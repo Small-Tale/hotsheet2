@@ -9803,6 +9803,13 @@ test('clicks exact feedback character positions, removes a split, and composes a
       .evaluate((node) => node.getBoundingClientRect().height),
   ).toBeLessThan(75);
   await expect(note.getByRole('button', { name: 'Add response at a character position' })).toHaveCount(1);
+  const firstBlock = note.locator('.note-card__feedback-block').filter({ hasText: 'Something' });
+  await firstBlock.hover();
+  await note.screenshot({ path: 'target/visual-captures/hs2-cdpb73-inline-add-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await firstBlock.hover();
+  await note.screenshot({ path: 'target/visual-captures/hs2-cdpb73-inline-add-390.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await clickAfter('Something');
   const first = note.getByRole('textbox', { name: /Response at character/ });
   await expect(first).toBeFocused();

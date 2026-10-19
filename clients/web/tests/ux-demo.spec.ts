@@ -3007,17 +3007,19 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     await standaloneNote.evaluate((node) => {
       const card = getComputedStyle(node),
         header = getComputedStyle(node.querySelector('.note-card__header')!),
-        kind = getComputedStyle(node.querySelector('.note-card__kind')!),
         headerEnd = getComputedStyle(node.querySelector('.note-card__header-end')!);
       return {
         padding: getComputedStyle(node.parentElement!).padding,
         gap: card.rowGap,
         headerGap: header.gap,
-        kindGap: kind.gap,
         headerEndGap: headerEnd.gap,
       };
     }),
-  ).toEqual({ padding: '8px', gap: '8px', headerGap: '16px', kindGap: '4px', headerEndGap: '4px' });
+  ).toEqual({ padding: '8px', gap: '8px', headerGap: '16px', headerEndGap: '4px' });
+  await expect(standaloneNote.locator('.note-card__header')).toHaveAttribute('data-component', 'row');
+  await expect(standaloneNote.locator('.note-card__header-end')).toHaveAttribute('data-component', 'row');
+  await expect(standaloneNote.locator('.note-card__kind [data-component="text"]')).toHaveCount(1);
+  await expect(standaloneNote.getByRole('button', { name: 'Delete Note' })).toHaveAttribute('data-component', 'button');
   expect(
     await activityNote.evaluate((node) => {
       const style = getComputedStyle(node);
@@ -3026,7 +3028,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   ).toEqual({ padding: '8px', gap: '4px' });
   await feedbackNote.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-note-card-feedback-wide.png' });
   await activityNote.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-note-card-activity-wide.png' });
-  await page.setViewportSize({ width: 430, height: 760 });
+  await page.setViewportSize({ width: 390, height: 760 });
   expect(await notes.evaluateAll((items) => items.every((item) => item.scrollWidth <= item.clientWidth + 1))).toBe(
     true,
   );
@@ -3058,6 +3060,12 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(popup).toHaveURL(/component=tag-chip/);
   await popup.close();
   await expect(reader.locator('[data-component="note-card"]')).toHaveCount(6);
+  await reader.locator('[data-component="note-card"]').first().scrollIntoViewIfNeeded();
+  await reader.screenshot({ path: 'target/visual-captures/hs2-cdpb73-reader-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await reader.locator('[data-component="note-card"]').first().scrollIntoViewIfNeeded();
+  await reader.screenshot({ path: 'target/visual-captures/hs2-cdpb73-reader-390.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   const noteHistory = reader.getByRole('link', { name: 'note history' });
   await expect(noteHistory).toHaveAttribute('target', '_blank');
   await expect(noteHistory).toHaveAttribute('rel', 'noopener noreferrer');

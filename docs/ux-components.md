@@ -1667,6 +1667,9 @@ icons; structural separators do not require icons.
   feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,
   an optional banded AI completion `ConfidenceBadge` (all four rubric bands shown in the
   demo; HS2-DWTJ43),
+  Kerf `Row` for header/action and editor action layout, `Text` for kind, time, and author
+  copy, `List` for feedback stacks, `Badge` for the inline add affordance, and Kerf `Button`
+  for note and inline-reply actions (HS2-CDPB73),
   contained long-token wrapping, and note identity;
   `density="compact"` selects the tighter 11.2px/8px inset and 9.6px radius used for every
   kind in the TicketNotes list, while the default `comfortable` density keeps the canonical

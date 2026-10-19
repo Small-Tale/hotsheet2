@@ -6,34 +6,12 @@
   max-width: 100%;
   gap: var(--kui-space-xs);
 }
-.note-card__header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--kui-space-m);
-}
 .note-card__kind {
-  display: inline-flex;
   min-width: 0;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  font-size: var(--wa-font-size-xs);
   font-weight: 700;
-}
-.note-card__time,
-.note-card__footer {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
 }
 .note-card__time {
   flex: none;
-}
-.note-card__header-end {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--kui-space-2xs);
 }
 /* Hover/focus-revealed note actions beside the timestamp. */
 .note-card__actions {
@@ -46,35 +24,6 @@
 .note-card:hover .note-card__actions,
 .note-card:focus-within .note-card__actions {
   opacity: 1;
-}
-/* Standalone icon-only actions in the note header and beside inline replies. Kerf ToolbarControlGroup
-   requires a Toolbar parent and an icon-only wa-button lacks square geometry (KF-1315VN), so these stay
-   app-owned native buttons until Kerf offers a standalone icon button. */
-.note-card__actions button,
-.note-card__inline-reply-row button {
-  display: inline-grid;
-  width: remify(28px);
-  height: remify(28px);
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.note-card__inline-reply-row button {
-  width: remify(32px);
-  height: remify(32px);
-}
-.note-card__actions button:hover {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-}
-.note-card__inline-reply-row button:hover {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
 }
 /* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
    --hotsheet-reading-scale on its own root; each reading part multiplies its own ordinary size by it
@@ -104,19 +53,12 @@
 .note-card__editor textarea[data-note-response='true'] {
   min-height: remify(40px);
 }
-.note-card__editor > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
-}
 .note-card__respond {
   display: grid;
 }
 /* Feedback prompts split into clickable blocks with inline response textareas (HS2 feedback flow). */
 .note-card__feedback-prompt {
-  display: grid;
   min-width: 0;
-  gap: var(--kui-space-2xs);
   font-size: calc(var(--hotsheet-reading-scale, 1) * 1em);
 }
 .note-card__feedback-section {
@@ -145,8 +87,6 @@
   display: grid;
   width: remify(24px);
   height: remify(24px);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-brand-fill-normal);
   opacity: 0;
   place-items: center;
   transition: opacity 120ms ease;
@@ -173,27 +113,15 @@
 .note-card__inline-reply {
   min-height: remify(64px);
 }
-.note-card[data-kind='status'] .note-card__kind {
-  color: var(--wa-color-text-link);
-}
 .note-card[data-kind='activity'] {
   gap: var(--kui-space-2xs);
-}
-.note-card[data-kind='activity'] .note-card__kind {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: var(--wa-font-weight-semibold);
 }
 .note-card[data-kind='activity'] .note-card__body {
   color: var(--wa-color-neutral-on-quiet);
   font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-xs));
   line-height: 1.4;
 }
-.note-card[data-kind='feedback_needed'] .note-card__kind,
-.note-card[data-kind='feedback_draft'] .note-card__kind {
-  color: var(--wa-color-warning-on-quiet);
-}
-.note-card[data-acknowledgement='true'] :is(.note-card__kind, .note-card__body) {
+.note-card[data-acknowledgement='true'] .note-card__body {
   color: var(--wa-color-neutral-on-quiet);
 }
 /* The compact density (TicketNotes' list) only tightens the internal stack; the ContentItem inset is

@@ -1,12 +1,15 @@
 import './native-textarea.css';
 import './note-card.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
 import { ContentItem, type ContentItemAppearance } from '@kerfjs/ui/content-item';
 import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { Activity, CircleAlert, FilePenLine, MessageSquareText, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -108,7 +111,7 @@ function FeedbackBlocks({
     .filter((reply) => reply.offset >= sourceStart && reply.offset <= sourceStart + source.length)
     .map((reply) => ({ ...reply, offset: reply.offset - sourceStart }));
   return (
-    <>
+    <List gap="2xs">
       {splitFeedbackPrompt(source, localReplies).map((segment) => (
         <div class="note-card__feedback-section">
           {segment.markdown && (
@@ -124,7 +127,9 @@ function FeedbackBlocks({
             >
               <MarkdownPreview source={segment.markdown} attachmentContext={attachmentContext} />
               <span class="note-card__feedback-add" aria-hidden="true">
-                <LucideIcon size="xs" icon={Plus} name="plus" color={uiColor('brand-on-normal')} />
+                <Badge tone="info" size="compact" ariaHidden icon={<LucideIcon size="xs" icon={Plus} name="plus" />}>
+                  {''}
+                </Badge>
               </span>
             </div>
           )}
@@ -140,21 +145,23 @@ function FeedbackBlocks({
               >
                 {segment.reply.text}
               </textarea>
-              <button
-                type="button"
-                {...INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.attrs}
-                data-note-id={noteId}
-                data-offset={sourceStart + segment.reply.offset}
-                aria-label={`Remove Response at Character ${sourceStart + segment.reply.offset}`}
+              <Button
+                size="compact"
+                emphasis="plain"
+                action={INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.value}
+                rootAttributes={{
+                  'data-note-id': noteId,
+                  'data-offset': String(sourceStart + segment.reply.offset),
+                }}
+                ariaLabel={`Remove Response at Character ${sourceStart + segment.reply.offset}`}
                 title="Remove response"
-              >
-                <LucideIcon size="s" icon={X} name="x" />
-              </button>
+                icon={<LucideIcon size="s" icon={X} name="x" />}
+              />
             </div>
           )}
         </div>
       ))}
-    </>
+    </List>
   );
 }
 
@@ -176,70 +183,74 @@ export function FeedbackPrompt({
   if (!choices)
     return (
       <div class="note-card__feedback-prompt">
-        <FeedbackBlocks
-          source={source}
-          sourceStart={0}
-          noteId={id}
-          replies={inlineReplies}
-          attachmentContext={attachmentContext}
-        />
+        <List gap="2xs">
+          <FeedbackBlocks
+            source={source}
+            sourceStart={0}
+            noteId={id}
+            replies={inlineReplies}
+            attachmentContext={attachmentContext}
+          />
+        </List>
       </div>
     );
   const trailing = choices.regions[choices.groups.length];
   return (
     <div class="note-card__feedback-prompt">
-      {choices.groups.map((group, index) => (
-        <>
-          <FeedbackBlocks
-            source={choices.regions[index].source}
-            sourceStart={choices.regions[index].sourceStart}
-            noteId={id}
-            replies={inlineReplies}
-            attachmentContext={attachmentContext}
-          />
-          {group.inlineQuestion && group.question && (
-            // A `CHOICE: question` header carries its question on the header line (HS2-3MHSBS).
-            <div class="note-card__feedback-question">
-              <MarkdownPreview source={group.question} attachmentContext={attachmentContext} />
-            </div>
-          )}
-          <List
-            selectionMode="multiple"
-            ariaLabel={
-              choices.groups.length === 1
-                ? 'Feedback Choices'
-                : `Feedback Choices ${group.index}${group.question ? `: ${group.question}` : ''}`
-            }
-            gap="xs"
-          >
-            {group.choices.map((choice) => (
-              <ContentItem
-                interactive
-                action={INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.value}
-                itemId={choice.id}
-                selectionMode="multiple"
-                selected={selected.has(choice.id)}
-                frame="framed"
-                rootAttributes={{ 'data-note-id': id, 'data-choice-id': choice.id }}
-              >
-                <MarkdownPreview
-                  source={choice.markdown}
-                  attachmentContext={attachmentContext}
-                  size="inherit"
-                  media="thumbnail"
-                />
-              </ContentItem>
-            ))}
-          </List>
-        </>
-      ))}
-      <FeedbackBlocks
-        source={trailing.source}
-        sourceStart={trailing.sourceStart}
-        noteId={id}
-        replies={inlineReplies}
-        attachmentContext={attachmentContext}
-      />
+      <List gap="2xs">
+        {choices.groups.map((group, index) => (
+          <>
+            <FeedbackBlocks
+              source={choices.regions[index].source}
+              sourceStart={choices.regions[index].sourceStart}
+              noteId={id}
+              replies={inlineReplies}
+              attachmentContext={attachmentContext}
+            />
+            {group.inlineQuestion && group.question && (
+              // A `CHOICE: question` header carries its question on the header line (HS2-3MHSBS).
+              <div class="note-card__feedback-question">
+                <MarkdownPreview source={group.question} attachmentContext={attachmentContext} />
+              </div>
+            )}
+            <List
+              selectionMode="multiple"
+              ariaLabel={
+                choices.groups.length === 1
+                  ? 'Feedback Choices'
+                  : `Feedback Choices ${group.index}${group.question ? `: ${group.question}` : ''}`
+              }
+              gap="xs"
+            >
+              {group.choices.map((choice) => (
+                <ContentItem
+                  interactive
+                  action={INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.value}
+                  itemId={choice.id}
+                  selectionMode="multiple"
+                  selected={selected.has(choice.id)}
+                  frame="framed"
+                  rootAttributes={{ 'data-note-id': id, 'data-choice-id': choice.id }}
+                >
+                  <MarkdownPreview
+                    source={choice.markdown}
+                    attachmentContext={attachmentContext}
+                    size="inherit"
+                    media="thumbnail"
+                  />
+                </ContentItem>
+              ))}
+            </List>
+          </>
+        ))}
+        <FeedbackBlocks
+          source={trailing.source}
+          sourceStart={trailing.sourceStart}
+          noteId={id}
+          replies={inlineReplies}
+          attachmentContext={attachmentContext}
+        />
+      </List>
     </div>
   );
 }
@@ -278,7 +289,7 @@ export function NoteEditor({
         {source}
       </textarea>
       {actions && (
-        <div>
+        <Row hAlign="right" vAlign="middle" gap="xs">
           {response && (
             <Button
               size="compact"
@@ -298,7 +309,7 @@ export function NoteEditor({
           >
             {response ? 'Respond' : 'Submit'}
           </Button>
-        </div>
+        </Row>
       )}
     </div>
   );
@@ -388,42 +399,60 @@ export function NoteCard({
       data-edit-on-click={editInPlace && !editorOpen && !aiFeedback.length ? 'true' : undefined}
       title={editInPlace && !editorOpen ? 'Click to edit' : undefined}
     >
-      <header class="note-card__header">
-        <span class="note-card__kind">
-          <LucideIcon size={15.2} icon={presentation.icon} name={presentation.iconName} />
-          {title ?? presentation.label}
-        </span>
-        <span class="note-card__header-end">
+      <Row className="note-card__header" hAlign="space-between" vAlign="middle" gap="m">
+        <strong class="note-card__kind">
+          <Text
+            variant="span"
+            size="compact"
+            color={
+              kind === 'feedback_needed' || kind === 'feedback_draft'
+                ? uiColor('warning-on-quiet')
+                : kind === 'status'
+                  ? uiColor('text-link')
+                  : kind === 'activity' || acknowledgement
+                    ? uiColor('neutral-on-quiet')
+                    : undefined
+            }
+          >
+            <LucideIcon inline size={15.2} icon={presentation.icon} name={presentation.iconName} />{' '}
+            {title ?? presentation.label}
+          </Text>
+        </strong>
+        <Row className="note-card__header-end" vAlign="middle" gap="2xs">
           {(editPrompt || (!editorOpen && deletable)) && (
             <span class="note-card__actions">
               {editPrompt && (
-                <button
-                  type="button"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.editFeedbackPrompt.attrs}
-                  data-note-id={id}
-                  aria-label="Edit Note"
+                <Button
+                  size="compact"
+                  emphasis="plain"
+                  action={INSPECTOR_AND_EDITOR_ACTIONS.editFeedbackPrompt.value}
+                  rootAttributes={{ 'data-note-id': id }}
+                  ariaLabel="Edit Note"
                   title="Edit note"
-                >
-                  <LucideIcon size={12.8} icon={Pencil} name="pencil" />
-                </button>
+                  icon={<LucideIcon size={12.8} icon={Pencil} name="pencil" />}
+                />
               )}
               {!editorOpen && deletable && (
-                <button
-                  type="button"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
-                  data-note-id={id}
-                  aria-label="Delete Note"
+                <Button
+                  size="compact"
+                  emphasis="plain"
+                  action={INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.value}
+                  rootAttributes={{ 'data-note-id': id }}
+                  ariaLabel="Delete Note"
                   title="Delete note"
-                >
-                  <LucideIcon size={12.8} icon={Trash2} name="trash-2" />
-                </button>
+                  icon={<LucideIcon size={12.8} icon={Trash2} name="trash-2" />}
+                />
               )}
             </span>
           )}
           {confidence !== undefined && <ConfidenceBadge value={confidence} />}
-          <time class="note-card__time">{time}</time>
-        </span>
-      </header>
+          <time class="note-card__time">
+            <Text variant="span" size="compact" tone="quiet">
+              {time}
+            </Text>
+          </time>
+        </Row>
+      </Row>
       {feedbackResponse && (
         <FeedbackPrompt
           source={body}
@@ -467,7 +496,9 @@ export function NoteCard({
             feedbackTarget={`note:${id}`}
           />
         ) : (
-          author
+          <Text variant="span" size="compact" tone="quiet">
+            {author}
+          </Text>
         )}
       </footer>
       {aiFeedback.length > 0 && (

@@ -2620,7 +2620,7 @@
       "id": "note-card",
       "name": "NoteCard",
       "kind": "component",
-      "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
+      "purpose": "Kind-specific note presentation composed from Kerf ContentItem, Row, Text, Button, List, and Badge, with an optional banded AI completion confidence badge.",
       "publicExports": [
         {
           "name": "NoteCard"

@@ -61,7 +61,7 @@ describe('NoteCard', () => {
       expect(markup).toContain('data-lucide="gauge"');
       expect(markup).toContain(`${value}%`);
       // The badge sits in the header beside the timestamp, not in the body.
-      expect(markup).toMatch(/note-card__header-end">[\s\S]*confidence-badge[\s\S]*<time class="note-card__time">/u);
+      expect(markup).toMatch(/note-card__header-end"[\s\S]*confidence-badge[\s\S]*<time class="note-card__time">/u);
     }
     // Kerf's Badge tints each band through its semantic tone; there is no stylesheet (HS2-MBFKJF).
     expect(existsSync(resolve(import.meta.dirname, 'confidence-badge.css'))).toBe(false);
@@ -208,9 +208,12 @@ describe('NoteCard', () => {
       }),
     );
     expect(markup.match(/data-action="add-inline-feedback-reply"/g)).toHaveLength(2);
+    expect(markup).toContain('class="kui-list" data-component="list"');
+    expect(markup).toContain('data-component="badge" data-tone="info"');
     expect(markup).toContain('aria-label="Response at character 7"');
     expect(markup).toContain('Reply after a character');
     expect(markup).toContain('data-action="remove-inline-feedback-reply"');
+    expect(markup).toMatch(/data-component="button"[^>]*data-action="remove-inline-feedback-reply"/u);
     expect(markup).toContain('aria-label="Remove Response at Character 7"');
     expect(markup).toContain('aria-label="Feedback response"');
     expect(markup).toContain('placeholder="General response (optional)"');
@@ -250,6 +253,11 @@ describe('NoteCard', () => {
     expect(markup).toContain('aria-label="Edit note"');
     expect(markup).not.toContain('data-action="edit-note"');
     expect(markup).not.toContain('open-ticket-reader');
+    expect(markup).toContain('class="kui-row note-card__header"');
+    expect(markup).toContain('class="kui-row note-card__header-end"');
+    expect(markup).toContain('data-component="text"');
+    expect(markup).toContain('data-action="delete-note"');
+    expect(markup).toContain('data-component="button"');
   });
 
   it('renders note Markdown through the shared safe new-tab boundary', () => {
@@ -349,10 +357,11 @@ describe('NoteCard', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.note-card \{[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).not.toContain('.note-card__header {');
+    expect(css).not.toContain('.note-card__header-end {');
+    expect(css).not.toContain('.note-card__editor > div {');
     expect(css).not.toContain('note-card__choice');
-    expect(css).toMatchSource(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
+    expect(css).not.toContain('.note-card__inline-reply-row button');
     // The response badge carries a Lucide icon, never a font glyph (HS2-MDJRCM).
     expect(css).not.toMatch(/feedback-block::after|content: '\+'/);
     expect(css).toMatchSource(/\[data-kind="activity"\] \{[^}]*gap: var\(--kui-space-2xs\)/);
@@ -440,7 +449,9 @@ describe('NoteCard', () => {
     expect(event).toContain('data-ai-authored="true"');
     expect(event).not.toContain('AI-generated');
     expect(event).not.toContain('data-component="ai-content-label"');
-    expect(event).toContain('Codex</footer>');
+    expect(event).toMatch(
+      /<footer class="note-card__footer">[\s\S]*data-component="text"[\s\S]*Codex<\/span><\/footer>/u,
+    );
 
     const mixed = String(NoteCard({ ...base, body: 'Status changed from Started to Completed\n\nVerified the fix.' }));
     expect(mixed).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
