@@ -196,7 +196,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   }
   function matchedSearchRows(rows: WireTicketRow[], effective: EffectiveTicketSearch) {
     const advanced = usesAdvancedSearchExpression(effective.text),
-      matched = advanced ? filterAdvancedSearchResults(rows, effective.text, 'all', []) : rows,
+      matched = advanced ? filterAdvancedSearchResults(rows, effective.text) : rows,
       tags = effective.tokens
         .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
         .map((token) => token.value.toLowerCase());

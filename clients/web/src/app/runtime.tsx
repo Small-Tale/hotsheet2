@@ -2210,7 +2210,7 @@ export async function startHotSheetWebClient() {
           : effective.tokens
               .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
               .map((token) => token.value.toLowerCase());
-      result = filterAdvancedSearchResults(matched, effective.text, 'all', []).filter((ticket) =>
+      result = filterAdvancedSearchResults(matched, effective.text).filter((ticket) =>
         tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)),
       );
     } else result = ticketsForView(tickets.value, selectedView.value);
@@ -2728,7 +2728,7 @@ export async function startHotSheetWebClient() {
       if (searchQuery.value.trim() || searchTokens.value.length) {
         const effective = effectiveSearch(searchQuery.value, searchTokens.value),
           matched = usesAdvancedSearchExpression(effective.text)
-            ? filterAdvancedSearchResults(rows, effective.text, 'all', [])
+            ? filterAdvancedSearchResults(rows, effective.text)
             : rows,
           matches = searchMatchKeys.value ?? new Set<string>();
         for (const ticket of matched) matches.add(ticketSearchKey(ticket));

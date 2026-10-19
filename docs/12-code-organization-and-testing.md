@@ -474,6 +474,33 @@ gate; an additional wide/narrow command workflow crosses edit, autosave, run, ca
 navigation, and a second edit. The pre-existing export cancel/reopen async-identity
 gap is tracked separately in HS2-1S33A9.
 
+### 12.6.5 Web search reachability audit (HS2-GT58KA)
+
+Trace production entry points before treating a tested export as a shipped feature.
+The former global search overlay was removed in HS2-0094CQ; its old unit assertions
+did not establish reachability after that change. The HS2-GT58KA inventory is:
+
+- Removed `searchScopeChoices`, `searchFilters`, `addSearchFilter`, and the
+  scope/filter branches of `filterAdvancedSearchResults`. No production caller used
+  the overlay controls; the three callers passed `all` and an empty filter list.
+  Local Boolean and lifecycle expression filtering remains for inline search.
+- Removed `searchMatchLabel`, `isExactTicketSlug`, and the hidden-status fallback
+  branch. Only the removed overlay's result-label flow or tests reached them. Exact
+  ticket-reference navigation remains in the compact link chooser.
+- Retained `SearchScopeToolbar`, `ticketSearchScope`, and inline token parsing.
+  The workspace and ticket rail render and wire these current controls; their
+  view-versus-all scope is separate from the deleted overlay scope choices.
+- Flagged other possible test/demo-only web helpers: `fromTokenSearchTokens`,
+  `endAttachmentLabelEdit`, `duplicateOutcomeLabel`,
+  `reconcileRememberedProjectRoots`, `discardProjectSettings`,
+  `formatTicketLinkReference`, `isAppRegionId`, and `startProjectChangePoll`.
+  Name-reference counts alone do not prove dead code; HS2-YQF129 owns production
+  entry-point and requirement tracing before any removal.
+
+The earlier global-overlay promise in [06-clients.md](06-clients.md) now agrees with
+the later single-surface decision. The search feature row in
+[TEST-COVERAGE.md](TEST-COVERAGE.md) no longer claims overlay-only match labels.
+
 ## 12.7 Testing strategy
 
 Follows the project's philosophy (double coverage; transition-matrix testing for

@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  addSearchFilter,
   collectMatchingSearchPages,
   filterAdvancedSearchResults,
   matchesSearchExpression,
-  searchMatchLabel,
   usesAdvancedSearchExpression,
   usesBooleanSearchExpression,
 } from './advanced-search';
@@ -27,27 +25,10 @@ const row = (slug: string, status = 'not_started', extra: Partial<TicketRow> = {
   ...extra,
 });
 describe('advanced search semantics', () => {
-  it('distinguishes working search from complete view-independent search', () => {
+  it('leaves ordinary text to provider search and filters inline expressions locally', () => {
     const rows = [row('HS2-ONE'), row('HS2-HIDDEN', 'archive')];
-    expect(filterAdvancedSearchResults(rows, 'words', 'working', [])).toEqual([rows[0]]);
-    expect(filterAdvancedSearchResults(rows, 'words', 'all', [])).toEqual(rows);
-    expect(filterAdvancedSearchResults(rows, 'HS2-HIDDEN', 'working', [])).toEqual(rows);
-  });
-  it('supports current scope and explicit filters', () => {
-    const rows = [row('HS2-ONE'), row('HS2-TWO', 'backlog', { up_next: true })];
-    expect(filterAdvancedSearchResults(rows, '', 'current', [], new Set([rows[0].qualified_id]))).toEqual([rows[0]]);
-    expect(filterAdvancedSearchResults(rows, '', 'working', ['status:backlog', 'up-next'])).toEqual([rows[1]]);
-  });
-  it('filters blocked tickets by their visible reason rather than a dependency edge', () => {
-    const reason = row('HS2-REASON', 'started', { blocked_reason: 'Waiting' }),
-      edge = row('HS2-EDGE', 'started', { blocked_by: ['missing'] });
-    expect(filterAdvancedSearchResults([reason, edge], '', 'all', ['blocked'])).toEqual([reason]);
-  });
-  it('replaces lifecycle filters and clearly labels ticket references', () => {
-    expect(addSearchFilter(['status:archive'], 'status:deleted')).toEqual(['status:deleted']);
-    expect(searchMatchLabel(row('HS2-ONE', 'not_started', { details: 'Depends on HS2-TWO' }), 'HS2-TWO')).toBe(
-      'Ticket reference',
-    );
+    expect(filterAdvancedSearchResults(rows, 'words')).toEqual(rows);
+    expect(filterAdvancedSearchResults(rows, 'is:archived')).toEqual([rows[1]]);
   });
   it('supports every is: lifecycle alias and live Up Next/active state', () => {
     const now = Date.parse('2026-09-09T10:00:00Z'),
@@ -78,7 +59,7 @@ describe('advanced search semantics', () => {
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:not-started', now))).toEqual([rows[0]]);
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:backlogged', now))).toEqual([rows[4]]);
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:archived', now))).toEqual([rows[5]]);
-    expect(filterAdvancedSearchResults(rows, 'is:archived', 'working', [])).toEqual([rows[5]]);
+    expect(filterAdvancedSearchResults(rows, 'is:archived')).toEqual([rows[5]]);
   });
   it('matches review state in Boolean expressions and clears resolved feedback', () => {
     const feedback = row('HS2-FEEDBACK', 'started', { feedback_needed: true, needs_review: true });

@@ -1309,11 +1309,10 @@ preview/download, server directory browser) are separate design work.
   cancel cleanly when the query changes, so matches after the first 200 rows remain discoverable.
   Structured duplicate searches send
   `close_reason=duplicate` to the provider before bounded pagination, rather than hoping
-  duplicate rows happen to occur in the first unfiltered page. Reference-mention matches say why
-  they matched, every result names its provider, and the global overlay can hand its
-  current query/scope/filter payload to the separately owned saved-view editor without
-  replacing the compact workspace search. The overlay is available from the toolbar and
-  the platform Search shortcut (`Command-K`/`Control-K`).
+  duplicate rows happen to occur in the first unfiltered page. The toolbar's inline search
+  handles these expressions in the workspace and ticket rail; the saved-view editor uses
+  the same query syntax. The former global overlay and its separate result labels, scope,
+  and filter controls have been removed (HS2-0094CQ, HS2-GT58KA).
 
   Workspace view choices use Kerf `SegmentedControl` with toolbar appearance inside
   the existing toolbar group. List, Columns, Notifications, and Settings retain native
