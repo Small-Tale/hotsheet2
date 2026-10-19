@@ -9449,14 +9449,14 @@ for (const width of [1280, 390])
     // A terminal on its default name offers no reset.
     await openRename(/Tests/);
     await expect(reset).toHaveCount(0);
-    await expect(field).toHaveJSProperty('hint', '');
+    await expect(field).not.toHaveAttribute('aria-description', /.+/);
     await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Quality shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
     // Once renamed, the dialog names the default and offers to restore it.
     await openRename(/Quality shell/);
     await expect(field).toHaveJSProperty('value', 'Quality shell');
-    await expect(field).toHaveJSProperty('hint', 'Default name: Tests');
+    await expect(field).toHaveAttribute('aria-description', 'Default name: Tests');
     await expect(reset).toBeVisible();
     await page.waitForTimeout(400); // let the dialog's open animation settle before measuring and capturing
     const box = await dialog.locator('[part~="dialog"]').boundingBox(),
@@ -9497,7 +9497,7 @@ for (const width of [1280, 390])
     await reloaded.getByRole('tab', { name: /Second name/ }).click({ button: 'right' });
     await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     await expect(reset).toBeVisible();
-    await expect(field).toHaveJSProperty('hint', 'Default name: Tests');
+    await expect(field).toHaveAttribute('aria-description', 'Default name: Tests');
   });
 
 test('shares a terminal rename with other devices and restores it through the real server (HS2-89FPV1)', async ({
@@ -15755,8 +15755,13 @@ for (const viewport of [
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
       title = composer.locator('input[name="new-ticket-title"]');
     await expect(title).toBeVisible();
-    // The composer's modal would leave a popover painted on top but inert, so clicks reached the dialog
-    // beneath (HS2-MAE27T); the popup is lifted as a modal dialog above it instead.
+    // A focused native TextField keeps the pending request out of the way while the title is being
+    // edited. Once editing focus leaves, the popup lifts above the composer (HS2-MAE27T).
+    await expect(title).toBeFocused();
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(false);
+    await title.evaluate((element) => {
+      (element as HTMLInputElement).blur();
+    });
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await expect(popup).toBeFocused();
     // Capture once the composer's open animation settles, so the evidence shows the real stacking.
@@ -15805,9 +15810,13 @@ for (const viewport of [
     await expect(popup).toContainText('request-63');
     await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
     expect(await popup.evaluate((element) => element.matches(':modal'))).toBe(false);
-    // Reopen the composer: lifted again; Ignore dismisses the popup and the composer becomes usable.
+    // Reopen the composer: its focused title delays the lift until editing focus leaves.
     await launcher.dispatchEvent('click');
     await expect(title).toBeVisible();
+    await expect(title).toBeFocused();
+    await title.evaluate((element) => {
+      (element as HTMLInputElement).blur();
+    });
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await popup.getByRole('button', { name: 'Ignore', exact: true }).click();
     await expect(popup).toHaveCount(0);
@@ -26133,7 +26142,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await expect(dialog).toContainText('Add tag — 2 selected');
   await settledAnimations(dialog);
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-add-wide.png', fullPage: true });
-  await page.getByRole('textbox', { name: 'Tag to add *' }).fill('regression');
+  await page.getByRole('textbox', { name: 'Tag to add' }).fill('regression');
   await dialog.getByRole('button', { name: 'Add tag' }).click();
   await expect
     .poll(

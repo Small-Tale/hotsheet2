@@ -710,7 +710,7 @@ test('represents the application states extracted from main.tsx in the UX catalo
   // default-named variant does not.
   const renameField = rename.locator('input[name="terminal-name"]'),
     resetRename = rename.getByRole('button', { name: 'Reset to Default' });
-  await expect(renameField).toHaveJSProperty('hint', 'Default name: Terminal 1');
+  await expect(renameField).toHaveAttribute('aria-description', 'Default name: Terminal 1');
   await resetRename.click();
   await expect(rename).toHaveJSProperty('open', false);
   await expect(page.locator('[data-rename-demo-output]')).toHaveText(
@@ -719,7 +719,7 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await page.getByRole('button', { name: 'Rename a default-named Terminal' }).click();
   await expect(rename).toHaveJSProperty('open', true);
   await expect(renameField).toHaveJSProperty('value', 'Terminal 1');
-  await expect(renameField).toHaveJSProperty('hint', '');
+  await expect(renameField).not.toHaveAttribute('aria-description', /.+/);
   await expect(resetRename).toHaveCount(0);
   await rename.getByRole('button', { name: 'Cancel' }).click();
   await expect(rename).toHaveJSProperty('open', false);
