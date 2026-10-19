@@ -1,23 +1,29 @@
-/* The shared ticket row shell (`ticket-row-shell.css`, danger tone) owns the surface, divider,
-   list-edge rounding, hover, selection, danger rail, and selection wiggle (HS2-1FH8BG). This rule
-   lays out the row's own content: the warning icon in its own column beside the identity and
-   message (HS2-SJVM8C). */
+/* Kerf SummaryRow owns the diagnostic surface, list edges, danger rail, and selection.
+   The wrapper matches the list radius and preserves the app's selection feedback. */
 .corrupt-ticket-row {
-  display: grid;
-  grid-template-columns: remify(32px) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-xs);
-  padding: var(--kui-space-xs) var(--kui-space-m);
+  --kui-layout-rounded-radius: remify(10.4px);
+}
+.corrupt-ticket-row[data-selected='true'] {
+  animation: corrupt-ticket-row-selected-wiggle 150ms ease-out;
+}
+@keyframes corrupt-ticket-row-selected-wiggle {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  45% {
+    transform: translateX(remify(5.6px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .corrupt-ticket-row[data-selected='true'] {
+    animation: none;
+  }
 }
 .corrupt-ticket-row__icon {
   display: inline-flex;
   width: remify(26.4px);
   height: remify(26.4px);
-}
-.corrupt-ticket-row__content {
-  display: grid;
-  min-width: 0;
-  gap: var(--kui-space-2xs);
 }
 /* Web Awesome's native button styles give every button the form-control height; the identity and
    message stack is taller than that, so the button sizes to its content (HS2-SJVM8C). */
@@ -43,26 +49,22 @@
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
 }
-.corrupt-ticket-row__content strong {
+.corrupt-ticket-row__select strong {
   color: var(--wa-color-danger-on-normal);
   font-size: var(--wa-font-size-s);
 }
-.corrupt-ticket-row__content span {
+.corrupt-ticket-row__select span {
   color: var(--wa-color-danger-on-quiet);
   font-size: var(--wa-font-size-xs);
   font-weight: 650;
 }
-.corrupt-ticket-row__content p {
-  margin: var(--kui-space-2xs) 0 0;
-  color: var(--wa-color-danger-on-quiet);
-  font-size: var(--wa-font-size-xs);
+.corrupt-ticket-row__recovery {
+  margin: 0;
+  color: var(--wa-color-success-on-quiet);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.corrupt-ticket-row__content .corrupt-ticket-row__recovery {
-  color: var(--wa-color-success-on-quiet);
-}
-.corrupt-ticket-row__content .corrupt-ticket-row__recovery[data-failed='true'] {
+.corrupt-ticket-row__recovery[data-failed='true'] {
   color: var(--wa-color-danger-on-quiet);
 }
 /* The recovery surface is a right-rail panel (HS2-QQW6CT): Kerf's Pane owns the toolbar, the fixed

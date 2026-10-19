@@ -46,8 +46,9 @@ describe('TicketList', () => {
         corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
       }),
     );
-    expect(markup.match(/data-component="summary-row"/g)).toHaveLength(1);
+    expect(markup.match(/data-component="summary-row"/g)).toHaveLength(2);
     expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
+    expect(markup.match(/role="option"/g)).toHaveLength(1);
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-label="Unreadable tickets"');
     expect(markup).toContain('data-action="select-corrupt-ticket"');
@@ -71,20 +72,12 @@ describe('TicketList', () => {
 
   it('rounds only the rows at each section edge through the row listEdge prop (HS2-4APEJP)', () => {
     const listCss = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
-    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8'),
-      shellCss = readFileSync(resolve(import.meta.dirname, 'ticket-row-shell.css'), 'utf8');
+    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(rowCss).toContain('--kui-layout-rounded-radius: remify(10.4px)');
     // The list styles none of its rows; each row owns its edge corners.
     expect(listCss).not.toContain('ticket-list-row');
     expect(listCss).not.toContain('corrupt-ticket-row');
-    // CorruptTicketRow retains its diagnostic shell; TicketRow passes listEdge to Kerf SummaryRow.
-    expect(shellCss).toContainSource(
-      ".ticket-row-shell[data-list-edge='start'] { border-radius: remify(10.4px) remify(10.4px) 0 0; }",
-    );
-    expect(shellCss).toContainSource(
-      ".ticket-row-shell[data-list-edge='end'] { border-radius: 0 0 remify(10.4px) remify(10.4px); }",
-    );
-    expect(shellCss).toContainSource(".ticket-row-shell[data-list-edge='only'] { border-radius: remify(10.4px); }");
+    // Both ticket presentations pass listEdge to Kerf SummaryRow.
     expect([0, 1, 2].map((index) => listEdge(index, 3))).toEqual(['start', undefined, 'end']);
     expect(listEdge(0, 1)).toBe('only');
     const markup = String(

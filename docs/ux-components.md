@@ -2969,14 +2969,11 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
   `.repository-status-popover__sync-icon`.
 - **ListItem tokens.** The Errors view row takes its danger tone from ListItem tokens on its app
   wrapper (`data-view-tone="danger"`) instead of a class on the ListItem.
-- **Own state.** `CorruptTicketRow`'s selected wiggle keys off its own `data-selected` instead of
-  TicketRow's modifier. Since HS2-QSR1TG it also owns its list-row shell (surface, divider,
-  `listEdge` rounding, hover, and selected presentation) in `corrupt-ticket-row.css` instead of
-  rendering TicketRow's `ticket-list-row` classes; the rendered row is pixel-identical. HS2-SJVM8C then
-  restored the row's authored grid, which TicketRow's `display: block` had always overridden: the
-  warning icon sits in a 32px column beside the identity and message, and the select button sizes to
-  that stack instead of Web Awesome's native form-control height, which had pushed the message into
-  the row's bottom padding.
+- **Own state.** `CorruptTicketRow` composes Kerf `SummaryRow` in its static `group` mode
+  (HS2-MK98R7). Kerf owns the danger rail, list edges, selected surface, warning-icon slot,
+  and metadata placement. The nested recovery button owns focus and activation; the app wrapper
+  keeps the brief selected wiggle and honors reduced motion. The button sizes to its identity and
+  message rather than Web Awesome's native form-control height.
 
 No stylesheet entries from this group remain: HS2-T44PFW removed the terminal zoom entry
 (`KF-FTADQT`).

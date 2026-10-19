@@ -16066,18 +16066,18 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toContainText('HS2-QQRY00');
   await expect(stale).toHaveCount(0);
   await expect(corrupt).toContainText('Ticket file could not be read');
-  await expect(corrupt).toHaveAttribute('role', 'group');
-  await expect(corrupt).toHaveCSS('padding', '8px 16px');
-  // The row owns its list-row shell rather than TicketRow's `ticket-list-row` block (HS2-QSR1TG).
+  const corruptSurface = corrupt.locator('[data-component="summary-row"]');
+  await expect(corruptSurface).toHaveAttribute('role', 'group');
+  await expect(corruptSurface).not.toHaveAttribute('tabindex', '0');
+  await expect(corruptSurface.locator('.kui-summary-row__body')).toHaveCSS('padding', '8px 12px');
+  // The diagnostic composes Kerf's static group surface, without TicketRow's option classes.
   await expect(corrupt).not.toHaveClass(/ticket-list-row/);
-  // The warning icon sits in its own 32px column beside the identity and message (HS2-SJVM8C).
-  await expect(corrupt).toHaveCSS('display', 'grid');
-  await expect(corrupt).toHaveCSS('grid-template-columns', /^32px \d/);
-  await expect(corrupt).toHaveCSS('border-top-left-radius', '10.4px');
+  await expect(corruptSurface.locator('.kui-summary-row__body')).toHaveCSS('display', 'grid');
+  await expect(corruptSurface).toHaveCSS('border-top-left-radius', '10.4px');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
   const corruptLayout = await corrupt.evaluate((node) => {
     const icon = node.querySelector('.corrupt-ticket-row__icon')!.getBoundingClientRect(),
-      content = node.querySelector('.corrupt-ticket-row__content')!.getBoundingClientRect(),
+      content = node.querySelector('.kui-summary-row__content')!.getBoundingClientRect(),
       identity = node.querySelector('.corrupt-ticket-row__select strong')!.getBoundingClientRect(),
       row = node.getBoundingClientRect();
     return {
@@ -16100,7 +16100,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   expect(corruptLayout.rowBottom - corruptLayout.contentBottom).toBeGreaterThanOrEqual(8);
   const errorRowBefore = await corrupt.evaluate((node) => {
     const icon = node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),
-      rail = getComputedStyle(node, '::before');
+      rail = getComputedStyle(node.querySelector('.kui-summary-row__rail')!);
     return { iconX: icon.x, railWidth: rail.width, railColor: rail.backgroundColor };
   });
   await page.evaluate(() => {
@@ -16119,11 +16119,11 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
         () => (window as typeof window & { __corruptSelectionAnimations?: string[] }).__corruptSelectionAnimations,
       ),
     )
-    .toContain('ticket-row-danger-selected-wiggle');
+    .toContain('corrupt-ticket-row-selected-wiggle');
   await corrupt.evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
-  const selectedBorder = await corrupt.evaluate((node) => {
+  const selectedBorder = await corruptSurface.evaluate((node) => {
     const style = getComputedStyle(node);
     return {
       widths: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
@@ -16141,7 +16141,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   expect(selectedBorder.radii.every((radius) => Number.parseFloat(radius) > 0)).toBe(true);
   const errorRowAfter = await corrupt.evaluate((node) => {
     const icon = node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),
-      rail = getComputedStyle(node, '::before');
+      rail = getComputedStyle(node.querySelector('.kui-summary-row__rail')!);
     return { iconX: icon.x, railWidth: rail.width, railColor: rail.backgroundColor };
   });
   expect(errorRowAfter).toEqual(errorRowBefore);
@@ -16264,7 +16264,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await page.getByRole('button', { name: /Ticket errors/ }).click();
     const corrupt = page.locator('[data-component="corrupt-ticket-row"]');
     await expect(corrupt).toContainText(created.slug);
-    await expect(page.locator('[data-component="summary-row"]')).toHaveCount(0);
+    await expect(corrupt.locator('[data-component="summary-row"][role="group"]')).toHaveCount(1);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       if (width < 1024) await expect(page.getByRole('button', { name: 'Show Project Sidebar' })).toBeVisible();
@@ -16279,7 +16279,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
           }),
         )
         .toBe(true);
-      await expect(corrupt).toHaveCSS('display', 'grid');
+      await expect(corrupt.locator('.kui-summary-row__body')).toHaveCSS('display', 'grid');
       const layout = await corrupt.evaluate((node) => {
         const icon = node.querySelector('.corrupt-ticket-row__icon')!.getBoundingClientRect(),
           identity = node.querySelector('.corrupt-ticket-row__select strong')!.getBoundingClientRect(),

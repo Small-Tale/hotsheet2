@@ -17,7 +17,10 @@ describe('CorruptTicketRow', () => {
   it('shows recovered identity, diagnostics, and both recovery actions', () => {
     const markup = String(CorruptTicketRow({ ticket: corrupt }));
     expect(markup).toContain('data-component="corrupt-ticket-row"');
+    expect(markup).toContain('data-component="summary-row"');
     expect(markup).toContain('role="group"');
+    expect(markup).not.toContain('role="option"');
+    expect(markup).not.toContain('draggable="true"');
     expect(markup).toContain('data-lucide="file-warning"');
     expect(markup).toContain('HS2-BROKEN');
     expect(markup).toContain('data-corrupt-key="local:/project.hs2/tickets/01/01M1.md"');
@@ -64,30 +67,20 @@ describe('CorruptTicketRow', () => {
 
   it('uses a visibly distinct actionable treatment and platform labels', () => {
     const markup = String(CorruptTicketRow({ ticket: corrupt, selected: true }));
-    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8'),
-      shell = readFileSync(new URL('./ticket-row-shell.css', import.meta.url), 'utf8');
-    // The row composes the shared ticket row shell in its danger tone, never TicketRow's block
-    // classes (HS2-QSR1TG, HS2-1FH8BG).
-    expect(markup).toContain('class="ticket-row-shell corrupt-ticket-row" data-component="corrupt-ticket-row"');
+    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
+    expect(markup).toContain('class="corrupt-ticket-row" data-component="corrupt-ticket-row"');
+    expect(markup).toContain('class="kui-summary-row corrupt-ticket-row__surface"');
     expect(markup).toContain('data-selected="true"');
-    expect(markup).toContain('data-tone="danger"');
+    expect(markup).toContain('data-rail="danger"');
+    expect(markup).toContain('aria-label="Unreadable ticket HS2-BROKEN"');
+    expect(markup).not.toContain('aria-selected');
     expect(markup).not.toContain('ticket-list-row');
     expect(css).not.toMatch(/\.ticket-list-row/);
-    // The shell, not this stylesheet, owns the surface, selection, edges, and danger rail.
-    expect(css).not.toMatch(/data-selected|data-list-edge|::before|:hover|border-bottom-color/);
-    expect(shell).toContainSource(
-      ".ticket-row-shell[data-selected='true'] { border-color:var(--wa-color-brand-border-normal); background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent); }",
-    );
-    expect(shell).toContainSource(".ticket-row-shell[data-list-edge='only'] { border-radius:remify(10.4px); }");
-    expect(shell).toMatch(
-      /ticket-row-shell\[data-tone='danger'\]::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/,
-    );
+    // Kerf owns the surface, rail, selection and edges; only the app's wiggle remains.
+    expect(css).not.toMatch(/data-list-edge|::before|:hover|border-bottom-color/);
+    expect(css).toContain('--kui-layout-rounded-radius: remify(10.4px)');
     expect(css).not.toContain('border-left-width');
-    // The warning icon has its own column beside the identity and message (HS2-SJVM8C), and the select
-    // button sizes to that stack instead of Web Awesome's native form-control height.
-    expect(css).toMatch(
-      /\.corrupt-ticket-row \{[^}]*display: grid;\s*grid-template-columns: remify\(32px\) minmax\(0, 1fr\);\s*align-items: start;/,
-    );
+    // The select button sizes to its identity and message instead of Web Awesome's form-control height.
     expect(css).toMatch(/\.corrupt-ticket-row__select \{[^}]*height: auto;/);
     expect(css).toContain('cursor: pointer');
     expect(revealFileLabel('MacIntel')).toBe('Reveal in Finder');
@@ -96,13 +89,13 @@ describe('CorruptTicketRow', () => {
   });
 
   it('wiggles newly selected danger rows and honors reduced motion', () => {
-    const shell = readFileSync(new URL('./ticket-row-shell.css', import.meta.url), 'utf8');
-    expect(shell).toMatch(
-      /\.ticket-row-shell\[data-tone='danger'\]\[data-selected='true'\] \{[^}]*animation: ticket-row-danger-selected-wiggle 150ms ease-out;/,
+    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
+    expect(css).toMatch(
+      /\.corrupt-ticket-row\[data-selected='true'\] \{[^}]*animation: corrupt-ticket-row-selected-wiggle 150ms ease-out;/,
     );
-    expect(shell).toContainSource('45% { transform:translateX(remify(5.6px)); }');
-    expect(shell).toContainSource(
-      "@media (prefers-reduced-motion: reduce) { .ticket-row-shell[data-tone='danger'][data-selected='true'] { animation:none; } }",
+    expect(css).toContainSource('45% { transform:translateX(remify(5.6px)); }');
+    expect(css).toContainSource(
+      "@media (prefers-reduced-motion: reduce) { .corrupt-ticket-row[data-selected='true'] { animation:none; } }",
     );
   });
 
@@ -115,5 +108,13 @@ describe('CorruptTicketRow', () => {
     );
     expect(completed).toContain('role="status"');
     expect(completed).toContain('Queued HS2-REPAIR for AI repair.');
+    for (const failed of [false, true]) {
+      const row = String(CorruptTicketRow({ ticket: corrupt, recovery: { message: 'Recovery update', failed } }));
+      expect(row).toContain(`role="${failed ? 'alert' : 'status'}"`);
+      expect(row).toContain('Recovery update');
+      expect(
+        String(CorruptTicketRow({ ticket: corrupt, selected: true, recovery: { message: 'Recovery update', failed } })),
+      ).not.toContain('Recovery update');
+    }
   });
 });

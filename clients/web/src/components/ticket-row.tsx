@@ -1,5 +1,3 @@
-// CorruptTicketRow still uses the diagnostic shell; TicketRow uses Kerf SummaryRow.
-import './ticket-row-shell.css';
 import './ticket-row.css';
 
 import { Badge } from '@kerfjs/ui/badge';
@@ -34,23 +32,6 @@ export type TicketRowPresentation = 'list' | 'column';
  * row's hover and selection border follows the container's curve (HS2-4APEJP).
  */
 export type TicketRowListEdge = 'start' | 'end' | 'only';
-
-/**
- * The legacy diagnostic row shell remains for CorruptTicketRow until HS2-MK98R7.
- */
-export const TICKET_ROW_SHELL_CLASS = 'ticket-row-shell';
-export type TicketRowShellTone = 'danger';
-export function ticketRowShellAttributes({
-  selected,
-  listEdge,
-  tone,
-}: {
-  selected: boolean;
-  listEdge?: TicketRowListEdge;
-  tone?: TicketRowShellTone;
-}) {
-  return { 'data-selected': String(selected), 'data-list-edge': listEdge, 'data-tone': tone };
-}
 
 export interface TicketRowProps {
   slug: string;

@@ -7,6 +7,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { SummaryRow } from '@kerfjs/ui/summary-row';
 import { Text } from '@kerfjs/ui/text';
 import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
@@ -14,7 +15,7 @@ import type { CorruptTicket } from '../api';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
-import { type TicketRowListEdge, ticketRowShellAttributes } from './ticket-row';
+import type { TicketRowListEdge } from './ticket-row';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
@@ -94,43 +95,51 @@ export function CorruptTicketRow({
   const upgradeRequired = ticket.error_code === 'upgrade_required';
   const key = corruptTicketKey(ticket);
   return (
-    <article
-      class="ticket-row-shell corrupt-ticket-row"
-      data-component="corrupt-ticket-row"
-      {...ticketRowShellAttributes({ selected, listEdge, tone: 'danger' })}
-      role="group"
-      aria-label={`Unreadable ticket ${identity}`}
-    >
-      <span class="corrupt-ticket-row__icon">
-        <LucideIcon
-          icon={upgradeRequired ? RefreshCw : FileWarning}
-          name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
-          size={26.4}
-          color={uiColor('danger-on-quiet')}
-        />
-      </span>
-      <div class="corrupt-ticket-row__content">
-        <button
-          type="button"
-          class="corrupt-ticket-row__select"
-          {...NAVIGATION_AND_TABS_ACTIONS.selectCorruptTicket.attrs}
-          data-corrupt-key={key}
-          aria-label={`Open recovery for ${identity}`}
-        >
-          <strong>{identity}</strong>
-          <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Ticket file could not be read'}</span>
-        </button>
-        {recovery?.message && !selected && (
-          <p
-            class="corrupt-ticket-row__recovery"
-            data-failed={String(Boolean(recovery.failed))}
-            role={recovery.failed ? 'alert' : 'status'}
+    <div class="corrupt-ticket-row" data-component="corrupt-ticket-row" data-selected={String(selected)}>
+      <SummaryRow
+        className="corrupt-ticket-row__surface"
+        semanticRole="group"
+        ariaLabel={`Unreadable ticket ${identity}`}
+        selected={selected}
+        listEdge={listEdge}
+        rail="danger"
+        titleLines={3}
+        rootAttributes={{ 'data-corrupt-key': key }}
+        leading={
+          <span class="corrupt-ticket-row__icon">
+            <LucideIcon
+              icon={upgradeRequired ? RefreshCw : FileWarning}
+              name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
+              size={26.4}
+              color={uiColor('danger-on-quiet')}
+            />
+          </span>
+        }
+        title={
+          <button
+            type="button"
+            class="corrupt-ticket-row__select"
+            {...NAVIGATION_AND_TABS_ACTIONS.selectCorruptTicket.attrs}
+            data-corrupt-key={key}
+            aria-label={`Open recovery for ${identity}`}
           >
-            {recovery.message}
-          </p>
-        )}
-      </div>
-    </article>
+            <strong>{identity}</strong>
+            <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Ticket file could not be read'}</span>
+          </button>
+        }
+        metadata={
+          recovery?.message && !selected ? (
+            <p
+              class="corrupt-ticket-row__recovery"
+              data-failed={String(Boolean(recovery.failed))}
+              role={recovery.failed ? 'alert' : 'status'}
+            >
+              {recovery.message}
+            </p>
+          ) : undefined
+        }
+      />
+    </div>
   );
 }
 
