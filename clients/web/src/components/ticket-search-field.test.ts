@@ -140,7 +140,8 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       ),
     );
     expect(help).toContain('aria-label="Add is:duplicate to the search"');
-    expect(help.match(/data-item-id="/g)).toHaveLength(22);
+    expect(help).toContain('data-item-id="is:needs-review"');
+    expect(help.match(/data-item-id="/g)).toHaveLength(23);
     expect(help).toContain('data-item-id="(client OR server) AND NOT is:archived"');
     expect(help).toContain('<strong>Combine filters</strong>');
     expect(help).toContain('updated-after:2026-09-01T11:05');
