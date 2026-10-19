@@ -46,6 +46,7 @@ export interface SettingsWorkspaceProps {
     delays: readonly number[];
     /** Remembered answers for this project (HS2-JNHAYB). */
     rules?: readonly PermissionRule[];
+    dialog?: { query: string; page: number };
     revoking?: readonly string[];
     rulesMessage?: string;
   };
@@ -129,6 +130,7 @@ export function SettingsWorkspace({
           </Text>
           <PermissionRulesSettings
             rules={permissions.rules ?? []}
+            dialog={permissions.dialog}
             revoking={permissions.revoking}
             message={permissions.rulesMessage}
           />

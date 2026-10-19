@@ -701,6 +701,23 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-dialog-remote-narrow.png' });
 });
 
+test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-16XPHH)', async ({ page }) => {
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]'),
+    preview = example.getByRole('list', { name: 'Recent Remembered Answers' });
+  await expect(preview.locator('[data-permission-rule]')).toHaveCount(3);
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Page 1 of 2');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(dialog).toContainText('Page 2 of 2');
+  await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('WebFetch');
+  await expect(dialog).toContainText('Page 1 of 1');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
 

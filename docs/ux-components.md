@@ -2236,6 +2236,10 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   permission grid and its note, terminals, column view, and general. Its Permission automation
   setting (Off, Auto-allow, Auto-deny) shows the delay select disabled and enabled, and Reset
   returns to Ticket sources with automation off (HS2-PS9BQV).
+- `PermissionRulesSettings` — **production + demo built**: shows the latest three project
+  answers in reverse arrival order. A Kerf dialog searches safe displayed labels and pages
+  the complete list five at a time, while each row keeps its individual revoke action
+  (HS2-JNHAYB, HS2-16XPHH).
 - `SettingsSection`
 - `EffectiveSettingField`
 - `SettingScopePicker`

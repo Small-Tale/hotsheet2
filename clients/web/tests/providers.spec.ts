@@ -2888,7 +2888,7 @@ test('falls back to the project dialog when the direct native chooser fails', as
   await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/work/demo');
   await expect(dialog.locator('.project-dialog__error')).toContainText('The native folder chooser failed.');
-  await dialog.getByRole('button', { name: 'Close' }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(500);
   await expect(dialog).toBeHidden();
@@ -15097,6 +15097,72 @@ test('answers identical permission requests for this chat and revokes the rememb
       action: rememberedActionKey(secretAction),
     },
   ]);
+});
+
+test('previews three recent permission answers and searches the paged full list (HS2-16XPHH)', async ({ page }) => {
+  await mockProject(page);
+  let rules = Array.from({ length: 12 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    tool: index % 2 ? 'WebFetch' : 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: index % 2 ? 'deny' : 'allow',
+    scope: index % 2 ? 'session' : 'always',
+  }));
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'DELETE') {
+      const body = route.request().postDataJSON() as { action: string };
+      rules = rules.filter((rule) => rule.action !== body.action);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ json: rules });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const preview = page.locator('[data-component="permission-rules-settings"]'),
+    recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
+  await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
+  await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await expect(preview.getByRole('button', { name: 'Show all 12 answers' })).toBeVisible();
+  await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-wide.png' });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-16xphh-settings-2048.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await preview.getByRole('button', { name: 'Show all 12 answers' }).click();
+  const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
+    all = dialog.getByRole('list', { name: 'All Remembered Answers' }),
+    search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
+  await expect(dialog).toBeVisible();
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
+  await expect(dialog).toContainText('Page 1 of 3');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(all.locator('[data-permission-rule]').first()).toContainText('00000006');
+  await search.fill('WebFetch');
+  await expect(dialog).toContainText('Page 1 of 2');
+  await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
+  await all.getByRole('button', { name: 'Revoke WebFetch request · 00000001' }).click();
+  await expect(dialog).toContainText('Page 1 of 1');
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
+  await search.fill('not-a-visible-label');
+  await expect(dialog).toContainText('No Matching Answers');
+  await search.fill('');
+  await expect(dialog).toContainText('11 matching answers');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-phone.png' });
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
+  await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-phone.png' });
+  await preview.getByRole('button', { name: 'Show all 11 answers' }).click();
+  await expect(search).toHaveValue('');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('refreshes another client’s remembered answers when a rule is revoked or remembered elsewhere (HS2-KYK1S7)', async ({

@@ -45,6 +45,7 @@ export interface SettingsSurfaceDependencies {
   terminalLimitDeviceDefaults?: () => NonNullable<Props['terminalMemory']>['deviceDefaults'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
+  permissionRulesDialogFor: (projectId: string, visible: boolean) => Props['permissions']['dialog'];
   permissionRulesMessage: Readable<string>;
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
@@ -92,6 +93,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     terminalLimitDeviceDefaults,
     permissionAutomation,
     permissionRules,
+    permissionRulesDialogFor,
     permissionRulesMessage,
     revokingPermissionRules,
     hideVerifiedColumn,
@@ -173,6 +175,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           delays: PERMISSION_DELAYS,
           // Loaded only while the Permissions category shows (HS2-JNHAYB).
           rules: settingsCategory() === 'permissions' ? permissionRules(current.id) : [],
+          dialog: permissionRulesDialogFor(current.id, settingsCategory() === 'permissions'),
           revoking: revokingPermissionRules.value,
           rulesMessage: permissionRulesMessage.value,
         }}

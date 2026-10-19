@@ -14,6 +14,9 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   resumeNotifications: action('resume-notifications'),
   resolvePermission: action('resolve-permission'),
   revokePermissionRule: action('revoke-permission-rule'),
+  openPermissionRules: action('open-permission-rules'),
+  previousPermissionRulesPage: action('previous-permission-rules-page'),
+  nextPermissionRulesPage: action('next-permission-rules-page'),
   dismissAppError: action('dismiss-app-error'),
   openHaltedSession: action('open-halted-session'),
   dismissHaltedSession: action('dismiss-halted-session'),
@@ -32,4 +35,6 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
  */
 export const NOTIFICATIONS_AND_LINKS_TARGETS = {
   ticketLinkChoiceDialog: attr('data-dialog-component', 'ticket-link-choice-dialog'),
+  permissionRulesDialog: attr('data-dialog-component', 'permission-rules-dialog'),
+  permissionRulesSearch: attr('name', 'permission-rule-search'),
 } as const;

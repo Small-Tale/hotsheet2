@@ -2,11 +2,11 @@ import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
-import { attr, delegate, signal } from 'kerfjs';
+import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
-import { PermissionRulesSettings } from '../components/permission-rules-settings';
+import { permissionRulesPage, PermissionRulesSettings } from '../components/permission-rules-settings';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
@@ -15,6 +15,7 @@ import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialo
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft, TrashSettings } from '../components/trash-settings';
 import { wireTrashSettings } from '../components/trash-settings-interactions';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { type PermissionAutomationAction } from '../permission-notifications';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
@@ -258,7 +259,30 @@ const PERMISSION_RULES_DEMO = [
     decision: 'deny',
     scope: 'always',
   },
+  {
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'d'.repeat(16)}:${'d'.repeat(56)}00000004`,
+    decision: 'allow',
+    scope: 'always',
+  },
+  {
+    project: '/work/demo.hs2',
+    tool: 'WebFetch',
+    action: `hmac-sha256:v2:${'e'.repeat(16)}:${'e'.repeat(56)}00000005`,
+    decision: 'deny',
+    scope: 'session',
+  },
+  {
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'f'.repeat(16)}:${'f'.repeat(56)}00000006`,
+    decision: 'allow',
+    scope: 'chat',
+  },
 ] as const;
+
+const permissionRulesDemoDialog = signal<{ query: string; page: number } | undefined>(undefined);
 
 /** Remembered permission answers (HS2-JNHAYB): empty, listed, and a revoke in flight with an error. */
 export function PermissionRulesSettingsDemo() {
@@ -268,7 +292,9 @@ export function PermissionRulesSettingsDemo() {
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
       <CatalogExample label="Chat, Session, and Always Rules">
-        <PermissionRulesSettings rules={PERMISSION_RULES_DEMO} />
+        <div data-demo-permission-rules>
+          <PermissionRulesSettings rules={PERMISSION_RULES_DEMO} dialog={permissionRulesDemoDialog.value} />
+        </div>
       </CatalogExample>
       <CatalogExample label="Revoking, with a Failure Message">
         <PermissionRulesSettings
@@ -411,6 +437,45 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       },
     ),
   );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector}`,
+      () => {
+        permissionRulesDemoDialog.value = { query: '', page: 1 };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'input', '[data-demo-permission-rules] [name="permission-rule-search"]', (_event, target) => {
+      permissionRulesDemoDialog.value = { query: (target as FormControl).value, page: 1 };
+    }),
+  );
+  for (const [selector, offset] of [
+    [NOTIFICATIONS_AND_LINKS_ACTIONS.previousPermissionRulesPage.selector, -1],
+    [NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.selector, 1],
+  ] as const)
+    demoListeners.add(
+      delegate(root, 'click', `[data-demo-permission-rules] ${selector}`, () => {
+        const state = permissionRulesDemoDialog.value;
+        if (state)
+          permissionRulesDemoDialog.value = {
+            ...state,
+            page: permissionRulesPage(PERMISSION_RULES_DEMO, state.query, state.page + offset).page,
+          };
+      }),
+    );
+  demoListeners.add(
+    delegateCapture(
+      root,
+      'kui-request-close',
+      '[data-demo-permission-rules] [data-dialog-component="permission-rules-dialog"]',
+      () => {
+        permissionRulesDemoDialog.value = undefined;
+      },
+    ),
+  );
   return () => {
     demoListeners.dispose();
   };
@@ -437,7 +502,13 @@ export const demoModule: DemoModule = {
     },
     'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo, reset: resetTrashSettingsDemo },
     'terminal-memory-settings': { catalogExamples: true, Demo: TerminalMemorySettingsDemo },
-    'permission-rules-settings': { catalogExamples: true, Demo: PermissionRulesSettingsDemo },
+    'permission-rules-settings': {
+      catalogExamples: true,
+      Demo: PermissionRulesSettingsDemo,
+      reset: () => {
+        permissionRulesDemoDialog.value = undefined;
+      },
+    },
   },
   wire: wireSetupSettingsDemo,
 };

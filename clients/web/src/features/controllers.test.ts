@@ -286,6 +286,21 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionCount('b')).toBe(0);
   });
 
+  it('resets remembered-answer search and page across project and settings changes (HS2-16XPHH)', () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    owner.openPermissionRules('a');
+    owner.searchPermissionRules('a', 'Bash');
+    expect(owner.permissionRulesDialogFor('a', true)).toEqual({ projectId: 'a', query: 'Bash', page: 1 });
+    expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
+    expect(owner.permissionRulesDialogFor('a', true)).toBeUndefined();
+    owner.openPermissionRules('b');
+    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1 });
+    expect(owner.permissionRulesDialogFor('b', false)).toBeUndefined();
+    expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
+    owner.dispose();
+  });
+
   it('refetches a shown remembered-rule list once per rules change, only for that project (HS2-KYK1S7)', async () => {
     const projects = signal([project('a'), project('b')]),
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),

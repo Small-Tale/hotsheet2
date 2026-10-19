@@ -3171,7 +3171,7 @@
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
-      "purpose": "Remembered permission answers (chat, session, and always rules) for a project, each with a revoke action (HS2-JNHAYB).",
+      "purpose": "Three newest remembered permission answers for a project, with a searchable, paged full-list dialog and individual revoke actions (HS2-JNHAYB, HS2-16XPHH).",
       "publicExports": [
         {
           "name": "PermissionRulesSettings"

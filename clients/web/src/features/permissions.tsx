@@ -4,6 +4,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
 import { updatePermissionCountdownText } from '../components/permission-request-card';
+import { permissionRulesPage } from '../components/permission-rules-settings';
 import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { Project } from '../interactions/types';
@@ -68,7 +69,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const permissionRulesByProject = signal<Record<string, PermissionRule[]>>({}),
     permissionRulesMessage = signal(''),
     revokingPermissionRules = signal<readonly string[]>([]),
-    freshPermissionRules = signal<ReadonlySet<string>>(new Set());
+    freshPermissionRules = signal<ReadonlySet<string>>(new Set()),
+    permissionRulesDialog = signal<{ projectId: string; query: string; page: number } | undefined>(undefined);
   const loadingPermissionRules = new Set<string>();
   const markPermissionRulesStale = (projectId?: string) => {
     const fresh = freshPermissionRules.peek();
@@ -352,6 +354,33 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     return permissionRulesByProject.value[projectId] ?? [];
   }
 
+  function permissionRulesDialogFor(projectId: string, visible: boolean) {
+    const current = permissionRulesDialog.value;
+    if (current && (!visible || current.projectId !== projectId)) permissionRulesDialog.value = undefined;
+    return visible && current?.projectId === projectId ? current : undefined;
+  }
+
+  function openPermissionRules(projectId: string) {
+    permissionRulesDialog.value = { projectId, query: '', page: 1 };
+  }
+
+  function closePermissionRules() {
+    permissionRulesDialog.value = undefined;
+  }
+
+  function searchPermissionRules(projectId: string, query: string) {
+    if (permissionRulesDialog.value?.projectId === projectId)
+      permissionRulesDialog.value = { projectId, query, page: 1 };
+  }
+
+  function movePermissionRulesPage(projectId: string, offset: number) {
+    const current = permissionRulesDialog.value;
+    if (current?.projectId !== projectId) return;
+    const rules = permissionRulesByProject.value[projectId] ?? [],
+      page = permissionRulesPage(rules, current.query, current.page + offset).page;
+    permissionRulesDialog.value = { ...current, page };
+  }
+
   /** Another client remembered or revoked one of `projectId`'s answers (HS2-KYK1S7). */
   function permissionRulesChanged(projectId: string) {
     markPermissionRulesStale(projectId);
@@ -377,6 +406,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       ...permissionRulesByProject.value,
       [project.id]: projectPermissionRules(rules, project),
     };
+    const dialog = permissionRulesDialog.value;
+    if (dialog?.projectId === project.id)
+      permissionRulesDialog.value = {
+        ...dialog,
+        page: permissionRulesPage(permissionRulesByProject.value[project.id], dialog.query, dialog.page).page,
+      };
   }
 
   /** Forget one remembered answer from Settings → Permissions (HS2-JNHAYB). */
@@ -401,6 +436,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       else
         permissionRulesMessage.value = `Could not revoke the rule. ${reason instanceof Error ? reason.message : String(reason)}`;
     } finally {
+      const dialog = permissionRulesDialog.value;
+      if (dialog?.projectId === projectId)
+        permissionRulesDialog.value = {
+          ...dialog,
+          page: permissionRulesPage(permissionRulesByProject.value[projectId] ?? [], dialog.query, dialog.page).page,
+        };
       revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
     }
   }
@@ -417,6 +458,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesMessage,
     revokingPermissionRules,
     revokePermissionRule,
+    permissionRulesDialogFor,
+    openPermissionRules,
+    closePermissionRules,
+    searchPermissionRules,
+    movePermissionRulesPage,
     loadPermissionAutomation,
     permissionRevision,
     permissionInbox,

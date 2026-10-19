@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
+import type { PermissionHistoryItem, PermissionItem, PermissionRule } from '../permission-notifications';
 import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
@@ -13,7 +13,7 @@ import {
   PermissionRequestPopup,
   updatePermissionCountdownText,
 } from './permission-request-card';
-import { PermissionRulesSettings } from './permission-rules-settings';
+import { permissionRulesPage, PermissionRulesSettings } from './permission-rules-settings';
 
 const pending: PermissionItem = {
   id: 7,
@@ -242,6 +242,41 @@ describe('permission presentation components', () => {
     expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toMatch(
       /data-tone="neutral"[^>]*>0<\/span>/,
     );
+  });
+});
+
+describe('recent remembered answers (HS2-16XPHH)', () => {
+  const rules: PermissionRule[] = Array.from({ length: 12 }, (_, index) => ({
+    project: '/p',
+    tool: index % 2 ? 'WebFetch' : 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: index % 2 ? 'deny' : 'allow',
+    scope: index % 2 ? 'session' : 'always',
+  }));
+
+  it('shows the newest three and a route to all answers', () => {
+    const markup = String(PermissionRulesSettings({ rules }));
+    expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
+    expect(markup).toContain('WebFetch request · 00000011');
+    expect(markup).toContain('Show all 12 answers');
+    expect(markup).not.toContain('00000008');
+  });
+
+  it('filters safe visible labels, clamps pages after removal, and refills an empty result', () => {
+    const first = permissionRulesPage(rules, 'deny', 1);
+    expect(first.rows.map((rule) => rule.action.slice(-8))).toEqual([
+      '00000011',
+      '00000009',
+      '00000007',
+      '00000005',
+      '00000003',
+    ]);
+    expect(permissionRulesPage(rules, 'deny', 2).rows.map((rule) => rule.action.slice(-8))).toEqual(['00000001']);
+    expect(permissionRulesPage(rules.slice(0, 5), 'deny', 2).page).toBe(1);
+    expect(permissionRulesPage([], 'Bash', 5).rows).toEqual([]);
+    expect(permissionRulesPage(rules, '00000010', 1).rows).toHaveLength(1);
+    expect(permissionRulesPage([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 1).rows).toEqual([]);
+    expect(permissionRulesPage(rules, 'deny', 1).rows).toHaveLength(5);
   });
 });
 

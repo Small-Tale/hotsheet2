@@ -40,6 +40,10 @@ export interface NotificationAndLinkInteractionsDependencies {
   ) => Promise<void>;
   /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
   readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
+  readonly openPermissionRules: (projectId: string) => void;
+  readonly closePermissionRules: () => void;
+  readonly searchPermissionRules: (projectId: string, query: string) => void;
+  readonly movePermissionRulesPage: (projectId: string, offset: number) => void;
   readonly error: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
@@ -66,6 +70,10 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     pendingPermissions,
     resolvePermission,
     revokePermissionRule,
+    openPermissionRules,
+    closePermissionRules,
+    searchPermissionRules,
+    movePermissionRulesPage,
     error,
     selectedProjectId,
     hideVerifiedByProject,
@@ -160,6 +168,41 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const key = data(target).ruleKey;
         if (key) void revokePermissionRule(selectedProjectId.value, key);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector, () => {
+      openPermissionRules(selectedProjectId.value);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'input',
+      NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.selector,
+      (_event, target) => {
+        searchPermissionRules(selectedProjectId.value, (target as Control).value);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.previousPermissionRulesPage.selector, () => {
+      movePermissionRulesPage(selectedProjectId.value, -1);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.selector, () => {
+      movePermissionRulesPage(selectedProjectId.value, 1);
+    }),
+  );
+  lifetime.add(
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesDialog.selector,
+      () => {
+        closePermissionRules();
       },
     ),
   );
