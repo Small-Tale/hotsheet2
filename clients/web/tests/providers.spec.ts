@@ -16694,9 +16694,11 @@ test('projects Up Next immediately and reconciles without a full project refresh
     document.addEventListener(
       'click',
       () => {
-        const started = performance.now();
         requestAnimationFrame(() => {
-          (window as typeof window & { mutationRenderMs?: number }).mutationRenderMs = performance.now() - started;
+          const row = document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEXT01"]');
+          const count = document.querySelector('[data-tab-kind="project"] .project-tab__work-count');
+          (window as typeof window & { upNextVisibleOnFirstFrame?: boolean }).upNextVisibleOnFirstFrame =
+            Boolean(row?.querySelector('[aria-label="Remove from Up Next"]')) && count?.textContent.trim() === '2';
         });
       },
       { once: true, capture: true },
@@ -16706,8 +16708,12 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await expect(row.getByRole('button', { name: 'Remove from Up Next' })).toBeVisible();
   await expect(projectTab.locator('.project-tab__work-count')).toHaveText('2');
   await expect
-    .poll(() => page.evaluate(() => (window as typeof window & { mutationRenderMs?: number }).mutationRenderMs))
-    .toBeLessThan(100);
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { upNextVisibleOnFirstFrame?: boolean }).upNextVisibleOnFirstFrame,
+      ),
+    )
+    .toBe(true);
   await expect
     .poll(() => requests.some((value) => value.startsWith('PATCH ') && !value.endsWith('/tickets')))
     .toBe(true);
