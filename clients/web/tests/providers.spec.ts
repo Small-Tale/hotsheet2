@@ -24808,8 +24808,8 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
   const emptyButton = page.getByRole('button', { name: 'Empty Trash' }),
     emptyHost = page.locator('[data-action="open-empty-trash"]'),
-    emptyIcon = emptyHost.locator('[slot="start"]'),
-    emptyText = emptyHost.locator('[part~="label"]');
+    emptyIcon = emptyHost.locator('svg[data-lucide="trash-2"]'),
+    emptyText = emptyHost.locator('.kui-button__label');
   const [iconBox, textBox] = await Promise.all([emptyIcon.boundingBox(), emptyText.boundingBox()]);
   expect(iconBox).not.toBeNull();
   expect(textBox).not.toBeNull();
