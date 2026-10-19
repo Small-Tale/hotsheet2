@@ -81,7 +81,8 @@ export function TerminalMemorySettings({ limits, deviceDefaults, message = '' }:
               : limits
                 ? 'This machine did not report its memory, so the defaults are conservative. '
                 : ''}
-            These limits apply to every project on this machine and take effect for terminals opened afterward.
+            These limits apply to every project on this machine. Terminal history and warm-terminal changes update open
+            clients immediately; replay buffer changes update running terminals on the server.
           </Text>
           {deviceDefaults ? (
             <Text tone="quiet" size="compact" data-role="terminal-limits-conservative">

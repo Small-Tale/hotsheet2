@@ -68,7 +68,7 @@ export function isPhoneDevice(screenValue: Pick<Screen, 'width' | 'height'> = wi
 let current: ClientTerminalLimits = resolveClientTerminalLimits(undefined, { remote: true, phone: false });
 const listeners = new Set<(limits: ClientTerminalLimits) => void>();
 
-/** The limits in effect now. Emulators read them when they mount. */
+/** The limits in effect now. Mounted emulators follow later changes. */
 export function currentTerminalLimits(): ClientTerminalLimits {
   return current;
 }
@@ -80,7 +80,7 @@ export function applyTerminalLimits(limits: TerminalLimits | undefined, context:
   return current;
 }
 
-/** Follow later changes (for example, the warm cap evicting extra parked terminals). */
+/** Follow later changes in mounted emulator history and warm-terminal capacity. */
 export function onTerminalLimitsChange(listener: (limits: ClientTerminalLimits) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

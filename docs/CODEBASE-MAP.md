@@ -173,10 +173,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
-    src/terminal-limits.ts  #   Client terminal history / warm-cap limits resolved from /terminal-limits; conservative defaults on another device or a phone (HS2-Y5DYC0)
+    src/terminal-limits.ts  #   Client terminal history / warm-cap limits resolved from /terminal-limits and pushed to mounted emulators; conservative defaults on another device or a phone (HS2-Y5DYC0, HS2-ZWVDTZ)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
-    src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
+    src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, live scrollback limit updates, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-long-press.ts # Touch long-press controller (500 ms, 10px tolerance) that opens the terminal edit menu (HS2-KKP8YJ)
     src/terminal-touch-selection.ts # Touch text selection: point→buffer cell, word bounds, anchored drag range, and the controller the long-press drives (HS2-EYR96N)
@@ -189,7 +189,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/touch-field-font.spec.ts # Touch screens keep native text fields at 16px+ so iOS never zooms on focus; desktop stays compact (HS2-8JPRRC); walks every UX demo for editable fields under 16px (HS2-JDXSND); walks interaction-only fields of the composed app on a touch phone and tablet (HS2-R2H1BA); walks populated settings editors, the git source form, and saved-view/terminal renames (HS2-NYGR2Q) plus AI tools, non-git provider forms, and the repository remote field (HS2-ME1XBC) on a touch phone and tablet
     tests/mobile-project-fixture.ts # openDemoProject(page, ...): shared mocked one-project app fixture for mobile-layout and touch-field-font specs
     tests/shell-composition.spec.ts # AppShell/ProjectTabBar/terminal grid and drawer configured through props, not cross-component CSS (HS2-DR549A)
-    src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup and successful refill with idempotent teardown
+    src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup, live scrollback transitions, and successful refill with idempotent teardown
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection

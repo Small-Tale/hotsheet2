@@ -29,6 +29,7 @@ import {
   terminalModifiersActive,
   type TerminalSpecialKey,
 } from './terminal-keys';
+import { onTerminalLimitsChange } from './terminal-limits';
 import { createLongPressController } from './terminal-long-press';
 import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
@@ -118,6 +119,15 @@ function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () =>
     throw error;
   }
   return dispose;
+}
+
+/** Keep a mounted emulator's history limit current without replacing its terminal instance. */
+function followTerminalScrollback(element: HTMLElement, terminal: Terminal, fixedDashboardGrid: boolean): () => void {
+  return onTerminalLimitsChange(() => {
+    const limit = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid);
+    if (terminal.options.scrollback !== limit) terminal.options.scrollback = limit;
+    element.dataset.scrollbackLimit = String(limit);
+  });
 }
 
 /**
@@ -213,6 +223,7 @@ function initializeStaticTerminalViewport(
     terminal.dispose();
   });
   own(followTerminalTheme(element, terminal));
+  own(followTerminalScrollback(element, terminal, fixedDashboardGrid || !scaledPreview));
   terminal.open(element);
   const fit = new FitAddon();
   terminal.loadAddon(fit);
@@ -388,6 +399,7 @@ function initializeTerminalViewport(
     terminal.dispose();
   });
   own(followTerminalTheme(element, terminal));
+  own(followTerminalScrollback(element, terminal, fixedDashboardGrid || magnified));
   terminal.loadAddon(fit);
   terminal.open(element);
   const ticketLinks =

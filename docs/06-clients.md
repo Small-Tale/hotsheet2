@@ -3861,9 +3861,10 @@ peer that omits it keeps 256 KiB. Saving a new limit through `/terminal-limits` 
 each running PTY's replay buffer, including broker-hosted terminals. Shrinking evicts old
 output at a parser-safe boundary; growing retains future output without recovering bytes
 already discarded. An older detached broker that does not recognize the resize operation
-keeps its current running buffers until restarted. An emulator keeps the history it mounted
-with, so its history change applies to terminals opened afterward. Lowering the warm-terminal
-limit evicts extra parked terminals immediately.
+keeps its current running buffers until restarted. Mounted dedicated and magnified emulators
+update their scrollback limit when history changes, without remounting; a scaled preview still
+keeps no duplicate scrollback. Lowering the warm-terminal limit evicts extra parked terminals
+immediately (HS2-ZWVDTZ).
 
 ## 6.8 Notes, reader mode & editing
 

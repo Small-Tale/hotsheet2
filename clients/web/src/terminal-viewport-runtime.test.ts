@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns';
 import { TERMINAL_EDIT_MENU_EVENT } from './terminal-clipboard';
+import { applyTerminalLimits } from './terminal-limits';
 import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -218,6 +219,66 @@ function element() {
     listeners: mock.addEventListener,
   };
 }
+
+describe('live terminal history changes (HS2-ZWVDTZ)', () => {
+  it('updates dedicated, magnified, and static emulators without remounting and stops after disposal', () => {
+    applyTerminalLimits(undefined, { remote: true, phone: false });
+    const dedicated = element().viewport,
+      magnified = element().viewport,
+      staticViewport = element().viewport;
+    (magnified as unknown as { closest: (selector: string) => unknown }).closest = (selector) =>
+      selector === '[data-fixed-aspect-terminal-card="magnified"]' ? {} : null;
+    const disposeDedicated = mountTerminalViewportRuntime(dedicated, {
+        url: 'ws://lan/terminal',
+        viewerId: 'dedicated',
+      }),
+      disposeMagnified = mountTerminalViewportRuntime(magnified, { url: 'ws://lan/terminal', viewerId: 'magnified' }),
+      disposeStatic = mountStaticTerminalViewportRuntime(staticViewport, { output: 'ready' }),
+      [dedicatedTerminal, magnifiedTerminal, staticTerminal] = allocated.terminals;
+    const setHistory = (history: number) =>
+      applyTerminalLimits(
+        {
+          physical_memory_bytes: null,
+          defaults: { history_lines: 5_000, replay_bytes: 960_000, warm_terminals: 12 },
+          configured: { history_lines: history, replay_bytes: null, warm_terminals: null },
+          effective: { history_lines: history, replay_bytes: 960_000, warm_terminals: 12 },
+        },
+        { remote: true, phone: false },
+      );
+    expect(allocated.terminals).toHaveLength(3);
+    expect(dedicatedTerminal.options.scrollback).toBe(5_000);
+    expect(magnifiedTerminal.options.scrollback).toBe(1_000);
+    expect(staticTerminal.options.scrollback).toBe(1_000);
+    setHistory(20_000);
+    expect([
+      dedicatedTerminal.options.scrollback,
+      magnifiedTerminal.options.scrollback,
+      staticTerminal.options.scrollback,
+    ]).toEqual([20_000, 4_000, 4_000]);
+    expect([
+      dedicated.dataset.scrollbackLimit,
+      magnified.dataset.scrollbackLimit,
+      staticViewport.dataset.scrollbackLimit,
+    ]).toEqual(['20000', '4000', '4000']);
+    setHistory(2_500);
+    expect([
+      dedicatedTerminal.options.scrollback,
+      magnifiedTerminal.options.scrollback,
+      staticTerminal.options.scrollback,
+    ]).toEqual([2_500, 500, 500]);
+    disposeMagnified();
+    setHistory(12_000);
+    expect(dedicatedTerminal.options.scrollback).toBe(12_000);
+    expect(magnifiedTerminal.options.scrollback).toBe(500);
+    expect(staticTerminal.options.scrollback).toBe(2_400);
+    expect(allocated.terminals).toHaveLength(3);
+    disposeDedicated();
+    disposeStatic();
+    applyTerminalLimits(undefined, { remote: true, phone: false });
+    expect(dedicatedTerminal.options.scrollback).toBe(12_000);
+    expect(staticTerminal.options.scrollback).toBe(2_400);
+  });
+});
 
 describe('reparented live viewports (HS2-AMNNBR, HS2-TBQQ00)', () => {
   it("re-observes a scaled preview's new frame instead of recreating the emulator", () => {

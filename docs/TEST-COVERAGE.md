@@ -904,3 +904,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/components/{active-claim,settings-workspace,ticket-row,ticket-source-surfaces}.test.ts` and `clients/web/src/kerf-ui-profile.test.ts` cover markup, state, and the UI profile.
 - End to end: `clients/web/tests/ux-demo.spec.ts` covers setting, resetting, and editing demo checkboxes plus wide and phone claim states; `clients/web/tests/providers.spec.ts` covers provider default toggles, permission-rule selection, shell-history and Verified-column settings, and live claim ETA.
 - Manual: Inspect matching wide and phone captures attached to HS2-SKD293.
+
+### Live terminal history limits (HS2-ZWVDTZ)
+
+- Behavior: A saved terminal history limit updates mounted dedicated, magnified, and static xterm scrollback without remounting; disposed emulators stop receiving changes. Server replay capacity is covered separately by HS2-56G204.
+- Unit: `clients/web/src/terminal-viewport-runtime.test.ts` covers increase, decrease, another increase, and disposal; `clients/web/src/terminal-limits.test.ts` covers client defaults and the magnified ratio.
+- End to end: `clients/web/tests/terminal-limits.spec.ts` saves limits through the real server and checks a mounted emulator and newly opened magnified card.
+- Manual: Inspect wide and phone settings captures attached to HS2-ZWVDTZ.

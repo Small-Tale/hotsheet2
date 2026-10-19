@@ -19,8 +19,8 @@ async function choose(page: Page, name: string, value: string) {
 }
 
 // HS2-Y5DYC0: App Settings → Terminal memory reads and writes the real server's machine-wide limits,
-// and an emulator mounted afterward keeps the chosen history.
-test('saves machine-wide terminal limits and sizes terminals opened afterward', async ({ page }) => {
+// and an already mounted emulator follows a changed history without remounting.
+test('saves machine-wide terminal limits and updates mounted terminals', async ({ page }) => {
   const server = await realTicketServer();
   try {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -39,6 +39,12 @@ test('saves machine-wide terminal limits and sizes terminals opened afterward', 
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('tab', { name: 'Terminal feedback' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await page.getByRole('tab', { name: 'Nano Busy' }).click();
+    const live = page.locator('.terminal-viewport--dedicated').first();
+    await expect(live).toHaveAttribute('data-scrollback-limit', String(initial.defaults.history_lines));
+    const mounted = await live.elementHandle();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Terminal memory', exact: true }).click();
     const settings = page.locator('[data-component="terminal-memory-settings"]'),
@@ -52,6 +58,9 @@ test('saves machine-wide terminal limits and sizes terminals opened afterward', 
     await expect
       .poll(async () => (await server.request<Limits>('/terminal-limits')).configured)
       .toEqual({ history_lines: 10_000, replay_bytes: null, warm_terminals: null });
+    await expect.poll(() => mounted.evaluate((element) => element.dataset.scrollbackLimit)).toBe('10000');
+    expect(await mounted.evaluate((element) => element.isConnected)).toBe(true);
+    await page.screenshot({ path: 'target/visual-captures/hs2-zwvdzt-live-history-wide.png', fullPage: true });
     const saved = await server.request<Limits>('/terminal-limits');
     // The unset replay follows the configured history, so a reconnect restores what the client keeps.
     expect(saved.effective.replay_bytes).toBe(10_000 * 192);
@@ -81,6 +90,49 @@ test('saves machine-wide terminal limits and sizes terminals opened afterward', 
     await expect
       .poll(async () => (await server.request<Limits>('/terminal-limits')).configured)
       .toEqual({ history_lines: null, replay_bytes: null, warm_terminals: 4 });
+    await expect
+      .poll(() => mounted.evaluate((element) => element.dataset.scrollbackLimit))
+      .toBe(String(initial.defaults.history_lines));
+  } finally {
+    await server.stop();
+  }
+});
+
+test('shows Terminal memory settings on a fresh phone viewport (HS2-ZWVDTZ)', async ({ page }) => {
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installTerminalFixture(page);
+    await page.route('**/terminal-limits', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/terminal-limits`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+    await page.getByRole('button', { name: 'Terminal memory', exact: true }).click();
+    await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+    const settings = page.locator('[data-component="terminal-memory-settings"]');
+    await expect(settings).toBeVisible();
+    await expect(page.locator('kui-select[name="terminal-history-lines"]')).toHaveJSProperty('value', 'default');
+    await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
+    await expect
+      .poll(() =>
+        page
+          .locator('[data-component="app-shell"]')
+          .evaluate((element) => element.getAnimations({ subtree: true }).length),
+      )
+      .toBe(0);
+    const box = (await settings.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: 'target/visual-captures/hs2-zwvdzt-live-history-phone.png', animations: 'disabled' });
   } finally {
     await server.stop();
   }
