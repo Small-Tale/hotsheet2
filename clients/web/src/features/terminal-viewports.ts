@@ -126,6 +126,10 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     tiledInstances.delete(element);
     element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }));
   }
+  function copyViewportLabel(placeholder: HTMLElement, element: HTMLElement) {
+    const label = placeholder.getAttribute('aria-label');
+    if (label) element.setAttribute('aria-label', label);
+  }
   const terminalViewportCandidates = new Set<HTMLElement>();
   const terminalViewportObservationTargets = new Map<HTMLElement, HTMLElement>();
   const terminalViewportCandidatesByTarget = new Map<HTMLElement, HTMLElement>();
@@ -315,6 +319,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     const [host, hosted] = found;
     releaseTileHost(host);
     placeholder.replaceWith(hosted.element);
+    copyViewportLabel(placeholder, hosted.element);
     terminalViewportMounts.set(hosted.element, hosted.dispose);
     presentInteractively(hosted.element);
     const focus =
@@ -336,6 +341,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     parkedViewports.delete(identity);
     entry.element.removeEventListener(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT, entry.evict);
     parking.restore(placeholder, entry.element);
+    copyViewportLabel(placeholder, entry.element);
     delete entry.element.dataset.parked;
     terminalViewportMounts.set(entry.element, entry.dispose);
     // A parked tile instance becomes interactive in either the drawer or a magnified card.

@@ -196,11 +196,14 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
   type Fake = HTMLElement & { events: string[]; removed: boolean };
   function keepAlive(projectId: string, terminalId: string): Fake {
     const target = new EventTarget() as unknown as Fake;
-    const dispatch = target.dispatchEvent.bind(target);
+    const dispatch = target.dispatchEvent.bind(target),
+      attributes = new Map<string, string>();
     Object.assign(target, {
       isConnected: true,
       dataset: { projectId, terminalId, displayMode: 'interactive', mountPolicy: 'keep-alive' },
       closest: () => null,
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      setAttribute: (name: string, value: string) => attributes.set(name, value),
       events: [] as string[],
       removed: false,
       remove() {
@@ -589,6 +592,9 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
     setAttribute(name: string, value: string) {
       this.attributes.set(name, value);
     }
+    getAttribute(name: string) {
+      return this.attributes.get(name) ?? null;
+    }
     closest(selector: string): FakeNode | null {
       const match = /^\[data-([\w-]+)="([^"]*)"\]$/.exec(selector);
       if (!match) return null;
@@ -842,8 +848,10 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
     expect(instance.parentElement).toBe(view.holder);
     expect(instance.dataset.parked).toBe('true');
     const magnified = view.tile('x', true);
+    magnified.preview.setAttribute('aria-label', 'X interactive terminal');
     view.sync();
     expect(instance.parentElement).toBe(magnified.frame);
+    expect(instance.getAttribute('aria-label')).toBe('X interactive terminal');
     expect(instance.dataset.parked).toBeUndefined();
     expect(instance.events.slice(-2)).toEqual([
       'hs-terminal-viewport-presentation:false',

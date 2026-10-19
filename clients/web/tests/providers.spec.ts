@@ -30970,12 +30970,15 @@ test('paints magnified terminals above every surface from the workspace grid and
     }),
   ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('workspace-grid-magnified-menu.png') });
-  // Kerf's menu (beta.106) takes the first Escape itself and closes only the menu; with focus
-  // outside the terminal, the next Escape closes the magnified overlay.
+  // Kerf's menu takes the first Escape itself and returns focus to the adopted live terminal.
+  // A focused terminal owns Escape, so the backdrop remains the explicit close target.
   await page.keyboard.press('Escape');
   await expect(menuItem).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(1);
+  await expect(magnified.locator('.xterm-helper-textarea')).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(1);
+  await magnified.click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
 });
 
