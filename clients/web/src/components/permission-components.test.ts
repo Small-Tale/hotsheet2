@@ -297,6 +297,8 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));
     expect(empty).toContain('No Remembered Answers');
+    const first = `sha256:v1:${'a'.repeat(56)}12345678`,
+      second = `sha256:v1:${'b'.repeat(56)}87654321`;
     const markup = String(
       PermissionRulesSettings({
         rules: [
@@ -304,22 +306,24 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
             project: '/p',
             connection: 'chat-a',
             tool: 'Bash',
-            action: 'npm test\nmore',
+            action: first,
             decision: 'allow',
             scope: 'chat',
           },
-          { project: '/p', tool: 'Bash', action: 'rm -rf build', decision: 'deny', scope: 'always' },
+          { project: '/p', tool: 'Bash', action: second, decision: 'deny', scope: 'always' },
         ],
-        revoking: [JSON.stringify(['/p', '', 'Bash', 'rm -rf build'])],
+        revoking: [JSON.stringify(['/p', '', 'Bash', second])],
         message: 'Could not revoke the rule.',
       }),
     );
-    expect(markup).toContain('Bash: npm test');
+    expect(markup).toContain('Bash request · 12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Deny · This project, always');
+    expect(markup).toContain('Deny · This project, always · Details hidden');
+    expect(markup).not.toContain('npm test');
+    expect(markup).not.toContain('rm -rf build');
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
     expect(markup).toMatch(
-      /aria-label="Revoke Bash: rm -rf build"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash: rm -rf build"/,
+      /aria-label="Revoke Bash request · 87654321"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash request · 87654321"/,
     );
     expect(markup).toContain('Could not revoke the rule.');
   });

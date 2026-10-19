@@ -25,6 +25,35 @@ use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+const ACTION_FINGERPRINT_PREFIX: &str = "sha256:v1:";
+
+/// Exact-match key for remembered actions. Never persist or list the original command/path:
+/// permission prompts can include credentials, inline tokens, and private file names.
+fn action_fingerprint(action: &str) -> String {
+    format!(
+        "{ACTION_FINGERPRINT_PREFIX}{:x}",
+        Sha256::digest(action.as_bytes())
+    )
+}
+
+fn is_action_fingerprint(action: &str) -> bool {
+    action
+        .strip_prefix(ACTION_FINGERPRINT_PREFIX)
+        .is_some_and(|digest| {
+            digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+}
+
+/// Normalize a stored key, including old files that still contain raw actions.
+fn stored_action_key(action: &str) -> String {
+    if is_action_fingerprint(action) {
+        action.to_owned()
+    } else {
+        action_fingerprint(action)
+    }
+}
 
 /// Eventual safe-deny guard for an unattended permission request. Client automation is
 /// deliberately independent: its countdown advances only while the popup is visible, so
@@ -83,7 +112,8 @@ pub struct PermissionAsk {
     pub agent: Option<String>,
 }
 
-/// A persisted allow-rule: auto-answer any request matching `(project, tool, action)`.
+/// A remembered allow-rule: auto-answer any request matching the exact original action.
+/// New rules hold only its fingerprint; raw actions occur only in legacy caller fixtures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule {
     pub project: String,
@@ -100,12 +130,20 @@ pub struct Rule {
 
 impl Rule {
     fn matches(&self, project: &str, tool: &str, action: &str) -> bool {
-        self.project == project && self.tool == tool && self.action == action
+        self.project == project
+            && self.tool == tool
+            && if is_action_fingerprint(&self.action) {
+                self.action == action_fingerprint(action)
+            } else {
+                self.action == action
+            }
     }
 
     /// Whether two rules occupy the same slot: a newer one replaces an older one.
     fn same_key(&self, other: &Rule) -> bool {
-        self.matches(&other.project, &other.tool, &other.action)
+        self.project == other.project
+            && self.tool == other.tool
+            && stored_action_key(&self.action) == stored_action_key(&other.action)
             && self.connection == other.connection
     }
 }
@@ -152,7 +190,7 @@ impl From<&Rule> for RuleInfo {
             project: rule.project.clone(),
             connection: rule.connection.clone(),
             tool: rule.tool.clone(),
-            action: rule.action.clone(),
+            action: stored_action_key(&rule.action),
             decision: rule.decision,
             scope: if rule.connection.is_some() {
                 Scope::Chat
@@ -307,7 +345,11 @@ impl PermissionBridge {
         action: &str,
     ) -> Option<Rule> {
         let position = self.rules.iter().position(|rule| {
-            rule.matches(project, tool, action) && rule.connection.as_deref() == connection
+            rule.project == project
+                && rule.tool == tool
+                && (rule.matches(project, tool, action)
+                    || stored_action_key(&rule.action) == action)
+                && rule.connection.as_deref() == connection
         })?;
         Some(self.rules.remove(position))
     }
@@ -334,7 +376,7 @@ impl PermissionBridge {
             let rule = Rule {
                 project: req.project.clone(),
                 tool: req.tool.clone(),
-                action: req.action.clone(),
+                action: action_fingerprint(&req.action),
                 decision,
                 persist: scope == Scope::Always,
                 connection: (scope == Scope::Chat).then(|| req.connection.clone()),
@@ -780,8 +822,8 @@ impl Drop for AsyncAsk<'_> {
 
 // ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
 
-/// The on-disk form of an `Always` allow-rule — enough to auto-answer the same
-/// `(project, tool, action)` on a later run. The transient `persist` flag isn't stored.
+/// The on-disk form of an `Always` allow-rule. `action` is an opaque exact-match
+/// fingerprint, never the command/path text. The transient `persist` flag isn't stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredRule {
     #[serde(default)]
@@ -796,7 +838,7 @@ impl From<&Rule> for StoredRule {
         StoredRule {
             project: r.project.clone(),
             tool: r.tool.clone(),
-            action: r.action.clone(),
+            action: stored_action_key(&r.action),
             decision: r.decision,
         }
     }
@@ -816,17 +858,32 @@ impl StoredRule {
     }
 }
 
-/// Load durable allow-rules from `path` (a JSON array). A missing or unreadable/malformed
-/// file yields an empty set — a first run just has no remembered answers.
+/// Load durable allow-rules from `path` (a JSON array). Legacy raw actions are replaced
+/// on disk before their rules are activated; if that scrub fails, load no rules rather than
+/// keeping a secret-bearing legacy file active. Missing/unreadable/malformed files are empty.
 pub fn load_rules(path: &Path) -> Vec<Rule> {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
-    serde_json::from_str::<Vec<StoredRule>>(&text)
-        .unwrap_or_default()
-        .into_iter()
-        .map(StoredRule::into_rule)
-        .collect()
+    let Ok(mut stored) = serde_json::from_str::<Vec<StoredRule>>(&text) else {
+        return Vec::new();
+    };
+    let mut migrated = false;
+    for rule in &mut stored {
+        if !is_action_fingerprint(&rule.action) {
+            rule.action = action_fingerprint(&rule.action);
+            migrated = true;
+        }
+    }
+    if migrated {
+        let Ok(json) = serde_json::to_string_pretty(&stored) else {
+            return Vec::new();
+        };
+        if std::fs::write(path, json).is_err() {
+            return Vec::new();
+        }
+    }
+    stored.into_iter().map(StoredRule::into_rule).collect()
 }
 
 /// Remove a durable rule for `(project, tool, action)` from `path` (HS2-JNHAYB revoke).
@@ -836,7 +893,9 @@ pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std:
     let before = rules.len();
     // Durable rules may be stored with the project or with the legacy empty project.
     rules.retain(|r| {
-        !((r.project == project || r.project.is_empty()) && r.tool == tool && r.action == action)
+        !((r.project == project || r.project.is_empty())
+            && r.tool == tool
+            && (r.action == action || r.action == action_fingerprint(action)))
     });
     if rules.len() == before {
         return Ok(false);
@@ -850,8 +909,8 @@ pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std:
 /// `(project, tool, action)` (a later answer wins) — so remembered answers survive a restart.
 pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
     let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
-    rules
-        .retain(|r| !(r.project == rule.project && r.tool == rule.tool && r.action == rule.action));
+    let action_key = stored_action_key(&rule.action);
+    rules.retain(|r| !(r.project == rule.project && r.tool == rule.tool && r.action == action_key));
     rules.push(StoredRule::from(rule));
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1163,9 +1222,102 @@ mod tests {
 
         let loaded = load_rules(&path);
         assert_eq!(loaded.len(), 2, "deduped by (tool, action)");
-        let ls = loaded.iter().find(|r| r.action == "ls").unwrap();
+        let ls = loaded
+            .iter()
+            .find(|r| r.action == action_fingerprint("ls"))
+            .unwrap();
         assert_eq!(ls.decision, Decision::Deny, "the later answer won");
         assert!(loaded.iter().all(|r| r.persist), "loaded rules are durable");
+        assert!(!std::fs::read_to_string(path).unwrap().contains("\"ls\""));
+    }
+
+    #[test]
+    fn secret_bearing_actions_remain_exact_but_never_enter_rule_exports_or_storage() {
+        let secret = "curl -H 'Authorization: Bearer sk-example-private' https://example.test";
+        let near = "curl -H 'Authorization: Bearer sk-example-other' https://example.test";
+        let mut bridge = PermissionBridge::new();
+        let id = match bridge.request_for_project("project", "chat", "Bash", secret) {
+            Outcome::Pending(id) => id,
+            other => panic!("expected a pending ask, got {other:?}"),
+        };
+        let resolved = bridge.resolve(id, Decision::Allow, Scope::Always).unwrap();
+        let rule = resolved.persisted_rule.unwrap();
+        assert_eq!(rule.action, action_fingerprint(secret));
+        assert!(!format!("{rule:?}").contains("sk-example-private"));
+        let listed = bridge
+            .rules()
+            .iter()
+            .map(RuleInfo::from)
+            .collect::<Vec<_>>();
+        assert!(
+            !serde_json::to_string(&listed)
+                .unwrap()
+                .contains("sk-example-private")
+        );
+        assert_eq!(
+            bridge.request_for_project("project", "other-chat", "Bash", secret),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(matches!(
+            bridge.request_for_project("project", "other-chat", "Bash", near),
+            Outcome::Pending(_)
+        ));
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        append_rule(&path, &rule).unwrap();
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("sk-example-private")
+        );
+        let mut restarted = PermissionBridge::with_rules(load_rules(&path));
+        assert_eq!(
+            restarted.request_for_project("project", "fresh-chat", "Bash", secret),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(
+            restarted
+                .revoke("project", None, "Bash", &listed[0].action)
+                .is_some()
+        );
+        assert!(matches!(
+            restarted.request_for_project("project", "fresh-chat", "Bash", secret),
+            Outcome::Pending(_)
+        ));
+    }
+
+    #[test]
+    fn loading_a_legacy_rule_scrubs_raw_action_before_activation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        let secret = "API_TOKEN=private-value npm test";
+        std::fs::write(
+            &path,
+            serde_json::to_string(&vec![StoredRule {
+                project: "p".into(),
+                tool: "Bash".into(),
+                action: secret.into(),
+                decision: Decision::Allow,
+            }])
+            .unwrap(),
+        )
+        .unwrap();
+        let rules = load_rules(&path);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].action, action_fingerprint(secret));
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("private-value")
+        );
+        let mut bridge = PermissionBridge::with_rules(rules);
+        assert_eq!(
+            bridge.request_for_project("p", "c", "Bash", secret),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(remove_rule(&path, "p", "Bash", &action_fingerprint(secret)).unwrap());
+        assert!(load_rules(&path).is_empty());
     }
 
     #[test]

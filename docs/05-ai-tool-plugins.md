@@ -887,8 +887,14 @@ another client or transport answers: every attached client refetches pending req
 retains the disappeared request in notification history, including generic tools such as
 `ToolSearch` whose action/details string is empty.
 
-`Always Allow` rules match the same project, tool, and exact action text (for example,
-the same Bash command); a different command asks again. They are personal machine state, stored per linked ticket store under
+`Always Allow` rules match the same project, tool, and exact action (for example,
+the same Bash command); a different command asks again. Remembered rules hold an opaque
+fingerprint of the action, not the command or path text. The original action is shown
+only in the pending request so the person can decide. Existing rule files with raw
+actions are scrubbed to fingerprints before those rules become active; a file that
+cannot be scrubbed contributes no active rules. Fingerprints prevent direct secret
+disclosure in rule files and list responses, but a person should still revoke any rule
+whose action they cannot recognize. Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each
 pending request so clients only render that action when durable rule storage is active.
@@ -914,9 +920,11 @@ waiting — the resolve response lists them in `also_resolved` and each gets its
 `permission_resolved` event. The client groups identical pending requests (same project,
 connection, tool, and action) into one popup that names the count; a one-time answer is
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
-`DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one (removing a
-durable rule from the store's rule file too); Settings → Permissions lists the project's
-remembered answers with a revoke action. Remembering an answer, revoking one, and closing a
+`DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
+opaque action fingerprint (removing a durable rule from the store's rule file too);
+Settings → Permissions lists the project's remembered answers by tool, scope, decision,
+and a short fingerprint identifier, with command/path details hidden and each rule
+revocable. Remembering an answer, revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).

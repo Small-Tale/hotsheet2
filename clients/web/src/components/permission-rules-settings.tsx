@@ -22,10 +22,10 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   always: 'This project, always',
 };
 
-/** The first line of a remembered action; commands can span lines. */
-function actionSummary(action: string) {
-  const first = action.split('\n', 1)[0] ?? '';
-  return first.trim() || '(any input)';
+/** Opaque ID distinguishes otherwise similar rules without exposing command/path text. */
+function ruleLabel(tool: string, action: string) {
+  const fingerprint = /^sha256:v1:[a-f0-9]{64}$/.test(action) ? action.slice(-8) : undefined;
+  return fingerprint ? `${tool} request · ${fingerprint}` : `${tool} request`;
 }
 
 /**
@@ -52,7 +52,7 @@ export function PermissionRulesSettings({ rules, revoking = [], message = '' }: 
             {rules.map((rule) => {
               const key = permissionRuleKey(rule),
                 allowed = rule.decision === 'allow',
-                summary = actionSummary(rule.action);
+                label = ruleLabel(rule.tool, rule.action);
               return (
                 <Row
                   vAlign="middle"
@@ -68,11 +68,11 @@ export function PermissionRulesSettings({ rules, revoking = [], message = '' }: 
                     label={allowed ? 'Allowed' : 'Denied'}
                   />
                   <List gap="none" flex>
-                    <Text wrap="truncate" title={rule.action} flush>
-                      {`${rule.tool}: ${summary}`}
+                    <Text wrap="truncate" title="Action details hidden to protect sensitive values" flush>
+                      {label}
                     </Text>
                     <Text tone="quiet" size="compact" flush>
-                      {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
+                      {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]} · Details hidden`}
                     </Text>
                   </List>
                   <Button
@@ -80,7 +80,7 @@ export function PermissionRulesSettings({ rules, revoking = [], message = '' }: 
                     size="compact"
                     action={NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value}
                     disabled={revoking.includes(key)}
-                    ariaLabel={`Revoke ${rule.tool}: ${summary}`}
+                    ariaLabel={`Revoke ${label}`}
                     title="Forget this answer; the next identical request asks again"
                     rootAttributes={{ 'data-rule-key': key }}
                     icon={<LucideIcon icon={Trash2} name="trash-2" />}

@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -19,6 +20,8 @@ import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
+
+const rememberedActionKey = (action: string) => `sha256:v1:${createHash('sha256').update(action).digest('hex')}`;
 
 /** A Kerf PopupMenu root's opener, whose `aria-expanded` is the menu's open state (Kerf beta.106). */
 const menuOpener = (menu: Locator) =>
@@ -14970,12 +14973,13 @@ test('answers identical permission requests for this chat and revokes the rememb
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
+  const secretAction = 'API_TOKEN=example-private-value npm test';
   const ask = (id: number) => ({
     id,
     project: '/work/demo.hs2',
     connection: 'hotsheet-drawer-chat-1',
     tool: 'Bash',
-    action: 'npm test',
+    action: secretAction,
     agent: 'claude',
     always_allow_supported: true,
   });
@@ -15003,7 +15007,7 @@ test('answers identical permission requests for this chat and revokes the rememb
         project: '/work/demo.hs2',
         connection: 'hotsheet-drawer-chat-1',
         tool: 'Bash',
-        action: 'npm test',
+        action: rememberedActionKey(secretAction),
         decision: 'allow',
         scope: 'chat',
       },
@@ -15038,9 +15042,12 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
-  await expect(row).toContainText('Bash: npm test');
-  await expect(row).toContainText('Allow · This chat only, until it closes');
+  await expect(row).toContainText(`Bash request · ${rememberedActionKey(secretAction).slice(-8)}`);
+  await expect(row).toContainText('Allow · This chat only, until it closes · Details hidden');
+  await expect(row).not.toContainText('example-private-value');
   await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-204hpy-remembered-rules-2048.png' });
   // Phone width, loaded fresh so the mobile layout applies.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -15054,12 +15061,21 @@ test('answers identical permission requests for this chat and revokes the rememb
   expect(await remembered.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-390.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-204hpy-remembered-rules-390.png' });
   const revoke = row.locator('[data-action="revoke-permission-rule"]');
-  await expect(revoke).toHaveAttribute('aria-label', 'Revoke Bash: npm test');
+  await expect(revoke).toHaveAttribute(
+    'aria-label',
+    `Revoke Bash request · ${rememberedActionKey(secretAction).slice(-8)}`,
+  );
   await revoke.click();
   await expect(remembered).toContainText('No Remembered Answers');
   expect(revokes).toEqual([
-    { project: '/work/demo.hs2', connection: 'hotsheet-drawer-chat-1', tool: 'Bash', action: 'npm test' },
+    {
+      project: '/work/demo.hs2',
+      connection: 'hotsheet-drawer-chat-1',
+      tool: 'Bash',
+      action: rememberedActionKey(secretAction),
+    },
   ]);
 });
 
@@ -15070,7 +15086,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   const rule = (action: string) => ({
     project: '/work/demo.hs2',
     tool: 'Bash',
-    action,
+    action: rememberedActionKey(action),
     decision: 'allow',
     scope: 'always',
   });
@@ -15126,13 +15142,15 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   const secondReads = second.reads.count;
 
   // The first client revokes a rule; the second's open list follows the server's event.
-  const lint = first.remembered.locator('[data-permission-rule-scope="always"]').filter({ hasText: 'npm run lint' });
+  const lint = first.remembered
+    .locator('[data-permission-rule-scope="always"]')
+    .filter({ hasText: rememberedActionKey('npm run lint').slice(-8) });
   await lint.locator('[data-action="revoke-permission-rule"]').click();
   await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).toContainText('Bash: npm run lint');
+  await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
   await publishRulesChanged(second);
   await expect(second.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).not.toContainText('Bash: npm run lint');
+  await expect(second.remembered).not.toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
   // Exactly one refetch, and no polling while nothing changes.
   expect(second.reads.count).toBe(secondReads + 1);
   await second.page.waitForTimeout(1_500);
@@ -15142,7 +15160,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   rules = [...rules, rule('cargo test')];
   await expect.poll(() => second.polls.length).toBeGreaterThan(0);
   await publishRulesChanged(second);
-  await expect(second.remembered).toContainText('Bash: cargo test');
+  await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('cargo test').slice(-8)}`);
   expect(second.reads.count).toBe(secondReads + 2);
   await second.remembered.screenshot({ path: 'target/visual-captures/hs2-kyk1s7-second-client-rules-1280.png' });
   for (const context of contexts) await context.close();

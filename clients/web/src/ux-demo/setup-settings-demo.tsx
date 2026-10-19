@@ -240,12 +240,24 @@ const PERMISSION_RULES_DEMO = [
     project: '/work/demo.hs2',
     connection: 'hotsheet-drawer-chat-1',
     tool: 'Bash',
-    action: 'npm test',
+    action: `sha256:v1:${'a'.repeat(56)}12345678`,
     decision: 'allow',
     scope: 'chat',
   },
-  { project: '/work/demo.hs2', tool: 'WebFetch', action: 'https://docs.rs', decision: 'allow', scope: 'session' },
-  { project: '/work/demo.hs2', tool: 'Bash', action: 'rm -rf build', decision: 'deny', scope: 'always' },
+  {
+    project: '/work/demo.hs2',
+    tool: 'WebFetch',
+    action: `sha256:v1:${'b'.repeat(56)}87654321`,
+    decision: 'allow',
+    scope: 'session',
+  },
+  {
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `sha256:v1:${'c'.repeat(56)}feedcafe`,
+    decision: 'deny',
+    scope: 'always',
+  },
 ] as const;
 
 /** Remembered permission answers (HS2-JNHAYB): empty, listed, and a revoke in flight with an error. */

@@ -42,7 +42,7 @@ export interface PermissionHistoryItem extends PermissionItem {
   resolvedAt: number;
   automatic?: boolean;
 }
-/** A remembered answer as `GET /permissions/rules` lists it (HS2-JNHAYB). */
+/** A remembered answer as `GET /permissions/rules` lists it. `action` is an opaque fingerprint. */
 export interface PermissionRule {
   project: string;
   connection?: string;

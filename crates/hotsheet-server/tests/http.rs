@@ -15077,6 +15077,79 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
     );
 }
 
+#[tokio::test]
+async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
+    const ACTION: &str = "API_TOKEN=private-value curl https://example.test";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let rules_path = dir.path().join("permissions.json");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let worker_bridge = bridge.clone();
+    let worker_project = project.clone();
+    let waiter = std::thread::spawn(move || {
+        worker_bridge.request_blocking_for_project(worker_project, "chat", "Bash", ACTION)
+    });
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(response).await.as_array().unwrap().first() {
+            assert_eq!(
+                first["action"], ACTION,
+                "the one-time prompt keeps decision context"
+            );
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await["persisted"], true);
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    let file = std::fs::read_to_string(&rules_path).unwrap();
+    assert!(!file.contains("private-value"));
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let listed_text = listed.to_string();
+    assert!(!listed_text.contains("private-value"));
+    let action_key = listed[0]["action"].as_str().unwrap();
+    assert!(action_key.starts_with("sha256:v1:"));
+    let revoke = serde_json::json!({
+        "project": project,
+        "tool": "Bash",
+        "action": action_key,
+    });
+    let response = app
+        .oneshot(authed(
+            "DELETE",
+            "/permissions/rules",
+            Some(&revoke.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(hotsheet_aitools::load_permission_rules(&rules_path).is_empty());
+}
+
 /// HS2-JNHAYB: "Allow for this chat" answers only its connection, cascades to identical
 /// waiting asks, and every remembered rule is listed and revocable (durable ones from disk).
 #[tokio::test]
