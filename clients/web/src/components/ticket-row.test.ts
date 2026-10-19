@@ -220,7 +220,7 @@ describe('TicketRow', () => {
       }),
     );
     expect(estimate).toContain('data-claim-eta="estimate"');
-    expect(estimate).toMatch(/<wa-progress-ring[^>]*value="25"/);
+    expect(estimate).toMatch(/data-component="progress-ring"[^>]*aria-valuenow="25"/);
     expect(estimate).not.toContain('data-component="loading-spinner"');
     expect(estimate.indexOf('ticket-list-row__claim')).toBeLessThan(estimate.indexOf('ticket-list-row__owner'));
     expect(estimate.indexOf('ticket-list-row__owner')).toBeLessThan(estimate.indexOf('data-claim-eta'));
@@ -230,7 +230,7 @@ describe('TicketRow', () => {
       TicketRow({ ...base, claimEta: { kind: 'overrun', label: 'Soon', title: 'Past its estimate' } }),
     );
     expect(overrun).toContain('data-claim-eta="overrun"');
-    expect(overrun).not.toContain('wa-progress-ring');
+    expect(overrun).not.toContain('data-component="progress-ring"');
     expect(overrun).toContain('data-component="loading-spinner"');
     expect(overrun).toContain('>Soon<');
     // No ETA without live work, even if a stale presentation is passed.

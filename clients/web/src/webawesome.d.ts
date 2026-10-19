@@ -44,7 +44,6 @@ declare module 'kerfjs/jsx-runtime' {
       'wa-textarea': WaBase & { rows?: AttrLike<number>; resize?: AttrLike };
       'wa-select': WaBase & { multiple?: AttrLike<boolean>; 'max-options-visible'?: AttrLike<number> };
       'wa-option': WaBase;
-      'wa-checkbox': WaBase;
       'wa-dialog': WaBase;
       'wa-drawer': WaBase;
       'wa-tag': WaBase;
@@ -53,7 +52,6 @@ declare module 'kerfjs/jsx-runtime' {
       'wa-divider': WaBase;
       'wa-skeleton': WaBase & { effect?: AttrLike };
       'wa-progress-bar': WaProgressBar;
-      'wa-progress-ring': Omit<WaBase, 'value'> & { value?: AttrLike<number> };
       feGaussianBlur: SvgFilterPrimitive;
       feColorMatrix: SvgFilterPrimitive;
       feBlend: SvgFilterPrimitive;

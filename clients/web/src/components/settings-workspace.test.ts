@@ -80,13 +80,14 @@ describe('SettingsWorkspace', () => {
     expect(sources).toContain('/work/demo.hs2');
   });
 
-  it('composes Web Awesome checkboxes and a Kerf page column (HS2-0ZF0KS)', () => {
+  it('composes Kerf checkboxes and a Kerf page column (HS2-0ZF0KS)', () => {
     const general = String(SettingsWorkspace(props));
     expect(general).toContain('data-content-width="wide"');
     expect(general).toContain('data-content-align="center"');
     expect(general).toContain('data-inset="document"');
-    expect(general).toMatch(/<wa-checkbox data-action="toggle-loading-activity" checked hint="Shows a small label/);
-    expect(general).not.toContain('type="checkbox"');
+    expect(general).toMatch(
+      /<input[^>]*type="checkbox" checked data-action="toggle-loading-activity"[^>]*aria-description="Shows a small label/,
+    );
     const permissions = String(SettingsWorkspace({ ...props, category: 'permissions' }));
     expect(permissions).toContain('data-component="grid"');
     expect(permissions).toContain('data-permission-note="true"');

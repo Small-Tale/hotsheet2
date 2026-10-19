@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
@@ -92,12 +93,8 @@ export function ChoiceCardSettings() {
         value={choiceCardSettings.tone.value}
         choices={(['brand', 'danger'] as const).map((value) => ({ value, label: value }))}
       />
-      <wa-checkbox name="description" checked={choiceCardSettings.description.value}>
-        Description
-      </wa-checkbox>
-      <wa-checkbox name="disabled" checked={choiceCardSettings.disabled.value}>
-        Disabled
-      </wa-checkbox>
+      <Checkbox name="description" checked={choiceCardSettings.description.value} label="Description" />
+      <Checkbox name="disabled" checked={choiceCardSettings.disabled.value} label="Disabled" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>

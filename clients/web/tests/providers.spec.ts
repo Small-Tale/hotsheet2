@@ -180,7 +180,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   await expect(page.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
   const editor = page.locator('[data-component="git-source-editor"]');
   await expect(editor.getByRole('alert')).toContainText('This path contains a different Git store.');
-  await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
+  await expect(editor.locator('input[type="checkbox"][name="review-unverified-recovery"]')).toHaveCount(0);
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'target/visual-captures/hs2-agc4zt-mismatch-wide.png', fullPage: true });
   await narrowSources.getByRole('button', { name: 'Edit HS git tickets' }).click();
@@ -233,7 +233,7 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
   await sources.getByRole('button', { name: 'Edit HS git tickets' }).click();
   const editor = page.locator('[data-component="git-source-editor"]');
   await expect(editor.getByRole('alert')).toContainText('This Git store cannot be opened.');
-  await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
+  await expect(editor.locator('input[type="checkbox"][name="review-unverified-recovery"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
 
   const narrowContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -3201,7 +3201,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
   await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/recovered.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('cannot verify this destination');
-  await dialog.locator('wa-checkbox[name="review-unverified-recovery"]').click();
+  await dialog.locator('input[type="checkbox"][name="review-unverified-recovery"]').click();
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
   await dialog.getByRole('button', { name: 'Done' }).click();
@@ -3235,7 +3235,7 @@ test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQ
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-dialog-narrow.png', animations: 'disabled' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await dialog.locator('wa-checkbox[name="review-unverified-recovery"]').click();
+  await dialog.locator('input[type="checkbox"][name="review-unverified-recovery"]').click();
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
   await dialog.getByRole('button', { name: 'Done' }).click();
@@ -3552,11 +3552,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.getByLabel('Display Name').fill('GitHub Secondary');
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
   // Adding a second source keeps this project's existing default unless explicitly changed.
-  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
-  await providerForm.locator('wa-checkbox[name="make-default"] label[part~="base"]').click();
-  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
-  await providerForm.locator('wa-checkbox[name="make-default"] label[part~="base"]').click();
-  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
+  await expect(providerForm.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', false);
+  await providerForm.getByRole('checkbox', { name: "Use as this project's default ticket source" }).check();
+  await expect(providerForm.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', true);
+  await providerForm.getByRole('checkbox', { name: "Use as this project's default ticket source" }).uncheck();
+  await expect(providerForm.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', false);
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(2);
   expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', make_default: false });
@@ -3578,7 +3578,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.locator('input[name="connection-locator"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-y5588d-edit-repositories-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
-  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
+  await expect(providerForm.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', true);
   const colorPicker = providerForm.locator('[data-component="ticket-source-color-picker"]');
   await expect(
     colorPicker.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
@@ -11314,7 +11314,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
     inspectorNotice = inspector.locator('[data-component="live-claim-notice"]');
   await expect(inspectorNotice).toContainText('Codex is working on this.');
   await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
-  await expect(inspectorNotice.locator('.claim-eta__ring')).toBeVisible();
+  await expect(inspectorNotice.locator('[data-component="progress-ring"]')).toBeVisible();
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
   // The same row also shows the estimate, so opening the ticket keeps both cues (HS2-XQMDQB).
@@ -11419,14 +11419,14 @@ test('shows ETA progress on actively claimed tickets in list and column views an
     await expect
       .poll(() =>
         page
-          .locator('[data-ticket-slug="HS2-DEMO01"] .ticket-list-row__claim wa-progress-ring')
-          .evaluate((ring) => (ring as HTMLElement & { value: number }).value),
+          .locator('[data-ticket-slug="HS2-DEMO01"] .ticket-list-row__claim [data-component="progress-ring"]')
+          .evaluate((ring) => Number(ring.getAttribute('aria-valuenow'))),
       )
       .toBeGreaterThanOrEqual(24);
     await expect(estimateEta).toHaveAttribute('title', /Estimated to finish/);
     await expect(overrunEta).toHaveAttribute('data-claim-eta', 'overrun');
     await expect(overrunEta).toHaveText('Soon');
-    await expect(overrunEta.locator('wa-progress-ring')).toHaveCount(0);
+    await expect(overrunEta.locator('[data-component="progress-ring"]')).toHaveCount(0);
     await expect(overrunEta).toHaveAttribute('title', /Past its estimate .* by about 10m/);
     await expect(etaOf('HS2-DONE01')).toHaveCount(0);
   };
@@ -15294,6 +15294,11 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   await expect(dialog).toContainText('6 selected');
   await dialog.getByRole('button', { name: 'Deselect Page' }).click();
   await dialog.getByRole('button', { name: 'Previous' }).click();
+  await expect(dialog).toContainText('5 selected');
+  const firstRuleOption = dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first();
+  await firstRuleOption.uncheck();
+  await expect(dialog).toContainText('4 selected');
+  await firstRuleOption.check();
   await expect(dialog).toContainText('5 selected');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-c057g5-selected-wide.png' });
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
@@ -23922,7 +23927,7 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   const option = page.getByRole('checkbox', { name: 'Use my global shell history' });
   await expect(option).not.toBeChecked();
   await expect(page.getByText(/each terminal keeps private/)).toBeVisible();
-  await page.locator('wa-checkbox', { hasText: 'Use my global shell history' }).click({ position: { x: 8, y: 8 } });
+  await option.check();
   await expect.poll(() => writes).toEqual([{ inherit_global_shell_history: true }]);
   // The save is silent on success (HS2-GHA1D3): no inline Saving…/Saved line under the option.
   await expect(option).toBeChecked();
@@ -25344,7 +25349,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.locator('wa-checkbox', { hasText: 'Hide Verified Column' }).click({ position: { x: 8, y: 8 } });
+  await page.getByRole('checkbox', { name: 'Hide Verified Column' }).check();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column')))
     .toBe('true');
@@ -25355,7 +25360,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.locator('wa-checkbox', { hasText: 'Hide Verified Column' }).click({ position: { x: 8, y: 8 } });
+  await page.getByRole('checkbox', { name: 'Hide Verified Column' }).uncheck();
   await page.getByLabel('Columns View').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText([
     'Not Started',

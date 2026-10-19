@@ -890,3 +890,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/conversation-context-menu.test.ts`, `clients/web/src/components/ai-conversation-interactions.test.ts`, `clients/web/src/components/ai-conversation.test.ts`, and `clients/web/src/features/controllers.test.ts` cover scope, input routing, markup, clipboard contents, and export-dialog scope.
 - End to end: `clients/web/tests/providers.spec.ts # copies and downloads AI chat messages from a scoped context menu (HS2-YR405B)` exercises the shipped chat, clipboard, context menu, keyboard access, scoped export, and selection-bar Download.
 - Manual: Inspect matching wide and phone menu captures attached to HS2-YR405B.
+
+### Kerf checkbox and claim progress controls (HS2-SKD293)
+
+- Behavior: Settings, provider defaults, permission-rule selection, and UX demo boolean options use Kerf Checkbox with native checked state and bubbling changes. Live claim ETA uses Kerf ProgressRing with an accessible progress value; the overrun state retains its activity spinner.
+- Unit: `clients/web/src/components/{active-claim,settings-workspace,ticket-row,ticket-source-surfaces}.test.ts` and `clients/web/src/kerf-ui-profile.test.ts` cover markup, state, and the UI profile.
+- End to end: `clients/web/tests/ux-demo.spec.ts` covers setting, resetting, and editing demo checkboxes plus wide and phone claim states; `clients/web/tests/providers.spec.ts` covers provider default toggles, permission-rule selection, shell-history and Verified-column settings, and live claim ETA.
+- Manual: Inspect matching wide and phone captures attached to HS2-SKD293.

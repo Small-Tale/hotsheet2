@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -234,27 +235,17 @@ export function TicketRowSettings() {
       />
       <wa-input name="tags" label="Tags (Comma Separated)" value={ticketRowSettings.tags.value} />
       <wa-input name="agent" label="Active Agent" value={ticketRowSettings.agentName.value} />
-      <wa-checkbox name="up-next" checked={ticketRowSettings.upNext.value}>
-        Up Next
-      </wa-checkbox>
-      <wa-checkbox name="blocked" checked={ticketRowSettings.blocked.value}>
-        Blocked
-      </wa-checkbox>
-      <wa-checkbox name="needs-review" checked={ticketRowSettings.needsReview.value}>
-        Needs review
-      </wa-checkbox>
-      <wa-checkbox name="feedback-needed" checked={ticketRowSettings.feedbackNeeded.value}>
-        Feedback needed
-      </wa-checkbox>
-      <wa-checkbox name="selected" checked={ticketRowSettings.selected.value}>
-        Selected
-      </wa-checkbox>
-      <wa-checkbox name="busy" checked={ticketRowSettings.busy.value}>
-        AI working
-      </wa-checkbox>
-      <wa-checkbox name="show-source-icon" checked={ticketRowSettings.showSourceIcon.value}>
-        Multiple ticket sources
-      </wa-checkbox>
+      <Checkbox name="up-next" checked={ticketRowSettings.upNext.value} label="Up Next" />
+      <Checkbox name="blocked" checked={ticketRowSettings.blocked.value} label="Blocked" />
+      <Checkbox name="needs-review" checked={ticketRowSettings.needsReview.value} label="Needs review" />
+      <Checkbox name="feedback-needed" checked={ticketRowSettings.feedbackNeeded.value} label="Feedback needed" />
+      <Checkbox name="selected" checked={ticketRowSettings.selected.value} label="Selected" />
+      <Checkbox name="busy" checked={ticketRowSettings.busy.value} label="AI working" />
+      <Checkbox
+        name="show-source-icon"
+        checked={ticketRowSettings.showSourceIcon.value}
+        label="Multiple ticket sources"
+      />
       <Select
         name="claim-eta"
         label="Claim ETA (Shown While AI Working)"

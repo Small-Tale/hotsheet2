@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
@@ -59,12 +60,16 @@ export function resetProjectSidebarDemo(controlRoot?: ParentNode): void {
 export function ProjectSidebarSettings() {
   return (
     <DemoSettingsForm settings="project-sidebar">
-      <wa-checkbox name="conversation-open" checked={projectSidebarSettings.conversationOpen.value}>
-        Conversation open
-      </wa-checkbox>
-      <wa-checkbox name="conversation-disabled" checked={projectSidebarSettings.conversationDisabled.value}>
-        Conversation disabled
-      </wa-checkbox>
+      <Checkbox
+        name="conversation-open"
+        checked={projectSidebarSettings.conversationOpen.value}
+        label="Conversation open"
+      />
+      <Checkbox
+        name="conversation-disabled"
+        checked={projectSidebarSettings.conversationDisabled.value}
+        label="Conversation disabled"
+      />
       <Select
         name="conversation-unread"
         label="Unread Chat Messages"

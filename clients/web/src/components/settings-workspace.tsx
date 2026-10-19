@@ -1,5 +1,4 @@
-import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
-
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
@@ -88,13 +87,12 @@ export function SettingsWorkspace({
         )}
         {category === 'terminals' && (
           <List gap="xs">
-            <wa-checkbox
-              {...COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.attrs}
+            <Checkbox
+              action={COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.value}
               checked={terminals.inheritGlobalShellHistory}
               hint="By default, each terminal keeps private, machine-local command recall for this project and terminal. This opt-out applies only on this machine and affects newly created terminals."
-            >
-              Use my global shell history
-            </wa-checkbox>
+              label="Use my global shell history"
+            />
             <Text tone="quiet" size="compact" role="status" flush>
               {terminals.message}
             </Text>
@@ -137,22 +135,20 @@ export function SettingsWorkspace({
           </List>
         )}
         {category === 'columns' && (
-          <wa-checkbox
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.attrs}
+          <Checkbox
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
             checked={columns.hideVerified}
             hint="Verified tickets appear in Completed."
-          >
-            Hide Verified column
-          </wa-checkbox>
+            label="Hide Verified column"
+          />
         )}
         {category === 'general' && (
-          <wa-checkbox
-            {...COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.attrs}
+          <Checkbox
+            action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
             checked={general.showLoadingActivity}
             hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
-          >
-            Show loading activity
-          </wa-checkbox>
+            label="Show loading activity"
+          />
         )}
         {category === 'keyboard' && <KeyboardSettings {...keyboard} />}
       </List>

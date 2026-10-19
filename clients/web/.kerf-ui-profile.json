@@ -22,17 +22,17 @@
     "text-entry": {
       "preferred": "@kerfjs/ui:text-field",
       "avoid": [],
-      "rationale": "Kerf 5.0.0-beta.106 discourages wa-input and wa-textarea; HS2-SKD293 adopts Kerf TextField, then restores this avoid list."
+      "rationale": "Kerf 5.0.0-beta.106 discourages wa-input and wa-textarea; HS2-CQ1TZN adopts Kerf TextField, then restores this avoid list."
     },
     "boolean-option": {
       "preferred": "@kerfjs/ui:checkbox",
-      "avoid": [],
-      "rationale": "Kerf 5.0.0-beta.106 discourages wa-checkbox; HS2-SKD293 adopts Kerf Checkbox, then restores this avoid list."
+      "avoid": ["@kerfjs/ui:wa-checkbox"],
+      "rationale": "Kerf Checkbox owns all boolean options after HS2-SKD293."
     },
     "compact-progress": {
       "preferred": "@kerfjs/ui:progress-ring",
-      "avoid": [],
-      "rationale": "Kerf 5.0.0-beta.106 discourages wa-progress-ring; HS2-SKD293 adopts Kerf ProgressRing, then restores this avoid list."
+      "avoid": ["@kerfjs/ui:wa-progress-ring"],
+      "rationale": "Kerf ProgressRing owns the live-claim ETA indicator after HS2-SKD293."
     }
   },
   "exceptions": [

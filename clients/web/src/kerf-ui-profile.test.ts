@@ -86,16 +86,15 @@ describe('Kerf application UI profile', () => {
     expect(profile.exceptions.at(-1)?.rationale).toContain('KF-Z00DKT');
   });
 
-  it('restores Kerf-discouraged Web Awesome controls only until their adoption tickets land', () => {
-    // Kerf beta.106 discourages wa-button, wa-input, wa-textarea, wa-checkbox, and wa-progress-ring;
-    // each override keeps Kerf's preferred component and names the ticket that removes it (HS2-BH7NZ4).
+  it('keeps only the pending text-entry override after Checkbox and ProgressRing adoption', () => {
     const profile = JSON.parse(readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8')) as {
       preferences: Record<string, { preferred: string; avoid: string[]; rationale: string }>;
     };
     expect(Object.keys(profile.preferences).sort()).toEqual(['boolean-option', 'compact-progress', 'text-entry']);
-    for (const key of ['text-entry', 'boolean-option', 'compact-progress'])
-      expect(profile.preferences[key].rationale, key).toContain('HS2-SKD293');
-    for (const preference of Object.values(profile.preferences)) expect(preference.avoid).toEqual([]);
+    expect(profile.preferences['text-entry'].rationale).toContain('HS2-CQ1TZN');
+    expect(profile.preferences['text-entry'].avoid).toEqual([]);
+    expect(profile.preferences['boolean-option'].avoid).toEqual(['@kerfjs/ui:wa-checkbox']);
+    expect(profile.preferences['compact-progress'].avoid).toEqual(['@kerfjs/ui:wa-progress-ring']);
   });
 
   it('uses Kerf Button for standalone actions rather than raw Web Awesome buttons', () => {

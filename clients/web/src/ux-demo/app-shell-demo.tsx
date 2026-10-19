@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
@@ -147,12 +148,16 @@ export function AppShellSettings() {
           { value: 'viewport', label: 'Viewport (Application Root)' },
         ]}
       />
-      <wa-checkbox name="overlay-open" checked={appShellSettings.overlayOpen.value}>
-        Top-layer overlay open (work-area focus ring off)
-      </wa-checkbox>
-      <wa-checkbox name="mobile-view-header" checked={appShellSettings.mobileView.value}>
-        Phone view header (view Select and action)
-      </wa-checkbox>
+      <Checkbox
+        name="overlay-open"
+        checked={appShellSettings.overlayOpen.value}
+        label="Top-layer overlay open (work-area focus ring off)"
+      />
+      <Checkbox
+        name="mobile-view-header"
+        checked={appShellSettings.mobileView.value}
+        label="Phone view header (view Select and action)"
+      />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>

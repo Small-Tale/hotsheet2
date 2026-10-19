@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -103,15 +104,9 @@ export function TagChipSettings() {
         value={tagChipSettings.size.value}
         choices={(['small', 'medium', 'large'] as const).map((value) => ({ value, label: value }))}
       />
-      <wa-checkbox name="removable" checked={tagChipSettings.removable.value}>
-        Removable
-      </wa-checkbox>
-      <wa-checkbox name="pill" checked={tagChipSettings.pill.value}>
-        Pill shape
-      </wa-checkbox>
-      <wa-checkbox name="disabled" checked={tagChipSettings.disabled.value}>
-        Disabled
-      </wa-checkbox>
+      <Checkbox name="removable" checked={tagChipSettings.removable.value} label="Removable" />
+      <Checkbox name="pill" checked={tagChipSettings.pill.value} label="Pill shape" />
+      <Checkbox name="disabled" checked={tagChipSettings.disabled.value} label="Disabled" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>

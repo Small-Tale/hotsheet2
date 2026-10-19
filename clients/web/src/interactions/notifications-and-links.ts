@@ -212,7 +212,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       'change',
       NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.selector,
       (_event, target) => {
-        const key = data(target).ruleKey;
+        const key = data(target.closest('[data-rule-key]') ?? target).ruleKey;
         if (key) selectPermissionRule(selectedProjectId.value, key, (target as Control & { checked: boolean }).checked);
       },
     ),

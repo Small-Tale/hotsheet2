@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/input/input.js';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
@@ -77,12 +78,12 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           }}
         >
           {selectable && (
-            <wa-checkbox
-              {...NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.attrs}
-              data-rule-key={key}
+            <Checkbox
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
+              rootAttributes={{ 'data-rule-key': key }}
               checked={selected.has(key)}
               disabled={dialog?.busy}
-              aria-label={`Select ${label}`}
+              label={`Select ${label}`}
             />
           )}
           <LucideIcon

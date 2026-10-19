@@ -2,6 +2,7 @@ import './ticket-source-setup-dialog.css';
 import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -321,10 +322,11 @@ export function TicketSourceSetupDialog({
                 This Git store cannot be opened. Restore its location, or remove this source.
               </Text>
             ) : (
-              <wa-checkbox name="review-unverified-recovery" value="on">
-                If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet
-                cannot verify it is the same repository.
-              </wa-checkbox>
+              <Checkbox
+                name="review-unverified-recovery"
+                value="on"
+                label="If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot verify it is the same repository."
+              />
             )}
           </List>
         </form>

@@ -257,7 +257,7 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       if (value === 'authorized')
         await expect(dialog.locator('input[name="attachment-repo"]')).toHaveJSProperty('value', '');
       if (value === 'authorized' || value === 'authorized-existing-default')
-        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty(
+        await expect(dialog.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty(
           'checked',
           value === 'authorized',
         );
@@ -266,12 +266,12 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
           node.value = 'authorized';
           node.dispatchEvent(new Event('change', { bubbles: true }));
         });
-        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
+        await expect(dialog.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', true);
         await scenario.evaluate((node: HTMLElement & { value: string }) => {
           node.value = 'authorized-existing-default';
           node.dispatchEvent(new Event('change', { bubbles: true }));
         });
-        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
+        await expect(dialog.locator('input[type="checkbox"][name="make-default"]')).toHaveJSProperty('checked', false);
       }
       await dialog.evaluate(async (node) => {
         await Promise.all(
@@ -2376,7 +2376,7 @@ test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8
     await page.locator('[data-action="toggle-settings"]').first().click();
     const inspector = page.getByRole('complementary', { name: 'AppShell Settings' });
     const presentation = inspector.locator('kui-select[name="presentation"]');
-    const overlay = inspector.locator('wa-checkbox[name="overlay-open"]');
+    const overlay = inspector.locator('input[type="checkbox"][name="overlay-open"]');
     await expect(presentation).toHaveJSProperty('value', 'framed');
     await expect(overlay).toHaveJSProperty('checked', false);
     // Control → render: viewport drops the frame; an open overlay turns the work-area ring off.
@@ -2420,7 +2420,7 @@ test('round-trips the AppShell phone view header and its Empty Trash action (HS2
   await expect(header).toHaveCount(0);
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'AppShell Settings' }),
-    toggle = inspector.locator('wa-checkbox[name="mobile-view-header"]');
+    toggle = inspector.locator('input[type="checkbox"][name="mobile-view-header"]');
   await expect(toggle).toHaveJSProperty('checked', false);
   // Control → render: the header replaces the page header with the view Select and launcher.
   await toggle.click();
@@ -2458,8 +2458,8 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   const inspector = page.getByRole('complementary', { name: 'StatusBadge Settings' });
   const status = inspector.locator('kui-select[name="status"]');
   const appearance = inspector.locator('kui-select[name="appearance"]');
-  const icon = inspector.locator('wa-checkbox[name="show-icon"]');
-  const compact = inspector.locator('wa-checkbox[name="compact"]');
+  const icon = inspector.locator('input[type="checkbox"][name="show-icon"]');
+  const compact = inspector.locator('input[type="checkbox"][name="compact"]');
   // Kerf's Badge owns the filled pill and its status tone (HS2-3FMK0T).
   await expect(badge.locator('[data-component="badge"]')).toHaveAttribute('data-tone', 'warning');
   await status.evaluate((node: HTMLElement & { value: string }) => {
@@ -2525,7 +2525,7 @@ test('shows a released final-testing ticket in the list row at wide and phone wi
     node.value = 'final_testing';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  const busy = settings.locator('wa-checkbox[name="busy"]');
+  const busy = settings.locator('input[type="checkbox"][name="busy"]');
   await busy.click();
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row.locator('[data-component="status-badge"]')).toContainText('Final testing');
@@ -2620,13 +2620,13 @@ test('switches the TicketInspector live-claim header through every claim state (
   await expect(notice).toContainText('Claude is working on this.');
   await expect(notice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
-  const claimRing = notice.locator('.claim-eta__ring');
-  await expect(claimRing).toHaveJSProperty('value', 25);
+  const claimRing = notice.locator('[data-component="progress-ring"]');
+  await expect(claimRing).toHaveAttribute('aria-valuenow', '25');
   const ringBox = await claimRing.boundingBox();
-  expect(ringBox!.width).toBeCloseTo(16.8, 1);
-  expect(ringBox!.height).toBeCloseTo(16.8, 1);
+  expect(ringBox!.width).toBeCloseTo(16, 1);
+  expect(ringBox!.height).toBeCloseTo(16, 1);
   await expect(eta).toHaveText('~45m left');
-  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await expect(eta.locator('[data-component="progress-ring"]')).toHaveCount(0);
   // The notice leads the header notices and sits inside the inspector's width.
   const [noticeBox, inspectorBox] = await Promise.all([notice.boundingBox(), inspector.boundingBox()]);
   expect(noticeBox!.x).toBeGreaterThanOrEqual(inspectorBox!.x);
@@ -2635,7 +2635,7 @@ test('switches the TicketInspector live-claim header through every claim state (
   await setLiveClaim('overrun');
   await expect(eta).toHaveAttribute('data-claim-eta', 'overrun');
   await expect(eta).toHaveText('Soon');
-  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await expect(eta.locator('[data-component="progress-ring"]')).toHaveCount(0);
   await setLiveClaim('no-eta');
   await expect(notice).toContainText('Claude is working on this.');
   await expect(eta).toHaveCount(0);
@@ -2648,9 +2648,9 @@ test('switches the TicketInspector live-claim header through every claim state (
   await page.screenshot({ path: test.info().outputPath('live-claim-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(notice).toBeVisible();
-  const narrowRing = await notice.locator('.claim-eta__ring').boundingBox();
-  expect(narrowRing!.width).toBeCloseTo(16.8, 1);
-  expect(narrowRing!.height).toBeCloseTo(16.8, 1);
+  const narrowRing = await notice.locator('[data-component="progress-ring"]').boundingBox();
+  expect(narrowRing!.width).toBeCloseTo(16, 1);
+  expect(narrowRing!.height).toBeCloseTo(16, 1);
   await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
   await page.locator('[data-action="toggle-settings"]').first().click();
   await setLiveClaim('generated-id');
@@ -2697,7 +2697,7 @@ test('projects phone project attention through selection and reset (HS2-34VG07)'
   await expect(attention).toBeVisible();
 });
 
-test('uses the row claim slot for one same-size ring or spinner at wide and phone widths (HS2-SNC0S3/1FYDF0)', async ({
+test('uses the row claim slot for one compact ring or spinner at wide and phone widths (HS2-SNC0S3/1FYDF0)', async ({
   page,
 }) => {
   await page.goto('/ux-demo?component=ticket-row');
@@ -2715,12 +2715,12 @@ test('uses the row claim slot for one same-size ring or spinner at wide and phon
   };
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    const ring = row.locator('.ticket-list-row__claim .claim-eta__ring');
+    const ring = row.locator('.ticket-list-row__claim [data-component="progress-ring"]');
     await expect(ring).toBeVisible();
     await expect(row.locator('[data-component="loading-spinner"]')).toHaveCount(0);
     const ringBox = await ring.boundingBox();
-    expect(ringBox!.width).toBeCloseTo(16.8, 1);
-    expect(ringBox!.height).toBeCloseTo(16.8, 1);
+    expect(ringBox!.width).toBeCloseTo(16, 1);
+    expect(ringBox!.height).toBeCloseTo(16, 1);
     await expect(row.locator('[data-claim-eta]')).toHaveText('~45m left');
     await setClaimEta('none');
     const spinner = row.locator('[data-component="loading-spinner"]');
@@ -2830,11 +2830,11 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const priority = inspector.locator('kui-select[name="priority"]');
   const categoryIcon = inspector.locator('kui-select[name="category-icon"]');
   const categoryColor = inspector.locator('kui-select[name="category-color"]');
-  const upNext = inspector.locator('wa-checkbox[name="up-next"]');
-  const blocked = inspector.locator('wa-checkbox[name="blocked"]');
-  const needsReview = inspector.locator('wa-checkbox[name="needs-review"]');
-  const selected = inspector.locator('wa-checkbox[name="selected"]');
-  const busy = inspector.locator('wa-checkbox[name="busy"]');
+  const upNext = inspector.locator('input[type="checkbox"][name="up-next"]');
+  const blocked = inspector.locator('input[type="checkbox"][name="blocked"]');
+  const needsReview = inspector.locator('input[type="checkbox"][name="needs-review"]');
+  const selected = inspector.locator('input[type="checkbox"][name="selected"]');
+  const busy = inspector.locator('input[type="checkbox"][name="busy"]');
   const claimEta = inspector.locator('kui-select[name="claim-eta"]');
   const eta = row.locator('[data-claim-eta]');
   const setClaimEta = async (value: string) => {
@@ -2847,8 +2847,11 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   // A live claim with an estimate shows a progress ring and the time left (HS2-XQMDQB).
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(eta).toHaveText('~45m left');
-  await expect(row.locator('.ticket-list-row__claim wa-progress-ring')).toHaveJSProperty('value', 25);
-  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await expect(row.locator('.ticket-list-row__claim [data-component="progress-ring"]')).toHaveAttribute(
+    'aria-valuenow',
+    '25',
+  );
+  await expect(eta.locator('[data-component="progress-ring"]')).toHaveCount(0);
   await title.fill('Fix selection synchronization');
   await category.fill('bug');
   await tags.fill('client, regression');
@@ -2898,7 +2901,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await setConfidence('25');
   await expect(confidencePill).toHaveText('25%');
   await expect(confidencePill).toHaveAttribute('data-band', 'unverified');
-  const feedbackNeeded = inspector.locator('wa-checkbox[name="feedback-needed"]');
+  const feedbackNeeded = inspector.locator('input[type="checkbox"][name="feedback-needed"]');
   await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
   await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
@@ -2980,7 +2983,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await setClaimEta('overrun');
   await expect(eta).toHaveAttribute('data-claim-eta', 'overrun');
   await expect(eta).toHaveText('Soon');
-  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
+  await expect(eta.locator('[data-component="progress-ring"]')).toHaveCount(0);
   await setClaimEta('none');
   await expect(eta).toHaveCount(0);
   await setClaimEta('estimate');
@@ -6283,7 +6286,7 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   });
   await expect(kerfChip).toHaveAttribute('data-tone', 'success');
   await expect(inspector).toBeVisible();
-  await inspector.locator('wa-checkbox[name="pill"]').click();
+  await inspector.locator('input[type="checkbox"][name="pill"]').click();
   await expect(kerfChip).toHaveAttribute('data-shape', 'pill');
   await expect(inspector).toBeVisible();
   await chip.getByRole('button', { name: 'Remove server' }).click();
@@ -6295,9 +6298,9 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(page.locator('kui-select[name="variant"]')).toHaveJSProperty('value', 'neutral');
   await expect(page.locator('kui-select[name="appearance"]')).toHaveJSProperty('value', 'filled');
   await expect(page.locator('kui-select[name="size"]')).toHaveJSProperty('value', 'small');
-  await expect(inspector.locator('wa-checkbox[name="removable"]')).toHaveJSProperty('checked', true);
-  await expect(inspector.locator('wa-checkbox[name="pill"]')).toHaveJSProperty('checked', false);
-  await expect(inspector.locator('wa-checkbox[name="disabled"]')).toHaveJSProperty('checked', false);
+  await expect(inspector.locator('input[type="checkbox"][name="removable"]')).toHaveJSProperty('checked', true);
+  await expect(inspector.locator('input[type="checkbox"][name="pill"]')).toHaveJSProperty('checked', false);
+  await expect(inspector.locator('input[type="checkbox"][name="disabled"]')).toHaveJSProperty('checked', false);
   await expect(chip).toContainText('needs-design');
   await expect(kerfChip).toHaveAttribute('data-tone', 'neutral');
   await expect(kerfChip).toHaveAttribute('data-shape', 'rounded');
@@ -6338,7 +6341,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .evaluate((node) => getComputedStyle(node.querySelector('.kui-select__trigger')!).cursor);
   expect(selectCursor).toBe('pointer');
   const checkboxCursor = await inspector
-    .locator('wa-checkbox[name="up-next"]')
+    .locator('input[type="checkbox"][name="up-next"]')
     .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
   expect(checkboxCursor).toBe('pointer');
   const buttonCursor = await inspector
@@ -6764,9 +6767,9 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(settings).toBeVisible();
   await expect(conversation).toHaveAttribute('aria-pressed', 'false');
   await expect(conversation).toBeEnabled();
-  await settings.locator('wa-checkbox[name="conversation-open"]').click();
+  await settings.locator('input[type="checkbox"][name="conversation-open"]').click();
   await expect(conversation).toHaveAttribute('aria-pressed', 'true');
-  await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
+  await settings.locator('input[type="checkbox"][name="conversation-disabled"]').click();
   await expect(conversation).toBeDisabled();
   await expect(conversation).toHaveCSS('cursor', 'not-allowed');
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -6778,12 +6781,12 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(conversation).toHaveCSS('cursor', 'not-allowed');
   await page.screenshot({ path: test.info().outputPath('project-sidebar-conversation-disabled-phone.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
+  await settings.locator('input[type="checkbox"][name="conversation-disabled"]').click();
   await conversation.click();
   await expect(conversation).toHaveAttribute('aria-pressed', 'false');
   expect(
     await settings
-      .locator('wa-checkbox[name="conversation-open"]')
+      .locator('input[type="checkbox"][name="conversation-open"]')
       .evaluate((node) => (node as HTMLInputElement).checked),
   ).toBe(false);
   await settings.getByRole('button', { name: 'Reset' }).click();
@@ -7989,8 +7992,8 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   const variant = settings.locator('[name="variant"]');
   const request = settings.locator('[name="request"]');
   const automation = settings.locator('[name="automation"]');
-  const alwaysSupported = settings.locator('wa-checkbox[name="always-supported"]');
-  const explanation = settings.locator('wa-checkbox[name="explanation"]');
+  const alwaysSupported = settings.locator('input[type="checkbox"][name="always-supported"]');
+  const explanation = settings.locator('input[type="checkbox"][name="explanation"]');
   const choose = async (control: typeof variant, value: string) =>
     control.evaluate((node: HTMLElement & { value: string }, selected) => {
       node.value = selected;
@@ -9524,7 +9527,9 @@ test('shows the source mark after the type on cards and beside the inspector num
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.locator('[data-action="toggle-settings"]').first().click();
-  const multipleSources = page.locator('[data-settings="ticket-list-row"] wa-checkbox[name="show-source-icon"]');
+  const multipleSources = page.locator(
+    '[data-settings="ticket-list-row"] input[type="checkbox"][name="show-source-icon"]',
+  );
   await multipleSources.click();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await expect(row.locator('.ticket-list-row__body')).toHaveAttribute('data-has-source', 'false');

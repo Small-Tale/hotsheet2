@@ -272,7 +272,10 @@ describe('ticket source surfaces', () => {
     );
     expect(signedIn).not.toContain('provider-setup-form__grid');
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
-    expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
+    expect(signedIn).toMatch(
+      /<div class="provider-setup-form__wide"><div class="kui-checkbox"[^>]*data-component="checkbox"/,
+    );
+    expect(signedIn).toMatch(/<input[^>]*type="checkbox" name="make-default"[^>]*checked/);
     expect(signedIn).toContain('name="attachment-repo"');
     expect(signedIn).toContain('Enter an assets repository and save to configure attachments.');
     expect(signedIn).toContain('name="attachment-folder" label="Attachment Folder" value="hotsheet-attachments"');

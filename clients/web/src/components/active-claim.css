@@ -1,12 +1,3 @@
-/* Web Awesome's progress ring has no size prop; its documented custom properties match it to the
-   16.8px LoadingSpinner it replaces when a live claim has an ETA (HS2-XQMDQB). */
-.claim-eta__ring {
-  --size: remify(16.8px);
-  --track-width: remify(2px);
-  --indicator-width: remify(2px);
-  --indicator-color: var(--wa-color-brand-fill-loud);
-  --track-color: var(--wa-color-neutral-fill-normal);
-}
 /* StateBanner owns no outer margin and the inspector header stack has no gap, so the app-owned
    notice wrapper spaces itself from the feedback banner or tabs below it. */
 .live-claim-notice {

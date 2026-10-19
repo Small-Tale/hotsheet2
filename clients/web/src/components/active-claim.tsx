@@ -1,8 +1,8 @@
-import '@awesome.me/webawesome/dist/components/progress-ring/progress-ring.js';
 import './active-claim.css';
 
 import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
+import { ProgressRing } from '@kerfjs/ui/progress-ring';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 
@@ -36,7 +36,7 @@ export function ActiveClaimIndicator({
   color?: CssForegroundColor;
 }) {
   return eta?.kind === 'estimate' ? (
-    <wa-progress-ring class="claim-eta__ring" value={eta.percent} aria-label={`${label}; ${eta.label}`} />
+    <ProgressRing value={eta.percent} max={100} size="small" label={`${label}; ${eta.label}`} />
   ) : (
     <ActiveClaimSpinner label={label} color={color} />
   );

@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -88,12 +89,8 @@ export function StatusBadgeSettings() {
           { value: 'plain', label: 'Plain' },
         ]}
       />
-      <wa-checkbox name="show-icon" checked={statusBadgeSettings.showIcon.value}>
-        Show icon
-      </wa-checkbox>
-      <wa-checkbox name="compact" checked={statusBadgeSettings.compact.value}>
-        Compact
-      </wa-checkbox>
+      <Checkbox name="show-icon" checked={statusBadgeSettings.showIcon.value} label="Show icon" />
+      <Checkbox name="compact" checked={statusBadgeSettings.compact.value} label="Compact" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>

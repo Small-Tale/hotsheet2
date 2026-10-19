@@ -909,7 +909,7 @@ always retain native clipboard behavior.
   non-expired worker claim adds an activity indicator immediately after the status badge;
   started-but-unclaimed and previously claimed tickets do not show it.
   When that live claim carries an ETA (HS2-XQMDQB), the agent name is followed by a compact
-  estimate: a brand-blue Web Awesome progress ring replaces the spinner in its 16.8px slot,
+  estimate: a brand-blue Kerf ProgressRing replaces the spinner in its 16px slot,
   showing the elapsed share of the time from the claim's start (`claim_started_at`) to its ETA.
   The time label remains after the agent name: `~45m left` (`<1m`, `~1h 20m`, `~3d` forms).
   Once the ETA passes, the ring gives way to `Soon`, with the activity spinner as the
@@ -2460,8 +2460,9 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   delegated action is the `action` prop; application metadata is passed through `rootAttributes`.
   `QuickTicketLauncher` and `TicketViewAction` use Kerf `Button` in TabBar's `end` zone since
   beta.109 accepted it (`KF-535H1M`, HS2-H2ASWT), removing the two exact `KUI-L301`
-  exceptions. The profile continues temporarily allowing the other
-  discouraged controls until HS2-SKD293 adopts Kerf `TextField`, `Checkbox`, and `ProgressRing`.
+  exceptions. HS2-SKD293 adopted Kerf `Checkbox` for boolean settings, provider defaults, and
+  demo controls, and `ProgressRing` for the live-claim ETA. The remaining `wa-input` and
+  `wa-textarea` allowance is tracked by HS2-CQ1TZN for Kerf `TextField` adoption.
   One `KUI-L203` exception covers Kerf's stale `MessageComposer` composition zone (KF-Z00DKT).
 
 ### Kerf beta.24 layout adoption

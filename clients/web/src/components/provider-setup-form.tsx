@@ -1,7 +1,7 @@
 import './provider-setup-form.css';
-import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Combobox } from '@kerfjs/ui/combobox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
@@ -543,10 +543,15 @@ export function ProviderSetupForm({
             />
           )}
           {defaultChoice !== undefined && (
-            <wa-checkbox class="provider-setup-form__wide" name="make-default" value="on" checked={defaultChoice}>
-              Use as this project's default ticket source
-              <span slot="hint">New tickets in this project will be created here.</span>
-            </wa-checkbox>
+            <div class="provider-setup-form__wide">
+              <Checkbox
+                name="make-default"
+                value="on"
+                checked={defaultChoice}
+                label="Use as this project's default ticket source"
+                hint="New tickets in this project will be created here."
+              />
+            </div>
           )}
         </Grid>
       )}

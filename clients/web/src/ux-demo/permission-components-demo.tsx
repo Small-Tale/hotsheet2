@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -281,12 +282,12 @@ export function PermissionRequestSettings() {
           { value: 'deny', label: 'Deny Countdown' },
         ]}
       />
-      <wa-checkbox name="always-supported" checked={permissionRequestSettings.alwaysSupported.value}>
-        Supports Always Allow
-      </wa-checkbox>
-      <wa-checkbox name="explanation" checked={permissionRequestSettings.explanation.value}>
-        Show explanation
-      </wa-checkbox>
+      <Checkbox
+        name="always-supported"
+        checked={permissionRequestSettings.alwaysSupported.value}
+        label="Supports Always Allow"
+      />
+      <Checkbox name="explanation" checked={permissionRequestSettings.explanation.value} label="Show explanation" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
