@@ -934,6 +934,15 @@ drive connection that held chat rules each publish a replayable `permission_rule
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
 
+Remembered answers match the **exact project, tool, and action**. For Claude and Codex
+permission hooks, the action is the command, path, or serialized tool input; Codex
+app-server approvals use a command, call ID, path, or reason. Persistent actions are
+stored as keyed fingerprints, so the list cannot reconstruct a command or path and
+cannot use a glob over it. Wildcard matching is not offered for remembered answers.
+The `*` matcher on Claude's hook registration selects which tool events reach Hot
+Sheet; it does not broaden a remembered answer. Patterned rules require a separate
+scoped design with an inspectable grant and safe revocation (HS2-HT4SJN).
+
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
 
