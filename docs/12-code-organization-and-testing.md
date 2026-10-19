@@ -204,6 +204,13 @@ optional sccache remains complementary because it can reuse compiler outputs acr
 two target directories. `cargo clean` removes the nested Clippy directory along with the
 rest of `target`.
 
+Keep the ordinary development build unoptimized, including its dependencies
+(HS2-DRW277). On a 1,961-ticket store, a 500-row list in that build spent about
+4 ms in the index query and 50 ms encoding JSON (27 ms for compact output).
+The maintainer accepted this development-only cost rather than adding dependency
+optimization or changing the local server's build profile, both of which would
+change build time and disk use across worktrees.
+
 ### 12.6.2.1 Build artifact retention and disk headroom
 
 Keep a separate Cargo `target/` for each active checkout, as described above. Before
