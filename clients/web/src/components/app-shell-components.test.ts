@@ -532,19 +532,19 @@ describe('application shell components', () => {
     // KF-A59SC4, HS2-T44PFW). The strip never styles the TabBar's markup (HS2-DR549A).
     expect(desktop).toContain('data-trailing-placement="adjacent"');
     expect(desktop).toMatch(/kui-tab-bar__trailing[^]*kui-toolbar-control-group[^]*data-action="choose-project"/);
-    // The workspace action is data the strip renders as one standalone brand `wa-button` (HS2-PNCDAE).
-    expect(desktop).toMatch(
-      /<div class="kui-tab-bar__end"><wa-button variant="brand" pill size="medium" class="quick-ticket-composer__launcher"[^>]*data-action="expand-ticket-composer"[^>]*>[^]*New ticket…<\/wa-button><\/div>/,
-    );
+    // The workspace action is data the strip renders as one standalone brand Kerf Button.
+    expect(desktop).toContain('<div class="kui-tab-bar__end"><span class="quick-ticket-composer__launcher"');
+    expect(desktop).toContain('data-action="expand-ticket-composer"');
+    expect(desktop).toContain('data-component="button"');
+    expect(desktop).toContain('New ticket…');
     const trash = String(
       ProjectTabBar({
         tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
         workspaceAction: { kind: 'empty-trash' },
       }),
     );
-    expect(trash).toMatch(
-      /<div class="kui-tab-bar__end"><wa-button class="workspace-header__text-action" appearance="outlined" variant="danger" data-action="open-empty-trash"/,
-    );
+    expect(trash).toContain('<div class="kui-tab-bar__end"><button');
+    expect(trash).toContain('data-action="open-empty-trash"');
     expect(trash).not.toContain('expand-ticket-composer');
     expect(
       String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }] })),
@@ -844,9 +844,8 @@ describe('application shell components', () => {
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
     expect(markup).toContain('aria-label="Add Project"');
-    expect(markup).toMatch(
-      /kui-tab-bar__end"><wa-button[^>]*quick-ticket-composer__launcher[^]*tab-action<\/wa-button>/,
-    );
+    expect(markup).toContain('kui-tab-bar__end"><span class="quick-ticket-composer__launcher"');
+    expect(markup).toContain('tab-action');
     expect(markup).toContain('data-component="toolbar"');
     // The popup overlay follows the tab strip inside the main column, before the right rail (the
     // rails' own `data-*-overlay*` attributes also contain "overlay", so search from the strip).

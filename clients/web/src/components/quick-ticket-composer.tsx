@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
@@ -98,28 +97,30 @@ export function QuickTicketLauncher({
   label = 'New ticket…',
   size = 'default',
 }: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' } = {}) {
-  // A brand Web Awesome pill: Kerf's TabBar `end` zone accepts one standalone `wa-button`, and the
-  // composition extension declares this launcher `rendersAs @kerfjs/ui:wa-button` (HS2-PNCDAE).
+  // The app-owned drop shell carries drag feedback without styling Kerf's Button root.
   return (
-    <wa-button
-      variant="brand"
-      pill
-      size={size === 'compact' ? 'small' : 'medium'}
+    <span
       class="quick-ticket-composer__launcher"
       data-size={size}
       data-component="quick-ticket-composer-launcher"
       {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
       {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
       {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
-      title={
-        attachmentsEnabled
-          ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
-          : 'Create a new ticket or drop tickets to duplicate'
-      }
     >
-      <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
-      {label}
-    </wa-button>
+      <Button
+        tone="brand"
+        shape="pill"
+        size={size}
+        icon={<LucideIcon size="s" icon={Plus} name="plus" />}
+        title={
+          attachmentsEnabled
+            ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
+            : 'Create a new ticket or drop tickets to duplicate'
+        }
+      >
+        {label}
+      </Button>
+    </span>
   );
 }
 

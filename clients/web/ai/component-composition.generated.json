@@ -1869,7 +1869,7 @@
       ],
       "source": "src/components/workspace-controls.tsx",
       "rendersAs": [
-        "@kerfjs/ui:wa-button"
+        "@kerfjs/ui:button"
       ],
       "parents": {
         "mode": "any",
@@ -3987,7 +3987,7 @@
       "id": "quick-ticket-launcher",
       "name": "QuickTicketLauncher",
       "kind": "component",
-      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "purpose": "The brand pill Kerf Button that opens the quick ticket composer and accepts dropped tickets and files.",
       "publicExports": [
         {
           "name": "QuickTicketLauncher"
@@ -3998,7 +3998,7 @@
       ],
       "source": "src/components/quick-ticket-composer.tsx",
       "rendersAs": [
-        "@kerfjs/ui:wa-button"
+        "@kerfjs/ui:button"
       ],
       "parents": {
         "mode": "any",
@@ -7160,7 +7160,7 @@
       ],
       "source": "src/components/workspace-controls.tsx",
       "rendersAs": [
-        "@kerfjs/ui:wa-button"
+        "@kerfjs/ui:button"
       ],
       "parents": {
         "mode": "any",

@@ -46,12 +46,6 @@
 .workspace-header__up-next-fill[data-fill='half'] {
   clip-path: inset(0 50% 0 0);
 }
-/* The standalone Empty Trash wa-button sizes to its label inside TabBar's end zone. */
-wa-button.workspace-header__text-action::part(base) {
-  width: auto;
-  padding-inline: var(--wa-space-s);
-  white-space: nowrap;
-}
 /* The sort Select's selected value takes the toolbar control color through Kerf's public token. */
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);

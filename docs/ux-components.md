@@ -706,25 +706,25 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   Every zone holds catalog-accepted content, written as literal JSX so Kerf's `KUI-L202`
   composition rule checks each placement (HS2-PNCDAE):
 
-  | Zone       | Content                                                                                                                                                               |
-  | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `leading`  | `ProjectDashboardModes`: a borderless, compact `ToolbarControlGroup` of native pressed icon buttons (raised brand selection)                                          |
-  | `trailing` | `AddProjectAction`: one native icon button in a single borderless, compact `ToolbarControlGroup`                                                                      |
-  | `end`      | `TicketViewAction`: renders `QuickTicketLauncher` (a brand `wa-button` pill, `size="small"` for compact headings) or `EmptyTrashAction` (outlined danger `wa-button`) |
+  | Zone       | Content                                                                                                                                                                     |
+  | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `leading`  | `ProjectDashboardModes`: a borderless, compact `ToolbarControlGroup` of native pressed icon buttons (raised brand selection)                                                |
+  | `trailing` | `AddProjectAction`: one native icon button in a single borderless, compact `ToolbarControlGroup`                                                                            |
+  | `end`      | `TicketViewAction`: renders `QuickTicketLauncher` (a brand Kerf `Button` pill, `size="compact"` for compact headings) or `EmptyTrashAction` (outlined danger Kerf `Button`) |
   - The strip owns no control chrome. Those components live in `project-strip-actions.tsx` and
     `workspace-controls.tsx`, and `kerf.components.json` declares them
-    `rendersAs` `@kerfjs/ui:toolbar-control-group` or `@kerfjs/ui:wa-button`.
+    `rendersAs` `@kerfjs/ui:toolbar-control-group` or `@kerfjs/ui:button`.
   - `workspaceAction` and AppShell's `projectTabAction` are a `TicketViewActionSpec`
     (`{ kind: 'new-ticket' }` or `{ kind: 'empty-trash' }`), not markup. The demo shows both.
   - The phone strip is a Kerf `Toolbar` whose `leading` zone holds the modes, the project `Select`
     (in a single borderless group), and Add project.
-  - The launcher keeps its drop-target data attributes. The app styles only the host's
-    drag-over ring; Web Awesome owns its size, fill, hover, and focus.
+  - The launcher keeps its drop-target data attributes on an app-owned shell. The shell draws
+    drag-over feedback; Kerf Button owns the action's size, fill, hover, and focus.
   - Heading `Toolbar`s (the workspace page heading, the phone view header, and the terminal ticket
     rail) render the same spec as literal `<TicketViewAction>` JSX in their `trailing` zone. Kerf
-    Toolbar accepts one standalone primary `wa-button` there and keeps its Web Awesome chrome
-    (`KF-9N7K8S`, `KF-S4ZPRG`, HS2-F4P7ZA). The rail's `action` prop is a `TicketViewActionSpec`
-    too. The composition extension declares `TicketViewAction` `rendersAs @kerfjs/ui:wa-button`, so
+    Toolbar accepts the standalone Kerf Button there (`KF-9N7K8S`, `KF-S4ZPRG`, HS2-F4P7ZA).
+    The rail's `action` prop is a `TicketViewActionSpec` too. The composition extension declares
+    `TicketViewAction` `rendersAs @kerfjs/ui:button`, so
     the doctor's `KUI-L202` checks all three placements (a probe moving it to `leading` fails,
     HS2-CJC0MX).
 
@@ -1096,8 +1096,9 @@ helper, a typed filter, a restored query, and the model rule — labels it throu
 `searchDateLabel`, so a local `YYYY-MM-DD[THH:MM]` value reads in the machine locale's short
 date (and time) format (`created after 9/1/26, 11:05 AM`) while relative, zoned, and
 locale-typed values keep the text as written (HS2-074E0P). The helper uses labeled native
-date and time inputs with a visible focus ring because Kerf beta.107 `TextField` does not
-support those input types (HS2-GEFM29). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
+date and time inputs with a visible focus ring (HS2-GEFM29). Kerf beta.110 `TextField` now
+supports `date` but still lacks `time`; date-field adoption belongs to HS2-CQ1TZN.
+Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
 restores the caret itself after a model-mode Backspace/Delete beside a chip and after a model
 field's clear, so the app no longer snapshots chip offsets or refocuses a cleared field
 (HS2-45F8WW). Syntax-help examples are Kerf action Chips (`insert-ticket-search-syntax`, the
@@ -2409,9 +2410,9 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   discourages `wa-button`, `wa-input`, `wa-textarea`, `wa-checkbox`, and `wa-progress-ring`.
   Standalone actions use Kerf `Button`, including dialog footers and icon-only actions. Their
   delegated action is the `action` prop; application metadata is passed through `rootAttributes`.
-  `QuickTicketLauncher` and `TicketViewAction` keep raw `wa-button` because Kerf beta.106's TabBar
-  `end` zone accepts that component but rejects Kerf `Button` (`KUI-L202`). Two exact `KUI-L301`
-  exceptions document that boundary. The profile continues temporarily allowing the other
+  `QuickTicketLauncher` and `TicketViewAction` use Kerf `Button` in TabBar's `end` zone since
+  beta.109 accepted it (`KF-535H1M`, HS2-H2ASWT), removing the two exact `KUI-L301`
+  exceptions. The profile continues temporarily allowing the other
   discouraged controls until HS2-SKD293 adopts Kerf `TextField`, `Checkbox`, and `ProgressRing`.
   One `KUI-L203` exception covers Kerf's stale `MessageComposer` composition zone (KF-Z00DKT).
 

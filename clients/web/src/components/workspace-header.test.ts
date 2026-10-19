@@ -193,12 +193,13 @@ describe('WorkspaceHeader', () => {
     );
     // The header module owns the Empty Trash text action that the page header places (HS2-T35VN7).
     const emptyTrash = String(EmptyTrashAction());
-    expect(emptyTrash).toMatch(/<wa-button[^>]*class="workspace-header__text-action"/);
-    expect(emptyTrash).toContain('variant="danger"');
+    expect(emptyTrash).toMatch(/<button[^>]*data-component="button"/);
+    expect(emptyTrash).toContain('data-tone="danger"');
+    expect(emptyTrash).toContain('data-emphasis="secondary"');
     expect(emptyTrash).toContain('data-action="open-empty-trash"');
-    // The icon uses wa-button's documented start slot, so no app label row is needed (HS2-8G5C1P).
-    expect(emptyTrash).toMatch(/<svg slot="start" data-lucide="trash-2"[^>]*>.*<\/svg>Empty Trash<\/wa-button>/);
-    expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
+    expect(emptyTrash).toContain('data-lucide="trash-2"');
+    expect(emptyTrash).toContain('Empty Trash</span>');
+    expect(headerCss).not.toContain('workspace-header__text-action');
     expect(headerCss).not.toContain('.workspace-header__text-action-label');
     expect(shellCss).not.toContain('.kui-toolbar:has(.ticket-search-field');
   });
@@ -498,7 +499,9 @@ describe('WorkspaceHeader', () => {
 describe('TicketViewAction settings actions', () => {
   it('renders Ticket sources as one brand "+ Data Source…" pill that opens the source dialog (HS2-G9J35B)', () => {
     const markup = String(TicketViewAction({ action: { kind: 'add-data-source' } }));
-    expect(markup).toMatch(/<wa-button[^>]*variant="brand"[^>]*pill[^>]*data-action="open-provider-dialog"/);
+    expect(markup).toMatch(
+      /<button[^>]*data-tone="brand"[^>]*data-shape="pill"[^>]*data-action="open-provider-dialog"/,
+    );
     expect(markup).toContain('plus');
     expect(markup).toContain('Data Source…');
   });
@@ -508,15 +511,17 @@ describe('TicketViewAction settings actions', () => {
       command = markup.indexOf('data-action="add-command-setting"');
     expect(group).toBeGreaterThan(-1);
     expect(command).toBeGreaterThan(group);
-    expect(markup).toMatch(/<wa-button[^>]*appearance="outlined"[^>]*pill[^>]*data-action="add-command-group"/);
-    expect(markup).toMatch(/<wa-button[^>]*variant="brand"[^>]*pill[^>]*data-action="add-command-setting"/);
+    expect(markup).toMatch(
+      /<button[^>]*data-emphasis="secondary"[^>]*data-shape="pill"[^>]*data-action="add-command-group"/,
+    );
+    expect(markup).toMatch(/<button[^>]*data-tone="brand"[^>]*data-shape="pill"[^>]*data-action="add-command-setting"/);
     expect(markup).toContain('Add group…');
     expect(markup).toContain('Add command…');
   });
   it('uses small pills with shorter labels in the narrow page header (HS2-YKB7HS)', () => {
     const markup = String(TicketViewAction({ action: { kind: 'command-settings', size: 'compact' } }));
-    expect(markup).toMatch(/size="small"[^>]*title="Add a command group"[^]*Group…/);
-    expect(markup).toMatch(/size="small"[^>]*title="Add a custom command"[^]*Command…/);
+    expect(markup).toMatch(/data-size="compact"[^>]*title="Add a command group"[^]*Group…/);
+    expect(markup).toMatch(/data-size="compact"[^>]*title="Add a custom command"[^]*Command…/);
     expect(markup).not.toContain('Add group…');
   });
 });

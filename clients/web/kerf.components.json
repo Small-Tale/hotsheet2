@@ -6756,7 +6756,7 @@
       ],
       "sourceLinks": ["src/components/workspace-controls.tsx"],
       "composition": {
-        "rendersAs": ["@kerfjs/ui:wa-button"],
+        "rendersAs": ["@kerfjs/ui:button"],
         "parents": {
           "mode": "any",
           "entries": []
@@ -6884,7 +6884,7 @@
       "id": "quick-ticket-launcher",
       "name": "QuickTicketLauncher",
       "kind": "component",
-      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "purpose": "The brand pill Kerf Button that opens the quick ticket composer and accepts dropped tickets and files.",
       "source": "src/components/quick-ticket-composer.tsx",
       "publicExports": [
         {
@@ -6893,7 +6893,7 @@
       ],
       "sourceLinks": ["src/components/quick-ticket-composer.tsx"],
       "composition": {
-        "rendersAs": ["@kerfjs/ui:wa-button"],
+        "rendersAs": ["@kerfjs/ui:button"],
         "parents": {
           "mode": "any",
           "entries": []
@@ -6948,7 +6948,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs the brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files."
+          "Hot Sheet needs the brand pill Kerf Button that opens the quick ticket composer and accepts dropped tickets and files."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific QuickTicketLauncher behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -6967,7 +6967,7 @@
       ],
       "sourceLinks": ["src/components/workspace-controls.tsx"],
       "composition": {
-        "rendersAs": ["@kerfjs/ui:wa-button"],
+        "rendersAs": ["@kerfjs/ui:button"],
         "parents": {
           "mode": "any",
           "entries": []

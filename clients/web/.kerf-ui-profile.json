@@ -335,18 +335,6 @@
       "rules": ["KUI-L203"],
       "target": "src/components/ai-conversation.tsx",
       "rationale": "Kerf beta.106's composition catalog still declares MessageComposer's removed actions zone, so a correct trailing prop reads as empty (KF-Z00DKT); remove once it ships."
-    },
-    {
-      "id": "tab-bar-end-quick-ticket-launcher",
-      "rules": ["KUI-L301"],
-      "target": "src/components/quick-ticket-composer.tsx",
-      "rationale": "Kerf TabBar's end zone accepts wa-button but not Kerf Button in beta.106; QuickTicketLauncher is its drop-enabled standalone action (KUI-L202)."
-    },
-    {
-      "id": "tab-bar-end-ticket-view-actions",
-      "rules": ["KUI-L301"],
-      "target": "src/components/workspace-controls.tsx",
-      "rationale": "Kerf TabBar's end zone accepts wa-button but not Kerf Button in beta.106; TicketViewAction renders the standalone actions there (KUI-L202)."
     }
   ]
 }

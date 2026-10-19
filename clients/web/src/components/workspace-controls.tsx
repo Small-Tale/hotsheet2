@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './workspace-header.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar, px } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
@@ -152,22 +152,21 @@ export type TicketViewActionSpec =
    * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. */
   | { kind: 'command-settings'; size?: 'default' | 'compact' };
 
-/** The Trash view's standalone outlined danger `wa-button` (declared `rendersAs @kerfjs/ui:wa-button`). */
+/** The Trash view's standalone outlined danger action. */
 export function EmptyTrashAction() {
   return (
-    <wa-button
-      class="workspace-header__text-action"
-      appearance="outlined"
-      variant="danger"
-      {...TICKET_SELECTION_ACTIONS.openEmptyTrash.attrs}
+    <Button
+      emphasis="secondary"
+      tone="danger"
+      action={TICKET_SELECTION_ACTIONS.openEmptyTrash.value}
+      icon={<LucideIcon icon={Trash2} name="trash-2" />}
     >
-      <LucideIcon slot="start" icon={Trash2} name="trash-2" />
       Empty Trash
-    </wa-button>
+    </Button>
   );
 }
 
-/** Renders a {@link TicketViewActionSpec} as standalone pill `wa-button`s (HS2-PNCDAE). Settings pages
+/** Renders a {@link TicketViewActionSpec} with standalone Kerf Buttons (HS2-H2ASWT). Settings pages
  * put their page-level add actions here, like New ticket… in ticket views; a trailing "…" marks an
  * action that opens a dialog or prompt (HS2-G9J35B, HS2-YKB7HS). */
 export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
@@ -180,34 +179,38 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
       );
     case 'add-data-source':
       return (
-        <wa-button variant="brand" pill {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
-          <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
+        <Button
+          tone="brand"
+          shape="pill"
+          action={COMMANDS_AND_AI_ACTIONS.openProviderDialog.value}
+          icon={<LucideIcon size="s" icon={Plus} name="plus" />}
+        >
           Data Source…
-        </wa-button>
+        </Button>
       );
     case 'command-settings':
       return (
         <Row gap="xs" vAlign="middle">
-          <wa-button
-            appearance="outlined"
-            pill
-            size={action.size === 'compact' ? 'small' : 'medium'}
+          <Button
+            emphasis="secondary"
+            shape="pill"
+            size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a command group"
-            {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}
+            action={COMMANDS_AND_AI_ACTIONS.addCommandGroup.value}
+            icon={<LucideIcon size="s" icon={FolderPlus} name="folder-plus" />}
           >
-            <LucideIcon size="s" slot="start" icon={FolderPlus} name="folder-plus" />
             {action.size === 'compact' ? 'Group…' : 'Add group…'}
-          </wa-button>
-          <wa-button
-            variant="brand"
-            pill
-            size={action.size === 'compact' ? 'small' : 'medium'}
+          </Button>
+          <Button
+            tone="brand"
+            shape="pill"
+            size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a custom command"
-            {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
+            action={COMMANDS_AND_AI_ACTIONS.addCommandSetting.value}
+            icon={<LucideIcon size="s" icon={Plus} name="plus" />}
           >
-            <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
             {action.size === 'compact' ? 'Command…' : 'Add command…'}
-          </wa-button>
+          </Button>
         </Row>
       );
     default:

@@ -21,7 +21,7 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(52);
+    expect(profile.exceptions).toHaveLength(50);
     for (const exception of profile.exceptions.slice(0, 16)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
@@ -44,7 +44,7 @@ describe('Kerf application UI profile', () => {
     // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
     // site; each exception is exact (one file, one rule) and its rationale names the classes or
     // expressions it covers, so a new finding elsewhere still fails the gate.
-    const reviewed = profile.exceptions.slice(17, -3);
+    const reviewed = profile.exceptions.slice(17, -1);
     expect(reviewed.length).toBeGreaterThan(0);
     const ids = new Set<string>(),
       targets = new Set<string>(),
@@ -76,18 +76,14 @@ describe('Kerf application UI profile', () => {
     expect(targets.size).toBe(reviewed.length);
     expect(stale).toEqual([]);
     // A false Kerf composition finding, exact to one file and rule until the Kerf fix ships (HS2-BH7NZ4).
-    expect(profile.exceptions.at(-3)).toEqual(
+    expect(profile.exceptions.at(-1)).toEqual(
       expect.objectContaining({
         id: 'message-composer-trailing-zone',
         rules: ['KUI-L203'],
         target: 'src/components/ai-conversation.tsx',
       }),
     );
-    expect(profile.exceptions.at(-3)?.rationale).toContain('KF-Z00DKT');
-    expect(profile.exceptions.slice(-2)).toEqual([
-      expect.objectContaining({ rules: ['KUI-L301'], target: 'src/components/quick-ticket-composer.tsx' }),
-      expect.objectContaining({ rules: ['KUI-L301'], target: 'src/components/workspace-controls.tsx' }),
-    ]);
+    expect(profile.exceptions.at(-1)?.rationale).toContain('KF-Z00DKT');
   });
 
   it('restores Kerf-discouraged Web Awesome controls only until their adoption tickets land', () => {
@@ -102,7 +98,7 @@ describe('Kerf application UI profile', () => {
     for (const preference of Object.values(profile.preferences)) expect(preference.avoid).toEqual([]);
   });
 
-  it('keeps raw action buttons only at the TabBar end composition boundary', () => {
+  it('uses Kerf Button for standalone actions rather than raw Web Awesome buttons', () => {
     const root = new URL('./', import.meta.url);
     const files = (directory: URL): URL[] =>
       readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -119,10 +115,7 @@ describe('Kerf application UI profile', () => {
         count: [...readFileSync(file, 'utf8').matchAll(/<wa-button\b/g)].length,
       }))
       .filter(({ count }) => count > 0);
-    expect(usages).toEqual([
-      { file: 'components/quick-ticket-composer.tsx', count: 1 },
-      { file: 'components/workspace-controls.tsx', count: 4 },
-    ]);
+    expect(usages).toEqual([]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

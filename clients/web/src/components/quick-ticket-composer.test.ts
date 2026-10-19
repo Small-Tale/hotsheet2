@@ -50,13 +50,14 @@ describe('QuickTicketComposer', () => {
     expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain(
       'class="quick-ticket-composer__launcher" data-size="compact"',
     );
-    // A brand Web Awesome pill whose size maps to a Web Awesome size, not app geometry (HS2-PNCDAE).
-    expect(collapsed).toMatch(/^<wa-button variant="brand" pill size="medium" class="quick-ticket-composer__launcher"/);
-    expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain('size="small"');
-    expect(collapsed).toContain('<svg slot="start" data-lucide="plus"');
+    // Kerf Button owns size and chrome; the shell owns the drop-state marker and ring.
+    expect(collapsed).toMatch(/^<span class="quick-ticket-composer__launcher"/);
+    expect(collapsed).toMatch(/<button[^>]*data-component="button"[^>]*data-tone="brand"/);
+    expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain('data-size="compact"');
+    expect(collapsed).toContain('data-lucide="plus"');
     const launcherCss = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
-    expect(launcherCss).not.toMatch(/quick-ticket-composer__launcher[^{]*\{[^}]*(?:min-height|padding|background)/);
-    expect(launcherCss).not.toMatch(/quick-ticket-composer__launcher[^{]*::part/);
+    expect(launcherCss).toMatch(/\.quick-ticket-composer__launcher:is\([^)]*data-dragging/);
+    expect(launcherCss).not.toMatch(/\.kui-button|quick-ticket-composer__launcher[^\n]*button/);
     const collapsedComposer = String(QuickTicketComposer({ expanded: false }));
     expect(collapsedComposer).toContain('data-component="quick-ticket-composer"');
     expect(collapsedComposer).toContain('aria-hidden="true"');

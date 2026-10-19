@@ -3,13 +3,11 @@
    under the existing L011 exception), form grid, Up Next toggle, auto-growing details textarea,
    staged-attachment rows, drop zone, and mobile stacking, which no Kerf component
    expresses. */
-/* The launcher is a brand Web Awesome pill (HS2-PNCDAE): Web Awesome owns its size, fill, hover, and
-   focus ring; `size="compact"` maps to the small button of a narrow heading such as the ticket rail's.
-   The app styles only the host's drop-target ring while tickets or files are dragged over it. */
+/* This app-owned drop shell surrounds a Kerf Button; the shell alone draws drag feedback. */
 .quick-ticket-composer__launcher {
+  display: inline-flex;
   flex: none;
-  border-radius: var(--wa-border-radius-pill);
-  white-space: nowrap;
+  border-radius: 9999px;
 }
 .quick-ticket-composer__launcher:is([data-dragging='true'], [data-dragging-ticket='true']) {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 40%, transparent);

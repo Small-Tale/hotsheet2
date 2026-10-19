@@ -3527,8 +3527,8 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(sourcesPanel.getByRole('heading', { name: 'Ticket sources' })).toHaveCount(0);
   await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
   // The brand "+ Data Source…" pill sits in the project tab bar's action zone, not the form (HS2-G9J35B).
-  await expect(page.locator('.project-tab-bar').locator('wa-button', { hasText: 'Data Source…' })).toHaveJSProperty(
-    'variant',
+  await expect(page.locator('.project-tab-bar').getByRole('button', { name: 'Data Source…' })).toHaveAttribute(
+    'data-tone',
     'brand',
   );
   await expect(sourcesPanel.locator('[data-action="open-provider-dialog"]')).toHaveCount(0);
@@ -4997,12 +4997,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
-      // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill lives on the base part.
-      launcherStyle = getComputedStyle(
-        node
-          .querySelector<HTMLElement>('.quick-ticket-composer__launcher')!
-          .shadowRoot!.querySelector('[part~="base"]')!,
-      );
+      // Kerf Button owns the fill inside the app-owned drop shell.
+      launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher button')!);
     return {
       modeBottom: mode.bottom,
       modeWidth: mode.width,
@@ -14186,9 +14182,9 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   // Add group… and the brand Add command… pills sit in the project tab bar's far-edge action zone,
   // where ticket views put New ticket…, not in the page body (HS2-YKB7HS).
   const tabBar = page.locator('.project-tab-bar');
-  await expect(tabBar.locator('wa-button', { hasText: 'Add command…' })).toHaveJSProperty('variant', 'brand');
-  await expect(tabBar.locator('wa-button', { hasText: 'Add command…' })).toHaveJSProperty('pill', true);
-  await expect(tabBar.locator('wa-button', { hasText: 'Add group…' })).toHaveJSProperty('appearance', 'outlined');
+  await expect(tabBar.getByRole('button', { name: 'Add command…' })).toHaveAttribute('data-tone', 'brand');
+  await expect(tabBar.getByRole('button', { name: 'Add command…' })).toHaveAttribute('data-shape', 'pill');
+  await expect(tabBar.getByRole('button', { name: 'Add group…' })).toHaveAttribute('data-emphasis', 'secondary');
   await expect(editor.locator('[data-action="add-command-setting"], [data-action="add-command-group"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button Label').fill('Lint');
@@ -20267,6 +20263,7 @@ test('focuses the ticket title every time the real composer expands', async ({ p
 });
 
 test('stages safe attachment drops from the collapsed and expanded new-ticket composer', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   const uploads: string[] = [];
   page.on('request', (request) => {
@@ -20279,8 +20276,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  // The launcher is a Web Awesome pill (HS2-PNCDAE): a real drag event starts on its shadow button and
-  // is composed, so the delegated drop target sees (and marks) the host.
+  // The native Kerf Button bubbles the drag to the app-owned drop shell (HS2-H2ASWT).
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     launcherHost = page.locator('[data-component="quick-ticket-composer-launcher"]');
   await launcher.evaluate((node) => {
@@ -20291,6 +20287,8 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
     );
   });
   await expect(launcherHost).toHaveAttribute('data-dragging', 'true');
+  await expect.poll(() => launcherHost.evaluate((node) => getComputedStyle(node).boxShadow)).not.toBe('none');
+  await launcherHost.screenshot({ path: 'target/visual-captures/hs2-h2aswt-drop-ring-1280.png' });
   await launcher.evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['first proof'], 'first-proof.txt', { type: 'text/plain' }));
@@ -20299,6 +20297,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
     );
   });
   await expect(launcherHost).not.toHaveAttribute('data-dragging', 'true');
+  await expect.poll(() => launcherHost.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
   const form = page.locator('[data-action="create-ticket-form"]');
   await expect(form.getByText('first-proof.txt')).toBeVisible();
   await form.screenshot({ path: 'target/visual-captures/hs2-v1xn4t-new-ticket-drop-wide.png' });

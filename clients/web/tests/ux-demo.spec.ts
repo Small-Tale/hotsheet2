@@ -1414,6 +1414,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(launcher).toContainText('Ticket…');
   await expect(launcher).not.toContainText('New ticket');
+  await rail.screenshot({ path: 'target/visual-captures/hs2-h2aswt-ticket-rail-1280.png' });
   await expect(panel.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Hide ticket rail' })).toHaveAttribute(
     'data-action',
@@ -1435,12 +1436,8 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       content = getComputedStyle(node.querySelector<HTMLElement>('.kui-nav-stack__view[data-nav-active="true"]')!),
-      // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill and radius live on the base part.
-      launcherStyle = getComputedStyle(
-        node
-          .querySelector<HTMLElement>('.quick-ticket-composer__launcher')!
-          .shadowRoot!.querySelector('[part~="base"]')!,
-      );
+      // Kerf Button owns the action fill and radius inside the app-owned drop shell.
+      launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher button')!);
     return {
       mode: {
         top: mode.top,
@@ -1466,6 +1463,9 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       contentPadding: content.padding,
       launcherBackground: launcherStyle.backgroundColor,
       launcherRadius: launcherStyle.borderRadius,
+      launcherHeight: node
+        .querySelector<HTMLElement>('.quick-ticket-composer__launcher button')!
+        .getBoundingClientRect().height,
     };
   });
   expect(geometry.mode.bottom).toBeLessThanOrEqual(geometry.sortTop);
@@ -1488,7 +1488,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   );
   expect(geometry.headingDivider).toBe(false);
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
-  expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
+  expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThanOrEqual(geometry.launcherHeight / 2);
   const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane__content'),
     rows = rail.locator('[data-component="ticket-list-row"]'),
     lastRow = rows.last();
@@ -1584,6 +1584,10 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   });
   expect(narrowLauncher.buttonRight).toBeLessThanOrEqual(narrowLauncher.railRight);
   await rail.screenshot({ path: 'target/visual-captures/hs2-r292m4-terminal-ticket-rail-narrow.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(launcher).toBeVisible();
+  await expect.poll(() => rail.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await rail.screenshot({ path: 'target/visual-captures/hs2-h2aswt-ticket-rail-390.png' });
 });
 
 for (const component of ['workspace-header', 'terminal-ticket-rail']) {
@@ -6981,13 +6985,18 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   const actionGeometry = await withAction.evaluate((bar) => {
     const tabs = bar.querySelector('.kui-tab-bar__tabs')!.getBoundingClientRect(),
       add = bar.querySelector('[data-action="choose-project"]')!.getBoundingClientRect(),
-      action = bar.querySelector('.kui-tab-bar__end > wa-button')!.getBoundingClientRect(),
+      action = bar
+        .querySelector('.kui-tab-bar__end > [data-component="quick-ticket-composer-launcher"]')!
+        .getBoundingClientRect(),
       edge = bar.getBoundingClientRect();
     return { addGap: add.left - tabs.right, actionGap: action.left - add.right, edgeGap: edge.right - action.right };
   });
   expect(actionGeometry.addGap).toBeLessThan(24);
   expect(actionGeometry.actionGap).toBeGreaterThan(48);
   expect(actionGeometry.edgeGap).toBeLessThan(24);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await withAction.screenshot({ path: 'target/visual-captures/hs2-h2aswt-tab-bar-1280.png' });
+  await page.setViewportSize({ width: 1600, height: 900 });
   // The app strip adds the outer 4px inline inset; Kerf's TabBar pads and gaps by its 4px gap token.
   await expect(tabBar).toHaveCSS('padding', '0px 4px');
   await expect(tabBar.locator('[data-component="tab-bar"]')).toHaveCSS('padding', '4px');

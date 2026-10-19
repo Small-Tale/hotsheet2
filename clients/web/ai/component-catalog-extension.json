@@ -1336,9 +1336,9 @@
       "id": "quick-ticket-launcher",
       "name": "QuickTicketLauncher",
       "kind": "component",
-      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "purpose": "The brand pill Kerf Button that opens the quick ticket composer and accepts dropped tickets and files.",
       "useWhen": [
-        "Hot Sheet needs the brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files."
+        "Hot Sheet needs the brand pill Kerf Button that opens the quick ticket composer and accepts dropped tickets and files."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific QuickTicketLauncher behavior."
