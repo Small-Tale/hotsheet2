@@ -674,6 +674,26 @@ pub fn filter_provider_ticket_page(
     mut tickets: Vec<ApiTicket>,
     query: &TicketQuery,
 ) -> Vec<ApiTicket> {
+    for ticket in &mut tickets {
+        ticket.needs_review = ticket.feedback_needed
+            || !ticket.review_requests.is_empty()
+            || ticket
+                .notes
+                .iter()
+                .filter(|note| {
+                    matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
+                        && note.feedback_for.is_none()
+                        && note.ai_feedback.is_none()
+                })
+                .max_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)))
+                .map_or_else(
+                    || hotsheet_model::Note::text_requests_feedback(&ticket.details),
+                    |note| {
+                        note.kind == NoteKind::FeedbackNeeded
+                            || hotsheet_model::Note::text_requests_feedback(&note.text)
+                    },
+                );
+    }
     tickets.retain(|ticket| {
         provider_text_matches(ticket, query.text.as_deref())
             && query.status.is_none_or(|value| ticket.status == value)
@@ -706,6 +726,9 @@ pub fn filter_provider_ticket_page(
                 .assignee
                 .as_deref()
                 .is_none_or(|value| ticket.assignees.iter().any(|assignee| assignee == value))
+            && query
+                .needs_review
+                .is_none_or(|want| ticket.needs_review == want)
             && query
                 .created_after
                 .as_deref()
@@ -2457,6 +2480,24 @@ mod tests {
             exact.exhausted,
             "exactly `limit` remaining rows exhausts the source"
         );
+    }
+
+    #[test]
+    fn native_review_filter_reaches_matching_ticket_after_first_provider_page() {
+        let mut rows = created_rows();
+        rows.last_mut().unwrap().details = "FEEDBACK NEEDED: decide".into();
+        let query = TicketQuery {
+            needs_review: Some(true),
+            sort: crate::SortKey::Created,
+            ..Default::default()
+        };
+        let fetches = std::cell::Cell::new(0);
+        let page = keyset_page_from_native_pages(&query, None, None, 1, |cursor| {
+            native_pages(&rows, &fetches, cursor)
+        })
+        .unwrap();
+        assert_eq!(titles(&page), ["ticket 7"]);
+        assert!(fetches.get() > 1);
     }
 
     #[test]

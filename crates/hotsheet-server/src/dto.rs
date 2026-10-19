@@ -35,6 +35,8 @@ pub(crate) struct ListParams {
     review_requested: Option<String>,
     /// Only tickets whose review was requested by this person (git email).
     review_by: Option<String>,
+    /// User-facing Needs Review state (unanswered feedback or an explicit review request).
+    needs_review: Option<bool>,
     /// `true` = only claimed tickets; `false` = only unclaimed.
     claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
@@ -182,6 +184,7 @@ impl ListParams {
             assignee: resolve_person(self.assignee)?,
             review_requested: resolve_person(self.review_requested)?,
             review_by: resolve_person(self.review_by)?,
+            needs_review: self.needs_review,
             claimed: self.claimed,
             blocked: self.blocked,
             created_after: self.created_after,

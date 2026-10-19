@@ -342,6 +342,80 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(ticketPageQuery.value).toEqual({});
     expect(refreshProject).toHaveBeenCalledWith({ showLoading: false });
   });
+  it('workspace review search pushes a lone term down and walks Boolean result pages', async () => {
+    const searchQuery = signal(''),
+      searchTokens = signal<InlineSearchToken[]>([]),
+      searchMatchKeys = signal<Set<string> | undefined>(undefined),
+      tickets = signal<TicketRow[]>([]),
+      calls: string[] = [],
+      row = (slug: string, needsReview: boolean): TicketRow => ({
+        connection_id: 'git',
+        native_id: slug,
+        qualified_id: `git:${slug}`,
+        id: slug,
+        slug,
+        title: slug,
+        status: 'started',
+        up_next: false,
+        feedback_needed: needsReview,
+        needs_review: needsReview,
+        tags: [],
+        blocked_by: [],
+        claim_count: 0,
+      });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (url) => {
+        const value = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        calls.push(value);
+        const params = new URL(value, 'http://local').searchParams;
+        const boolean = !params.has('needs_review');
+        return Response.json({
+          items: boolean
+            ? params.has('cursor')
+              ? [row('HS2-LATE', true)]
+              : [row('HS2-FIRST', false)]
+            : [row('HS2-LATE', true)],
+          next_cursor: boolean && !params.has('cursor') ? 'second' : null,
+          counts: { total: 2, queued: 2, backlog: 0, archive: 0, open: 2, up_next: 0, active: 0, started: 2 },
+        });
+      }),
+    );
+    const owner = createWorkspaceSearchController({
+      searchQuery,
+      searchTokens,
+      searchHelpOpen: signal(false),
+      searchMatchKeys,
+      sidebarSearchCounts: signal<SidebarSearchCounts | undefined>(undefined),
+      selectedView: signal<TicketView>('all'),
+      searchAllTickets: signal(false),
+      error: signal(''),
+      ticketPageQuery: signal<CheckoutTicketQuery>({}),
+      ticketNextCursor: signal<string | undefined>(undefined),
+      tickets,
+      ticketRowsByProject: signal({}),
+      project: () => project('a'),
+      customViewFor: () => undefined,
+      customViewsFor: () => [],
+      activeWorkspaceSort: () => ({ sort: 'priority', sortDirection: 'descending' }),
+      ticketSearchKey: (ticket) => `${ticket.connection_id}:${ticket.native_id}`,
+      mergeTicketLinkRows: (_existing, incoming) => [...incoming],
+      refreshProject: vi.fn(async () => undefined),
+      resetBoardColumnPages: vi.fn(),
+      resetProgressiveTicketRendering: vi.fn(),
+      scheduleProjectSessionPersistence: vi.fn(),
+    });
+    replaceTicketSearch(owner.workspaceSearchModel, 'is:needs-review');
+    await owner.refreshTicketSearch();
+    expect(calls.some((url) => url.includes('needs_review=true'))).toBe(true);
+    expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-LATE']));
+    calls.length = 0;
+    replaceTicketSearch(owner.workspaceSearchModel, 'is:needs-review OR HS2-FIRST');
+    await owner.refreshTicketSearch();
+    expect(calls.some((url) => url.includes('cursor=second'))).toBe(true);
+    expect(calls.every((url) => !url.includes('needs_review=true'))).toBe(true);
+    expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-FIRST', 'git:HS2-LATE']));
+  });
   it('workspace search: All Tickets scope toggles, re-scopes the request, and ends with the search (HS2-4J6764)', async () => {
     const searchQuery = signal(''),
       searchTokens = signal<InlineSearchToken[]>([]),

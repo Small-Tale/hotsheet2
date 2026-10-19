@@ -164,6 +164,7 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
   if (!state) return ticketContains(ticket, value);
   if (state === 'up-next') return ticket.up_next;
   if (state === 'active') return isTicketActivelyWorkedOn(ticket, now);
+  if (state === 'needs-review') return ticket.needs_review ?? ticket.feedback_needed;
   if (state === 'duplicate') return ticket.close_reason === 'duplicate';
   const statuses = lifecycleAliases[state];
   return statuses ? statuses.includes(ticket.status ?? '') : false;
@@ -192,7 +193,7 @@ export function usesBooleanSearchExpression(query: string) {
 export function usesAdvancedSearchExpression(query: string) {
   return (
     usesBooleanSearchExpression(query) ||
-    /(?:^|\s)is:(?:up-next|active|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(
+    /(?:^|\s)is:(?:up-next|active|needs-review|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(
       query,
     )
   );

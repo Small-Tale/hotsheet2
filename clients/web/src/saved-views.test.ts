@@ -38,4 +38,12 @@ describe('saved views', () => {
     expect(plain.text).toBe('');
     expect(plain.tokens.map((token) => token.raw)).toEqual(['tag:docs']);
   });
+  it('keeps needs-review in saved-view queries and scoped bar expressions', () => {
+    const view = { id: 'review', name: 'Needs review', query: 'is:needs-review' };
+    expect(customViewSearch(view, '')).toMatchObject({
+      text: 'is:needs-review',
+      tokens: [{ kind: 'is', value: 'needs-review' }],
+    });
+    expect(customViewSearch(view, 'NOT tag:done').text).toBe('(is:needs-review) AND (NOT tag:done)');
+  });
 });

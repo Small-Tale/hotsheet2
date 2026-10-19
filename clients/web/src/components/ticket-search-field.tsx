@@ -104,6 +104,7 @@ const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[
     examples: [
       'is:up-next',
       'is:active',
+      'is:needs-review',
       'is:open',
       'is:closed',
       'is:duplicate',

@@ -377,6 +377,8 @@ export interface TicketRow {
   started_phase?: StartedPhase;
   up_next: boolean;
   feedback_needed: boolean;
+  /** User-facing Needs Review state: feedback or an explicit review request. */
+  needs_review?: boolean;
   tags: string[];
   blocked_by: string[];
   blocked_reason?: string;
@@ -424,6 +426,7 @@ export interface CheckoutTicketQuery {
   collection?: 'queue' | 'archive' | 'trash' | 'all';
   open?: boolean;
   up_next?: boolean;
+  needs_review?: boolean;
   blocked?: boolean;
   close_reason?: TicketCloseReason;
   compact?: boolean;

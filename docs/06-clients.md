@@ -4124,12 +4124,19 @@ the next ticket read.
 ticket states. A `feedback_needed` note, a description containing the case-sensitive
 `FEEDBACK NEEDED` marker, and an explicit review request all project to
 the same "Needs review" badge and purple leading rail in list and column presentations.
+The shared inline search field accepts `is:needs-review` in the workspace toolbar,
+ticket rail, and saved-view query dialog. It matches that same normalized state,
+including review requests and unanswered feedback; a response removes a feedback-only
+ticket from the results. Boolean expressions, view scope, and All Tickets scope retain
+the same meaning. A lone `is:needs-review` term filters at the provider/index before
+pagination; composed expressions are evaluated over all candidate pages.
 The sidebar inspector uses the "Needs review" banner without adding a redundant full-height
 purple rail; the modal reader retains the rail and banner. The underlying note still carries
 the specific question and feedback editor. The unified needs-review row/reader rail
 takes precedence over blocked and Up Next rails so the outstanding decision is never
-hidden. The server's compact row continues to expose the source `feedback_needed`
-boolean (mirrored in the index), while the client normalizes it at presentation time.
+hidden. The server's compact row exposes the source `feedback_needed` boolean and
+the normalized `needs_review` boolean (including review requests), so the client
+can present either state without loading full ticket notes.
 In the sidebar inspector, the active feedback note or marked description has a full-width
 **Respond to Feedback** action directly below its body. It is omitted from answered or
 superseded asks and from reader mode itself. Activating it opens reader mode on Info,

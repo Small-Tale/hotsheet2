@@ -204,11 +204,15 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   }
   function searchRequest(effective: EffectiveTicketSearch, view: TicketScope): CheckoutTicketQuery {
     const advanced = usesAdvancedSearchExpression(effective.text),
-      serverTokens = usesBooleanSearchExpression(effective.text) ? [] : effective.tokens;
+      serverTokens = usesBooleanSearchExpression(effective.text) ? [] : effective.tokens,
+      tokenFilters = tokenQuery(serverTokens);
+    // Only a lone positive review term can be pushed down. In a composed expression,
+    // the provider must leave all candidates for the local Boolean evaluator.
+    if (effective.text.trim().toLowerCase() !== 'is:needs-review') delete tokenFilters.needs_review;
     return sortedTicketQuery({
       ...searchScopeQuery(view),
       text: advanced ? '' : effective.text,
-      ...tokenQuery(serverTokens),
+      ...tokenFilters,
     });
   }
   function activeSidebarSearchCount(state: SidebarSearchCounts) {
@@ -349,6 +353,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
         client = new Api(current.apiPath),
         page = await client.checkoutTicketPage(current.id, 200, undefined, query),
         boolean = usesBooleanSearchExpression(effective.text),
+        collectAll = boolean || (usesAdvancedSearchExpression(effective.text) && !query.needs_review),
         active = () =>
           generation === searchGeneration &&
           project()?.id === current.id &&
@@ -356,7 +361,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
           searchScope() === scope &&
           searchSignature() === signature,
         sourceErrors = new Set(page.source_errors ?? []),
-        allMatches = boolean
+        allMatches = collectAll
           ? await collectMatchingSearchPages(
               page,
               async (cursor) => {
@@ -368,12 +373,12 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
               active,
             )
           : undefined;
-      if (boolean && !allMatches) return;
-      const rows = boolean ? allMatches! : page.items,
-        matched = boolean ? rows : matchedSearchRows(rows, effective);
+      if (collectAll && !allMatches) return;
+      const rows = collectAll ? allMatches! : page.items,
+        matched = collectAll ? rows : matchedSearchRows(rows, effective);
       if (!active()) return;
       ticketPageQuery.value = query;
-      ticketNextCursor.value = boolean ? undefined : page.next_cursor;
+      ticketNextCursor.value = collectAll ? undefined : page.next_cursor;
       tickets.value = mergeTicketLinkRows(tickets.value, rows);
       ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: tickets.value };
       searchMatchKeys.value = new Set(matched.map(ticketSearchKey));

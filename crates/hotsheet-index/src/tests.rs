@@ -1042,6 +1042,64 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
 }
 
 #[test]
+fn needs_review_query_tracks_feedback_marker_and_explicit_request_before_pagination() {
+    use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest};
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let matching = |ix: &Index| {
+        ix.query(&TicketQuery {
+            needs_review: Some(true),
+            limit: Some(1),
+            ..Default::default()
+        })
+        .unwrap()
+        .into_iter()
+        .map(|row| row.id)
+        .collect::<Vec<_>>()
+    };
+    assert!(matching(&ix).is_empty());
+
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.details = "FEEDBACK NEEDED: choose one".into();
+    store.write_ticket(&ticket).unwrap();
+    ix.reconcile(&store).unwrap();
+    assert_eq!(matching(&ix), vec![id.to_string()]);
+
+    ops::add_note(
+        &store,
+        &id,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
+        Timestamp::new("2026-08-19T01:00:00Z"),
+        NoteKind::Regular,
+        "Answered".into(),
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+    assert!(matching(&ix).is_empty());
+
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.review_requests.push(ReviewRequest {
+        who: "reviewer@example.com".into(),
+        kind: ReviewKind::Review,
+        by: id,
+        at: Timestamp::new("2026-08-19T02:00:00Z"),
+        requested_by: None,
+    });
+    store.write_ticket(&ticket).unwrap();
+    ix.reconcile(&store).unwrap();
+    assert_eq!(matching(&ix), vec![id.to_string()]);
+    assert!(
+        ix.query(&TicketQuery {
+            needs_review: Some(false),
+            ..Default::default()
+        })
+        .unwrap()
+        .iter()
+        .all(|row| row.id != id.to_string())
+    );
+}
+
+#[test]
 fn hs1_style_feedback_marker_sets_the_indexed_flag() {
     use hotsheet_model::{Note, NoteKind};
     let (_d, store, ix) = seeded();

@@ -80,6 +80,17 @@ describe('advanced search semantics', () => {
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:archived', now))).toEqual([rows[5]]);
     expect(filterAdvancedSearchResults(rows, 'is:archived', 'working', [])).toEqual([rows[5]]);
   });
+  it('matches review state in Boolean expressions and clears resolved feedback', () => {
+    const feedback = row('HS2-FEEDBACK', 'started', { feedback_needed: true, needs_review: true });
+    const requested = row('HS2-REQUEST', 'started', { needs_review: true });
+    const resolved = row('HS2-RESOLVED', 'started', { feedback_needed: false, needs_review: false });
+    const rows = [feedback, requested, resolved];
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:needs-review'))).toEqual([feedback, requested]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:needs-review AND NOT HS2-FEEDBACK'))).toEqual([
+      requested,
+    ]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'NOT is:needs-review'))).toEqual([resolved]);
+  });
   it('parses boolean precedence, negation, parentheses, phrases, and implicit AND', () => {
     const rows = [
       row('HS2-ONE', 'started', { title: 'Parser repair', tags: ['client'] }),

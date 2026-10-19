@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-5B9SWQ covers `is:needs-review` in the shared inline search. Parser,
+Boolean evaluator, and saved-view unit tests check chip recognition, composition,
+explicit review requests, and resolved feedback. Index tests check marker and review
+request filtering before a bounded page; the real-server checkout HTTP test checks
+note, description, and explicit request sources and feedback-resolution transitions.
+
 HS2-DX3EWW covers project statistics scrolling. The app-owned stats workspace
 bounds the Kerf Pane so its content slot is the sole vertical scroll owner;
 `clients/web/tests/mobile-layout.spec.ts` exercises wheel scrolling and reaches the

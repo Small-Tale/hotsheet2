@@ -349,6 +349,7 @@ impl GitLabProvider {
             started_phase: None,
             up_next: false,
             feedback_needed: false,
+            needs_review: false,
             tags: issue
                 .labels
                 .into_iter()

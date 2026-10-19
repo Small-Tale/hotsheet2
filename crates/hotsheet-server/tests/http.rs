@@ -7771,6 +7771,7 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
 
     let rows = body_json(
         router
+            .clone()
             .oneshot(authed(
                 "GET",
                 &format!("/checkouts/{checkout_id}/tickets"),
@@ -7787,6 +7788,117 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
         .find(|row| row["id"] == id)
         .unwrap();
     assert_eq!(row["feedback_needed"], true);
+    assert_eq!(row["needs_review"], true);
+
+    let filtered = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&needs_review=true"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(filtered["items"][0]["id"], id);
+    assert!(filtered["next_cursor"].is_null());
+
+    let answered = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/{checkout_id}/tickets/{id}"),
+                Some(r#"{"note":"Use the first choice"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(answered["needs_review"], false);
+    let cleared = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&needs_review=true"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(cleared["items"].as_array().unwrap().is_empty());
+
+    let marked = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Marked description","details":"FEEDBACK NEEDED: pick a date"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let marked_id = marked["id"].as_str().unwrap();
+    let found = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&needs_review=true"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(found["items"][0]["id"], marked_id);
+    let resolved = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/{checkout_id}/tickets/{marked_id}"),
+                Some(r#"{"note":"Tomorrow"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(resolved["needs_review"], false);
+
+    let review = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets/{id}/assign"),
+                Some(r#"{"reviews":[{"who":"reviewer@example.com","kind":"review"}]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(review["needs_review"], true);
+    let requested = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&needs_review=true"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(requested["items"][0]["id"], id);
+    assert!(requested["next_cursor"].is_null());
 }
 
 #[tokio::test]

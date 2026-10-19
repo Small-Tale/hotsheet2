@@ -956,6 +956,14 @@ impl Index {
             args.push(Box::new(self.store_id.clone()));
             args.push(Box::new(who.clone()));
         }
+        if let Some(want) = q.needs_review {
+            let predicate = "(t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id))";
+            wheres.push(if want {
+                predicate.into()
+            } else {
+                format!("NOT {predicate}")
+            });
+        }
         // Claimed / unclaimed — a lease holder is set or not (HS2-89).
         if let Some(want) = q.claimed {
             wheres.push(if want {
@@ -1179,7 +1187,8 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since \
+             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since,\
+             (t.feedback_needed = 1 OR EXISTS (SELECT 1 FROM reviews WHERE store_id=t.store_id AND ticket_id=t.id)) \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1202,6 +1211,7 @@ impl Index {
                     started_phase: r.get(27)?,
                     up_next: r.get::<_, i64>(7)? != 0,
                     feedback_needed: r.get::<_, i64>(22)? != 0,
+                    needs_review: r.get::<_, i64>(29)? != 0,
                     tags: json_vec(r.get::<_, String>(8)?),
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     blocked_reason: r.get(10)?,

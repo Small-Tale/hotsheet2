@@ -48,6 +48,9 @@ pub struct ApiTicket {
     /// Computed review state carried on full responses as well as compact rows so
     /// selecting a ticket cannot discard the list's needs-review presentation.
     pub feedback_needed: bool,
+    /// User-facing review state, including explicit review requests.
+    #[serde(default)]
+    pub needs_review: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
     pub blocked_reason: Option<String>,
@@ -180,6 +183,7 @@ impl ApiTicket {
             started_phase: t.started_phase,
             up_next: t.up_next,
             feedback_needed: t.feedback_needed(),
+            needs_review: t.feedback_needed() || !t.review_requests.is_empty(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),
@@ -299,6 +303,9 @@ pub struct TicketRow {
     /// waiting on the user. A later regular note clears the state. Computed here (a
     /// compact row has no notes) so lists need not load every ticket's notes.
     pub feedback_needed: bool,
+    /// User-facing review state, including explicit review requests.
+    #[serde(default)]
+    pub needs_review: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -357,6 +364,7 @@ impl From<&Ticket> for TicketRow {
             started_phase: t.started_phase.as_ref().map(enum_str),
             up_next: t.up_next,
             feedback_needed: t.feedback_needed(),
+            needs_review: t.feedback_needed() || !t.review_requests.is_empty(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),

@@ -257,7 +257,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         activeTab={activeTab}
         upNext={ticket.up_next}
         upNextEligible={canUpdate && (ticket.status === 'not_started' || ticket.status === 'started')}
-        feedbackNeeded={fullTicketFeedbackNeeded(ticket)}
+        feedbackNeeded={ticket.needs_review || fullTicketFeedbackNeeded(ticket)}
         closeReason={ticket.close_reason}
         latestConfidence={ticket.latest_confidence}
         duplicateTarget={duplicateTargetFor(ticket)}

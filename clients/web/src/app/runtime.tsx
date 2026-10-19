@@ -2092,7 +2092,7 @@ export async function startHotSheetWebClient() {
     tags: ticket.tags,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
-    feedbackNeeded: ticket.feedback_needed,
+    feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
     blocked: hasUnresolvedBlocker(ticket),
     selected: selectedTicketSlugs.value.includes(ticket.slug),
     cutPending: Boolean(

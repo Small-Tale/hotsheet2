@@ -451,6 +451,14 @@ query(filter, sort, text?, paging) -> TicketRow[]
     use the full-scan keyset.
   - A pre-value-keyset `v1.` cursor is rejected as stale; the client restarts from the top.
 
+  The `needs_review=true|false` query filter uses the normalized review state before
+  a page is cut: unresolved `feedback_needed` exchanges (including the case-sensitive
+  `FEEDBACK NEEDED` description marker) or an explicit review request. Local indexes
+  combine their feedback flag with the reviews facet; provider adapters apply the
+  same predicate while walking native pages. The row's `needs_review` boolean carries
+  that presentation state separately from `feedback_needed`, which describes the
+  feedback exchange alone (HS2-5B9SWQ).
+
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

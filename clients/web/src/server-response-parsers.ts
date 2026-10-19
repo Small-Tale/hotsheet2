@@ -300,6 +300,7 @@ const rowOptional: Record<string, Check> = {
   status: isString,
   up_next: isBoolean,
   feedback_needed: isBoolean,
+  needs_review: isBoolean,
   tags: isStringArray,
   blocked_by: isStringArray,
   claim_count: isNumber,

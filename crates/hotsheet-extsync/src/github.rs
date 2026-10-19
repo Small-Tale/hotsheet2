@@ -638,6 +638,7 @@ impl GitHubProvider {
             started_phase: None,
             up_next: status.is_active() && labels.iter().any(|label| label == "up-next"),
             feedback_needed: false,
+            needs_review: false,
             tags: labels
                 .into_iter()
                 .filter(|label| !is_provider_label(label))

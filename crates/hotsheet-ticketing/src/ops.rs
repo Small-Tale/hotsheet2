@@ -139,6 +139,8 @@ pub struct TicketQuery {
     pub review_requested: Option<String>,
     /// Only tickets whose review was requested by this person (HS2-NZT80R).
     pub review_by: Option<String>,
+    /// Match the user-facing Needs Review state: unanswered feedback or a review request.
+    pub needs_review: Option<bool>,
     /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
     /// unclaimed. `None` doesn't constrain (HS2-89).
     pub claimed: Option<bool>,
@@ -291,6 +293,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
                 t.review_requests
                     .iter()
                     .any(|r| r.requested_by.as_deref() == Some(who))
+            })
+            && q.needs_review.is_none_or(|want| {
+                (t.feedback_needed() || !t.review_requests.is_empty()) == want
             })
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)

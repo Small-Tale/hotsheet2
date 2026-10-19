@@ -351,6 +351,7 @@ fn projected_rows_with_limit(
 
 fn requires_jira_filter_validation(query: &TicketQuery) -> bool {
     query.review_requested.is_some()
+        || query.needs_review.is_some()
         || query.review_by.is_some()
         || query.claimed.is_some()
         || query.blocked.is_some()

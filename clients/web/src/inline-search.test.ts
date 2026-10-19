@@ -35,6 +35,11 @@ describe('inline advanced-search tokens', () => {
       token: { kind: 'has', value: 'attachment' },
     });
     expect(consumeSearchToken('is:up-next ')).toMatchObject({ text: '', token: { kind: 'is', value: 'up-next' } });
+    expect(consumeSearchToken('is:needs-review ')).toMatchObject({
+      text: '',
+      token: { kind: 'is', value: 'needs-review' },
+    });
+    expect(tokenQuery([tokenFromRaw('is:needs-review')!])).toEqual({ needs_review: true });
     expect(consumeSearchToken('is:active')).toEqual({ text: 'is:active' });
     expect(consumeSearchToken('is:active', true)).toMatchObject({ text: '', token: { kind: 'is', value: 'active' } });
     expect(consumeSearchToken('is:closed ')).toMatchObject({ text: '', token: { kind: 'is', value: 'closed' } });

@@ -4340,6 +4340,7 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   const help = page.getByRole('dialog', { name: 'Search syntax' });
   const helpBody = help.locator('.ticket-search-field__help');
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.getByRole('button', { name: 'Add is:needs-review to the search' })).toBeVisible();
   await expect(help).toContainText('Combine filters');
   await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-demo-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });

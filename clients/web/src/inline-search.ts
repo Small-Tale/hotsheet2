@@ -4,6 +4,7 @@ export type SearchPresence = 'attachment' | 'media-annotation' | 'commit';
 export type SearchLifecycle =
   | 'up-next'
   | 'active'
+  | 'needs-review'
   | 'open'
   | 'closed'
   | 'duplicate'
@@ -228,7 +229,7 @@ export function dateTokenFromInput(
 export function tokenFromRaw(raw: string): InlineSearchToken | undefined {
   const source = raw.trim();
   const lifecycle = source.match(
-    /^is:(up-next|active|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)$/i,
+    /^is:(up-next|active|needs-review|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)$/i,
   );
   if (lifecycle) {
     const value = lifecycle[1].toLowerCase() as SearchLifecycle;
@@ -394,6 +395,7 @@ export function tokenQuery(tokens: readonly InlineSearchToken[]) {
     .find((token): token is Extract<InlineSearchToken, { kind: 'attachment' }> => token.kind === 'attachment');
   if (attachment) query.attachment = attachment.value;
   if (tokens.some((token) => token.kind === 'is' && token.value === 'duplicate')) query.close_reason = 'duplicate';
+  if (tokens.some((token) => token.kind === 'is' && token.value === 'needs-review')) query.needs_review = true;
   for (const token of tokens) {
     if (token.kind !== 'date') continue;
     const field = token.field === 'started' || token.field === 'archived' ? 'updated' : token.field;
