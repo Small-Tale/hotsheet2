@@ -6919,38 +6919,44 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
             });
           }),
       );
-  // Put a known middle-history pair safely in view before measuring; the selection clicks themselves must not scroll.
+  // Put a known middle-history pair safely in view before measuring. The selection bar
+  // changes scroller geometry, but the message being read should stay in place on screen.
   const [anchorIndex, endIndex] = [5, 3];
   await messages.nth(anchorIndex).evaluate((node) => {
     node.scrollIntoView({ block: 'center' });
   });
   await settle();
   const readingTop = await scrollTop();
+  let readingY = await messages.nth(anchorIndex).evaluate((node) => node.getBoundingClientRect().top);
   expect(readingTop).toBeGreaterThan(40);
   expect(await transcript.evaluate((node) => node.scrollTop + node.clientHeight < node.scrollHeight - 32)).toBe(true);
-  const expectReadingPosition = async () => {
-    const position = await transcript.evaluate((node) => ({
-      top: node.scrollTop,
-      atBottom: node.scrollTop + node.clientHeight >= node.scrollHeight - 32,
-    }));
-    expect(position.atBottom).toBe(false);
-    expect(Math.abs(position.top - readingTop)).toBeLessThanOrEqual(24);
+  const expectReadingPosition = async (index: number) => {
+    expect(await transcript.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 32)).toBe(
+      false,
+    );
+    const anchorY = await messages.nth(index).evaluate((node) => node.getBoundingClientRect().top);
+    expect(Math.abs(anchorY - readingY)).toBeLessThanOrEqual(24);
   };
   await messages.nth(anchorIndex).click();
   await expect(messages.nth(anchorIndex)).toHaveAttribute('data-selected', 'true');
   await expect(conversation).toContainText('1 message selected');
   await settle();
-  await expectReadingPosition();
+  await expectReadingPosition(anchorIndex);
   // Shift-click extends from the anchor (HS2-WV88W3).
+  // Bring the older target into view as a reader would; measure from that new reading
+  // position so the deliberate scroll is not mistaken for a selection-induced jump.
+  await messages.nth(endIndex).scrollIntoViewIfNeeded();
+  await settle();
+  readingY = await messages.nth(endIndex).evaluate((node) => node.getBoundingClientRect().top);
   await messages.nth(endIndex).click({ modifiers: ['Shift'] });
   await expect(conversation).toContainText(`${anchorIndex - endIndex + 1} messages selected`);
   await settle();
-  await expectReadingPosition();
+  await expectReadingPosition(endIndex);
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-scroll-selection-after.png' });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
   await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
   await settle();
-  await expectReadingPosition();
+  await expectReadingPosition(endIndex);
   // Sending is an explicit request to continue the conversation, so it returns to and follows the latest edge.
   await composer.fill('Growth after reading older messages.');
   await composer.press('Enter');
