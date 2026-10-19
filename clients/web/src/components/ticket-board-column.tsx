@@ -16,8 +16,6 @@ export interface TicketBoardColumnProps {
   countPartial?: boolean;
   selectionRoot?: boolean;
   continuation?: { loading: boolean };
-  /** Snap a horizontally scrolling board to this column's start edge (the paged board layout). */
-  scrollSnap?: boolean;
 }
 
 export function TicketBoardColumn({
@@ -28,7 +26,6 @@ export function TicketBoardColumn({
   countPartial = false,
   selectionRoot = true,
   continuation,
-  scrollSnap = false,
 }: TicketBoardColumnProps) {
   const dropStatus = id === 'not-started' ? 'not_started' : id;
   return (
@@ -37,7 +34,6 @@ export function TicketBoardColumn({
       data-key={`ticket-column:${id}`}
       data-component="ticket-board-column"
       data-column-id={id}
-      data-scroll-snap={scrollSnap ? 'start' : undefined}
       data-ticket-drop-status={dropStatus}
       aria-label={`${title} Column`}
     >

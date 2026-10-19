@@ -3809,8 +3809,8 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
   await expect(board.locator('.ticket-board-column__tickets').first()).toHaveCSS('padding', '0px 8px 16px');
-  await expect(board).toHaveCSS('padding', '0px 8px');
-  await expect(board.locator('.ticket-board__columns')).toHaveCSS('gap', '0px');
+  await expect(board.locator('[data-component="column-track"]')).toHaveCSS('padding', '0px 8px');
+  await expect(board.locator('.kui-column-track__columns')).toHaveCSS('display', 'grid');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('6 tickets')).toHaveCount(1);

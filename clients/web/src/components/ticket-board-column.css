@@ -7,10 +7,6 @@
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--kui-space-xs);
 }
-/* Paged board (HS2-ZYJMDP): each column is a snap target. */
-.ticket-board-column[data-scroll-snap='start'] {
-  scroll-snap-align: start;
-}
 /* Drop-target feedback while a ticket is dragged over the column. */
 .ticket-board-column[data-dragging-ticket='true'] {
   background: var(--wa-color-brand-fill-quiet);

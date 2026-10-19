@@ -1,5 +1,8 @@
 import './ticket-board.css';
 
+import { ColumnTrack } from '@kerfjs/ui/column-track';
+import { px } from '@kerfjs/ui/css-values';
+
 import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
 import { TicketBoardColumn, type TicketBoardColumnProps } from './ticket-board-column';
 import { TicketEmptyState, type TicketEmptyStateProps } from './ticket-empty-state';
@@ -34,15 +37,12 @@ export function TicketBoard({ columns, label = 'Ticket board', emptyState, layou
       aria-multiselectable="true"
       aria-label={label}
     >
-      <div
-        class="ticket-board__columns"
-        style={`--ticket-board-column-count:${columns.length};--ticket-board-min-width:${columns.length * 250}px`}
-      >
+      <ColumnTrack layout={layout === 'grid' ? 'scroll' : 'paged'} minColumnWidth={px(250)} peek={px(24)}>
         {/* Each column carries its own continuation so every column paginates independently (HS2-8NBGBX). */}
         {columns.map((column) => (
-          <TicketBoardColumn {...column} selectionRoot={false} scrollSnap={layout === 'paged'} />
+          <TicketBoardColumn {...column} selectionRoot={false} />
         ))}
-      </div>
+      </ColumnTrack>
       {empty && emptyState && (
         <div class="ticket-board__empty">
           <TicketEmptyState {...emptyState} />

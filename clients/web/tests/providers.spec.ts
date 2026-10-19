@@ -4922,9 +4922,10 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
   await rail.getByRole('button', { name: /Columns View/ }).click();
   const board = rail.locator('[data-component="ticket-board"]'),
+    track = board.locator('[data-component="column-track"]'),
     columns = board.locator('[data-component="ticket-board-column"]');
   await expect(board).toHaveAttribute('data-layout', 'paged');
-  await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
+  await expect(track).toHaveCSS('scroll-snap-type', 'x mandatory');
   await expect(rail.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(rail.getByRole('button', { name: /Columns View/ })).toHaveAttribute('aria-pressed', 'true');
   // The rail keeps its launcher on the board too.
@@ -4933,7 +4934,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   // are revealed once that settles.
   await expect(columns.first().locator('[data-component="ticket-list-row"]').first()).toBeVisible();
   await expect(columns.nth(1).locator('[data-component="ticket-list-row"]').first()).toBeVisible();
-  const geometry = await board.evaluate((element) => {
+  const geometry = await track.evaluate((element) => {
     const bounds = element.getBoundingClientRect(),
       cells = [...element.querySelectorAll('[data-component="ticket-board-column"]')].map((cell) =>
         cell.getBoundingClientRect(),
@@ -4948,7 +4949,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await page.screenshot({ path: 'target/visual-captures/hs2-656q43-rail-columns-wide.png', fullPage: true });
   // A partial horizontal scroll settles on the nearest column start at the board's 8px scroll padding.
   const columnInset = (index: number) =>
-    board.evaluate(
+    track.evaluate(
       (element, target) =>
         Math.round(
           element.querySelectorAll('[data-component="ticket-board-column"]')[target].getBoundingClientRect().left -
@@ -4956,8 +4957,8 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
         ),
       index,
     );
-  const scrollLeft = () => board.evaluate((element) => Math.round(element.scrollLeft));
-  await board.hover();
+  const scrollLeft = () => track.evaluate((element) => Math.round(element.scrollLeft));
+  await track.hover();
   await page.mouse.wheel(Math.round(geometry.first.width * 0.7), 0);
   await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
   expect(await scrollLeft()).toBeGreaterThan(0);

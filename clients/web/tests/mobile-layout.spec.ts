@@ -491,6 +491,7 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   await openDemoProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
   const board = page.locator('[data-component="ticket-board"]');
+  const track = board.locator('[data-component="column-track"]');
   const columns = board.locator('[data-component="ticket-board-column"]');
 
   // The Columns toggle is offered on mobile and presents the paged board edge to edge.
@@ -499,8 +500,8 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   await expect(page.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Columns View' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.app-shell__workspace')).toHaveAttribute('data-presentation', 'edge-to-edge');
-  await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
-  const geometry = await board.evaluate((element) => {
+  await expect(track).toHaveCSS('scroll-snap-type', 'x mandatory');
+  const geometry = await track.evaluate((element) => {
     const bounds = element.getBoundingClientRect(),
       cells = [...element.querySelectorAll('[data-component="ticket-board-column"]')].map((cell) =>
         cell.getBoundingClientRect(),
@@ -512,11 +513,12 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   expect(geometry.first.width).toBeLessThan(geometry.board.width);
   expect(geometry.second.left).toBeLessThan(geometry.board.right);
   expect(geometry.overflow).toBeGreaterThan(geometry.first.width);
+  await page.screenshot({ path: 'target/visual-captures/hs2-j62968-board-phone.png', fullPage: true });
 
   // A partial horizontal scroll settles on the nearest column start once it is released: that column's
   // leading edge rests at the board's 8px scroll padding.
   const columnInset = (index: number) =>
-    board.evaluate(
+    track.evaluate(
       (element, target) =>
         Math.round(
           element.querySelectorAll('[data-component="ticket-board-column"]')[target].getBoundingClientRect().left -
@@ -524,8 +526,8 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
         ),
       index,
     );
-  const scrollLeft = () => board.evaluate((element) => Math.round(element.scrollLeft));
-  await board.hover();
+  const scrollLeft = () => track.evaluate((element) => Math.round(element.scrollLeft));
+  await track.hover();
   await page.mouse.wheel(Math.round(geometry.first.width * 0.7), 0);
   await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
   const second = await scrollLeft();
@@ -546,7 +548,8 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   // Growing to desktop keeps the board preference in the side-by-side grid layout, and back again.
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(board).toHaveAttribute('data-layout', 'grid');
-  await expect(board).toHaveCSS('scroll-snap-type', 'none');
+  await expect(track).toHaveCSS('scroll-snap-type', 'none');
+  await page.screenshot({ path: 'target/visual-captures/hs2-j62968-board-wide.png', fullPage: true });
   await expect(page.getByRole('button', { name: 'Columns View' })).toHaveAttribute('aria-pressed', 'true');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(board).toHaveAttribute('data-layout', 'paged');

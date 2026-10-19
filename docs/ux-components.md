@@ -858,7 +858,8 @@ always retain native clipboard behavior.
   markup; it fills the width supplied by its host (which owns the standard workspace
   margins), and the list shell and its first/last rows share rounded outer corners. The list never
   styles its rows: it passes each healthy and corrupt row a `listEdge` (`start`, `end`, or `only`)
-  prop, and the row rounds its own matching corners. The row also owns the overlap of
+  prop, and the row rounds its own matching corners. A Kerf `List` supplies the zero-gap row
+  stack inside the app-owned selection listbox. The row also owns the overlap of
   adjacent selected list rows (HS2-4APEJP)
   - composes the shared `TicketEmptyState` when no healthy or corrupt row exists,
     with distinct new-project, empty-view, searching, and no-match language
@@ -959,12 +960,14 @@ always retain native clipboard behavior.
   appropriate. If the whole board is empty, it retains the column headings and places
   one shared `TicketEmptyState` across the board body; individual empty columns remain
   blank when other columns contain tickets.
+  Kerf `ColumnTrack` owns the horizontal scrolling and equal-width column geometry inside
+  the app-owned board selection listbox; the board keeps its shared empty-state overlay.
   Its `layout` variant is `grid` (default, described above) or `paged` (HS2-ZYJMDP): each column
   is the board's visible width minus 24px so the next column peeks in, and mandatory horizontal
   scroll snapping settles a released scroll or swipe on the nearest column start with a smooth
   animated scroll (instant under `prefers-reduced-motion`). Trailing room lets the last column rest
-  at the same 8px inset. A paged board opts each column into snapping through
-  `TicketBoardColumn`'s `scrollSnap` prop rather than styling the column (HS2-4APEJP). The
+  at the same 8px inset. Kerf `ColumnTrack` supplies the snap targets and reduced-motion
+  behavior (HS2-4APEJP, HS2-J62968). The
   production app uses `paged` below the mobile breakpoint; the demo
   shows both variants. Changing `layout` remounts the board, so a paged scroll offset never leaves
   the grid mid-column.
@@ -976,8 +979,6 @@ always retain native clipboard behavior.
   Its semantic `h2` resets inherited browser heading typography and the selectable
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
-  Its `scrollSnap` prop (default off) makes the column a `scroll-snap-align: start` target
-  for a horizontally scrolling host such as the paged `TicketBoard`.
   It also has a standalone demo that preserves the 250px production minimum and shared
   responsive `TicketRow` composition. Loading and mutation-error variants are tracked
   by HS2-0W67Y6; an empty column intentionally retains only its heading and count.

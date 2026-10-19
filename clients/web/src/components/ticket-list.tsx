@@ -1,5 +1,6 @@
 import './ticket-list.css';
 
+import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 
@@ -65,20 +66,22 @@ export function TicketList({
         aria-label={label}
         aria-multiselectable="true"
       >
-        {empty && emptyState ? (
-          <TicketEmptyState {...emptyState} />
-        ) : (
-          tickets.map((ticket, index) => (
-            <TicketRow {...ticket} presentation="list" listEdge={listEdge(index, tickets.length)} />
-          ))
-        )}
-        {loadingMore && (
-          <Row hAlign="center" controlInsets="tb">
-            <Text variant="p" tone="quiet" size="compact" role="status" data-ticket-progressive-loading="true">
-              Loading more tickets…
-            </Text>
-          </Row>
-        )}
+        <List gap="none" rootAttributes={{ role: 'none' }}>
+          {empty && emptyState ? (
+            <TicketEmptyState {...emptyState} />
+          ) : (
+            tickets.map((ticket, index) => (
+              <TicketRow {...ticket} presentation="list" listEdge={listEdge(index, tickets.length)} />
+            ))
+          )}
+          {loadingMore && (
+            <Row hAlign="center" controlInsets="tb">
+              <Text variant="p" tone="quiet" size="compact" role="status" data-ticket-progressive-loading="true">
+                Loading more tickets…
+              </Text>
+            </Row>
+          )}
+        </List>
       </div>
     </section>
   );

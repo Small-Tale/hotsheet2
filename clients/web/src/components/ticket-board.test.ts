@@ -49,23 +49,21 @@ describe('TicketBoard', () => {
       { id: 'active', title: 'Active', tickets: [ticket] },
       { id: 'done', title: 'Done', tickets: [] },
     ];
-    expect(String(TicketBoard({ columns }))).toContain('data-layout="grid"');
-    expect(String(TicketBoard({ columns, layout: 'paged' }))).toContain('data-layout="paged"');
+    const grid = String(TicketBoard({ columns }));
+    const paged = String(TicketBoard({ columns, layout: 'paged' }));
+    expect(grid).toContain('data-layout="grid"');
+    expect(grid).toContain('data-component="column-track" data-layout="scroll"');
+    expect(paged).toContain('data-layout="paged"');
+    expect(paged).toContain('data-component="column-track" data-layout="paged"');
+    expect(paged).toContain('250px');
+    expect(paged).toContain('24px');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
-    const paged = css.match(/\.ticket-board\[data-layout='paged'\] \{([^}]*)\}/)?.[1] ?? '';
-    expect(paged).toMatch(/scroll-snap-type: x mandatory/);
-    expect(paged).toMatch(/scroll-behavior: smooth/);
-    expect(paged).toMatch(/container-type: inline-size/);
-    expect(css).toMatch(
-      /\[data-layout='paged'\] \.ticket-board__columns \{[^}]*grid-auto-columns: calc\(100cqi - remify\(24px\)\)/,
-    );
-    // The board never styles its columns; a paged board opts each column into snapping (HS2-4APEJP).
+    expect(css).not.toContain('scroll-snap-type');
+    expect(css).not.toContain('ticket-board__columns');
+    // Kerf owns the horizontal scroll and snap geometry; columns keep their vertical-only scroll.
     expect(css).not.toMatch(/\.ticket-board-column/);
-    expect(String(TicketBoard({ columns, layout: 'paged' })).match(/data-scroll-snap="start"/g)).toHaveLength(2);
-    expect(String(TicketBoard({ columns }))).not.toContain('data-scroll-snap');
     const columnCss = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
-    expect(columnCss).toMatch(/\.ticket-board-column\[data-scroll-snap='start'\] \{[^}]*scroll-snap-align: start/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce\)[^}]*\{[^}]*scroll-behavior: auto/);
+    expect(columnCss).not.toContain('scroll-snap-align');
   });
 
   it('leaves columns visually unframed beneath their title and count', () => {
@@ -79,10 +77,7 @@ describe('TicketBoard', () => {
     );
   });
 
-  it('matches the outer margin and inter-column spacing (HS2-VX9E4Z)', () => {
-    // Outer margin before the first column = board padding-inline (remify(8px)) + column padding (remify(8px)).
-    // With a 0 column-grid gap, inter-column spacing = column padding (remify(8px)) + 0 + column padding (remify(8px)),
-    // so the space between columns matches the space before the first / after the last column.
+  it('delegates outer margin and inter-column spacing to ColumnTrack (HS2-VX9E4Z)', () => {
     const markup = String(
       TicketBoard({
         columns: [
@@ -91,10 +86,9 @@ describe('TicketBoard', () => {
         ],
       }),
     );
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
-    expect(markup).toContain('--ticket-board-min-width:500px');
-    expect(css).toMatch(/ticket-board[^}]*padding-inline: remify\(8px\)/);
-    expect(css).toMatch(/ticket-board__columns[^}]*gap: 0/);
+    expect(markup).toContain('250px');
+    expect(markup).toContain('data-component="column-track"');
+    expect(markup.match(/data-component="ticket-board-column"/g)).toHaveLength(2);
   });
 
   it('projects one independently scrollable column with a derived count', () => {

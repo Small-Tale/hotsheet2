@@ -1,24 +1,10 @@
-/* The board is its own horizontal scroll owner and anchors the empty-state overlay; Kerf has no
-   overflowing column-track layout yet (KF-9WEWRF). */
+/* App-owned listbox and anchor for the board-wide empty overlay. Kerf ColumnTrack owns the
+   horizontal scroll, equal columns, and paged snapping (KF-9WEWRF, HS2-J62968). */
 .ticket-board {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding-inline: remify(8px);
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-/* Equal columns that never shrink below 250px, so a narrow board scrolls instead of crushing rows;
-   columns sit flush because each TicketBoardColumn owns its own inset. */
-.ticket-board__columns {
-  display: grid;
-  width: 100%;
-  min-width: var(--ticket-board-min-width);
-  height: 100%;
-  min-height: 0;
-  grid-template-columns: repeat(var(--ticket-board-column-count), minmax(250px, 1fr));
-  gap: 0;
 }
 /* The board-wide empty state floats over the (empty) columns below their headers. */
 .ticket-board__empty {
@@ -28,35 +14,4 @@
   pointer-events: none;
   inset: remify(41.6px) remify(8px) 0;
   place-items: center;
-}
-/* Paged layout (HS2-ZYJMDP): each column is nearly the board's visible width, so the next column
-   peeks in at the edge. Mandatory snapping lets the browser settle a released drag, swipe, or
-   momentum scroll onto the nearest column start (each column opts in with `scrollSnap`). */
-.ticket-board[data-layout='paged'] {
-  container-type: inline-size;
-  overscroll-behavior-x: contain;
-  scroll-behavior: smooth;
-  scroll-padding-inline: remify(8px);
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-/* WebKit/Blink equivalent of `scrollbar-width: none` for the paged swipe surface. */
-.ticket-board[data-layout='paged']::-webkit-scrollbar {
-  display: none;
-}
-/* Paged tracks: one near-full-width column per page plus trailing room (the peek plus the board
-   inset) so the last column can also snap to the leading inset. */
-.ticket-board[data-layout='paged'] .ticket-board__columns {
-  width: max-content;
-  min-width: 0;
-  grid-auto-columns: calc(100cqi - remify(24px));
-  grid-auto-flow: column;
-  grid-template-columns: none;
-  padding-inline-end: remify(24px);
-}
-/* Reduced motion: snap without the animated scroll. */
-@media (prefers-reduced-motion: reduce) {
-  .ticket-board[data-layout='paged'] {
-    scroll-behavior: auto;
-  }
 }
