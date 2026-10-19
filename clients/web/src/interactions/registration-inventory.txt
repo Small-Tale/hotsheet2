@@ -290,6 +290,7 @@ attachments-and-gallery	delegate	document.body	'input'	'[data-action="edit-galle
 attachments-and-gallery	delegate	document.body	'focusout'	'[data-action="edit-gallery-note"]'
 attachments-and-gallery	delegate	document.body	'change'	'[data-action="toggle-gallery-intent"]'
 attachments-and-gallery	delegate	document.body	'change'	'[data-action="toggle-gallery-closed"]'
+attachments-and-gallery	delegate	document.body	'change'	'[data-action="change-gallery-arrow-head"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="delete-gallery-annotation"]'
 attachments-and-gallery	delegateCapture	document.body	'pointerdown'	'[data-gallery-annotation-surface="true"]'
 attachments-and-gallery	document.addEventListener	'pointermove'
