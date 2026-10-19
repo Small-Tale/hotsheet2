@@ -398,15 +398,18 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   - `AiToolSettings` — **production + demo built**: machine-local plugin-discovered defaults
 
 - `AIConversation` — **production + demo built**: a project-scoped
-  dialog opened from a compact MessageSquare action beside Drive, plus an embedded presentation
+  resizable bottom sheet opened from a compact MessageSquare action beside Drive, plus an embedded presentation
   for AI-chat tabs in `TerminalDrawer`. Project Chat prepares the default tool and opens an empty
   conversation without running `$hotsheet`; Drive uses a separate stable connection and explicitly
   starts that workflow in the drawer. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
-  - dialog size: the conversation owns its panel size instead of Web Awesome's default
-    `100% - 40px` cap. Wide windows get `min(768px, 100vw - 32px)` by `min(608px, 100vh - 48px)`;
-    at 640px and below the panel keeps an 8px margin (`100vw - 16px` by `100vh - 16px`, so 374px
-    wide at 390px) (HS2-MWMMCN).
+  - sheet size and focus: Kerf attaches the sheet to the bottom edge, centered at up to 768 px
+    on wide windows and full-width on phones. It opens at 608 px of visible content height, with
+    a 320 px minimum and a cap at the dynamic viewport less top safe area and an 8 px gutter;
+    keyboard and bottom safe-area clearance keep content reachable. Its top-edge resize separator
+    is focusable and announces current/min/max height. Dragging resizes it; Arrow Up/Down change
+    height by 16 px, Page Up/Down by 64 px, and Home/End reach the current bounds. Height survives
+    conversation re-renders while open and resets on reopen (HS2-3P2DE9).
   - header: tool identity, ready/working/message-count context with the conversation's totals
     inline (`2 messages • 39K tokens • $0.23`; absent, zero, or unpriced totals are omitted, and
     no separate usage pill remains; HS2-P415F0), and native Save/Stop buttons inside Kerf

@@ -19710,6 +19710,16 @@ test('moves the chat model selector and export into the drawer and dialog toolba
     dialog = host,
     header = host.locator('[data-component="toolbar"]').first();
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-presentation', 'bottom-sheet');
+  const resizeHandle = dialog.getByRole('separator', { name: 'Resize sheet' });
+  await expect(resizeHandle).toHaveAttribute('aria-valuemin', '320');
+  const openingHeight = await resizeHandle.getAttribute('aria-valuenow');
+  await expect
+    .poll(async () => {
+      const box = await dialog.boundingBox();
+      return Math.abs(box!.y + box!.height - 800);
+    })
+    .toBeLessThanOrEqual(2);
   await expect(header.locator('[data-component="conversation-model-control"]')).toBeVisible();
   await expect(header.getByRole('button', { name: 'Save Conversation' })).toBeVisible();
   await expect(host.locator('[data-component="conversation-model-control"]')).toHaveCount(1);
@@ -19718,6 +19728,8 @@ test('moves the chat model selector and export into the drawer and dialog toolba
     await dialogComposer.fill('What time is it in California?');
     await dialogComposer.press('Enter');
     await expect(host.locator('[data-action="pick-conversation-message"]')).toHaveCount(turn * 2);
+    await expect(resizeHandle).toHaveCount(1);
+    await expect(resizeHandle).toHaveAttribute('aria-valuenow', openingHeight!);
   }
   await expect(header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toContainText(
     'GPT-6 Astra',

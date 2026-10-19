@@ -32,7 +32,20 @@ export function syncControlledOpen(root: ParentNode): void {
     if (isDialogSurface(element)) {
       // A detached dialog cannot open modally; the next render after it connects retries.
       if (!desired) closeDialog(element);
-      else if (element.isConnected) openDialog(element);
+      else if (element.isConnected) {
+        openDialog(element);
+        // App morphs can remove Kerf's live aria-value* attributes from an unchanged resize
+        // handle. Replacing that handle makes Kerf's own child observer rewire and restore them.
+        if (element.getAttribute('data-presentation') === 'bottom-sheet' && element.hasAttribute('data-resizable')) {
+          const handle = element.querySelector<HTMLElement>(':scope > .kui-dialog-surface__sheet-handle');
+          if (handle && !handle.hasAttribute('aria-valuenow')) {
+            const focused = element.ownerDocument.activeElement === handle;
+            const replacement = handle.cloneNode(true) as HTMLElement;
+            handle.replaceWith(replacement);
+            if (focused) replacement.focus({ preventScroll: true });
+          }
+        }
+      }
     } else if (typeof element.open === 'boolean') {
       // A raw Web Awesome dialog whose host is the exposed dialog keeps its shadow dialog unnamed.
       if (element.localName === 'wa-dialog' && element.getAttribute('role') === 'dialog')

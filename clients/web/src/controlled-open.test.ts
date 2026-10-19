@@ -110,6 +110,28 @@ describe('controlled custom-element open (HS2-KMDJRH)', () => {
       expect(surface.openDialog).toHaveBeenCalledExactlyOnceWith(detached);
     });
 
+    it('rewires a morph-stripped bottom-sheet resize handle while preserving focus (HS2-3P2DE9)', () => {
+      const replacement = { focus: vi.fn() };
+      const handle = {
+        hasAttribute: vi.fn(() => false),
+        cloneNode: vi.fn(() => replacement),
+        replaceWith: vi.fn(),
+      };
+      const sheet = Object.assign(dialog('true'), {
+        querySelector: vi.fn(() => handle),
+        ownerDocument: { activeElement: handle },
+      });
+      sheet.attributes.set('data-presentation', 'bottom-sheet');
+      sheet.attributes.set('data-resizable', '');
+      syncControlledOpen(rootWith(sheet));
+      expect(handle.cloneNode).toHaveBeenCalledExactlyOnceWith(true);
+      expect(handle.replaceWith).toHaveBeenCalledExactlyOnceWith(replacement);
+      expect(replacement.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+      handle.hasAttribute.mockReturnValue(true);
+      syncControlledOpen(rootWith(sheet));
+      expect(handle.replaceWith).toHaveBeenCalledTimes(1);
+    });
+
     it('delegates idempotence to Kerf: every sync re-asserts the declared state, including after a flip', () => {
       surface.openDialog.mockClear();
       surface.closeDialog.mockClear();

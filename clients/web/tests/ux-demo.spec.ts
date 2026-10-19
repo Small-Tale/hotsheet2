@@ -4,6 +4,86 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
+test('resizes the AI conversation bottom sheet and restores its opening size (HS2-3P2DE9)', async ({
+  page,
+}, testInfo) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=ai-conversation');
+    const sheet = page.locator('dialog[data-dialog-component="ai-conversation"]');
+    const handle = sheet.getByRole('separator', { name: 'Resize sheet' });
+    const transcript = sheet.getByRole('region', { name: 'Conversation Transcript' });
+    const composer = sheet.getByRole('textbox', { name: 'Message Codex' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveAttribute('data-presentation', 'bottom-sheet');
+    await expect(handle).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await sheet.boundingBox();
+        return Math.abs(box!.y + box!.height - 844);
+      })
+      .toBeLessThanOrEqual(2);
+    const opening = await sheet.boundingBox();
+    expect(opening).not.toBeNull();
+    expect(Math.abs(opening!.y + opening!.height - 844)).toBeLessThanOrEqual(2);
+    expect(opening!.width).toBeCloseTo(width === 390 ? 390 : 768, 0);
+    await page.screenshot({ path: testInfo.outputPath(`hs2-3p2de9-open-${width}.png`) });
+    await handle.focus();
+    await expect(handle).toBeFocused();
+    const maximum = Number(await handle.getAttribute('aria-valuemax'));
+    const minimum = Number(await handle.getAttribute('aria-valuemin'));
+    expect(minimum).toBe(320);
+    expect(maximum).toBeGreaterThan(minimum);
+    await page.keyboard.press('Home');
+    await expect(handle).toHaveAttribute('aria-valuenow', String(minimum));
+    const short = await sheet.boundingBox();
+    expect(short!.height).toBeGreaterThanOrEqual(minimum);
+    await expect(composer).toBeInViewport();
+    await expect(transcript).toBeVisible();
+    await transcript.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const lastMessage = transcript.locator('.ai-conversation__message').last();
+    await expect(lastMessage).toBeInViewport();
+    const lastMessageBox = await lastMessage.boundingBox();
+    const composerBox = await composer.boundingBox();
+    expect(lastMessageBox!.y + lastMessageBox!.height).toBeLessThanOrEqual(composerBox!.y);
+    await page.screenshot({ path: testInfo.outputPath(`hs2-3p2de9-min-${width}.png`) });
+    await sheet.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
+    await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeInViewport();
+    await expect(page.getByRole('menuitem', { name: /Model/ })).toBeInViewport();
+    await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeInViewport();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeVisible();
+    await handle.focus();
+    await page.keyboard.press('ArrowUp');
+    await expect(handle).toHaveAttribute('aria-valuenow', String(minimum + 16));
+    await page.keyboard.press('PageUp');
+    const resized = Number(await handle.getAttribute('aria-valuenow'));
+    expect(resized).toBeGreaterThan(minimum + 16);
+    await page
+      .locator('[data-settings="ai-conversation"] [name="scenario"]')
+      .evaluate((control: HTMLElement & { value: string }) => {
+        control.value = 'completed';
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    await expect(handle).toHaveCount(1);
+    await expect(handle).toHaveAttribute('aria-valuenow', String(resized));
+    await expect(handle).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(handle).toHaveAttribute('aria-valuenow', String(maximum));
+    await expect(composer).toBeInViewport();
+    await sheet.screenshot({ path: testInfo.outputPath(`hs2-3p2de9-sheet-${width}.png`) });
+    await page.keyboard.press('Escape');
+    await expect(sheet).not.toBeVisible();
+    await page.getByRole('button', { name: 'Open Conversation' }).first().click();
+    await expect(sheet).toBeVisible();
+    const reopened = await sheet.boundingBox();
+    expect(reopened!.height).toBeCloseTo(opening!.height, 0);
+    await expect(composer).toBeInViewport();
+  }
+});
+
 /** A Kerf PopupMenu root's top-level items: plain items and submenu triggers, not submenu entries. */
 const TOP_MENU_ITEMS =
   ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item';

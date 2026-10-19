@@ -344,7 +344,7 @@ export function AIConversationSettings() {
         label="Presentation"
         value={aiConversationPresentation.value}
         choices={[
-          { value: 'dialog', label: 'Dialog' },
+          { value: 'dialog', label: 'Bottom Sheet' },
           { value: 'embedded', label: 'Embedded' },
         ]}
       />

@@ -1597,7 +1597,7 @@ preview/download, server directory browser) are separate design work.
   inspector behind it keeps its static heading, and the reverse (HS2-2M5BBN).
 
   The MessageSquare action is available before Drive and opens the production
-  `AIConversation` dialog after preparing the default tool without sending a workflow turn.
+  `AIConversation` resizable bottom sheet after preparing the default tool without sending a workflow turn.
   Project Chat and Drive use different stable connection ids: Chat is a general project
   conversation, while Drive is the explicit `$hotsheet` automation shortcut in the drawer.
   The action carries a Kerf `Badge` with the project's unread AI chat message count, shown as

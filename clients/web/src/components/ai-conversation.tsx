@@ -810,12 +810,15 @@ export function AIConversation(props: AIConversationProps) {
         {composer}
       </section>
     );
-  // Kerf DialogSurface owns the panel geometry: a 768px x 608px panel capped to the viewport less an
-  // 8px gutter, with no body or footer inset (HS2-MWMMCN, HS2-ADM62E).
+  // Kerf owns the bottom sheet's viewport, keyboard, and resize bounds. Its 320px minimum
+  // leaves room for the toolbar and composer while the transcript remains independently scrollable.
   return (
     <DialogSurface
+      presentation="bottom-sheet"
+      resizable
       preferredWidth={remify(768)}
       height={remify(608)}
+      minHeight={remify(320)}
       viewportGutter={remify(8)}
       bodyInset="none"
       footerInset="none"
