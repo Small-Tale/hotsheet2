@@ -196,6 +196,7 @@ for (const width of [1280, 390])
     }
 
     // The Workspace Grid composition: hide the drawer, and the Workspace Grid tile hosts the instance.
+    const drawerGrid = await dedicated.getAttribute('data-grid-size');
     await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
     await page.getByRole('button', { name: 'Workspace Grid', exact: true }).first().click();
     const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -208,13 +209,29 @@ for (const width of [1280, 390])
         return { width: screen.width / frame.width, height: screen.height / frame.height };
       });
     if (width === 1280) {
-      // The spacious tile claims a fitted PTY grid instead of shrinking the drawer's wide grid.
-      // Text moves with the emulator before its animation-frame tile fit settles.
-      await expect.poll(async () => (await workspaceFill()).width).toBeGreaterThan(0.8);
-      await expect.poll(async () => (await workspaceFill()).height).toBeGreaterThan(0.8);
+      // Three tiles make each frame too small for the minimum 40×12 TUI grid even on desktop, so
+      // the tile mirrors the drawer grid without claiming PTY sizing. Preserve aspect and contain it;
+      // font metrics can leave more letterbox on either axis (HS2-BWSPMJ).
+      const tiledViewport = workspaceTile.locator('[data-presentation="tile"]');
+      await expect(tiledViewport).toHaveAttribute('data-geometry-ready', 'true');
+      await expect(tiledViewport).toHaveAttribute('data-sizing-focus', 'false');
+      await expect(tiledViewport).toHaveAttribute('data-grid-size', drawerGrid!);
+      // The moved viewport may paint before its animation-frame scale settles. Check the final
+      // contained frame rather than passing on an oversized first paint.
+      await expect
+        .poll(async () => {
+          const fill = await workspaceFill();
+          return fill.width <= 1.01 && fill.height <= 1.01 && Math.max(fill.width, fill.height) > 0.9;
+        })
+        .toBe(true);
     } else {
       // A phone tile cannot fit a usable TUI grid, so it keeps the legible scaled mirror.
-      await expect.poll(async () => (await workspaceFill()).width).toBeGreaterThan(0.95);
+      await expect
+        .poll(async () => {
+          const fill = await workspaceFill();
+          return fill.width <= 1.01 && fill.height <= 1.01 && Math.max(fill.width, fill.height) > 0.9;
+        })
+        .toBe(true);
     }
     expect(await emulatorOf(page, 'demo-one')).toEqual([
       { tag: opened.tag, inTile: true, inSession: false, presentation: 'tile', mode: 'interactive' },

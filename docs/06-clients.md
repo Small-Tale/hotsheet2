@@ -3399,7 +3399,7 @@ The owner tells the instance where it is with `hs-terminal-viewport-presentation
   claims that size; moving a wide drawer terminal into a tall Workspace Grid tile then lets
   the TUI use the tile's height. Smaller tiles mirror the existing PTY grid instead.
 - **Scale:** the fitted emulator is uniformly scaled to the tile's whole-cell remainder;
-  small tiles keep the existing letterboxed mirror.
+  small tiles keep the existing letterboxed mirror, including before the server reports a PTY size.
 - **Input and focus:** the instance is `inert`, input is disabled, and its scrollbar is hidden.
 - **Sizing:** a usable visible tile claims its fitted size through the normal sizing arbiter.
   A tile too small for a usable grid reports `visible:false` and cannot resize the PTY.

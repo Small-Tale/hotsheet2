@@ -1484,6 +1484,20 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     view.dispose();
   });
 
+  it('lays out a tiny tile before any server size report (HS2-BWSPMJ)', () => {
+    const view = mountMovable();
+    view.flush();
+    allocated.proposed = { cols: 20, rows: 10 };
+    const originalGrid = [view.terminal.cols, view.terminal.rows];
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    expect(view.viewport.dataset.geometryReady).toBe('true');
+    expect(view.viewport.style.transform).toBe('translate(0px, 30px) scale(0.5)');
+    expect([view.terminal.cols, view.terminal.rows]).toEqual(originalGrid);
+    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false });
+    view.dispose();
+  });
+
   it('survives repeated and redundant moves without leaking or reconnecting', () => {
     const view = mountMovable();
     for (let round = 0; round < 3; round += 1) {

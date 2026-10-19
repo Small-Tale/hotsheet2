@@ -713,8 +713,9 @@ function initializeTerminalViewport(
       if (!size) return;
       // A very small tile cannot host a usable TUI grid; mirror the existing PTY there.
       tileCanClaim = size.cols >= 40 && size.rows >= 12;
-      tileGridSize = tileCanClaim ? terminalDedicatedGridSize(size.cols, size.rows) : serverSize;
-      if (!tileGridSize) return;
+      tileGridSize = tileCanClaim
+        ? terminalDedicatedGridSize(size.cols, size.rows)
+        : (serverSize ?? { cols: terminal.cols, rows: terminal.rows });
       resizeTerminalPreservingScroll(terminal, tileGridSize.cols, tileGridSize.rows);
       element.dataset.geometryReady = 'true';
       layoutTile();

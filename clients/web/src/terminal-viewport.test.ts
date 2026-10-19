@@ -31,6 +31,7 @@ import {
   terminalResizeClaim,
   terminalScrollbackLimit,
   terminalShouldUseWebgl,
+  terminalTileLayout,
   terminalUsesMobile80xM,
   terminalViewportClaimsSizing,
   terminalViewportScale,
@@ -116,6 +117,12 @@ describe('terminal viewport protocol', () => {
     expect(terminalViewportScale(120, 40, 80, 24)).toBe(1);
     expect(terminalViewportScale(80, 24, 100, 30)).toBe(0.8);
     expect(terminalViewportScale(40, 12, 120, 40)).toBe(0.3);
+  });
+  it('fills one tile axis while centering a wider terminal grid without stretching it (HS2-BWSPMJ)', () => {
+    const layout = terminalTileLayout(800, 300, 500, 300);
+    expect(layout).toEqual({ scale: 0.625, x: 0, y: 56.25 });
+    expect(800 * layout!.scale).toBe(500);
+    expect((300 * layout!.scale) / 300).toBe(0.625);
   });
   it('uniformly scales the fixed 80 by 24 dashboard surface without changing its aspect', () => {
     expect([TERMINAL_PREVIEW_NATURAL_WIDTH, TERMINAL_PREVIEW_NATURAL_HEIGHT]).toEqual([1280, 768]);
