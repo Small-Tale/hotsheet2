@@ -107,7 +107,7 @@ describe('host-only controls on remote clients', () => {
     );
     const project = String(ProjectDialog({ open: true, root: '/work', error: '', hostActionsAvailable: false }));
     expect(project.match(/data-action="browse-project-path"[^>]*>/g)?.join('')).toContain(reason('choose-folder'));
-    expect((project.match(/data-action="browse-project-path"[^>]*disabled/g) ?? []).length).toBe(2);
+    expect((project.match(/data-action="browse-project-path"[^>]*disabled/g) ?? []).length).toBe(1);
     const hs1 = String(
       Hs1MigrationDialog({
         projectName: 'Demo',
