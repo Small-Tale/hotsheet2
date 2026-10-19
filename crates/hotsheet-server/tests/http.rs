@@ -15293,7 +15293,7 @@ async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() 
     assert!(
         !std::fs::read_to_string(&rules_path)
             .unwrap()
-            .contains(&old_key)
+            .contains(old_key)
     );
     assert_eq!(
         bridge.request_blocking_timeout_for_project(
