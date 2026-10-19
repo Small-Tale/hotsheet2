@@ -1900,8 +1900,10 @@ capability-aware sections when their underlying features and data contracts land
   searches the full Lucide catalog, which is lazy-loaded as a separate chunk on first use
   (`lucide-catalog.ts`, `loadLucideCatalog()`), so any of the ~2000 icons can be assigned. The
   host owns state: it passes the current icon name and query and wires the search input
-  (`name="command-icon-search"`) and per-icon `data-action="select-command-icon"`
-  (`data-icon-name`) buttons through Kerf delegation. `components/command-icon.ts`
+  (`name="command-icon-search"`) and Kerf `ChoiceChips presentation="icons"` native radio
+  `change` events (`data-action="select-command-icon"`) through delegation. The compact
+  36px grid, selected state, focus, and scrolling cap belong to Kerf (HS2-XA11C3).
+  `components/command-icon.ts`
   (`resolveCommandIcon`) maps a stored icon to a renderable node — resolving legacy keys
   (`test`→`test-tube-2`, `build`→`hammer`) and falling back to a default until the catalog
   loads — and the sidebar/editor read `lucideCatalogVersion` so custom icons appear once the

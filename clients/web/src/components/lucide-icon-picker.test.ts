@@ -10,11 +10,13 @@ describe('LucideIconPicker', () => {
     );
     expect(markup).toContain('data-component="lucide-icon-picker"');
     expect(markup).toContain('name="command-icon-search"');
-    // Popular defaults render as selectable buttons.
+    // Popular defaults render as Kerf's native icon radios.
+    expect(markup).toContain('data-component="choice-chips"');
+    expect(markup).toContain('data-presentation="icons"');
     expect(markup).toContain('data-action="select-command-icon"');
-    expect(markup).toContain('data-icon-name="send"');
-    // Legacy `test` resolves to test-tube-2 and shows pressed.
-    expect(markup).toMatch(/data-icon-name="test-tube-2" aria-pressed="true"/);
+    expect(markup).toContain('data-choice-value="send"');
+    // Legacy `test` resolves to test-tube-2 and checks its native radio.
+    expect(markup).toMatch(/type="radio" name="command-icon-choice" value="test-tube-2"[^>]*checked/);
   });
 
   it('shows a loading hint when searching before the catalog has loaded', async () => {
@@ -35,7 +37,7 @@ describe('LucideIconPicker', () => {
     const markup = String(
       LucideIconPicker({ query: 'compass', searchName: 'command-icon-search', selectAction: 'select-command-icon' }),
     );
-    expect(markup).toContain('data-icon-name="compass"');
+    expect(markup).toContain('data-choice-value="compass"');
     expect(markup).not.toContain('Loading icons…');
     const empty = String(
       LucideIconPicker({

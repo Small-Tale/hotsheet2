@@ -2,7 +2,8 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './lucide-icon-picker.css';
 
-import { uiColor } from '@kerfjs/ui/css-values';
+import { ChoiceChips } from '@kerfjs/ui/choice-chips';
+import { px, uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
@@ -24,7 +25,7 @@ export interface LucideIconPickerProps {
   query?: string;
   /** `input` element name for the search field, delegated by the host. */
   searchName: string;
-  /** `data-action` set on each icon button (with `data-icon-name`), delegated by the host. */
+  /** `data-action` set on each native icon radio, delegated by the host on change. */
   selectAction: string;
 }
 
@@ -46,6 +47,15 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
   const current = value ? resolveCommandIcon(value) : undefined;
   const selectedName = current?.name;
   const showCurrent = current && !trimmed && !results.some((entry) => entry.name === current.name);
+  const choices = [
+    ...(showCurrent ? [{ name: current.name, icon: current.icon, label: current.name.replace(/-/g, ' ') }] : []),
+    ...results,
+  ].map((entry) => ({
+    value: entry.name,
+    label: entry.label,
+    icon: <LucideIcon size={18} icon={entry.icon} name={entry.name} />,
+    title: entry.name,
+  }));
   return (
     <div class="lucide-icon-picker" data-component="lucide-icon-picker">
       <List gap="xs">
@@ -69,38 +79,16 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
         ) : trimmed && results.length === 0 ? (
           <Text size="compact" tone="quiet">{`No icons match “${trimmed}”.`}</Text>
         ) : (
-          <ul class="lucide-icon-picker__grid" aria-label="Icons">
-            {showCurrent && (
-              <li>
-                <button
-                  type="button"
-                  class="lucide-icon-picker__icon"
-                  data-action={selectAction}
-                  data-icon-name={current.name}
-                  aria-pressed="true"
-                  aria-label={current.name}
-                  title={current.name}
-                >
-                  <LucideIcon size={18} icon={current.icon} name={current.name} />
-                </button>
-              </li>
-            )}
-            {results.map((entry) => (
-              <li>
-                <button
-                  type="button"
-                  class="lucide-icon-picker__icon"
-                  data-action={selectAction}
-                  data-icon-name={entry.name}
-                  aria-pressed={entry.name === selectedName ? 'true' : undefined}
-                  aria-label={entry.name}
-                  title={entry.name}
-                >
-                  <LucideIcon size={18} icon={entry.icon} name={entry.name} />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <ChoiceChips
+            name="command-icon-choice"
+            label="Icons"
+            presentation="icons"
+            size="compact"
+            maxHeight={px(184)}
+            choices={choices}
+            value={selectedName}
+            action={selectAction}
+          />
         )}
       </List>
     </div>

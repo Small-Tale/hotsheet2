@@ -8711,7 +8711,7 @@ test('exposes a General app-settings entry in the settings navigator', async ({ 
 });
 
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
-  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
   const editor = page.locator('[data-component="command-settings-editor"]');
   await editor.scrollIntoViewIfNeeded();
@@ -8748,24 +8748,25 @@ test('edits custom command color and icon in the command settings editor', async
   await expect(dialog.getByRole('radiogroup', { name: 'Button color' }).getByRole('radio')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
-  // The editor styles only its own buttons, so the nested picker keeps its 18px grid icons (HS2-JSSMFY).
-  const pickerIcon = dialog.locator('[data-action="select-command-icon"]').first();
-  await expect(pickerIcon).toHaveCSS('display', 'grid');
+  // Kerf owns the compact icon radio grid while the picker keeps its 18px icon glyphs (HS2-XA11C3).
+  const picker = dialog.locator('[data-component="lucide-icon-picker"]'),
+    pickerIcon = picker.locator('[data-choice-value]').first();
+  await expect(picker.locator('[data-component="choice-chips"]')).toHaveAttribute('data-presentation', 'icons');
   await expect(pickerIcon.locator('svg')).toHaveCSS('width', '18px');
+  await picker.screenshot({ path: 'target/visual-captures/hs2-xa11c3-picker-wide.png' });
   await dialog.getByRole('radio', { name: 'Blue', exact: true }).check();
-  await dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]').click();
+  await picker.getByRole('radio', { name: 'wand', exact: true }).check();
   await expect(dialog.getByRole('radiogroup', { name: 'Button color' }).locator('input:checked')).toHaveValue(
     '#3b82f6',
   );
-  await expect(dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]')).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(picker.getByRole('radio', { name: 'wand', exact: true })).toBeChecked();
   const done = page.getByRole('button', { name: 'Done', exact: true });
   await expect(done).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
   await expect(done).toHaveCSS('height', '40px');
   await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-editor-color-icon.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  await picker.getByRole('radio', { name: 'wand', exact: true }).scrollIntoViewIfNeeded();
+  await picker.screenshot({ path: 'target/visual-captures/hs2-xa11c3-picker-phone.png' });
   await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
   const phoneIconInset = await iconInset();
   expect(Math.abs(phoneIconInset.left - phoneIconInset.right)).toBeLessThan(1);

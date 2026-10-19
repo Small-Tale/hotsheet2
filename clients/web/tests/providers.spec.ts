@@ -29461,9 +29461,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(commandDialog.getByRole('radiogroup', { name: 'Button color' }).locator('input:checked')).toHaveValue(
     '#22c55e',
   );
-  await expect(
-    commandDialog.locator('[data-action="select-command-icon"][data-icon-name="circle-check-big"]'),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(commandDialog.getByRole('radio', { name: 'circle check big', exact: true })).toBeChecked();
   const commandsSaved4 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );
@@ -29496,17 +29494,17 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
     picker = commandDialog.locator('[data-component="lucide-icon-picker"]');
   await expect(picker).toBeVisible();
   // The curated popular defaults show before searching; 'compass' is not among them.
-  await expect(picker.locator('[data-icon-name="send"]')).toBeVisible();
-  await expect(picker.locator('[data-icon-name="compass"]')).toHaveCount(0);
+  await expect(picker.locator('[data-choice-value="send"]')).toBeVisible();
+  await expect(picker.locator('[data-choice-value="compass"]')).toHaveCount(0);
   await picker.scrollIntoViewIfNeeded();
   await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-popular.png' });
   // Typing a query loads the full catalog and surfaces the matching icon.
   await picker.getByRole('searchbox', { name: 'Search Icons' }).fill('compass');
-  const compass = picker.locator('[data-action="select-command-icon"][data-icon-name="compass"]').first();
+  const compass = picker.getByRole('radio', { name: 'compass', exact: true });
   await expect(compass).toBeVisible();
   await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-search.png' });
-  await compass.click();
-  await expect(compass).toHaveAttribute('aria-pressed', 'true');
+  await compass.check();
+  await expect(compass).toBeChecked();
   const commandsSaved5 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );

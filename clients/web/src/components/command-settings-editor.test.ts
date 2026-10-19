@@ -148,7 +148,7 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('name="command-icon-search"');
     expect(markup).toContain('data-action="select-command-icon"');
     // Legacy alias `test` resolves to the Lucide id `test-tube-2` and shows as selected.
-    expect(markup).toMatch(/data-icon-name="test-tube-2" aria-pressed="true"/);
+    expect(markup).toMatch(/type="radio" name="command-icon-choice" value="test-tube-2"[^>]*checked/);
     expect(markup).not.toContain('name="icon"');
   });
 

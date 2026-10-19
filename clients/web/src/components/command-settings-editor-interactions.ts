@@ -222,9 +222,9 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
     }),
   );
   lifetime.add(
-    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandIcon.selector, (_event, target) => {
+    delegate(root, 'change', COMMANDS_AND_AI_ACTIONS.selectCommandIcon.selector, (_event, target) => {
       const id = commandIdOf(target),
-        name = (target as HTMLElement).dataset.iconName;
+        name = (target as HTMLInputElement).value;
       if (id && name) bindings.updateField(id, 'icon', name);
     }),
   );

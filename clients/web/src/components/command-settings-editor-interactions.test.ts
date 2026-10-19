@@ -111,4 +111,15 @@ describe('wireCommandSettingsEditor (HS2-RWY78R)', () => {
       ['b', { kind: 'model', value: 'gpt-5.6' }],
     ]);
   });
+
+  it('saves an icon from the Kerf radio change event', () => {
+    const state = bindings();
+    wireCommandSettingsEditor(root, state);
+    const choice = {
+      value: 'compass',
+      closest: (selector: string) => (selector === '[data-command-id]' ? { dataset: { commandId: 'b' } } : null),
+    } as unknown as Element;
+    handler('change', '[data-action="select-command-icon"]')(plainEvent(), choice);
+    expect(state.updateField).toHaveBeenCalledWith('b', 'icon', 'compass');
+  });
 });
