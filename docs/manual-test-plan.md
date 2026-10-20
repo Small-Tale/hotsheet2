@@ -288,6 +288,15 @@ appears in the session and a turn starts, and the agent indicator switches (Buil
 Automated tests replay the protocol but cannot see the rendered TUI. Last verified on
 2026-10-17 with opencode 1.17.18 (spike PTY capture plus a live Hot Sheet launch).
 
+### Codex first message (HS2-8R7SN0)
+
+Open a new Codex AI terminal in Hot Sheet and, before typing into it, send a prompt through
+`POST /connections/<terminal-id>/message`. Confirm it appears as one submitted prompt,
+including when it contains multiple lines. Try another message before the SessionStart hook
+reports, and confirm it is refused rather than submitted twice. After the hook reports,
+send a second message and confirm Codex receives it through `codex-queue`. Repeat with a
+reattached terminal and a shell terminal to check that neither gains a fresh bootstrap.
+
 ### Codex interactive permission-hook compatibility
 
 Run `HOTSHEET_CODEX_LIVE=1 cargo test -p hotsheet-cli

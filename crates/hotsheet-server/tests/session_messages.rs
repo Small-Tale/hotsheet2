@@ -540,6 +540,211 @@ async fn an_unreachable_session_api_is_a_502() {
 
 #[cfg(unix)]
 #[tokio::test]
+async fn a_brokered_codex_launch_can_bootstrap_only_once() {
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(
+        plugins.path(),
+        "fake-codex",
+        "[session_push]\nmechanism = \"codex-queue\"",
+    );
+    let socket_dir = tempfile::tempdir().unwrap();
+    let socket = socket_dir.path().join("broker.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let broker_task = tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "codex-bootstrap-project".into(),
+        Arc::new(TerminalManager::new()),
+    ));
+    let broker = TerminalBroker::at(&socket, "codex-bootstrap-project");
+    let router = app(AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_terminal_broker_at(broker.clone()));
+    launch(&router, "fake-codex", "broker-codex").await;
+    let (status, first) = send(
+        &router,
+        "POST",
+        "/connections/broker-codex/message",
+        Some(r#"{"text":"first"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["mechanism"], "codex-pty-bootstrap");
+    let (status, repeat) = send(
+        &router,
+        "POST",
+        "/connections/broker-codex/message",
+        Some(r#"{"text":"repeat"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{repeat}");
+    // A server restart must not mint another first-message opportunity.
+    let restarted = AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_terminal_broker_at(broker);
+    resume_broker_terminal_sessions(&restarted).await;
+    let (status, _) = send(
+        &app(restarted),
+        "POST",
+        "/connections/broker-codex/message",
+        Some(r#"{"text":"after restart"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let _ = send(&router, "DELETE", "/terminals/broker-codex", None).await;
+    broker_task.abort();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_new_codex_tui_accepts_one_prompt_before_its_thread_is_reported() {
+    use std::os::unix::fs::PermissionsExt;
+    const THREAD: &str = "01a14736-2ae1-7e92-8da0-5f8db11b19b0";
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    let dir = plugins.path().join("codex");
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("instructions.md"), "Fake setup marker\n").unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        r#"
+id = "codex"
+display_name = "Codex"
+product_name = "Codex"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[launch]
+program = "/bin/cat"
+[session_push]
+mechanism = "codex-queue"
+"#,
+    )
+    .unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let log = bin.path().join("queued");
+    let codex = bin.path().join("codex");
+    std::fs::write(&codex, format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\necho 'Queued message m-7 for thread {THREAD}.'\n", log.display())).unwrap();
+    std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let router = app(AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_session_push_program("codex", codex));
+    let (status, _) = send(
+        &router,
+        "POST",
+        "/terminals",
+        Some(r#"{"connect":"codex","id":"fresh"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, list) = send(&router, "GET", "/connections", None).await;
+    assert!(
+        connection(&list, "fresh")["actions"]
+            .to_string()
+            .contains("message")
+    );
+    let (status, first) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"text":"first line\nsecond line"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["mechanism"], "codex-pty-bootstrap");
+    assert_eq!(first["confirmed"], false);
+    let mut seen_prompt = false;
+    for _ in 0..100 {
+        let (_, terminal) = send(&router, "GET", "/terminals/fresh", None).await;
+        let output = terminal["scrollback"].as_str().unwrap_or_default();
+        if output.contains("first line") && output.contains("second line") {
+            seen_prompt = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        seen_prompt,
+        "the first prompt did not reach the launched PTY"
+    );
+    // Reattaching must not refresh the one-shot adapter.
+    assert_eq!(
+        send(
+            &router,
+            "POST",
+            "/terminals",
+            Some(r#"{"connect":"codex","id":"fresh"}"#)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, again) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"text":"repeat"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{again}");
+    let (status, command) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"command":"agent_cycle"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{command}");
+    let (status, invalid) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"text":"bad\u001b[2J"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{invalid}");
+    let report = serde_json::json!({ "agent": "codex", "session_id": THREAD });
+    assert_eq!(
+        send(
+            &router,
+            "POST",
+            "/terminals/fresh/ai-connection",
+            Some(&report.to_string())
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (status, queued) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"text":"after hook"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{queued}");
+    assert_eq!(queued["mechanism"], "codex-queue");
+    assert_eq!(
+        std::fs::read_to_string(log).unwrap(),
+        format!("queue\n--thread={THREAD}\n--message=after hook\n")
+    );
+    let _ = send(&router, "DELETE", "/terminals/fresh", None).await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn a_hook_reported_codex_thread_receives_prompts_through_codex_queue() {
     // HS2-FKM97G: the Codex SessionStart hook reports the thread id and CODEX_HOME; the server
     // registers the built-in `codex-queue` adapter for that terminal, and the shared operation

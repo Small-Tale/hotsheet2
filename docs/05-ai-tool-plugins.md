@@ -1077,8 +1077,9 @@ it and the thread id (`session_id`) internal on the terminal's connection. A per
 the same session keeps the reported home. Codex halt detection rejoins the thread under that
 home. Observed live on codex 0.162.1:
 
-- `SessionStart` fires lazily, when the first prompt is submitted, so a freshly opened TUI has
-  no reported thread until its first turn (HS2-8R7SN0).
+- `SessionStart` fires lazily, when the first prompt is submitted. A freshly opened Hot
+  Sheet-owned TUI accepts its first message through a one-shot PTY bootstrap adapter;
+  the reported thread then replaces it with `codex-queue` (HS2-8R7SN0).
 - Its `session_id` is the thread id that `codex queue --thread` and `thread/resume` accept.
 - `codex queue` stores messages per `CODEX_HOME`, so a TUI started with `--no-daemon` under the
   same home still received one. A different home cannot reach the thread

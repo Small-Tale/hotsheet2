@@ -6,13 +6,14 @@
 //! session is reachable, and maps the operation onto HTTP.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use hotsheet_aitools::session_push::{
-    self, PushError, PushLaunch, PushMessage, SessionPush, UreqHttp,
+    self, PushError, PushLaunch, PushMessage, PushReceipt, SessionPush, UreqHttp,
 };
 use hotsheet_sync::LockExt;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,93 @@ pub(crate) type SessionPushes = Arc<Mutex<HashMap<String, Arc<dyn SessionPush>>>
 
 /// The connection action a push-capable session advertises in `GET /connections`.
 pub(crate) const MESSAGE_ACTION: &str = "message";
+const CODEX_BOOTSTRAP: &str = "codex-pty-bootstrap";
+
+/// Only a newly spawned, Hot Sheet-owned Codex TUI gets this one-shot address. The
+/// first prompt starts Codex's SessionStart hook, which replaces this adapter with
+/// the thread-specific queue adapter. No daemon-wide cwd lookup is involved.
+struct CodexBootstrapPush {
+    used: AtomicBool,
+    write: Box<dyn Fn(Vec<u8>) -> Result<(), PushError> + Send + Sync>,
+}
+
+impl SessionPush for CodexBootstrapPush {
+    fn mechanism(&self) -> &'static str {
+        CODEX_BOOTSTRAP
+    }
+    fn session_id(&self) -> Option<String> {
+        None
+    }
+    fn message(&self, message: &PushMessage) -> Result<PushReceipt, PushError> {
+        let PushMessage::Prompt { text, .. } = message else {
+            return Err(PushError::Unsupported(
+                "Codex cannot run UI commands".into(),
+            ));
+        };
+        if text.trim().is_empty()
+            || text
+                .chars()
+                .any(|character| character.is_control() && character != '\n' && character != '\t')
+        {
+            return Err(PushError::Invalid(
+                "Codex bootstrap prompt is empty or contains terminal control characters".into(),
+            ));
+        }
+        if self.used.swap(true, Ordering::AcqRel) {
+            return Err(PushError::Unreachable(
+                "waiting for Codex SessionStart after the first prompt".into(),
+            ));
+        }
+        // Bracketed paste keeps embedded newlines inside one prompt; CR submits it.
+        let bytes = format!("\x1b[200~{text}\x1b[201~\r").into_bytes();
+        (self.write)(bytes)?;
+        Ok(PushReceipt {
+            mechanism: CODEX_BOOTSTRAP,
+            session_id: None,
+            confirmed: false,
+        })
+    }
+}
+
+pub(crate) fn register_codex_bootstrap(state: &AppState, id: &str) {
+    let write: Box<dyn Fn(Vec<u8>) -> Result<(), PushError> + Send + Sync> =
+        if let Some(broker) = &state.terminal_broker {
+            let broker = broker.clone();
+            let id = id.to_string();
+            let runtime = tokio::runtime::Handle::current();
+            Box::new(move |data| {
+                match runtime.block_on(broker.call(hotsheet_terminals::BrokerRequest::Input {
+                    id: id.clone(),
+                    data,
+                })) {
+                    Ok(hotsheet_terminals::BrokerResponse::Ok) => Ok(()),
+                    Ok(other) => Err(PushError::Unreachable(format!(
+                        "terminal broker: {other:?}"
+                    ))),
+                    Err(error) => Err(PushError::Unreachable(error.to_string())),
+                }
+            })
+        } else {
+            let Some(term) = state
+                .terminals
+                .get(&crate::routes::terminals::term_key(state, id))
+            else {
+                return;
+            };
+            Box::new(move |data| {
+                term.write(&data)
+                    .map_err(|error| PushError::Unreachable(error.to_string()))
+            })
+        };
+    register(
+        state,
+        id,
+        Arc::new(CodexBootstrapPush {
+            used: AtomicBool::new(false),
+            write,
+        }),
+    );
+}
 
 /// A launch prepared for session push: extra launch args/env plus the adapter to register
 /// once the terminal is actually spawned (never on a reattach).
@@ -185,7 +273,7 @@ pub(crate) fn register_reported(
     // Never displace a launch-wired adapter registered for this terminal.
     if pushes
         .get(terminal_id)
-        .is_none_or(|current| session_push::is_reported_mechanism(current.mechanism()))
+        .is_none_or(|current| is_replaceable_reported(current.mechanism()))
     {
         pushes.insert(terminal_id.to_string(), adapter);
     }
@@ -197,10 +285,14 @@ pub(crate) fn unregister_reported(state: &AppState, terminal_id: &str) {
     let mut pushes = state.session_pushes.lock_or_recover();
     if pushes
         .get(terminal_id)
-        .is_some_and(|current| session_push::is_reported_mechanism(current.mechanism()))
+        .is_some_and(|current| is_replaceable_reported(current.mechanism()))
     {
         pushes.remove(terminal_id);
     }
+}
+
+fn is_replaceable_reported(mechanism: &str) -> bool {
+    mechanism == CODEX_BOOTSTRAP || session_push::is_reported_mechanism(mechanism)
 }
 
 /// Drop an ended terminal's adapter.
@@ -326,5 +418,55 @@ fn push_error(error: PushError) -> ApiError {
         PushError::Rejected { .. } => {
             ApiError::new(StatusCode::BAD_GATEWAY, message).with_code("session_rejected")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_bootstrap_validates_then_sends_exactly_one_prompt() {
+        let writes = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+        let recorded = writes.clone();
+        let push = CodexBootstrapPush {
+            used: AtomicBool::new(false),
+            write: Box::new(move |bytes| {
+                recorded.lock().unwrap().push(bytes);
+                Ok(())
+            }),
+        };
+        assert!(matches!(
+            push.message(&PushMessage::Command {
+                command: "test".into()
+            }),
+            Err(PushError::Unsupported(_))
+        ));
+        assert!(matches!(
+            push.message(&PushMessage::Prompt {
+                text: "bad\x03".into(),
+                banner: None
+            }),
+            Err(PushError::Invalid(_))
+        ));
+        let first = push
+            .message(&PushMessage::Prompt {
+                text: "one\ntwo".into(),
+                banner: None,
+            })
+            .unwrap();
+        assert_eq!(first.mechanism, CODEX_BOOTSTRAP);
+        assert!(!first.confirmed);
+        assert!(matches!(
+            push.message(&PushMessage::Prompt {
+                text: "repeat".into(),
+                banner: None
+            }),
+            Err(PushError::Unreachable(_))
+        ));
+        assert_eq!(
+            *writes.lock().unwrap(),
+            vec![b"\x1b[200~one\ntwo\x1b[201~\r".to_vec()]
+        );
     }
 }

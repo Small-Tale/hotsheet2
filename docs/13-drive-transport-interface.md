@@ -521,11 +521,15 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-se
 Pinned against codex 0.162.1 by a live TUI spike and a live Hot Sheet run; the sanitized
 capture is `crates/hotsheet-aitools/tests/fixtures/codex-0.162.1-session-queue.json`.
 
-- **Address.** The address is reported, not launch-wired: no port, no password, no launch
-  adapter. The Codex `SessionStart` hook reports `session_id`, which is the thread id, and
+- **Address.** A fresh Hot Sheet-owned TUI gets a one-shot PTY bootstrap adapter. The Codex
+  `SessionStart` hook then reports `session_id`, which is the thread id, and
   `codex_home` when `CODEX_HOME` is set (unset means the user's default home).
-- **When it is known.** `SessionStart` fires lazily, on the first submitted prompt. A freshly
-  opened TUI therefore has no adapter until its first turn (HS2-8R7SN0).
+- **Before the first turn.** `SessionStart` fires lazily, on the first submitted prompt.
+  The bootstrap adapter sends that first prompt as bracketed paste followed by Enter to
+  the newly launched TUI's own PTY. It accepts exactly one prompt, rejects terminal
+  control characters and UI commands, and reports delivery as unconfirmed. The hook's
+  thread report replaces it with `codex-queue`. Reattached and shell terminals do not
+  create another bootstrap adapter (HS2-8R7SN0).
 - **Prompt.** `codex queue --thread=<id> --message=<text>` runs without a shell, under the
   reported home, with a 20 s timeout. It exits 0 with `Queued message <id> for thread <id>.`
   (`confirmed: true`). An idle session starts a turn; a busy one takes it as its next user turn.

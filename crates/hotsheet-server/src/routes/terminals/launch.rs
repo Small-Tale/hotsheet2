@@ -42,6 +42,7 @@ pub(crate) async fn open_terminal(
     // reattach keeps the adapter (and port) its original launch registered.
     let push = launch.push;
     let broker_push = launch.broker_push;
+    let codex_bootstrap = launch.codex_bootstrap;
     let kind = if req.connect.is_some() {
         hotsheet_terminals::TerminalKind::Ai
     } else {
@@ -89,6 +90,8 @@ pub(crate) async fn open_terminal(
                     register_broker_terminal_connection(&state, &id, tool, tb.clone());
                     if let Some(push) = push {
                         session_messages::register(&state, &id, push);
+                    } else if codex_bootstrap {
+                        session_messages::register_codex_bootstrap(&state, &id);
                     }
                 }
                 None => watch_broker_terminal_session_exit(
@@ -142,6 +145,8 @@ pub(crate) async fn open_terminal(
                 register_terminal_connection(&state, &id, tool, term.clone());
                 if let Some(push) = push {
                     session_messages::register(&state, &id, push);
+                } else if codex_bootstrap {
+                    session_messages::register_codex_bootstrap(&state, &id);
                 }
             }
             None => {
@@ -163,6 +168,7 @@ struct PreparedTerminalLaunch {
     /// The session-push adapter for a push-capable AI launch (HS2-PEJ962).
     push: Option<std::sync::Arc<dyn hotsheet_aitools::session_push::SessionPush>>,
     broker_push: Option<hotsheet_terminals::BrokerPushState>,
+    codex_bootstrap: bool,
 }
 
 fn terminal_launch(
@@ -184,6 +190,7 @@ fn terminal_launch(
             command,
             push: None,
             broker_push: None,
+            codex_bootstrap: false,
         });
     }
     if let Some(command) = &req.command {
@@ -193,6 +200,7 @@ fn terminal_launch(
             env: terminal_session_env(state, req, terminal_id, command)?,
             push: None,
             broker_push: None,
+            codex_bootstrap: false,
         });
     }
     let Some(tool) = req.connect.as_deref() else {
@@ -203,6 +211,7 @@ fn terminal_launch(
             args: req.args.clone(),
             push: None,
             broker_push: None,
+            codex_bootstrap: false,
         });
     };
     let root = state.store.root();
@@ -252,6 +261,11 @@ fn terminal_launch(
         .clone()
         .unwrap_or_else(|| root.to_string_lossy().into_owned());
     let push = session_messages::prepare_session_push(&plugin, &directory, req.model.as_deref())?;
+    let codex_bootstrap = plugin
+        .manifest
+        .session_push
+        .as_ref()
+        .is_some_and(|spec| spec.mechanism == hotsheet_aitools::session_push::CODEX_QUEUE);
     if let Some(prepared) = &push {
         args.extend(prepared.args.iter().cloned());
         env.extend(prepared.env.iter().cloned());
@@ -262,6 +276,7 @@ fn terminal_launch(
         env,
         broker_push: push.as_ref().map(|prepared| prepared.broker_state.clone()),
         push: push.map(|prepared| prepared.adapter),
+        codex_bootstrap,
     })
 }
 
