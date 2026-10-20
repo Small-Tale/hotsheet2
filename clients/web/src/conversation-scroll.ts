@@ -3,6 +3,7 @@ const BOTTOM_SLOP_PX = 32;
 interface TranscriptScrollState {
   pinned: boolean;
   top: number;
+  viewportTop: number;
 }
 
 /**
@@ -19,11 +20,19 @@ function atLatestEdge(transcript: HTMLElement): boolean {
 function trackedState(transcript: HTMLElement): TranscriptScrollState {
   let state = transcriptStates.get(transcript);
   if (state) return state;
-  const created: TranscriptScrollState = { pinned: true, top: transcript.scrollTop };
+  const created: TranscriptScrollState = {
+    pinned: true,
+    top: transcript.scrollTop,
+    viewportTop: transcript.getBoundingClientRect().top,
+  };
   transcriptStates.set(transcript, created);
   transcript.addEventListener(
     'scroll',
     () => {
+      // Browser scroll anchoring may adjust scrollTop as the selection row changes
+      // height. Wait for sync to reconcile that layout change against the last
+      // reader position before treating the event as an intentional scroll.
+      if (Math.abs(transcript.getBoundingClientRect().top - created.viewportTop) > 0.5) return;
       const top = transcript.scrollTop;
       if (atLatestEdge(transcript)) created.pinned = true;
       else if (top < created.top) created.pinned = false;
@@ -43,9 +52,18 @@ function trackedState(transcript: HTMLElement): TranscriptScrollState {
 export function syncConversationScroll(root: ParentNode = document, force = false): void {
   for (const transcript of root.querySelectorAll<HTMLElement>('.ai-conversation__transcript')) {
     const state = trackedState(transcript);
-    if (!force && !state.pinned) continue;
+    const viewportTop = transcript.getBoundingClientRect().top;
+    if (!force && !state.pinned) {
+      // The selection bar is a row above the scroller. Offset its movement so the
+      // message under the reader's eye stays at the same screen position.
+      transcript.scrollTop = state.top + viewportTop - state.viewportTop;
+      state.viewportTop = viewportTop;
+      state.top = transcript.scrollTop;
+      continue;
+    }
     transcript.scrollTop = transcript.scrollHeight;
     state.pinned = true;
     state.top = transcript.scrollTop;
+    state.viewportTop = viewportTop;
   }
 }

@@ -1827,7 +1827,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   starts at its latest message; streamed growth remains pinned while the reader is already at the
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
   Rerenders that do not add content — selecting, extending, or clearing a message selection — keep the
-  reader's scroll position, so messages can be picked while scrolled back through history. Sending a
+  message being read at the same screen position, even when the selection bar moves the scroller.
+  Messages can be picked while scrolled back through history. Sending a
   message is an explicit continuation, so it returns the transcript to its latest edge and pins it.
 
   The conversation's model/effort selector and native Save/Stop buttons render through

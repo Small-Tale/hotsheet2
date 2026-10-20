@@ -6,17 +6,21 @@ interface FakeTranscript {
   scrollTop: number;
   clientHeight: number;
   scrollHeight: number;
+  getBoundingClientRect: () => { top: number };
   addEventListener: (type: string, listener: () => void) => void;
   scroll: (top: number) => void;
   resize: (height: number) => void;
+  move: (top: number) => void;
 }
 
 function transcript(clientHeight: number, scrollHeight: number): FakeTranscript {
   const listeners: Array<() => void> = [];
+  let viewportTop = 0;
   const fake: FakeTranscript = {
     scrollTop: 0,
     clientHeight,
     scrollHeight,
+    getBoundingClientRect: () => ({ top: viewportTop }),
     addEventListener: (type, listener) => {
       if (type === 'scroll') listeners.push(listener);
     },
@@ -29,6 +33,9 @@ function transcript(clientHeight: number, scrollHeight: number): FakeTranscript 
       fake.scrollHeight = height;
       const clamped = Math.max(0, Math.min(fake.scrollTop, height - fake.clientHeight));
       if (clamped !== fake.scrollTop) fake.scroll(clamped);
+    },
+    move: (top) => {
+      viewportTop = top;
     },
   };
   return fake;
@@ -74,6 +81,38 @@ describe('conversation scroll', () => {
       syncConversationScroll(root);
       expect(view.scrollTop).toBe(150);
     }
+  });
+
+  it('keeps the same message at the same screen position as selection chrome appears and clears', () => {
+    const view = transcript(300, 1_000),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    view.scroll(150);
+    view.move(67);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(217);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(217);
+    view.move(0);
+    view.scroll(192); // Browser anchoring changed scrollTop before the render hook ran.
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(150);
+    view.scroll(200);
+    view.move(67);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(267);
+  });
+
+  it('still follows the latest edge when chrome changes while pinned', () => {
+    const view = transcript(300, 1_000),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    view.move(67);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(1_000);
+    view.scroll(150);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(150);
   });
 
   it('pins again once the reader returns to the latest edge', () => {
