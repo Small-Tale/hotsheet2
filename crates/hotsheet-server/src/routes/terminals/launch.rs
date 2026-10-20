@@ -54,6 +54,7 @@ pub(crate) async fn open_terminal(
         .cwd
         .clone()
         .unwrap_or_else(|| state.store.root().to_string_lossy().into_owned());
+    let connection_project = terminal_permission_project(&state, &req);
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -87,7 +88,13 @@ pub(crate) async fn open_terminal(
         if newly_spawned {
             match &req.connect {
                 Some(tool) => {
-                    register_broker_terminal_connection(&state, &id, tool, tb.clone());
+                    register_broker_terminal_connection(
+                        &state,
+                        &id,
+                        tool,
+                        &connection_project,
+                        tb.clone(),
+                    );
                     if let Some(push) = push {
                         session_messages::register(&state, &id, push);
                     } else if codex_bootstrap {
@@ -112,7 +119,8 @@ pub(crate) async fn open_terminal(
                 .or(req.connect.as_deref());
             if let Some(tool) = original_tool {
                 if state.drive_registry.lock_or_recover().get(&id).is_none() {
-                    register_broker_terminal_connection(&state, &id, tool, tb.clone());
+                    let project = terminal_project_for_cwd(&state, info.cwd.as_deref());
+                    register_broker_terminal_connection(&state, &id, tool, &project, tb.clone());
                 }
                 if session_messages::adapter(&state, &id).is_none() {
                     restore_broker_push(&state, &id, tb).await;
@@ -142,7 +150,7 @@ pub(crate) async fn open_terminal(
     if newly_spawned {
         match &req.connect {
             Some(tool) => {
-                register_terminal_connection(&state, &id, tool, term.clone());
+                register_terminal_connection(&state, &id, tool, &connection_project, term.clone());
                 if let Some(push) = push {
                     session_messages::register(&state, &id, push);
                 } else if codex_bootstrap {
@@ -454,7 +462,11 @@ pub(crate) fn terminal_permission_route_env(
 }
 
 pub(crate) fn terminal_permission_project(state: &AppState, req: &OpenTerminalReq) -> String {
-    let Some(cwd) = req.cwd.as_deref() else {
+    terminal_project_for_cwd(state, req.cwd.as_deref())
+}
+
+fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
+    let Some(cwd) = cwd else {
         return state.store.root().display().to_string();
     };
     let cwd = FsPath::new(cwd)
@@ -553,6 +565,7 @@ fn register_terminal_connection(
     state: &AppState,
     id: &str,
     tool: &str,
+    project: &str,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
 ) {
     let registry = state.drive_registry();
@@ -560,7 +573,7 @@ fn register_terminal_connection(
         let mut r = registry.lock_or_recover();
         r.register_tracked(hotsheet_aitools::Connection {
             id: id.to_string(),
-            project: state.store.root().display().to_string(),
+            project: project.to_string(),
             tool: tool.to_string(),
             role: hotsheet_aitools::Role::Main,
             transport: hotsheet_aitools::Transport::Pty,
@@ -612,6 +625,7 @@ fn register_broker_terminal_connection(
     state: &AppState,
     id: &str,
     tool: &str,
+    project: &str,
     broker: terminal_broker::TerminalBroker,
 ) {
     let registry = state.drive_registry();
@@ -619,7 +633,7 @@ fn register_broker_terminal_connection(
         let mut r = registry.lock_or_recover();
         r.register_tracked(hotsheet_aitools::Connection {
             id: id.to_string(),
-            project: state.store.root().display().to_string(),
+            project: project.to_string(),
             tool: tool.to_string(),
             role: hotsheet_aitools::Role::Main,
             transport: hotsheet_aitools::Transport::Pty,
@@ -830,7 +844,14 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
             .filter(|tool| !tool.is_empty());
         match (info.kind, tool) {
             (hotsheet_terminals::TerminalKind::Ai, Some(tool)) => {
-                register_broker_terminal_connection(state, &info.id, tool, broker.clone());
+                let project = terminal_project_for_cwd(state, info.cwd.as_deref());
+                register_broker_terminal_connection(
+                    state,
+                    &info.id,
+                    tool,
+                    &project,
+                    broker.clone(),
+                );
                 restore_broker_push(state, &info.id, &broker).await;
             }
             _ => watch_broker_terminal_session_exit(state, &info.id, worker, broker.clone()),

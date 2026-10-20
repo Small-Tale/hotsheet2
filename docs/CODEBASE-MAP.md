@@ -759,7 +759,9 @@ Live terminal session-message callers (HS2-NN6EXP) are in
 `clients/web/src/features/terminal-drawer.ts` and `components/terminal-drawer.tsx`, with the
 request/response parser in `clients/web/src/api.ts` and `server-response-parsers.ts`. The headless
 `hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`; both
-use the server's `POST /connections/{id}/message` operation.
+use the server's `POST /connections/{id}/message` operation. Server terminal registration in
+`crates/hotsheet-server/src/routes/terminals/launch.rs` resolves each connection's project from
+its launch checkout/source, which lets the selected project's drawer find its message action.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home. The setup resolver in

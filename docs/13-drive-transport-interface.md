@@ -486,7 +486,9 @@ point, and only Hot Sheet-owned `stream-json` processes could be messaged.
   (named with the tool's display name), `400` for a malformed or empty message,
   `502 session_unreachable` (nothing listening), `502 session_rejected` (an error status).
 - `GET /connections` lists `"message"` in a push-capable connection's `actions` and reports the
-  tool-native `session_id` once it is known.
+  tool-native `session_id` once it is known. Terminal connections use the launch checkout's
+  ticket source as their project (or its directory when no source is registered), including
+  after a detached broker restart, so the selected project's drawer can offer the message action.
 - The adapter lives while its terminal does; the terminal's exit drops it with the connection.
 - For a detached-broker terminal, the broker retains the launch mechanism, loopback port,
   password, directory, launch time, model, and resolved session id beside the live PTY. A

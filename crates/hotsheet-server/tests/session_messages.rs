@@ -106,7 +106,16 @@ args = ["-c", "printf 'wired:%s:%s:%s:end' \"$1\" \"$2\" \"$OPENCODE_SERVER_PASS
 
 /// Launch `tool` in terminal `id` and wait for the fake TUI to print its wiring.
 async fn launch(router: &axum::Router, tool: &str, id: &str) -> (String, String, String) {
-    let body = format!(r#"{{"connect":"{tool}","id":"{id}"}}"#);
+    launch_in(router, tool, id, None).await
+}
+
+async fn launch_in(
+    router: &axum::Router,
+    tool: &str,
+    id: &str,
+    cwd: Option<&std::path::Path>,
+) -> (String, String, String) {
+    let body = serde_json::json!({ "connect": tool, "id": id, "cwd": cwd }).to_string();
     let (status, json) = send(router, "POST", "/terminals", Some(&body)).await;
     assert_eq!(status, StatusCode::OK, "{json}");
     for _ in 0..100 {
@@ -230,7 +239,9 @@ password_env = "OPENCODE_SERVER_PASSWORD"
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_terminal_broker_at(broker.clone());
     let router = app(state);
-    let (flag, port, password) = launch(&router, "fake-push", "survives").await;
+    let project = tempfile::tempdir().unwrap();
+    let (flag, port, password) =
+        launch_in(&router, "fake-push", "survives", Some(project.path())).await;
     assert_eq!(flag, "--port");
     assert!(password.len() >= 40);
     let seen = fake_opencode(port.parse().unwrap());
@@ -254,6 +265,15 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     let (status, connections) = send(&router, "GET", "/connections", None).await;
     assert_eq!(status, StatusCode::OK);
     let listed = connection(&connections, "survives");
+    assert_eq!(
+        listed["project"],
+        project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
     assert_eq!(listed["actions"], serde_json::json!(["message"]));
     assert_eq!(listed["session_id"], "ses_e2e");
     assert!(!connections.to_string().contains(&password));
@@ -281,6 +301,15 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     assert_eq!(reattached_port, port);
     assert_eq!(reattached_password, password);
     let (_, connections) = send(&reattach_router, "GET", "/connections", None).await;
+    assert_eq!(
+        connection(&connections, "survives")["project"],
+        project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
     assert_eq!(
         connection(&connections, "survives")["session_id"],
         "ses_e2e"
@@ -320,9 +349,52 @@ password_env = "OPENCODE_SERVER_PASSWORD"
 }
 
 #[tokio::test]
+async fn a_terminal_connection_belongs_to_its_launch_checkouts_ticket_source() {
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project_dir = tempfile::tempdir().unwrap();
+    let checkout = project_dir.path().join("code");
+    std::fs::create_dir(&checkout).unwrap();
+    let source = FsStore::init(
+        project_dir.path().join("tickets"),
+        &StoreMetadata::new("TK"),
+    )
+    .unwrap();
+    let registry_path = project_dir.path().join("checkouts.json");
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&checkout, None, None, vec![source.root().to_path_buf()])
+        .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(plugins.path(), "fake-nopush", "");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_checkout_registry(registry_path);
+    let router = app(state);
+    let body =
+        serde_json::json!({"connect":"fake-nopush","id":"checkout-ai","cwd":checkout}).to_string();
+    let (status, terminal) = send(&router, "POST", "/terminals", Some(&body)).await;
+    assert_eq!(status, StatusCode::OK, "{terminal}");
+    let (_, connections) = send(&router, "GET", "/connections", None).await;
+    assert_eq!(
+        connection(&connections, "checkout-ai")["project"],
+        source
+            .root()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+    let (status, _) = send(&router, "DELETE", "/terminals/checkout-ai", None).await;
+    assert!(status.is_success());
+}
+
+#[tokio::test]
 async fn a_push_capable_terminal_is_launched_reachable_and_receives_prompts_and_commands() {
     let (_store, _plugins, router) = fixture();
-    let (flag, port, password) = launch(&router, "fake-push", "push-1").await;
+    let project = tempfile::tempdir().unwrap();
+    let (flag, port, password) =
+        launch_in(&router, "fake-push", "push-1", Some(project.path())).await;
     assert_eq!(flag, "--port");
     let port: u16 = port.parse().unwrap();
     assert!(
@@ -333,6 +405,15 @@ async fn a_push_capable_terminal_is_launched_reachable_and_receives_prompts_and_
 
     let (_, list) = send(&router, "GET", "/connections", None).await;
     let listed = connection(&list, "push-1");
+    assert_eq!(
+        listed["project"],
+        project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
     assert_eq!(listed["actions"], serde_json::json!(["message"]));
     assert!(listed.get("session_id").is_none(), "{listed}");
 
