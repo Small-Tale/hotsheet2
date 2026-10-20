@@ -954,3 +954,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/terminal-viewport-runtime.test.ts` covers increase, decrease, another increase, and disposal; `clients/web/src/terminal-limits.test.ts` covers client defaults and the magnified ratio.
 - End to end: `clients/web/tests/terminal-limits.spec.ts` saves limits through the real server and checks a mounted emulator and newly opened magnified card.
 - Manual: Inspect wide and phone settings captures attached to HS2-ZWVDTZ.
+
+### Bounded live ticket refreshes (HS2-B5SJMJ)
+
+- Behavior: Each project's change-stream ticket invalidations batch for 180 ms of quiet or at most 900 ms of continuous events. An event during an in-flight read schedules one trailing read. Closing the project cancels a queued read, and activation still performs an authoritative refresh.
+- Unit: `clients/web/src/project-change-refresh.test.ts` covers interleaved and sustained bursts, trailing reads, and cancellation; `clients/web/src/features/runtime-split-controllers.test.ts` covers the stream composition.
+- End to end: `clients/web/tests/change-poll-mux.spec.ts` checks active and background tab freshness, real-server ticket and corrupt-ticket reads, request counts, and latency under dense events.

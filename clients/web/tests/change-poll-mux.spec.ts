@@ -1,5 +1,7 @@
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
+import { realTicketServer } from './real-ticket-server';
+
 /**
  * HS2-6W1NNF: with WebSockets failing, every open project used to hold its own replay long-poll,
  * so six or more projects filled the browser's per-origin HTTP/1.1 connection pool. Projects
@@ -80,7 +82,11 @@ interface MuxPoll {
   timeout_ms: number;
 }
 
-async function installBridge(page: Page, liveSockets = false) {
+async function installBridge(
+  page: Page,
+  liveSockets = false,
+  real?: { projectId: string; page: (query: string) => Promise<unknown>; corrupt: () => Promise<unknown> },
+) {
   const rows = new Map(
     projects.map((project) => [project.id, [row(`${project.name.toUpperCase()}1`, `${project.name} first`)]]),
   );
@@ -90,6 +96,7 @@ async function installBridge(page: Page, liveSockets = false) {
   const muxBodies: MuxPoll[][] = [];
   const directPolls: string[] = [];
   const ticketLoads = new Map<string, number>();
+  const corruptLoads = new Map<string, number>();
   let chosen = 0;
   let bridgeSocket: WebSocketRoute | undefined;
   let bridgeSocketCount = 0;
@@ -200,6 +207,10 @@ async function installBridge(page: Page, liveSockets = false) {
           },
         ],
       });
+    if (path.endsWith('/corrupt-tickets') && real && projectId && projectId === real.projectId) {
+      corruptLoads.set(projectId, (corruptLoads.get(projectId) ?? 0) + 1);
+      return route.fulfill({ json: await real.corrupt() });
+    }
     if (
       [
         '/provider-connections',
@@ -221,6 +232,7 @@ async function installBridge(page: Page, liveSockets = false) {
     if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
     if (path.endsWith('/tickets') && request.method() === 'GET' && projectId) {
       ticketLoads.set(projectId, (ticketLoads.get(projectId) ?? 0) + 1);
+      if (projectId === real?.projectId) return route.fulfill({ json: await real.page(url.search) });
       return route.fulfill({ json: ticketPage(rows.get(projectId) ?? []) });
     }
     if (!path.startsWith('/__hotsheet/')) return route.continue();
@@ -263,6 +275,7 @@ async function installBridge(page: Page, liveSockets = false) {
     muxBodies,
     directPolls,
     ticketLoads,
+    corruptLoads,
     subscriptions,
     closeBridge: () => bridgeSocket?.close(),
     bridgeSocketCount: () => bridgeSocketCount,
@@ -313,6 +326,70 @@ test('one live bridge WebSocket serves open projects through add, remove, and re
   bridge.emit(target.id, 'created', 'HS2-DELTA3');
   await page.getByRole('tab', { name: target.name }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DELTA3"]')).toBeVisible();
+});
+
+test('dense live ticket events use bounded collection reads across active and background tabs (HS2-B5SJMJ)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const bridge = await installBridge(page, true);
+  await openAllProjects(page);
+  await expect.poll(() => bridge.subscriptions.size).toBe(projects.length);
+  const active = projects.at(-1)!;
+  const background = projects[2];
+  const before = new Map(bridge.ticketLoads);
+  const started = Date.now();
+  for (const [target, prefix] of [
+    [active, 'HOTEL'],
+    [background, 'CHARLIE'],
+  ] as const) {
+    bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row(`${prefix}2`, `${prefix} latest`)]);
+    for (let index = 0; index < 24; index += 1) bridge.emit(target.id, 'updated', `HS2-${prefix}${index}`);
+  }
+  await expect(page.locator('[data-ticket-slug="HS2-HOTEL2"]')).toContainText('HOTEL latest');
+  await expect
+    .poll(() => (bridge.ticketLoads.get(background.id) ?? 0) - (before.get(background.id) ?? 0))
+    .toBeGreaterThan(0);
+  expect(Date.now() - started).toBeLessThan(3_000);
+  expect((bridge.ticketLoads.get(active.id) ?? 0) - (before.get(active.id) ?? 0)).toBeLessThanOrEqual(3);
+  expect((bridge.ticketLoads.get(background.id) ?? 0) - (before.get(background.id) ?? 0)).toBeLessThanOrEqual(3);
+  await page.getByRole('tab', { name: background.name }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-CHARLIE2"]')).toContainText('CHARLIE latest');
+});
+
+test('dense changes reconcile the latest real-server ticket collection within the read budget (HS2-B5SJMJ)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await server.request(`/checkouts/${server.checkoutId}/tickets`, 'POST', { title: 'First live ticket' });
+    const target = projects[0];
+    const bridge = await installBridge(page, true, {
+      projectId: target.id,
+      page: (query) => server.request(`/checkouts/${server.checkoutId}/tickets${query}`),
+      corrupt: () => server.request(`/checkouts/${server.checkoutId}/corrupt-tickets`),
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.getByText('First live ticket')).toBeVisible();
+    await expect.poll(() => bridge.subscriptions.has(target.id)).toBe(true);
+    const created = await server.request<{ slug: string }>(`/checkouts/${server.checkoutId}/tickets`, 'POST', {
+      title: 'Latest live ticket',
+    });
+    const ticketBefore = bridge.ticketLoads.get(target.id) ?? 0;
+    const corruptBefore = bridge.corruptLoads.get(target.id) ?? 0;
+    const started = Date.now();
+    for (let index = 0; index < 30; index += 1) bridge.emit(target.id, 'updated', created.slug);
+    await expect(page.locator(`[data-ticket-slug="${created.slug}"]`)).toContainText('Latest live ticket');
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect((bridge.ticketLoads.get(target.id) ?? 0) - ticketBefore).toBeLessThanOrEqual(3);
+    expect((bridge.corruptLoads.get(target.id) ?? 0) - corruptBefore).toBeLessThanOrEqual(3);
+  } finally {
+    await server.stop();
+  }
 });
 
 for (const mode of ['main thread', 'worker'] as const)

@@ -1488,7 +1488,12 @@ preview/download, server directory browser) are separate design work.
 
   Background tab refreshes driven by each project's live change stream are silent too, and load
   the collection of the project's remembered view (not always the queue), so the cached rows are
-  the ones it will show. Startup stays active-only (see the remembered-project startup rules
+  the ones it will show. Dense ticket events batch per project: a refresh starts after 180 ms
+  without another invalidation, or within 900 ms of the first one in a continuous burst.
+  Events received while a read is in flight trigger at most one trailing refresh. Closing a
+  project cancels its pending refresh; switching tabs still performs an authoritative
+  activation refresh. This bounds full ticket and corrupt-ticket reads while keeping the
+  latest state current (HS2-B5SJMJ). Startup stays active-only (see the remembered-project startup rules
   above): a project becomes warm on its first visit, or when a live-refreshed background
   snapshot fits spare warm capacity; that first visit is an ordinary cold load. Activating a
   project beyond the bound evicts the least recently used warm project's resident projection

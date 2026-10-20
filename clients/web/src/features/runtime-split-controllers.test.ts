@@ -19,6 +19,7 @@ const streams = vi.hoisted(() => ({
   stopped: [] as string[],
   onEvents: new Map<string, (response: unknown) => Promise<void>>(),
   onResync: new Map<string, (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>>(),
+  refresh: new Map<string, () => Promise<void>>(),
 }));
 vi.mock('../project-change-poll', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../project-change-poll')>()),
@@ -26,11 +27,13 @@ vi.mock('../project-change-poll', async (importOriginal) => ({
     client: { origin?: string };
     onEvents: (response: unknown) => Promise<void>;
     onResync: (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>;
+    refresh: () => Promise<void>;
   }) => {
     const id = (options.client as unknown as { origin: string }).origin;
     streams.started.push(id);
     streams.onEvents.set(id, options.onEvents);
     streams.onResync.set(id, options.onResync);
+    streams.refresh.set(id, options.refresh);
     return () => streams.stopped.push(id);
   },
 }));
@@ -50,6 +53,7 @@ beforeEach(() => {
   streams.stopped.length = 0;
   streams.onEvents.clear();
   streams.onResync.clear();
+  streams.refresh.clear();
   vi.stubGlobal('window', { setTimeout, clearTimeout });
   vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setTimeout(callback, 0));
 });
@@ -136,6 +140,54 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     projects.value = [project('b')];
     owner.syncProjectChangeStreams();
     expect(streams.started).toEqual(['/api/a', '/api/b', '/api/b']);
+  });
+
+  it('change streams: burst refreshes are bounded per project while other events keep flowing', async () => {
+    const projects = signal([project('a'), project('b')]);
+    const noop = vi.fn(async () => undefined);
+    const refreshed: string[] = [];
+    const refreshTab = vi.fn(async (target: Project) => {
+      refreshed.push(target.id);
+    });
+    const owner = createProjectChangeStreamsController({
+      projects,
+      project: () => projects.value[0],
+      shellMode: signal('project'),
+      statsProjectId: signal(undefined),
+      localTicketMutationBarrier: createRefreshBarrier(),
+      localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+      projectTabRefresh: { request: refreshTab },
+      turnStreamEvents: () => [],
+      conversationPersistence: { flush: vi.fn() } as never,
+      updateConversation: vi.fn(),
+      conversationForActivity: vi.fn(),
+      refreshDriveConnections: noop,
+      refreshPermissions: noop,
+      serverResolvedPermission: vi.fn(),
+      permissionRulesChanged: vi.fn(),
+      applyTerminalRenamed: vi.fn(),
+      refreshTerminalDashboard: noop,
+      refreshProviderOutbox: noop,
+      refreshCommands: noop,
+      refreshCustomViews: noop,
+      refreshRepositoryStatus: noop,
+      loadConfidenceReport: noop,
+      loadRepositorySize: noop,
+    });
+    owner.syncProjectChangeStreams();
+    for (let index = 0; index < 20; index += 1) {
+      await streams.refresh.get('/api/a')!();
+      await streams.refresh.get('/api/b')!();
+    }
+    expect(refreshTab).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(180);
+    expect(refreshed.sort()).toEqual(['a', 'b']);
+    projects.value = [project('a')];
+    owner.syncProjectChangeStreams();
+    await streams.refresh.get('/api/b')!();
+    owner.dispose();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(refreshTab).toHaveBeenCalledTimes(2);
   });
 
   it('change streams: permission events and resyncs refresh only their own project', async () => {

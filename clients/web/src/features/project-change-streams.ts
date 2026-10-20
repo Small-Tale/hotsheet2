@@ -16,6 +16,7 @@ import {
   type ProjectChangeStreamOptions,
   startProjectChangeStream,
 } from '../project-change-poll';
+import { createProjectChangeRefresh } from '../project-change-refresh';
 import type { createRefreshBarrier } from '../refresh-barrier';
 import { type ServerClocks, serverClocks } from '../server-clock';
 import { parsePollResponse } from '../server-response-parsers';
@@ -174,6 +175,14 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     loadRepositorySize,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
+  const ticketRefresh = createProjectChangeRefresh<Project>(
+    (target) => {
+      return projectTabRefresh.request(target);
+    },
+    (reason) => {
+      console.error('Ticket change refresh failed', reason);
+    },
+  );
   const useWorker = dependencies.useChangeStreamWorker ?? changeStreamWorkerEnabled();
   const clocks = dependencies.serverClocks ?? serverClocks;
   let workerHost: ReturnType<typeof createChangeStreamWorkerHost> | undefined;
@@ -230,6 +239,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
       if (!live.has(id)) {
         stop();
         projectChangeStreams.delete(id);
+        ticketRefresh.cancel(id);
       }
     for (const [id, timer] of repositoryRefreshTimers)
       if (!live.has(id)) {
@@ -258,7 +268,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             ]);
           },
           refresh: async () => {
-            await projectTabRefresh.request(current);
+            // The transport delivers individual WebSocket events. Scheduling without waiting
+            // lets a dense sequence share one collection read per project (HS2-B5SJMJ).
+            ticketRefresh.schedule(current);
             await refreshProviderOutbox(current);
             // Ticket changes can complete, reopen, or verify: keep an open calibration current.
             if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
@@ -343,6 +355,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     disposed = true;
     for (const stop of projectChangeStreams.values()) stop();
     projectChangeStreams.clear();
+    ticketRefresh.dispose();
     workerHost?.dispose();
     workerHost = undefined;
     for (const timer of repositoryRefreshTimers.values()) window.clearTimeout(timer);
