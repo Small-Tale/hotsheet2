@@ -979,7 +979,9 @@ privacy reminder appears only in the label's tooltip.
 An older project-wide Bash answer without a synopsis has no recoverable command text. Deleting
 its existing fingerprint makes the next matching use show the full command in a new permission
 prompt. The person can then choose an optional
-fixed-vocabulary label before remembering the answer. The server rejects free text and
+fixed-vocabulary name before remembering the answer. The popup previews that name as it will
+appear in Settings; its automatic option says a safe name appears only for recognized commands.
+The choice changes the displayed name, never which exact command matches. The server rejects free text and
 labels on one-time or non-Bash answers; durable files and the rule-list API retain only
 the HMAC fingerprint and validated label. A command never used again remains unidentified
 unless its old answer is deleted; no migration guesses a command from its fingerprint

@@ -26,6 +26,12 @@
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-s);
 }
+.permission-request-card__description-preview {
+  color: var(--wa-color-neutral-on-normal);
+}
+.permission-request-card__description-help {
+  max-width: remify(520px);
+}
 .permission-request-card__decision-area {
   display: flex;
   min-width: 0;

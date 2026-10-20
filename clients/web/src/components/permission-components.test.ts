@@ -444,6 +444,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     setSelectedBashDescription(pending.key, 'Network command');
     expect(selectedBashDescription(pending.key)).toBe('Network command');
     expect(String(PermissionRequestCard({ item: pending }))).toContain('value="Network command" selected');
+    expect(String(PermissionRequestCard({ item: pending }))).toContain('Network command</output>');
     expect(String(PermissionRequestCard({ item: other }))).not.toContain('value="Network command" selected');
     clearSelectedBashDescription(pending.key);
     expect(selectedBashDescription(pending.key)).toBeUndefined();
@@ -452,7 +453,9 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
   it('offers Allow for This Chat and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));
     expect(single).toMatch(/data-scope="chat"[^>]*>[^]*Allow for This Chat/);
-    expect(single).toContain('aria-label="Remembered Bash answer label"');
+    expect(single).toContain('aria-label="Remembered Bash answer name"');
+    expect(single).toContain('Settings preview: Bash ·');
+    expect(single).toContain('automatic name if recognized</output>');
     expect(single).toContain('value="Network command"');
     expect(single).not.toContain('data-permission-group-count');
     const grouped = String(PermissionRequestCard({ item: pending, presentation: 'popup', groupCount: 3 }));
@@ -463,7 +466,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     );
     expect(remembered).toContain('allowed for this chat');
     expect(remembered).not.toContain('Allow for This Chat');
-    expect(remembered).not.toContain('Remembered Bash answer label');
+    expect(remembered).not.toContain('Remembered Bash answer name');
   });
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));

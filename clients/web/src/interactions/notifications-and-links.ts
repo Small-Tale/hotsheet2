@@ -205,7 +205,13 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   lifetime.add(
     delegate(document.body, 'change', '[data-permission-description]', (_event, target) => {
       const key = target.closest('[data-request-key]')?.getAttribute('data-request-key');
-      if (key) setSelectedBashDescription(key, (target as HTMLSelectElement).value);
+      if (!key) return;
+      const description = (target as HTMLSelectElement).value;
+      setSelectedBashDescription(key, description);
+      const preview = target
+        .closest('[data-request-key]')
+        ?.querySelector<HTMLOutputElement>('[data-permission-description-preview]');
+      if (preview) preview.textContent = description || 'automatic name if recognized';
     }),
   );
   lifetime.add(

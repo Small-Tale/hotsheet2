@@ -2697,9 +2697,10 @@ Preview and dialog answers use the same compact ListItem layout with the decisio
 its leading icon slot. New answers for recognized tools show a fixed-vocabulary operation synopsis
 plus their short fingerprint. Older entries without a synopsis say the original prompt is
 unavailable; a project-wide Bash answer can be deleted and asked again on its next use. The permission
-prompt shows the real command and offers an optional safe label for a remembered answer;
-one-time answers ignore that selector. Labels use a fixed list and never contain command
-arguments or paths (HS2-KSY290). The
+prompt keeps the real command readable and offers an optional safe name only for a remembered
+Bash answer. It previews the resulting Settings label as the choice changes and explains that
+the name does not broaden exact matching. One-time answers ignore that selector. Names use a
+fixed list and never contain command arguments or paths (HS2-KSY290, HS2-777E9V). The
 preview and dialog rows are selection controls: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
 Command/Ctrl-A while focused in a list adds its visible rows. Search and filter changes keep

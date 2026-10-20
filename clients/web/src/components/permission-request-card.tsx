@@ -277,10 +277,10 @@ export function PermissionRequestCard({
         {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
         {bashRequest && (
           <label class="permission-request-card__description">
-            Remembered answer label
-            <select data-permission-description aria-label="Remembered Bash answer label">
+            Name shown if you remember this command
+            <select data-permission-description aria-label="Remembered Bash answer name">
               <option value="" selected={!selectedDescription}>
-                Describe automatically when possible
+                Choose a safe name automatically
               </option>
               <option value="Build or test command" selected={selectedDescription === 'Build or test command'}>
                 Build or test command
@@ -298,6 +298,16 @@ export function PermissionRequestCard({
                 Other Bash command
               </option>
             </select>
+            <span class="permission-request-card__description-preview">
+              Settings preview: Bash ·{' '}
+              <output data-permission-description-preview>
+                {selectedDescription ?? 'automatic name if recognized'}
+              </output>
+            </span>
+            <span class="permission-request-card__description-help">
+              If remembered, the command is saved as an opaque identifier. This name does not broaden which command
+              matches.
+            </span>
           </label>
         )}
         {error && (
