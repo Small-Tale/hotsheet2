@@ -96,10 +96,10 @@ import {
 } from '../ticket-views';
 import { hs1CleanupPromptDismissed } from '../workspace-session';
 
-/** Live application bindings createHotSheetShell reads (HS2-K0VC2C). */
 /** Tab id prefix of a remembered project that is still opening (HS2-2BEJXD, HS2-XGSSK1). */
 export const PENDING_PROJECT_TAB_PREFIX = 'pending:';
 
+/** Live application bindings createHotSheetShell reads (HS2-K0VC2C). */
 export interface HotSheetShellDependencies {
   appRegionSize: (id: AppRegionId) => number;
   capabilitiesFor: (connectionId: string) => Capabilities;
@@ -276,8 +276,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             .map((entry) => entry.item)
             .find((root) => root === selectedProjectRestoreRoot.value);
     if (!current && !restoreFailure && !openingRoot) return <AppEmptyState />;
-    // The shell popup is a top-layer popover so the terminal drawer and the Workbench's main-pane clip
-    // can never cover it (HS2-ZESCM2); the conversation's foreground keeps its own inline copy.
+    // A chat hosts the permission sidecar within its own modal top layer. Otherwise the shell
+    // popup uses the global top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2).
     const haltPopup = haltedSessionsController.popup(),
       popup = (conversationOpen.value ? undefined : permissionPopupSurface('top')) ?? haltPopup,
       currentJob = current && migrationJobsByRoot.value[current.root],

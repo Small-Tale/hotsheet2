@@ -58,6 +58,41 @@
   animation: ai-conversation-foreground-scrollable linear both;
   animation-timeline: scroll(self);
 }
+/* A pending permission is a separate surface within the conversation modal's interaction scope.
+   Fixed positioning lets it sit beside the chat without making the chat inert (HS2-VBG6W5). */
+.ai-conversation__sidecar {
+  position: fixed;
+  z-index: 101;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: remify(1280px)) {
+  [data-dialog-component='ai-conversation']:has(.ai-conversation__sidecar) {
+    margin-right: max(remify(16px), calc((100vw - remify(1248px)) / 2));
+    margin-left: auto;
+  }
+  .ai-conversation__sidecar {
+    top: remify(116px);
+    left: max(remify(16px), calc((100vw - remify(1248px)) / 2));
+    width: remify(448px);
+    max-height: calc(100dvh - remify(132px));
+  }
+}
+@media (max-width: remify(1279px)) {
+  [data-dialog-component='ai-conversation']:has(.ai-conversation__sidecar) {
+    top: auto;
+    bottom: 0;
+    height: 50dvh;
+    max-height: 50dvh;
+    min-height: 0;
+  }
+  .ai-conversation__sidecar {
+    top: calc(env(safe-area-inset-top) + remify(8px));
+    right: remify(8px);
+    left: remify(8px);
+    max-height: calc(50dvh - env(safe-area-inset-top) - remify(24px));
+  }
+}
 @keyframes ai-conversation-foreground-scrollable {
   from,
   to {

@@ -629,7 +629,7 @@ describe('AIConversation', () => {
     expect(markup).not.toContain('save-conversation');
     expect(markup).not.toContain('send-conversation-turn');
   });
-  it('promotes a permission popup into the dialog top layer without duplicating its inline card', () => {
+  it('places one permission card in a separate sidecar without duplicating it in the transcript', () => {
     const markup = withToolbar({
       open: true,
       tool: 'Codex',
@@ -638,10 +638,10 @@ describe('AIConversation', () => {
       busy: true,
       interruptible: true,
       permissions: [permission],
-      foreground: PermissionRequestPopup({ item: permission, layer: 'flow' }),
+      sidecar: PermissionRequestPopup({ item: permission, layer: 'flow' }),
     });
-    expect(markup).toContain('ai-conversation__foreground');
-    // The foreground lays out an in-flow popup through the popup's own layer variant (HS2-M2W2DP).
+    expect(markup).toContain('ai-conversation__sidecar');
+    expect(markup).not.toContain('ai-conversation__foreground');
     expect(markup).toContain('data-layer="flow"');
     expect(css).not.toContain('.permission-request-popup');
     expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);

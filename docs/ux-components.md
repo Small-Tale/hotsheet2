@@ -1807,22 +1807,18 @@ capability-aware sections when their underlying features and data contracts land
   for continued review, plus a complete settings reset round trip.
 - `PermissionRequestPopup` — non-modal presentation of the shared request card. Its `layer`
   variant anchors it to its host's top-right corner (`inline`), places it in its host's layout so
-  the host positions it (`flow`, the AI conversation's foreground), or lifts it into the browser
+  the host positions it (`flow`, the AI conversation's sidecar), or lifts it into the browser
   top layer (`top`, the shell popup). The top layer uses `NotificationCard`'s `popup-contained`
   elevation so its scrolling dialog paints the rounded outer shadow. The UX demo previews all three. The `flow` layer sizes to
   its host's content box (`min(704px, 100%)`), does not clip the card's shadow, and never takes
   the corner or phone placement. The phone placement (pinned 8px from both viewport edges at
   672px and below) applies only to `inline` and `top`. So the host's padding alone sets a `flow`
-  popup's insets. The AI conversation's foreground covers the dialog panel (not the viewport) and
-  opens the popup below the heading, with symmetric 32px insets (16px at 640px and below), fully
-  inside the dialog (HS2-SH3DR7). When the card is taller than the dialog (a short viewport or a long
-  command), the foreground itself scrolls (wheel and touch over the card chain to it), keeping its
-  padding as shadow room, so the lower actions stay reachable without clipping the card's shadow
-  (HS2-VYM95K). While it overflows, the foreground is also pointer-interactive, so a mouse can drag
-  its scrollbar; a card that fits leaves it pointer-transparent over the transcript. A scroll-driven
-  animation (`animation-timeline: scroll(self)`) sets this, because a scroll timeline is active only
-  while its scroller overflows; browsers without scroll timelines keep wheel, touch and keyboard
-  scrolling (HS2-Q5TRYD).
+  popup's insets. The standalone conversation uses a fixed, independently scrolling sidecar
+  inside the chat modal's interaction scope. At 1280px and wider it places the card beside
+  the chat; below that it stacks the card above a shorter chat. The active request is never
+  duplicated in the transcript, and chat controls remain hit-testable (HS2-VBG6W5). The
+  older foreground layer remains available to other `AIConversation` compositions, but the
+  shipped standalone chat no longer uses it for permission requests.
   For the shell's `top` layer, the transparent dialog owns short-viewport scrolling and reserves
   inner space around the card, so its elevation shadow is not cut at the dialog edge (HS2-Q3R273).
 - `PermissionSummary`
@@ -3019,7 +3015,7 @@ an own class or configures the child through its props:
   - Its header and activity icons use LucideIcon `size`.
   - The activity list and items have own classes, so a summary's Markdown lists keep their own
     presentation.
-  - The foreground passes `PermissionRequestPopup layer="flow"` instead of repositioning the popup.
+  - The standalone permission sidecar passes `PermissionRequestPopup layer="flow"` and positions its own separate surface beside or above the chat.
   - Messages are Kerf `ContentItem` chat bubbles (`bubble="end"` + `brand-loud` for the person,
     `bubble="start"` + `neutral` for responses, `danger` when failed); a selectable transcript makes
     them interactive `selectionMode="single"` options activated through `wireContentItems`. The

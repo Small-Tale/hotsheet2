@@ -2763,10 +2763,11 @@ Outside any modal the popup never takes focus: it opens as a popover while brief
 autosave, an inline editor such as ticket details (HS2-HZK70N).
 Escape then belongs to the popup as the topmost surface: it acts as Ignore
 (client-only, no decision) and never reaches the modal beneath, so the composer stays open
-(HS2-S8K9BG). When a standalone AI conversation is open, the active permission popup is
-promoted into that dialog's top layer so it remains visible and interactive instead of
-being trapped beneath the modal; resolving it uses the same authoritative permission
-path. Standalone conversation dialogs use native light-dismiss and Escape behavior and
+(HS2-S8K9BG). When a standalone AI conversation is open, the active permission request
+uses a separate sidecar in that modal's interaction scope. On wide screens the sidecar sits
+beside the conversation; on narrower screens it stacks above a shorter conversation panel.
+Neither surface covers the other's controls, and resolving the request uses the same
+authoritative permission path (HS2-VBG6W5). Standalone conversation dialogs use native light-dismiss and Escape behavior and
 do not duplicate that dismissal with a header close button. The Notifications view, its
 Pending/24 Hours/7 Days counts, and newest-first machine-local client history are scoped to
 the selected project and switch immediately with its tab; a request that

@@ -86,6 +86,8 @@ export interface AIConversationProps {
    */
   availableHeight?: number;
   foreground?: SafeHtml;
+  /** A separate, viewport-positioned surface that stays inside this modal's interaction scope. */
+  sidecar?: SafeHtml;
   providerId?: string;
   providers?: readonly { id: string; label: string }[];
   canChangeProvider?: boolean;
@@ -597,6 +599,7 @@ export function AIConversation(props: AIConversationProps) {
     presentation = 'dialog',
     availableHeight,
     foreground,
+    sidecar,
     model,
     effort,
     readOnly = false,
@@ -615,7 +618,7 @@ export function AIConversation(props: AIConversationProps) {
             ? 'Ready for your first message'
             : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
               conversationHeaderSummary(messages.length, totalUsage);
-  const inlinePermissions = presentation === 'dialog' && foreground ? [] : permissions,
+  const inlinePermissions = presentation === 'dialog' && (foreground || sidecar) ? [] : permissions,
     selectedIds = new Set(selectedMessageIds),
     selectionEnabled = Boolean(selectionId) && messages.length > 0,
     selectedCount = selectedIds.size;
@@ -851,15 +854,15 @@ export function AIConversation(props: AIConversationProps) {
         {contextMenu}
       </section>
     );
-  // Kerf owns the bottom sheet's viewport, keyboard, and resize bounds. Its 320px minimum
-  // leaves room for the toolbar and composer while the transcript remains independently scrollable.
+  // Kerf owns the bottom sheet's viewport, keyboard, and resize bounds. A permission
+  // sidecar shares short viewports with the chat, so it releases the usual 320px minimum.
   return (
     <DialogSurface
       presentation="bottom-sheet"
       resizable
       preferredWidth={remify(768)}
       height={remify(608)}
-      minHeight={remify(320)}
+      minHeight={remify(sidecar ? 0 : 320)}
       viewportGutter={remify(8)}
       bodyInset="none"
       footerInset="none"
@@ -899,6 +902,7 @@ export function AIConversation(props: AIConversationProps) {
         trailing={<AIConversationToolbar {...props} presentation="dialog" />}
       />
       {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
+      {sidecar && <div class="ai-conversation__sidecar">{sidecar}</div>}
       {savedNotice}
       {selectionStatus}
       {transcript}

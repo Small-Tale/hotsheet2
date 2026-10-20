@@ -19269,15 +19269,12 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost).toContainText('≈$0.04');
   await expect(conversationHost).toContainText('Edited the conversation projection');
   await expect(conversationHost).toContainText('AI-generated · may contain errors');
-  await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();
-  const foregroundPopup = conversationHost.locator(
-    '.ai-conversation__foreground [data-component="permission-request-popup"]',
+  await expect(conversationHost.locator('.ai-conversation__foreground')).toHaveCount(0);
+  const permissionPopup = conversationHost.locator(
+    '.ai-conversation__sidecar [data-component="permission-request-popup"][data-layer="flow"]',
   );
-  await expect(foregroundPopup).toBeVisible();
-  // The foreground lays out the popup's own in-flow layer instead of restyling it (HS2-M2W2DP).
-  await expect(foregroundPopup).toHaveAttribute('data-layer', 'flow');
-  await expect(foregroundPopup).toHaveCSS('position', 'relative');
-  await expect(foregroundPopup).toHaveCSS('pointer-events', 'auto');
+  await expect(permissionPopup).toBeVisible();
+  await expect(permissionPopup.locator('[data-component="permission-request-card"]')).toBeVisible();
   await expect(conversationHost.getByRole('button', { name: 'Save Conversation' })).toHaveJSProperty(
     'tagName',
     'BUTTON',
@@ -19285,6 +19282,13 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost.getByRole('button', { name: 'Save Conversation' })).toBeDisabled();
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveJSProperty('tagName', 'BUTTON');
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
+  const widePopup = await permissionPopup.boundingBox(),
+    wideChat = await conversationHost.boundingBox();
+  expect(widePopup && wideChat && widePopup.x + widePopup.width <= wideChat.x).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-beside-chat-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-beside-chat-2048.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await conversationHost.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).last().click();
   const feedbackDialog = page.locator('[data-dialog-component="ai-feedback-dialog"]');
   await expect(feedbackDialog).toBeVisible();
@@ -19310,15 +19314,23 @@ test('opens a Codex chat without implicitly starting Drive through the productio
     )
     .toBe(true);
   await expect(page.locator('.app-toast')).toContainText('AI feedback saved as a ticket note.');
-  await page.screenshot({ path: 'target/visual-captures/hs2-t6a83t-permission-over-chat-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-vbg6w5-permission-beside-chat-feedback-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 760, height: 640 });
-  await page.screenshot({ path: 'target/visual-captures/hs2-t6a83t-permission-over-chat-narrow.png', fullPage: true });
+  const narrowPopup = await permissionPopup.boundingBox(),
+    narrowChat = await conversationHost.boundingBox();
+  expect(narrowPopup && narrowChat && narrowPopup.y + narrowPopup.height <= narrowChat.y).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-above-chat-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 800 });
+  const phonePopup = await permissionPopup.boundingBox(),
+    phoneChat = await conversationHost.boundingBox();
+  expect(phonePopup && phoneChat && phonePopup.y + phonePopup.height <= phoneChat.y).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-above-chat-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-wide.png' });
-  await conversationHost
-    .locator('[data-component="permission-request-card"]')
-    .getByRole('button', { name: 'Allow Once' })
-    .click();
+  await permissionPopup.getByRole('button', { name: 'Allow Once' }).click();
   await expect(conversationHost.locator('[data-component="permission-request-card"]')).toHaveCount(0);
   const assistantMessage = conversationHost.locator('.ai-conversation__message--assistant').last(),
     usageValues = assistantMessage.locator('[data-conversation-usage] [data-component="text"]');
@@ -19415,7 +19427,7 @@ for (const viewport of [
   { width: 390, height: 844 },
   { width: 1280, height: 800 },
 ]) {
-  test(`keeps the foreground permission popup inside the conversation dialog with symmetric insets at ${viewport.width}px (HS2-SH3DR7)`, async ({
+  test(`keeps a permission sidecar separate from the conversation at ${viewport.width}px (HS2-VBG6W5)`, async ({
     page,
   }) => {
     await mockProject(page);
@@ -19437,54 +19449,23 @@ for (const viewport of [
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
-      dialog = conversation,
-      popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
-    await expect(dialog).toBeVisible();
+      popup = conversation.locator('.ai-conversation__sidecar [data-component="permission-request-popup"]');
     await expect(popup).toBeVisible();
     await page.setViewportSize(viewport);
     await expect(popup).toHaveAttribute('data-layer', 'flow');
-    // The phone placement belongs to the corner-anchored layers only; the in-flow copy keeps no offset.
-    await expect(popup).toHaveCSS('position', 'relative');
-    await expect(popup).toHaveCSS('left', '0px');
-    const geometry = () =>
-      Promise.all([dialog.boundingBox(), popup.boundingBox()]).then(([dialogBox, popupBox]) => ({
-        left: Math.round(popupBox!.x - dialogBox!.x),
-        right: Math.round(dialogBox!.x + dialogBox!.width - (popupBox!.x + popupBox!.width)),
-        top: Math.round(popupBox!.y - dialogBox!.y),
-        bottom: Math.round(dialogBox!.y + dialogBox!.height - (popupBox!.y + popupBox!.height)),
-      }));
-    // The bottom sheet spans the phone viewport; a wide window keeps the 768px panel (HS2-3P2DE9).
+    await expect(conversation.locator('.ai-conversation__foreground')).toHaveCount(0);
+    await expect(conversation.locator('[data-component="permission-request-card"]')).toHaveCount(1);
     await expect
       .poll(async () => {
-        const box = (await dialog.boundingBox())!;
-        return { x: Math.round(box.x), width: Math.round(box.width) };
+        const [conversationBox, popupBox] = await Promise.all([conversation.boundingBox(), popup.boundingBox()]);
+        if (!conversationBox || !popupBox) return false;
+        return viewport.width >= 1280
+          ? popupBox.x + popupBox.width <= conversationBox.x
+          : popupBox.y + popupBox.height <= conversationBox.y;
       })
-      .toEqual(viewport.width === 390 ? { x: 0, width: 390 } : { x: 256, width: 768 });
-    // The foreground covers the dialog panel, so the popup sits fully inside it with symmetric insets:
-    // 16px on a phone, 32px wide (HS2-SH3DR7).
-    const expectedInset = viewport.width === 390 ? 16 : 32;
-    await expect
-      .poll(async () => {
-        const { left, right } = await geometry();
-        return { left, right };
-      })
-      .toEqual({ left: expectedInset, right: expectedInset });
-    // A card that fits leaves the foreground pointer-transparent, so the transcript beneath stays usable
-    // (HS2-Q5TRYD).
-    const fittingForeground = conversation.locator('.ai-conversation__foreground');
-    expect(await fittingForeground.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(0);
-    await expect(fittingForeground).toHaveCSS('pointer-events', 'none');
-    await page.screenshot({ path: `/tmp/claude/hs2-sh3dr7-foreground-popup-${viewport.width}.png` });
-    const [insets, headingBox, popupBox] = await Promise.all([
-      geometry(),
-      conversation.locator('[data-component="toolbar"]').first().boundingBox(),
-      popup.boundingBox(),
-    ]);
-    expect(insets.top).toBeGreaterThanOrEqual(0);
-    expect(insets.bottom).toBeGreaterThanOrEqual(0);
-    // It opens below the conversation heading rather than over it.
-    expect(popupBox!.y).toBeGreaterThanOrEqual(headingBox!.y + headingBox!.height);
+      .toBe(true);
     await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `target/visual-captures/hs2-vbg6w5-sidecar-${viewport.width}.png` });
   });
 }
 
@@ -19492,14 +19473,14 @@ for (const viewport of [
   { width: 390, height: 480 },
   { width: 1280, height: 420 },
 ]) {
-  test(`scrolls a foreground permission popup taller than the conversation dialog at ${viewport.width}x${viewport.height} (HS2-VYM95K)`, async ({
+  test(`scrolls a long permission request in its separate sidecar at ${viewport.width}x${viewport.height} (HS2-VBG6W5)`, async ({
     page,
   }) => {
     await mockProject(page);
     const longCommand = Array.from(
       { length: 14 },
       (_, index) => `npm run test -- --project=package-${index + 1} --reporter=verbose`,
-    ).join(' \\\n  && ');
+    ).join(' && ');
     await page.route('**/permissions', (route) =>
       route.fulfill({
         json: [
@@ -19518,67 +19499,30 @@ for (const viewport of [
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
-      dialog = conversation,
-      foreground = conversation.locator('.ai-conversation__foreground'),
-      popup = foreground.locator('[data-component="permission-request-popup"]'),
+      sidecar = conversation.locator('.ai-conversation__sidecar'),
+      popup = sidecar.locator('[data-component="permission-request-popup"]'),
       allowOnce = popup.getByRole('button', { name: 'Allow Once' });
     await expect(popup).toBeVisible();
     await page.setViewportSize(viewport);
-    // The card is taller than the dialog, so the foreground (not the popup) becomes the scroller and
-    // the popup keeps visible overflow for its shadow (HS2-VYM95K, HS2-SH3DR7).
-    await expect(foreground).toHaveCSS('overflow-y', 'auto');
-    await expect(popup).toHaveCSS('overflow-y', 'visible');
-    await expect.poll(() => foreground.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
-    const inside = async () => {
-      const [dialogBox, buttonBox] = await Promise.all([dialog.boundingBox(), allowOnce.boundingBox()]);
-      return (
-        buttonBox!.y >= dialogBox!.y &&
-        buttonBox!.y + buttonBox!.height <= dialogBox!.y + dialogBox!.height &&
-        buttonBox!.x >= dialogBox!.x &&
-        buttonBox!.x + buttonBox!.width <= dialogBox!.x + dialogBox!.width
-      );
-    };
-    // While it overflows, the foreground is pointer-interactive, so its own scrollbar takes a mouse drag
-    // instead of the transcript beneath (HS2-Q5TRYD).
-    await expect.poll(() => foreground.evaluate((node) => getComputedStyle(node).pointerEvents)).toBe('auto');
-    const scrollbar = await foreground.evaluate((node: HTMLElement) => {
-      const box = node.getBoundingClientRect(),
-        gutter = node.offsetWidth - node.clientWidth,
-        x = box.right - Math.max(gutter, 2) / 2 - 1,
-        y = box.top + box.height / 2;
-      return { x, y, gutter, hit: document.elementFromPoint(x, y) === node };
+    await expect(sidecar).toHaveCSS('overflow-y', 'auto');
+    await expect.poll(() => sidecar.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
+    await sidecar.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
     });
-    expect(scrollbar.hit).toBe(true);
-    if (scrollbar.gutter > 0) {
-      await page.mouse.move(scrollbar.x, scrollbar.y);
-      await page.mouse.down();
-      await page.mouse.move(scrollbar.x, scrollbar.y + 60, { steps: 4 });
-      await page.mouse.up();
-      await expect.poll(() => foreground.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-      await foreground.evaluate((node) => {
-        node.scrollTop = 0;
-      });
-    }
-    // Unscrolled, the lower actions start below the dialog's bottom edge.
-    expect(await inside()).toBe(false);
-    await dialog.evaluate((node) =>
-      Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined))),
-    );
-    await page.screenshot({ path: `/tmp/claude/hs2-vym95k-foreground-top-${viewport.width}x${viewport.height}.png` });
-    // A wheel over the pointer-interactive card scrolls its foreground host.
-    const popupBox = (await popup.boundingBox())!;
-    await page.mouse.move(popupBox.x + popupBox.width / 2, popupBox.y + 24);
-    await page.mouse.wheel(0, 2000);
-    await expect.poll(() => foreground.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-    await expect.poll(inside).toBe(true);
     await expect(allowOnce).toBeInViewport({ ratio: 1 });
     await allowOnce.click({ trial: true });
-    // Scrolled to the end, the foreground keeps its bottom padding below the card for the shadow.
-    const [foregroundBox, endPopupBox] = await Promise.all([foreground.boundingBox(), popup.boundingBox()]);
-    expect(
-      Math.round(foregroundBox!.y + foregroundBox!.height - (endPopupBox!.y + endPopupBox!.height)),
-    ).toBeGreaterThanOrEqual(16);
-    await page.screenshot({ path: `/tmp/claude/hs2-vym95k-foreground-end-${viewport.width}x${viewport.height}.png` });
+    await expect
+      .poll(async () => {
+        const [conversationBox, sidecarBox] = await Promise.all([conversation.boundingBox(), sidecar.boundingBox()]);
+        if (!conversationBox || !sidecarBox) return false;
+        return viewport.width >= 1280
+          ? sidecarBox.x + sidecarBox.width <= conversationBox.x
+          : sidecarBox.y + sidecarBox.height <= conversationBox.y;
+      })
+      .toBe(true);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-vbg6w5-long-sidecar-${viewport.width}x${viewport.height}.png`,
+    });
   });
 }
 
@@ -19616,7 +19560,7 @@ test('clears a foreground permission from its authoritative event while the Allo
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
     dialog = conversation,
-    popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
+    popup = conversation.locator('.ai-conversation__sidecar [data-component="permission-request-popup"]');
   await expect(dialog).toBeVisible();
   await expect(popup).toBeVisible();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
