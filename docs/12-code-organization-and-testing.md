@@ -634,7 +634,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   **conformance test** (HS2-64), the CLI
   build, and the **migrator vitest + coverage** (now `test:coverage`, gated on the
   per-language thresholds in `migrator/vitest.config.mjs`) + lint + the cross-language
-  conformance. A separate **`coverage` job** collects Rust coverage once
+  conformance. Ubuntu AVIF build dependencies are installed using Ubuntu package
+  sources only, so unrelated runner-image apt mirrors cannot block these jobs
+  (HS2-EFZZE8). A separate **`coverage` job** collects Rust coverage once
   (`cargo llvm-cov nextest --no-report`), uploads an lcov artifact (a _separate_
   per-language summary, not one merged lcov), and **gates** on a conservative line
   floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**

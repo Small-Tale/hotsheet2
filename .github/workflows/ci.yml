@@ -122,7 +122,10 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
+        # These are Ubuntu packages; unrelated runner-image sources can fail independently.
+        run: |
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm
 
       - name: Format
         run: cargo fmt --all --check
@@ -258,7 +261,10 @@ jobs:
           tool: cargo-llvm-cov,nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
+        # These are Ubuntu packages; unrelated runner-image sources can fail independently.
+        run: |
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm
 
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
@@ -326,7 +332,10 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
+        # These are Ubuntu packages; unrelated runner-image sources can fail independently.
+        run: |
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm
 
       - name: Build the CLI and server that the real-server flows spawn
         run: cargo build -p hotsheet-cli -p hotsheet-server --bins
