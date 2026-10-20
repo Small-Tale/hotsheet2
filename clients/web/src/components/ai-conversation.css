@@ -84,18 +84,20 @@
   }
 }
 @media (max-width: remify(1279px)) {
+  /* The permission card's intrinsic height varies with font metrics. Keep room for its footer
+     above the chat on 760px and phone viewports (HS2-777E9V). */
   [data-dialog-component='ai-conversation']:has(.ai-conversation__sidecar) {
     top: auto;
     bottom: 0;
-    height: 40dvh;
-    max-height: 40dvh;
+    height: 35dvh;
+    max-height: 35dvh;
     min-height: 0;
   }
   .ai-conversation__sidecar {
     top: calc(env(safe-area-inset-top) + remify(8px));
     right: remify(8px);
     left: remify(8px);
-    max-height: calc(60dvh - env(safe-area-inset-top) - remify(24px));
+    max-height: calc(65dvh - env(safe-area-inset-top) - remify(24px));
   }
 }
 @keyframes ai-conversation-foreground-scrollable {

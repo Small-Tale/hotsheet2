@@ -19526,14 +19526,21 @@ test('opens a Codex chat without implicitly starting Drive through the productio
     fullPage: true,
   });
   await page.setViewportSize({ width: 760, height: 640 });
-  const narrowPopup = await permissionPopup.boundingBox(),
+  const permissionSidecar = conversationHost.locator('.ai-conversation__sidecar');
+  const narrowSidecar = await permissionSidecar.boundingBox(),
     narrowChat = await conversationHost.boundingBox();
-  expect(narrowPopup && narrowChat && narrowPopup.y + narrowPopup.height <= narrowChat.y).toBe(true);
+  expect(narrowSidecar && narrowChat && narrowSidecar.y + narrowSidecar.height <= narrowChat.y).toBe(true);
+  await permissionPopup.getByRole('button', { name: 'Allow Once' }).scrollIntoViewIfNeeded();
+  await expect(permissionPopup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+  await expect(composer).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-above-chat-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 800 });
-  const phonePopup = await permissionPopup.boundingBox(),
+  const phoneSidecar = await permissionSidecar.boundingBox(),
     phoneChat = await conversationHost.boundingBox();
-  expect(phonePopup && phoneChat && phonePopup.y + phonePopup.height <= phoneChat.y).toBe(true);
+  expect(phoneSidecar && phoneChat && phoneSidecar.y + phoneSidecar.height <= phoneChat.y).toBe(true);
+  await permissionPopup.getByRole('button', { name: 'Allow Once' }).scrollIntoViewIfNeeded();
+  await expect(permissionPopup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+  await expect(composer).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: 'target/visual-captures/hs2-vbg6w5-permission-above-chat-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-wide.png' });

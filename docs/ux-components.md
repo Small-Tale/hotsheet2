@@ -1821,8 +1821,8 @@ capability-aware sections when their underlying features and data contracts land
   672px and below) applies only to `inline` and `top`. So the host's padding alone sets a `flow`
   popup's insets. The standalone conversation uses a fixed, independently scrolling sidecar
   inside the chat modal's interaction scope. At 1280px and wider it places the card beside
-  the chat; below that it gives the card the upper 60% of the viewport and the chat the lower
-  40%. Longer cards scroll in the sidecar. The active request is never
+  the chat; below that it gives the card the upper 65% of the viewport and the chat the lower
+  35%. Longer cards scroll in the sidecar. The active request is never
   duplicated in the transcript, and chat controls remain hit-testable (HS2-VBG6W5). An
   ignored prompt keeps an answerable card in that same sidecar until it is resolved. The
   older foreground layer remains available to other `AIConversation` compositions, but the
