@@ -64,9 +64,10 @@ export function terminalGridLayout(
   fitAcross: number,
   fitHigh: number,
   fitPhone = TERMINAL_GRID_DEFAULT_PHONE,
+  phoneViewport = width <= TERMINAL_GRID_PHONE_BREAKPOINT,
 ): TerminalGridLayout {
-  const phone = width <= TERMINAL_GRID_PHONE_BREAKPOINT;
-  const basis = terminalGridBasis(height, width);
+  const phone = phoneViewport;
+  const basis = terminalGridBasis(height, phone ? TERMINAL_GRID_PHONE_BREAKPOINT : Number.POSITIVE_INFINITY);
   const max = phone ? TERMINAL_GRID_MAX_PHONE : basis === 'across' ? TERMINAL_GRID_MAX_ACROSS : TERMINAL_GRID_MAX_HIGH;
   const fit = Math.min(max, clampTerminalFit(phone ? fitPhone : basis === 'across' ? fitAcross : fitHigh, basis));
   if (basis === 'across') {

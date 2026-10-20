@@ -249,8 +249,10 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     delegate(document.body, 'click', TERMINALS_ACTIONS.zoomTerminalGrid.selector, (_event, target) => {
       const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
         bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
-        phone = !drawer && bounds.width <= TERMINAL_GRID_PHONE_BREAKPOINT,
-        basis = drawer ? 'high' : terminalGridBasis(bounds.height, bounds.width),
+        phone = !drawer && window.innerWidth <= TERMINAL_GRID_PHONE_BREAKPOINT,
+        basis = drawer
+          ? 'high'
+          : terminalGridBasis(bounds.height, phone ? TERMINAL_GRID_PHONE_BREAKPOINT : Number.POSITIVE_INFINITY),
         direction = data(target).zoomDirection as 'in' | 'out';
       if (drawer) {
         terminalDrawerFitHigh.value = adjustTerminalFit(terminalDrawerFitHigh.value, basis, direction);

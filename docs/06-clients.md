@@ -3001,7 +3001,7 @@ viewport: the surrounding card adds the measured spacing-token inset and footer 
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
 changing rows, columns, or glyph proportions. At phone
-grid widths of 600px or less, the Workspace Grid defaults to one card across so the scaled
+viewport widths of 600px or less, the Workspace Grid defaults to one card across so the scaled
 80×24 preview fills the available width. Its one-to-three-card zoom preference persists
 separately from the desktop across and short-layout high preferences. A dedicated drawer
 terminal moved into a phone Workspace Grid tile also renders and claims 80×24 rather than

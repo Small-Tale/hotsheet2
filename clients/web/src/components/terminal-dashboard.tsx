@@ -119,6 +119,7 @@ export interface TerminalDashboardProps {
   fitAcross: number;
   fitHigh: number;
   fitPhone?: number;
+  phoneViewport?: boolean;
   fullscreen?: boolean;
   grouping?: 'project' | 'flow';
   layoutMode?: 'responsive' | 'drawer';
@@ -757,6 +758,7 @@ export function TerminalDashboard({
   fitAcross,
   fitHigh,
   fitPhone,
+  phoneViewport,
   fullscreen = false,
   grouping = 'flow',
   layoutMode = 'responsive',
@@ -786,7 +788,7 @@ export function TerminalDashboard({
   const layout =
     layoutMode === 'drawer'
       ? terminalDrawerGridLayout(width, height, fitHigh)
-      : terminalGridLayout(width, height, fitAcross, fitHigh, fitPhone);
+      : terminalGridLayout(width, height, fitAcross, fitHigh, fitPhone, phoneViewport);
   const magnified = groups.flatMap((group) => group.sessions).find((session) => keyFor(session) === magnifiedKey);
   // One menu signal serves every grid; only the grid that shows the targeted tile renders it.
   const menuTargetsThisGrid =

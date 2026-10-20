@@ -43,6 +43,7 @@ describe('terminal grid layout', () => {
     expect(terminalGridLayout(366, 300, 4, 2, 2)).toMatchObject({ basis: 'across', fit: 2, max: 3, tileWidth: 177 });
     expect(terminalGridLayout(600, 300, 4, 2, 10)).toMatchObject({ basis: 'across', fit: 3, max: 3 });
     expect(terminalGridLayout(601, 300, 4, 2, 1)).toMatchObject({ basis: 'high', fit: 2, max: 3 });
+    expect(terminalGridLayout(500, 300, 4, 2, 1, false)).toMatchObject({ basis: 'high', fit: 2, max: 3 });
   });
 
   it('clamps independent counts and maps plus/minus to zoom direction', () => {

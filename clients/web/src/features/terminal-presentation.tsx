@@ -190,6 +190,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           fitAcross: terminalFitAcross.value,
           fitHigh: terminalFitHigh.value,
           fitPhone: terminalFitPhone.value,
+          phoneViewport: typeof window !== 'undefined' && window.innerWidth <= 600,
           grouping: 'flow',
           magnifiedKey: magnifiedTerminalKey.value,
           mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,
