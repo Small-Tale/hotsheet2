@@ -2676,8 +2676,10 @@ path. Its footer shows the current page and total pages without a separate count
 the dialog or switching projects resets its search, page, and selection (HS2-16XPHH,
 HS2-C057G5). A selection may span pages and mix decisions and lifetimes. Allow selected
 and Deny selected change only the answer, while Delete selected asks for confirmation.
-Each project-wide answer in the preview and full dialog also offers an individual
-Session/Always duration action; chat-scoped answers keep their connection lifetime.
+Each project-wide answer in the preview and full dialog shows its saved decision and either
+Persistent or Session (until restart). The adjacent Set Persistent/Session action
+names the target duration so it cannot be mistaken for the current one (HS2-BTPTWK);
+chat-scoped answers keep their connection lifetime.
 The effective duration updates in both lists after a successful server write, and a
 failed edit leaves the displayed duration intact (HS2-V95VEB).
 After a batch the dialog refreshes from the server, summarizes successes and failures,

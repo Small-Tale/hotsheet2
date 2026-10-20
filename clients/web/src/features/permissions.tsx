@@ -551,7 +551,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         ),
       };
       if (selectedProjectId.value === projectId)
-        permissionRulesMessage.value = `Answer remembered ${scope === 'always' ? 'always' : 'until the server restarts'}.`;
+        permissionRulesMessage.value = `Answer set to ${scope === 'always' ? 'Persistent' : 'Session (until restart)'}.`;
     } catch (reason) {
       if (selectedProjectId.value === projectId)
         permissionRulesMessage.value = `Could not change how long the answer is remembered. ${reason instanceof Error ? reason.message : String(reason)}`;

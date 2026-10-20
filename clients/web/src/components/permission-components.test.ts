@@ -374,14 +374,15 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('data-truncate="middle"');
     expect(markup).toContain('kui-text__truncate-tail">12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Deny · Always');
+    expect(markup).toContain('Denied · Persistent');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
     expect(markup).not.toContain('rm -rf build');
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
     expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(1);
-    expect(markup).toContain('aria-label="Remember Bash request · 87654321 until server restart"');
+    expect(markup).toContain('aria-label="Set Bash request · 87654321 to Session"');
+    expect(markup).toContain('Set Session');
     expect(markup).toMatch(
       /aria-label="Revoke Bash request · 87654321"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash request · 87654321"/,
     );

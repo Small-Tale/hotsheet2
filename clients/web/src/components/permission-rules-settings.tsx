@@ -43,8 +43,8 @@ export function permissionRulesPage(rules: readonly PermissionRule[], query: str
 
 const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   chat: 'This chat only, until it closes',
-  session: 'Until the server restarts',
-  always: 'Always',
+  session: 'Session (until restart)',
+  always: 'Persistent',
 };
 
 /** Opaque ID distinguishes otherwise similar rules without exposing command/path text. */
@@ -69,7 +69,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
-        label = ruleLabel(rule.tool, rule.action);
+        label = ruleLabel(rule.tool, rule.action),
+        targetScope = rule.scope === 'session' ? 'Persistent' : 'Session';
       return (
         <Row
           vAlign="middle"
@@ -108,7 +109,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 {label}
               </Text>
               <Text tone="quiet" size="compact" flush>
-                {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
+                {`${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
               </Text>
             </List>
           </div>
@@ -122,10 +123,10 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 'data-scope': rule.scope === 'session' ? 'always' : 'session',
               }}
               disabled={revoking.includes(key) || dialog?.busy}
-              ariaLabel={`Remember ${label} ${rule.scope === 'session' ? 'always' : 'until server restart'}`}
-              title={rule.scope === 'session' ? 'Change to Always' : 'Change to Until Server Restarts'}
+              ariaLabel={`Set ${label} to ${targetScope}`}
+              title={`Set to ${targetScope}`}
             >
-              {rule.scope === 'session' ? 'Always' : 'Session'}
+              {`Set ${targetScope}`}
             </Button>
           )}
           <Button

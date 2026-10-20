@@ -940,7 +940,8 @@ the in-memory answer or lifetime changes, and a failed write leaves the live rul
 Permissions lists only the selected project's remembered answers by tool, scope,
 decision, and a short fingerprint identifier, with command/path details hidden and each rule
 revocable. Each project-wide row in the recent and full lists can switch between
-Until the server restarts and Always; the new duration appears immediately and survives
+Session (until restart) and Persistent; the action names its target scope (HS2-BTPTWK).
+The new duration appears immediately and survives
 a reload according to its lifetime. The full list supports selecting individual answers or a visible page, then
 applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
