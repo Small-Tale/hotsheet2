@@ -2,10 +2,11 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDevLatencyLog, devLatencyLogPath } from './dev-latency-log';
 import { createDevApp } from './dev-server';
+import { projectSessionRegistry } from './project-bridge';
 
 const report = (label: string, duration_ms = 420) => ({
   at: '2026-10-16T00:00:00.000Z',
@@ -117,5 +118,29 @@ describe('dev bridge latency route', () => {
     expect(await bad.json()).toEqual({ error: 'reports must be an array' });
     expect((await app(false).request('/__hotsheet/dev/latency')).status).toBe(404);
     expect((await app(false).request('/__hotsheet/dev/latency', { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+
+  it('adds correlation and bridge stages only to a development project API response', async () => {
+    const registry = projectSessionRegistry(),
+      project = 'timing-fixture-project',
+      fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(Response.json({ requests: [] }, { headers: { 'server-timing': 'handler;dur=0.5' } }));
+    registry.set(project, { url: 'http://127.0.0.1:19999', secret: 'private-fixture', storeIds: [] });
+    try {
+      const path = `/__hotsheet/project-api/${project}/permissions`;
+      const response = await app(true).request(path);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ requests: [] });
+      expect(response.headers.get('server-timing')).toMatch(
+        /handler;dur=0\.5, bridge;dur=[\d.]+, bridge_queue;dur=[\d.]+, upstream;dur=[\d.]+/,
+      );
+      expect(response.headers.get('x-hotsheet-trace-id')).toMatch(/^[\da-f-]{36}$/);
+      expect(response.headers.get('server-timing')).not.toContain('private-fixture');
+      expect((await app(false).request(path)).status).toBe(404);
+    } finally {
+      fetchMock.mockRestore();
+      registry.delete(project);
+    }
   });
 });

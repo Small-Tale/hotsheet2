@@ -21,6 +21,16 @@ browser flows in `tests/providers.spec.ts`, `tests/project-startup.spec.ts`, and
 `tests/change-poll-mux.spec.ts` cover the composed collection and change-stream
 surfaces. Native runners remain future client work.
 
+HS2-WSW9PB adds development-only request-stage tracing. Unit tests in
+`dev-request-timing.test.ts`, `dev-latency.test.ts`, and
+`dev-latency-log.test.ts` check bridge stage headers, random correlation IDs,
+privacy, and parsed durations. `tests/dev-latency.spec.ts` exercises headers,
+body, and next-paint timings through the running browser at wide and phone
+sizes. A live three-project profile captured idle reads, a 24-request burst,
+and browser connection saturation under six long polls. The ordinary burst
+stayed below 21 ms; the saturated permission reads waited 7.8 s before bridge
+receipt. `HS2-TVASVW` covers the direct-poll fallback's connection use.
+
 HS2-E9AWV8 covers the first versioned client transport contract. The route
 inventory check in `clients/web/tests/contracts.spec.ts` compares every server
 router path and method to OpenAPI, then validates compatibility, ticket, row,

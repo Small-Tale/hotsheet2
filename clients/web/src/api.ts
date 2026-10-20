@@ -1048,16 +1048,22 @@ export class Api {
     const trackBusy = trackRequest && this.trackBusy;
     if (trackBusy) beginServerRequest(describeServerRequest(init.method ?? 'GET', path));
     const observed = trackRequest ? observeRequest(init.method ?? 'GET', path) : undefined;
+    const dispatchedAt = observed ? performance.now() : undefined;
     let response: Response | undefined;
+    let headersAt: number | undefined;
     try {
       response = await fetch(`${this.origin}${path}`, { ...init, headers });
+      if (observed) headersAt = performance.now();
       if (!response.ok)
         throw new ApiHttpError(errorMessageOf(await responseJson(response)) ?? `${response.status}`, response.status);
       onResponse?.(response);
       return response.status === 204 ? undefined : await responseJsonBody(response);
     } finally {
       // After the body is read, so the timing covers the whole response (HS2-ZGBQ5Q).
-      observed?.(response);
+      observed?.(response, {
+        ...(dispatchedAt === undefined || headersAt === undefined ? {} : { headers_ms: headersAt - dispatchedAt }),
+        ...(headersAt === undefined ? {} : { body_ms: performance.now() - headersAt }),
+      });
       if (trackBusy) endServerRequest();
     }
   }

@@ -11,6 +11,7 @@ import {
   type LatencySample,
   requestRouteLabel,
   serverHandlerMs,
+  serverTimingMs,
   summarizeViolation,
 } from './dev-latency';
 
@@ -97,6 +98,8 @@ describe('request classification', () => {
     expect(serverHandlerMs('handler;dur=abc')).toBeUndefined();
     expect(serverHandlerMs('total;dur=4')).toBeUndefined();
     expect(serverHandlerMs(null)).toBeUndefined();
+    expect(serverTimingMs('handler;dur=1, bridge;dur=27.25, upstream;dur=2', 'bridge')).toBe(27.25);
+    expect(serverTimingMs('handler;dur=1', 'bridge')).toBeUndefined();
   });
 });
 

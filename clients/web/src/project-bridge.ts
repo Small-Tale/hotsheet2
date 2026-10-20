@@ -1629,6 +1629,8 @@ export async function proxyProjectRequest(
   request: Request,
   /** Cancels the upstream request; only the change multiplexer passes one (HS2-6W1NNF). */
   signal?: AbortSignal,
+  /** Development bridge timing hook; absent in the production host. */
+  mark?: (phase: 'dispatch' | 'headers') => void,
 ): Promise<Response> {
   const target = sessions.get(projectId);
   if (!target) return Response.json({ error: 'Project session is not open.' }, { status: 404 });
@@ -1642,6 +1644,7 @@ export async function proxyProjectRequest(
     (request.method === 'PUT' || request.method === 'DELETE' || request.method === 'PATCH') &&
     !serverPath.split('?')[0].endsWith('/color');
   const forward = async () => {
+    mark?.('dispatch');
     const response = await fetch(authenticatedServerUrl(target.url, serverPath, target.secret), {
       method: request.method,
       headers,
@@ -1649,6 +1652,7 @@ export async function proxyProjectRequest(
       redirect: 'manual',
       ...(signal ? { signal } : {}),
     });
+    mark?.('headers');
     if (response.ok && sourceMutation) await refreshChangeStoreMembership(target);
     return new Response(response.body, { status: response.status, headers: response.headers });
   };

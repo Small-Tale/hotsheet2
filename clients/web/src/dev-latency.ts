@@ -44,6 +44,16 @@ export interface RequestTiming {
   server_ms?: number;
 }
 
+export interface RequestStageTiming {
+  headers_ms?: number;
+  body_ms?: number;
+  paint_ms?: number;
+  bridge_ms?: number;
+  bridge_queue_ms?: number;
+  upstream_ms?: number;
+  browser_before_request_ms?: number;
+}
+
 export interface LatencySample {
   kind: LatencyKind;
   label: string;
@@ -52,6 +62,10 @@ export interface LatencySample {
   requests?: RequestTiming[];
   /** Server handler time (requests only). */
   server_ms?: number;
+  /** Random development bridge correlation id. Never derived from a URL or request body. */
+  trace_id?: string;
+  /** Development-only stage durations; absent when a stage could not be observed. */
+  stages?: RequestStageTiming;
 }
 
 export interface LatencyViolation {
@@ -154,12 +168,12 @@ export function requestRouteLabel(method: string, path: string): string {
   return `${method.toUpperCase()} ${segments.join('/') || '/'}`;
 }
 
-/** The `handler` duration from a `Server-Timing` header, if present. */
-export function serverHandlerMs(header: string | null | undefined): number | undefined {
+/** One named duration from a `Server-Timing` header, if present. */
+export function serverTimingMs(header: string | null | undefined, metric: string): number | undefined {
   if (!header) return undefined;
   for (const entry of header.split(',')) {
     const [name, ...params] = entry.trim().split(';');
-    if (name.trim() !== 'handler') continue;
+    if (name.trim() !== metric) continue;
     for (const param of params) {
       const [key, value = ''] = param.trim().split('=');
       if (key === 'dur' && value) {
@@ -169,6 +183,10 @@ export function serverHandlerMs(header: string | null | undefined): number | und
     }
   }
   return undefined;
+}
+
+export function serverHandlerMs(header: string | null | undefined): number | undefined {
+  return serverTimingMs(header, 'handler');
 }
 
 export interface InteractionTrackerOptions {

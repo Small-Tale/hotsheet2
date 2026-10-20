@@ -10,6 +10,7 @@ import {
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createDevLatencyLog } from './dev-latency-log';
+import { traceDevBridgeRequest } from './dev-request-timing';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
@@ -230,10 +231,14 @@ export function createDevApp(
     if (!dev) return context.notFound();
     const prefix = `/__hotsheet/project-api/${encodeURIComponent(context.req.param('project'))}`;
     const path = context.req.path.slice(prefix.length) || '/';
-    return proxyProjectRequest(
-      context.req.param('project'),
-      `${path}${new URL(context.req.url).search}`,
-      context.req.raw,
+    return traceDevBridgeRequest((mark) =>
+      proxyProjectRequest(
+        context.req.param('project'),
+        `${path}${new URL(context.req.url).search}`,
+        context.req.raw,
+        undefined,
+        mark,
+      ),
     );
   });
   app.post('/__hotsheet/projects/:project/corrupt-tickets/reveal', async (context) => {

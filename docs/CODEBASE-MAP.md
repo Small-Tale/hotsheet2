@@ -70,6 +70,12 @@ transitions, validation, group retention/reorder, and project-keyed save timing
 and response guards. `features/commands.tsx` adapts that workflow to project
 signals, API calls, prompts, popovers, and the rendered command surfaces.
 
+Development request-stage tracing lives in `clients/web/src/dev-request-timing.ts`
+(bridge header marks), `request-observer.ts` and `api.ts` (browser milestones),
+and `dev-latency-entry.ts` (slow-report correlation). Its durable log is served
+by `dev-server.ts` through `dev-latency-log.ts`; production does not install the
+browser observer or enter the development proxy route.
+
 ## Directory tree
 
 ```

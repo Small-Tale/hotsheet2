@@ -559,8 +559,14 @@ preview/download, server directory browser) are separate design work.
   sync, project open) are not waited for, so only their immediate feedback is judged.
   Every API request other than idle long polls is also judged on its own against the
   same budget. Timed server routes return `Server-Timing: handler;dur=<ms>`, so each
-  report separates server handler time from browser, bridge, or queueing time. Route
-  labels template ids out (`GET /checkouts/{id}/tickets/{id}`).
+  report separates server handler time from browser, bridge, or queueing time.
+  In development, the project API bridge appends `bridge`, `bridge_queue`, and
+  `upstream` durations to that header and a random trace id. Request reports
+  record dispatch-to-headers, body read/parse, next paint, and the browser's
+  Resource Timing pre-request interval when available. The fields are absent
+  when the corresponding stage cannot be observed. Route labels template ids
+  out (`GET /checkouts/{id}/tickets/{id}`); reports never include request bodies,
+  secrets, or full URLs.
   Each violation produces:
   - a `[hotsheet dev latency]` console warning with the full detail;
   - a non-blocking, dismissible Web Awesome warning toast (bottom-start, 8 s, one at a

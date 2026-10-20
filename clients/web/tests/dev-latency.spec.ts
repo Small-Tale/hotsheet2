@@ -9,6 +9,8 @@ interface Report {
   reasons: string[];
   requests?: { label: string; duration_ms: number; server_ms?: number }[];
   server_ms?: number;
+  trace_id?: string;
+  stages?: { headers_ms?: number; body_ms?: number; paint_ms?: number; bridge_ms?: number; upstream_ms?: number };
   message: string;
 }
 
@@ -69,7 +71,14 @@ for (const viewport of [
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
           });
-          await route.fulfill({ response });
+          await route.fulfill({
+            response,
+            headers: {
+              ...response.headers(),
+              'server-timing': `${response.headers()['server-timing'] ?? 'handler;dur=1'}, bridge;dur=5, upstream;dur=3`,
+              'x-hotsheet-trace-id': 'trace-fixture',
+            },
+          });
         } catch {
           await route.abort().catch(() => undefined);
         }
@@ -101,8 +110,17 @@ for (const viewport of [
       expect(slowRequest?.server_ms).toBeLessThan(400);
       expect(interaction.message).toContain('slowest request GET');
       // The slow request is flagged on its own too, with ids templated out.
+      await expect
+        .poll(async () => (await reports(page)).slice(before).find((report) => report.kind === 'request'))
+        .toBeTruthy();
       const request = (await reports(page)).slice(before).find((report) => report.kind === 'request')!;
       expect(request.label).not.toContain(ticket.id);
+      expect(request.stages?.headers_ms).toBeGreaterThanOrEqual(400);
+      expect(request.stages?.body_ms).toBeGreaterThanOrEqual(0);
+      expect(request.stages?.paint_ms).toBeGreaterThanOrEqual(0);
+      expect(request.stages?.bridge_ms).toBe(5);
+      expect(request.stages?.upstream_ms).toBe(3);
+      expect(request.trace_id).toBe('trace-fixture');
 
       // Visible, non-blocking dev indicator.
       const toast = page.locator('[data-dev-latency-toast]');

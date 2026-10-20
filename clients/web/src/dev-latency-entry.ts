@@ -23,7 +23,9 @@ import {
   type LatencySample,
   type LatencyViolation,
   requestRouteLabel,
+  type RequestStageTiming,
   serverHandlerMs,
+  serverTimingMs,
   summarizeViolation,
 } from './dev-latency';
 import { setRequestObserver } from './request-observer';
@@ -36,6 +38,8 @@ export interface DevLatencyReport {
   reasons: LatencyViolation['reasons'];
   average_ms: number;
   server_ms?: number;
+  trace_id?: string;
+  stages?: RequestStageTiming;
   requests?: LatencySample['requests'];
   message: string;
 }
@@ -112,6 +116,8 @@ export function installDevLatencyMonitor(): () => void {
       reasons: violation.reasons,
       average_ms: Math.round(violation.average_ms),
       ...(sample.server_ms === undefined ? {} : { server_ms: Math.round(sample.server_ms) }),
+      ...(sample.trace_id === undefined ? {} : { trace_id: sample.trace_id }),
+      ...(sample.stages === undefined ? {} : { stages: sample.stages }),
       ...(sample.requests?.length ? { requests: sample.requests } : {}),
       message,
     };
@@ -158,12 +164,57 @@ export function installDevLatencyMonitor(): () => void {
       longRunning = isLongRunningRequest(method, path),
       started = performance.now(),
       end = tracker.requestStarted(label, longRunning);
-    return (response) => {
+    return (response, milestones) => {
       const duration_ms = performance.now() - started,
-        server_ms = serverHandlerMs(response?.headers.get('server-timing'));
+        timing = response?.headers.get('server-timing'),
+        server_ms = serverHandlerMs(timing),
+        trace_id = response?.headers.get('x-hotsheet-trace-id') ?? undefined,
+        resource = response && performance.getEntriesByName(response.url).at(-1),
+        beforeRequest =
+          resource instanceof PerformanceResourceTiming && resource.requestStart >= resource.startTime
+            ? resource.requestStart - resource.startTime
+            : undefined,
+        stages: RequestStageTiming = {
+          ...milestones,
+          ...stage('bridge_ms', 'bridge'),
+          ...stage('bridge_queue_ms', 'bridge_queue'),
+          ...stage('upstream_ms', 'upstream'),
+          ...(beforeRequest === undefined ? {} : { browser_before_request_ms: beforeRequest }),
+        };
+      function stage(key: keyof RequestStageTiming, metric: string): Partial<RequestStageTiming> {
+        const value = serverTimingMs(timing, metric);
+        return value === undefined ? {} : { [key]: value };
+      }
       end({ label, duration_ms, ...(server_ms === undefined ? {} : { server_ms }) });
-      if (!longRunning)
-        judge({ kind: 'request', label, duration_ms, ...(server_ms === undefined ? {} : { server_ms }) });
+      if (!longRunning) {
+        const sample: LatencySample = {
+          kind: 'request',
+          label,
+          duration_ms,
+          ...(server_ms === undefined ? {} : { server_ms }),
+          ...(trace_id === undefined ? {} : { trace_id }),
+          stages,
+        };
+        if (document.visibilityState !== 'visible') judge(sample);
+        else {
+          const settledAt = performance.now();
+          let delivered = false;
+          const deliver = (paint_ms?: number) => {
+            if (delivered) return;
+            delivered = true;
+            judge({ ...sample, stages: { ...stages, ...(paint_ms === undefined ? {} : { paint_ms }) } });
+          };
+          const fallback = setTimeout(() => {
+            deliver();
+          }, 250);
+          requestAnimationFrame(() => {
+            clearTimeout(fallback);
+            setTimeout(() => {
+              deliver(performance.now() - settledAt);
+            }, 0);
+          });
+        }
+      }
     };
   });
 
