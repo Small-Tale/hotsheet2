@@ -8,6 +8,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
@@ -24,6 +25,8 @@ export interface PermissionRulesSettingsProps {
   dialog?: {
     query: string;
     visibleCount: number;
+    lifetime?: PermissionRuleLifetimeFilter;
+    decision?: PermissionRuleDecisionFilter;
     selected?: readonly string[];
     busy?: boolean;
     confirmingDelete?: boolean;
@@ -34,14 +37,32 @@ export interface PermissionRulesSettingsProps {
 }
 
 export const PERMISSION_RULE_BATCH_SIZE = 100;
+export type PermissionRuleLifetimeFilter = 'permanent' | 'session';
+export type PermissionRuleDecisionFilter = 'allow' | 'deny';
+export interface PermissionRuleFilters {
+  lifetime: PermissionRuleLifetimeFilter;
+  decision: PermissionRuleDecisionFilter;
+}
 
 /** The API returns oldest first. Search only fields displayed to the user, never raw actions. */
-export function permissionRulesList(rules: readonly PermissionRule[], query: string, requestedVisibleCount: number) {
+export function permissionRulesList(
+  rules: readonly PermissionRule[],
+  query: string,
+  requestedVisibleCount: number,
+  filters?: PermissionRuleFilters,
+) {
   const term = query.trim().toLocaleLowerCase(),
-    matches = [...rules].reverse().filter((rule) => {
-      const safeText = `${ruleLabel(rule.tool, rule.action)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
-      return safeText.toLocaleLowerCase().includes(term);
-    }),
+    matches = [...rules]
+      .reverse()
+      .filter(
+        (rule) =>
+          (!filters || (filters.lifetime === 'permanent' ? rule.scope === 'always' : rule.scope !== 'always')) &&
+          (!filters || rule.decision === filters.decision),
+      )
+      .filter((rule) => {
+        const safeText = `${ruleLabel(rule.tool, rule.action)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
+        return safeText.toLocaleLowerCase().includes(term);
+      }),
     visibleCount = Math.min(
       Math.max(
         PERMISSION_RULE_BATCH_SIZE,
@@ -73,7 +94,11 @@ function ruleLabel(tool: string, action: string) {
  */
 export function PermissionRulesSettings({ rules, dialog, revoking = [], message = '' }: PermissionRulesSettingsProps) {
   const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
-    list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount) : undefined,
+    filters: PermissionRuleFilters = {
+      lifetime: dialog?.lifetime ?? 'permanent',
+      decision: dialog?.decision ?? 'allow',
+    },
+    list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount, filters) : undefined,
     selected = new Set(dialog?.selected ?? []),
     selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length,
     visibleSelected = list?.rows.length ? list.rows.every((rule) => selected.has(permissionRuleKey(rule))) : false;
@@ -213,6 +238,30 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             }
           >
             <List gap="m">
+              <Row gap="xs" wrap>
+                <SegmentedControl<PermissionRuleLifetimeFilter>
+                  id="permission-rule-lifetime"
+                  label="Answer lifetime"
+                  value={filters.lifetime}
+                  choices={[
+                    { value: 'permanent', label: 'Permanent' },
+                    { value: 'session', label: 'Session', title: 'Session and chat-only answers' },
+                  ]}
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleLifetime.value}
+                  disabled={dialog?.busy}
+                />
+                <SegmentedControl<PermissionRuleDecisionFilter>
+                  id="permission-rule-decision"
+                  label="Answer decision"
+                  value={filters.decision}
+                  choices={[
+                    { value: 'allow', label: 'Allow' },
+                    { value: 'deny', label: 'Disallow' },
+                  ]}
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleDecision.value}
+                  disabled={dialog?.busy}
+                />
+              </Row>
               <TextField
                 name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.value}
                 type="search"
@@ -231,6 +280,9 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   {visibleSelected ? 'Deselect Shown' : 'Select Shown'}
                 </Button>
                 <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>
+                <Text tone="quiet" size="compact">
+                  {`${list.matches.length} ${list.matches.length === 1 ? 'answer' : 'answers'}`}
+                </Text>
                 {selectedCount > 0 && (
                   <Button
                     emphasis="plain"

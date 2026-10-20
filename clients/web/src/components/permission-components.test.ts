@@ -283,7 +283,14 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     const dialog = String(
       PermissionRulesSettings({
         rules,
-        dialog: { query: '', visibleCount: PERMISSION_RULE_BATCH_SIZE, selected: [selectedKey], busy: true },
+        dialog: {
+          query: '',
+          visibleCount: PERMISSION_RULE_BATCH_SIZE,
+          lifetime: 'session',
+          decision: 'deny',
+          selected: [selectedKey],
+          busy: true,
+        },
       }),
     );
     expect(dialog).toContain('data-rule-selected="true"');
@@ -297,7 +304,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
       3,
     );
     expect(dialog.match(/class="permission-rules-settings__answer"><button[^>]*class="kui-list-item"/g)).toHaveLength(
-      15,
+      9,
     );
     expect(preview).toMatch(/class="kui-list-item__icon"><svg data-lucide="shield-/u);
     expect(dialog).toMatch(
@@ -322,8 +329,39 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(permissionRulesList([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 100).rows).toEqual([]);
   });
 
+  it('combines lifetime, decision, and search before batching (HS2-7Z3VWR)', () => {
+    const chatRule = { ...rules[0], connection: 'chat-a', scope: 'chat' as const };
+    const listRules = [...rules, chatRule];
+    expect(permissionRulesList(listRules, '', 100, { lifetime: 'permanent', decision: 'allow' }).matches).toHaveLength(
+      6,
+    );
+    expect(permissionRulesList(listRules, '', 100, { lifetime: 'session', decision: 'deny' }).matches).toHaveLength(6);
+    expect(permissionRulesList(listRules, '', 100, { lifetime: 'session', decision: 'allow' }).matches).toEqual([
+      chatRule,
+    ]);
+    expect(
+      permissionRulesList(listRules, '00000010', 100, { lifetime: 'permanent', decision: 'allow' }).matches,
+    ).toHaveLength(1);
+    expect(
+      permissionRulesList(listRules, '00000010', 100, { lifetime: 'session', decision: 'allow' }).matches,
+    ).toHaveLength(0);
+    const one = String(
+      PermissionRulesSettings({
+        rules: listRules,
+        dialog: { query: '00000010', visibleCount: 100, lifetime: 'permanent', decision: 'allow' },
+      }),
+    );
+    expect(one).toContain('1 answer');
+    expect(one).not.toContain('1 answers');
+  });
+
   it('shows a scrollable list and accessible placeholder search (HS2-988X4X, HS2-4HTTMK)', () => {
-    const markup = String(PermissionRulesSettings({ rules, dialog: { query: 'deny', visibleCount: 100 } }));
+    const markup = String(
+      PermissionRulesSettings({
+        rules,
+        dialog: { query: 'deny', visibleCount: 100, lifetime: 'session', decision: 'deny' },
+      }),
+    );
     expect(markup).toContain('permission-rules-settings__all');
     expect(markup).not.toContain('Previous');
     expect(markup).not.toContain('Next');

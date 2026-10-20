@@ -4,7 +4,11 @@ import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
 import { updatePermissionCountdownText } from '../components/permission-request-card';
-import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList } from '../components/permission-rules-settings';
+import {
+  PERMISSION_RULE_BATCH_SIZE,
+  type PermissionRuleFilters,
+  permissionRulesList,
+} from '../components/permission-rules-settings';
 import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { Project } from '../interactions/types';
@@ -75,6 +79,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           projectId: string;
           query: string;
           visibleCount: number;
+          lifetime: PermissionRuleFilters['lifetime'];
+          decision: PermissionRuleFilters['decision'];
           selected?: readonly string[];
           busy?: boolean;
           confirmingDelete?: boolean;
@@ -371,7 +377,14 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   }
 
   function openPermissionRules(projectId: string) {
-    permissionRulesDialog.value = { projectId, query: '', visibleCount: PERMISSION_RULE_BATCH_SIZE, selected: [] };
+    permissionRulesDialog.value = {
+      projectId,
+      query: '',
+      visibleCount: PERMISSION_RULE_BATCH_SIZE,
+      lifetime: 'permanent',
+      decision: 'allow',
+      selected: [],
+    };
   }
 
   function closePermissionRules() {
@@ -388,6 +401,17 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       };
   }
 
+  function filterPermissionRules(projectId: string, filters: Partial<PermissionRuleFilters>) {
+    const current = permissionRulesDialog.value;
+    if (current?.projectId === projectId && !current.busy)
+      permissionRulesDialog.value = {
+        ...current,
+        ...filters,
+        visibleCount: PERMISSION_RULE_BATCH_SIZE,
+        confirmingDelete: false,
+      };
+  }
+
   function loadMorePermissionRules(projectId: string) {
     const current = permissionRulesDialog.value;
     if (current?.projectId !== projectId || current.busy) return;
@@ -396,6 +420,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         rules,
         current.query,
         current.visibleCount + PERMISSION_RULE_BATCH_SIZE,
+        current,
       ).visibleCount;
     permissionRulesDialog.value = { ...current, visibleCount };
   }
@@ -419,6 +444,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       permissionRulesByProject.value[projectId] ?? [],
       dialog.query,
       dialog.visibleCount,
+      dialog,
     ).rows;
     const selected = new Set(dialog.selected ?? []);
     const allSelected = rows.length > 0 && rows.every((rule) => selected.has(permissionRuleKey(rule)));
@@ -503,6 +529,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           permissionRulesByProject.value[projectId] ?? [],
           current.query,
           current.visibleCount,
+          current,
         ).visibleCount,
       };
       return true;
@@ -540,8 +567,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     if (dialog?.projectId === project.id)
       permissionRulesDialog.value = {
         ...dialog,
-        visibleCount: permissionRulesList(permissionRulesByProject.value[project.id], dialog.query, dialog.visibleCount)
-          .visibleCount,
+        visibleCount: permissionRulesList(
+          permissionRulesByProject.value[project.id],
+          dialog.query,
+          dialog.visibleCount,
+          dialog,
+        ).visibleCount,
       };
   }
 
@@ -608,6 +639,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
             permissionRulesByProject.value[projectId] ?? [],
             dialog.query,
             dialog.visibleCount,
+            dialog,
           ).visibleCount,
         };
       revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
@@ -631,6 +663,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
+    filterPermissionRules,
     loadMorePermissionRules,
     selectPermissionRule,
     selectVisiblePermissionRules,

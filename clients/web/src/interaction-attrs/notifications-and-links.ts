@@ -17,6 +17,8 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   changePermissionRuleScope: action('change-permission-rule-scope'),
   openPermissionRules: action('open-permission-rules'),
   loadMorePermissionRules: action('load-more-permission-rules'),
+  filterPermissionRuleLifetime: action('filter-permission-rule-lifetime'),
+  filterPermissionRuleDecision: action('filter-permission-rule-decision'),
   selectPermissionRule: action('select-permission-rule'),
   togglePermissionRuleRow: action('toggle-permission-rule-row'),
   selectVisiblePermissionRules: action('select-visible-permission-rules'),

@@ -8,6 +8,7 @@ import { createScope } from 'kerfjs/scope';
 import { KeyboardSettings } from '../components/keyboard-settings';
 import {
   PERMISSION_RULE_BATCH_SIZE,
+  type PermissionRuleFilters,
   permissionRulesList,
   PermissionRulesSettings,
 } from '../components/permission-rules-settings';
@@ -290,6 +291,8 @@ const permissionRulesDemoDialog = signal<
   | {
       query: string;
       visibleCount: number;
+      lifetime: PermissionRuleFilters['lifetime'];
+      decision: PermissionRuleFilters['decision'];
       selected?: readonly string[];
       confirmingDelete?: boolean;
     }
@@ -456,19 +459,63 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector}`,
       () => {
-        permissionRulesDemoDialog.value = { query: '', visibleCount: PERMISSION_RULE_BATCH_SIZE, selected: [] };
+        permissionRulesDemoDialog.value = {
+          query: '',
+          visibleCount: PERMISSION_RULE_BATCH_SIZE,
+          lifetime: 'permanent',
+          decision: 'allow',
+          selected: [],
+        };
       },
     ),
   );
   demoListeners.add(
     delegate(root, 'input', '[data-demo-permission-rules] [name="permission-rule-search"]', (_event, target) => {
+      const state = permissionRulesDemoDialog.value;
+      if (!state) return;
       permissionRulesDemoDialog.value = {
-        ...permissionRulesDemoDialog.value,
+        ...state,
         query: (target as FormControl).value,
         visibleCount: PERMISSION_RULE_BATCH_SIZE,
         confirmingDelete: false,
       };
     }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleLifetime.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value,
+          lifetime = (target as HTMLElement).dataset.segmentValue;
+        if (state && (lifetime === 'permanent' || lifetime === 'session'))
+          permissionRulesDemoDialog.value = {
+            ...state,
+            lifetime,
+            visibleCount: PERMISSION_RULE_BATCH_SIZE,
+            confirmingDelete: false,
+          };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleDecision.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value,
+          decision = (target as HTMLElement).dataset.segmentValue;
+        if (state && (decision === 'allow' || decision === 'deny'))
+          permissionRulesDemoDialog.value = {
+            ...state,
+            decision,
+            visibleCount: PERMISSION_RULE_BATCH_SIZE,
+            confirmingDelete: false,
+          };
+      },
+    ),
   );
   demoListeners.add(
     delegate(
@@ -484,6 +531,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
               permissionRulesDemoRules.value,
               state.query,
               state.visibleCount + PERMISSION_RULE_BATCH_SIZE,
+              state,
             ).visibleCount,
           };
       },
@@ -531,7 +579,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
         const state = permissionRulesDemoDialog.value;
         if (!state) return;
         const selected = new Set(state.selected ?? []),
-          rows = permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount).rows,
+          rows = permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount, state).rows,
           all = rows.every((rule) => selected.has(permissionRuleKey(rule)));
         for (const rule of rows) {
           const key = permissionRuleKey(rule);
@@ -608,7 +656,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           ...state,
           selected: [],
           confirmingDelete: false,
-          visibleCount: permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount)
+          visibleCount: permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount, state)
             .visibleCount,
         };
       },

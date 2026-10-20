@@ -2669,6 +2669,11 @@ The settings view uses a Kerf ListHeader for the Remembered answers section and 
 the three most recently remembered answers, newest first. A list item with a chevron opens
 the searchable dialog (HS2-Q6GKWQ), which starts with 100 answers in a bounded scrolling list
 and loads another 100 on request, still newest first (HS2-988X4X).
+Two segmented controls filter the dialog by Persistent or Session and by Allow or Disallow,
+defaulting to Persistent and Allow. Session includes chat-only answers, whose exact lifetime
+remains in their row. Filters combine with search before batching; changing one resets the
+visible window to 100 and keeps the query and selection across views. The current result
+count appears beside selection controls (HS2-7Z3VWR).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. Selecting a dialog row toggles its checkbox; the duration and revoke
 buttons remain separate sibling controls (HS2-1Q8EF7).

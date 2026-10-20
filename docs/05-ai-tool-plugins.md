@@ -943,8 +943,11 @@ revocable. Each project-wide row in the recent and full lists can switch between
 Session (until restart) and Persistent; the action names its target scope (HS2-BTPTWK).
 The new duration appears immediately and survives
 a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
-loads 100 more on request, and supports selecting individual answers or all shown answers, then
-applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
+loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
+includes chat-only rules, with their exact scope still shown in the row. The filters and search
+determine the result count and loaded rows; changing a filter resets the loaded window but keeps
+selections. Users can select individual answers or all shown answers, apply Allow or Deny to mixed
+selections, or delete them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`

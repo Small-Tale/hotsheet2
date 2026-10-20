@@ -792,7 +792,7 @@ test('lets the remembered-answer demo search and dismiss its scrollable dialog (
   await expect(dialog).toBeVisible();
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
-  ).toHaveCount(6);
+  ).toHaveCount(1);
   const firstDialogRow = dialog
     .getByRole('list', { name: 'All Remembered Answers' })
     .locator('[data-action="toggle-permission-rule-row"]')
@@ -817,10 +817,11 @@ test('lets the remembered-answer demo search and dismiss its scrollable dialog (
   await dialog.screenshot({ path: 'target/visual-captures/hs2-m97dkr-remembered-dialog-narrow.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-4httmk-filter-narrow.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('WebFetch');
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
 });
@@ -847,12 +848,14 @@ test('lets the remembered-answer demo edit and confirm deletion of shown answers
   await dialog.getByRole('button', { name: 'Select Shown' }).click();
   const firstRule = dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first();
   await firstRule.uncheck();
-  await expect(dialog).toContainText('5 selected');
+  await expect(dialog).toContainText('0 selected');
+  await firstRule.check();
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
   await expect(dialog).toContainText('0 selected');
+  await dialog.locator('[data-action="filter-permission-rule-decision"][data-segment-value="deny"]').click();
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Denied ·', { exact: false }),
-  ).toHaveCount(5);
+  ).toHaveCount(2);
   await dialog.getByRole('button', { name: 'Select Shown' }).click();
   await firstRule.uncheck();
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();

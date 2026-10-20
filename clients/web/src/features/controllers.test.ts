@@ -296,6 +296,8 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
       projectId: 'a',
       query: 'Bash',
       visibleCount: 100,
+      lifetime: 'permanent',
+      decision: 'allow',
       selected: [],
       confirmingDelete: false,
     });
@@ -306,6 +308,8 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
       projectId: 'b',
       query: '',
       visibleCount: 100,
+      lifetime: 'permanent',
+      decision: 'allow',
       selected: [],
     });
     expect(owner.permissionRulesDialogFor('b', false)).toBeUndefined();
@@ -365,7 +369,19 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
     owner.openPermissionRules('a');
     owner.selectVisiblePermissionRules('a');
+    owner.filterPermissionRules('a', { lifetime: 'session' });
+    owner.selectVisiblePermissionRules('a');
+    owner.filterPermissionRules('a', { decision: 'deny' });
+    owner.selectVisiblePermissionRules('a');
     expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(3);
+    owner.requestDeleteSelectedPermissionRules('a', true);
+    expect(owner.permissionRulesDialogFor('a', true)?.confirmingDelete).toBe(true);
+    owner.filterPermissionRules('a', { decision: 'deny' });
+    expect(owner.permissionRulesDialogFor('a', true)).toMatchObject({
+      selected: expect.any(Array),
+      confirmingDelete: false,
+      visibleCount: 100,
+    });
     await owner.applySelectedPermissionRules('a', 'deny');
     expect(owner.permissionRules('a').map((rule) => [rule.decision, rule.scope])).toEqual([
       ['deny', 'chat'],
@@ -377,6 +393,11 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     failTwo = false;
     await owner.applySelectedPermissionRules('a', 'allow');
     expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
+    owner.filterPermissionRules('a', { lifetime: 'permanent', decision: 'deny' });
+    owner.selectVisiblePermissionRules('a');
+    owner.filterPermissionRules('a', { lifetime: 'session', decision: 'allow' });
+    owner.selectVisiblePermissionRules('a');
+    owner.filterPermissionRules('a', { decision: 'deny' });
     owner.selectVisiblePermissionRules('a');
     await owner.applySelectedPermissionRules('a', 'delete');
     expect(owner.permissionRules('a')).toHaveLength(3);
@@ -455,6 +476,8 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
       projectId: 'b',
       query: '',
       visibleCount: 100,
+      lifetime: 'permanent',
+      decision: 'allow',
       selected: [],
     });
     expect(owner.permissionRulesMessage.value).toBe('');

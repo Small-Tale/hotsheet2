@@ -2,6 +2,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
+import { type PermissionRuleFilters } from '../components/permission-rules-settings';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
@@ -44,6 +45,7 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
+  readonly filterPermissionRules: (projectId: string, filters: Partial<PermissionRuleFilters>) => void;
   readonly loadMorePermissionRules: (projectId: string) => void;
   readonly selectPermissionRule: (projectId: string, key: string, checked: boolean) => void;
   readonly selectVisiblePermissionRules: (projectId: string) => void;
@@ -80,6 +82,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
+    filterPermissionRules,
     loadMorePermissionRules,
     selectPermissionRule,
     selectVisiblePermissionRules,
@@ -214,6 +217,29 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.loadMorePermissionRules.selector, () => {
       loadMorePermissionRules(selectedProjectId.value);
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleLifetime.selector,
+      (_event, target) => {
+        const lifetime = (target as HTMLElement).dataset.segmentValue;
+        if (lifetime === 'permanent' || lifetime === 'session')
+          filterPermissionRules(selectedProjectId.value, { lifetime });
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleDecision.selector,
+      (_event, target) => {
+        const decision = (target as HTMLElement).dataset.segmentValue;
+        if (decision === 'allow' || decision === 'deny') filterPermissionRules(selectedProjectId.value, { decision });
+      },
+    ),
   );
   lifetime.add(
     delegate(
