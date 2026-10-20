@@ -85,6 +85,7 @@ and don't imply reading order — read by group.
 | [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md)         | Review process for AI note ratings and concise, approved project guidance                                | Proposed (HS2-355565)                                     |
 | [19-format-compatibility.md](19-format-compatibility.md)           | Persisted-format and unsynchronized-rollout compatibility policy and guards                              | Implemented (pre-release baseline)                        |
 | [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md)   | Point-in-time audit of CLI commands vs MCP tools vs HTTP routes (2026-10-08)                             | Audit                                                     |
+| [25-client-state-boundaries.md](25-client-state-boundaries.md)     | Browser-coupled client rules, server authority, and extraction order (HS2-KHBRKE)                         | Audit                                                     |
 
 **C · Data & storage**
 
