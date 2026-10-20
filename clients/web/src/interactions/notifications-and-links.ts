@@ -227,6 +227,17 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ),
   );
   lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleRow.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (key) selectPermissionRule(selectedProjectId.value, key, target.getAttribute('aria-pressed') !== 'true');
+      },
+    ),
+  );
+  lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.selector, () => {
       selectVisiblePermissionRules(selectedProjectId.value);
     }),

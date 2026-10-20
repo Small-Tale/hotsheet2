@@ -793,6 +793,18 @@ test('lets the remembered-answer demo search and dismiss its scrollable dialog (
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
   ).toHaveCount(6);
+  const firstDialogRow = dialog
+    .getByRole('list', { name: 'All Remembered Answers' })
+    .locator('[data-action="toggle-permission-rule-row"]')
+    .first();
+  await firstDialogRow.click();
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first(),
+  ).toBeChecked();
+  await firstDialogRow.click();
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first(),
+  ).not.toBeChecked();
   await expect(dialog).not.toContainText('matching answers · newest first');
   await expect(dialog.getByRole('searchbox', { name: 'Search Remembered Answers' })).toHaveAttribute(
     'placeholder',

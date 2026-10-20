@@ -2669,6 +2669,9 @@ The settings view uses a Kerf ListHeader for the Remembered answers section and 
 the three most recently remembered answers, newest first. A list item with a chevron opens
 the searchable dialog (HS2-Q6GKWQ), which starts with 100 answers in a bounded scrolling list
 and loads another 100 on request, still newest first (HS2-988X4X).
+Preview and dialog answers use the same compact ListItem layout with the decision shield in
+its leading icon slot. Selecting a dialog row toggles its checkbox; the duration and revoke
+buttons remain separate sibling controls (HS2-1Q8EF7).
 Denied answers have a distinct background in both views; selection and keyboard focus remain
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label

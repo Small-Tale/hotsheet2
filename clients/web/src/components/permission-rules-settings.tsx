@@ -1,7 +1,6 @@
 import './permission-rules-settings.css';
 
 import { Button } from '@kerfjs/ui/button';
-import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
@@ -85,49 +84,48 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
         label = ruleLabel(rule.tool, rule.action),
         targetScope = rule.scope === 'session' ? 'Persistent' : 'Session';
       return (
-        <Row
-          vAlign="middle"
-          gap="m"
-          rootAttributes={{
-            'data-permission-rule': key,
-            'data-permission-rule-scope': rule.scope,
-            'data-permission-rule-decision': rule.decision,
-            'data-rule-selected': selectable && selected.has(key) ? 'true' : undefined,
-            'data-rule-disabled': dialog?.busy || revoking.includes(key) ? 'true' : undefined,
-            'data-selectable': selectable ? '' : undefined,
-          }}
+        <div
+          class="permission-rules-settings__rule"
+          data-permission-rule={key}
+          data-permission-rule-scope={rule.scope}
+          data-permission-rule-decision={rule.decision}
+          data-rule-selected={selectable && selected.has(key) ? 'true' : undefined}
+          data-rule-disabled={dialog?.busy || revoking.includes(key) ? 'true' : undefined}
+          data-selectable={selectable ? '' : undefined}
         >
           {selectable && (
             <div class="permission-rules-settings__selection">
-              <Checkbox
-                action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
-                rootAttributes={{ 'data-rule-key': key }}
+              <input
+                type="checkbox"
+                data-action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
+                data-rule-key={key}
                 checked={selected.has(key)}
                 disabled={dialog?.busy}
-                label={`Select ${label}`}
+                aria-label={`Select ${label}`}
               />
             </div>
           )}
-          <LucideIcon
-            icon={allowed ? ShieldCheck : ShieldX}
-            name={allowed ? 'shield-check' : 'shield-x'}
-            label={allowed ? 'Allowed' : 'Denied'}
-          />
           <div class="permission-rules-settings__answer">
-            <List gap="none" flex>
-              <Text
-                wrap="truncate"
-                truncate="middle"
-                truncateKeep={8}
-                title={`${label} — Action details hidden to protect sensitive values`}
-                flush
-              >
-                {label}
-              </Text>
-              <Text tone="quiet" size="compact" flush>
-                {`${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
-              </Text>
-            </List>
+            <ListItem
+              action={
+                selectable
+                  ? NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleRow.value
+                  : NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value
+              }
+              rootAttributes={{ 'data-rule-key': key }}
+              density="compact"
+              icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
+              label={
+                <Text variant="span" wrap="truncate" truncate="middle" truncateKeep={8} flush>
+                  {label}
+                </Text>
+              }
+              description={`${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
+              title={`${label} — Action details hidden to protect sensitive values`}
+              pressed={selectable ? selected.has(key) : undefined}
+              disabled={dialog?.busy || revoking.includes(key)}
+              accessibleLabel={`${selectable ? (selected.has(key) ? 'Deselect' : 'Select') : 'View'} ${label}`}
+            />
           </div>
           {rule.scope !== 'chat' && (
             <Button
@@ -155,7 +153,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             rootAttributes={{ 'data-rule-key': key }}
             icon={<LucideIcon icon={Trash2} name="trash-2" />}
           />
-        </Row>
+        </div>
       );
     });
   }

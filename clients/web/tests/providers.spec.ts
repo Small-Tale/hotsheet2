@@ -15221,6 +15221,8 @@ test('previews three recent permission answers and searches the scrollable full 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await expect(recent.locator('[data-component="list-item"]')).toHaveCount(3);
+  await expect(recent.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(3);
   const deniedBackground = await recent
     .locator('[data-permission-rule-decision="deny"]')
     .first()
@@ -15236,20 +15238,28 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(preview).not.toContainText('OtherProjectTool');
   await expect(preview.getByRole('button', { name: 'Show all 12 answers' })).toBeVisible();
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-wide.png' });
+  await preview.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-preview-wide.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.screenshot({ path: 'target/visual-captures/hs2-16xphh-settings-2048.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-q40bbv-settings-2048.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await preview.getByRole('button', { name: 'Show all 12 answers' }).click();
+  await recent.locator('[data-component="list-item"]').first().click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
     all = dialog.getByRole('list', { name: 'All Remembered Answers' }),
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(12);
+  await expect(all.locator('[data-component="list-item"]')).toHaveCount(12);
+  await expect(all.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(12);
+  await all.locator('[data-action="toggle-permission-rule-row"]').first().click();
+  await expect(all.getByRole('checkbox').first()).toBeChecked();
+  await all.locator('[data-action="toggle-permission-rule-row"]').first().click();
+  await expect(all.getByRole('checkbox').first()).not.toBeChecked();
   await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(6);
   await expect(dialog).not.toContainText('OtherProjectTool');
   await expect(dialog.getByRole('button', { name: /Load .* more answers/ })).toHaveCount(0);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-dialog-wide.png' });
   await search.fill('WebFetch');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
@@ -15268,10 +15278,12 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(firstFingerprint).toBeInViewport();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-phone.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-q40bbv-dialog-phone.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-dialog-phone.png' });
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-phone.png' });
   await preview.screenshot({ path: 'target/visual-captures/hs2-q40bbv-preview-phone.png' });
+  await preview.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-preview-phone.png' });
   await preview.getByRole('button', { name: 'Show all 11 answers' }).click();
   await expect(search).toHaveValue('');
   await page.keyboard.press('Escape');

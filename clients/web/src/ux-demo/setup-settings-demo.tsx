@@ -510,6 +510,22 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleRow.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value,
+          key = (target as HTMLElement).getAttribute('data-rule-key');
+        if (!state || !key) return;
+        const selected = new Set(state.selected ?? []);
+        if (selected.has(key)) selected.delete(key);
+        else selected.add(key);
+        permissionRulesDemoDialog.value = { ...state, selected: [...selected], confirmingDelete: false };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.selector}`,
       () => {
         const state = permissionRulesDemoDialog.value;

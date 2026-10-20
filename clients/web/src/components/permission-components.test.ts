@@ -290,6 +290,21 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(dialog).toContain('data-rule-disabled="true"');
   });
 
+  it('uses the same ListItem and leading shield slot in preview and dialog (HS2-1Q8EF7)', () => {
+    const preview = String(PermissionRulesSettings({ rules })),
+      dialog = String(PermissionRulesSettings({ rules, dialog: { query: '', visibleCount: 100 } }));
+    expect(preview.match(/class="permission-rules-settings__answer"><button[^>]*class="kui-list-item"/g)).toHaveLength(
+      3,
+    );
+    expect(dialog.match(/class="permission-rules-settings__answer"><button[^>]*class="kui-list-item"/g)).toHaveLength(
+      15,
+    );
+    expect(preview).toMatch(/class="kui-list-item__icon"><svg data-lucide="shield-/u);
+    expect(dialog).toMatch(
+      /data-action="toggle-permission-rule-row"[^]*class="kui-list-item__icon"><svg data-lucide="shield-/u,
+    );
+  });
+
   it('filters safe labels and moves through 100-row batches across shrink and refill', () => {
     const many = Array.from({ length: 205 }, (_, index) => ({
       ...rules[index % rules.length],
