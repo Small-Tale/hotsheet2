@@ -15548,7 +15548,7 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(rows).toHaveCount(100);
   await expect(dialog).not.toContainText('202 answers');
   await expect(rows.first()).not.toContainText('Allowed · Persistent');
-  const filterGroups = dialog.locator('.permission-rules-settings__filter');
+  const filterGroups = dialog.locator('.permission-rules-settings__filters > .kui-segmented-control');
   const wideWidths = await filterGroups.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
   expect(wideWidths).toHaveLength(2);
   expect(Math.abs(wideWidths[0] - wideWidths[1])).toBeLessThan(2);
@@ -15906,13 +15906,19 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByRole('button', { name: 'Show all 4 answers' }).click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]');
   await dialog.locator('[data-action="filter-permission-rule-decision"][data-segment-value="deny"]').click();
-  await expect(dialog).toContainText('Denied · Persistent');
+  await expect(
+    dialog.locator('[data-permission-rule-decision="deny"][data-permission-rule-scope="always"]'),
+  ).toHaveCount(1);
+  await expect(dialog.getByRole('button', { name: 'Permanent', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-btptwk-persistent-wide.png' });
   await dialog.getByRole('button', { name: 'More Actions for Bash request · 00000002' }).click();
   await page.getByRole('menuitem', { name: 'Set to Session' }).click();
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
-  await expect(dialog).toContainText('Denied · Session (until restart)');
+  await expect(
+    dialog.locator('[data-permission-rule-decision="deny"][data-permission-rule-scope="session"]'),
+  ).toHaveCount(1);
+  await expect(dialog.getByRole('button', { name: 'Session', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog).toContainText('Answer set to Session (until restart).');
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-phone.png' });

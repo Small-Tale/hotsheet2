@@ -276,7 +276,6 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 <SegmentedControl<PermissionRuleLifetimeFilter>
                   id="permission-rule-lifetime"
                   label="Answer lifetime"
-                  className="permission-rules-settings__filter"
                   layout="equal"
                   value={filters.lifetime}
                   choices={[
@@ -289,7 +288,6 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 <SegmentedControl<PermissionRuleDecisionFilter>
                   id="permission-rule-decision"
                   label="Answer decision"
-                  className="permission-rules-settings__filter"
                   layout="equal"
                   value={filters.decision}
                   choices={[

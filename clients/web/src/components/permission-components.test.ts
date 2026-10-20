@@ -377,9 +377,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(dialog.indexOf('aria-label="Search Remembered Answers"')).toBeLessThan(
       dialog.indexOf('permission-rules-settings__filters'),
     );
-    expect(
-      dialog.match(/class="kui-segmented-control permission-rules-settings__filter"[^>]*data-layout="equal"/g),
-    ).toHaveLength(2);
+    expect(dialog.match(/class="kui-segmented-control"[^>]*data-layout="equal"/g)).toHaveLength(2);
     expect(dialog).not.toContain('Allowed · Persistent');
     expect(dialog).not.toContain('Denied · Session (until restart)');
     expect(markup).toContain('Allowed · Persistent');

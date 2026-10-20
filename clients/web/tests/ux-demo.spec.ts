@@ -854,7 +854,7 @@ test('lets the remembered-answer demo edit and confirm deletion of shown answers
   await expect(dialog.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
   await dialog.locator('[data-action="filter-permission-rule-decision"][data-segment-value="deny"]').click();
   await expect(
-    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Denied ·', { exact: false }),
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule-decision="deny"]'),
   ).toHaveCount(2);
   await dialog.getByLabel('Scrollable Remembered Answers').focus();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');

@@ -10,11 +10,6 @@
   gap: var(--wa-space-xs);
 }
 
-.permission-rules-settings__filter {
-  width: 100%;
-  min-width: 0;
-}
-
 @media (max-width: 520px) {
   .permission-rules-settings__filters {
     grid-template-columns: minmax(0, 1fr);
