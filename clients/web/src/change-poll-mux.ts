@@ -32,6 +32,8 @@ export interface ChangePollMultiplexerOptions {
   clientId: string;
   /** SharedWorker v2: several tab clients may poll the same project in one browser request. */
   sharedAcrossClients?: boolean;
+  /** Older bridges have no mux endpoint, but still need bounded direct polling. */
+  directOnly?: boolean;
   parse(value: unknown): PollResponse;
   fetch?: typeof fetch;
   now?: () => number;
@@ -47,6 +49,7 @@ interface Pending {
   since?: number;
   deadline: number;
   signal?: AbortSignal;
+  directController: AbortController;
   direct: ChangePollFn;
   resolve(response: PollResponse): void;
   reject(reason: unknown): void;
@@ -59,6 +62,10 @@ interface InFlight {
 }
 
 const DEFAULT_TIMEOUT_MS = 25_000;
+/** Leave two HTTP/1.1 origin connections available for ordinary API work in direct fallback. */
+export const DIRECT_POLL_MAX_IN_FLIGHT = 4;
+/** Rotate queued projects rather than holding their place for the full long-poll deadline. */
+export const DIRECT_POLL_TIMEOUT_MS = 1_000;
 
 const abortError = (): Error => {
   const error = new Error('The change poll was aborted.');
@@ -93,6 +100,7 @@ export class ChangePollMultiplexer {
   private modeValue: ChangePollMuxMode = 'mux';
   private readonly pending = new Map<string, Pending>();
   private inflight: InFlight | undefined;
+  private readonly directActive = new Set<Pending>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
@@ -101,6 +109,7 @@ export class ChangePollMultiplexer {
   requests = 0;
 
   constructor(private readonly options: ChangePollMultiplexerOptions) {
+    if (options.directOnly) this.modeValue = 'direct';
     this.fetcher = options.fetch ?? ((input, init) => fetch(input, init));
     this.now = options.now ?? Date.now;
     this.coalesceMs = options.coalesceMs ?? 5;
@@ -138,7 +147,6 @@ export class ChangePollMultiplexer {
     clientId = this.options.clientId,
   ): Promise<PollResponse> {
     if (signal?.aborted) return Promise.reject(abortError());
-    if (this.modeValue === 'direct') return direct(since, signal, timeoutMs);
     return new Promise<PollResponse>((resolve, reject) => {
       const key = this.key(project, clientId);
       // A transport polls sequentially, so a second poll for a project supersedes the first.
@@ -153,6 +161,7 @@ export class ChangePollMultiplexer {
           entry.reject(abortError());
         });
         if (this.inflight?.members.get(key) === entry) this.schedule();
+        if (this.modeValue === 'direct') this.drainDirect();
       };
       const entry: Pending = {
         key,
@@ -161,6 +170,7 @@ export class ChangePollMultiplexer {
         ...(since === undefined ? {} : { since }),
         deadline: this.now() + Math.max(0, timeoutMs),
         ...(signal ? { signal } : {}),
+        directController: new AbortController(),
         direct,
         resolve,
         reject,
@@ -168,7 +178,8 @@ export class ChangePollMultiplexer {
       };
       signal?.addEventListener('abort', onAbort, { once: true });
       this.pending.set(key, entry);
-      this.schedule();
+      if (this.modeValue === 'direct') this.drainDirect();
+      else this.schedule();
     });
   }
 
@@ -176,6 +187,7 @@ export class ChangePollMultiplexer {
   private settle(entry: Pending, outcome: () => void) {
     if (this.pending.get(entry.key) === entry) this.pending.delete(entry.key);
     entry.detach();
+    entry.directController.abort();
     outcome();
   }
 
@@ -305,7 +317,7 @@ export class ChangePollMultiplexer {
     if (this.pending.size) this.schedule();
   }
 
-  /** Permanently poll each project directly; hand every waiting poll over now. */
+  /** Permanently poll projects directly, but reserve browser connections for ordinary API calls. */
   private goDirect(reason: string) {
     if (this.modeValue === 'direct') return;
     this.modeValue = 'direct';
@@ -314,18 +326,37 @@ export class ChangePollMultiplexer {
     if (this.flushTimer !== undefined) clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
     this.options.onModeChange?.('direct', reason);
-    const now = this.now();
-    for (const entry of [...this.pending.values()])
-      this.settle(entry, () => {
-        entry.direct(entry.since, entry.signal, Math.max(0, Math.ceil(entry.deadline - now))).then(
+    this.drainDirect();
+  }
+
+  private drainDirect() {
+    if (this.modeValue !== 'direct') return;
+    for (const entry of this.pending.values()) {
+      if (this.directActive.size >= DIRECT_POLL_MAX_IN_FLIGHT) break;
+      if (this.directActive.has(entry)) continue;
+      this.directActive.add(entry);
+      const timeout = Math.min(DIRECT_POLL_TIMEOUT_MS, Math.max(0, Math.ceil(entry.deadline - this.now())));
+      void Promise.resolve()
+        .then(() => entry.direct(entry.since, entry.directController.signal, timeout))
+        .then(
           (page) => {
-            entry.resolve(page);
+            this.directActive.delete(entry);
+            if (this.pending.get(entry.key) === entry)
+              this.settle(entry, () => {
+                entry.resolve(page);
+              });
+            this.drainDirect();
           },
           (reason: unknown) => {
-            entry.reject(reason);
+            this.directActive.delete(entry);
+            if (this.pending.get(entry.key) === entry)
+              this.settle(entry, () => {
+                entry.reject(reason);
+              });
+            this.drainDirect();
           },
         );
-      });
+    }
   }
 }
 

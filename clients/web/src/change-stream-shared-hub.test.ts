@@ -38,6 +38,43 @@ class FakeSocket extends EventTarget {
 }
 
 describe('SharedWorker change-stream port hub', () => {
+  it('shares a bounded direct-poll pool across tabs without a mux path', async () => {
+    const calls: Array<{ resolve(response: Response): void }> = [];
+    const runs: ProjectChangeTransportOptions[] = [];
+    const hub = createChangeStreamSharedHub({
+      fetch: () => new Promise<Response>((resolve) => calls.push({ resolve })),
+      runTransport: (options) => {
+        runs.push(options);
+      },
+    });
+    const a = new FakePort(),
+      b = new FakePort();
+    hub.connect(a);
+    hub.connect(b);
+    for (const [port, client] of [
+      [a, 'tab-a'],
+      [b, 'tab-b'],
+    ] as const)
+      for (let index = 0; index < 3; index += 1)
+        port.incoming({
+          type: 'open',
+          project: `${client}-${index}`,
+          generation: 1,
+          apiUrl: `http://host/__hotsheet/project-api/${client}-${index}`,
+          clientId: client,
+        });
+    const polls = runs.map((run) => run.client.pollEvents(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(4);
+    for (const call of calls.slice(0, 4)) call.resolve(Response.json({ cursor: 2, events: [], overflow: false }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(6);
+    for (const call of calls.slice(4)) call.resolve(Response.json({ cursor: 2, events: [], overflow: false }));
+    await Promise.all(polls);
+    a.incoming({ type: 'dispose' });
+    b.incoming({ type: 'dispose' });
+  });
+
   it('shares one bridge socket while same-project tabs retain separate presence and disposal', () => {
     let now = 0;
     const sockets: FakeSocket[] = [];

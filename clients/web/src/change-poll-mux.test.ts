@@ -7,6 +7,8 @@ import {
   type ChangePollFn,
   ChangePollMultiplexer,
   createChangePollMultiplexers,
+  DIRECT_POLL_MAX_IN_FLIGHT,
+  DIRECT_POLL_TIMEOUT_MS,
 } from './change-poll-mux';
 import { type ProjectChangeSink, runProjectChangePollTransport } from './project-change-poll';
 import { parsePollResponse } from './server-response-parsers';
@@ -346,6 +348,89 @@ describe('ChangePollMultiplexer', () => {
     await Promise.all(polls);
     expect(bridge.calls).toHaveLength(0);
     expect(m.mode).toBe('direct');
+  });
+
+  it('rotates direct fallback polls under the connection cap while preserving project order', async () => {
+    const bridge = fakeBridge();
+    const m = mux(bridge.fetcher);
+    const directCalls: Array<{
+      since?: number;
+      signal?: AbortSignal;
+      timeout?: number;
+      resolve(page: PollResponse): void;
+    }> = [];
+    const direct: ChangePollFn = (since, signal, timeout) =>
+      new Promise<PollResponse>((resolve) => {
+        directCalls.push({ since, signal, timeout, resolve });
+      });
+    const polls = Array.from({ length: 8 }, (_, index) => m.poll(`p${index}`, direct, index));
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    expect(directCalls).toHaveLength(DIRECT_POLL_MAX_IN_FLIGHT);
+    expect(directCalls.map((call) => call.since)).toEqual([0, 1, 2, 3]);
+    expect(directCalls.every((call) => call.timeout === DIRECT_POLL_TIMEOUT_MS)).toBe(true);
+    for (const call of directCalls.slice(0, 4)) call.resolve(page((call.since ?? 0) + 1));
+    await tick();
+    expect(directCalls).toHaveLength(8);
+    expect(directCalls.slice(4).map((call) => call.since)).toEqual([4, 5, 6, 7]);
+    for (const call of directCalls.slice(4)) call.resolve(page((call.since ?? 0) + 1));
+    await expect(Promise.all(polls)).resolves.toEqual(Array.from({ length: 8 }, (_, index) => page(index + 1)));
+    expect(m.waiting()).toEqual([]);
+  });
+
+  it('removes an aborted queued direct poll and lets a fresh project refill its slot', async () => {
+    const bridge = fakeBridge();
+    const m = mux(bridge.fetcher);
+    const calls: Array<{ since?: number; resolve(page: PollResponse): void }> = [];
+    const direct: ChangePollFn = (since) => new Promise((resolve) => calls.push({ since, resolve }));
+    const active = Array.from({ length: 4 }, (_, index) => m.poll(`p${index}`, direct, index));
+    const closing = new AbortController();
+    const queued = m.poll('closing', direct, 10, closing.signal);
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    expect(calls).toHaveLength(4);
+    closing.abort();
+    await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+    const refill = m.poll('refill', direct, 20);
+    calls[0].resolve(page(1));
+    await tick();
+    expect(calls).toHaveLength(5);
+    expect(calls[4].since).toBe(20);
+    for (const call of calls.slice(1)) call.resolve(page((call.since ?? 0) + 1));
+    await Promise.all([...active, refill]);
+    expect(m.waiting()).toEqual([]);
+  });
+
+  it('aborts a superseded active direct poll and accepts the replacement', async () => {
+    const bridge = fakeBridge();
+    const m = mux(bridge.fetcher);
+    const calls: Array<{ since?: number; signal?: AbortSignal; resolve(page: PollResponse): void }> = [];
+    const direct: ChangePollFn = (since, signal) =>
+      new Promise((resolve, reject) => {
+        calls.push({ since, signal, resolve });
+        signal?.addEventListener(
+          'abort',
+          () => {
+            reject(new Error('aborted'));
+          },
+          { once: true },
+        );
+      });
+    const first = m.poll('a', direct, 1);
+    await tick();
+    bridge.calls[0].respondRaw(new Response('missing', { status: 404 }));
+    await tick();
+    expect(calls).toHaveLength(1);
+    const second = m.poll('a', direct, 2);
+    await expect(first).rejects.toThrow('Superseded by a newer change poll.');
+    expect(calls[0].signal?.aborted).toBe(true);
+    await tick();
+    expect(calls).toHaveLength(2);
+    calls[1].resolve(page(3));
+    await expect(second).resolves.toEqual(page(3));
+    expect(m.waiting()).toEqual([]);
   });
 
   it('an idle set of projects holds exactly one request per window', async () => {

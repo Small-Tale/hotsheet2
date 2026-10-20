@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-TVASVW covers bounded direct change-poll fallback in
+`change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker
+and shared-worker transport tests, and the eight-project older-bridge browser
+flow in `tests/change-poll-mux.spec.ts`, including an ordinary permission read
+while direct polls are active. `HS2-GDF4ZJ` tracks the remaining cross-tab cap
+when SharedWorker is unavailable.
+
 HS2-HRN55S covers command write ordering in the server command manager and real
 HTTP settings persistence, the client save workflow's ordered metadata, and a
 real-server browser page-hide/reload/edit sequence. Cross-editor conflict

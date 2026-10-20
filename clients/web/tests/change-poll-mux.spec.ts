@@ -469,58 +469,93 @@ for (const mode of ['main thread', 'worker'] as const)
     expect(bridge.maxOpen()).toBeLessThanOrEqual(2);
   });
 
-test('an older bridge without the multiplexed poll keeps per-project long polls', async ({ page }) => {
-  test.setTimeout(60_000);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  const directPolls: string[] = [];
-  let muxRequests = 0;
-  await page.routeWebSocket(/.*/, (socket) => {
-    void socket.close();
-  });
-  await page.route('**/*', async (route) => {
-    const request = route.request(),
-      path = decodeURIComponent(new URL(request.url()).pathname);
-    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: projects[0] });
-    // The older bridge has no such route.
-    if (path === MUX) {
-      muxRequests += 1;
-      return route.fulfill({ status: 404, body: 'Not Found' });
-    }
-    if (path.endsWith('/ws/poll')) {
-      directPolls.push(path);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
-    }
-    if (path.endsWith('/providers'))
-      return route.fulfill({
-        json: [
-          {
-            connection_id: 'git',
-            provider: 'git',
-            display_name: 'Hot Sheet Git',
-            locator: '/work/alpha.hs2',
-            default: true,
-            capabilities,
+for (const advertisesMux of [true, false]) {
+  test(`an older bridge ${advertisesMux ? 'rejecting' : 'omitting'} the mux keeps direct polls bounded`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const directPolls: string[] = [];
+    let muxRequests = 0;
+    let chosen = 0;
+    let activePolls = 0;
+    let maxActivePolls = 0;
+    await page.routeWebSocket(/.*/, (socket) => {
+      void socket.close();
+    });
+    await page.route('**/*', async (route) => {
+      const request = route.request(),
+        path = decodeURIComponent(new URL(request.url()).pathname);
+      if (path === '/__hotsheet/projects/open') {
+        const root = (request.postDataJSON() as { root: string }).root;
+        const selected = projects.find((project) => project.root === root) ?? projects[0];
+        return route.fulfill({
+          status: 201,
+          json: advertisesMux ? selected : { ...selected, changeMuxPath: undefined },
+        });
+      }
+      if (path === '/__hotsheet/folders/choose') {
+        chosen += 1;
+        return route.fulfill({ json: { path: projects[chosen].root } });
+      }
+      // The older bridge has no such route.
+      if (path === MUX) {
+        muxRequests += 1;
+        return route.fulfill({ status: 404, body: 'Not Found' });
+      }
+      if (path.endsWith('/ws/poll')) {
+        directPolls.push(path);
+        activePolls += 1;
+        maxActivePolls = Math.max(maxActivePolls, activePolls);
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        activePolls -= 1;
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
+      }
+      if (path.endsWith('/providers'))
+        return route.fulfill({
+          json: [
+            {
+              connection_id: 'git',
+              provider: 'git',
+              display_name: 'Hot Sheet Git',
+              locator: '/work/alpha.hs2',
+              default: true,
+              capabilities,
+            },
+          ],
+        });
+      if (path.endsWith('/tickets') && request.method() === 'GET') {
+        const projectId = path.match(/project-api\/([^/]+)/)?.[1];
+        const name = projects.find((project) => project.id === projectId)?.name ?? 'Alpha';
+        return route.fulfill({ json: ticketPage([row(`${name.toUpperCase()}1`, `${name} first`)]) });
+      }
+      if (path.endsWith('/repository/status'))
+        return route.fulfill({
+          json: {
+            branch: 'main',
+            ahead: 0,
+            behind: 0,
+            staged: 0,
+            unstaged: 0,
+            untracked: 0,
+            conflicted: 0,
+            clean: true,
           },
-        ],
-      });
-    if (path.endsWith('/tickets') && request.method() === 'GET')
-      return route.fulfill({ json: ticketPage([row('ALPHA1', 'Alpha first')]) });
-    if (path.endsWith('/repository/status'))
-      return route.fulfill({
-        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
-      });
-    if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
-    if (path.startsWith('/__hotsheet/project-api/')) return route.fulfill({ json: [] });
-    if (!path.startsWith('/__hotsheet/')) return route.continue();
-    return route.fulfill({ status: 404, json: { error: `Unhandled ${path}` } });
+        });
+      if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
+      if (path.startsWith('/__hotsheet/project-api/')) return route.fulfill({ json: [] });
+      if (!path.startsWith('/__hotsheet/')) return route.continue();
+      return route.fulfill({ status: 404, json: { error: `Unhandled ${path}` } });
+    });
+    await openAllProjects(page);
+    await expect(page.locator('[data-ticket-slug="HS2-HOTEL1"]')).toBeVisible();
+    await expect.poll(() => new Set(directPolls).size, { timeout: 10_000 }).toBe(projects.length);
+    expect(maxActivePolls).toBeLessThanOrEqual(4);
+    const permissions = await page.evaluate(
+      async () => (await fetch('/__hotsheet/project-api/alpha-project/permissions')).status,
+    );
+    expect(permissions).toBe(200);
+    // The 404 is learned once; the bridge is not asked again.
+    expect(muxRequests).toBe(advertisesMux ? 1 : 0);
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
-  await expect.poll(() => directPolls.length, { timeout: 10_000 }).toBeGreaterThan(0);
-  // The 404 is learned once; the bridge is not asked again.
-  await page.waitForTimeout(2_000);
-  expect(muxRequests).toBe(1);
-});
+}

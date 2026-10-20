@@ -272,7 +272,7 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     await vi.waitFor(() => {
       expect(sockets).toHaveLength(1);
     });
-    expect(polls[0]).toBe('http://host/p/a/ws/poll?timeout_ms=25000&client=tab-1');
+    expect(polls[0]).toBe('http://host/p/a/ws/poll?timeout_ms=1000&client=tab-1');
     sockets[0].open();
     await vi.waitFor(() => {
       expect(polls).toHaveLength(2);
@@ -345,6 +345,28 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
       expect(requests).toHaveLength(2);
     });
     expect(requests[1].body.polls.map((poll) => poll.project)).toEqual(['a', 'b']);
+    runtime.dispose();
+  });
+
+  it('bounds direct polls across projects when an older bridge advertises no mux path', async () => {
+    const { runs, runTransport } = fakeTransports();
+    const calls: Array<{ url: string; resolve(response: Response): void }> = [];
+    const fetcher = ((url: string) =>
+      new Promise<Response>((resolve) => calls.push({ url, resolve }))) as unknown as typeof fetch;
+    const runtime = createChangeStreamWorkerRuntime({ post: () => undefined, runTransport, fetch: fetcher });
+    for (let index = 0; index < 6; index += 1)
+      runtime.handle(open(`p${index}`, 1, { apiUrl: `http://host/__hotsheet/project-api/p${index}` }));
+    const polls = runs.map((run) => run.options.client.pollEvents(1));
+    await vi.waitFor(() => {
+      expect(calls).toHaveLength(4);
+    });
+    for (const call of calls.slice(0, 4)) call.resolve(Response.json(page(2)));
+    await vi.waitFor(() => {
+      expect(calls).toHaveLength(6);
+    });
+    for (const call of calls.slice(4)) call.resolve(Response.json(page(2)));
+    await expect(Promise.all(polls)).resolves.toHaveLength(6);
+    expect(calls.every((call) => call.url.includes('/ws/poll?'))).toBe(true);
     runtime.dispose();
   });
 

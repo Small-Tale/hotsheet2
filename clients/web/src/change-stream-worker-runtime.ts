@@ -22,6 +22,8 @@ export interface ChangeStreamWorkerRuntimeOptions {
   openWebSocket?: (url: string) => WebSocket;
   /** Shared across SharedWorker ports so their long polls occupy one browser request. */
   pollMultiplexerFor?: ReturnType<typeof createChangePollMultiplexers>;
+  /** Bounded direct fallback, shared across SharedWorker ports when supplied. */
+  directPollMultiplexerFor?: ReturnType<typeof createChangePollMultiplexers>;
   /** Shared across SharedWorker ports so their project sockets use one browser bridge socket. */
   webSocketMultiplexerFor?: ReturnType<typeof createChangeWebSocketMultiplexers>;
   maxQueuedEvents?: number;
@@ -61,12 +63,24 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
       parse: parsePollResponse,
       fetch: fetcher,
     });
+  const directPollMultiplexerFor =
+    options.directPollMultiplexerFor ??
+    createChangePollMultiplexers({
+      parse: parsePollResponse,
+      fetch: fetcher,
+      directOnly: true,
+    });
   const webSocketMultiplexerFor =
     options.webSocketMultiplexerFor ?? createChangeWebSocketMultiplexers(options.openWebSocket);
   const changeClient = (message: ChangeStreamWorkerOpen): ChangeClient => {
     const direct = createWorkerChangeClient(message, fetcher);
-    if (!message.changeMuxUrl) return direct;
     const project = changeMuxTarget(new URL(message.apiUrl).pathname, '')?.project ?? message.project;
+    if (!message.changeMuxUrl)
+      return directPollMultiplexerFor(new URL(message.apiUrl).origin, message.clientId).client(
+        project,
+        direct,
+        message.clientId,
+      );
     return multiplexerFor(message.changeMuxUrl, message.clientId).client(project, direct, message.clientId);
   };
   const subscriptions = new Map<

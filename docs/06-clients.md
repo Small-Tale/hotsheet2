@@ -1766,7 +1766,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   Version skew: an older bridge does not advertise the path, so its projects poll directly.
   A bridge answering 400, 404, 405, or 501, an unsupported or empty answer, or more than 64
   waiting projects switches that multiplexer permanently to direct per-project polls. An
-  older server behind a new bridge surfaces as that project's own error, as before.
+  older server behind a new bridge surfaces as that project's own error, as before. Direct
+  fallback in the page, dedicated worker, and shared worker admits at most four browser
+  polls at once per origin and caps each one at one second; queued projects rotate in
+  arrival order, while abort and supersede remove obsolete work. This reserves browser
+  connections for ordinary API calls even when many project WebSockets fail. Separate
+  tabs without a SharedWorker can each use their own direct-poll allowance.
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
   WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
   the others; every acknowledgement and live event carries its project id and subscription

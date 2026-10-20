@@ -189,22 +189,27 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   // Projects whose bridge advertises it share one change long-poll per origin (HS2-6W1NNF),
   // on the main thread and in the worker alike.
   const multiplexerFor = createChangePollMultiplexers({ parse: parsePollResponse });
+  const directPollerFor = createChangePollMultiplexers({ parse: parsePollResponse, directOnly: true });
   const webSocketMultiplexerFor = createChangeWebSocketMultiplexers();
   const changeMuxUrl = (current: Project): string | undefined =>
     current.changeMuxPath ? new URL(current.changeMuxPath, location.href).href : undefined;
   const startStream = (current: Project, directOptions: ProjectChangeStreamOptions): (() => void) => {
     const muxUrl = changeMuxUrl(current);
+    const project = changeMuxTarget(current.apiPath, '')?.project ?? current.id;
     const streamOptions: ProjectChangeStreamOptions = muxUrl
       ? {
           ...directOptions,
-          client: multiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).client(
-            changeMuxTarget(current.apiPath, '')?.project ?? current.id,
-            directOptions.client,
-          ),
+          client: multiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).client(project, directOptions.client),
           openWebSocket: (url: string) =>
             webSocketMultiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).open(current.id, url, CHANGE_STREAM_CLIENT_ID),
         }
-      : directOptions;
+      : {
+          ...directOptions,
+          client: directPollerFor(
+            new URL(current.apiPath, typeof location === 'undefined' ? 'http://localhost' : location.href).origin,
+            CHANGE_STREAM_CLIENT_ID,
+          ).client(project, directOptions.client),
+        };
     if (!useWorker) return startProjectChangeStream(streamOptions);
     workerHost ??= createChangeStreamWorkerHost({
       createWorker: dependencies.createChangeStreamWorker ?? createBundledChangeStreamWorker,

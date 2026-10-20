@@ -18,6 +18,12 @@ export function createChangeStreamSharedHub(
     sharedAcrossClients: true,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
+  const directPollMultiplexerFor = createChangePollMultiplexers({
+    parse: parsePollResponse,
+    sharedAcrossClients: true,
+    directOnly: true,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
   const ports = new Map<SharedPort, { dispose(): void; lastSeen: number }>();
   const now = options.now ?? Date.now;
   const idleMs = options.idleMs ?? 90_000;
@@ -29,6 +35,7 @@ export function createChangeStreamSharedHub(
         },
         webSocketMultiplexerFor,
         pollMultiplexerFor,
+        directPollMultiplexerFor,
         ...(options.fetch ? { fetch: options.fetch } : {}),
         ...(options.runTransport ? { runTransport: options.runTransport } : {}),
       });
