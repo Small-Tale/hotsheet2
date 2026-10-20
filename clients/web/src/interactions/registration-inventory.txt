@@ -249,6 +249,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="filter-per
 notifications-and-links	delegate	document.body	'click'	'[data-action="filter-permission-rule-decision"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-permission-rule-row"]'
 notifications-and-links	delegate	document.body	'keydown'	'.permission-rules-settings__all'
+notifications-and-links	delegate	document.body	'keydown'	'.permission-rules-settings__recent'
 notifications-and-links	delegate	document.body	'click'	'[data-action="clear-permission-rule-selection"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="edit-selected-permission-rules"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="request-delete-selected-permission-rules"]'
