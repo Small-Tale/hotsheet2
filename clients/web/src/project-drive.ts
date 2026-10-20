@@ -3,6 +3,7 @@ import type { Api, ToolConnection, ToolSession } from './api';
 export const SIDEBAR_DRIVE_CONNECTION_ID = 'hotsheet-sidebar';
 export const PROJECT_CHAT_CONNECTION_ID = 'hotsheet-project-chat';
 export const SIDEBAR_DRIVE_PROMPT = '$hotsheet';
+export const SESSION_DRIVE_PROMPT = 'Run the hotsheet skill now.';
 export type ProjectDriveTool = string;
 
 export interface DrawerAIChat {
@@ -30,6 +31,24 @@ export interface ProjectDriveControlState {
   running: boolean;
   disabled: boolean;
   disabledReason?: string;
+}
+
+export type ProjectDriveTarget =
+  { kind: 'session'; connection: ToolConnection } | { kind: 'drive'; connection?: ToolConnection };
+
+/** Prefer an addressable interactive session for the chosen tool in this project's snapshot. */
+export function projectDriveTarget(
+  connections: readonly ToolConnection[],
+  checkout: string,
+  tool: ProjectDriveTool,
+): ProjectDriveTarget {
+  const messageable = connections.filter(
+    (connection) => connection.tool === tool && connection.role === 'main' && connection.actions?.includes('message'),
+  );
+  const session = [...messageable].reverse().find((connection) => !connection.busy) ?? messageable.at(-1);
+  return session
+    ? { kind: 'session', connection: session }
+    : { kind: 'drive', connection: projectDriveConnection(connections, checkout, tool) };
 }
 
 export function compatibleAiEffort(
@@ -172,23 +191,24 @@ export function projectDriveControlState(
   pending = false,
   tool: ProjectDriveTool = 'codex',
 ): ProjectDriveControlState {
-  const connection = projectDriveConnection(connections, checkout, tool);
+  const target = projectDriveTarget(connections, checkout, tool),
+    connection = target.connection;
   const label = `${tool.slice(0, 1).toUpperCase()}${tool.slice(1)}`;
   if (pending)
     return {
       connection,
-      running: Boolean(connection?.busy),
+      running: target.kind === 'drive' && Boolean(connection?.busy),
       disabled: true,
       disabledReason: `Updating the ${label} connection…`,
     };
-  if (connection?.busy)
+  if (target.kind === 'drive' && connection?.busy)
     return {
       connection,
       running: true,
       disabled: true,
       disabledReason: `The ${label} workflow is already running in its chat tab.`,
     };
-  return { connection, running: Boolean(connection?.busy), disabled: false };
+  return { connection, running: target.kind === 'drive' && Boolean(connection?.busy), disabled: false };
 }
 
 export async function prepareProjectConversation(

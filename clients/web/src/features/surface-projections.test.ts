@@ -8,7 +8,7 @@ import type { ProjectTicketSources } from '../new-ticket-source';
 import { createSettingsSurface, type SettingsSurfaceDependencies } from './settings-surface';
 import { createSidebarSurface, type SidebarSurfaceDependencies } from './sidebar-surface';
 
-const current = { id: 'p1', apiPath: '/api/p1' } as Project;
+const current = { id: 'p1', apiPath: '/api/p1', root: '/p1', stores: [] } as unknown as Project;
 const read = <T>(value: T) => ({ value });
 
 function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDependencies> = {}) {
@@ -25,6 +25,7 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
     selectedView: read('all'),
     corruptTickets: read([]),
     driveConnectionsByProject: read({}),
+    terminalGroups: read([]),
     drivePendingByProject: read({}),
     commandDefinitions: read([{ id: 'c1', title: 'Run tests', kind: 'shell', command: 'npm test' }]),
     commandGroupExpanded: read(true),

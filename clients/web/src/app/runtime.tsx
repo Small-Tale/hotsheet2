@@ -858,6 +858,7 @@ export async function startHotSheetWebClient() {
     project: () => project(),
     error,
     terminalDrawerChatsByProject,
+    terminalGroups,
     createDrawerAIChat: (selection, options) => terminalDrawer.createDrawerAIChat(selection, options),
     selectDrawerItem: (id) => {
       terminalDrawer.selectDrawerItem(id);
@@ -865,6 +866,7 @@ export async function startHotSheetWebClient() {
     setTerminalDrawerVisible: (visible) => {
       terminalDrawer.setTerminalDrawerVisible(visible);
     },
+    showToast,
     aiConfiguration: () => aiConfigurationController,
   });
   const {
@@ -3485,6 +3487,7 @@ export async function startHotSheetWebClient() {
     selectedView,
     corruptTickets,
     driveConnectionsByProject,
+    terminalGroups,
     drivePendingByProject,
     commandDefinitions,
     commandGroupExpanded,

@@ -12,10 +12,16 @@ import type {
 import type { AiToolDescriptor } from '../components/drive-options-menu';
 import type { NotificationView } from '../components/notification-navigation';
 import type { SettingsCategory } from '../components/settings-navigation';
+import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { SidebarSurfaceProps } from '../components/workspace-composition-surfaces';
 import type { WorkspaceViewMode } from '../components/workspace-header';
 import type { Project } from '../interactions/types';
-import { projectChatConnectionId, projectDriveControlState } from '../project-drive';
+import {
+  projectChatConnectionId,
+  projectConnections,
+  projectDriveControlState,
+  projectDriveTarget,
+} from '../project-drive';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
 import { customTicketViewId, type TicketScope, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
@@ -38,6 +44,7 @@ export interface SidebarSurfaceDependencies {
   selectedView: Readable<TicketView>;
   corruptTickets: Readable<CorruptTicket[]>;
   driveConnectionsByProject: Readable<Record<string, ToolConnection[]>>;
+  terminalGroups: Readable<TerminalDashboardGroup[]>;
   drivePendingByProject: Readable<Record<string, boolean>>;
   commandDefinitions: Readable<CommandDefinition[]>;
   commandGroupExpanded: Readable<boolean>;
@@ -88,6 +95,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     selectedView,
     corruptTickets,
     driveConnectionsByProject,
+    terminalGroups,
     drivePendingByProject,
     commandDefinitions,
     commandGroupExpanded,
@@ -189,12 +197,21 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
       ],
       selection = effectiveDriveSelection(current.id),
       tool = selection.tool,
-      drive = projectDriveControlState(
-        driveConnectionsByProject.value[current.id] ?? [],
-        current.id,
-        drivePendingByProject.value[current.id] ?? false,
-        tool,
-      );
+      connections = projectConnections(driveConnectionsByProject.value[current.id] ?? [], current),
+      target = projectDriveTarget(connections, current.id, tool),
+      terminal =
+        target.kind === 'session'
+          ? terminalGroups.value
+              .find((group) => group.projectId === current.id)
+              ?.sessions.find((session) => session.id === target.connection.id)
+          : undefined,
+      driveDestination =
+        target.kind === 'session'
+          ? `${terminal?.title ?? `${aiToolLabel(tool)} session`} (${target.connection.id.length <= 12 ? target.connection.id : target.connection.id.slice(-6)})`
+          : target.connection
+            ? `Existing ${aiToolLabel(tool)} Drive chat`
+            : `New ${aiToolLabel(tool)} Drive chat`,
+      drive = projectDriveControlState(connections, current.id, drivePendingByProject.value[current.id] ?? false, tool);
     return {
       kind: 'project',
       sidebar: {
@@ -231,6 +248,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         driveRunning: drive.running,
         driveTool: tool,
         driveToolLabel: aiToolLabel(tool),
+        driveDestination,
         driveDisabled: drive.disabled,
         driveDisabledReason: drive.disabledReason,
         driveOptionsOpen: driveOptionsOpen.value,

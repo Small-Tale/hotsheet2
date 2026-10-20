@@ -369,6 +369,11 @@ including HS1 refusal, an isolated Codex home, permission bridging, and the cros
 Unix hosts reuse the shared Codex daemon; Windows uses the direct app-server transport
 because the daemon control channel is Unix-domain-socket based.
 The HTTP lifecycle is fake-backend E2E tested and has a credentials-gated real Codex test.
+The web sidebar's Drive control first selects a message-capable main terminal connection for
+the active project and chosen tool (preferring an idle session) and sends the explicit
+`Run the hotsheet skill now.` instruction through the session-push route in §13.12. It opens
+that terminal tab and names the destination in the options menu. If none is available, it
+reuses or creates the dedicated client-owned drive described above and sends `$hotsheet`.
 Separately, `hotsheet-cli launch codex` uses the ordinary interactive CLI with a
 project-local `.codex/hooks.json` `PermissionRequest` adapter and running-server route-back;
 it is intentionally not the isolated app-server drive and does not bypass Codex hook trust.

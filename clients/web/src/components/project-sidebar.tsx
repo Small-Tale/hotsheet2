@@ -37,6 +37,7 @@ export interface ProjectSidebarProps {
   driveRunning: boolean;
   driveTool: string;
   driveToolLabel?: string;
+  driveDestination?: string;
   driveDisabled?: boolean;
   driveDisabledReason?: string;
   driveOptionsOpen?: boolean;
@@ -110,6 +111,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
             defaultSelection={props.driveDefaultSelection ?? { tool: props.driveTool }}
             loading={props.driveToolsLoading}
             error={props.driveToolsError}
+            destination={props.driveDestination}
             x={props.driveOptionsAnchor?.x}
             y={props.driveOptionsAnchor?.y}
           />

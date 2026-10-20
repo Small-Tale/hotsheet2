@@ -9,9 +9,11 @@ import {
   projectConnections,
   projectDriveConnection,
   projectDriveControlState,
+  projectDriveTarget,
   recoverProjectConnections,
   restoreDrawerAIChats,
   runProjectDrive,
+  SESSION_DRIVE_PROMPT,
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from './project-drive';
@@ -225,6 +227,33 @@ describe('production project drive control', () => {
       disabled: true,
       disabledReason: 'Updating the Claude connection…',
     });
+  });
+
+  it('selects a reachable main session for the chosen tool before a dedicated Drive chat', () => {
+    const drive = connection(),
+      busy = connection({ id: 'codex-terminal-old', busy: true, actions: ['message'] }),
+      idle = connection({ id: 'codex-terminal-new', actions: ['message'] }),
+      worker = connection({ id: 'codex-worker', role: 'worker', actions: ['message'] }),
+      otherTool = connection({ id: 'claude-terminal', tool: 'claude', actions: ['message'] });
+    expect(projectDriveTarget([drive, busy, worker, otherTool, idle], checkout, 'codex')).toEqual({
+      kind: 'session',
+      connection: idle,
+    });
+    expect(projectDriveTarget([drive, busy], checkout, 'codex')).toEqual({ kind: 'session', connection: busy });
+    expect(projectDriveTarget([drive, worker, otherTool], checkout, 'codex')).toEqual({
+      kind: 'drive',
+      connection: drive,
+    });
+    expect(projectDriveTarget([worker, otherTool], checkout, 'codex')).toEqual({
+      kind: 'drive',
+      connection: undefined,
+    });
+    expect(projectDriveControlState([drive, busy], checkout)).toMatchObject({
+      connection: busy,
+      running: false,
+      disabled: false,
+    });
+    expect(SESSION_DRIVE_PROMPT).toBe('Run the hotsheet skill now.');
   });
 
   it('prepares chat without sending the workflow and keeps tools independent', async () => {

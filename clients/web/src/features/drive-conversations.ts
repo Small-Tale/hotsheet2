@@ -10,6 +10,7 @@ import {
 } from '../ai-conversation';
 import { type AiToolDefaults, Api, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
+import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { syncControlledOpen } from '../controlled-open';
 import {
   type ConversationHistoryCursor,
@@ -30,9 +31,11 @@ import {
   prepareProjectConversation,
   projectChatConnectionId,
   projectConnections,
+  projectDriveTarget,
   recoverProjectConnections,
   restoreDrawerAIChats,
   runProjectDrive,
+  SESSION_DRIVE_PROMPT,
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from '../project-drive';
@@ -56,12 +59,14 @@ export interface DriveConversationsDependencies {
   project: () => Project | undefined;
   error: Signal<string>;
   terminalDrawerChatsByProject: Signal<Record<string, DrawerAIChat[]>>;
+  terminalGroups: Signal<TerminalDashboardGroup[]>;
   createDrawerAIChat: (
     selection: AiToolDefaults,
     options?: { connectionId?: string; drive?: boolean },
   ) => Promise<DrawerAIChat | undefined>;
   selectDrawerItem: (id: string) => void;
   setTerminalDrawerVisible: (visible: boolean) => void;
+  showToast: (message: string) => void;
   /** Resolved lazily: the AI configuration owner is created after this one and reads its state. */
   aiConfiguration: () => AiConfiguration;
   /**
@@ -82,9 +87,11 @@ export function createDriveConversationsController(dependencies: DriveConversati
     project,
     error,
     terminalDrawerChatsByProject,
+    terminalGroups,
     createDrawerAIChat,
     selectDrawerItem,
     setTerminalDrawerVisible,
+    showToast,
   } = dependencies;
   const effectiveDriveSelection: AiConfiguration['effectiveDriveSelection'] = (...args) =>
       dependencies.aiConfiguration().effectiveDriveSelection(...args),
@@ -233,21 +240,43 @@ export function createDriveConversationsController(dependencies: DriveConversati
     const selection = effectiveDriveSelection(current.id),
       tool = selection.tool,
       connectionId = sidebarDriveConnectionId(current.id, tool),
+      connections = projectConnections(driveConnectionsByProject.value[current.id] ?? [], current),
+      target = projectDriveTarget(connections, current.id, tool),
       existing = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId);
+    if (target.kind === 'session') {
+      drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
+      try {
+        await new Api(current.apiPath).messageToolConnection(target.connection.id, SESSION_DRIVE_PROMPT);
+        if (project()?.id !== current.id) return;
+        const terminal = terminalGroups.value
+          .find((group) => group.projectId === current.id)
+          ?.sessions.find((session) => session.id === target.connection.id);
+        if (terminal) {
+          selectDrawerItem(terminal.id);
+          setTerminalDrawerVisible(true);
+        }
+        showToast(`Sent the Hot Sheet instruction to ${aiToolLabel(tool)} session.`);
+      } catch (reason) {
+        if (project()?.id === current.id) error.value = reason instanceof Error ? reason.message : String(reason);
+      } finally {
+        drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
+      }
+      return;
+    }
     if (existing?.busy) return;
     let tab = (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId);
     if (!tab) tab = await createDrawerAIChat(selection, { connectionId, drive: true });
     if (!tab || project()?.id !== current.id) return;
+    const currentConnections = driveConnectionsByProject.value[current.id] ?? [];
     selectDrawerItem(tab.id);
     setTerminalDrawerVisible(true);
-    const connections = driveConnectionsByProject.value[current.id] ?? [];
     drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
     conversationConnectionId.value = connectionId;
     const start = beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
     try {
       const updated = await runProjectDrive(
         new Api(current.apiPath),
-        connections,
+        currentConnections,
         current.id,
         tool,
         { model: selection.model, effort: selection.effort },
@@ -256,7 +285,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
       if (project()?.id === current.id)
         driveConnectionsByProject.value = {
           ...driveConnectionsByProject.value,
-          [current.id]: connections.filter((item) => item.id !== updated.id).concat(updated),
+          [current.id]: currentConnections.filter((item) => item.id !== updated.id).concat(updated),
         };
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);

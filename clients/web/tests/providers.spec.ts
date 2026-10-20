@@ -20356,6 +20356,66 @@ for (const width of [1280, 390] as const)
   });
 
 for (const width of [390, 1280] as const)
+  test(`Drive sends the skill instruction to a capable terminal session at ${width}px (HS2-FWCE1Y)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await mockProject(page);
+    const messages: Array<{ text: string }> = [],
+      driveCreates: unknown[] = [];
+    await page.route('**/*', (route) => {
+      const request = route.request(),
+        path = new URL(request.url()).pathname;
+      if (path.endsWith('/connections') && request.method() === 'GET')
+        return route.fulfill({
+          json: [
+            {
+              id: 'codex-main',
+              tool: 'codex',
+              project: '/work/demo',
+              role: 'main',
+              busy: false,
+              actions: ['message'],
+            },
+          ],
+        });
+      if (path.endsWith('/connections/codex-main/message') && request.method() === 'POST') {
+        messages.push(request.postDataJSON() as { text: string });
+        return route.fulfill({ json: { delivered: true, mechanism: 'codex-queue', confirmed: false } });
+      }
+      if (path.endsWith('/drive/connections') && request.method() === 'POST') driveCreates.push(request.postDataJSON());
+      return route.fallback();
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const sidebar = page.locator('#app-left-rail'),
+      drive = sidebar.locator('[data-action="toggle-drive"]');
+    if (width < 640) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+    await sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }).click();
+    const menu = sidebar.getByRole('menu', { name: 'Drive Provider, Model, and Effort Options' });
+    await expect(menu).toContainText('Destination');
+    await expect(menu).toContainText('codex-main');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `target/visual-captures/hs2-fwce1y-drive-destination-${width}.png` });
+    await page.mouse.click(1, 1);
+    await drive.click();
+    await expect.poll(() => messages).toEqual([{ text: 'Run the hotsheet skill now.' }]);
+    expect(driveCreates).toEqual([]);
+    await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
+    await expect(page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]')).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+    if (width < 640) {
+      await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+      await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+      await page.waitForTimeout(250);
+    }
+    await page.screenshot({ path: `target/visual-captures/hs2-fwce1y-drive-terminal-${width}.png` });
+  });
+
+for (const width of [390, 1280] as const)
   test(`messages a capable terminal AI session from the drawer at ${width}px (HS2-NN6EXP)`, async ({ page }) => {
     await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
     await mockProject(page);

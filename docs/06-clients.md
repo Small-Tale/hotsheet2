@@ -1551,13 +1551,18 @@ preview/download, server directory browser) are separate design work.
   while it remains selected, and forgets it after a catalog selection. Live conversations retain
   their compact editable catalog-backed control. These paths keep detected models convenient
   without preventing an older or otherwise undiscovered model id.
-  Drive prepares a stable dedicated connection scoped to that checkout and tool, opens and
+  Drive first uses a message-capable main terminal session for the selected provider in the
+  active project, preferring an idle session. It sends `Run the hotsheet skill now.` through
+  `POST /connections/{id}/message` and opens that terminal in the drawer. The options menu
+  names the session that will receive the instruction. Without an eligible session, Drive
+  prepares a stable dedicated connection scoped to that checkout and tool, opens and
   selects its AI-chat tab in the bottom drawer, then sends the `$hotsheet` workflow turn; later
-  activations reuse that tab, connection, and retained session. The server resolves the checkout id to its code
+  activations reuse that tab, connection, and retained session. The menu names this existing
+  or new Drive chat as the destination. The server resolves the checkout id to its code
   root before preparing the tool—ticket-store paths are never used as the working directory.
   The sidebar derives running
   state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
-  and disables a second Drive activation while that turn is busy; interruption remains in the
+  and disables a second dedicated Drive activation while that turn is busy; interruption remains in the
   selected chat when the connection advertises it. The Views add action opens a compact
   create dialog for a readable name and any ordinary search expression. The query editor fills
   the dialog content width on desktop and mobile, independently of the collapsed toolbar search. Saved views live in

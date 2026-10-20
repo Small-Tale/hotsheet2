@@ -16,6 +16,18 @@ const tools = [
 ];
 
 describe('DriveOptionsMenu', () => {
+  it('identifies the destination that the Drive button will use', () => {
+    const markup = String(
+      DriveOptionsMenu({
+        tools,
+        selection: { tool: 'codex' },
+        defaultSelection: { tool: 'codex' },
+        destination: 'Codex 2 (660A4)',
+      }),
+    );
+    expect(markup).toContain('Destination');
+    expect(markup).toContain('Codex 2 (660A4)');
+  });
   it('renders plugin-discovered submenus plus a selected ephemeral custom model and Other action', () => {
     const markup = String(
       DriveOptionsMenu({

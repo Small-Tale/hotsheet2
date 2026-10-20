@@ -39,6 +39,7 @@ export function DriveOptionsMenu({
   defaultSelection,
   loading = false,
   error,
+  destination,
   x = 0,
   y = 0,
 }: {
@@ -47,6 +48,8 @@ export function DriveOptionsMenu({
   defaultSelection: AiToolSelection;
   loading?: boolean;
   error?: string;
+  /** The live session or Drive chat that pressing the main button will use. */
+  destination?: string;
   /** Viewport anchor of the menu's top-start corner (the drive row's top-left, HS2-2EHD8R). */
   x?: number;
   y?: number;
@@ -80,6 +83,8 @@ export function DriveOptionsMenu({
       placement="top-start"
       rootAttributes={{ 'data-context-menu': 'drive-options' }}
       items={[
+        ...(destination ? [{ kind: 'heading' as const, label: `Destination: ${destination}` }] : []),
+        ...(destination ? [{ kind: 'divider' as const }] : []),
         {
           label: 'Default',
           action: 'select-drive-default',
