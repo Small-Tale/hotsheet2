@@ -307,14 +307,26 @@ impl JiraProvider {
             .map(|comment| {
                 let (text, confidence) =
                     note_trailer::parse_comment(&adf_to_text(Some(&comment.body)));
+                let (feedback_request, response_to) =
+                    note_trailer::parse_feedback_metadata(&adf_to_text(Some(&comment.body)));
                 ApiNote {
                     id: comment.id,
-                    kind: NoteKind::Regular,
+                    hotsheet_note_id: note_trailer::parse_note_id(&adf_to_text(Some(
+                        &comment.body,
+                    ))),
+                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
+                    {
+                        NoteKind::FeedbackNeeded
+                    } else {
+                        NoteKind::Regular
+                    },
                     created_at: comment.created.clone(),
                     edited_at: comment.updated.unwrap_or(comment.created),
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    feedback_request,
+                    response_to,
                     ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
                     actor: None,
@@ -339,7 +351,7 @@ impl JiraProvider {
             status,
             started_phase: None,
             up_next: false,
-            feedback_needed: false,
+            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
             needs_review: false,
             tags: issue.fields.labels,
             blocked_by: vec![],
@@ -739,7 +751,7 @@ impl TicketProvider for JiraProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _: NoteKind,
+        kind: NoteKind,
         metadata: NoteMetadataInput,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
@@ -751,7 +763,33 @@ impl TicketProvider for JiraProvider {
         {
             return self.get(native_id);
         }
-        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
+        let kind =
+            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
+                NoteKind::FeedbackNeeded
+            } else {
+                kind
+            };
+        if let Some(request_id) = metadata.response_to.as_deref() {
+            let ticket = self.get(native_id)?;
+            if kind != NoteKind::Regular
+                || !ticket
+                    .notes
+                    .iter()
+                    .any(|note| note.id == request_id && note.kind == NoteKind::FeedbackNeeded)
+            {
+                return Err(ProviderError::Conflict {
+                    ticket: native_id.into(),
+                    message: "response_to must name a feedback request on this ticket".into(),
+                });
+            }
+        }
+        let body = note_trailer::compose_feedback_comment(
+            &text,
+            metadata.confidence,
+            ctx.generated_id,
+            kind,
+            metadata.response_to.as_deref(),
+        );
         self.request(
             "POST",
             &self.endpoint(&format!("issue/{native_id}/comment")),
@@ -1276,6 +1314,7 @@ mod tests {
                     confidence: Some(score),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "## Result\nShipped.".into(),
             )
@@ -2005,12 +2044,15 @@ mod tests {
     fn prep_expected_score_matches_the_reopen_bound() {
         let note = |created: &str, score: u8| ApiNote {
             id: created.into(),
+            hotsheet_note_id: None,
             kind: NoteKind::Regular,
             created_at: created.into(),
             edited_at: created.into(),
             summary: None,
             confidence: Some(score),
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: hotsheet_model::AiFeedback::from_legacy_text("Shipped."),
             human_edited: false,
             actor: None,

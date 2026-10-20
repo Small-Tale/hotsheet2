@@ -110,9 +110,16 @@ pub struct ApiTicket {
 }
 
 /// One note entry on the wire.
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiNote {
     pub id: String,
+    /// Generated idempotency marker; may differ from a provider-native comment id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotsheet_note_id: Option<String>,
     pub kind: NoteKind,
     pub created_at: String,
     pub edited_at: String,
@@ -124,6 +131,10 @@ pub struct ApiNote {
     /// Source note id for AI thumbs feedback; absent on older or unrelated notes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub feedback_for: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub feedback_request: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_to: Option<String>,
     /// Current structured rating, including exact legacy prose ratings.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ai_feedback: Option<hotsheet_model::AiFeedback>,
@@ -134,6 +145,39 @@ pub struct ApiNote {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<hotsheet_model::NoteActor>,
     pub text: String,
+}
+
+/// Provider-neutral review state for external trackers whose notes are native comments.
+pub fn api_feedback_needed(notes: &[ApiNote]) -> bool {
+    if notes.iter().any(|request| {
+        request.kind == NoteKind::FeedbackNeeded
+            && request.feedback_request
+            && !notes
+                .iter()
+                .any(|reply| reply.response_to.as_deref() == Some(&request.id))
+    }) {
+        return true;
+    }
+    notes
+        .iter()
+        .filter(|note| {
+            matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
+                && !note.feedback_request
+                && note.response_to.is_none()
+                && note.ai_feedback.is_none()
+                && note.feedback_for.is_none()
+        })
+        .max_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.id.cmp(&right.id))
+        })
+        .is_some_and(|note| {
+            note.kind == NoteKind::FeedbackNeeded
+                && !notes
+                    .iter()
+                    .any(|reply| reply.response_to.as_deref() == Some(note.id.as_str()))
+        })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +262,7 @@ impl ApiTicket {
                 .iter()
                 .map(|n| ApiNote {
                     id: n.id.to_string(),
+                    hotsheet_note_id: Some(n.id.to_string()),
                     kind: if n.is_feedback_needed_request() {
                         NoteKind::FeedbackNeeded
                     } else {
@@ -228,6 +273,8 @@ impl ApiTicket {
                     summary: n.summary.clone(),
                     confidence: n.confidence.map(Confidence::get),
                     feedback_for: n.ai_feedback_for_note().map(|id| id.to_string()),
+                    feedback_request: n.feedback_request,
+                    response_to: n.response_to.map(|id| id.to_string()),
                     ai_feedback: n.ai_feedback_value(),
                     human_edited: n.human_edited,
                     actor: n.actor.clone(),
@@ -542,6 +589,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -601,6 +650,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,

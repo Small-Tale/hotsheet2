@@ -589,14 +589,24 @@ impl GitHubProvider {
             })
             .map(|comment| {
                 let (text, confidence) = note_trailer::parse_comment(&comment.body);
+                let (feedback_request, response_to) =
+                    note_trailer::parse_feedback_metadata(&comment.body);
                 ApiNote {
                     id: comment.id.to_string(),
-                    kind: NoteKind::Regular,
+                    hotsheet_note_id: note_trailer::parse_note_id(&comment.body),
+                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
+                    {
+                        NoteKind::FeedbackNeeded
+                    } else {
+                        NoteKind::Regular
+                    },
                     created_at: comment.created_at.clone(),
                     edited_at: comment.updated_at.unwrap_or(comment.created_at),
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    feedback_request,
+                    response_to,
                     ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
                     actor: None,
@@ -637,7 +647,7 @@ impl GitHubProvider {
             status,
             started_phase: None,
             up_next: status.is_active() && labels.iter().any(|label| label == "up-next"),
-            feedback_needed: false,
+            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
             needs_review: false,
             tags: labels
                 .into_iter()
@@ -1242,7 +1252,7 @@ impl TicketProvider for GitHubProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _kind: NoteKind,
+        kind: NoteKind,
         metadata: NoteMetadataInput,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
@@ -1254,7 +1264,33 @@ impl TicketProvider for GitHubProvider {
         {
             return self.get(native_id);
         }
-        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
+        let kind =
+            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
+                NoteKind::FeedbackNeeded
+            } else {
+                kind
+            };
+        if let Some(request_id) = metadata.response_to.as_deref() {
+            let ticket = self.get(native_id)?;
+            if kind != NoteKind::Regular
+                || !ticket
+                    .notes
+                    .iter()
+                    .any(|note| note.id == request_id && note.kind == NoteKind::FeedbackNeeded)
+            {
+                return Err(ProviderError::Conflict {
+                    ticket: native_id.into(),
+                    message: "response_to must name a feedback request on this ticket".into(),
+                });
+            }
+        }
+        let body = note_trailer::compose_feedback_comment(
+            &text,
+            metadata.confidence,
+            ctx.generated_id,
+            kind,
+            metadata.response_to.as_deref(),
+        );
         self.request(
             "POST",
             &self.endpoint(&format!("issues/{native_id}/comments")),
@@ -2621,6 +2657,7 @@ mod tests {
                     confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "## Result\nDone.".into(),
             )
@@ -3740,6 +3777,7 @@ mod tests {
                     confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "Hot Sheet live comment validation".into(),
             )
@@ -3804,6 +3842,7 @@ mod tests {
                     confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "Hot Sheet live re-completion validation".into(),
             )

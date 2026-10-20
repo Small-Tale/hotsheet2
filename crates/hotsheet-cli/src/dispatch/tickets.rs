@@ -765,6 +765,7 @@ pub(crate) fn cmd_edit(
         note,
         note_kind,
         note_summary,
+        response_to,
         note_confidence,
         edit_note,
     } = edit;
@@ -866,6 +867,7 @@ pub(crate) fn cmd_edit(
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
+                response_to,
             },
             text,
         )?;
@@ -1213,6 +1215,9 @@ pub(crate) struct TicketEditArgs {
     /// Concise plain-text timeline headline for an activity/status note.
     #[arg(long, conflicts_with = "edit_note")]
     note_summary: Option<String>,
+    /// Feedback request note ULID answered by this note.
+    #[arg(long, conflicts_with = "edit_note")]
+    response_to: Option<String>,
     /// AI completion confidence (integer 0-100) recorded on the appended note, or the
     /// corrected score of the note named by --edit-note (note text then optional).
     #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
@@ -1332,6 +1337,7 @@ pub(crate) struct TicketEdit {
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
+    response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 }
@@ -1340,6 +1346,9 @@ impl TicketEdit {
     /// Read `--note`/`--note-file` and validate the note modifiers before any write.
     fn prepare(args: TicketEditArgs) -> Result<Self> {
         let note = read_note_input(args.note, args.note_file, args.allow_literal_backslash_n)?;
+        if args.response_to.is_some() && note.as_deref().is_none_or(str::is_empty) {
+            anyhow::bail!("--response-to requires --note or --note-file");
+        }
         let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
         validate_note_modifiers(
             &note,
@@ -1366,6 +1375,7 @@ impl TicketEdit {
             note,
             note_kind: parse_note_kind(args.note_kind.as_deref().unwrap_or("regular"))?,
             note_summary: args.note_summary,
+            response_to: args.response_to,
             note_confidence,
             edit_note: args.edit_note,
         })

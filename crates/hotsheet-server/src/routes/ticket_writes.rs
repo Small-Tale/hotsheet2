@@ -168,6 +168,14 @@ pub(crate) fn do_update_with_ticket(
             "note_summary requires a non-empty note",
         ));
     }
+    if req.response_to.is_some()
+        && (edit_note_id.is_some() || req.note.as_deref().is_none_or(str::is_empty))
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "response_to requires an appended note",
+        ));
+    }
     let confidence_change = req.note_confidence_change(edit_note_id.is_some())?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
@@ -241,6 +249,7 @@ pub(crate) fn do_update_with_ticket(
                     confidence: confidence_change.flatten(),
                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                     ai_feedback: None,
+                    response_to: req.response_to,
                 },
                 text,
             )?,

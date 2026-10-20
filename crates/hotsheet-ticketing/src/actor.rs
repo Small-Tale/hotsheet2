@@ -119,6 +119,11 @@ pub fn api_scored_in_current_cycle(ticket: &crate::wire::ApiTicket) -> bool {
                 .confidence
                 .and_then(|score| hotsheet_model::Confidence::new(u64::from(score)).ok()),
             feedback_for: None,
+            feedback_request: note.feedback_request,
+            response_to: note
+                .response_to
+                .as_deref()
+                .and_then(|id| hotsheet_model::Ulid::from_string(id).ok()),
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -260,6 +265,7 @@ mod tests {
                 confidence: Some(Confidence::new(80).unwrap()),
                 actor: None,
                 ai_feedback: None,
+                response_to: None,
             },
             "## Confidence\n80".into(),
         )

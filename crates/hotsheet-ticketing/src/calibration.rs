@@ -234,6 +234,7 @@ mod tests {
                     confidence: Some(Confidence::new(value).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "## Confidence".into(),
             )

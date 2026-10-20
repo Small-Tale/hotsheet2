@@ -32,6 +32,10 @@ pub struct Note {
     /// Source note of an AI thumbs rating. Legacy files without this marker retain
     /// their relationship through the known first-line prefix.
     pub feedback_for: Option<Ulid>,
+    /// New feedback requests use independent response tracking. Absent on legacy notes.
+    pub feedback_request: bool,
+    /// Feedback request answered by this note. Distinct from AI thumbs `feedback_for`.
+    pub response_to: Option<Ulid>,
     /// Structured thumbs feedback. The note id is the stable rating id; edits replace
     /// its current value and `None` rating records a withdrawal.
     pub ai_feedback: Option<AiFeedback>,
@@ -748,16 +752,26 @@ impl Ticket {
         }
     }
 
-    /// Whether the ticket's latest feedback exchange is still waiting for a response.
-    /// A marked description starts the exchange when no regular/feedback note exists.
-    /// A regular note answers the preceding feedback request; activity/status notes do
-    /// not change that state, and a later feedback request opens it again.
+    /// Whether any independently tracked request or legacy sequential exchange is open.
     pub fn feedback_needed(&self) -> bool {
+        let tracked_open = self.notes.iter().any(|request| {
+            request.kind == NoteKind::FeedbackNeeded
+                && request.feedback_request
+                && !self
+                    .notes
+                    .iter()
+                    .any(|reply| reply.response_to == Some(request.id))
+        });
+        if tracked_open {
+            return true;
+        }
         self.notes
             .iter()
             .filter(|note| {
                 matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
                     && !note.is_ai_thumbs_feedback()
+                    && !note.feedback_request
+                    && note.response_to.is_none()
             })
             .max_by(|a, b| {
                 a.created_at
@@ -767,7 +781,13 @@ impl Ticket {
             })
             .map_or_else(
                 || Note::text_requests_feedback(&self.details),
-                Note::is_feedback_needed_request,
+                |note| {
+                    Note::is_feedback_needed_request(note)
+                        && !self
+                            .notes
+                            .iter()
+                            .any(|reply| reply.response_to == Some(note.id))
+                },
             )
     }
 }
@@ -793,6 +813,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -861,6 +883,62 @@ mod tests {
             "2026-08-20T00:03:00Z",
         ));
         assert!(ticket.feedback_needed());
+    }
+
+    #[test]
+    fn tracked_requests_close_only_by_their_own_linked_response() {
+        let mut ticket = Ticket::default();
+        let mut oldest = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:00:00Z",
+        );
+        oldest.feedback_request = true;
+        let mut newest = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:01:00Z",
+        );
+        newest.feedback_request = true;
+        ticket.notes.extend([oldest.clone(), newest.clone()]);
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(
+            ticket.feedback_needed(),
+            "unrelated regular note cannot answer either request"
+        );
+
+        for (first, second) in [(newest.id, oldest.id), (oldest.id, newest.id)] {
+            let mut sequence = ticket.clone();
+            let mut answer = note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+                NoteKind::Regular,
+                "2026-08-20T00:03:00Z",
+            );
+            answer.response_to = Some(first);
+            sequence.notes.push(answer.clone());
+            assert!(
+                sequence.feedback_needed(),
+                "one of two requests remains open"
+            );
+            sequence.notes.push(answer.clone());
+            assert!(
+                sequence.feedback_needed(),
+                "repeat reply does not answer another request"
+            );
+            answer.id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA5").unwrap();
+            answer.response_to = Some(second);
+            sequence.notes.push(answer);
+            assert!(!sequence.feedback_needed());
+            sequence.notes.pop();
+            assert!(
+                sequence.feedback_needed(),
+                "deleting the last linked response reopens its request"
+            );
+        }
     }
 
     #[test]

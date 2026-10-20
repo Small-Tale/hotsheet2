@@ -263,6 +263,14 @@ pub(crate) fn do_provider_update(
             "note_summary requires a non-empty note",
         ));
     }
+    if req.response_to.is_some()
+        && (req.note_id.is_some() || req.note.as_deref().is_none_or(str::is_empty))
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "response_to requires an appended note",
+        ));
+    }
     let confidence_change = req.note_confidence_change(req.note_id.is_some())?;
     // An append's null means "no score"; only an edit can clear one (HS2-CY4CWC).
     let note_confidence = confidence_change.flatten();
@@ -355,10 +363,21 @@ pub(crate) fn do_provider_update(
                         confidence: note_confidence,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         ai_feedback: None,
+                        response_to: req.response_to.clone(),
                     },
                     note,
                 )
-                .map_err(provider_transfer_error)?;
+                .map_err(|error| match &error {
+                    hotsheet_ticketing::ProviderError::Store(
+                        hotsheet_ticketing::StoreError::InvalidFeedbackResponse(_),
+                    ) => ApiError::new(StatusCode::BAD_REQUEST, error.to_string()),
+                    hotsheet_ticketing::ProviderError::Conflict { message, .. }
+                        if message.starts_with("response_to") =>
+                    {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    }
+                    _ => provider_transfer_error(error),
+                })?;
         }
         _ => {}
     }

@@ -373,6 +373,8 @@ struct NoteMetadata {
     summary: Option<String>,
     confidence: Option<Confidence>,
     feedback_for: Option<Ulid>,
+    feedback_request: bool,
+    response_to: Option<Ulid>,
     ai_feedback: Option<crate::ticket::AiFeedback>,
     human_edited: bool,
     actor: Option<NoteActor>,
@@ -416,6 +418,8 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         // the whole file (HS2-DWTJ43); writers can only emit validated values.
         confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
         feedback_for: value_after("feedback_for:").and_then(|value| Ulid::from_string(value).ok()),
+        feedback_request: value_after("feedback_request:") == Some("true"),
+        response_to: value_after("response_to:").and_then(|value| Ulid::from_string(value).ok()),
         ai_feedback: value_after("ai_feedback_hex:")
             .and_then(decode_note_summary)
             .and_then(|value| serde_json::from_str(&value).ok()),
@@ -454,6 +458,8 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         summary: metadata.summary,
         confidence: metadata.confidence,
         feedback_for: metadata.feedback_for,
+        feedback_request: metadata.feedback_request,
+        response_to: metadata.response_to,
         ai_feedback: metadata.ai_feedback,
         human_edited: metadata.human_edited,
         actor: metadata.actor,
@@ -493,6 +499,13 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(feedback_for) = n.feedback_for {
             out.push_str(" feedback_for: ");
             out.push_str(&feedback_for.to_string());
+        }
+        if n.feedback_request {
+            out.push_str(" feedback_request: true");
+        }
+        if let Some(response_to) = n.response_to {
+            out.push_str(" response_to: ");
+            out.push_str(&response_to.to_string());
         }
         if let Some(feedback) = &n.ai_feedback {
             out.push_str(" ai_feedback_hex: ");
@@ -723,6 +736,8 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: None,
                 human_edited: false,
                 actor: None,
@@ -736,6 +751,8 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: None,
                 human_edited: false,
                 actor: None,
@@ -752,6 +769,23 @@ mod tests {
         let back = parse_file(&text).expect("parses");
         assert_eq!(back, t, "parse(serialize(t)) == t");
         assert_eq!(to_file_string(&back), text, "serialize is byte-idempotent");
+    }
+
+    #[test]
+    fn tracked_feedback_links_survive_file_round_trip() {
+        let mut ticket = sample();
+        ticket.notes[1].feedback_request = true;
+        let request_id = ticket.notes[1].id;
+        let mut answer = ticket.notes[0].clone();
+        answer.id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");
+        answer.response_to = Some(request_id);
+        ticket.notes.push(answer);
+        let stored = to_file_string(&ticket);
+        assert!(stored.contains("feedback_request: true"));
+        assert!(stored.contains(&format!("response_to: {request_id}")));
+        let reloaded = parse_file(&stored).unwrap();
+        assert_eq!(reloaded.notes, ticket.notes);
+        assert!(!reloaded.feedback_needed());
     }
 
     #[test]
@@ -1168,6 +1202,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1192,6 +1228,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1308,6 +1346,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1345,6 +1385,8 @@ mod tests {
                 summary: Some("Shipped".into()),
                 confidence: Some(Confidence::new(82).unwrap()),
                 feedback_for: None,
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: None,
                 human_edited: false,
                 actor: None,
@@ -1358,6 +1400,8 @@ mod tests {
                 summary: None,
                 confidence: Some(Confidence::new(0).unwrap()),
                 feedback_for: None,
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: None,
                 human_edited: false,
                 actor: None,
@@ -1382,6 +1426,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1424,6 +1470,8 @@ mod tests {
             summary: Some("Completed café investigation".into()),
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1479,6 +1527,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -1545,6 +1595,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,

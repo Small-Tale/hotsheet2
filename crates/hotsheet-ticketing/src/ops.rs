@@ -891,6 +891,8 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         summary: Some(status_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        feedback_request: false,
+        response_to: None,
         ai_feedback: None,
         human_edited: false,
         actor: None,
@@ -939,6 +941,8 @@ fn append_started_phase_transition(
         summary: Some(started_phase_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        feedback_request: false,
+        response_to: None,
         ai_feedback: None,
         human_edited: false,
         actor: None,
@@ -993,6 +997,8 @@ pub fn prepare_not_working(
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
         feedback_for: None,
+        feedback_request: false,
+        response_to: None,
         ai_feedback: None,
         human_edited: false,
         actor: None,
@@ -1010,7 +1016,9 @@ pub fn prepare_not_working(
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
             ai_feedback: None,
+            response_to: None,
             human_edited: false,
             actor: None,
             text: format!("Not working: {text}"),
@@ -1215,6 +1223,7 @@ pub fn add_note_with_summary(
             confidence: None,
             actor: None,
             ai_feedback: None,
+            response_to: None,
         },
         text,
     )
@@ -1233,6 +1242,8 @@ pub struct NoteMetadataInput {
     pub ai_feedback: Option<hotsheet_model::AiFeedback>,
     /// Preserve a source note's human edit history during provider copy.
     pub human_edited: bool,
+    /// Request note answered by this new note, if any.
+    pub response_to: Option<String>,
 }
 
 /// Append a note with optional metadata (see [`NoteMetadataInput`]).
@@ -1257,6 +1268,29 @@ pub fn add_note_with_metadata(
         } else {
             kind
         };
+        let response_to = metadata
+            .response_to
+            .as_deref()
+            .map(|id| {
+                Ulid::from_string(id).map_err(|_| {
+                    StoreError::InvalidFeedbackResponse(
+                        "response_to must be a feedback request ULID",
+                    )
+                })
+            })
+            .transpose()?;
+        if let Some(request_id) = response_to {
+            if kind != NoteKind::Regular
+                || !t
+                    .notes
+                    .iter()
+                    .any(|note| note.id == request_id && note.kind == NoteKind::FeedbackNeeded)
+            {
+                return Err(StoreError::InvalidFeedbackResponse(
+                    "response_to must name a feedback request on this ticket",
+                ));
+            }
+        }
         t.notes.push(Note {
             id: note_id,
             kind,
@@ -1273,6 +1307,8 @@ pub fn add_note_with_metadata(
                 .and_then(|feedback| feedback.target.strip_prefix("note:"))
                 .and_then(|id| Ulid::from_string(id).ok())
                 .or_else(|| Note::feedback_parent_from_text(&text)),
+            feedback_request: kind == NoteKind::FeedbackNeeded,
+            response_to,
             ai_feedback: metadata.ai_feedback,
             human_edited: metadata.human_edited,
             actor: metadata.actor,
@@ -1374,6 +1410,8 @@ pub fn rate_ai_content(
                 feedback_for: target
                     .strip_prefix("note:")
                     .and_then(|id| Ulid::from_string(id).ok()),
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: Some(feedback),
                 human_edited: false,
                 actor,
@@ -3560,6 +3598,7 @@ mod tests {
                     confidence: confidence.map(|value| Confidence::new(value).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "note".into(),
             )
@@ -3638,6 +3677,8 @@ mod tests {
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -4748,12 +4789,16 @@ mod tests {
         .unwrap();
         assert!(store.read_ticket(&id).unwrap().feedback_needed());
 
-        let ticket = add_note(
+        let ticket = add_note_with_metadata(
             &store,
             &id,
             Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
             ts("2026-08-19T02:00:00Z"),
             NoteKind::Regular,
+            NoteMetadataInput {
+                response_to: Some("01ARZ3NDEKTSV4RRFFQ69G5FB0".into()),
+                ..Default::default()
+            },
             "> FEEDBACK NEEDED: choose a layout\n\nUse the compact layout.".into(),
         )
         .unwrap();

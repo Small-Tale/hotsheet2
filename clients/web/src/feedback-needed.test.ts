@@ -54,6 +54,28 @@ describe('isFeedbackNeeded', () => {
     expect(presentedNoteKind(response, notes)).toBe('regular');
     expect(presentedNoteKind(next, notes)).toBe('feedback_needed');
   });
+  it('keeps independently tracked requests open through unrelated and repeated replies in either order', () => {
+    const oldest = { ...note('oldest', 'feedback_needed', '2026-09-02T00:00:00Z'), feedback_request: true };
+    const newest = { ...note('newest', 'feedback_needed', '2026-09-02T00:01:00Z'), feedback_request: true };
+    const unrelated = note('unrelated', 'regular', '2026-09-02T00:02:00Z');
+    for (const [first, second] of [
+      [oldest, newest],
+      [newest, oldest],
+    ]) {
+      const pending = [oldest, newest, unrelated];
+      expect(isFeedbackNeeded(pending)).toBe(true);
+      expect(presentedNoteKind(oldest, pending)).toBe('feedback_needed');
+      expect(presentedNoteKind(newest, pending)).toBe('feedback_needed');
+      const reply = { ...note('reply', 'regular', '2026-09-02T00:03:00Z'), response_to: first.id };
+      const partlyAnswered = [...pending, reply, { ...reply, id: 'repeat' }];
+      expect(isFeedbackNeeded(partlyAnswered)).toBe(true);
+      expect(presentedNoteKind(first, partlyAnswered)).toBe('regular');
+      expect(presentedNoteKind(second, partlyAnswered)).toBe('feedback_needed');
+      const allAnswered = [...partlyAnswered, { ...reply, id: 'other', response_to: second.id }];
+      expect(isFeedbackNeeded(allAnswered)).toBe(false);
+      expect(fullTicketFeedbackNeeded({ details: '', notes: allAnswered })).toBe(false);
+    }
+  });
   it('matches the core marker rule for feedback requests in descriptions', () => {
     expect(textRequestsFeedback('Context. FEEDBACK NEEDED: choose one')).toBe(true);
     expect(textRequestsFeedback('feedback needed from someone')).toBe(false);

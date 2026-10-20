@@ -75,11 +75,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             allow_literal_backslash_n,
             note_kind,
             note_summary,
+            response_to,
             note_confidence,
             clear_note_confidence,
             edit_note,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
+            if response_to.is_some() && note.as_deref().is_none_or(str::is_empty) {
+                anyhow::bail!("--response-to requires --note or --note-file");
+            }
             let note_confidence = confidence_change(note_confidence, clear_note_confidence);
             validate_note_modifiers(
                 &note,
@@ -101,6 +105,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     note,
                     note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
                     note_summary,
+                    response_to,
                     note_confidence,
                     edit_note,
                 },
@@ -685,6 +690,7 @@ pub(crate) fn cmd_provider_edit(
                 confidence: input.note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
+                response_to: input.response_to,
             },
             note,
         )?;
@@ -1360,6 +1366,7 @@ pub(crate) struct ProviderEditInput {
     note: Option<String>,
     note_kind: NoteKind,
     note_summary: Option<String>,
+    response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 }

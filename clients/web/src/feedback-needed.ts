@@ -1,7 +1,7 @@
 import type { Note } from './api';
 
 type RelevantNote = Pick<Note, 'id' | 'kind' | 'created_at'> &
-  Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback'>>;
+  Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback' | 'feedback_request' | 'response_to'>>;
 type FullFeedbackTicket = { feedback_needed?: boolean; details: string; notes: readonly RelevantNote[] };
 
 export const DETAILS_FEEDBACK_ID = 'ticket-details';
@@ -27,11 +27,26 @@ export function isAiThumbsFeedback(note: Partial<Pick<Note, 'text' | 'feedback_f
 const after = (candidate: RelevantNote, note: RelevantNote) =>
   candidate.created_at > note.created_at || (candidate.created_at === note.created_at && candidate.id > note.id);
 
-/** A regular note answers the preceding feedback request; other note kinds are neutral. */
+/** Keep new requests open independently while reading unmarked legacy notes sequentially. */
 export function isFeedbackNeeded(notes: readonly RelevantNote[]) {
+  if (
+    notes.some(
+      (request) =>
+        request.kind === 'feedback_needed' &&
+        request.feedback_request &&
+        !notes.some((reply) => reply.response_to === request.id),
+    )
+  )
+    return true;
   let latest: RelevantNote | undefined;
   for (const note of notes) {
-    if ((note.kind !== 'regular' && note.kind !== 'feedback_needed') || isAiThumbsFeedback(note)) continue;
+    if (
+      (note.kind !== 'regular' && note.kind !== 'feedback_needed') ||
+      isAiThumbsFeedback(note) ||
+      note.feedback_request ||
+      note.response_to
+    )
+      continue;
     if (
       !latest ||
       note.created_at > latest.created_at ||
@@ -39,7 +54,7 @@ export function isFeedbackNeeded(notes: readonly RelevantNote[]) {
     )
       latest = note;
   }
-  return latest?.kind === 'feedback_needed';
+  return latest?.kind === 'feedback_needed' && !notes.some((reply) => reply.response_to === latest.id);
 }
 
 /** Preserve response UX when a newer client reads a full ticket from an older server
@@ -52,10 +67,20 @@ export function fullTicketFeedbackNeeded(ticket: FullFeedbackTicket): boolean {
   return hasExchange ? isFeedbackNeeded(ticket.notes) : textRequestsFeedback(ticket.details);
 }
 
-/** A feedback ask that has already received a later regular response reads as an ordinary note. */
+/** Present each answered request as an ordinary note, preserving legacy response order. */
 export function presentedNoteKind(note: RelevantNote, notes: readonly RelevantNote[]): RelevantNote['kind'] {
+  if (note.kind === 'feedback_needed' && note.feedback_request) {
+    return notes.some((reply) => reply.response_to === note.id) ? 'regular' : 'feedback_needed';
+  }
   return note.kind === 'feedback_needed' &&
-    notes.some((candidate) => candidate.kind === 'regular' && !isAiThumbsFeedback(candidate) && after(candidate, note))
+    (notes.some((candidate) => candidate.response_to === note.id) ||
+      notes.some(
+        (candidate) =>
+          candidate.kind === 'regular' &&
+          !candidate.response_to &&
+          !isAiThumbsFeedback(candidate) &&
+          after(candidate, note),
+      ))
     ? 'regular'
     : note.kind;
 }

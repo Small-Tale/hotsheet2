@@ -263,6 +263,8 @@ pub(crate) struct UpdateReq {
     pub(crate) note_kind: Option<NoteKind>,
     /// Optional concise plain-text headline used by timeline presentations.
     pub(crate) note_summary: Option<String>,
+    /// Request note id answered by the appended note.
+    pub(crate) response_to: Option<String>,
     /// Optional AI completion confidence (integer 0-100) on the appended note
     /// (HS2-DWTJ43), or on the note named by `note_id`, where JSON null clears it
     /// (HS2-CY4CWC). Kept as raw JSON so a malformed value gets an explicit 400.
@@ -299,6 +301,7 @@ impl UpdateReq {
             || self.edit_feedback_prompt
             || self.note_kind.is_some()
             || self.note_summary.is_some()
+            || self.response_to.is_some()
             || self.note_confidence.is_some()
         {
             return Err(ApiError::new(

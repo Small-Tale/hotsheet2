@@ -93,7 +93,7 @@ export interface InspectorAndEditorInteractionsDependencies {
     note: DebouncedAutosave<{ id: string; value: string }>;
     blocked: DebouncedAutosave<string>;
     /** Answer a feedback request in the frame's ticket with a new regular note. */
-    respond: (value: string) => Promise<boolean>;
+    respond: (value: string, requestId?: string) => Promise<boolean>;
   };
   readonly readerDetailsAutosave: DebouncedAutosave<string>;
   readonly detailsAutosave: DebouncedAutosave<string>;
@@ -887,7 +887,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         : frame.edit.noteDraft;
     if (!value.trim()) return;
     const saves = linkedReaderSaves(frame.id),
-      saved = response ? saves.respond(value) : saves.note.flush();
+      saved = response ? saves.respond(value, id) : saves.note.flush();
     void saved.then((ok) => {
       if (!ok) return;
       replaceLinkedReaderFrame(frame.id, (current) => ({
@@ -1148,7 +1148,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
               : draft.value;
         if (!id || !value.trim()) return;
         const patch = response
-          ? { note: value, note_kind: 'regular' }
+          ? { note: value, note_kind: 'regular', ...(note?.kind === 'feedback_needed' ? { response_to: id } : {}) }
           : noteEditPatch(linkedReaderFrame(target)?.ticket ?? selectedTicket.value, id, value);
         void updateSelected(patch).then((saved) => {
           if (saved) {
@@ -1169,8 +1169,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       const frame = linkedReaderFrame(target),
         // A linked reader frame answers on its own ticket, not the workspace selection (HS2-04XTV5).
         saved = frame
-          ? linkedReaderSaves(frame.id).respond('No response needed')
-          : updateSelected({ note: 'No response needed', note_kind: 'regular' });
+          ? linkedReaderSaves(frame.id).respond('No response needed', id)
+          : updateSelected({ note: 'No response needed', note_kind: 'regular', response_to: id });
       void saved.then((ok) => {
         if (ok) clearFeedbackReplyState(id, frame?.id);
       });

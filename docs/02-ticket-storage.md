@@ -364,6 +364,9 @@ should the fix also cover the dashboard dedicated view?
   - `regular` — an ordinary note. **Shared** (committed).
   - `feedback_needed` — a request for a human decision (HS1's `FEEDBACK NEEDED:`
     prefix, promoted to a first-class kind). **Shared** (committed).
+    New requests carry `feedback_request: true`; each stays open until a regular
+    reply or `No response needed` acknowledgement names its ULID in `response_to:`.
+    Older notes without these markers keep their sequential interpretation.
   - `feedback_draft` — a user's half-written response to a `feedback_needed` ask.
     **Local / per-user** — it lives in the gitignored local overlay (§2.11 Tier B),
     _not_ the committed ticket file; on submit it becomes a `regular` shared note.

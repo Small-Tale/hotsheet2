@@ -220,6 +220,9 @@ enum Cmd {
         /// Concise plain-text timeline headline for an activity/status note.
         #[arg(long, conflicts_with = "edit_note")]
         note_summary: Option<String>,
+        /// Provider-native feedback request note id answered by this note.
+        #[arg(long, conflicts_with = "edit_note")]
+        response_to: Option<String>,
         /// AI completion confidence (integer 0-100) recorded on the appended note, or the
         /// corrected score of the note named by --edit-note (note text then optional).
         #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]

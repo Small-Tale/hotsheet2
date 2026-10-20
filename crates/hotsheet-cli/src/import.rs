@@ -885,6 +885,8 @@ fn build_ticket(
                 summary: None,
                 confidence: None,
                 feedback_for: Note::feedback_parent_from_text(&n.text),
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&n.text),
                 human_edited: false,
                 actor: None,

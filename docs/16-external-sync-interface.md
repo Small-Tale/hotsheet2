@@ -551,6 +551,14 @@ trailer is the final paragraph before it, after non-empty text, matching exactly
 `Confidence: <integer 0-100>%`. Ordinary human comments, prose on the same line,
 out-of-range or non-integer values, and earlier paragraphs never become a score. Jira
 writes the trailer as its own ADF paragraph.
+New feedback requests append `<!-- hotsheet-feedback-request -->` after the
+idempotency marker; replies and `No response needed` acknowledgements append
+`<!-- hotsheet-response-to:<hex-encoded native comment id> -->`. Provider reads
+expose the request and response link using native note IDs and retain the older
+sequential rule for comments without these markers (HS2-W1ENZD).
+Reads also expose the generated note marker as `hotsheet_note_id` alongside the
+provider-native `id`, allowing ticket copy to remap a request and its response
+correctly after reload or an idempotent retry.
 
 `latest_confidence` is bounded by the current completion cycle on every provider
 (HS2-N3RMTV). A completed or verified ticket reports its newest scored note written

@@ -124,22 +124,27 @@ like a reserved `<!-- hotsheet:… -->` marker is backslash-escaped on disk and 
 on read. Content after `hotsheet:notes:end` is rejected by current readers rather
 than swallowed or discarded; a future schema can define such a section explicitly.
 
-| Note field   | Type                                                         | Notes                                                                                                                                                        |
-| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`         | ULID                                                         | stable identity and chronological tie-breaker (§2.6/§2.7)                                                                                                    |
-| `kind`       | `regular\|activity\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6                                                                          |
-| `created_at` | RFC3339                                                      | immutable creation time; primary timeline order                                                                                                              |
-| `edited_at`  | RFC3339                                                      | last text edit; equals `created_at` when never edited                                                                                                        |
-| `summary`    | optional plain text                                          | concise Timeline headline, encoded as UTF-8 hex in the forward-compatible `summary_hex:` note-marker token; primarily supplied for `activity`/`status` notes |
-| `confidence` | optional integer 0-100                                       | AI completion confidence (HS2-DWTJ43) as the plain `confidence: NN` note-marker token after `summary_hex:`; out-of-range or malformed values parse as absent |
-| `actor`      | optional `human\|ai\|system` plus id                         | who wrote the note (HS2-32QDZ3): `actor: ai` plus an optional `actor_id_hex:` (UTF-8 hex id); an unknown role parses as absent                               |
-| text         | Markdown                                                     | rendered; raw HTML escaped                                                                                                                                   |
+| Note field         | Type                                                         | Notes                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`               | ULID                                                         | stable identity and chronological tie-breaker (§2.6/§2.7)                                                                                                    |
+| `kind`             | `regular\|activity\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6                                                                          |
+| `created_at`       | RFC3339                                                      | immutable creation time; primary timeline order                                                                                                              |
+| `edited_at`        | RFC3339                                                      | last text edit; equals `created_at` when never edited                                                                                                        |
+| `summary`          | optional plain text                                          | concise Timeline headline, encoded as UTF-8 hex in the forward-compatible `summary_hex:` note-marker token; primarily supplied for `activity`/`status` notes |
+| `confidence`       | optional integer 0-100                                       | AI completion confidence (HS2-DWTJ43) as the plain `confidence: NN` note-marker token after `summary_hex:`; out-of-range or malformed values parse as absent |
+| `actor`            | optional `human\|ai\|system` plus id                         | who wrote the note (HS2-32QDZ3): `actor: ai` plus an optional `actor_id_hex:` (UTF-8 hex id); an unknown role parses as absent                               |
+| `feedback_request` | optional `true`                                              | New `feedback_needed` notes carry `feedback_request: true` and remain open until their own linked response arrives (HS2-W1ENZD). Absent on legacy notes.     |
+| `response_to`      | optional note ULID                                           | A regular answer or `No response needed` acknowledgement names the request it closes. Distinct from AI thumbs `feedback_for`.                                |
+| text               | Markdown                                                     | rendered; raw HTML escaped                                                                                                                                   |
 
 AI thumbs feedback for a source note carries an optional `feedback_for: <ulid>` token
 in the note marker. Writers derive it from the known `AI feedback for note:<ulid>:`
 first line; readers still recognize that prefix in older files without the token.
 The marker keeps the association if the feedback text is edited. Other note kinds and
 feedback for non-note targets omit it. Older bounded-note readers ignore this token.
+Unmarked older feedback notes retain the sequential latest-request/latest-regular-note
+interpretation. New feedback requests and replies use `feedback_request` and
+`response_to` in the note marker so unrelated notes cannot close a request.
 
 New AI thumbs notes also carry `ai_feedback_hex: <UTF-8 JSON in hex>`. The JSON has
 `target` (`note:<id>`, `activity:<id>`, or `conversation:<id>`), `rating`

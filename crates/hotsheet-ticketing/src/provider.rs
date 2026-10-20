@@ -1557,6 +1557,7 @@ impl TicketProvider for GitProvider {
                 confidence: None,
                 actor: None,
                 ai_feedback: None,
+                response_to: None,
             },
             text,
         )
@@ -2123,6 +2124,37 @@ pub fn copy_between(
             field: "AI feedback",
         });
     }
+    if ticket.notes.iter().any(|note| {
+        note.response_to.as_deref().is_some_and(|id| {
+            !ticket
+                .notes
+                .iter()
+                .any(|request| request.id == id && request.kind == NoteKind::FeedbackNeeded)
+        })
+    }) {
+        return Err(TransferError::UnsupportedField {
+            connection_id: destination_connection.into(),
+            field: "orphaned feedback response",
+        });
+    }
+    // A tracker may return comments newest-first. Copy request notes before their
+    // linked replies so the destination can validate and remap each native id.
+    let mut pending_notes = ticket.notes.clone();
+    let mut ordered_notes = Vec::with_capacity(pending_notes.len());
+    while !pending_notes.is_empty() {
+        let next = pending_notes
+            .iter()
+            .position(|note| {
+                note.response_to
+                    .as_ref()
+                    .is_none_or(|target| !pending_notes.iter().any(|pending| pending.id == *target))
+            })
+            .ok_or_else(|| TransferError::UnsupportedField {
+                connection_id: destination_connection.into(),
+                field: "cyclic feedback responses",
+            })?;
+        ordered_notes.push(pending_notes.remove(next));
+    }
     let draft = ProviderDraft {
         title: ticket.title,
         category: ticket.category,
@@ -2149,8 +2181,15 @@ pub fn copy_between(
         .iter()
         .map(|note| note.id.clone())
         .collect::<Vec<_>>();
-    for note in ticket.notes {
+    let mut copied_note_ids = HashMap::<String, String>::new();
+    for note in ordered_notes {
         let generated_id = transfer_ulid(operation_id, &format!("note:{}", note.id));
+        let response_to = note.response_to.as_ref().map(|source_id| {
+            copied_note_ids
+                .get(source_id)
+                .cloned()
+                .unwrap_or_else(|| source_id.clone())
+        });
         let mut ai_feedback = note.ai_feedback.clone();
         let mut copied_text = note.text.clone();
         if let Some(feedback) = &mut ai_feedback {
@@ -2170,7 +2209,7 @@ pub fn copy_between(
                 }
             }
         }
-        destination.add_note_with_metadata(
+        let copied = destination.add_note_with_metadata(
             &created.native_id,
             MutationContext {
                 now: Timestamp::new(note.created_at.clone()),
@@ -2184,14 +2223,28 @@ pub fn copy_between(
                     .and_then(|value| Confidence::new(u64::from(value)).ok()),
                 actor: note.actor.clone(),
                 ai_feedback,
+                response_to,
                 human_edited: note.human_edited,
             },
             copied_text.clone(),
         )?;
+        let generated_id_text = generated_id.to_string();
+        let destination_note_id = copied
+            .notes
+            .iter()
+            .find(|candidate| {
+                candidate.hotsheet_note_id.as_deref() == Some(generated_id_text.as_str())
+            })
+            .map(|candidate| candidate.id.clone())
+            .ok_or_else(|| ProviderError::Conflict {
+                ticket: created.native_id.clone(),
+                message: format!("copied note {} could not be identified", note.id),
+            })?;
+        copied_note_ids.insert(note.id.clone(), destination_note_id.clone());
         if note.edited_at != note.created_at {
             destination.edit_note(
                 &created.native_id,
-                &generated_id.to_string(),
+                &destination_note_id,
                 Timestamp::new(note.edited_at),
                 copied_text,
             )?;
@@ -3486,6 +3539,7 @@ mod tests {
                     confidence: Some(Confidence::new(73).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "## Confidence\n73".into(),
             )
@@ -3512,6 +3566,7 @@ mod tests {
                     confidence: Some(Confidence::new(10).unwrap()),
                     actor: None,
                     ai_feedback: None,
+                    response_to: None,
                 },
                 "scored".into(),
             )
@@ -3732,6 +3787,66 @@ mod tests {
                 .text
                 .starts_with(&format!("AI feedback for note:{}:", copied.notes[0].id))
         );
+    }
+
+    #[test]
+    fn copy_remaps_feedback_reply_to_copied_request() {
+        let (_source_dir, source) = git_provider();
+        let (_dest_dir, dest) = git_provider();
+        let dest = GitProvider::new("destination", dest.store.clone());
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T03:00:00Z"),
+                draft("linked feedback", vec![]),
+            )
+            .unwrap();
+        let ask_id = Ulid::new();
+        source
+            .add_note(
+                &source_id.to_string(),
+                ctx(ask_id, "2026-08-26T03:01:00Z"),
+                NoteKind::FeedbackNeeded,
+                "Which route?".into(),
+            )
+            .unwrap();
+        source
+            .add_note_with_metadata(
+                &source_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T03:02:00Z"),
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    response_to: Some(ask_id.to_string()),
+                    ..Default::default()
+                },
+                "Route A".into(),
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry.register(Arc::new(dest)).unwrap();
+        let copied = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "linked-feedback-copy",
+            Timestamp::new("2026-08-26T03:03:00Z"),
+        )
+        .unwrap();
+        let ticket = registry
+            .get("destination")
+            .unwrap()
+            .get(&copied.destination.native_id)
+            .unwrap();
+        assert_eq!(ticket.notes.len(), 2);
+        assert_eq!(
+            ticket.notes[1].response_to.as_deref(),
+            Some(ticket.notes[0].id.as_str())
+        );
+        assert!(!ticket.feedback_needed);
     }
 
     #[test]

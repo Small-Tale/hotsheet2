@@ -4027,7 +4027,7 @@ unsupported, so they cannot create this state through Hot Sheet.
   The optional catchall response starts at half the ordinary note-editor minimum height
   so it does not dominate the feedback prompt, while remaining vertically resizable.
   A compact, text-only secondary **No response needed** action appends that exact text
-  as a regular note and closes the feedback exchange without mutating or deleting the
+  as a regular note linked to that request and closes it without mutating or deleting the
   ask. It uses an outlined button rather than an ambiguous acknowledgement icon. Clients
   keep it in the same action row, height, and centerline as the adjacent Respond action,
   and render the exact acknowledgement as a subtle ordinary note rather than another
@@ -4261,9 +4261,9 @@ takes precedence over blocked and Up Next rails so the outstanding decision is n
 hidden. The server's compact row exposes the source `feedback_needed` boolean and
 the normalized `needs_review` boolean (including review requests), so the client
 can present either state without loading full ticket notes.
-In the sidebar inspector, the active feedback note or marked description has a full-width
-**Respond to Feedback** action directly below its body. It is omitted from answered or
-superseded asks and from reader mode itself. Activating it opens reader mode on Info,
+In the sidebar inspector, each pending feedback note or marked description has a full-width
+**Respond to Feedback** action directly below its body. It is omitted from answered asks
+and from reader mode itself. Activating it opens reader mode on Info,
 scrolls the active source into view, and focuses its response editor. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
@@ -4272,11 +4272,12 @@ activity, and status notes, including their Markdown paragraphs, lists, code, an
 An active feedback description uses the same warning border/fill and content insets as a
 feedback note in both inspector and reader. Reader mode also gives it the standard
 circle-alert icon and "Feedback needed" heading so its meaning is explicit in context.
-For note-driven feedback, only an unanswered ask is active: among regular and
-`feedback_needed` notes, the most recent one controls the state. A later regular note is
-the response and clears Needs review; the answered ask then uses the ordinary note
-presentation rather than retaining feedback styling or an editor. Activity/status notes
-are neutral, and a later `feedback_needed` note opens it again.
+For newly written note-driven feedback, every `feedback_needed` note remains open until
+a regular response or `No response needed` acknowledgement names that request note in
+`response_to`. Unrelated regular notes and later requests leave it open. Needs review
+remains active while any request is open; each answered ask uses ordinary note
+presentation. Older notes without linkage retain the sequential rule: the most recent
+regular or `feedback_needed` note controls state. Activity/status notes remain neutral.
 The reader's reply to a feedback request is a draft for a new note. Background ticket
 refresh preserves that reply without comparing it to the request note or showing a note
 edit conflict; actual edits to existing notes still reconcile against their source text.

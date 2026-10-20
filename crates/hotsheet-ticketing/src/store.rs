@@ -169,6 +169,8 @@ impl StoreMetadata {
 pub enum StoreError {
     #[error("{0}")]
     InvalidAnnotations(&'static str),
+    #[error("{0}")]
+    InvalidFeedbackResponse(&'static str),
     #[error(transparent)]
     ImageCrop(#[from] crate::image_crop::ImageCropError),
     #[error(transparent)]
@@ -1594,6 +1596,8 @@ impl FsStore {
             summary: Some(summary),
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor,
@@ -2419,6 +2423,8 @@ mod tests {
                     summary: None,
                     confidence: None,
                     feedback_for: None,
+                    feedback_request: false,
+                    response_to: None,
                     ai_feedback: Some(AiFeedback {
                         target: "conversation:shared".into(),
                         rating: Some(AiFeedbackRating::NotHelpful),
@@ -2521,6 +2527,8 @@ mod tests {
                     summary: None,
                     confidence: None,
                     feedback_for: None,
+                    feedback_request: false,
+                    response_to: None,
                     ai_feedback: None,
                     human_edited: false,
                     actor: None,

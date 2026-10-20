@@ -151,6 +151,8 @@ fn arb_note() -> impl Strategy<Value = Note> {
             summary,
             confidence,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor,

@@ -988,3 +988,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/terminal-grid-layout.test.ts` checks phone, short-phone, boundary, and desktop layout choices; `clients/web/src/terminal-viewport.test.ts` checks phone fixed, desktop fitted, and too-small mirrored tile sizing.
 - End to end: `clients/web/tests/terminal-feedback.spec.ts` checks rendered 80×24 rows and PTY size, one/two-card zoom and persistence, short viewport, desktop transition, moved drawer instance, and phone/wide captures.
 - Manual: `docs/manual-test-plan.md` checks the grid on a physical phone with more than one live terminal.
+
+### Independently linked feedback requests (HS2-W1ENZD)
+
+- Behavior: Every new feedback request stays open until a regular reply or `No response needed` note names it in `response_to`; unrelated notes and later requests leave it open. Legacy notes keep the prior sequential interpretation. `feedback_for` remains AI thumbs metadata.
+- Unit: Model transition permutations and file round trip; merge of a request and reply from separate branches; provider comment metadata round trip; web state and note action tests.
+- End to end: Server HTTP checkout flow covers two requests, newest answer first, and Needs Review until the older request closes. Browser provider flow covers two pending actions, response and acknowledgement, wide and phone presentation.

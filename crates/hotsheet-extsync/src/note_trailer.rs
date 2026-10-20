@@ -18,7 +18,7 @@
 //! be the final non-empty line before the marker, and it must match exactly
 //! `Confidence: <integer 0-100>%`.
 
-use hotsheet_model::{Confidence, Status, Timestamp};
+use hotsheet_model::{Confidence, NoteKind, Status, Timestamp};
 use hotsheet_ticketing::wire::ApiNote;
 
 /// Prefix of the HTML comment that identifies a Hot Sheet-authored comment.
@@ -29,6 +29,15 @@ const TRAILER_PREFIX: &str = "Confidence: ";
 /// The idempotency marker for a note id.
 pub fn note_marker(note_id: impl std::fmt::Display) -> String {
     format!("{NOTE_MARKER_PREFIX}{note_id} -->")
+}
+
+/// Stable Hot Sheet marker id when the comment was written by this provider.
+pub fn parse_note_id(body: &str) -> Option<String> {
+    let (_, tail) = body.rsplit_once(SEPARATOR_MARKER)?;
+    let id = tail.split_once(" -->")?.0;
+    hotsheet_model::Ulid::from_string(id)
+        .ok()
+        .map(|_| id.to_owned())
 }
 
 /// The comment body for a Hot Sheet note: its text, the optional confidence trailer, and
@@ -46,6 +55,58 @@ pub fn compose_comment(
         ),
         None => format!("{text}\n\n{marker}"),
     }
+}
+
+/// Preserve independent feedback exchanges in provider comments without changing the
+/// existing idempotency marker or confidence trailer.
+pub fn compose_feedback_comment(
+    text: &str,
+    confidence: Option<Confidence>,
+    note_id: impl std::fmt::Display,
+    kind: NoteKind,
+    response_to: Option<&str>,
+) -> String {
+    let mut body = compose_comment(text, confidence, note_id);
+    if kind == NoteKind::FeedbackNeeded {
+        body.push_str("\n<!-- hotsheet-feedback-request -->");
+    }
+    if let Some(id) = response_to {
+        body.push_str("\n<!-- hotsheet-response-to:");
+        body.push_str(
+            &id.bytes()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+        );
+        body.push_str(" -->");
+    }
+    body
+}
+
+pub fn parse_feedback_metadata(body: &str) -> (bool, Option<String>) {
+    if parse_note_id(body).is_none() {
+        return (false, None);
+    }
+    let metadata = body
+        .rsplit_once(SEPARATOR_MARKER)
+        .and_then(|(_, tail)| tail.split_once(" -->"))
+        .map_or("", |(_, metadata)| metadata);
+    let request = metadata
+        .lines()
+        .any(|line| line == "<!-- hotsheet-feedback-request -->");
+    let response_to = metadata.lines().find_map(|line| {
+        let encoded = line
+            .strip_prefix("<!-- hotsheet-response-to:")?
+            .strip_suffix(" -->")?;
+        if encoded.len() % 2 != 0 {
+            return None;
+        }
+        let bytes = (0..encoded.len())
+            .step_by(2)
+            .map(|at| u8::from_str_radix(&encoded[at..at + 2], 16).ok())
+            .collect::<Option<Vec<_>>>()?;
+        String::from_utf8(bytes).ok()
+    });
+    (request, response_to)
 }
 
 /// Split a comment body into its visible note text and the trailer's confidence.
@@ -172,6 +233,50 @@ mod tests {
     }
 
     #[test]
+    fn provider_feedback_metadata_round_trips_and_ignores_unmarked_prose() {
+        let request = compose_feedback_comment(
+            "Choose A?",
+            None,
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            NoteKind::FeedbackNeeded,
+            None,
+        );
+        assert_eq!(parse_comment(&request), ("Choose A?".into(), None));
+        assert_eq!(parse_feedback_metadata(&request), (true, None));
+        let answer = compose_feedback_comment(
+            "Use A",
+            None,
+            "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            NoteKind::Regular,
+            Some("12345"),
+        );
+        assert_eq!(parse_comment(&answer), ("Use A".into(), None));
+        assert_eq!(
+            parse_feedback_metadata(&answer),
+            (false, Some("12345".into()))
+        );
+        assert_eq!(
+            parse_feedback_metadata("<!-- hotsheet-feedback-request -->"),
+            (false, None)
+        );
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let marked = compose_feedback_comment("A?", None, id, NoteKind::FeedbackNeeded, None);
+        assert_eq!(parse_note_id(&marked).as_deref(), Some(id));
+        assert_eq!(
+            parse_note_id("A?\n\n<!-- hotsheet-note-id:invalid -->"),
+            None
+        );
+        let quoted = compose_feedback_comment(
+            "Example: <!-- hotsheet-feedback-request -->",
+            None,
+            id,
+            NoteKind::Regular,
+            None,
+        );
+        assert_eq!(parse_feedback_metadata(&quoted), (false, None));
+    }
+
+    #[test]
     fn ordinary_prose_never_becomes_a_score() {
         for body in [
             // No Hot Sheet marker: a human comment is never parsed.
@@ -206,12 +311,15 @@ mod tests {
     fn latest_confidence_reports_the_newest_scored_note_of_a_completed_ticket() {
         let note = |created_at: &str, confidence: Option<u8>| ApiNote {
             id: created_at.into(),
+            hotsheet_note_id: None,
             kind: hotsheet_model::NoteKind::Regular,
             created_at: created_at.into(),
             edited_at: created_at.into(),
             summary: None,
             confidence,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -235,12 +343,15 @@ mod tests {
     fn note(created_at: &str, confidence: Option<u8>) -> ApiNote {
         ApiNote {
             id: created_at.into(),
+            hotsheet_note_id: None,
             kind: hotsheet_model::NoteKind::Regular,
             created_at: created_at.into(),
             edited_at: created_at.into(),
             summary: None,
             confidence,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,

@@ -7823,6 +7823,7 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     )
     .await;
     assert_eq!(updated["notes"][0]["kind"], "feedback_needed");
+    assert_eq!(updated["notes"][0]["feedback_request"], true);
     assert_eq!(updated["feedback_needed"], true);
 
     let rows = body_json(
@@ -7861,13 +7862,58 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     assert_eq!(filtered["items"][0]["id"], id);
     assert!(filtered["next_cursor"].is_null());
 
+    let second_request = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/{checkout_id}/tickets/{id}"),
+                Some(r#"{"note":"FEEDBACK NEEDED: choose a date"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second_id = second_request["notes"][1]["id"].as_str().unwrap();
+    let newest_answer = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/{checkout_id}/tickets/{id}"),
+                Some(&serde_json::json!({"note":"Tomorrow", "response_to": second_id}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        newest_answer["feedback_needed"], true,
+        "older request remains open"
+    );
+    assert_eq!(newest_answer["notes"][2]["response_to"], second_id);
+
+    let request_id = updated["notes"][0]["id"].as_str().unwrap();
+    let invalid = router
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/{checkout_id}/tickets/{id}"),
+            Some(r#"{"note":"Unlinked","response_to":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), axum::http::StatusCode::BAD_REQUEST);
     let answered = body_json(
         router
             .clone()
             .oneshot(authed(
                 "PATCH",
                 &format!("/checkouts/{checkout_id}/tickets/{id}"),
-                Some(r#"{"note":"Use the first choice"}"#),
+                Some(
+                    &serde_json::json!({"note":"Use the first choice", "response_to": request_id})
+                        .to_string(),
+                ),
             ))
             .await
             .unwrap(),

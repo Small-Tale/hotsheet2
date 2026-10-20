@@ -13,6 +13,7 @@ import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
+import { isFeedbackNeeded } from '../src/feedback-needed';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
@@ -1029,7 +1030,7 @@ const XV1VCR_T0 = Date.UTC(2026, 9, 16, 9, 0, 0);
 async function mockProject(
   page: import('@playwright/test').Page,
   canUpdate = true,
-  primaryFeedbackNeeded: boolean | 'choices' | 'details' = false,
+  primaryFeedbackNeeded: boolean | 'choices' | 'details' | 'two' = false,
   ticketLoadDelay = 0,
   batchResponseDelay = 0,
   patchResponseDelay = 0,
@@ -1076,6 +1077,7 @@ async function mockProject(
               {
                 id: 'N4',
                 kind: 'feedback_needed',
+                ...(primaryFeedbackNeeded === 'two' ? { feedback_request: true } : {}),
                 created_at: '2026-08-30T00:37:00Z',
                 edited_at: '2026-08-30T00:37:00Z',
                 text:
@@ -1083,6 +1085,18 @@ async function mockProject(
                     ? 'Which direction should I implement?\n\nCHOICE:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n- Defer this change\n\nYou can also explain another direction.'
                     : 'FEEDBACK NEEDED\n\nHello there\n\n1. Something\n2. Another thing',
               },
+              ...(primaryFeedbackNeeded === 'two'
+                ? [
+                    {
+                      id: 'N5',
+                      kind: 'feedback_needed' as const,
+                      feedback_request: true,
+                      created_at: '2026-08-30T00:38:00Z',
+                      edited_at: '2026-08-30T00:38:00Z',
+                      text: 'Which launch order should we use?',
+                    },
+                  ]
+                : []),
             ],
           }
         : { ...full, feedback_needed: false }
@@ -2510,6 +2524,7 @@ async function mockProject(
                   created_at: '2026-09-02T02:01:00Z',
                   edited_at: '2026-09-02T02:01:00Z',
                   feedback_for: /^AI feedback for note:([^:]+): /u.exec(body.note)?.[1],
+                  response_to: body.response_to,
                   text: body.note,
                 }
               : undefined;
@@ -2548,7 +2563,9 @@ async function mockProject(
           ...body,
           started_phase: nextPhase,
           updated_at: '2026-08-30T02:00:00Z',
-          feedback_needed: appendedNote ? false : (selectedFull as { feedback_needed?: boolean }).feedback_needed,
+          feedback_needed: appendedNote
+            ? isFeedbackNeeded([...ratingNotes, appendedNote])
+            : (selectedFull as { feedback_needed?: boolean }).feedback_needed,
           notes: [
             ...ratingNotes,
             ...(statusNote ? [statusNote] : []),
@@ -10136,6 +10153,45 @@ test('records No response needed as a subtle regular response and clears review 
   const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
   await expect(acknowledgement).toBeVisible();
   await acknowledgement.screenshot({ path: 'target/visual-captures/hs2-yk27gp-no-response-needed.png' });
+});
+
+test('answers two feedback requests independently and keeps review visible until both close', async ({ page }) => {
+  const patches = await mockProject(page, true, 'two');
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
+  await ticket.click();
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(2);
+  await inspector
+    .locator('article[data-note-id="N4"]')
+    .screenshot({ path: 'target/visual-captures/hs2-w1enzd-oldest-pending-wide.png' });
+  await inspector
+    .locator('article[data-note-id="N5"]')
+    .screenshot({ path: 'target/visual-captures/hs2-w1enzd-newest-pending-wide.png' });
+  await inspector.locator('article[data-note-id="N5"]').getByRole('button', { name: 'Respond to Feedback' }).click();
+  let reader = page.getByRole('dialog');
+  await reader
+    .locator('article[data-note-id="N5"]')
+    .getByRole('textbox', { name: 'Feedback response' })
+    .fill('Launch B first.');
+  await reader.locator('article[data-note-id="N5"]').getByRole('button', { name: 'Respond', exact: true }).click();
+  await expect.poll(() => patches.some((patch) => patch.response_to === 'N5')).toBe(true);
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(inspector.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(1);
+  await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
+  await inspector.locator('article[data-note-id="N4"]').getByRole('button', { name: 'Respond to Feedback' }).click();
+  reader = page.getByRole('dialog');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await reader.screenshot({ path: 'target/visual-captures/hs2-w1enzd-one-pending-phone.png' });
+  await reader.locator('article[data-note-id="N4"]').getByRole('button', { name: 'No Response Needed' }).click();
+  await expect
+    .poll(() => patches.some((patch) => patch.response_to === 'N4' && patch.note === 'No response needed'))
+    .toBe(true);
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  await expect(inspector.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(0);
 });
 
 test('answers a feedback prompt with new notes and never rewrites the prompt', async ({ page }) => {

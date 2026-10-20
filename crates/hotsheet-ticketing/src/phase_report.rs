@@ -443,6 +443,8 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                feedback_request: false,
+                response_to: None,
                 ai_feedback: None,
                 human_edited: false,
                 actor: None,

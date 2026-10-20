@@ -316,14 +316,24 @@ impl GitLabProvider {
             })
             .map(|note| {
                 let (text, confidence) = note_trailer::parse_comment(&note.body);
+                let (feedback_request, response_to) =
+                    note_trailer::parse_feedback_metadata(&note.body);
                 ApiNote {
                     id: note.id.to_string(),
-                    kind: NoteKind::Regular,
+                    hotsheet_note_id: note_trailer::parse_note_id(&note.body),
+                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
+                    {
+                        NoteKind::FeedbackNeeded
+                    } else {
+                        NoteKind::Regular
+                    },
                     created_at: note.created_at.clone(),
                     edited_at: note.updated_at.unwrap_or(note.created_at),
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    feedback_request,
+                    response_to,
                     ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
                     actor: None,
@@ -348,7 +358,7 @@ impl GitLabProvider {
             status,
             started_phase: None,
             up_next: false,
-            feedback_needed: false,
+            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
             needs_review: false,
             tags: issue
                 .labels
@@ -740,7 +750,7 @@ impl TicketProvider for GitLabProvider {
         &self,
         native_id: &str,
         ctx: MutationContext,
-        _: NoteKind,
+        kind: NoteKind,
         metadata: NoteMetadataInput,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
@@ -752,7 +762,33 @@ impl TicketProvider for GitLabProvider {
         {
             return self.get(native_id);
         }
-        let body = note_trailer::compose_comment(&text, metadata.confidence, ctx.generated_id);
+        let kind =
+            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
+                NoteKind::FeedbackNeeded
+            } else {
+                kind
+            };
+        if let Some(request_id) = metadata.response_to.as_deref() {
+            let ticket = self.get(native_id)?;
+            if kind != NoteKind::Regular
+                || !ticket
+                    .notes
+                    .iter()
+                    .any(|note| note.id == request_id && note.kind == NoteKind::FeedbackNeeded)
+            {
+                return Err(ProviderError::Conflict {
+                    ticket: native_id.into(),
+                    message: "response_to must name a feedback request on this ticket".into(),
+                });
+            }
+        }
+        let body = note_trailer::compose_feedback_comment(
+            &text,
+            metadata.confidence,
+            ctx.generated_id,
+            kind,
+            metadata.response_to.as_deref(),
+        );
         self.request(
             "POST",
             &self.endpoint(&format!("issues/{native_id}/notes")),
@@ -1144,6 +1180,7 @@ mod tests {
                         confidence: Some(score),
                         actor: None,
                         ai_feedback: None,
+                        response_to: None,
                     },
                     "Re-verified.".into(),
                 )
@@ -1409,6 +1446,7 @@ mod tests {
             confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),
             actor: None,
             ai_feedback: None,
+            response_to: None,
         };
         let set_status = |status| {
             std::thread::sleep(std::time::Duration::from_millis(1100));

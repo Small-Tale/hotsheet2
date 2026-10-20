@@ -914,7 +914,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       details: DebouncedAutosave<string>;
       note: DebouncedAutosave<{ id: string; value: string }>;
       blocked: DebouncedAutosave<string>;
-      respond: (value: string) => Promise<boolean>;
+      respond: (value: string, requestId?: string) => Promise<boolean>;
     }
   >();
   function linkedReaderSaves(id: string) {
@@ -929,7 +929,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           ),
         ),
         blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null })),
-        respond: (value) => updateLinkedReader(id, { note: value, note_kind: 'regular' }),
+        respond: (value, requestId) =>
+          updateLinkedReader(id, {
+            note: value,
+            note_kind: 'regular',
+            ...(requestId ? { response_to: requestId } : {}),
+          }),
       };
       linkedReaderAutosaves.set(id, saves);
     }

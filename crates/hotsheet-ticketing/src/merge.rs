@@ -446,6 +446,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -460,6 +462,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -468,6 +472,38 @@ mod tests {
         let m = merge_tickets(&base, &ours, &theirs).ticket;
         assert_eq!(m.notes.len(), 2, "both appends kept");
         assert!(m.notes[0].id < m.notes[1].id, "sorted by id");
+    }
+
+    #[test]
+    fn concurrent_feedback_request_and_linked_reply_survive_merge() {
+        let base = base_ticket();
+        let mut ours = base.clone();
+        let mut request = Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            kind: hotsheet_model::NoteKind::FeedbackNeeded,
+            created_at: ts("2026-08-19T01:00:00Z"),
+            edited_at: ts("2026-08-19T01:00:00Z"),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: true,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: None,
+            text: "Choose a route".into(),
+        };
+        ours.notes.push(request.clone());
+        let mut theirs = base.clone();
+        request.id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+        request.kind = hotsheet_model::NoteKind::Regular;
+        request.feedback_request = false;
+        request.response_to = Some(ours.notes[0].id);
+        request.text = "Use A".into();
+        theirs.notes.push(request);
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(merged.notes.len(), 2);
+        assert!(!merged.feedback_needed());
     }
 
     #[test]
@@ -480,6 +516,8 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: true,
             actor: None,
@@ -545,6 +583,8 @@ mod tests {
             summary: Some("Started implementation".into()),
             confidence: None,
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,
@@ -575,6 +615,8 @@ mod tests {
             summary: None,
             confidence: confidence(value),
             feedback_for: None,
+            feedback_request: false,
+            response_to: None,
             ai_feedback: None,
             human_edited: false,
             actor: None,

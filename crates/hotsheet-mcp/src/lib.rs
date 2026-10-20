@@ -232,6 +232,7 @@ fn base_tools_list() -> Value {
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
                 "note_summary": str_prop("optional concise plain-text timeline headline"),
+                "response_to": str_prop("feedback request note id answered by this appended note"),
                 "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
@@ -1969,6 +1970,12 @@ mod core_backend {
                     {
                         return Err(bad_request("note_summary requires a non-empty note"));
                     }
+                    if body.get("response_to").is_some()
+                        && (edit_note_id.is_some()
+                            || str_field(body, "note").is_none_or(|note| note.is_empty()))
+                    {
+                        return Err(bad_request("response_to requires an appended note"));
+                    }
                     let confidence_change = note_confidence_change(body, edit_note_id.is_some())?;
                     let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
                     let note_text = str_field(body, "note").filter(|text| !text.is_empty());
@@ -2060,6 +2067,7 @@ mod core_backend {
                                     confidence: confidence_change.flatten(),
                                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                                     ai_feedback: None,
+                                    response_to: str_field(body, "response_to"),
                                 },
                                 text,
                             )
@@ -2681,7 +2689,7 @@ mod core_backend {
 
     fn store_err(e: StoreError) -> BackendError {
         let status = match &e {
-            StoreError::InvalidAnnotations(_) => 400,
+            StoreError::InvalidAnnotations(_) | StoreError::InvalidFeedbackResponse(_) => 400,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
             _ => 500,
         };

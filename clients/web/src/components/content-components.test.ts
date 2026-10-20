@@ -90,19 +90,24 @@ describe('content components', () => {
     expect(markup.indexOf('data-component="note-card"')).toBeLessThan(markup.indexOf('data-component="note-composer"'));
     expect(markup).not.toContain('data-action="add-ticket-note"');
   });
-  it('offers Respond to Feedback only below the active inspector feedback note', () => {
+  it('offers Respond to Feedback below every pending inspector request', () => {
     const notes = [
       { id: 'old', kind: 'feedback_needed' as const, author: 'Codex', time: 'Earlier', body: 'Old ask' },
       { id: 'active', kind: 'feedback_needed' as const, author: 'Codex', time: 'Now', body: 'Current ask' },
     ];
     const inspector = String(TicketNotes({ notes }));
-    expect(inspector.match(/data-action="respond-to-feedback"/g)).toHaveLength(1);
+    expect(inspector.match(/data-action="respond-to-feedback"/g)).toHaveLength(2);
+    expect(inspector).toMatch(/<button(?=[^>]*data-action="respond-to-feedback")(?=[^>]*data-note-id="old")/);
     expect(inspector).toMatch(/<button(?=[^>]*data-action="respond-to-feedback")(?=[^>]*data-note-id="active")/);
     expect(String(TicketNotes({ notes, readerMode: true }))).not.toContain('respond-to-feedback');
     expect(
       String(
         TicketNotes({
-          notes: [...notes, { id: 'answer', kind: 'regular', author: 'You', time: 'Later', body: 'Answered' }],
+          notes: [
+            { ...notes[0], kind: 'regular' },
+            { ...notes[1], kind: 'regular' },
+            { id: 'answer', kind: 'regular', author: 'You', time: 'Later', body: 'Answered' },
+          ],
         }),
       ),
     ).not.toContain('respond-to-feedback');

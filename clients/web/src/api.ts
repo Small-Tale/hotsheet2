@@ -191,6 +191,8 @@ export type GitHubAuthStatus =
   | { state: 'error'; message: string };
 export interface Note {
   id: string;
+  /** Provider comment's stable Hot Sheet marker when it differs from the native id. */
+  hotsheet_note_id?: string;
   kind: 'regular' | 'activity' | 'feedback_needed' | 'feedback_draft' | 'status';
   created_at: string;
   edited_at: string;
@@ -199,6 +201,10 @@ export interface Note {
   confidence?: number;
   /** Persisted source note id of AI thumbs feedback; older/provider notes use their text prefix. */
   feedback_for?: string;
+  /** New request tracked independently from legacy sequential exchanges. */
+  feedback_request?: boolean;
+  /** Request note id answered by this note; separate from AI thumbs feedback_for. */
+  response_to?: string;
   /** Current rating; null is a withdrawal. Exact legacy prose is normalized on read. */
   ai_feedback?: { target: string; rating: 'helpful' | 'not_helpful' | null; explanation?: string };
   /** True once a human changed AI-authored text, including after a later revert. */

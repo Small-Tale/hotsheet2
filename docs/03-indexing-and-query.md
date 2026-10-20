@@ -452,7 +452,8 @@ query(filter, sort, text?, paging) -> TicketRow[]
   - A pre-value-keyset `v1.` cursor is rejected as stale; the client restarts from the top.
 
   The `needs_review=true|false` query filter uses the normalized review state before
-  a page is cut: unresolved `feedback_needed` exchanges (including the case-sensitive
+  a page is cut: any unresolved independently linked `feedback_needed` request or
+  legacy sequential exchange (including the case-sensitive
   `FEEDBACK NEEDED` description marker) or an explicit review request. Local indexes
   combine their feedback flag with the reviews facet; provider adapters apply the
   same predicate while walking native pages. The row's `needs_review` boolean carries

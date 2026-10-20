@@ -1116,6 +1116,8 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
         summary: None,
         confidence: None,
         feedback_for: None,
+        feedback_request: false,
+        response_to: None,
         ai_feedback: None,
         human_edited: false,
         actor: None,
@@ -2057,6 +2059,7 @@ fn complete_with_score(store: &FsStore, id: &str, now: &str, score: Option<u64>)
             confidence: score.map(|value| hotsheet_model::Confidence::new(value).unwrap()),
             actor: None,
             ai_feedback: None,
+            response_to: None,
         },
         "done".into(),
     )

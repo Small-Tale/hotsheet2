@@ -860,6 +860,12 @@ text, direct `--note` input containing a literal `\n` sequence outside Markdown 
 code or fenced backtick code is rejected with guidance to use `--note-file`. Intentional
 literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
 form also accepts intentional literal sequences without needing the override.
+`edit` and `provider-edit` accept `--response-to <request-note-id>` when appending a
+regular reply or `No response needed` acknowledgement. The request must be a
+`feedback_needed` note on that ticket. The server PATCH routes and MCP
+`hotsheet_update` accept the same `response_to` JSON field; it is invalid on an
+edit or without note text. New feedback requests are independently tracked, while
+older notes without the linkage retain sequential review state (HS2-W1ENZD).
 `--note-confidence <0-100>` (HS2-DWTJ43) records the author's completion confidence on the
 **appended** note, where it requires `--note`/`--note-file`. Anything but a plain integer
 from 0 to 100 is rejected before any write. With `--edit-note <note-ulid>` (HS2-CY4CWC) it

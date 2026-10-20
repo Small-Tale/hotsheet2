@@ -13,7 +13,6 @@ import { Text } from '@kerfjs/ui/text';
 import { Activity, MessageSquareText, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
-import { isAiThumbsFeedback } from '../feedback-needed';
 import { isFeedbackPromptEdit } from '../feedback-prompt-edits';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { NoteCard, type NoteCardProps } from './note-card';
@@ -149,14 +148,6 @@ function LoadedTicketNotes({
   const visibleNotes = nestAiFeedback(
     notes.filter((note) => !(note.kind === 'activity' && note.body.startsWith('Started phase changed from '))),
   );
-  const latestExchangeNote = [...visibleNotes]
-    .reverse()
-    .find(
-      (note) =>
-        (note.kind === 'regular' || note.kind === 'feedback_needed') &&
-        !isAiThumbsFeedback({ text: note.body, feedback_for: note.feedbackFor, ai_feedback: note.ratingMetadata }),
-    );
-  const activeFeedbackNoteId = latestExchangeNote?.kind === 'feedback_needed' ? latestExchangeNote.id : undefined;
   return (
     // A Kerf List stacks the header, cards or empty line, composer, and add row (HS2-ZA1EAG).
     <section class="ticket-notes" data-component="ticket-notes">
@@ -189,7 +180,7 @@ function LoadedTicketNotes({
                 editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
                 draft={note.id === editingNoteId ? noteDraft : undefined}
                 readerMode={readerMode}
-                respondToFeedback={!readerMode && note.id === activeFeedbackNoteId}
+                respondToFeedback={!readerMode && note.kind === 'feedback_needed'}
                 inlineReplies={inlineFeedbackReplies[note.id]}
                 selectedChoices={feedbackChoiceSelections[note.id]}
                 attachmentContext={attachmentContext}
