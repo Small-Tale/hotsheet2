@@ -15516,8 +15516,12 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await expect(preview).toBeVisible();
   await expect
-    .poll(async () => (await page.locator('[data-component="permission-rules-settings"]').boundingBox())?.x ?? -1)
-    .toBeGreaterThanOrEqual(8);
+    .poll(async () =>
+      page
+        .locator('[aria-label="Sidebar rail"] > .kui-workbench__panel-content')
+        .evaluate((element) => element.getBoundingClientRect().right),
+    )
+    .toBeLessThanOrEqual(0);
   await preview.locator('[data-permission-rule]').first().scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-x4es6z-preview-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -15544,6 +15548,53 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   expect(edits.filter((edit) => edit.scope === 'session')).toHaveLength(3);
   expect(edits.some((edit) => edit.decision === 'deny')).toBe(true);
+});
+
+test('keeps phone Settings content inside the viewport after closing its sidebar (HS2-FJ22SA)', async ({ page }) => {
+  await mockProject(page);
+  await page.route('**/permissions/rules', (route) =>
+    route.fulfill({
+      json: [
+        {
+          project: '/work/demo.hs2',
+          tool: 'Bash',
+          action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(64)}`,
+          decision: 'allow',
+          scope: 'always',
+        },
+      ],
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  const settings = page.locator('[data-component="settings-workspace"]'),
+    answer = page.locator('[data-component="permission-rules-settings"]'),
+    rail = page.locator('[aria-label="Sidebar rail"]');
+  await expect(answer).toBeVisible();
+  await answer.locator('[data-permission-rule]').first().scrollIntoViewIfNeeded();
+  await expect(rail).toHaveAttribute('data-collapsed', 'true');
+  await expect
+    .poll(async () =>
+      rail
+        .locator('.kui-workbench__panel-content')
+        .first()
+        .evaluate((element) => element.getBoundingClientRect().right),
+    )
+    .toBeLessThanOrEqual(0);
+  await expect(settings).toBeInViewport();
+  await expect.poll(async () => (await settings.boundingBox())?.x ?? -1).toBeGreaterThanOrEqual(8);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: 'target/visual-captures/hs2-fj22sa-settled-phone.png' });
 });
 
 test('bulk edits and deletes mixed remembered answers with partial failure recovery (HS2-C057G5)', async ({ page }) => {
