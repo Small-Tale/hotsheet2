@@ -6,12 +6,13 @@ import { remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
-import { ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { ChevronRight, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -163,9 +164,11 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               {ruleRows(ordered.slice(0, 3))}
             </List>
             {ordered.length > 3 && (
-              <Button emphasis="plain" action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value}>
-                {`Show all ${ordered.length} answers`}
-              </Button>
+              <ListItem
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value}
+                label={`Show all ${ordered.length} answers`}
+                trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
+              />
             )}
           </>
         )}
