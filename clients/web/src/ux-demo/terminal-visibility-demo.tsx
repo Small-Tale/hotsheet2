@@ -20,12 +20,12 @@ import {
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
-  TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
   type TerminalVisibilityType,
+  visibleTerminalTypes,
 } from '../terminal-visibility';
-import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { DEMO_ACTIONS } from './demo-actions';
 import { type DemoModule, type FormControl, listen } from './demo-module';
 
@@ -66,7 +66,6 @@ export const terminalVisibilityDemoState = signal(
     false,
   ),
 );
-export const terminalVisibilityDemoTypes = signal<readonly TerminalVisibilityType[]>(TERMINAL_VISIBILITY_TYPES);
 export const terminalVisibilityDemoOpen = signal(false),
   terminalVisibilityDemoContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
   terminalVisibilityDemoNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
@@ -86,7 +85,6 @@ export function TerminalVisibilityDialogDemo() {
         state={terminalVisibilityDemoState.value}
         scope="dashboard"
         groups={terminalVisibilityDemoGroups}
-        types={terminalVisibilityDemoTypes.value}
         contextMenu={terminalVisibilityDemoContextMenu.value}
       />
       <TerminalVisibilityNameDialog prompt={terminalVisibilityDemoNamePrompt.value} />
@@ -94,7 +92,6 @@ export function TerminalVisibilityDialogDemo() {
   );
 }
 export function showTerminalVisibilityDemo() {
-  terminalVisibilityDemoTypes.value = TERMINAL_VISIBILITY_TYPES;
   terminalVisibilityDemoOpen.value = true;
 }
 export function closeTerminalVisibilityDemo() {
@@ -163,11 +160,19 @@ export function toggleTerminalVisibilityDemo(key: string) {
     active().hiddenKeys.includes(key),
   );
 }
+export function toggleTerminalVisibilityDemoType(type: TerminalVisibilityType) {
+  terminalVisibilityDemoState.value = setTerminalTypeVisibleInGroup(
+    terminalVisibilityDemoState.value,
+    active().id,
+    type,
+    active().hiddenTypes?.includes(type) ?? false,
+  );
+}
 export function setAllTerminalVisibilityDemo(visible: boolean) {
   terminalVisibilityDemoState.value = setAllTerminalsVisibleInGroup(
     terminalVisibilityDemoState.value,
     active().id,
-    terminalVisibilityItems(terminalVisibilityDemoGroups, 'dashboard', terminalVisibilityDemoTypes.value).flatMap(
+    terminalVisibilityItems(terminalVisibilityDemoGroups, 'dashboard', visibleTerminalTypes(active())).flatMap(
       (group) => group.items.map((item) => item.key),
     ),
     visible,
@@ -192,9 +197,12 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.showTerminalVisibilityDemo.selector, showTerminalVisibilityDemo),
   );
-  wireTerminalVisibilityTypeFilter(root, (types) => {
-    terminalVisibilityDemoTypes.value = types;
-  });
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibilityType.selector, (_event, target) => {
+      const type = (target as HTMLElement).dataset.visibilityType;
+      if (type === 'shell' || type === 'ai' || type === 'chat') toggleTerminalVisibilityDemoType(type);
+    }),
+  );
   demoListeners.add(
     delegate(root, 'kui-request-close', '[data-terminal-visibility-dialog]', (event, target) => {
       if (event.target === target) closeTerminalVisibilityDemo();
@@ -202,7 +210,7 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.selectTerminalVisibilityTab.selector, (_event, target) => {
-      selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
+      selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.tabId ?? 'default');
     }),
   );
   demoListeners.add(

@@ -6,23 +6,22 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
-import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
+import { Eye, EyeOff, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
 import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
-  TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
+  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
@@ -31,23 +30,18 @@ export interface TerminalVisibilityDialogProps {
   state: TerminalVisibilityState;
   scope: string;
   groups: TerminalDashboardGroup[];
-  types?: readonly TerminalVisibilityType[];
   contextMenu?: { id: string; x: number; y: number };
 }
 
-/** Browser tiles are a separate (unshipped) kind, so the choice stays visible but unavailable. */
-export const TERMINAL_VISIBILITY_TYPE_CHOICES: readonly SelectChoice<TerminalVisibilityType | 'browser'>[] = [
-  { value: 'shell', label: 'Shell Terminals', icon: Terminal, iconName: 'terminal' },
-  { value: 'ai', label: 'AI Terminals', icon: Sparkles, iconName: 'sparkles' },
-  { value: 'chat', label: 'AI Chat', icon: MessageSquare, iconName: 'message-square' },
-  {
-    value: 'browser',
-    label: 'Web Browsers',
-    icon: Globe,
-    iconName: 'globe',
-    disabled: true,
-    disabledReason: 'Web browser tiles are not available yet.',
-  },
+const TYPE_CHOICES: readonly {
+  value: TerminalVisibilityType;
+  label: string;
+  icon: typeof Terminal;
+  iconName: string;
+}[] = [
+  { value: 'shell', label: 'Terminals', icon: Terminal, iconName: 'terminal' },
+  { value: 'ai', label: 'AI Shells', icon: Sparkles, iconName: 'sparkles' },
+  { value: 'chat', label: 'AI Chats', icon: MessageSquare, iconName: 'message-square' },
 ];
 
 export interface TerminalVisibilityNamePrompt {
@@ -94,16 +88,10 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   );
 }
 
-export function TerminalVisibilityDialog({
-  open,
-  state,
-  scope,
-  groups,
-  types = TERMINAL_VISIBILITY_TYPES,
-  contextMenu,
-}: TerminalVisibilityDialogProps) {
+export function TerminalVisibilityDialog({ open, state, scope, groups, contextMenu }: TerminalVisibilityDialogProps) {
   const activeId = state.activeByScope[scope] ?? DEFAULT_TERMINAL_VISIBILITY_GROUP_ID;
   const active = state.groups.find((group) => group.id === activeId) ?? state.groups[0];
+  const types = visibleTerminalTypes(active);
   const visibleGroups = terminalVisibilityItems(groups, scope, types);
   const hidden = new Set(active.hiddenKeys);
 
@@ -175,16 +163,22 @@ export function TerminalVisibilityDialog({
             </TabBar>
           </List>
           <List controlInsets="trbl">
-            <Select
-              name="terminal-visibility-types"
-              label="Item Types"
-              placeholderText="No types selected"
-              multiple
-              value={types}
-              choices={TERMINAL_VISIBILITY_TYPE_CHOICES}
-              selectAllLabel="Select all"
-              clearLabel="Clear"
-            />
+            <div role="group" aria-label="Item Types">
+              <Row wrap gap="xs" vAlign="middle">
+                {TYPE_CHOICES.map((choice) => (
+                  <Button
+                    action={TERMINALS_ACTIONS.toggleTerminalVisibilityType.value}
+                    rootAttributes={{ 'data-visibility-type': choice.value }}
+                    size="compact"
+                    emphasis="secondary"
+                    pressed={types.includes(choice.value)}
+                    icon={<LucideIcon icon={choice.icon} name={choice.iconName} size={16} />}
+                  >
+                    {choice.label}
+                  </Button>
+                ))}
+              </Row>
+            </div>
           </List>
           <List gap="l" controlInsets="trbl">
             {visibleGroups.length === 0 ? (

@@ -2095,18 +2095,12 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   const addIcon = dialog.getByRole('button', { name: 'Add Visibility Group' }).locator('svg');
   await expect(addIcon).toHaveCSS('width', '16px');
   await expect(addIcon).toHaveCSS('height', '16px');
-  const types = dialog.locator('kui-select[name="terminal-visibility-types"]');
-  await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
-  await types.locator('.kui-select__trigger').click();
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: 'target/visual-captures/hs2-kj7fax-types-open-wide.png', fullPage: true });
-  await types.locator('button[data-select-action="clear"]').click();
-  await expect(types).toHaveAttribute('open', '');
-  await expect(types).toHaveJSProperty('value', []);
-  await types.locator('.kui-select__option[data-value="chat"]').click();
+  const typeButton = (type: string) => dialog.locator(`[data-visibility-type="${type}"]`);
+  for (const type of ['shell', 'ai', 'chat']) await expect(typeButton(type)).toHaveAttribute('aria-pressed', 'true');
+  await typeButton('shell').click();
+  await typeButton('ai').click();
   await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(1);
-  await page.keyboard.press('Escape');
-  await expect(types).not.toHaveAttribute('open');
+  await page.screenshot({ path: 'target/visual-captures/hs2-1hafae-demo-types-wide.png', fullPage: true });
   await expect(dialog).toHaveJSProperty('open', true);
   await dialog.getByRole('button', { name: 'Add Visibility Group' }).click();
   const nameDialog = page.locator('[data-terminal-visibility-name-dialog]'),
@@ -2118,15 +2112,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(nameDialog).toHaveJSProperty('open', false);
   const review = dialog.getByRole('tab', { name: 'Review' });
   await expect(review).toHaveAttribute('aria-selected', 'true');
-  await expect(types).toHaveJSProperty('value', ['chat']);
-  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(1);
-  await types.locator('.kui-select__caret').click();
-  await expect(types).toHaveAttribute('open', '');
-  await types.locator('button[data-select-action="all"]').click();
-  await expect
-    .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
-    .toEqual(['ai', 'chat', 'shell']);
-  await page.keyboard.press('Escape');
+  for (const type of ['shell', 'ai', 'chat']) await expect(typeButton(type)).toHaveAttribute('aria-pressed', 'true');
   await dialog.getByRole('button', { name: /Hide Development/ }).click();
   await expect(dialog.getByRole('button', { name: /Show Development/ })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-z0m2vv-visibility-demo-open-wide.png', fullPage: true });
@@ -2140,11 +2126,8 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
-  await types.locator('.kui-select__trigger').click();
-  await expect(types).toHaveAttribute('open', '');
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: 'target/visual-captures/hs2-kj7fax-types-open-narrow.png', fullPage: true });
-  await page.keyboard.press('Escape');
+  await expect(dialog.getByRole('group', { name: 'Item Types' }).getByRole('button')).toHaveCount(3);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1hafae-demo-types-phone.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-z0m2vv-visibility-demo-open-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await review.click({ button: 'right' });

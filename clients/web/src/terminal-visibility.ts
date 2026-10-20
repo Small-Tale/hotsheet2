@@ -5,11 +5,14 @@ export const DEFAULT_TERMINAL_VISIBILITY_GROUP_ID = 'default';
 export const DEFAULT_TERMINAL_VISIBILITY_GROUP_NAME = 'Default';
 export const TERMINAL_VISIBILITY_STORAGE_KEY = 'hotsheet.terminals.visibility-groups';
 export const TERMINAL_DASHBOARD_VISIBILITY_SCOPE = 'dashboard';
+export type TerminalVisibilityType = 'shell' | 'ai' | 'chat';
+export const TERMINAL_VISIBILITY_TYPES: readonly TerminalVisibilityType[] = ['shell', 'ai', 'chat'];
 
 export interface TerminalVisibilityGroup {
   id: string;
   name: string;
   hiddenKeys: string[];
+  hiddenTypes?: TerminalVisibilityType[];
 }
 export interface TerminalVisibilityState {
   groups: TerminalVisibilityGroup[];
@@ -48,7 +51,10 @@ export function parseTerminalVisibilityState(raw: string | null): TerminalVisibi
         ? [...new Set(candidate.hiddenKeys.filter((key): key is string => typeof key === 'string' && Boolean(key)))]
         : [];
       seen.add(candidate.id);
-      groups.push({ id: candidate.id, name: candidate.name.trim(), hiddenKeys });
+      const hiddenTypes = Array.isArray(candidate.hiddenTypes)
+        ? terminalVisibilityTypes(candidate.hiddenTypes.filter((type): type is string => typeof type === 'string'))
+        : [];
+      groups.push({ id: candidate.id, name: candidate.name.trim(), hiddenKeys, hiddenTypes });
     }
     if (!groups.some((group) => group.id === DEFAULT_TERMINAL_VISIBILITY_GROUP_ID))
       groups.unshift({
@@ -158,11 +164,32 @@ export function hideNewTerminalInNamedGroups(state: TerminalVisibilityState, key
   };
 }
 
-export type TerminalVisibilityType = 'shell' | 'ai' | 'chat';
-export const TERMINAL_VISIBILITY_TYPES: readonly TerminalVisibilityType[] = ['shell', 'ai', 'chat'];
-
 export function terminalVisibilityTypes(value: readonly string[]): TerminalVisibilityType[] {
   return TERMINAL_VISIBILITY_TYPES.filter((kind) => value.includes(kind));
+}
+
+export function visibleTerminalTypes(group: TerminalVisibilityGroup): TerminalVisibilityType[] {
+  return TERMINAL_VISIBILITY_TYPES.filter((kind) => !group.hiddenTypes?.includes(kind));
+}
+
+export function setTerminalTypeVisibleInGroup(
+  state: TerminalVisibilityState,
+  groupId: string,
+  type: TerminalVisibilityType,
+  visible: boolean,
+): TerminalVisibilityState {
+  return {
+    ...state,
+    groups: state.groups.map((group) => {
+      if (group.id !== groupId) return group;
+      const hiddenTypes = group.hiddenTypes ?? [];
+      if (hiddenTypes.includes(type) === !visible) return group;
+      return {
+        ...group,
+        hiddenTypes: visible ? hiddenTypes.filter((kind) => kind !== type) : [...hiddenTypes, type],
+      };
+    }),
+  };
 }
 
 export function terminalVisibilityItems(

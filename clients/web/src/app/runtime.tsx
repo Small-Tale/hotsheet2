@@ -160,12 +160,7 @@ import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers
 import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
-import {
-  parseTerminalVisibilityState,
-  TERMINAL_VISIBILITY_STORAGE_KEY,
-  TERMINAL_VISIBILITY_TYPES,
-  type TerminalVisibilityType,
-} from '../terminal-visibility';
+import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
 import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
@@ -445,7 +440,6 @@ export async function startHotSheetWebClient() {
   const magnifiedTerminalKey = signal<string | undefined>(undefined),
     terminalVisibility = signal(parseTerminalVisibilityState(localStorage.getItem(TERMINAL_VISIBILITY_STORAGE_KEY))),
     terminalVisibilityDialogScope = signal<string | undefined>(undefined),
-    terminalVisibilityFilter = signal<readonly TerminalVisibilityType[]>(TERMINAL_VISIBILITY_TYPES),
     terminalVisibilityContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
     terminalVisibilityNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
   const terminalNames = signal(parseTerminalNames(localStorage.getItem('hotsheet.terminals.names'))),
@@ -1458,7 +1452,6 @@ export async function startHotSheetWebClient() {
     terminalDashboardMessage,
     terminalVisibility,
     terminalVisibilityDialogScope: () => terminalVisibilityDialogScope.value,
-    terminalVisibilityFilter: () => terminalVisibilityFilter.value,
     terminalDrawerOrderByProject,
     terminalDrawerChatsByProject: () => terminalDrawerChatsByProject.value,
     terminalNames: () => terminalNames.value,
@@ -1473,6 +1466,7 @@ export async function startHotSheetWebClient() {
   const {
     terminalSession,
     terminalHiddenKeys,
+    terminalVisibleTypes,
     terminalHiddenCount,
     persistTerminalVisibility,
     terminalVisibilityScopeFor,
@@ -3559,6 +3553,7 @@ export async function startHotSheetWebClient() {
         terminalFitHigh,
         magnifiedTerminalKey,
         terminalHiddenKeys,
+        terminalVisibleTypes,
         terminalDashboardLoading,
         terminalDashboardMessage,
         terminalContextMenu,
@@ -4007,7 +4002,6 @@ export async function startHotSheetWebClient() {
     terminalVisibility,
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
-    terminalVisibilityFilter,
     terminalVisibilityNamePrompt,
     ticketCloseDialog,
     ticketCollectionState,
@@ -4283,7 +4277,6 @@ export async function startHotSheetWebClient() {
     terminalVisibilityScopeFor,
     terminalVisibility,
     persistTerminalVisibility,
-    terminalVisibilityFilter,
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,

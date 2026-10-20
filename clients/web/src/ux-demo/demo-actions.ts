@@ -106,6 +106,7 @@ export const DEMO_ACTIONS = {
   toggleSelectedUpNext: attr('data-action', 'toggle-selected-up-next'),
   toggleSettings: attr('data-action', 'toggle-settings'),
   toggleTerminalVisibility: attr('data-action', 'toggle-terminal-visibility'),
+  toggleTerminalVisibilityType: attr('data-action', 'toggle-terminal-visibility-type'),
   toggleTicketInspector: attr('data-action', 'toggle-ticket-inspector'),
   transitionBack: attr('data-action', 'transition-back'),
   transitionForward: attr('data-action', 'transition-forward'),

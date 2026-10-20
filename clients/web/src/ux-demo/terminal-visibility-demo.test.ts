@@ -5,29 +5,32 @@ import {
   setAllTerminalVisibilityDemo,
   showTerminalVisibilityDemo,
   terminalVisibilityDemoState,
-  terminalVisibilityDemoTypes,
   TerminalVisibilityDialogDemo,
+  toggleTerminalVisibilityDemoType,
 } from './terminal-visibility-demo';
 
 describe('TerminalVisibilityDialog demo', () => {
-  it('projects type replacement and bulk chat visibility, resets, then accepts another edit', () => {
+  it('persists type choices across reopening and scopes bulk changes to listed items', () => {
+    const initial = terminalVisibilityDemoState.value;
     showTerminalVisibilityDemo();
-    terminalVisibilityDemoTypes.value = ['chat'];
+    toggleTerminalVisibilityDemoType('shell');
+    toggleTerminalVisibilityDemoType('ai');
     setAllTerminalVisibilityDemo(false);
     let markup = String(TerminalVisibilityDialogDemo());
     expect(markup).toContain('aria-label="Show Codex chat"');
     expect(markup).not.toContain('aria-label="Hide AI"');
-    terminalVisibilityDemoTypes.value = [];
+    toggleTerminalVisibilityDemoType('chat');
     setAllTerminalVisibilityDemo(true);
     expect(terminalVisibilityDemoState.value.groups[1].hiddenKeys).toContain('demo:ai-chat:demo');
     closeTerminalVisibilityDemo();
     showTerminalVisibilityDemo();
-    expect(terminalVisibilityDemoTypes.value).toEqual(['shell', 'ai', 'chat']);
-    terminalVisibilityDemoTypes.value = ['chat'];
+    expect(terminalVisibilityDemoState.value.groups[1].hiddenTypes).toEqual(['shell', 'ai', 'chat']);
+    toggleTerminalVisibilityDemoType('chat');
     setAllTerminalVisibilityDemo(true);
     markup = String(TerminalVisibilityDialogDemo());
     expect(markup).toContain('aria-label="Hide Codex chat"');
     closeTerminalVisibilityDemo();
+    terminalVisibilityDemoState.value = initial;
   });
   it('starts behind a launcher and supports explicit open and close', () => {
     closeTerminalVisibilityDemo();

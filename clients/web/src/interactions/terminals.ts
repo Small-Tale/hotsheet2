@@ -54,12 +54,12 @@ import {
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
-import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
 import { type Control, type Project } from './types';
@@ -82,7 +82,6 @@ export interface TerminalInteractionsDependencies {
   readonly terminalVisibilityScopeFor: (target: Element) => string;
   readonly terminalVisibility: Signal<TerminalVisibilityState>;
   readonly persistTerminalVisibility: (next: TerminalVisibilityState) => void;
-  readonly terminalVisibilityFilter: Signal<readonly TerminalVisibilityType[]>;
   readonly terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
   readonly terminalVisibilityDialogScope: Signal<string | undefined>;
   readonly terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
@@ -170,7 +169,6 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalVisibilityScopeFor,
     terminalVisibility,
     persistTerminalVisibility,
-    terminalVisibilityFilter,
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
@@ -563,15 +561,24 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       if (magnifiedTerminalKey.value === key) magnifiedTerminalKey.value = undefined;
     }),
   );
-  wireTerminalVisibilityTypeFilter(document.body, (types) => {
-    terminalVisibilityFilter.value = types;
-  });
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalVisibility.selector, (event, target) => {
       event.stopImmediatePropagation();
       terminalVisibilityContextMenu.value = undefined;
-      terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
       terminalVisibilityDialogScope.value = terminalVisibilityScopeFor(target);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibilityType.selector, (_event, target) => {
+      const scope = terminalVisibilityDialogScope.value,
+        type = data(target).visibilityType as TerminalVisibilityType | undefined;
+      if (!scope || !type || !TERMINAL_VISIBILITY_TYPES.includes(type)) return;
+      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+        visible = active.hiddenTypes?.includes(type) ?? false;
+      persistTerminalVisibility(setTerminalTypeVisibleInGroup(terminalVisibility.value, active.id, type, visible));
+      const magnified = terminalSession(magnifiedTerminalKey.value);
+      if (!visible && magnified && (magnified.kind === 'ai' ? 'ai' : 'shell') === type)
+        magnifiedTerminalKey.value = undefined;
     }),
   );
   lifetime.add(
@@ -592,7 +599,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.selectTerminalVisibilityTab.selector, (_event, target) => {
       const scope = terminalVisibilityDialogScope.value,
-        id = data(target).itemId;
+        id = data(target).tabId;
       terminalVisibilityContextMenu.value = undefined;
       if (scope && id) persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
     }),

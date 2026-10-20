@@ -49,7 +49,6 @@ function owner(projects = signal([project('a')])) {
     terminalDashboardMessage,
     terminalVisibility,
     terminalVisibilityDialogScope: () => undefined,
-    terminalVisibilityFilter: () => [],
     terminalDrawerOrderByProject: signal({}),
     terminalDrawerChatsByProject: () => ({ a: [{ id: 'ai-chat:c', connectionId: 'c', tool: 'claude', name: 'chat' }] }),
     terminalNames: () => ({ 'a:t2': 'Renamed' }),

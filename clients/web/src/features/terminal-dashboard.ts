@@ -17,7 +17,7 @@ import {
   TERMINAL_VISIBILITY_STORAGE_KEY,
   terminalProjectVisibilityScope,
   terminalVisibilityItems,
-  type TerminalVisibilityType,
+  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createTerminalNamesController } from './terminal-names';
@@ -33,7 +33,6 @@ export interface TerminalDashboardDependencies {
   terminalDashboardMessage: Signal<string>;
   terminalVisibility: Signal<TerminalVisibilityState>;
   terminalVisibilityDialogScope: () => string | undefined;
-  terminalVisibilityFilter: () => readonly TerminalVisibilityType[];
   terminalDrawerOrderByProject: Signal<Record<string, string[]>>;
   terminalDrawerChatsByProject: () => Record<string, DrawerAIChat[]>;
   terminalNames: () => Record<string, string>;
@@ -63,7 +62,6 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     terminalDashboardMessage,
     terminalVisibility,
     terminalVisibilityDialogScope,
-    terminalVisibilityFilter,
     terminalDrawerOrderByProject,
     terminalDrawerChatsByProject,
     terminalNames,
@@ -85,14 +83,19 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   function terminalHiddenKeys(scope: string) {
     return activeTerminalVisibilityGroup(terminalVisibility.value, scope).hiddenKeys;
   }
+  function terminalVisibleTypes(scope: string) {
+    return visibleTerminalTypes(activeTerminalVisibilityGroup(terminalVisibility.value, scope));
+  }
   function terminalHiddenCount(scope: string, projectId?: string) {
-    const live = new Set(
-      terminalVisibilityItems(
-        workspaceTerminalGroups(),
-        projectId ? terminalProjectVisibilityScope(projectId) : scope,
-      ).flatMap((group) => group.items.map((item) => item.key)),
-    );
-    return terminalHiddenKeys(scope).filter((key) => live.has(key)).length;
+    const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+      visibleTypes = visibleTerminalTypes(active),
+      hiddenKeys = new Set(active.hiddenKeys);
+    return terminalVisibilityItems(
+      workspaceTerminalGroups(),
+      projectId ? terminalProjectVisibilityScope(projectId) : scope,
+    )
+      .flatMap((group) => group.items)
+      .filter((item) => hiddenKeys.has(item.key) || !visibleTypes.includes(item.kind)).length;
   }
   function persistTerminalVisibility(next: TerminalVisibilityState) {
     terminalVisibility.value = next;
@@ -108,7 +111,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     return terminalVisibilityItems(
       workspaceTerminalGroups(),
       terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
-      terminalVisibilityFilter(),
+      terminalVisibleTypes(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
     ).flatMap((group) => group.items.map((item) => item.key));
   }
   function drawerTabOrder(projectId: string) {
@@ -217,6 +220,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   return {
     terminalSession,
     terminalHiddenKeys,
+    terminalVisibleTypes,
     terminalHiddenCount,
     persistTerminalVisibility,
     terminalVisibilityScopeFor,

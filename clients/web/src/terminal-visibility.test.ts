@@ -11,22 +11,31 @@ import {
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
   terminalVisibilityTypes,
+  visibleTerminalTypes,
 } from './terminal-visibility';
 
 describe('terminal visibility groups', () => {
   it('parses persisted groups tolerantly and restores invalid scopes to Default', () => {
     const parsed = parseTerminalVisibilityState(
       JSON.stringify({
-        groups: [{ id: 'focus', name: ' Focus ', hiddenKeys: ['project:a', 'project:a', 3] }],
+        groups: [
+          {
+            id: 'focus',
+            name: ' Focus ',
+            hiddenKeys: ['project:a', 'project:a', 3],
+            hiddenTypes: ['chat', 'chat', 'browser', 3],
+          },
+        ],
         activeByScope: { dashboard: 'missing', 'project:p': 'focus' },
       }),
     );
     expect(parsed.groups.map((group) => group.id)).toEqual(['default', 'focus']);
-    expect(parsed.groups[1]).toMatchObject({ name: 'Focus', hiddenKeys: ['project:a'] });
+    expect(parsed.groups[1]).toMatchObject({ name: 'Focus', hiddenKeys: ['project:a'], hiddenTypes: ['chat'] });
     expect(activeTerminalVisibilityGroup(parsed, 'dashboard').id).toBe(DEFAULT_TERMINAL_VISIBILITY_GROUP_ID);
     expect(activeTerminalVisibilityGroup(parsed, 'project:p').id).toBe('focus');
     expect(parseTerminalVisibilityState('{')).toEqual(initialTerminalVisibilityState());
@@ -59,6 +68,25 @@ describe('terminal visibility groups', () => {
     );
     expect(state.groups.find((group) => group.id === 'default')?.hiddenKeys).toEqual([]);
     expect(state.groups.find((group) => group.id === 'focus')?.hiddenKeys).toEqual(['p:new']);
+  });
+  it('keeps type visibility per group through repeated toggles, scope switches, and persistence', () => {
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'focus').state;
+    state = selectTerminalVisibilityGroup(state, 'dashboard', 'focus');
+    for (const type of TERMINAL_VISIBILITY_TYPES) {
+      state = setTerminalTypeVisibleInGroup(state, 'focus', type, false);
+      expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).not.toContain(type);
+    }
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).toEqual([]);
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'project:p'))).toEqual(TERMINAL_VISIBILITY_TYPES);
+    state = setTerminalTypeVisibleInGroup(state, 'focus', 'chat', true);
+    state = setTerminalTypeVisibleInGroup(state, 'focus', 'chat', true);
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).toEqual(['chat']);
+    state = parseTerminalVisibilityState(JSON.stringify(state));
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).toEqual(['chat']);
+    state = selectTerminalVisibilityGroup(state, 'dashboard', 'default');
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).toEqual(TERMINAL_VISIBILITY_TYPES);
+    state = selectTerminalVisibilityGroup(state, 'dashboard', 'focus');
+    expect(visibleTerminalTypes(activeTerminalVisibilityGroup(state, 'dashboard'))).toEqual(['chat']);
   });
 });
 

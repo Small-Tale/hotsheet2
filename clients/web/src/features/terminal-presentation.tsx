@@ -22,7 +22,7 @@ import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
 import { type ServerClocks, serverClocks } from '../server-clock';
-import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
+import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityType } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
 
@@ -45,6 +45,7 @@ export interface TerminalPresentationDependencies {
     terminalFitHigh: Signal<number>;
     magnifiedTerminalKey: Signal<string | undefined>;
     terminalHiddenKeys: (scope: string) => string[];
+    terminalVisibleTypes: (scope: string) => readonly TerminalVisibilityType[];
     terminalDashboardLoading: Signal<boolean>;
     terminalDashboardMessage: Signal<string>;
     terminalContextMenu: Signal<{ key: string; x: number; y: number } | undefined>;
@@ -101,6 +102,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalFitHigh,
     magnifiedTerminalKey,
     terminalHiddenKeys,
+    terminalVisibleTypes,
     terminalDashboardLoading,
     terminalDashboardMessage,
     terminalContextMenu,
@@ -190,6 +192,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,
           touchClipboard: touchClipboard(),
           hiddenKeys: terminalHiddenKeys(TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
+          visibleTypes: terminalVisibleTypes(TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
           loading: terminalDashboardLoading.value,
           message: terminalDashboardMessage.value,
           contextMenu: terminalContextMenu.value,

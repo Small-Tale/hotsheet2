@@ -8953,7 +8953,7 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
 });
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`filters workspace visibility by creation kind and chat in ${theme} (HS2-SE3RVM)`, async ({ page }) => {
+  test(`toggles workspace item types in the list and dashboard in ${theme} (HS2-1HAFAE)`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: theme });
     await installFakeTerminalSockets(page, true);
@@ -8982,85 +8982,89 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(chat).toHaveCount(1);
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
     const dialog = page.locator('[data-terminal-visibility-dialog]');
-    const types = dialog.locator('kui-select[name="terminal-visibility-types"]');
     const rows = dialog.locator('[data-action="toggle-terminal-visibility"]');
-    await expect(types).toHaveAttribute('data-component', 'select');
-    await expect(types.locator('.kui-select__icon')).toHaveCount(4);
-    await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
+    const typeButton = (type: 'shell' | 'ai' | 'chat') => dialog.locator(`[data-visibility-type="${type}"]`);
+    await expect(dialog.getByRole('group', { name: 'Item Types' }).getByRole('button')).toHaveCount(3);
+    await expect(typeButton('shell')).toHaveAccessibleName('Terminals');
+    await expect(typeButton('ai')).toHaveAccessibleName('AI Shells');
+    await expect(typeButton('chat')).toHaveAccessibleName('AI Chats');
+    for (const type of ['shell', 'ai', 'chat'] as const)
+      await expect(typeButton(type)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog).not.toContainText('Web Browsers');
     await expect(rows).toHaveCount(3);
     await dialog.screenshot({
-      path: `target/visual-captures/hs2-se3rvm-dialog-${theme}-after.png`,
+      path: `target/visual-captures/hs2-1hafae-dialog-${theme}-wide.png`,
       animations: 'disabled',
     });
-    await types.locator('.kui-select__trigger').click();
-    const choose = async (value: string, selected: string[], count: number) => {
-      if (value === 'select-all' || value === 'deselect-all')
-        await types.locator(`button[data-select-action="${value === 'select-all' ? 'all' : 'clear'}"]`).click();
-      else await types.locator(`.kui-select__option[data-value="${value}"]`).click();
-      await expect(types).toHaveAttribute('open', '');
-      await expect
-        .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
-        .toEqual([...selected].sort());
-      await expect(rows).toHaveCount(count);
-      for (const kind of ['shell', 'ai', 'chat'])
-        await expect(types.locator(`.kui-select__option[data-value="${kind}"]`)).toHaveAttribute(
-          'aria-selected',
-          String(selected.includes(kind)),
-        );
-    };
-    await expect(types.locator('.kui-select__option[data-value="browser"]')).toHaveAttribute('aria-disabled', 'true');
-    await expect(types.locator('.kui-select__option[data-value="browser"]')).toHaveAttribute(
-      'title',
-      'Web browser tiles are not available yet.',
-    );
-    await expect(types.getByRole('button', { name: 'Select all' })).toBeVisible();
-    await expect(types.getByRole('button', { name: 'Clear' })).toBeVisible();
-    await choose('deselect-all', [], 0);
+    await typeButton('ai').click();
+    await expect(typeButton('ai')).toHaveAttribute('aria-pressed', 'false');
+    await expect(rows).toHaveCount(2);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(1);
+    await expect(chat).toHaveCount(1);
+    await typeButton('shell').click();
+    await expect(rows).toHaveCount(1);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(0);
+    await typeButton('chat').click();
+    await expect(rows).toHaveCount(0);
+    await expect(chat).toHaveCount(0);
     await expect(dialog.getByText('No workspace items match the selected types.')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Hide Listed' })).toBeDisabled();
-    await choose('ai', ['ai'], 1);
+    await typeButton('ai').click();
+    await expect(rows).toHaveCount(1);
     await expect(rows).toHaveAccessibleName('Hide Codex Main');
-    await choose('shell', ['shell', 'ai'], 2);
-    await choose('ai', ['shell'], 1);
+    await typeButton('shell').click();
+    await expect(rows).toHaveCount(2);
+    await typeButton('ai').click();
+    await expect(rows).toHaveCount(1);
     await expect(rows).toHaveAccessibleName('Hide Tests');
-    await choose('chat', ['shell', 'chat'], 2);
-    await choose('select-all', ['shell', 'ai', 'chat'], 3);
-    await choose('deselect-all', [], 0);
-    await choose('chat', ['chat'], 1);
+    await typeButton('chat').click();
+    await expect(rows).toHaveCount(2);
     await page.screenshot({
-      path: `target/visual-captures/hs2-se3rvm-filter-${theme}-open.png`,
+      path: `target/visual-captures/hs2-1hafae-types-${theme}-wide.png`,
       animations: 'disabled',
     });
-    await page.keyboard.press('Escape');
-    await expect(types).not.toHaveAttribute('open');
     await expect(dialog).toHaveAttribute('open', '');
     await dialog.getByRole('button', { name: 'Hide Listed' }).click();
-    await expect(rows).toHaveAccessibleName('Show Codex chat');
+    await expect(rows).toHaveCount(2);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(0);
+    await expect(chat).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(dialog).not.toHaveAttribute('open');
-    await expect(chat).toHaveCount(0);
-    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
     await expect(page.locator('[data-component="badge"][data-placement="corner"]')).not.toContainText('≥');
     await page.reload();
     await page.getByRole('button', { name: 'Workspace Grid' }).click();
     await expect(chat).toHaveCount(0);
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
-    await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
-    await expect(rows).toHaveCount(3);
-    await types.locator('.kui-select__trigger').click();
-    await choose('deselect-all', [], 0);
-    await choose('chat', ['chat'], 1);
-    await page.keyboard.press('Escape');
+    await expect(typeButton('ai')).toHaveAttribute('aria-pressed', 'false');
+    await expect(typeButton('shell')).toHaveAttribute('aria-pressed', 'true');
+    await expect(typeButton('chat')).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows).toHaveCount(2);
     await dialog.getByRole('button', { name: 'Show Listed' }).click();
-    await expect(rows).toHaveAccessibleName('Hide Codex chat');
+    await expect(chat).toHaveCount(1);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Add Visibility Group' }).click();
+    const nameDialog = page.locator('[data-terminal-visibility-name-dialog]');
+    await nameDialog.getByRole('textbox', { name: 'Group Name' }).fill('No Chats');
+    await nameDialog.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(dialog.getByRole('tab', { name: 'No Chats' })).toHaveAttribute('aria-selected', 'true');
+    await typeButton('chat').click();
+    await expect(chat).toHaveCount(0);
+    await dialog.getByRole('tab', { name: 'Default' }).click();
+    await expect(dialog.getByRole('tab', { name: 'Default' })).toHaveAttribute('aria-selected', 'true');
+    await expect(typeButton('chat')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chat).toHaveCount(1);
+    await dialog.getByRole('tab', { name: 'No Chats' }).click();
+    await expect(typeButton('chat')).toHaveAttribute('aria-pressed', 'false');
+    await expect(chat).toHaveCount(0);
+    await dialog.getByRole('tab', { name: 'Default' }).click();
     await page.setViewportSize({ width: 390, height: 844 });
-    await types.locator('.kui-select__trigger').click();
-    await choose('select-all', ['shell', 'ai', 'chat'], 3);
+    await typeButton('ai').click();
+    await expect(rows).toHaveCount(3);
+    await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
     await page.screenshot({
-      path: `target/visual-captures/hs2-se3rvm-filter-${theme}-mobile.png`,
+      path: `target/visual-captures/hs2-1hafae-types-${theme}-phone.png`,
       animations: 'disabled',
     });
-    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(chat).toBeVisible();

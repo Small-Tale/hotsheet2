@@ -1809,6 +1809,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalFitHigh: signal(1),
       magnifiedTerminalKey: magnified,
       terminalHiddenKeys: () => ['hidden'],
+      terminalVisibleTypes: () => ['shell', 'ai', 'chat'],
       terminalDashboardLoading: signal(false),
       terminalDashboardMessage: signal(''),
       terminalContextMenu: signal<{ key: string; x: number; y: number } | undefined>(undefined),

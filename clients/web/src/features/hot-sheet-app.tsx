@@ -59,11 +59,7 @@ import { syncConversationScroll } from '../conversation-scroll';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
 import type { RenderMetrics } from '../render-metrics';
-import {
-  TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
-  type TerminalVisibilityState,
-  type TerminalVisibilityType,
-} from '../terminal-visibility';
+import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
 import {
@@ -189,7 +185,6 @@ export interface HotSheetAppDependencies {
   terminalVisibility: Signal<TerminalVisibilityState>;
   terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
   terminalVisibilityDialogScope: Signal<string | undefined>;
-  terminalVisibilityFilter: Signal<readonly TerminalVisibilityType[]>;
   terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
   ticketCollectionState: Signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>;
@@ -315,7 +310,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     terminalVisibility,
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
-    terminalVisibilityFilter,
     terminalVisibilityNamePrompt,
     ticketCloseDialog,
     ticketCollectionState,
@@ -494,7 +488,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           state={terminalVisibility.value}
           scope={visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
           groups={workspaceTerminalGroups()}
-          types={terminalVisibilityFilter.value}
           contextMenu={terminalVisibilityContextMenu.value}
         />
         <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />

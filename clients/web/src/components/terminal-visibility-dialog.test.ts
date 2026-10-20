@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { initialTerminalVisibilityState } from '../terminal-visibility';
+import { initialTerminalVisibilityState, setTerminalTypeVisibleInGroup } from '../terminal-visibility';
 import { TerminalVisibilityDialog, TerminalVisibilityNameDialog } from './terminal-visibility-dialog';
 
 const groups = [
@@ -24,28 +24,25 @@ const groups = [
   },
 ];
 describe('TerminalVisibilityDialog', () => {
-  it('renders a Kerf multiple Select with bulk actions and no matching empty project headers', () => {
+  it('renders three pressed type buttons and no matching empty project headers', () => {
+    const state = (['shell', 'ai', 'chat'] as const).reduce(
+      (next, type) => setTerminalTypeVisibleInGroup(next, 'default', type, false),
+      initialTerminalVisibilityState(),
+    );
     const markup = String(
       TerminalVisibilityDialog({
         open: true,
-        state: initialTerminalVisibilityState(),
+        state,
         scope: 'dashboard',
         groups,
-        types: [],
       }),
     );
-    expect(markup).toContain('data-component="select"');
-    expect(markup).toContain('name="terminal-visibility-types"');
-    expect(markup).toContain('data-placeholder-text="No types selected"');
-    expect(markup).not.toContain('terminal-visibility-dialog__type-icon');
-    expect(markup).toContain('multiple');
-    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="shell" aria-selected="false"/);
-    expect(markup).toContain('data-select-action="all"');
-    expect(markup).toContain('data-select-action="clear"');
-    expect(markup).toContain(
-      'data-value="browser" aria-selected="false" aria-disabled="true" title="Web browser tiles are not available yet."',
-    );
-    expect(markup).toContain('class="kui-select__icon"');
+    expect(markup).toContain('role="group" aria-label="Item Types"');
+    expect(markup).toContain('data-visibility-type="shell"');
+    expect(markup).toContain('data-visibility-type="ai"');
+    expect(markup).toContain('data-visibility-type="chat"');
+    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).not.toContain('Web Browsers');
     expect(markup).toContain('No workspace items match the selected types.');
     expect(markup).not.toContain('data-component="list-header"');
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');

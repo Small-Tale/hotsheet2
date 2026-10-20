@@ -172,8 +172,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
     src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)
-    src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
-    src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
+    src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, persisted shell/AI/chat type visibility and scoped bulk inclusion rules
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
     src/terminal-limits.ts  #   Client terminal history / warm-cap limits resolved from /terminal-limits and pushed to mounted emulators; conservative defaults on another device or a phone (HS2-Y5DYC0, HS2-ZWVDTZ)

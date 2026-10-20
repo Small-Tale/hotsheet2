@@ -2870,16 +2870,13 @@ surface rather than introducing a separate gray band. Visibility groups apply on
 global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
 and newly created AI chats appear in Default and start hidden in existing named groups.
-The dialog lists both terminal and chat tiles and filters rows through a Kerf multiple
-`Select` for Shell Terminals, AI Terminals, and AI Chat. Its Select all and Clear footer
-actions affect the filter only, keep the popup open, and never change visibility. Hide listed / Show listed
-apply only to matching rows in the selected visibility group. No selected types yields an
-explicit empty result and disabled bulk actions. Switching groups retains the filter;
-reopening the dialog resets it to all supported types. Web Browsers is disabled until
-browser tiles ship under HS2-7VS6SF: the choice stays visible with a `disabledReason`
-tooltip. The filter is a controlled Kerf `Select` (`multiple`, `selectAllLabel`, `clearLabel`,
-Lucide choice icons) since HS2-8ZC1YB; the app only reports its `change` events, and Kerf's
-register module turns the footer actions into ordinary value changes. Terminal kind comes from the creation request:
+The dialog lists terminal and chat tiles beneath three inline toggle buttons: Terminals,
+AI Shells, and AI Chats (HS2-1HAFAE). Turning a type off hides every item of that type
+from the active workspace's list and dashboard, without closing the sessions. Each
+visibility group persists its own type choices; older saved groups begin with all three
+visible. Hide Listed / Show Listed apply only to rows of the enabled types in the active
+group. No enabled types yields an explicit empty result and disabled bulk actions. Web
+Browsers has no control until browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).

@@ -77,6 +77,7 @@ terminals	delegateCapture	document.body	'close'	'[data-dialog-component="termina
 terminals	wireTerminalTextSizeControl	document.body
 terminals	delegate	document.body	'click'	'[data-action="hide-dashboard-terminal"]'
 terminals	delegate	document.body	'click'	'[data-action="open-terminal-visibility"]'
+terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-visibility-type"]'
 terminals	delegate	document.body	'kui-request-close'	'[data-terminal-visibility-dialog]'
 terminals	delegate	document.body	'change'	'[name="terminal-visibility-group"]'
 terminals	delegate	document.body	'click'	'[data-action="select-terminal-visibility-tab"]'

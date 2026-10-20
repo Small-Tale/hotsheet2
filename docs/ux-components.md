@@ -2124,15 +2124,13 @@ second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dial
 ListHeader, and ListItem vocabulary. Adding prompts for the name before creation; pill tabs
 select groups and named-tab context menus rename or delete them, while Default has no context
 menu. Rows include both terminals and AI chats with their existing stable visibility keys.
-A Web Awesome native multi-select, styled with Kerf's public Select class, filters Shell
-Terminals, AI Terminals, and AI Chat. Kerf's current Select API is single-valued, so this
-composition uses the native multiple contract and one controlled array/property bridge.
-The item-type controls flow into the workspace rows without a separating rule (HS2-KJ7FAX).
-The static native control is a morph-skipped island so its open popup and focus survive
-list updates. Select All / Deselect All keep the popup open; Hide listed / Show listed
-change only matching rows, with disabled bulk actions for an empty filter. Reopening resets
-all supported types, while named-group changes retain the filter. Web Browsers remains
-disabled pending HS2-7VS6SF. Creation kind is immutable server/broker metadata, with shell
+Three inline Kerf toggle buttons—Terminals, AI Shells, and AI Chats—set the active
+workspace group's persisted type visibility (HS2-1HAFAE). Each off type disappears from
+both the dialog list and dashboard; the item-type controls flow into the workspace rows
+without a separating rule (HS2-KJ7FAX). Hide listed / Show listed change only listed
+rows, with disabled bulk actions when every type is off. Switching groups restores each
+group's type choices, and reopening keeps them. Web Browsers has no control pending
+HS2-7VS6SF. Creation kind is immutable server/broker metadata, with shell
 fallback for legacy payloads (HS2-SE3RVM). An
 adjacent compact label Select switches immediately, while an eye badge reports the active
 group's hidden count. The project drawer always shows its local terminals and exposes no

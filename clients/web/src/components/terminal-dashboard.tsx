@@ -45,7 +45,11 @@ import {
   terminalPreviewText,
 } from '../terminal-grid-layout';
 import { terminalPhysicalScale } from '../terminal-viewport';
-import type { TerminalVisibilityGroup } from '../terminal-visibility';
+import {
+  TERMINAL_VISIBILITY_TYPES,
+  type TerminalVisibilityGroup,
+  type TerminalVisibilityType,
+} from '../terminal-visibility';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
 
 export interface TerminalDashboardSession {
@@ -128,6 +132,7 @@ export interface TerminalDashboardProps {
    */
   touchClipboard?: boolean;
   hiddenKeys?: readonly string[];
+  visibleTypes?: readonly TerminalVisibilityType[];
   loading?: boolean;
   message?: string;
   contextMenu?: { key: string; x: number; y: number };
@@ -757,6 +762,7 @@ export function TerminalDashboard({
   mobileMagnified,
   touchClipboard = false,
   hiddenKeys = [],
+  visibleTypes = TERMINAL_VISIBILITY_TYPES,
   loading = false,
   message = '',
   contextMenu,
@@ -766,8 +772,10 @@ export function TerminalDashboard({
   const visibleGroups = groups
     .map((group) => ({
       ...group,
-      sessions: group.sessions.filter((session) => !hidden.has(keyFor(session))),
-      chats: (group.chats ?? []).filter((chat) => !hidden.has(chatKeyFor(chat))),
+      sessions: group.sessions.filter(
+        (session) => visibleTypes.includes(session.kind === 'ai' ? 'ai' : 'shell') && !hidden.has(keyFor(session)),
+      ),
+      chats: (group.chats ?? []).filter((chat) => visibleTypes.includes('chat') && !hidden.has(chatKeyFor(chat))),
     }))
     .filter((group) => group.sessions.length + group.chats.length > 0);
   const sessions = visibleGroups.flatMap((group) => group.sessions);

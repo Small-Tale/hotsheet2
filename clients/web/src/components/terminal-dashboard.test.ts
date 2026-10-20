@@ -148,6 +148,16 @@ describe('TerminalDashboard', () => {
     );
     expect(hidden).not.toContain('data-component="workspace-chat-tile"');
     expect(hidden).toContain('data-component="terminal-tile"');
+    const chatOnly = String(
+      TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, visibleTypes: ['chat'] }),
+    );
+    expect(chatOnly).toContain('data-component="workspace-chat-tile"');
+    expect(chatOnly).not.toContain('data-component="terminal-tile"');
+    const terminalOnly = String(
+      TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, visibleTypes: ['shell'] }),
+    );
+    expect(terminalOnly).not.toContain('data-component="workspace-chat-tile"');
+    expect(terminalOnly).toContain('data-component="terminal-tile"');
   });
   it('makes the footer identity actionable, explains terminal state, and omits the snapshot working directory', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
