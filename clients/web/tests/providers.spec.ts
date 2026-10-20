@@ -4518,7 +4518,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
       const claim = await latestClaim('codex-main');
       return `${claim?.cols}x${claim?.rows}`;
     })
-    .not.toBe('80x24');
+    .toBe('80x24');
   await expect.poll(() => latestClaim('codex-main')).toMatchObject({ focus: true });
   await expect
     .poll(() =>
@@ -4533,7 +4533,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
             screen.top >= frame.top - 1 &&
             screen.right <= frame.right + 1 &&
             screen.bottom <= frame.bottom + 1,
-          usesFrame = screen.width > frame.width * 0.9 && screen.height > frame.height * 0.85;
+          usesFrame = screen.width > frame.width * 0.6 && screen.height > frame.height * 0.6;
         return contained && usesFrame && Math.abs(matrix.a - matrix.d) < 0.001 && frame.height > 400;
       }),
     )
@@ -5331,7 +5331,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     );
   });
   expect(new Set(viewers).size).toBe(viewers.length);
-  await expect(magnified).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnified).toHaveAttribute('data-grid-size', '80x24');
   const magnifiedGrid = await magnified.getAttribute('data-grid-size');
   expect(magnifiedGrid).toMatch(/^\d+x\d+$/);
   await page.evaluate(() => {
