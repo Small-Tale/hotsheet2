@@ -606,13 +606,15 @@ async fn a_new_codex_tui_accepts_one_prompt_before_its_thread_is_reported() {
     let store_dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
-    let dir = plugins.path().join("codex");
+    // Built-in plugin IDs take precedence over fixture directories. Use a distinct ID so
+    // CI does not try to launch the real Codex binary from the bundled manifest.
+    let dir = plugins.path().join("fake-codex");
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("instructions.md"), "Fake setup marker\n").unwrap();
     std::fs::write(
         dir.join("manifest.toml"),
         r#"
-id = "codex"
+id = "fake-codex"
 display_name = "Codex"
 product_name = "Codex"
 tier = "cli-agent"
@@ -645,7 +647,7 @@ mechanism = "codex-queue"
         &router,
         "POST",
         "/terminals",
-        Some(r#"{"connect":"codex","id":"fresh"}"#),
+        Some(r#"{"connect":"fake-codex","id":"fresh"}"#),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -685,7 +687,7 @@ mechanism = "codex-queue"
             &router,
             "POST",
             "/terminals",
-            Some(r#"{"connect":"codex","id":"fresh"}"#)
+            Some(r#"{"connect":"fake-codex","id":"fresh"}"#)
         )
         .await
         .0,
