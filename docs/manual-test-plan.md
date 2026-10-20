@@ -71,16 +71,16 @@ the default-on path is checked by hand.
    "empty"/clipped terminal on the phone). Then interact on the phone (tap/type) and
    confirm the PTY follows the phone after the focus-hold; interact back on the desktop
    and confirm it follows the desktop. Interaction, not the heartbeat, transfers control.
-5. HS2-Z84F78 — on a real phone, open the Workspace grid and magnify a terminal. Confirm it
-   fills the screen (no 5:3 letterbox), shows a full 80 columns scaled to the phone width, and
-   uses M rows to fill the height (many more than 24), and that a full-width TUI (e.g. `nano`,
-   `htop`) renders without horizontal wrapping. Rotate the device and confirm M recomputes.
+5. HS2-SA08XA — on a real phone, open the Workspace grid and magnify a terminal. Confirm it
+   fills the screen (no 5:3 letterbox), keeps 80×24 scaled to the available frame, and that a
+   full-width TUI (e.g. `nano`, `htop`) renders without horizontal wrapping. Rotate the device
+   and confirm the scale recomputes without changing the grid.
    HS2-WMN626 — on a real iPhone (Safari and the installed PWA), magnify a terminal and tap into
    it. Confirm the terminal shrinks to sit above the virtual keyboard (nothing hidden behind it),
    the top toolbar hides while the keyboard is up and returns when it is dismissed, the status
    bar/home-indicator safe areas are respected, and dragging or typing never pans the terminal
-   sideways. Cycle the text-size button through 80/70/60/50/40 columns and confirm each fits the
-   width, then close with the toolbar's X. Automated coverage simulates the keyboard through a
+   sideways. Confirm magnification has no column-changing text-size button, then close with the
+   toolbar's X. Automated coverage simulates the keyboard through a
    stubbed `VisualViewport`; only a device proves iOS's real keyboard and focus-scroll behavior.
 6. HS2-3ZBQDG — on current **physical-device Mobile Safari**, use the server's ordinary
    LAN HTTP address (not localhost or an HTTPS tunnel), then repeat on HTTPS. Confirm visible

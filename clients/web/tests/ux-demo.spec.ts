@@ -1960,7 +1960,7 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
     await expect(viewport).toHaveAttribute('data-renderer', 'dom');
   }
   await expect(previewViewport).toHaveAttribute('data-grid-size', '80x24');
-  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
   const rows = previewViewport.locator('.xterm-rows > div');
   await expect(rows).toHaveCount(24);
   await expect(rows.first()).toContainText('GNU nano 8.4');
@@ -1996,12 +1996,11 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
   expect(sizing.previewWidth).toBeLessThanOrEqual(352);
   expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);
   expect(sizing.font).toContain('ui-monospace');
-  // HS2-WMN626 phone variant: toolbar with Close and text size on top; hidden while the keyboard is up.
+  // HS2-WMN626 phone variant: toolbar with Close on top; hidden while the keyboard is up.
   await expect(phone).toHaveCount(2);
   const phoneToolbar = phone.first().locator('.terminal-tile__footer');
   await expect(phoneToolbar.getByRole('button', { name: 'Close Development' })).toBeVisible();
-  await expect(phoneToolbar.getByRole('button', { name: 'Text Size: 60 Columns. Change Text Size' })).toBeVisible();
-  await expect(phoneToolbar.locator('svg[data-lucide="a-large-small"]')).toBeVisible();
+  await expect(phoneToolbar.getByRole('button', { name: /Text Size/ })).toHaveCount(0);
   await expect(phoneToolbar.locator('svg[data-lucide="x"]')).toBeVisible();
   expect(
     await phone

@@ -238,7 +238,7 @@ test('opens ticket references from interactive terminals without linking scaled 
     .toContain('echo link-input');
   await page.setViewportSize({ width: 1024, height: 650 });
   await expect(viewport).toHaveAttribute('data-grid-size', /^\d+x\d+$/);
-  await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
   await page.screenshot({ path: testInfo.outputPath('interactive-terminal-narrow.png'), fullPage: true });
 });
 
@@ -352,7 +352,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
     magnified.locator('article.terminal-tile[data-terminal-key="terminal-feedback:nano"][data-magnified="true"]'),
   ).toHaveCount(1);
   await expect(magnifiedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
-  await expect(magnifiedViewport).not.toHaveAttribute('data-grid-size', '80x24');
+  await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
   await expect
     .poll(async () => {
       const grid = await magnifiedViewport.getAttribute('data-grid-size'),
@@ -790,9 +790,9 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
       });
       expect(contained).toBe(true);
     },
-    assertFitted = async (viewport: typeof dedicated) => {
+    assertFixedMagnified = async (viewport: typeof dedicated) => {
       await expect(viewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
-      await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
+      await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
       await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
       await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
       await expect(viewport).toHaveAttribute('data-renderer', 'dom');
@@ -818,7 +818,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(readyMagnifiedFrame - firstMagnifiedFrame).toBeLessThanOrEqual(3);
   expect(magnifiedFrames.slice(firstMagnifiedFrame, readyMagnifiedFrame).every((frame) => frame?.hidden)).toBe(true);
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified Terminal New' });
-  await assertFitted(magnified.locator('[data-display-mode="interactive"]'));
+  await assertFixedMagnified(magnified.locator('[data-display-mode="interactive"]'));
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
   await assertTiled(tile.locator('[data-presentation="tile"]'));
@@ -896,9 +896,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.screenshot({ path: 'target/visual-captures/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
 });
 
-test('a zoomed Workspace Grid terminal takes over PTY sizing at its fitted grid across zoom, unzoom, zoom (HS2-6179FV)', async ({
-  page,
-}) => {
+test('a zoomed Workspace Grid terminal keeps 80x24 sizing across zoom, unzoom, zoom (HS2-6179FV)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // A real server round trip: the zoom focuses the terminal before its socket opens.
   await installTerminalFixture(page, false, false, { openDelayMs: 300, warmLimit: 0 });
@@ -929,9 +927,9 @@ test('a zoomed Workspace Grid terminal takes over PTY sizing at its fitted grid 
     await tile.click();
     await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
     await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
-    await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
+    await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
     const grid = (await viewport.getAttribute('data-grid-size'))!;
-    // Opening the zoom is a genuine interaction: its claim reaches the PTY at the zoomed fit, with
+    // Opening the zoom is a genuine interaction: its fixed-grid claim reaches the PTY, with
     // no keystroke or click inside the terminal needed.
     await expect.poll(newestInteractingClaims).toContain(grid);
     await expect(viewport).toHaveAttribute('data-pty-size', grid);
@@ -951,7 +949,7 @@ test('a zoomed Workspace Grid terminal takes over PTY sizing at its fitted grid 
   expect(await zoomAndAssertFilled('rezoomed-wide-after')).toBe(wide);
   await unzoom();
   await page.setViewportSize({ width: 1100, height: 640 });
-  expect(await zoomAndAssertFilled('zoomed-narrow-after')).not.toBe(wide);
+  expect(await zoomAndAssertFilled('zoomed-narrow-after')).toBe(wide);
   await unzoom();
 });
 
@@ -1030,9 +1028,8 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await context.close();
 });
 
-// HS2-Z84F78: on a phone the magnified terminal keeps 80 columns but fills the available height
-// with M rows (M >> the desktop 24) and scales to fit width, instead of letterboxing a 5:3 80×24.
-test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F78)', async ({ page }) => {
+// HS2-SA08XA: magnification keeps the same 80×24 grid at phone width, scaling the screen to fit.
+test('renders the magnified terminal at scaled 80x24 on a phone (HS2-SA08XA)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installTerminalFixture(page);
   await page.goto('/');
@@ -1046,16 +1043,11 @@ test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F7
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     viewport = magnified.locator('[data-display-mode="interactive"]');
   await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
-  // 80 columns, and far more than the desktop 24 rows to fill the tall phone.
-  await expect(viewport).toHaveAttribute('data-grid-size', /^80x\d+$/);
-  await expect
-    .poll(async () => Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1]))
-    .toBeGreaterThan(30);
-  await expect(viewport).toHaveAttribute('data-pty-size', /^80x\d+$/);
-  // Scaled to fit the phone width (well under 1:1), with the 80-col screen contained in the frame.
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+  // Font metrics and the final physical transform fit the 80-column screen inside the frame.
   const scale = Number(await viewport.getAttribute('data-physical-scale'));
   expect(scale).toBeGreaterThan(0);
-  expect(scale).toBeLessThan(1);
   const geometry = await viewport.evaluate((element) => {
     const screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
       frame = element.closest<HTMLElement>('.terminal-tile__viewport-frame')!.getBoundingClientRect();
@@ -1071,10 +1063,8 @@ test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F7
 
 // HS2-WMN626: the phone magnified terminal follows the visual viewport (so the virtual keyboard
 // shrinks it), clips instead of panning sideways, has no inset ring, and carries a top toolbar with
-// Close and a text-size control (80 → 40 columns) that hides while the keyboard is presented.
-test('adapts the phone magnified terminal to the keyboard with close and text-size controls (HS2-WMN626)', async ({
-  page,
-}) => {
+// Close and a fixed 80×24 grid that scales again when the keyboard changes available space.
+test('adapts the phone magnified terminal to the keyboard with a fixed grid (HS2-WMN626)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     const fake = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844, scale: 1 });
@@ -1096,14 +1086,11 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     viewport = magnified.locator('[data-display-mode="interactive"]'),
     footer = magnified.locator('.terminal-tile__footer'),
-    close = magnified.getByRole('button', { name: 'Close nano' }),
-    textSize = magnified.getByRole('button', { name: /^Text Size: \d+ Columns/ });
+    close = magnified.getByRole('button', { name: 'Close nano' });
   await expect(magnified).toHaveAttribute('data-mobile', 'true');
   await expect(magnified).toHaveAttribute('data-keyboard-visible', 'false');
-  await expect(viewport).toHaveAttribute('data-grid-size', /^80x\d+$/);
-  const rowsOf = async () => Number((await viewport.getAttribute('data-grid-size'))!.split('x')[1]);
-  await expect.poll(rowsOf).toBeGreaterThan(30);
-  const fullRows = await rowsOf();
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
 
   // Full-bleed on the terminal background, toolbar above the terminal.
   const chrome = await magnified.evaluate((overlay) => {
@@ -1129,8 +1116,7 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   expect(chrome.radius).toBe('0px');
   expect(chrome.toolbarAbove).toBe(true);
   await expect(close).toBeVisible();
-  await expect(textSize).toHaveAttribute('data-columns', '80');
-  await expect(textSize).toHaveCSS('cursor', 'pointer');
+  await expect(magnified.getByRole('button', { name: /Text Size/ })).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-toolbar.png') });
 
   // The scaled xterm root is wider than its box in layout terms; the viewport must not pan sideways.
@@ -1141,51 +1127,6 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   });
   expect(panned).toEqual([0, 0, 'clip']);
 
-  // Text size cycles 80 → 70 → 60 → 50 → 40 → 80, refitting the PTY each time, and persists.
-  for (const columns of [70, 60, 50, 40, 80]) {
-    await textSize.click();
-    // The size button no longer shows the column count inline; a toast reports it (HS2-89JZSN).
-    await expect(page.locator('.app-toast')).toHaveText(`Terminal text size: ${columns} columns`);
-    await expect(textSize).toHaveAttribute('data-columns', String(columns));
-    await expect(textSize).toHaveAccessibleName(`Text Size: ${columns} Columns. Change Text Size`);
-    await expect(viewport).toHaveAttribute('data-grid-size', new RegExp(`^${columns}x\\d+$`));
-    await expect(viewport).toHaveAttribute('data-pty-size', new RegExp(`^${columns}x\\d+$`));
-    expect(await page.evaluate(() => localStorage.getItem('hotsheet.terminals.mobile-columns'))).toBe(String(columns));
-    if (columns === 40) {
-      const measure = () =>
-        viewport.evaluate((element) => {
-          const box = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
-            frame = element.getBoundingClientRect();
-          return { left: box.left - frame.left, right: frame.right - box.right, scale: element.dataset.physicalScale };
-        });
-      // The left edge is already anchored while the width-fit transform is still settling.
-      // Wait for both strict edge bounds together before sampling the final geometry (HS2-D31SS1).
-      await expect
-        .poll(async () => {
-          const screen = await measure();
-          return Math.max(Math.abs(screen.left), Math.abs(screen.right)) <= 1 && Number(screen.scale) > 1;
-        })
-        .toBe(true);
-      const screen = await measure();
-      expect(Math.abs(screen.left)).toBeLessThanOrEqual(1);
-      expect(Math.abs(screen.right)).toBeLessThanOrEqual(1);
-      expect(Number(screen.scale)).toBeGreaterThan(1);
-      // Hover/press feedback stays legible on the terminal-colored toolbar.
-      const hover = await textSize.evaluate((button) => [
-        getComputedStyle(button).backgroundColor,
-        getComputedStyle(button).color,
-      ]);
-      expect(hover[0]).not.toBe(hover[1]);
-      expect(hover[0]).toMatch(/color-mix|rgba?\(|oklab|color\(/);
-      await textSize.hover();
-      await footer.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-toolbar-hover.png') });
-      await page.mouse.move(0, 400);
-      await page.screenshot({ path: test.info().outputPath('hs2-wmn626-mobile-magnified-40-columns.png') });
-    }
-  }
-  await textSize.click();
-  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
-
   // Presenting the keyboard shrinks the overlay to the visual viewport and hides the toolbar.
   await page.evaluate(() => {
     (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(500);
@@ -1193,8 +1134,7 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   await expect(magnified).toHaveAttribute('data-keyboard-visible', 'true');
   await expect(footer).toBeHidden();
   await expect.poll(async () => (await magnified.boundingBox())?.height).toBe(500);
-  await expect.poll(rowsOf).toBeLessThan(fullRows);
-  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
   // The app must not show in the gap between the shrunken terminal and the keyboard: a full-viewport
   // terminal-colored backdrop covers it (HS2-SB1FSQ), and tapping it does not dismiss the terminal.
   const gapHit = await magnified.evaluate((overlay) => {
@@ -1216,21 +1156,20 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
   await expect(magnified).toHaveAttribute('data-keyboard-visible', 'false');
   await expect(footer).toBeVisible();
   await expect.poll(async () => (await magnified.boundingBox())?.height).toBe(844);
-  await expect.poll(rowsOf).toBeGreaterThan(30);
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
 
-  // Close dismisses the magnified terminal; reopening keeps the chosen text size.
+  // Close dismisses the magnified terminal; reopening keeps the fixed grid.
   await close.click();
   await expect(magnified).toBeHidden();
   await tile.click();
   await expect(magnified).toBeVisible();
-  await expect(textSize).toHaveAttribute('data-columns', '70');
-  await expect(viewport).toHaveAttribute('data-grid-size', /^70x\d+$/);
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
 
   // Widening past the phone breakpoint drops the phone-only chrome.
   await page.setViewportSize({ width: 1280, height: 844 });
   await expect(magnified).toHaveAttribute('data-mobile', 'false');
   await expect(close).toHaveCount(0);
-  await expect(textSize).toHaveCount(0);
+  await expect(magnified.getByRole('button', { name: /Text Size/ })).toHaveCount(0);
 });
 
 // HS2-KFBRSB: a finger drag scrolls phone terminals like a wheel, while a tap still only focuses.

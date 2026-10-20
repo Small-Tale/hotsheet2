@@ -149,7 +149,7 @@ for (const width of [1280, 390])
     await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
     const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-one"]');
     await expect(dedicated).toHaveAttribute('data-connection', 'connected');
-    await expect(dedicated.locator('.xterm-rows')).toContainText('demo-one READY');
+    await expect(dedicated.locator('.xterm-rows')).toContainText('demo-one line');
     const [opened] = await emulatorOf(page, 'demo-one'),
       sockets = await socketsFor(page, 'demo-one');
     expect(opened).toMatchObject({ inSession: true, presentation: 'drawer' });
@@ -250,6 +250,7 @@ for (const width of [1280, 390])
       magnifiedViewport = magnified.locator('[data-terminal-id="demo-one"][data-display-mode="interactive"]');
     await expect(magnifiedViewport).toHaveAttribute('data-connection', 'connected');
     await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
     expect(await magnifiedViewport.locator('.xterm').getAttribute('data-move-tag')).toBe(opened.tag);
     expect(await socketsFor(page, 'demo-one')).toBe(sockets);
     await magnified.screenshot({ path: `target/visual-captures/hs2-sa08xa-workspace-magnified-${String(width)}.png` });
@@ -298,6 +299,7 @@ for (const width of [1280, 390])
       magnifiedViewport = magnified.locator('[data-terminal-id="demo-one"][data-display-mode="interactive"]');
     await expect(magnifiedViewport).toHaveAttribute('data-connection', 'connected');
     await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(magnifiedViewport).toHaveAttribute('data-grid-size', '80x24');
     expect(await magnifiedViewport.locator('.xterm').getAttribute('data-move-tag')).toBe(first.tag);
     expect(await socketsFor(page, 'demo-one')).toBe(firstSockets);
     await magnified.screenshot({ path: `target/visual-captures/hs2-sa08xa-drawer-magnified-${String(width)}.png` });

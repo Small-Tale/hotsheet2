@@ -155,7 +155,7 @@ describe('TerminalDashboard', () => {
     expect(markup).toMatch(/class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*aria-label="Busy"/);
     expect(markup).not.toContain('/work/one');
   });
-  it('reserves fixed 80x24 sizing for dashboard grid previews', () => {
+  it('keeps fixed 80x24 sizing in dashboard previews and magnified terminals', () => {
     const session = groups[0].sessions[0],
       preview = String(FixedAspectTerminalCard({ session })),
       magnified = String(FixedAspectTerminalCard({ session, mode: 'magnified' }));
@@ -172,17 +172,15 @@ describe('TerminalDashboard', () => {
     expect(magnified).toContain('data-fixed-aspect-terminal-card="magnified"');
     expect(magnified).toContain('data-display-mode="interactive"');
     expect(magnified).toContain('data-mount-policy="immediate"');
-    expect(magnified).toContain('data-mobile-grid-policy="80xm"');
     expect(magnified).not.toContain('data-grid-policy="dashboard-80x24"');
+    expect(magnified).not.toContain('data-mobile-grid-policy="80xm"');
   });
-  it('shows the phone text-size control without an inline column number (HS2-89JZSN)', () => {
+  it('keeps the phone magnified toolbar compatible with its fixed grid', () => {
     const session = groups[0].sessions[0],
       mobile = { viewport: { left: 0, top: 0, width: 360, height: 640 }, keyboardVisible: false, columns: 60 },
       markup = String(FixedAspectTerminalCard({ session, mode: 'magnified', mobile }));
-    // The control stays present and accessible; a toast reports the change instead of an inline number.
-    expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
-    expect(markup).toContain('data-columns="60"');
-    expect(markup).toContain('aria-label="Text Size: 60 Columns. Change Text Size"');
+    expect(markup).not.toContain('data-action="cycle-mobile-terminal-columns"');
+    expect(markup).not.toContain('data-grid-policy="dashboard-80x24"');
     expect(markup).not.toContain('aria-hidden="true">60<');
     // HS2-FRB545: the phone toolbar carries Copy and Paste beside text size.
     expect(markup).toContain('data-action="copy-terminal-text"');

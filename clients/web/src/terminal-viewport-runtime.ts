@@ -200,7 +200,8 @@ function initializeStaticTerminalViewport(
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     // A demo TerminalPreview renders the mirroring preview's 80×24 fallback grid (HS2-XHBDRV).
     mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
-    fixedGrid = fixedDashboardGrid || mirrorPtyGrid,
+    fixedGrid =
+      fixedDashboardGrid || mirrorPtyGrid || Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
     theme = resolveTerminalTheme(element);
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
@@ -365,7 +366,11 @@ function initializeTerminalViewport(
     // A non-claiming preview (no grid policy) mirrors the borrowed PTY's grid at the dashboard font
     // and scales it to fill the canvas, so its glyphs stay legible (HS2-XHBDRV).
     mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
-    fixedGrid = fixedDashboardGrid || mirrorPtyGrid;
+    fixedGrid = fixedDashboardGrid || mirrorPtyGrid,
+    initialFixedGrid = fixedGrid || insideMagnified();
+  // An adopted drawer/tile emulator was constructed before magnification. Its grid policy must
+  // follow its current presentation, while its emulator and socket remain the same instance.
+  const fixedPresentation = () => fixedGrid || insideMagnified();
   const theme = resolveTerminalTheme(element);
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
@@ -378,14 +383,14 @@ function initializeTerminalViewport(
   // first frames could otherwise show the emulator at its constructor size (HS2-MHPHZB). Dedicated
   // drawer terminals stay paintable (and focusable) from mount.
   if (insideMagnified() && element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
-  if (fixedGrid) {
-    element.dataset.geometryReady = 'false';
+  if (initialFixedGrid) {
+    if (element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
     element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
     element.dataset.letterSpacing = '0';
     element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
   }
   const terminal = new Terminal({
-      ...(fixedGrid
+      ...(initialFixedGrid
         ? { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS, lineHeight: TERMINAL_DASHBOARD_LINE_HEIGHT }
         : {}),
       cursorBlink: !scaledPreview,
@@ -393,7 +398,7 @@ function initializeTerminalViewport(
       convertEol: false,
       scrollback,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-      fontSize: fixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
+      fontSize: initialFixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
       theme,
     }),
     fit = new FitAddon();
@@ -417,6 +422,7 @@ function initializeTerminalViewport(
     });
   let webgl: WebglAddon | undefined;
   const mobile80xM = () =>
+    !insideMagnified() &&
     terminalUsesMobile80xM(
       isMobileViewport(window.innerWidth),
       fixedDashboardGrid || element.dataset.mobileGridPolicy === '80xm' || insideMagnified(),
@@ -483,6 +489,7 @@ function initializeTerminalViewport(
     serverSize: { cols: number; rows: number } | undefined,
     // Shown inside a grid tile rather than the drawer: fitted to the tile while sharing its socket.
     tiled = false,
+    magnifiedPresentation = insideMagnified(),
     tileGridSize: { cols: number; rows: number } | undefined,
     tileCanClaim = false,
     tileWebglReleased = false;
@@ -510,16 +517,16 @@ function initializeTerminalViewport(
   const proposed = () => {
     if (tiled) return tileGridSize ?? serverSize ?? { cols: terminal.cols, rows: terminal.rows };
     if (mobile80xM()) return { cols: mobileCols(), rows: mobileGridRows };
-    if (fixedGrid) return fixedGridSize();
+    if (fixedPresentation()) return fixedGridSize();
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
     return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
   };
   const claimDimensions = () =>
-    !tiled && !fixedGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
+    !tiled && !fixedPresentation() && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
   const reconcileScale = () => {
     if (!terminal.element || tiled) return;
     const previewScale = scaledPreview ? applyScaledPreviewTransform(element) : 1;
-    if (fixedGrid || mobile80xM()) {
+    if (fixedPresentation() || mobile80xM()) {
       if (!scaledPreview) element.style.transform = '';
       if (!mobile80xM()) element.dataset.scale = String(previewScale);
       delete element.dataset.viewingLabel;
@@ -549,7 +556,7 @@ function initializeTerminalViewport(
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(claimVisible);
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (!fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    if (!fixedPresentation() && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, false));
   };
@@ -566,7 +573,7 @@ function initializeTerminalViewport(
     if (
       socket?.readyState !== WebSocket.OPEN ||
       !visible ||
-      (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true')
+      (!fixedPresentation() && !mobile80xM() && element.dataset.geometryReady !== 'true')
     ) {
       pendingInteraction = true;
       return;
@@ -634,7 +641,7 @@ function initializeTerminalViewport(
     if (scale <= 0) return;
     // Keep pointer hit-testing, text selection, and link ranges aligned with glyphs for any
     // interactive fixed grid. xterm measures mouse cells before CSS transforms, so fit its font.
-    if (fixedDashboardGrid && !scaledPreview) {
+    if (fixedPresentation() && !scaledPreview) {
       const current = terminal.options.fontSize ?? TERMINAL_DASHBOARD_FONT_SIZE,
         naturalScale = terminalPhysicalScale(
           TERMINAL_PREVIEW_NATURAL_WIDTH,
@@ -669,13 +676,14 @@ function initializeTerminalViewport(
     terminal.element.style.width = '';
     terminal.element.style.height = '';
     element.dataset.geometryReady = 'true';
-    if (autoFocus && focusRequested) {
+    if (focusRequested && (autoFocus || insideMagnified()) && automaticInputFocusAllowed(window.innerWidth)) {
       terminal.focus();
+      focusRequested = false;
       claim();
     }
   };
   const scheduleDashboardFill = () => {
-    if ((!fixedGrid && !mobile80xM()) || dashboardFrame !== undefined) return;
+    if ((!fixedPresentation() && !mobile80xM()) || dashboardFrame !== undefined) return;
     dashboardFrame = window.requestAnimationFrame(() => {
       dashboardFrame = undefined;
       applyDashboardPhysicalFill();
@@ -747,7 +755,7 @@ function initializeTerminalViewport(
         releaseWebgl();
         terminal.resize(mobileCols(), mobileGridRows);
         scheduleDashboardFill();
-      } else if (fixedGrid) {
+      } else if (fixedPresentation()) {
         const size = fixedGridSize();
         terminal.resize(size.cols, size.rows);
         scheduleDashboardFill();
@@ -766,7 +774,7 @@ function initializeTerminalViewport(
       /* layout can be transiently zero-sized */
       return;
     }
-    if (!fixedGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
+    if (!fixedPresentation() && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
     element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
     reconcileScale();
     // The settled grid always reaches the arbiter: a deferred interaction that still cannot be sent
@@ -913,7 +921,7 @@ function initializeTerminalViewport(
         let bytes = new Uint8Array(value);
         if (initialReplay) {
           initialReplay = false;
-          if (fixedGrid || insideMagnified() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
+          if (fixedPresentation() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
         }
         if (replacementReplayPending) {
           replacementReplayPending = false;
@@ -1046,6 +1054,15 @@ function initializeTerminalViewport(
     const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
     const changed = tile !== tiled;
     parked = false;
+    if (magnifiedPresentation && !insideMagnified() && !fixedGrid) {
+      terminal.options.fontSize = 12;
+      delete element.dataset.fontSize;
+    }
+    if (!magnifiedPresentation && insideMagnified()) {
+      element.dataset.geometryReady = 'false';
+      focusRequested = automaticInputFocusAllowed(window.innerWidth);
+    }
+    magnifiedPresentation = insideMagnified();
     if (changed) {
       tiled = tile;
       if (tile) {

@@ -10,9 +10,9 @@ async function rememberProject(page: Page) {
   }, project.root);
 }
 
-// HS2-6179FV: a zoomed Workspace Grid terminal must take over the real PTY's size from a smaller
-// viewer that was driving it, so the session fills the zoom space; zooming again must do it again.
-test('a zoomed Workspace Grid terminal refits the real PTY across zoom, unzoom, zoom (HS2-6179FV)', async ({
+// HS2-6179FV / HS2-SA08XA: zooming takes over the real PTY's size from another viewer,
+// while keeping the same 80×24 grid through repeated zoom and unzoom.
+test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom, unzoom, zoom (HS2-SA08XA)', async ({
   baseURL,
 }, testInfo) => {
   test.setTimeout(90_000);
@@ -96,15 +96,14 @@ test('a zoomed Workspace Grid terminal refits the real PTY across zoom, unzoom, 
       const zoom = async (capture: string) => {
         await tile.click();
         await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
-        // The zoomed terminal drives the real PTY at its own fit (after the arbiter's focus hold),
-        // so the session fills the panel instead of the other device's 60x16.
+        // The zoomed terminal drives the real PTY at 80×24 after the arbiter's focus hold.
         await expect
           .poll(async () => {
             const [grid, pty] = await Promise.all([
               viewport.getAttribute('data-grid-size'),
               viewport.getAttribute('data-pty-size'),
             ]);
-            return grid === pty && grid !== '60x16' && grid !== '80x24' ? grid : undefined;
+            return grid === pty && grid === '80x24' ? grid : undefined;
           })
           .toBeTruthy();
         const grid = (await viewport.getAttribute('data-grid-size'))!;
@@ -125,6 +124,7 @@ test('a zoomed Workspace Grid terminal refits the real PTY across zoom, unzoom, 
       await magnified.getByRole('button', { name: /^Open nano in project terminal drawer$/i }).click();
       const dedicated = page.locator('[data-component="terminal-session"] [data-terminal-id="nano"]');
       await expect(dedicated).toHaveAttribute('data-geometry-ready', 'true');
+      await expect(dedicated).not.toHaveAttribute('data-grid-size', '80x24');
       await dedicated.locator('.xterm-helper-textarea').focus();
       await page.keyboard.type('x');
       await expect.poll(() => dedicated.getAttribute('data-driving')).toBe('true');
@@ -134,7 +134,7 @@ test('a zoomed Workspace Grid terminal refits the real PTY across zoom, unzoom, 
       expect(await zoom('rezoomed-wide')).toBe(wide);
       await unzoom();
       await page.setViewportSize({ width: 1100, height: 640 });
-      expect(await zoom('zoomed-narrow')).not.toBe(wide);
+      expect(await zoom('zoomed-narrow')).toBe(wide);
       await unzoom();
     } finally {
       stopOther();

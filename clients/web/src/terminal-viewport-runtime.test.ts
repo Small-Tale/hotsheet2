@@ -17,6 +17,8 @@ const allocated = vi.hoisted(() => ({
   proposed: { cols: 80, rows: 24 },
   openElement: false,
   terminals: [] as Array<{
+    cols: number;
+    rows: number;
     dispose: ReturnType<typeof vi.fn>;
     render: ReturnType<typeof vi.fn>;
     input: ReturnType<typeof vi.fn>;
@@ -898,6 +900,17 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
 });
 
 describe('unpainted until the first geometry pass (HS2-MHPHZB)', () => {
+  it('constructs a static magnified demo at the same 80x24 grid', () => {
+    const viewport = element().viewport;
+    (viewport as unknown as { closest: (selector: string) => unknown }).closest = (selector) =>
+      selector === '[data-fixed-aspect-terminal-card="magnified"]' ? {} : null;
+    const dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'ready' });
+    const terminal = allocated.terminals.at(-1)!;
+    expect([terminal.cols, terminal.rows, terminal.options.fontSize]).toEqual([80, 24, 24]);
+    expect(viewport.dataset.geometryReady).toBe('false');
+    dispose();
+  });
+
   it('marks a fresh magnified viewport not ready, keeps a settled one ready, and leaves dedicated ones paintable', () => {
     const dedicated = element().viewport;
     const disposeDedicated = mountTerminalViewportRuntime(dedicated, {
@@ -1287,9 +1300,10 @@ describe('a closed socket reconnects on user activity instead of waiting out its
 
 describe('an early interaction on a magnified terminal takes over PTY sizing (HS2-6179FV)', () => {
   function mountMagnified(proposed: { cols: number; rows: number }) {
+    let magnified = true;
     const frames: Array<() => void> = [],
       sent: string[] = [];
-    // A desktop-width magnified overlay (the phone overlay uses the fixed 80×M grid instead).
+    // Both desktop and phone magnified overlays keep the same fixed 80×24 grid.
     windowMock.innerWidth = 1440;
     windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
       frames.push(callback);
@@ -1297,7 +1311,7 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     }) as never);
     const { viewport, listeners } = element();
     (viewport as unknown as { closest: (selector: string) => unknown }).closest = (selector: string) =>
-      selector.includes('magnified') ? {} : null;
+      magnified && selector.includes('magnified') ? {} : null;
     allocated.proposed = proposed;
     const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
       socket = sockets.at(-1) as unknown as EventTarget & { readyState: number; send: (value: string) => void },
@@ -1320,6 +1334,15 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
         (terminal.resize as unknown as (cols: number, rows: number) => void)(cols, rows);
         observer.callback();
       },
+      leaveMagnified: (cols: number, rows: number) => {
+        magnified = false;
+        allocated.proposed = { cols, rows };
+        // The FitAddon mock does not resize; model its real fit before the settled pass.
+        (terminal.resize as unknown as (cols: number, rows: number) => void)(cols, rows);
+        for (const [type, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+          if (type === TERMINAL_VIEWPORT_PRESENTATION_EVENT)
+            handler(new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }));
+      },
       focusin: () => {
         for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
           if (type === 'focusin') handler();
@@ -1341,26 +1364,26 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     view.socket.dispatchEvent(new Event('open'));
     view.fit(180, 50);
     view.runFrames();
-    expect(view.viewport.dataset.geometryReady).toBe('true');
+    expect(view.viewport.dataset.geometryReady).toBe('false'); // no screen geometry in this socket-only mock
     // Not yet reported visible: an interaction the arbiter would ignore is still held back.
     expect(view.claims().some((claim) => claim.interacting)).toBe(false);
     view.show();
     // Before HS2-6179FV this early interaction was dropped, so the viewport only sent heartbeat
     // claims and never took PTY sizing from the previous (smaller) driver.
     expect(view.claims().filter((claim) => claim.interacting)).toEqual([
-      expect.objectContaining({ cols: 180, rows: 50, interacting: true, visible: true }),
+      expect.objectContaining({ cols: 80, rows: 24, interacting: true, visible: true }),
     ]);
     // Later layout passes are heartbeat claims at the new fit, not repeated interactions.
     view.fit(120, 30);
     view.runFrames();
-    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: false });
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: false });
     // A settled terminal sends an interaction immediately.
     view.focusin();
-    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: true });
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: true });
     view.dispose();
   });
 
-  it('walks zoom → unzoom → zoom: each fresh magnified viewport takes over at its own fit', () => {
+  it('walks zoom → unzoom → zoom: each fresh magnified viewport claims 80×24', () => {
     for (const size of [
       { cols: 180, rows: 50 },
       { cols: 150, rows: 40 },
@@ -1373,12 +1396,24 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
       view.runFrames();
       view.show();
       expect(view.claims().filter((claim) => claim.interacting)).toEqual([
-        expect.objectContaining({ ...size, interacting: true, visible: true }),
+        expect.objectContaining({ cols: 80, rows: 24, interacting: true, visible: true }),
       ]);
       // Un-zoom disposes the magnified viewport and closes its socket.
       view.dispose();
       expect(sockets.at(-1)!.close).toHaveBeenCalled();
     }
+  });
+
+  it('returns a cold magnified viewport to the drawer sizing policy', () => {
+    const view = mountMagnified({ cols: 160, rows: 48 });
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.runFrames();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24 });
+    view.leaveMagnified(120, 35);
+    view.runFrames();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 35 });
+    view.dispose();
   });
 
   it('keeps sending geometry claims while a deferred interaction waits for visibility (HS2-KRQRWH)', () => {
@@ -1390,13 +1425,13 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     view.runFrames();
     // The interaction is still held back, but the settled grid reaches the arbiter anyway; before
     // this fix the deferral swallowed every geometry claim and the PTY kept another viewport's size.
-    expect(view.claims().at(-1)).toMatchObject({ cols: 180, rows: 50, interacting: false, visible: false });
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: false, visible: false });
     view.fit(120, 30);
     view.runFrames();
-    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: false, visible: false });
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: false, visible: false });
     expect(view.claims().some((claim) => claim.interacting)).toBe(false);
     view.show();
-    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: true, visible: true });
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: true, visible: true });
     view.dispose();
   });
 
@@ -1509,10 +1544,13 @@ describe('a silent OPEN socket is replaced instead of freezing the terminal (HS2
 describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', () => {
   function mountMovable() {
     allocated.openElement = true;
+    let magnified = false;
     const frame = { clientWidth: 400, clientHeight: 300 },
       screen = { offsetWidth: 800, offsetHeight: 480 },
       { viewport, listeners } = element();
     Object.assign(viewport, { parentElement: frame, inert: false });
+    (viewport as unknown as { closest: (selector: string) => unknown }).closest = (selector) =>
+      selector === '[data-fixed-aspect-terminal-card="magnified"]' && magnified ? {} : null;
     (viewport.classList as unknown as { contains: (name: string) => boolean }).contains = (name: string) =>
       name === 'terminal-viewport--dedicated';
     const frames: Array<() => void> = [];
@@ -1549,8 +1587,43 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
       sent
         .filter((value) => value.startsWith('{"resize"'))
         .map((value) => (JSON.parse(value) as { resize: { focus: boolean; visible: boolean } }).resize);
-    return { viewport, terminal, dispose, fire, flush, size, sent, claims, screen, frame };
+    return {
+      viewport,
+      terminal,
+      dispose,
+      fire,
+      flush,
+      size,
+      sent,
+      claims,
+      screen,
+      frame,
+      setMagnified: (value: boolean) => {
+        magnified = value;
+      },
+    };
   }
+
+  it('keeps one 80x24 grid when a live tile moves into and out of phone magnification', () => {
+    const view = mountMovable();
+    view.flush();
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    const socketCount = sockets.length;
+    view.setMagnified(true);
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+    view.flush();
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, focus: true, visible: true });
+    expect(view.terminal.options.disableStdin).toBe(false);
+    expect(sockets).toHaveLength(socketCount);
+    view.setMagnified(false);
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    expect(view.viewport.dataset.presentation).toBe('tile');
+    expect(view.terminal.options.fontSize).toBe(12);
+    view.dispose();
+  });
 
   it('keeps its socket in a tile and claims a usable fitted grid', async () => {
     const view = mountMovable();

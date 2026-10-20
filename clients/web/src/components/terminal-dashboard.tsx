@@ -14,7 +14,6 @@ import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import {
-  ALargeSmall,
   CircleCheck,
   ClipboardPaste,
   Copy,
@@ -285,7 +284,6 @@ function TerminalCard({
         data-display-mode={dashboardPreview ? 'scaled-preview' : 'interactive'}
         data-mount-policy={dashboardPreview ? 'visible-progressive' : 'immediate'}
         data-grid-policy={dashboardPreview ? 'dashboard-80x24' : undefined}
-        data-mobile-grid-policy={magnified ? '80xm' : undefined}
         data-geometry-ready="false"
         aria-hidden={dashboardPreview ? 'true' : undefined}
         aria-label={dashboardPreview ? undefined : `${session.title ?? session.id} interactive terminal`}
@@ -419,18 +417,6 @@ function TerminalCard({
                 size={magnified && mobile ? 'default' : 'compact'}
                 label="Terminal Actions"
               >
-                {magnified && mobile && (
-                  <button
-                    type="button"
-                    class="terminal-tile__text-size"
-                    {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
-                    data-columns={String(mobile.columns)}
-                    aria-label={`Text Size: ${mobile.columns} Columns. Change Text Size`}
-                    title="Change text size"
-                  >
-                    <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
-                  </button>
-                )}
                 {clipboardActions && (
                   <button
                     type="button"

@@ -2939,10 +2939,10 @@ viewport: the surrounding card adds the measured spacing-token inset and footer 
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
 changing rows, columns, or glyph proportions. Magnified interactive terminals first fit their font
-metrics and row/column count to the available modal frame. Magnifying a grid tile therefore
-leaves the grid-only 80×24 contract and becomes an available-space interactive terminal. While
+metrics to the available modal frame while keeping the same 80×24 rows and columns. Magnifying a grid tile
+keeps the 80×24 contract in its larger interactive frame. While
 that terminal is magnified, its matching grid card replaces the live preview with a solid
-terminal-background placeholder. A live tile instance moves into the magnified card, refits there,
+terminal-background placeholder. A live tile instance moves into the magnified card, scales there,
 then returns to the grid on dismissal without reconnecting. When no live instance exists, the card
 mounts its own viewer and the grid preview remounts on dismissal. This keeps exactly one local sizing
 claimant for that terminal through the transition. Fixed grid previews and the magnified terminal
@@ -3016,7 +3016,7 @@ idempotent and settles geometry without replaying the drawer's show animation.
 The UX catalog mounts the same xterm frontend over deterministic ANSI fixtures rather than
 substituting a text placeholder. Its preview is constrained to a realistic grid-card width,
 the magnified variant receives the remaining stage width; the preview demonstrates the canonical
-80×24 grid while the magnified terminal fits that available stage. Its initial terminal focus is one-shot: later
+80×24 grid while the magnified terminal scales the same grid into that available stage. Its initial terminal focus is one-shot: later
 xterm paints, including cursor blinking, never steal focus from catalog controls or close an
 open Web Awesome popup.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
@@ -3440,7 +3440,7 @@ and Apple WebKit. Firefox keeps WebGL, with DOM fallback after load failure
 or context loss. Renderer selection alone is not proof of painted glyphs.
 The fixed 80×24 dashboard grid and magnified surfaces also use DOM.
 Read-only previews are uniformly CSS-scaled, while interactive magnified
-surfaces fit their row/column grid to available space. Browser coverage
+surfaces keep 80×24 and scale their glyphs to available space. Browser coverage
 checks DOM rows, screen containment, and rendered output; Firefox's WebGL
 parking and restore behavior has separate unit coverage.
 
@@ -3482,7 +3482,7 @@ output that the TUI emitted for the drawer's previous size. Conversely, offscree
 cards do not mount a viewport or open a socket until intersection observation reaches them, so
 an unpainted or hidden fixed-grid card cannot take sizing control. The matching preview is also
 temporarily unmounted while its magnified interactive viewport owns the terminal, then restored
-after dismissal. Interactive magnified and dedicated terminals claim their fitted dimensions
+after dismissal. Interactive magnified terminals claim 80×24; dedicated terminals claim their fitted dimensions
 whenever they are visible, independently of which app control owns keyboard focus. Finishing a
 drawer drag or maximize publishes its final claim; clicking or focusing another control cannot
 revert the terminal to a stale 80×24 size.
@@ -3639,15 +3639,15 @@ recency claim and lets the server move the shared PTY to those fitted dimensions
 rendering and physical scaling belong only to workspace and drawer grid tiles.
 
 **Mobile 80×M (HS2-Z84F78, HS2-S708S3).** On a phone-width viewport (`isMobileViewport`, the same
-1024px breakpoint as the single-column layout) a magnified or dedicated interactive terminal keeps a
+1024px breakpoint as the single-column layout) a dedicated interactive terminal keeps a
 fixed column count — the canonical **80 columns** by default, so line wrapping matches every other
 device — and chooses **M rows to fill the available height**, scaling the whole grid to fit the
 phone width. The text ends up small (80 columns on a ~390px screen), which is the deliberate
 default trade for consistent width; the phone text-size control below trades columns for larger
 text.
-The magnified/full-screen terminal drops its 5:3 aspect and fills the screen. The dedicated
-drawer terminal applies the same fixed-80-column DOM render path within the drawer's available
-height. Both resize the PTY to 80×M, width-fit the physical grid, and reclaim sizing with the
+The magnified/full-screen terminal drops its 5:3 aspect and fills the screen with a scaled 80×24 grid. The dedicated
+drawer terminal applies the fixed-80-column DOM render path within the drawer's available
+height. It resizes the PTY to 80×M, width-fits the physical grid, and reclaims sizing with the
 final measured row count rather than the provisional 80×24 size. The xterm layout root expands by
 the inverse of that physical scale, keeping its vertical scrollbar on the visible right edge instead
 of stranding it inside the terminal (HS2-QBMVFQ). Read-only grid preview tiles
@@ -3758,29 +3758,26 @@ Read-only grid previews never open the menu.
 
 **Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
-shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the
+shrinks it and scales the same 80×24 grid into the visible area above the keyboard instead of leaving the
 terminal behind it. It is full-bleed on the terminal background color (no inset ring or dimmed
 scrim), and a full-viewport backdrop in that color blacks out the app behind it, so nothing shows in
 a gap between the shrunken terminal and the keyboard. Unlike the desktop scrim, tapping the overlay
 outside the terminal never dismisses it; Close does (HS2-SB1FSQ). It pads for the device safe areas (dropping the bottom inset while the keyboard covers it),
 and clips rather than scrolls its scaled xterm root so a focus scroll or touch cannot pan the
 terminal sideways off screen. The card footer becomes a **top toolbar** carrying **Close**
-(Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small`; the
-column count is not shown inline — a toast reports the new size on change, HS2-89JZSN), Copy and
+(Lucide `x`), the terminal identity, Copy and
 Paste (HS2-FRB545), and the actions menu. The identity leads with the terminal's own name and shows
 its project as a smaller subtitle, so at 390px it names the terminal rather than truncating inside
 the project name. There is no separate open-in-drawer button on the phone: **More actions → Open**
 and tapping the identity both open the terminal in its project drawer (HS2-8NQRJB). The toolbar is
 shown only while the
 keyboard is hidden; keyboard visibility is inferred when the unscaled visual viewport is more than
-120px shorter than the layout viewport (pinch zoom is not mistaken for a keyboard). Text size
-cycles **80 → 70 → 60 → 50 → 40 → 80** columns; the choice is persisted per browser
-(`hotsheet.terminals.mobile-columns`), applies to every phone-width 80×M terminal (magnified and
-dedicated drawer), and immediately refits the grid and PTY claim to the new *columns*×M. Wider
+120px shorter than the layout viewport (pinch zoom is not mistaken for a keyboard). The magnified
+grid stays 80×24 even if a different column choice is saved for the dedicated drawer. Wider
 viewports never render this chrome. The phone **dedicated drawer** terminal's focus mode carries
 the same text-size control (`a-large-small`) at the top-left, mirroring the top-right Exit pill and
-hidden while the keyboard is presented, so the size is adjustable there too, not only from a
-magnified terminal (HS2-ZSFAHF).
+hidden while the keyboard is presented; that drawer control cycles its saved column choice
+without changing the magnified grid (HS2-ZSFAHF).
 
 **Tap-only focus in the mobile layout (HS2-YD7RZ7).** Below the desktop breakpoint, focusing a
 terminal raises the on-screen keyboard and enters focus mode, so only the user's own tap on a
