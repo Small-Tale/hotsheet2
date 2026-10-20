@@ -782,6 +782,7 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
 });
 
 test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-16XPHH)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=permission-rules-settings');
   const example = page.locator('[data-demo-permission-rules]'),
     preview = example.getByRole('list', { name: 'Recent Remembered Answers' });
@@ -790,6 +791,12 @@ test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-
   const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Page 1 of 2');
+  await expect(dialog).not.toContainText('matching answers · newest first');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-m97dkr-remembered-dialog-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-m97dkr-remembered-dialog-narrow.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await dialog.getByRole('button', { name: 'Next' }).click();
   await expect(dialog).toContainText('Page 2 of 2');
   await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('WebFetch');
@@ -828,7 +835,9 @@ test('lets the remembered-answer demo edit and confirm deletion of a selected pa
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
   await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
-  await expect(dialog).toContainText('1 matching answers');
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
+  ).toHaveCount(1);
 });
 
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {

@@ -2669,7 +2669,8 @@ The settings view uses a Kerf ListHeader for the Remembered answers section and 
 the three most recently remembered answers, newest first. Show all
 opens a searchable dialog with five answers per page, still newest first; search covers only
 the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or
-path. Search changes start at page one, and add/revoke updates clamp the current page. Closing
+path. Its footer shows the current page and total pages without a separate count and sort line
+(HS2-M97DKR). Search changes start at page one, and add/revoke updates clamp the current page. Closing
 the dialog or switching projects resets its search, page, and selection (HS2-16XPHH,
 HS2-C057G5). A selection may span pages and mix decisions and lifetimes. Allow selected
 and Deny selected change only the answer, while Delete selected asks for confirmation.

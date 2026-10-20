@@ -214,7 +214,6 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 clearable
                 autofocus
               />
-              <Text tone="quiet" size="compact">{`${page.matches.length} matching answers · newest first`}</Text>
               <Row gap="xs" vAlign="middle" wrap>
                 <Button
                   emphasis="secondary"

@@ -282,6 +282,13 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(permissionRulesPage([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 1).rows).toEqual([]);
     expect(permissionRulesPage(rules, 'deny', 1).rows).toHaveLength(5);
   });
+
+  it('keeps page context without a separate count and sort line (HS2-M97DKR)', () => {
+    const markup = String(PermissionRulesSettings({ rules, dialog: { query: 'deny', page: 2 } }));
+    expect(markup).toContain('Page 2 of 2');
+    expect(markup).not.toContain('matching answers · newest first');
+    expect(markup).toContain('All Remembered Answers');
+  });
 });
 
 describe('notification pause controls (HS2-QYA9SC)', () => {
