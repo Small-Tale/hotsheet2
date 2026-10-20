@@ -11332,6 +11332,19 @@ async fn command_revisions_reject_stale_editors_and_survive_server_restart() {
             .status(),
         StatusCode::CONFLICT
     );
+    let mut group_force = authed("PUT", "/command-groups", Some(r#"["Forced"]"#));
+    group_force
+        .headers_mut()
+        .insert(header::IF_MATCH, "*".parse().unwrap());
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(group_force)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
 
     let restarted = app(
         AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
@@ -11350,7 +11363,8 @@ async fn command_revisions_reject_stale_editors_and_survive_server_restart() {
         .oneshot(authed("GET", "/command-groups", None))
         .await
         .unwrap();
-    assert_eq!(body_json(groups).await, serde_json::json!(["Ideas"]));
+    let before_cli_group_edit = groups.headers()[header::ETAG].to_str().unwrap().to_owned();
+    assert_eq!(body_json(groups).await, serde_json::json!(["Forced"]));
     let mut stale_after_restart = authed("PUT", "/commands", Some(&command("Stale")));
     stale_after_restart
         .headers_mut()
@@ -11388,11 +11402,41 @@ async fn command_revisions_reject_stale_editors_and_survive_server_restart() {
         .insert(header::IF_MATCH, before_cli_edit.parse().unwrap());
     assert_eq!(
         restarted
+            .clone()
             .oneshot(stale_from_before_cli)
             .await
             .unwrap()
             .status(),
         StatusCode::CONFLICT
+    );
+    Settings::new(dir.path())
+        .set(
+            "command_groups",
+            serde_json::json!(["CLI group"]),
+            Scope::Local,
+        )
+        .unwrap();
+    let mut stale_group_from_before_cli =
+        authed("PUT", "/command-groups", Some(r#"["Stale group"]"#));
+    stale_group_from_before_cli
+        .headers_mut()
+        .insert(header::IF_MATCH, before_cli_group_edit.parse().unwrap());
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(stale_group_from_before_cli)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    let mut forced_after_cli = authed("PUT", "/command-groups", Some(r#"["Override"]"#));
+    forced_after_cli
+        .headers_mut()
+        .insert(header::IF_MATCH, "*".parse().unwrap());
+    assert_eq!(
+        restarted.oneshot(forced_after_cli).await.unwrap().status(),
+        StatusCode::OK
     );
 }
 

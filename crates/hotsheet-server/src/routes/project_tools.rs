@@ -139,6 +139,29 @@ fn command_revision<T: Serialize>(value: &T) -> Result<String, ApiError> {
     Ok(format!("\"{:x}\"", Sha256::digest(bytes)))
 }
 
+fn persisted_commands_match(value: Option<&serde_json::Value>, expected: &str) -> bool {
+    let definitions: Vec<hotsheet_ticketing::commands::CommandDefinition> = match value {
+        Some(value) => match serde_json::from_value(value.clone()) {
+            Ok(definitions) => definitions,
+            Err(_) => return false,
+        },
+        None => Vec::new(),
+    };
+    command_revision(&definitions).is_ok_and(|revision| revision == expected)
+}
+
+fn persisted_groups_match(value: Option<&serde_json::Value>, expected: &str) -> bool {
+    let groups: Vec<String> = match value {
+        Some(value) => match serde_json::from_value(value.clone()) {
+            Ok(groups) => groups,
+            Err(_) => return false,
+        },
+        None => Vec::new(),
+    };
+    let groups = hotsheet_ticketing::commands::normalize_groups(groups);
+    command_revision(&groups).is_ok_and(|revision| revision == expected)
+}
+
 fn revision_response<T: Serialize>(value: T) -> Result<(HeaderMap, Json<T>), ApiError> {
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -227,6 +250,7 @@ pub(crate) async fn save_commands(
     validate_command_definitions(&definitions)?;
     let order = command_write_order(&headers)?;
     let expected = expected_command_revision(&headers)?;
+    let next_revision = command_revision(&definitions)?;
     let settings = Settings::new(state.store.root());
     let current_revision = || {
         let current = hotsheet_ticketing::commands::from_settings(&settings)
@@ -239,17 +263,27 @@ pub(crate) async fn save_commands(
             .as_ref()
             .map(|(session, seq)| (session.as_str(), *seq)),
         expected,
+        &next_revision,
         current_revision,
-        || {
-            settings
-                .set(
+        |checked_revision| {
+            let written = settings
+                .set_if(
                     "commands",
                     serde_json::to_value(&definitions).map_err(|error| {
                         ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
                     })?,
                     hotsheet_ticketing::Scope::Local,
+                    |current| {
+                        expected == "*" || persisted_commands_match(current, checked_revision)
+                    },
                 )
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            if !written {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "command settings changed during this write",
+                ));
+            }
             state.commands.replace_definitions(definitions.clone());
             Ok::<(), ApiError>(())
         },
@@ -342,6 +376,7 @@ fn write_command_groups(
 ) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
     let expected = expected_command_revision(headers)?;
     let groups = hotsheet_ticketing::commands::normalize_groups(groups);
+    let next_revision = command_revision(&groups)?;
     let current_revision = || {
         let current = hotsheet_ticketing::commands::groups_from_settings(settings)
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
@@ -351,17 +386,26 @@ fn write_command_groups(
         &format!("{project}:groups"),
         None,
         expected,
+        &next_revision,
         current_revision,
-        || {
-            settings
-                .set(
+        |checked_revision| {
+            let written = settings
+                .set_if(
                     hotsheet_ticketing::commands::COMMAND_GROUPS_KEY,
                     serde_json::to_value(&groups).map_err(|error| {
                         ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
                     })?,
                     hotsheet_ticketing::Scope::Local,
+                    |current| expected == "*" || persisted_groups_match(current, checked_revision),
                 )
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            if !written {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "command groups changed during this write",
+                ));
+            }
+            Ok(())
         },
     )?;
     if written.is_none() {
@@ -427,6 +471,7 @@ pub(crate) async fn save_checkout_commands(
     let (checkout, settings) = checkout_settings(&state, &reference)?;
     let order = command_write_order(&headers)?;
     let expected = expected_command_revision(&headers)?;
+    let next_revision = command_revision(&definitions)?;
     let project = checkout.id.clone();
     let current_revision = || {
         let current = hotsheet_ticketing::commands::from_settings(&settings)
@@ -439,17 +484,27 @@ pub(crate) async fn save_checkout_commands(
             .as_ref()
             .map(|(session, seq)| (session.as_str(), *seq)),
         expected,
+        &next_revision,
         current_revision,
-        || {
-            settings
-                .set(
+        |checked_revision| {
+            let written = settings
+                .set_if(
                     "commands",
                     serde_json::to_value(&definitions).map_err(|error| {
                         ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
                     })?,
                     hotsheet_ticketing::Scope::Local,
+                    |current| {
+                        expected == "*" || persisted_commands_match(current, checked_revision)
+                    },
                 )
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            if !written {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "command settings changed during this write",
+                ));
+            }
             state
                 .commands
                 .replace_project(checkout.id, checkout.root.into(), definitions.clone());

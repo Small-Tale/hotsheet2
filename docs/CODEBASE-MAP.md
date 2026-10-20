@@ -70,6 +70,9 @@ transitions, validation, group retention/reorder, project-keyed save timing,
 revision baselines, and conflict retention. The server's `routes/project_tools.rs`
 returns persisted-content `ETag` values and checks `If-Match` under the command
 manager's write lock, including same-session ordered saves.
+`Settings::set_if` in `crates/hotsheet-ticketing/src/settings.rs` compares the
+effective value and writes under all three scope locks, serializing server
+command saves with CLI settings edits across processes (HS2-KYP8ZT).
 `features/commands.tsx` adapts the workflow to project
 signals, API calls, prompts, popovers, and the rendered command surfaces.
 

@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-KYP8ZT tests forced two-process local and shared settings lock interleavings in
+`settings::tests::conditional_write_serializes_with_a_second_process` and
+root command/group HTTP stale, CLI-style out-of-band edit, and explicit force
+flows in `command_revisions_reject_stale_editors_and_survive_server_restart`.
+The browser save flow is covered by the HS2-X2A3C1 real-server test below.
+
 HS2-X2A3C1 covers persisted-content command and kept-group revisions in server
 HTTP tests (stale editor, same-session overlap, missing precondition, restart),
 command workflow unit tests (tab conflict and draft retention), and the real-server

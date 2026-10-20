@@ -1359,6 +1359,10 @@ unconditional administrative replacement. Revisions derive from persisted conten
 so a stale editor remains stale after a server restart or a CLI settings edit. A
 newer sequence from the same editor can follow its own in-flight save's revision,
 but a write by a different editor still conflicts (HS2-X2A3C1).
+The server repeats the revision check while holding the global, shared, and
+local settings file locks, so a separate `hotsheet-cli settings set` or
+`unset` cannot write between the final comparison and replacement
+(HS2-KYP8ZT).
 The CLI exposes that same live runner without opening the web client. Start a server for
 the selected `-C` ticket store, then use a registered checkout id, alias, or path:
 

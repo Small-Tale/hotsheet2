@@ -348,6 +348,38 @@ impl Settings {
     /// Set a key in a scope (read-modify-write). Writing a local key also ensures the
     /// local file is gitignored.
     pub fn set(&self, key: &str, value: Value, scope: Scope) -> Result<(), SettingsError> {
+        Self::validate_set_value(key, &value)?;
+        let _lock = self.lock_scope(scope)?;
+        let mut map = self.map(scope)?;
+        map.insert(key.to_string(), value);
+        self.write(scope, &map)
+    }
+
+    /// Compare the effective key and write while holding all contributing scope locks.
+    /// A CLI writer in any scope cannot change the effective value between the
+    /// comparison and this write. Locks are acquired in precedence order.
+    pub fn set_if(
+        &self,
+        key: &str,
+        value: Value,
+        scope: Scope,
+        matches: impl FnOnce(Option<&Value>) -> bool,
+    ) -> Result<bool, SettingsError> {
+        Self::validate_set_value(key, &value)?;
+        let _global_lock = self.lock_scope(Scope::Global)?;
+        let _shared_lock = self.lock_scope(Scope::Shared)?;
+        let _local_lock = self.lock_scope(Scope::Local)?;
+        let current = self.get_effective(key)?;
+        if !matches(current.as_ref()) {
+            return Ok(false);
+        }
+        let mut map = self.map(scope)?;
+        map.insert(key.to_string(), value);
+        self.write(scope, &map)?;
+        Ok(true)
+    }
+
+    fn validate_set_value(key: &str, value: &Value) -> Result<(), SettingsError> {
         if key == TRASH_CLEANUP_DAYS_SETTING {
             parse_trash_cleanup_days(value.clone())?;
         }
@@ -359,10 +391,7 @@ impl Settings {
                 }
             })?;
         }
-        let _lock = self.lock_scope(scope)?;
-        let mut map = self.map(scope)?;
-        map.insert(key.to_string(), value);
-        self.write(scope, &map)
+        Ok(())
     }
 
     /// Effective Trash retention, defaulting to 30 days when the project has no value.
@@ -511,6 +540,80 @@ mod tests {
 
     fn root() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn conditional_write_serializes_with_a_second_process() {
+        use std::process::Command;
+
+        for scope in [Scope::Local, Scope::Shared] {
+            let root = root();
+            let settings = Settings::for_project(root.path());
+            settings.set("race", json!("initial"), scope).unwrap();
+            let mut child = None;
+            let written = settings
+                .set_if("race", json!("server"), Scope::Local, |current| {
+                    assert_eq!(current, Some(&json!("initial")));
+                    let mut process = Command::new(std::env::current_exe().unwrap())
+                        .arg("--exact")
+                        .arg("settings::tests::conditional_write_child_process")
+                        .env("HS2_SETTINGS_RACE_ROOT", root.path())
+                        .env("HS2_SETTINGS_RACE_SCOPE", scope.file_name())
+                        .spawn()
+                        .unwrap();
+                    let marker = root.path().join("child-attempted");
+                    for _ in 0..100 {
+                        if marker.exists() {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    assert!(marker.exists(), "child never reached the settings write");
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    assert!(process.try_wait().unwrap().is_none());
+                    child = Some(process);
+                    true
+                })
+                .unwrap();
+            assert!(written);
+            assert!(child.take().unwrap().wait().unwrap().success());
+            assert_eq!(settings.get("race", scope).unwrap(), Some(json!("cli")));
+            if scope == Scope::Local {
+                assert!(
+                    !settings
+                        .set_if("race", json!("stale server"), Scope::Local, |current| {
+                            current == Some(&json!("server"))
+                        })
+                        .unwrap()
+                );
+                assert_eq!(settings.get_effective("race").unwrap(), Some(json!("cli")));
+            } else {
+                assert_eq!(
+                    settings.get_effective("race").unwrap(),
+                    Some(json!("server"))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn conditional_write_child_process() {
+        let Some(root) = std::env::var_os("HS2_SETTINGS_RACE_ROOT") else {
+            return;
+        };
+        let scope = match std::env::var("HS2_SETTINGS_RACE_SCOPE").unwrap().as_str() {
+            "settings.local.json" => Scope::Local,
+            "settings.json" => Scope::Shared,
+            other => panic!("unexpected child scope: {other}"),
+        };
+        std::fs::write(
+            std::path::Path::new(&root).join("child-attempted"),
+            b"ready",
+        )
+        .unwrap();
+        Settings::for_project(root)
+            .set("race", json!("cli"), scope)
+            .unwrap();
     }
 
     /// HS2-MZ1TMH: temp projects that write settings and then disappear must not leave a

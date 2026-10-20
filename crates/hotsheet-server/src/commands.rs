@@ -119,8 +119,9 @@ impl CommandManager {
         project: &str,
         order: Option<(&str, u64)>,
         expected: &str,
+        new_revision: &str,
         current_revision: impl Fn() -> Result<String, E>,
-        write: impl FnOnce() -> Result<T, E>,
+        write: impl FnOnce(&str) -> Result<T, E>,
     ) -> Result<Option<(T, String)>, E> {
         let mut sequences = self.write_sequences.lock_or_recover();
         let key = order.map(|(session, _)| (project.to_owned(), session.to_owned()));
@@ -135,12 +136,11 @@ impl CommandManager {
         if expected != "*" && expected != current && !follows_own_write {
             return Ok(None);
         }
-        let result = write()?;
-        let revision = current_revision()?;
+        let result = write(&current)?;
         if let (Some(key), Some((_, sequence))) = (key, order) {
-            sequences.insert(key, (sequence, Some(revision.clone())));
+            sequences.insert(key, (sequence, Some(new_revision.to_owned())));
         }
-        Ok(Some((result, revision)))
+        Ok(Some((result, new_revision.to_owned())))
     }
     pub fn replace_project(
         &self,
