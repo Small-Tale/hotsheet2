@@ -2914,9 +2914,11 @@ collection exceeds the viewport (HS2-8J0378). The launcher retains the shared bl
 list and column views but shortens its rail label to `Ticket…` so it stays on one line. The
 rectangular list/notification
 segmented control owns its full first row, while sort, selection actions, and the compact search
-launcher share the second row. Activating search animates it onto a dedicated full-width third
-row, where tag-autocomplete options stretch across the popup with consistently left-aligned
-labels. The rail uses 8px within its project/header/content groups, a 4px top inset for the
+launcher share the second row. The rail's selected-ticket More Actions button opens the same context
+menu as the project workspace, including Copy ticket ID for a read-only source (HS2-F0XZAX).
+Activating search animates it onto a dedicated full-width third row, where tag-autocomplete
+options stretch across the popup with consistently left-aligned labels. The rail uses 8px within
+its project/header/content groups, a 4px top inset for the
 connected control cluster, and an 8px search-row transition offset; its toolbar, selector,
 button, and transition dimensions remain explicit geometry (HS2-4Y6SM9). This is the same
 advanced search surface and state as the main workspace, including chips,

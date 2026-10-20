@@ -389,7 +389,12 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
           workAreaFocusRing={!magnifiedTerminalKey.value}
-          overlay={viewportMobile.value ? undefined : popup}
+          overlay={
+            <>
+              {!viewportMobile.value && popup}
+              {ticketContextMenuSurface()}
+            </>
+          }
           viewportOverlay={viewportMobile.value ? popup : undefined}
         />
       );
