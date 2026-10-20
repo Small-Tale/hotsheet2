@@ -79,6 +79,9 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           rootAttributes={{
             'data-permission-rule': key,
             'data-permission-rule-scope': rule.scope,
+            'data-permission-rule-decision': rule.decision,
+            'data-rule-selected': selectable && selected.has(key) ? 'true' : undefined,
+            'data-rule-disabled': dialog?.busy || revoking.includes(key) ? 'true' : undefined,
             'data-selectable': selectable ? '' : undefined,
           }}
         >

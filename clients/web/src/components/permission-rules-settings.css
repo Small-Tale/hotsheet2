@@ -3,6 +3,36 @@
   min-width: 0;
 }
 
+.permission-rules-settings [data-permission-rule] {
+  border-radius: remify(6px);
+  padding-inline: var(--wa-space-xs);
+}
+
+.permission-rules-settings [data-permission-rule-decision='deny'] {
+  background: var(--wa-color-danger-fill-quiet);
+}
+
+.permission-rules-settings [data-permission-rule-decision='deny']:hover:not([data-rule-disabled='true']) {
+  background: color-mix(in srgb, var(--wa-color-danger-fill-quiet) 70%, var(--wa-color-danger-fill-normal));
+}
+
+.permission-rules-settings [data-rule-selected='true'] {
+  background: var(--wa-color-brand-fill-quiet);
+  box-shadow: inset 0 0 0 1px var(--wa-color-brand-border-normal);
+}
+
+.permission-rules-settings [data-permission-rule-decision='deny'][data-rule-selected='true'] {
+  background: color-mix(in srgb, var(--wa-color-danger-fill-quiet) 65%, var(--wa-color-brand-fill-quiet));
+  box-shadow:
+    inset 0 0 0 1px var(--wa-color-brand-border-normal),
+    inset remify(3px) 0 0 var(--wa-color-danger-border-normal);
+}
+
+.permission-rules-settings [data-permission-rule]:focus-within {
+  outline: 2px solid var(--wa-color-brand-border-loud);
+  outline-offset: 1px;
+}
+
 @media (max-width: 480px) {
   .permission-rules-settings [data-permission-rule][data-selectable] {
     display: grid;

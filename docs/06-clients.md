@@ -2666,8 +2666,10 @@ resurrect or duplicate the resolved request. A `permission_rules_changed` event 
 project's remembered answers stale; a shown Settings → Permissions list refetches them once,
 including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
 The settings view uses a Kerf ListHeader for the Remembered answers section and previews
-the three most recently remembered answers, newest first. Show all
-opens a searchable dialog with five answers per page, still newest first. Its search field has
+the three most recently remembered answers, newest first. A list item with a chevron opens
+the searchable dialog (HS2-Q6GKWQ), which shows five answers per page, still newest first.
+Denied answers have a distinct background in both views; selection and keyboard focus remain
+visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label
 (HS2-4HTTMK); search covers only
 the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or

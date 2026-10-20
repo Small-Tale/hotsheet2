@@ -15219,6 +15219,15 @@ test('previews three recent permission answers and searches the paged full list 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  const deniedBackground = await recent
+    .locator('[data-permission-rule-decision="deny"]')
+    .first()
+    .evaluate((row) => getComputedStyle(row).backgroundColor);
+  const allowedBackground = await recent
+    .locator('[data-permission-rule-decision="allow"]')
+    .first()
+    .evaluate((row) => getComputedStyle(row).backgroundColor);
+  expect(deniedBackground).not.toBe(allowedBackground);
   await expect(recent).toContainText('Session (until restart)');
   await expect(preview).not.toContainText('This project,');
   await expect(preview).not.toContainText('Details hidden');
@@ -15235,6 +15244,7 @@ test('previews three recent permission answers and searches the paged full list 
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
+  await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(3);
   await expect(dialog).not.toContainText('OtherProjectTool');
   await expect(dialog).toContainText('Page 1 of 3');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });

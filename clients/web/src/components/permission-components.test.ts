@@ -3,7 +3,12 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PermissionHistoryItem, PermissionItem, PermissionRule } from '../permission-notifications';
+import {
+  type PermissionHistoryItem,
+  type PermissionItem,
+  type PermissionRule,
+  permissionRuleKey,
+} from '../permission-notifications';
 import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
@@ -269,6 +274,17 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).toContain('WebFetch request · 00000011');
     expect(markup).toContain('Show all 12 answers');
     expect(markup).not.toContain('00000008');
+  });
+
+  it('marks denied, selected, and busy answers in both row compositions', () => {
+    const selectedKey = permissionRuleKey(rules[11]);
+    const preview = String(PermissionRulesSettings({ rules }));
+    expect(preview).toContain('data-permission-rule-decision="deny"');
+    const dialog = String(
+      PermissionRulesSettings({ rules, dialog: { query: '', page: 1, selected: [selectedKey], busy: true } }),
+    );
+    expect(dialog).toContain('data-rule-selected="true"');
+    expect(dialog).toContain('data-rule-disabled="true"');
   });
 
   it('filters safe visible labels, clamps pages after removal, and refills an empty result', () => {
