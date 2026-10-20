@@ -26,6 +26,7 @@ import {
   ArrowUp,
   Bot,
   Brain,
+  ChevronDown,
   CircleAlert,
   Copy,
   Download,
@@ -440,14 +441,10 @@ export function AIConversationToolbar({
                     </Text>
                   </span>
                 ) : null}
-                {canChangeEffort && currentEffort ? (
-                  <Badge tone="neutral" size="compact" label={`Effort ${currentEffort}`}>
-                    {currentEffort}
-                  </Badge>
-                ) : null}
+                <LucideIcon icon={ChevronDown} name="chevron-down" color={uiColor('neutral-on-quiet')} />
               </span>
             }
-            caret
+            caret={false}
             placement={embedded ? 'top-end' : 'bottom-end'}
             rootAttributes={{ 'data-conversation-model-menu': 'true' }}
             items={providerModelEffortEntries({

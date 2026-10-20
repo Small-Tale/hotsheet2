@@ -1829,8 +1829,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   `AIConversationToolbar`: in the dialog's header toolbar, and, for a bottom-drawer chat, in
   the drawer's tab toolbar beside its own actions. The embedded drawer chat has no title bar
   or settings row of its own, since its tab already names it (HS2-DMH8MX, HS2-59F7WK). The
-  selector combines the brain icon, current model, and effort in its dropdown trigger
-  (HS2-XWSXWD). Its popup opens upward from the drawer and downward from the dialog header;
+  selector combines the brain icon, current model, and disclosure in an evenly padded dropdown
+  trigger; the current effort stays in its menu rather than the header label (HS2-XWSXWD,
+  HS2-PP5ZN7, HS2-Q800AX, HS2-KSBXXG). Its popup opens upward from the drawer and downward
+  from the dialog header;
   the menu shows the current provider, model, effort, and permissions. The phone dialog uses
   the tool name alone as a compact title and omits the redundant bot tile to leave room for
   that summary. Buttons sit in Kerf `ToolbarControlGroup`s (compact borderless in the drawer); the

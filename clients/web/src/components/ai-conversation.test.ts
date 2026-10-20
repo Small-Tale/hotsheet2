@@ -646,7 +646,7 @@ describe('AIConversation', () => {
     expect(css).not.toContain('.permission-request-popup');
     expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);
   });
-  it('shows the current model/effort with a popup to change them, including custom and Other, only when the plugin declares support', () => {
+  it('shows the model without an effort badge while retaining the effort menu', () => {
     const markup = withToolbar({
       open: true,
       presentation: 'embedded',
@@ -664,10 +664,11 @@ describe('AIConversation', () => {
       canChangeEffort: true,
     });
     expect(markup).toContain('data-component="conversation-model-control"');
-    // Current model + effort shown as a compact label.
+    // The compact trigger shows the model; effort stays available in the menu.
     expect(markup).toContain('title="legacy model"');
     expect(markup).toMatch(/data-component="text"[^>]*data-wrap="truncate">legacy model/);
-    expect(markup).toMatch(/data-component="badge" data-tone="neutral"[^>]*aria-label="Effort high">high</);
+    expect(markup).not.toContain('aria-label="Effort high"');
+    expect(markup).toContain('data-lucide="chevron-down"');
     // Popup lets you pick a listed model, the current custom model, Other…, and an effort.
     expect(markup).toMatch(/data-value="gpt"[^>]*data-action="select-conversation-model" value="gpt"/);
     expect(markup).toMatch(
@@ -777,8 +778,8 @@ describe('AIConversation', () => {
     );
     expect(trigger).toContain('data-component="conversation-model-control"');
     expect(trigger).toContain('Opus');
-    expect(trigger).toContain('medium');
-    expect(trigger).toContain('kui-popup-menu__caret');
+    expect(trigger).not.toContain('medium');
+    expect(trigger).toContain('data-lucide="chevron-down"');
     // The dialog's menu opens downward from its header; the dropdown trigger sits in a nested-dropdown group.
     expect(trailing).toContain('placement="bottom-end"');
     expect(dialog.match(/data-component="conversation-model-control"/g)).toHaveLength(1);

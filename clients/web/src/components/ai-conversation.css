@@ -21,18 +21,23 @@
 .ai-conversation__saved-notice {
   padding-top: var(--kui-space-xs);
 }
-/* The current model and effort are content inside the settings trigger in either host toolbar
-   (HS2-R5F7A5, HS2-59F7WK, HS2-XWSXWD). */
+/* Kerf's content trigger is a bare button. Its app-owned row includes the icon, model, and
+   disclosure with a standard inset on both ends (HS2-PP5ZN7, HS2-Q800AX, HS2-KSBXXG). */
 .ai-conversation__model {
   display: inline-flex;
   min-width: 0;
   max-width: remify(240px);
   align-items: center;
   gap: var(--wa-space-2xs);
+  padding-inline: var(--kui-layout-item-padding);
 }
 .ai-conversation__model-name {
   min-width: 0;
   overflow: hidden;
+}
+.ai-conversation__model > :last-child {
+  flex: none;
+  margin-inline-start: var(--wa-space-2xs);
 }
 /* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
    padding alone insets a foreground popup symmetrically inside the dialog, below the heading
