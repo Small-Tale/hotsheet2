@@ -932,6 +932,7 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: A message context menu copies or downloads the current selection when the target is selected, and only the target when it is not; keyboard access and a touch selection-bar Download action reach the same export flow.
 - Unit: `clients/web/src/conversation-context-menu.test.ts`, `clients/web/src/components/ai-conversation-interactions.test.ts`, `clients/web/src/components/ai-conversation.test.ts`, and `clients/web/src/features/controllers.test.ts` cover scope, input routing, markup, clipboard contents, and export-dialog scope.
 - End to end: `clients/web/tests/providers.spec.ts # copies and downloads AI chat messages from a scoped context menu (HS2-YR405B)` exercises the shipped chat, clipboard, context menu, keyboard access, scoped export, and selection-bar Download.
+- Scroll preservation (HS2-BT9MD3): `clients/web/src/components/ai-conversation.test.ts` keeps the transient menu before the transcript in both presentations; `clients/web/tests/providers.spec.ts # opening and closing a chat message menu keeps the reading position` checks a scrolled dialog through right-click and Escape.
 - Manual: Inspect matching wide and phone menu captures attached to HS2-YR405B.
 
 ### Kerf TextField adoption (HS2-CQ1TZN)

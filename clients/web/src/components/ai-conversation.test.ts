@@ -188,6 +188,14 @@ describe('AIConversation', () => {
     expect(markup).toContain('Download 2 Messages…');
     expect(markup).toContain('data-conversation-context-action="copy"');
     expect(markup).toContain('data-conversation-context-action="download"');
+    // DialogSurface's fill-last body layout needs the transcript after the transient menu.
+    expect(markup.indexOf('data-context-menu="conversation"')).toBeLessThan(
+      markup.indexOf('ai-conversation__transcript'),
+    );
+    const embeddedMarkup = String(AIConversation({ ...props, presentation: 'embedded' }));
+    expect(embeddedMarkup.indexOf('data-context-menu="conversation"')).toBeLessThan(
+      embeddedMarkup.indexOf('ai-conversation__transcript'),
+    );
     expect(String(AIConversation({ ...props, selectionId: 'chat-b' }))).not.toContain(
       'data-context-menu="conversation"',
     );

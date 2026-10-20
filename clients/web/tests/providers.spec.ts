@@ -6988,6 +6988,50 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
     .toBe(true);
 });
 
+test('opening and closing a chat message menu keeps the reading position (HS2-BT9MD3)', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1662, height: 1286 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
+    messages = conversation.locator('[data-action="pick-conversation-message"]'),
+    transcript = conversation.locator('.ai-conversation__transcript'),
+    menu = page.locator('[data-context-menu="conversation"]');
+  for (let turn = 1; turn <= 6; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(composer).toBeEnabled();
+  }
+  for (const [width, height] of [
+    [1662, 1286],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await messages.nth(5).evaluate((node) => {
+      node.scrollIntoView({ block: 'center' });
+    });
+    const before = await transcript.evaluate((node) => node.scrollTop);
+    expect(before).toBeGreaterThan(40);
+    await messages.nth(5).click({ button: 'right' });
+    await expect(menu.getByRole('menuitem', { name: 'Copy Message' })).toBeVisible();
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect.poll(() => transcript.evaluate((node) => node.scrollTop)).toBe(before);
+    await testInfo.attach(`hs2-bt9md3-menu-${width}`, {
+      body: await conversation.screenshot({ path: testInfo.outputPath(`hs2-bt9md3-menu-${width}.png`) }),
+      contentType: 'image/png',
+    });
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect.poll(() => transcript.evaluate((node) => node.scrollTop)).toBe(before);
+  }
+});
+
 test('selects and copies chat messages before saving that range without choosing it again', async ({
   page,
   context,

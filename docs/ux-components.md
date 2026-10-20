@@ -495,8 +495,10 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     context menu for Copy and Download. If the message is selected, both actions use the full
     current selection; otherwise they use only that message without changing the selection.
     Shift+F10 and the Context Menu key open the same menu for the focused row. Links, file
-    controls, and selected text retain their native context menu. The selection bar also
-    offers Download for touch use (HS2-YR405B).
+    controls, and selected text retain their native context menu. Opening or dismissing the
+    message menu keeps the transcript at its current reading position: the transient menu
+    precedes the transcript so the dialog's fill-last layout continues to size the scroller
+    (HS2-BT9MD3). The selection bar also offers Download for touch use (HS2-YR405B).
   - save/reopen: the header Save action reuses the live transcript selection. If messages are selected,
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected messages
     without presenting another picker; if nothing is selected it skips directly to the vertically

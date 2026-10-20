@@ -859,9 +859,9 @@ export function AIConversation(props: AIConversationProps) {
             render in the drawer's tab toolbar through AIConversationToolbar (HS2-DMH8MX, HS2-59F7WK). */}
         {savedNotice}
         {selectionStatus}
+        {contextMenu}
         {transcript}
         {composer}
-        {contextMenu}
       </section>
     );
   // Kerf owns the bottom sheet's viewport, keyboard, and resize bounds. A permission
@@ -915,8 +915,9 @@ export function AIConversation(props: AIConversationProps) {
       {permissionSidecar && <div class="ai-conversation__sidecar">{permissionSidecar}</div>}
       {savedNotice}
       {selectionStatus}
-      {transcript}
+      {/* Keep the transcript last: DialogSurface's fill-last layout gives that child the scrollport. */}
       {contextMenu}
+      {transcript}
     </DialogSurface>
   );
 }
