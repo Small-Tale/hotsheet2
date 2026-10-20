@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-JPXM6R covers portable MCP entries in shared user-owned AI-tool configs.
+`crates/hotsheet-plugins/src/setup.rs` tests all three config formats and checks
+that shared entries omit machine paths; `crates/hotsheet-mcp/src/main.rs` tests
+linked-store resolution from a nested checkout directory, and
+`crates/hotsheet-mcp/tests/portable_project_config.rs` exercises the real shim
+with `--path .` and a linked store.
+
 HS2-W857P0 covers exact ticket-number ranking in the duplicate-close target
 picker. `clients/web/src/ticket-close.test.ts` checks stable ordering across exact,
 case-insensitive, and title matches; `clients/web/tests/ticket-close.spec.ts`

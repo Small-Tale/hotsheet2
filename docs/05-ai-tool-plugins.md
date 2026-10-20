@@ -258,9 +258,14 @@ Machine-specific integrations never alter the shared ignore policy: Claude's per
 hook uses `.claude/settings.local.json`, Codex's uses `.codex/hooks.json`, and both are
 added only to that checkout's `.git/info/exclude`. A newly created, wholly Hot Sheet-owned
 MCP config is excluded the same way. A pre-existing config with unrelated user content
-remains visible to git while the Hot Sheet entry is merged into it. In a linked git worktree the entry goes to
-the common directory's `info/exclude` (via the gitdir's `commondir`), because git never reads a
-per-worktree exclude file (HS2-8XTDZP).
+remains visible to git while the Hot Sheet entry is merged into it. That shared entry
+uses `hotsheet-mcp --path .`: the shim follows the checkout's machine-local
+`.hotsheet2/store` link (or `HOTSHEET_STORE`) when launched from the project, keeping
+the committed config free of the local binary and store paths. The tool must find
+`hotsheet-mcp` on its launch `PATH`; if its GUI environment does not, install the
+shim on that `PATH` or keep its MCP entry in a local-only tool config. In a linked git
+worktree the entry goes to the common directory's `info/exclude` (via the gitdir's
+`commondir`), because git never reads a per-worktree exclude file (HS2-8XTDZP).
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
@@ -1279,7 +1284,8 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > A serverless shim with no known server reports nothing.
 >
 > **Which shim the config launches (HS2-HNXE38 reopen).** Presence needs a current
-> `hotsheet-mcp`. `setup` records an absolute command: an existing absolute
+> `hotsheet-mcp`. For a wholly Hot Sheet-owned local config, `setup` records an
+> absolute command: an existing absolute
 > `HOTSHEET_MCP_BIN` first, else the `hotsheet-mcp` beside the running CLI/server, else the
 > bare name resolved through PATH. The development local host runs the server from a
 > private snapshot without the shim, so it sets `HOTSHEET_MCP_BIN` to the stable
@@ -1287,6 +1293,8 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > setup wrote a bare `hotsheet-mcp` that PATH could resolve to a stale install with no
 > presence lease, and the badge correctly read "MCP not connected" while Claude reported
 > the server healthy. `npm run server:rebuild` builds and installs the shim with the CLI.
+> A config shared with user-owned entries instead records the portable bare command and
+> `--path .`; the shim resolves the linked store from the project working directory.
 >
 > **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
 > restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a

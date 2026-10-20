@@ -552,7 +552,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   a budgeted blocking-pool scan tagged `listing: fresh|cached|index` (HS2-9PPDR1).
 - **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
   headless default) **or** `--server <url> --secret <s>` (proxy a running server).
-  Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project.
+  Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project;
+  `--path .` follows the checkout's local store link for portable shared MCP configs.
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

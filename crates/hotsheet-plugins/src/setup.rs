@@ -587,9 +587,13 @@ fn collect_findings(
         }
         if enabled_tool {
             if let Some(finding) = artifacts.iter_mut().find(|finding| finding.kind == ArtifactKind::Mcp) {
-                let expected_command = mcp_command(&plugin.manifest.mcp.command);
                 let store_abs = store_path.canonicalize().unwrap_or_else(|_| store_path.to_path_buf());
-                let expected_args = plugin.mcp_args(&store_abs.to_string_lossy());
+                let (expected_command, expected_args, _) = mcp_entry(
+                    &original,
+                    project,
+                    &store_abs,
+                    &plugin,
+                );
                 match installed_mcp.as_ref() {
                     None if original.is_file(&project.join(&plugin.manifest.mcp.target)) => {
                         finding.status = ArtifactStatus::Missing;
@@ -1646,10 +1650,7 @@ fn write_mcp(
     let rel = &p.manifest.mcp.target;
     let target = project.join(rel);
     let name = &p.manifest.mcp.server_name;
-    let command = mcp_command(&p.manifest.mcp.command);
-    let args = p.mcp_args(&store_abs.to_string_lossy());
-    let locally_owned = !fs.exists(&target)
-        || is_hotsheet_only_mcp_config(fs, &target, &p.manifest.mcp.format, name);
+    let (command, args, locally_owned) = mcp_entry(fs, project, store_abs, p);
 
     match p.manifest.mcp.format.as_str() {
         "claude-json" => write_mcp_json(fs, &target, name, &command, &args)?,
@@ -1666,6 +1667,34 @@ fn write_mcp(
         ensure_local_git_exclude(fs, project, rel)?;
     }
     Ok(rel.clone())
+}
+
+/// A shared project config may be committed, so its Hot Sheet entry must contain no
+/// host-specific binary or ticket-store path. The ignored, Hot Sheet-only file keeps
+/// absolute paths so GUI launches do not depend on a shell PATH or working directory.
+fn mcp_entry(
+    fs: &PlanFs,
+    project: &Path,
+    store_abs: &Path,
+    p: &Plugin,
+) -> (String, Vec<String>, bool) {
+    let target = project.join(&p.manifest.mcp.target);
+    let locally_owned = !fs.exists(&target)
+        || is_hotsheet_only_mcp_config(
+            fs,
+            &target,
+            &p.manifest.mcp.format,
+            &p.manifest.mcp.server_name,
+        );
+    if locally_owned {
+        (
+            mcp_command(&p.manifest.mcp.command),
+            p.mcp_args(&store_abs.to_string_lossy()),
+            true,
+        )
+    } else {
+        (p.manifest.mcp.command.clone(), p.mcp_args("."), false)
+    }
 }
 
 fn is_hotsheet_only_mcp_config(fs: &PlanFs, target: &Path, format: &str, name: &str) -> bool {
@@ -3769,6 +3798,38 @@ args = ["--path", "{{store}}"]
             codex["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
             Some("ai")
         );
+        // Shared project files can be committed. Their Hot Sheet entry must remain
+        // portable even when setup ran from a machine-specific binary and store.
+        assert_eq!(json["mcpServers"]["hotsheet"]["command"], "hotsheet-mcp");
+        assert_eq!(
+            json["mcpServers"]["hotsheet"]["args"],
+            serde_json::json!(["--path", "."])
+        );
+        assert_eq!(
+            opencode["mcp"]["hotsheet"]["command"],
+            serde_json::json!(["hotsheet-mcp", "--path", "."])
+        );
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["command"].as_str(),
+            Some("hotsheet-mcp")
+        );
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["args"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["--path", "."]
+        );
+        for contents in [
+            fixture.read("shared.json").unwrap(),
+            fixture.read("opencode.json").unwrap(),
+            fixture.read(".toby/config.toml").unwrap(),
+        ] {
+            assert!(!contents.contains(&fixture.store.path().display().to_string()));
+            assert!(!contents.contains(&fixture.project.path().display().to_string()));
+        }
         assert!(
             fixture
                 .read("shared.json")

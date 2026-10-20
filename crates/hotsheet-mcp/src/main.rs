@@ -4,7 +4,7 @@
 //!   - `--server <url> --secret <s>` → proxy a running hotsheet-server over HTTP.
 
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use clap::Parser;
@@ -31,6 +31,14 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let cwd = std::env::current_dir()?;
+    let path = cli.path.map(|path| {
+        resolve_store_path(
+            path,
+            &cwd,
+            std::env::var_os("HOTSHEET_STORE").map(PathBuf::from),
+        )
+    });
 
     // HS2-HNXE38: the server this shim reports presence to, if any.
     let pid = std::process::id();
@@ -47,7 +55,7 @@ fn main() -> Result<()> {
         // HS2-E4J72D: a serverless shim outside a Hot Sheet terminal finds the store's
         // running server in the machine-local instance registry.
         || {
-            cli.path.as_deref().and_then(|store| {
+            path.as_deref().and_then(|store| {
                 presence::discover_server(
                     &hotsheet_plugins::hotsheet_home().join("instances"),
                     store,
@@ -63,7 +71,7 @@ fn main() -> Result<()> {
     let mut presence_target = presence_target;
     // A failed heartbeat re-reads the registry for this store (stale terminal route-back,
     // server restarted on a new port). Proxy mode has no store path and never relocates.
-    let relocate_store = cli.path.clone();
+    let relocate_store = path.clone();
     let relocate = move || {
         relocate_store.as_deref().and_then(|store| {
             presence::discover_server(&hotsheet_plugins::hotsheet_home().join("instances"), store)
@@ -72,7 +80,7 @@ fn main() -> Result<()> {
     let mut relocate = Some(relocate);
     let mut _presence: Option<Presence> = None;
 
-    let backend: Box<dyn Backend> = match (cli.path, cli.server) {
+    let backend: Box<dyn Backend> = match (path, cli.server) {
         (Some(path), None) => Box::new(CoreBackend::open(&path)?),
         (None, Some(server)) => {
             let secret = cli
@@ -112,4 +120,51 @@ fn main() -> Result<()> {
     // stdin closed: dropping the presence handle releases the lease.
     drop(_presence);
     Ok(())
+}
+
+/// A portable project MCP entry passes `--path .`. Resolve its local link at launch,
+/// while preserving explicit paths supplied by a user or a wholly local config.
+fn resolve_store_path(path: PathBuf, cwd: &Path, env_store: Option<PathBuf>) -> PathBuf {
+    if path != Path::new(".") {
+        return path;
+    }
+    if let Some(store) = env_store.filter(|store| !store.as_os_str().is_empty()) {
+        return store;
+    }
+    for dir in cwd.ancestors() {
+        for link in [".hotsheet2/store", ".hotsheet/store"] {
+            if let Ok(contents) = std::fs::read_to_string(dir.join(link)) {
+                let linked = contents.trim();
+                if !linked.is_empty() {
+                    return PathBuf::from(linked);
+                }
+            }
+        }
+    }
+    path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn portable_path_follows_a_link_from_nested_project_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("src/nested");
+        let link_dir = root.path().join(".hotsheet2");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::create_dir_all(&link_dir).unwrap();
+        let store = root.path().join("tickets");
+        std::fs::write(link_dir.join("store"), format!("{}\n", store.display())).unwrap();
+        assert_eq!(resolve_store_path(".".into(), &nested, None), store);
+        assert_eq!(
+            resolve_store_path(".".into(), &nested, Some(root.path().join("override"))),
+            root.path().join("override")
+        );
+        assert_eq!(
+            resolve_store_path("/explicit/store".into(), &nested, None),
+            PathBuf::from("/explicit/store")
+        );
+    }
 }
