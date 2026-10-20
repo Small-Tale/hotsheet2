@@ -939,8 +939,9 @@ Chat rules cannot change duration. Durable changes are written to the rule file 
 the in-memory answer or lifetime changes, and a failed write leaves the live rule intact. Settings →
 Permissions lists only the selected project's remembered answers by tool, scope,
 decision, and a short fingerprint identifier, with command/path details hidden and each rule
-revocable. Each project-wide row in the recent and full lists can switch between
-Session (until restart) and Persistent; the action names its target scope (HS2-BTPTWK).
+revocable. A row's ellipsis menu or right-click offers Allow, Disallow, Delete, and, for
+project-wide rules, switching between Session (until restart) and Persistent; the duration
+action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
 a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
 loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
@@ -948,7 +949,8 @@ includes chat-only rules, with their exact scope still shown in the row. The fil
 determine the result count and loaded rows; changing a filter resets the loaded window but keeps
 selections. In the dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
 Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
-Users can apply Allow or Deny to mixed selections or delete them after confirmation. A batch
+The dialog's selected-answer ellipsis menu enables Allow, Deny, Session, Persistent, and Delete
+when at least one answer is selected. Delete requires confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`

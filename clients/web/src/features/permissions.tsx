@@ -486,16 +486,27 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
   }
 
-  async function applySelectedPermissionRules(projectId: string, operation: 'delete' | 'allow' | 'deny') {
+  async function applySelectedPermissionRules(
+    projectId: string,
+    operation: 'delete' | 'allow' | 'deny' | 'session' | 'always',
+  ) {
     const dialog = permissionRulesDialog.value,
       project = projects.value.find((value) => value.id === projectId);
     if (!project || dialog?.projectId !== projectId || dialog.busy || !dialog.selected?.length) return;
     if (operation === 'delete' && !dialog.confirmingDelete) return;
     const rules = permissionRulesByProject.value[projectId] ?? [],
       selected = new Set(dialog.selected),
-      targets = rules.filter((rule) => selected.has(permissionRuleKey(rule))),
+      scopeChange = operation === 'session' || operation === 'always',
+      targets = rules.filter(
+        (rule) =>
+          selected.has(permissionRuleKey(rule)) &&
+          (!scopeChange || (rule.scope !== 'chat' && rule.scope !== operation)),
+      ),
       api = new Api(project.apiPath, '', { trackBusy: false });
-    if (!targets.length) return;
+    if (!targets.length) {
+      if (scopeChange) permissionRulesMessage.value = 'No selected answers need that duration change.';
+      return;
+    }
     permissionRulesDialog.value = { ...dialog, busy: true, confirmingDelete: false };
     permissionRulesMessage.value = '';
     const succeeded = new Set<string>(),
@@ -504,6 +515,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       const key = permissionRuleKey(rule);
       try {
         if (operation === 'delete') await api.revokePermissionRule(rule);
+        else if (operation === 'session' || operation === 'always')
+          await api.updatePermissionRuleScope(rule, operation);
         else await api.updatePermissionRule(rule, operation);
         succeeded.add(key);
       } catch (reason) {
@@ -515,7 +528,10 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       ...permissionRulesByProject.value,
       [projectId]: rules.flatMap((rule) => {
         if (!succeeded.has(permissionRuleKey(rule))) return [rule];
-        return operation === 'delete' ? [] : [{ ...rule, decision: operation }];
+        if (operation === 'delete') return [];
+        return operation === 'session' || operation === 'always'
+          ? [{ ...rule, scope: operation }]
+          : [{ ...rule, decision: operation }];
       }),
     };
     let refreshFailed = false;
@@ -588,6 +604,38 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           dialog,
         ).visibleCount,
       };
+  }
+
+  /** Change one remembered answer's decision from its row menu (HS2-X4ES6Z). */
+  async function changePermissionRuleDecision(projectId: string, key: string, decision: 'allow' | 'deny') {
+    const project = projects.value.find((value) => value.id === projectId),
+      rule = permissionRules(projectId).find((value) => permissionRuleKey(value) === key);
+    if (
+      !project ||
+      !rule ||
+      rule.decision === decision ||
+      revokingPermissionRules.value.includes(key) ||
+      permissionRulesDialog.value?.busy
+    )
+      return;
+    revokingPermissionRules.value = [...revokingPermissionRules.value, key];
+    permissionRulesMessage.value = '';
+    try {
+      await new Api(project.apiPath).updatePermissionRule(rule, decision);
+      permissionRulesByProject.value = {
+        ...permissionRulesByProject.value,
+        [projectId]: permissionRules(projectId).map((value) =>
+          permissionRuleKey(value) === key ? { ...value, decision } : value,
+        ),
+      };
+      if (selectedProjectId.value === projectId)
+        permissionRulesMessage.value = `Answer set to ${decision === 'allow' ? 'Allow' : 'Disallow'}.`;
+    } catch (reason) {
+      if (selectedProjectId.value === projectId)
+        permissionRulesMessage.value = `Could not change the answer. ${reason instanceof Error ? reason.message : String(reason)}`;
+    } finally {
+      revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
+    }
   }
 
   /** Change a project-wide answer's duration from either remembered-answer list (HS2-V95VEB). */
@@ -672,6 +720,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesMessage,
     revokingPermissionRules,
     revokePermissionRule,
+    changePermissionRuleDecision,
     changePermissionRuleScope,
     permissionRulesDialogFor,
     openPermissionRules,

@@ -1,6 +1,7 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
+import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -455,6 +456,59 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     ),
   );
   demoListeners.add(
+    delegate(root, 'contextmenu', '[data-demo-permission-rules] [data-permission-rule]', (event, target) => {
+      const menu = target.querySelector<HTMLElement>('[data-permission-rule-menu]');
+      if (!menu) return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openPopupMenuAt(menu, pointer.clientX, pointer.clientY);
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).dataset.ruleKey;
+        if (key)
+          permissionRulesDemoRules.value = permissionRulesDemoRules.value.filter(
+            (rule) => permissionRuleKey(rule) !== key,
+          );
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).dataset.ruleKey,
+          decision = (target as HTMLElement).dataset.decision;
+        if (!key || (decision !== 'allow' && decision !== 'deny')) return;
+        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
+          permissionRuleKey(rule) === key ? { ...rule, decision } : rule,
+        );
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).dataset.ruleKey,
+          scope = (target as HTMLElement).dataset.scope;
+        if (!key || (scope !== 'session' && scope !== 'always')) return;
+        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
+          permissionRuleKey(rule) === key && rule.scope !== 'chat' ? { ...rule, scope } : rule,
+        );
+      },
+    ),
+  );
+  demoListeners.add(
     delegate(
       root,
       'click',
@@ -621,6 +675,23 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           selected.has(permissionRuleKey(rule)) ? { ...rule, decision } : rule,
         );
         permissionRulesDemoDialog.value = { ...state, selected: [] };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value,
+          scope = (target as HTMLElement).dataset.scope;
+        if (!state || (scope !== 'session' && scope !== 'always')) return;
+        const selected = new Set(state.selected ?? []);
+        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
+          selected.has(permissionRuleKey(rule)) && rule.scope !== 'chat' ? { ...rule, scope } : rule,
+        );
+        permissionRulesDemoDialog.value = { ...state, selected: [], selectionAnchor: undefined };
       },
     ),
   );

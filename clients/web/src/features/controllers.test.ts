@@ -488,6 +488,45 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.dispose();
   });
 
+  it('applies row decision and bulk duration menus to eligible selected answers with retry (HS2-X4ES6Z)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    let rules: PermissionRule[] = [
+      { project: '/work/a', tool: 'Bash', action: 'one', decision: 'allow', scope: 'always' },
+      { project: '/work/a', tool: 'Bash', action: 'two', decision: 'allow', scope: 'always' },
+      { project: '/work/a', connection: 'chat', tool: 'Bash', action: 'three', decision: 'allow', scope: 'chat' },
+    ];
+    let failTwo = true;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method !== 'PATCH') return json(rules);
+      const body = JSON.parse(options.body as string) as {
+        action: string;
+        scope?: 'session' | 'always';
+        decision?: 'allow' | 'deny';
+      };
+      if (body.action === 'two' && failTwo) return Response.json({ error: 'Unavailable' }, { status: 503 });
+      rules = rules.map((rule) => (rule.action === body.action ? { ...rule, ...body } : rule));
+      return new Response(null, { status: 204 });
+    });
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRules('a');
+    owner.selectVisiblePermissionRules('a');
+    owner.filterPermissionRules('a', { lifetime: 'session' });
+    owner.selectVisiblePermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(3);
+    await owner.applySelectedPermissionRules('a', 'session');
+    expect(owner.permissionRules('a').map((rule) => rule.scope)).toEqual(['session', 'always', 'chat']);
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([permissionRuleKey(rules[1])]);
+    expect(owner.permissionRulesMessage.value).toContain('1 failed');
+    failTwo = false;
+    await owner.applySelectedPermissionRules('a', 'session');
+    expect(owner.permissionRules('a').map((rule) => rule.scope)).toEqual(['session', 'session', 'chat']);
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
+    await owner.changePermissionRuleDecision('a', permissionRuleKey(rules[0]), 'deny');
+    expect(owner.permissionRules('a')[0].decision).toBe('deny');
+    owner.dispose();
+  });
+
   it('does not restore an old project selection when a bulk edit finishes after switching projects (HS2-C057G5)', async () => {
     const projects = signal([project('a'), project('b')]),
       selectedProjectId = signal('a'),

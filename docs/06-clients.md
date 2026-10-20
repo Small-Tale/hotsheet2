@@ -2679,8 +2679,10 @@ its leading icon slot. The dialog row is the selection control: plain click sele
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
 Command/Ctrl-A while focused in the list adds all loaded rows. Search and filter changes keep
 selected keys but reset the range anchor; Load more extends the rows eligible for select-all.
-The preview row opens the dialog. Duration and revoke buttons remain separate sibling controls
-(HS2-1Q8EF7, HS2-ZVP9CB).
+The preview row opens the dialog. Both row layouts use an ellipsis menu and right-click for
+Allow, Disallow, Delete, and project-wide duration changes. The dialog toolbar offers those
+actions for the current selection in an ellipsis menu; chat-only answers have no duration
+change. Per-row trash and duration buttons are absent (HS2-1Q8EF7, HS2-ZVP9CB, HS2-X4ES6Z).
 Denied answers have a distinct background in both views; selection and keyboard focus remain
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label

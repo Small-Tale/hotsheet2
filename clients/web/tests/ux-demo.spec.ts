@@ -847,10 +847,11 @@ test('lets the remembered-answer demo edit and confirm deletion of shown answers
     .first();
   await firstRule.click();
   await firstRule.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
-  await expect(dialog.getByRole('button', { name: 'Deny Selected' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
   await firstRule.click();
-  await dialog.getByRole('button', { name: 'Deny Selected' }).click();
-  await expect(dialog.getByRole('button', { name: 'Deny Selected' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Deny Selected' }).click();
+  await expect(dialog.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
   await dialog.locator('[data-action="filter-permission-rule-decision"][data-segment-value="deny"]').click();
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Denied ·', { exact: false }),
@@ -858,7 +859,8 @@ test('lets the remembered-answer demo edit and confirm deletion of shown answers
   await dialog.getByLabel('Scrollable Remembered Answers').focus();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
   await firstRule.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
-  await dialog.getByRole('button', { name: 'Delete Selected' }).click();
+  await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
   await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(

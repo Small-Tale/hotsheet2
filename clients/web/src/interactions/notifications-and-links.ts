@@ -1,3 +1,4 @@
+import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -41,6 +42,7 @@ export interface NotificationAndLinkInteractionsDependencies {
   ) => Promise<void>;
   /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
   readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
+  readonly changePermissionRuleDecision: (projectId: string, key: string, decision: 'allow' | 'deny') => Promise<void>;
   readonly changePermissionRuleScope: (projectId: string, key: string, scope: 'session' | 'always') => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
@@ -55,7 +57,10 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly selectVisiblePermissionRules: (projectId: string) => void;
   readonly clearPermissionRuleSelection: (projectId: string) => void;
   readonly requestDeleteSelectedPermissionRules: (projectId: string, confirming: boolean) => void;
-  readonly applySelectedPermissionRules: (projectId: string, operation: 'delete' | 'allow' | 'deny') => Promise<void>;
+  readonly applySelectedPermissionRules: (
+    projectId: string,
+    operation: 'delete' | 'allow' | 'deny' | 'session' | 'always',
+  ) => Promise<void>;
   readonly error: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
@@ -82,6 +87,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     pendingPermissions,
     resolvePermission,
     revokePermissionRule,
+    changePermissionRuleDecision,
     changePermissionRuleScope,
     openPermissionRules,
     closePermissionRules,
@@ -180,6 +186,33 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
+    delegate(document.body, 'contextmenu', '[data-permission-rule]', (event, target) => {
+      const menu = target.querySelector<HTMLElement>('[data-permission-rule-menu]');
+      if (!menu || target.getAttribute('data-rule-disabled') === 'true') return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openPopupMenuAt(menu, pointer.clientX, pointer.clientY);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'keydown',
+      '[data-permission-rule] [data-action="select-permission-rule-row"]',
+      (event, target) => {
+        const keyboard = event as KeyboardEvent;
+        if (keyboard.key !== 'ContextMenu' && !(keyboard.shiftKey && keyboard.key === 'F10')) return;
+        const menu = target
+          .closest('[data-permission-rule]')
+          ?.querySelector<HTMLElement>('[data-permission-rule-menu]');
+        if (!menu) return;
+        event.preventDefault();
+        const rect = target.getBoundingClientRect();
+        openPopupMenuAt(menu, rect.left + 20, rect.top + 20);
+      },
+    ),
+  );
+  lifetime.add(
     delegate(
       document.body,
       'click',
@@ -187,6 +220,19 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const key = data(target).ruleKey;
         if (key) void revokePermissionRule(selectedProjectId.value, key);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey,
+          decision = data(target).decision;
+        if (key && (decision === 'allow' || decision === 'deny'))
+          void changePermissionRuleDecision(selectedProjectId.value, key, decision);
       },
     ),
   );
@@ -294,6 +340,18 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.selector,
       () => {
         requestDeleteSelectedPermissionRules(selectedProjectId.value, true);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.selector,
+      (_event, target) => {
+        const scope = data(target).scope;
+        if (scope === 'session' || scope === 'always')
+          void applySelectedPermissionRules(selectedProjectId.value, scope);
       },
     ),
   );

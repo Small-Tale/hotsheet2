@@ -7,12 +7,13 @@ import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
-import { ChevronRight, ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { ChevronRight, Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -106,7 +107,39 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule.tool, rule.action),
-        targetScope = rule.scope === 'session' ? 'Persistent' : 'Session';
+        targetScope = rule.scope === 'session' ? 'Persistent' : 'Session',
+        rowActions: PopupMenuEntry[] = [
+          {
+            label: 'Allow',
+            action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.value,
+            checked: allowed,
+            attributes: { 'data-rule-key': key, 'data-decision': 'allow' },
+          },
+          {
+            label: 'Disallow',
+            action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.value,
+            checked: !allowed,
+            attributes: { 'data-rule-key': key, 'data-decision': 'deny' },
+          },
+          ...(rule.scope === 'chat'
+            ? []
+            : [
+                { kind: 'divider' } as const,
+                {
+                  label: `Set to ${targetScope}`,
+                  action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.value,
+                  attributes: { 'data-rule-key': key, 'data-scope': rule.scope === 'session' ? 'always' : 'session' },
+                },
+              ]),
+          { kind: 'divider' },
+          {
+            label: 'Delete Answer',
+            action: NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value,
+            tone: 'danger',
+            icon: <LucideIcon icon={Trash2} name="trash-2" />,
+            attributes: { 'data-rule-key': key },
+          },
+        ];
       return (
         <div
           class="permission-rules-settings__rule"
@@ -139,31 +172,14 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               accessibleLabel={`${selectable ? 'Select' : 'View'} ${label}`}
             />
           </div>
-          {rule.scope !== 'chat' && (
-            <Button
-              emphasis="plain"
-              size="compact"
-              action={NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.value}
-              rootAttributes={{
-                'data-rule-key': key,
-                'data-scope': rule.scope === 'session' ? 'always' : 'session',
-              }}
-              disabled={revoking.includes(key) || dialog?.busy}
-              ariaLabel={`Set ${label} to ${targetScope}`}
-              title={`Set to ${targetScope}`}
-            >
-              {`Set ${targetScope}`}
-            </Button>
-          )}
-          <Button
-            emphasis="plain"
-            size="compact"
-            action={NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value}
+          <PopupMenu
+            label={`More Actions for ${label}`}
+            icon={<LucideIcon icon={Ellipsis} name="ellipsis" />}
+            caret={false}
+            placement="bottom-end"
             disabled={revoking.includes(key) || dialog?.busy}
-            ariaLabel={`Revoke ${label}`}
-            title="Forget this answer; the next identical request asks again"
-            rootAttributes={{ 'data-rule-key': key }}
-            icon={<LucideIcon icon={Trash2} name="trash-2" />}
+            rootAttributes={{ 'data-permission-rule-menu': key }}
+            items={rowActions}
           />
         </div>
       );
@@ -272,34 +288,45 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                     Clear
                   </Button>
                 )}
+                <PopupMenu
+                  label="Selected Answer Actions"
+                  icon={<LucideIcon icon={Ellipsis} name="ellipsis" />}
+                  caret={false}
+                  placement="bottom-end"
+                  disabled={selectedCount === 0 || dialog?.busy}
+                  rootAttributes={{ 'data-permission-bulk-menu': '' }}
+                  items={[
+                    {
+                      label: 'Allow Selected',
+                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
+                      attributes: { 'data-decision': 'allow' },
+                    },
+                    {
+                      label: 'Deny Selected',
+                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
+                      attributes: { 'data-decision': 'deny' },
+                    },
+                    { kind: 'divider' },
+                    {
+                      label: 'Set Selected to Session',
+                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
+                      attributes: { 'data-scope': 'session' },
+                    },
+                    {
+                      label: 'Set Selected to Persistent',
+                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
+                      attributes: { 'data-scope': 'always' },
+                    },
+                    { kind: 'divider' },
+                    {
+                      label: 'Delete Selected',
+                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value,
+                      tone: 'danger',
+                      icon: <LucideIcon icon={Trash2} name="trash-2" />,
+                    },
+                  ]}
+                />
               </Row>
-              {selectedCount > 0 && (
-                <Row gap="xs" vAlign="middle" wrap>
-                  <Button
-                    emphasis="secondary"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value}
-                    rootAttributes={{ 'data-decision': 'allow' }}
-                    disabled={dialog?.busy}
-                  >
-                    Allow Selected
-                  </Button>
-                  <Button
-                    emphasis="secondary"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value}
-                    rootAttributes={{ 'data-decision': 'deny' }}
-                    disabled={dialog?.busy}
-                  >
-                    Deny Selected
-                  </Button>
-                  <Button
-                    emphasis="plain"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value}
-                    disabled={dialog?.busy}
-                  >
-                    Delete Selected
-                  </Button>
-                </Row>
-              )}
               {dialog?.confirmingDelete && selectedCount > 0 && (
                 <Row
                   gap="xs"

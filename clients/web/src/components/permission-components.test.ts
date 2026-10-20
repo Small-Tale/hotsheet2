@@ -269,6 +269,8 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).toMatch(/data-component="list-header"[^]*<h3[^>]*>[^]*Remembered Answers/u);
     expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
     expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(3);
+    expect(markup.match(/data-permission-rule-menu=/g)).toHaveLength(3);
+    expect(markup).not.toContain('aria-label="Revoke');
     expect(markup).toContain('data-scope="session"');
     expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('WebFetch request · 00000011');
@@ -457,11 +459,9 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).not.toContain('rm -rf build');
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
     expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(1);
-    expect(markup).toContain('aria-label="Set Bash request · 87654321 to Session"');
-    expect(markup).toContain('Set Session');
-    expect(markup).toMatch(
-      /aria-label="Revoke Bash request · 87654321"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash request · 87654321"/,
-    );
+    expect(markup).toContain('Set to Session');
+    expect(markup).toContain('Delete Answer');
+    expect(markup).toContain('More Actions for Bash request · 87654321');
     expect(markup).toContain('Could not revoke the rule.');
   });
 });
