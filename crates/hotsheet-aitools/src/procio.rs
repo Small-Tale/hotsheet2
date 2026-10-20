@@ -357,8 +357,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_cooperative_stop_leaves_cleanup_to_the_child() {
-        let child =
-            shell("sleep 300 & echo $!; trap 'kill $!; exit 0' TERM; while :; do sleep 0.05; done");
+        // The PID line is the readiness signal: install the trap first or the parent can send
+        // SIGTERM in the gap and leave the sleeper behind (HS2-A179GH).
+        let child = shell(
+            "sleep 300 & trap 'kill $!; wait $!; exit 0' TERM; echo $!; while :; do sleep 0.05; done",
+        );
         let mut signals = child.signals();
         let (_writer, mut reader) = child.into_halves();
         let sleeper: i32 = reader.recv().unwrap().unwrap().trim().parse().unwrap();
