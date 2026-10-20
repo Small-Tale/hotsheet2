@@ -110,6 +110,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule),
+        unidentifiedBash = rule.tool.toLowerCase() === 'bash' && !rule.description,
+        reapprovalAvailable = unidentifiedBash && rule.scope !== 'chat',
         targetScope = rule.scope === 'session' ? 'Persistent' : 'Session',
         rowActions: PopupMenuEntry[] = [
           {
@@ -136,7 +138,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               ]),
           { kind: 'divider' },
           {
-            label: 'Delete Answer',
+            label: reapprovalAvailable ? 'Forget and Ask Again' : 'Delete Answer',
             action: NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value,
             tone: 'danger',
             icon: <LucideIcon icon={Trash2} name="trash-2" />,
@@ -168,8 +170,12 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   {label}
                 </Text>
               }
-              description={`${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
-              title={`${label} — Full action details hidden to protect sensitive values`}
+              description={`${unidentifiedBash ? 'Unidentified command · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
+              title={
+                reapprovalAvailable
+                  ? `${label} — The old command cannot be recovered from its fingerprint. Forget this answer to review the command on its next use and choose a safe label when remembering it again.`
+                  : `${label} — Full action details hidden to protect sensitive values`
+              }
               pressed={selectable ? selected.has(key) : undefined}
               disabled={dialog?.busy || revoking.includes(key)}
               accessibleLabel={`${selectable ? 'Select' : 'View'} ${label}`}

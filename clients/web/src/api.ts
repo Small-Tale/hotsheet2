@@ -1606,10 +1606,15 @@ export class Api {
   /** Tell the server this tab closed the project, so it can stop hosting what nothing else needs. */
   closeProjectSession = () =>
     this.parsed(ignoreBody, `/close?client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`, { method: 'POST' });
-  resolvePermission = (id: number, decision: 'allow' | 'deny', scope: 'once' | 'chat' | 'always') =>
+  resolvePermission = (
+    id: number,
+    decision: 'allow' | 'deny',
+    scope: 'once' | 'chat' | 'always',
+    description?: string,
+  ) =>
     this.parsed(parsePermissionDecision, `/permissions/${id}`, {
       method: 'POST',
-      body: JSON.stringify({ decision, scope }),
+      body: JSON.stringify({ decision, scope, ...(description ? { description } : {}) }),
     });
   /** Remembered permission answers: chat, session, and durable rules (HS2-JNHAYB). */
   permissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules');

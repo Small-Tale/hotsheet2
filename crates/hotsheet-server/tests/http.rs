@@ -15274,6 +15274,70 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 }
 
 #[tokio::test]
+async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() {
+    const ACTION: &str = "curl https://private.example/token=secret";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let rules_path = dir.path().join("permissions.json");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let worker = std::thread::spawn(move || {
+        bridge.request_blocking_for_project(project, "chat", "Bash", ACTION)
+    });
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(response).await.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let endpoint = format!("/permissions/{id}");
+    for body in [
+        r#"{"decision":"allow","scope":"always","description":"curl secret"}"#,
+        r#"{"decision":"allow","scope":"always","description":"Run npm unit tests"}"#,
+        r#"{"decision":"allow","scope":"once","description":"Network command"}"#,
+    ] {
+        let response = app
+            .clone()
+            .oneshot(authed("POST", &endpoint, Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &endpoint,
+            Some(r#"{"decision":"allow","scope":"always","description":"Network command"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await["persisted"], true);
+    assert_eq!(format!("{:?}", worker.join().unwrap()), "Allow");
+    let durable = std::fs::read_to_string(&rules_path).unwrap();
+    let listed = body_json(
+        app.oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["description"], "Network command");
+    for exposed in [durable, listed.to_string()] {
+        assert!(!exposed.contains("private.example"));
+        assert!(!exposed.contains("secret"));
+    }
+}
+
+#[tokio::test]
 async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     const ACTION: &str = "npm run test:unit -- --token=private-value";
     let dir = tempfile::tempdir().unwrap();

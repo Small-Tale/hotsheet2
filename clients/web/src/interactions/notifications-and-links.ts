@@ -3,6 +3,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
+import { selectedBashDescription, setSelectedBashDescription } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -39,6 +40,8 @@ export interface NotificationAndLinkInteractionsDependencies {
     decision: PermissionDecision,
     scope: PermissionScope,
     automatic?: boolean,
+    grouped?: boolean,
+    description?: string,
   ) => Promise<void>;
   /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
   readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
@@ -177,12 +180,22 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.selector, (_event, target) => {
       const key = data(target).requestKey,
         item = pendingPermissions().find((value) => value.key === key);
-      if (item)
+      if (item) {
         void resolvePermission(
           item,
           data(target).decision as PermissionDecision,
           data(target).scope as PermissionScope,
+          false,
+          true,
+          selectedBashDescription(item.key),
         );
+      }
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', '[data-permission-description]', (_event, target) => {
+      const key = target.closest('[data-request-key]')?.getAttribute('data-request-key');
+      if (key) setSelectedBashDescription(key, (target as HTMLSelectElement).value);
     }),
   );
   lifetime.add(

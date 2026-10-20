@@ -11,6 +11,21 @@
 .permission-request-card__error {
   color: var(--wa-color-danger-on-quiet);
 }
+.permission-request-card__description {
+  display: grid;
+  gap: remify(4px);
+  margin: remify(10.4px) remify(16px) 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.permission-request-card__description select {
+  width: min(100%, remify(280px));
+  min-height: remify(32px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-neutral-fill-normal);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-s);
+}
 .permission-request-card__decision-area {
   display: flex;
   min-width: 0;

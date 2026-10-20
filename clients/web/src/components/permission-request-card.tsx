@@ -12,6 +12,19 @@ import { NotificationCard } from './notification-card';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 
+/** Ephemeral choices keyed by the pending request; never stored with rule fingerprints. */
+const selectedBashDescriptions = new Map<string, string>();
+export function setSelectedBashDescription(key: string, description: string) {
+  if (description) selectedBashDescriptions.set(key, description);
+  else selectedBashDescriptions.delete(key);
+}
+export function selectedBashDescription(key: string) {
+  return selectedBashDescriptions.get(key);
+}
+export function clearSelectedBashDescription(key: string) {
+  selectedBashDescriptions.delete(key);
+}
+
 export interface PermissionRequestCardProps {
   item: PermissionItem | PermissionHistoryItem;
   presentation?: 'popup' | 'list';
@@ -82,6 +95,8 @@ export function PermissionRequestCard({
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
+  const bashRequest = !history && item.tool.toLowerCase() === 'bash';
+  const selectedDescription = bashRequest ? selectedBashDescription(item.key) : undefined;
   const statusLabel = history ? `${item.tool}: ${historyLabel(item)}` : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
@@ -260,6 +275,31 @@ export function PermissionRequestCard({
           </p>
         )}
         {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
+        {bashRequest && (
+          <label class="permission-request-card__description">
+            Remembered answer label
+            <select data-permission-description aria-label="Remembered Bash answer label">
+              <option value="" selected={!selectedDescription}>
+                Describe automatically when possible
+              </option>
+              <option value="Build or test command" selected={selectedDescription === 'Build or test command'}>
+                Build or test command
+              </option>
+              <option value="Version control command" selected={selectedDescription === 'Version control command'}>
+                Version control command
+              </option>
+              <option value="File operation command" selected={selectedDescription === 'File operation command'}>
+                File operation command
+              </option>
+              <option value="Network command" selected={selectedDescription === 'Network command'}>
+                Network command
+              </option>
+              <option value="Other Bash command" selected={selectedDescription === 'Other Bash command'}>
+                Other Bash command
+              </option>
+            </select>
+          </label>
+        )}
         {error && (
           <p class="permission-request-card__error" role="alert">
             {error}

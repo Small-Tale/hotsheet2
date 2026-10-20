@@ -3,7 +3,7 @@ import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
-import { updatePermissionCountdownText } from '../components/permission-request-card';
+import { clearSelectedBashDescription, updatePermissionCountdownText } from '../components/permission-request-card';
 import {
   PERMISSION_RULE_BATCH_SIZE,
   type PermissionRuleFilters,
@@ -153,6 +153,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         permissionRefreshRequested = true;
         return;
       }
+      const previousPendingKeys = pendingPermissions().map((item) => item.key);
       let changed = false;
       for (const result of results) {
         if (result.requests && projects.value.some((project) => project.id === result.current.id)) {
@@ -161,13 +162,18 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           continue;
         }
         const stale = permissionInbox.pending().filter((item) => item.projectId === result.current.id);
-        for (const item of stale) permissionTimer.remove(item.key);
+        for (const item of stale) {
+          permissionTimer.remove(item.key);
+          clearSelectedBashDescription(item.key);
+        }
         if (stale.some((item) => item.key in permissionResolutionErrors.value))
           permissionResolutionErrors.value = Object.fromEntries(
             Object.entries(permissionResolutionErrors.value).filter(([key]) => !stale.some((item) => item.key === key)),
           );
         changed = permissionInbox.discardProject(result.current.id) || changed;
       }
+      const currentPendingKeys = new Set(pendingPermissions().map((item) => item.key));
+      for (const key of previousPendingKeys) if (!currentPendingKeys.has(key)) clearSelectedBashDescription(key);
       if (changed) {
         updatePermissionTimer();
         permissionRevision.value += 1;
@@ -221,6 +227,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     scope: PermissionScope,
     automatic = false,
     grouped = !automatic,
+    description?: string,
   ) {
     const owning = projects.value.find((value) => value.id === item.projectId);
     if (!owning) return;
@@ -236,7 +243,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         for (const other of rest)
           if (permissionInbox.resolve(other.key, decision, scope)) permissionTimer.remove(other.key);
       await Promise.all([
-        resolvePermission(first, decision, scope, automatic, false),
+        resolvePermission(first, decision, scope, automatic, false, description),
         ...(scope === 'once' ? rest.map((other) => resolvePermission(other, decision, scope, false, false)) : []),
       ]);
       return;
@@ -254,11 +261,20 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRevision.value += 1;
     finishTiming();
     try {
-      await new Api(owning.apiPath).resolvePermission(item.id, decision, scope);
+      await new Api(owning.apiPath).resolvePermission(
+        item.id,
+        decision,
+        scope,
+        scope === 'once' ? undefined : description,
+      );
+      clearSelectedBashDescription(item.key);
     } catch (reason) {
       const noLongerPending = reason instanceof ApiHttpError && reason.status === 404;
       permissionInbox.restore(item);
-      if (noLongerPending) permissionInbox.removeExternal(item.key);
+      if (noLongerPending) {
+        permissionInbox.removeExternal(item.key);
+        clearSelectedBashDescription(item.key);
+      }
       persistPermissionHistory();
       // A failed automatic decision falls back to a manual one: never retry it on the next timer tick,
       // which for an immediate (0 s) Auto-allow would become a once-per-second request loop.
@@ -286,6 +302,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       ? permissionInbox.resolve(key, resolution.decision, resolution.scope)
       : permissionInbox.removeExternal(key);
     if (!removed) return;
+    clearSelectedBashDescription(key);
     permissionTimer.remove(key);
     updatePermissionTimer();
     permissionRevision.value += 1;

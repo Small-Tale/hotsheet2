@@ -966,6 +966,14 @@ Each row retains its tool and short action fingerprint so distinct private comma
 remain distinguishable, including at phone width where the center of a long label
 truncates first; a safe operation description appears when available, and the repeated
 privacy reminder appears only in the label's tooltip.
+An unidentified project-wide Bash answer has no recoverable command text. Its row menu offers
+**Forget and Ask Again**: the existing fingerprint is revoked, and the next matching use
+shows the full command in a new permission prompt. The person can then choose an optional
+fixed-vocabulary label before remembering the answer. The server rejects free text and
+labels on one-time or non-Bash answers; durable files and the rule-list API retain only
+the HMAC fingerprint and validated label. A command never used again remains unidentified
+unless its old answer is deleted; no migration guesses a command from its fingerprint
+(HS2-KSY290).
 When loading an older rule file with repeated exact project/tool/action
 slots, Hot Sheet keeps the newest answer and rewrites the file (HS2-Q40BBV).
 

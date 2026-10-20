@@ -14,8 +14,11 @@ import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
 import { NotificationsPausedBanner } from './notifications-paused-banner';
 import {
+  clearSelectedBashDescription,
   PermissionRequestCard,
   PermissionRequestPopup,
+  selectedBashDescription,
+  setSelectedBashDescription,
   updatePermissionCountdownText,
 } from './permission-request-card';
 import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList, PermissionRulesSettings } from './permission-rules-settings';
@@ -413,9 +416,21 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
 });
 
 describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
+  it('keeps a pending Bash label through rerenders and clears it for the next request (HS2-KSY290)', () => {
+    const other = { ...pending, key: `${pending.key}-other` };
+    setSelectedBashDescription(pending.key, 'Network command');
+    expect(selectedBashDescription(pending.key)).toBe('Network command');
+    expect(String(PermissionRequestCard({ item: pending }))).toContain('value="Network command" selected');
+    expect(String(PermissionRequestCard({ item: other }))).not.toContain('value="Network command" selected');
+    clearSelectedBashDescription(pending.key);
+    expect(selectedBashDescription(pending.key)).toBeUndefined();
+    expect(String(PermissionRequestCard({ item: pending }))).toContain('value="" selected');
+  });
   it('offers Allow for This Chat and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));
     expect(single).toMatch(/data-scope="chat"[^>]*>[^]*Allow for This Chat/);
+    expect(single).toContain('aria-label="Remembered Bash answer label"');
+    expect(single).toContain('value="Network command"');
     expect(single).not.toContain('data-permission-group-count');
     const grouped = String(PermissionRequestCard({ item: pending, presentation: 'popup', groupCount: 3 }));
     expect(grouped).toContain('data-permission-group-count="3"');
@@ -425,6 +440,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     );
     expect(remembered).toContain('allowed for this chat');
     expect(remembered).not.toContain('Allow for This Chat');
+    expect(remembered).not.toContain('Remembered Bash answer label');
   });
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));
@@ -452,7 +468,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('data-truncate="middle"');
     expect(markup).toContain('kui-text__truncate-tail">12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Denied · Persistent');
+    expect(markup).toContain('Unidentified command · Denied · Persistent');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
@@ -460,6 +476,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
     expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(1);
     expect(markup).toContain('Set to Session');
+    expect(markup).toContain('Forget and Ask Again');
     expect(markup).toContain('Delete Answer');
     expect(markup).toContain('More Actions for Bash request · 87654321');
     expect(markup).toContain('Could not revoke the rule.');

@@ -15181,6 +15181,91 @@ test('answers identical permission requests for this chat and revokes the rememb
   ]);
 });
 
+test('reapproves an unidentified Bash answer with a safe label after showing the command again (HS2-KSY290)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const action = 'curl https://private.example/token=secret',
+    fingerprint = rememberedActionKey(action),
+    oldRule = {
+      project: '/work/demo.hs2',
+      tool: 'Bash',
+      action: fingerprint,
+      decision: 'allow',
+      scope: 'always',
+    };
+  let rules: Array<Record<string, unknown>> = [oldRule],
+    pending: Array<Record<string, unknown>> = [];
+  const answers: Array<Record<string, unknown>> = [];
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'DELETE') {
+      expect(route.request().postDataJSON().action).toBe(fingerprint);
+      rules = [];
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ json: rules });
+  });
+  await page.route(/\/permissions\/\d+$/, (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    answers.push(body);
+    pending = [];
+    rules = [{ ...oldRule, description: body.description }];
+    return route.fulfill({ json: { connection: 'chat', decision: 'allow', persisted: true } });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const remembered = page.locator('[data-component="permission-rules-settings"]');
+  await expect(remembered).toContainText('Unidentified command');
+  await remembered.getByRole('button', { name: /More Actions for Bash request/ }).click();
+  await page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
+  await expect(remembered).toContainText('No Remembered Answers');
+
+  pending = [
+    {
+      id: 81,
+      project: '/work/demo.hs2',
+      connection: 'chat',
+      tool: 'Bash',
+      action,
+      agent: 'claude',
+      always_allow_supported: true,
+    },
+  ];
+  await page.reload();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toContainText(action);
+  await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-reapproval-wide.png', fullPage: true });
+  await popup.getByRole('combobox', { name: 'Remembered Bash answer label' }).selectOption('Network command');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-reapproval-phone.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(popup.getByRole('combobox', { name: 'Remembered Bash answer label' })).toHaveValue('Network command');
+  await popup.getByRole('button', { name: 'Always Allow' }).click();
+  await expect(popup).toHaveCount(0);
+  expect(answers).toEqual([{ decision: 'allow', scope: 'always', description: 'Network command' }]);
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await expect(remembered).toContainText('Bash · Network command');
+  await expect(remembered).not.toContainText('private.example');
+  await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
+  // The phone rail's exit transition can still cover the content after its toggle flips.
+  await page.waitForTimeout(350);
+  await expect(remembered).toContainText('Bash · Network command');
+  await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-phone.png', fullPage: true });
+});
+
 test('previews three recent permission answers and searches the scrollable full list (HS2-16XPHH)', async ({
   page,
 }) => {
@@ -15561,7 +15646,7 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(2);
   await dialog.locator('[data-permission-rule]').first().click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Delete Answer' }).click();
+  await page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   expect(edits.filter((edit) => edit.scope === 'session')).toHaveLength(3);
   expect(edits.some((edit) => edit.decision === 'deny')).toBe(true);
@@ -15831,7 +15916,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
     .locator('[data-permission-rule-scope="always"]')
     .filter({ hasText: rememberedActionKey('npm run lint').slice(-8) });
   await lint.getByRole('button', { name: /More Actions for Bash request/ }).click();
-  await first.page.getByRole('menuitem', { name: 'Delete Answer' }).click();
+  await first.page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
   await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
   await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
   await publishRulesChanged(second);

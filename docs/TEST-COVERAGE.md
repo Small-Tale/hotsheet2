@@ -1,5 +1,15 @@
 # Feature Coverage Matrix
 
+HS2-KSY290 covers safe reapproval of unidentified Bash answers. Rust unit coverage in
+`crates/hotsheet-aitools/src/permission.rs` checks revocation, a second prompt,
+validated labels, and opaque durable storage. `crates/hotsheet-server/tests/http.rs`
+checks the real resolution route rejects invalid labels before settling a request
+and omits command text from the rule file and list API. Component coverage in
+`clients/web/src/components/permission-components.test.ts` checks the selector and
+unidentified row action; `clients/web/tests/providers.spec.ts` walks the shipped
+Settings deletion, repeated prompt, label selection, and Settings result at wide
+and phone widths. Manual review checks the popup and Settings captures for clipping.
+
 HS2-JK3DXP covers project Stats navigation. `clients/web/src/components/project-tab-bar.test.ts`
 and `project-sidebar-components.test.ts` check selected project and summary state
 separately from the global Stats switch. `clients/web/tests/providers.spec.ts` walks

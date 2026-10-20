@@ -907,6 +907,9 @@ pub(crate) struct PermissionAnswer {
     /// for the raising connection only, in memory (HS2-JNHAYB).
     #[serde(default = "default_scope")]
     scope: hotsheet_aitools::PermissionScope,
+    /// Optional user-selected category for a remembered Bash answer. Free text is rejected.
+    #[serde(default)]
+    description: Option<String>,
 }
 
 fn default_scope() -> hotsheet_aitools::PermissionScope {
@@ -933,6 +936,22 @@ pub(crate) async fn resolve_permission(
     Path(id): Path<u64>,
     Json(body): Json<PermissionAnswer>,
 ) -> Result<Json<PermissionResolved>, ApiError> {
+    if let Some(description) = body.description.as_deref() {
+        let matching_bash_request = state
+            .permissions
+            .pending()
+            .iter()
+            .any(|request| request.id == id && request.tool.eq_ignore_ascii_case("bash"));
+        if body.scope == hotsheet_aitools::PermissionScope::Once
+            || !matching_bash_request
+            || !hotsheet_aitools::valid_user_bash_description(description)
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "choose a recognized Bash description for a remembered answer",
+            ));
+        }
+    }
     let event_decision = match body.decision {
         hotsheet_aitools::PermissionDecision::Allow => "allow",
         hotsheet_aitools::PermissionDecision::Deny => "deny",
@@ -945,7 +964,7 @@ pub(crate) async fn resolve_permission(
     };
     let resolved = state
         .permissions
-        .resolve(id, body.decision, body.scope)
+        .resolve_with_description(id, body.decision, body.scope, body.description.as_deref())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}")))?;
     // Persist an `Always` rule so the remembered answer survives a restart.
     let mut persisted = false;

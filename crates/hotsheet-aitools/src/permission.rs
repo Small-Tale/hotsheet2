@@ -99,8 +99,26 @@ fn valid_bash_description(description: &str) -> bool {
         "List files",
         "Check date",
         "Run Make target",
+        "Build or test command",
+        "Version control command",
+        "File operation command",
+        "Network command",
+        "Other Bash command",
     ];
     ALLOWED.contains(&description)
+}
+
+/// Labels a person may choose while reviewing a command. The narrower vocabulary avoids
+/// attaching a specific auto-generated operation claim to a different command.
+pub fn valid_user_bash_description(description: &str) -> bool {
+    matches!(
+        description,
+        "Build or test command"
+            | "Version control command"
+            | "File operation command"
+            | "Network command"
+            | "Other Bash command"
+    )
 }
 
 fn fresh_action_key() -> io::Result<ActionKey> {
@@ -608,6 +626,18 @@ impl PermissionBridge {
     /// session/always rule per `scope`, and returns who to route the answer back to.
     /// `None` if no pending request has that id (already answered / never existed).
     pub fn resolve(&mut self, id: u64, decision: Decision, scope: Scope) -> Option<Resolved> {
+        self.resolve_with_description(id, decision, scope, None)
+    }
+
+    /// Resolve a request with an optional label chosen from the fixed safe Bash vocabulary.
+    /// The label is accepted only for Bash; the original action is never copied into a rule.
+    pub fn resolve_with_description(
+        &mut self,
+        id: u64,
+        decision: Decision,
+        scope: Scope,
+        description: Option<&str>,
+    ) -> Option<Resolved> {
         let pos = self.queue.iter().position(|r| r.id == id)?;
         let req = self.queue.remove(pos).expect("position just found");
 
@@ -618,7 +648,12 @@ impl PermissionBridge {
                 project: req.project.clone(),
                 tool: req.tool.clone(),
                 action: action_fingerprint(&self.action_key, &req.action),
-                description: safe_bash_description(&req.tool, &req.action).map(str::to_owned),
+                description: description
+                    .filter(|value| {
+                        req.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
+                    })
+                    .or_else(|| safe_bash_description(&req.tool, &req.action))
+                    .map(str::to_owned),
                 decision,
                 persist: scope == Scope::Always,
                 connection: (scope == Scope::Chat).then(|| req.connection.clone()),
@@ -989,7 +1024,22 @@ impl SharedPermissionBridge {
     /// Answer a pending request (the route-back a client POSTs). Wakes the blocked waiter and
     /// returns who raised it + any rule to persist. `None` if the id isn't pending.
     pub fn resolve(&self, id: u64, decision: Decision, scope: Scope) -> Option<Resolved> {
-        let resolved = self.inner.lock_or_recover().resolve(id, decision, scope)?;
+        self.resolve_with_description(id, decision, scope, None)
+    }
+
+    pub fn resolve_with_description(
+        &self,
+        id: u64,
+        decision: Decision,
+        scope: Scope,
+        description: Option<&str>,
+    ) -> Option<Resolved> {
+        let resolved = self.inner.lock_or_recover().resolve_with_description(
+            id,
+            decision,
+            scope,
+            description,
+        )?;
         {
             let mut results = self.results.lock_or_recover();
             results.insert(id, decision);
@@ -1429,6 +1479,65 @@ mod tests {
                 .unwrap()
                 .contains("private command text")
         );
+    }
+
+    #[test]
+    fn chosen_bash_labels_are_safe_and_follow_reapproval_without_command_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        let mut bridge = PermissionBridge::new();
+        bridge.set_action_key_and_rules(action_key_for(&path).unwrap(), Vec::new());
+        let action = "curl https://private.example/token=secret";
+        let first = match bridge.request_for_project("p", "chat", "Bash", action) {
+            Outcome::Pending(id) => id,
+            _ => panic!("unknown action must ask"),
+        };
+        let initial = bridge
+            .resolve(first, Decision::Allow, Scope::Always)
+            .unwrap()
+            .persisted_rule
+            .unwrap();
+        append_rule(&path, &initial).unwrap();
+        assert_eq!(initial.description, None);
+        assert!(bridge.revoke("p", None, "Bash", &initial.action).is_some());
+        assert!(remove_rule(&path, "p", "Bash", &initial.action).unwrap());
+
+        let next = match bridge.request_for_project("p", "chat", "Bash", action) {
+            Outcome::Pending(id) => id,
+            _ => panic!("revoked action must ask again"),
+        };
+        let approved = bridge
+            .resolve_with_description(
+                next,
+                Decision::Allow,
+                Scope::Always,
+                Some("Network command"),
+            )
+            .unwrap()
+            .persisted_rule
+            .unwrap();
+        append_rule(&path, &approved).unwrap();
+        assert_eq!(approved.description.as_deref(), Some("Network command"));
+        assert_eq!(
+            bridge.request_for_project("p", "chat", "Bash", action),
+            Outcome::Auto(Decision::Allow)
+        );
+        let durable = std::fs::read_to_string(&path).unwrap();
+        assert!(durable.contains("Network command"));
+        assert!(!durable.contains("private.example"));
+        assert!(!durable.contains("secret"));
+
+        let other = match bridge.request_for_project("p", "chat", "Bash", "private command") {
+            Outcome::Pending(id) => id,
+            _ => panic!("other action must ask"),
+        };
+        bridge.resolve_with_description(
+            other,
+            Decision::Allow,
+            Scope::Session,
+            Some("secret text"),
+        );
+        assert_eq!(bridge.rules().last().unwrap().description, None);
     }
 
     #[test]

@@ -2677,6 +2677,10 @@ count appears beside selection controls (HS2-7Z3VWR).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. New Bash answers show a fixed-vocabulary operation description where
 available, plus their short fingerprint; older answers keep the fingerprint-only label. The
+unidentified project-wide Bash row menu says **Forget and Ask Again**. On its next use, the permission
+prompt shows the real command and offers an optional safe label for a remembered answer;
+one-time answers ignore that selector. Labels use a fixed list and never contain command
+arguments or paths (HS2-KSY290). The
 dialog row is the selection control: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
 Command/Ctrl-A while focused in the list adds all loaded rows. Search and filter changes keep
