@@ -1,0 +1,2516 @@
+openapi: 3.1.0
+info:
+  title: Hot Sheet client HTTP API
+  version: 1.0.0
+  description: Server-owned contracts consumed by browser and native clients. Paths are relative to the Hot Sheet server
+    origin or the checkout-scoped bridge origin. Unknown response members may be added without changing this contract
+    version.
+security:
+  - HotsheetSecret: []
+paths:
+  /compatibility:
+    get:
+      operationId: getCompatibility
+      responses:
+        '200':
+          description: Build and protocol compatibility metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Compatibility'
+  /checkouts/{reference}/tickets:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+    get:
+      operationId: listCheckoutTickets
+      description:
+        Without page_size this returns an array, capped by the server. With page_size it returns a cursor page.
+        Clients must not treat a missing next_cursor as an empty string.
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: counts
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Compact rows or bounded cursor page.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/TicketRow'
+                  - $ref: '#/components/schemas/CheckoutTicketPage'
+    post:
+      operationId: create_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /providers/{connection_id}/tickets:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    get:
+      operationId: listProviderTickets
+      responses:
+        '200':
+          description: Full provider tickets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+    post:
+      operationId: createProviderTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          $ref: '#/components/responses/FullTicket'
+  /providers/{connection_id}/tickets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+      - $ref: '#/components/parameters/NativeId'
+    get:
+      operationId: getProviderTicket
+      responses:
+        '200':
+          $ref: '#/components/responses/FullTicket'
+    patch:
+      operationId: updateProviderTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          $ref: '#/components/responses/FullTicket'
+  /permissions:
+    get:
+      operationId: listPermissions
+      responses:
+        '200':
+          description: Pending permission requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /ws/poll:
+    get:
+      operationId: pollChanges
+      security:
+        - HotsheetSecret: []
+        - HotsheetQuerySecret: []
+      description: Omit since for a no-backlog handshake. With since, events have cursors greater than that value. On
+        overflow, fetch a full ticket list before continuing from the returned cursor. The cursor is process-local.
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: timeout_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 55000
+        - name: checkout
+          in: query
+          schema:
+            type: string
+        - name: client
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Replay envelope.
+          content:
+            application/json:
+              schema:
+                $ref: poll-envelope.schema.json
+  /ws/sync:
+    get:
+      operationId: subscribeChanges
+      description:
+        WebSocket upgrade. Pass secret as a query parameter because browser WebSocket clients cannot set the usual
+        secret header. Each text frame is one change event; this transport has no initial replay.
+      security:
+        - HotsheetQuerySecret: []
+      parameters:
+        - name: secret
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: checkout
+          in: query
+          schema:
+            type: string
+        - name: client
+          in: query
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket upgrade; text frames follow change-event.schema.json.
+  /tickets:
+    get:
+      operationId: list_tickets
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: create_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /tickets/{id}:
+    get:
+      operationId: get_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: update_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/notes/{note_id}:
+    delete:
+      operationId: delete_ticket_note
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/attachments:
+    post:
+      operationId: add_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/attachments/{attachment_id}:
+    put:
+      operationId: update_ticket_attachment_annotations
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/close:
+    post:
+      operationId: close_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/assign:
+    post:
+      operationId: assign_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /claim-next:
+    post:
+      operationId: claim_next_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /tickets/{id}/claim:
+    post:
+      operationId: claim_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/release:
+    post:
+      operationId: release_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/renew:
+    post:
+      operationId: renew_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/copy:
+    post:
+      operationId: copy_ticket_route
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tickets/{id}/move:
+    post:
+      operationId: move_ticket_route
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /batch:
+    post:
+      operationId: batch_update
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /setup/{tool}:
+    post:
+      operationId: setup_tool
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: tool
+        in: path
+        required: true
+        schema:
+          type: string
+  /stores:
+    get:
+      operationId: list_stores
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: add_store
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /providers:
+    get:
+      operationId: list_providers
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /provider-transfers/copy:
+    post:
+      operationId: provider_copy_route
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /provider-transfers/move:
+    post:
+      operationId: provider_move_route
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts:
+    get:
+      operationId: list_checkouts
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: register_checkout
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /projects/open:
+    post:
+      operationId: open_project
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/close:
+    post:
+      operationId: close_checkout_session
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}:
+    get:
+      operationId: resolve_checkout
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/commands:
+    get:
+      operationId: list_checkout_commands
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_checkout_commands
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-groups:
+    get:
+      operationId: list_checkout_command_groups
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_checkout_command_groups
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/commands/{id}/run:
+    post:
+      operationId: run_checkout_command
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-runs:
+    get:
+      operationId: list_checkout_command_runs
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-runs/{id}:
+    get:
+      operationId: get_checkout_command_run
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-runs/{id}/cancel:
+    post:
+      operationId: cancel_checkout_command_run
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/views:
+    get:
+      operationId: list_checkout_custom_views
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_checkout_custom_views
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/ai-settings:
+    get:
+      operationId: get_checkout_ai_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_checkout_ai_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/terminal-settings:
+    get:
+      operationId: get_checkout_terminal_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_checkout_terminal_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/trash-settings:
+    get:
+      operationId: get_checkout_trash_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_checkout_trash_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/trash/purge-preview:
+    get:
+      operationId: preview_checkout_trash_purge
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/sources/{connection_id}:
+    put:
+      operationId: add_checkout_source
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: remove_checkout_source
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/sources/{connection_id}/color:
+    patch:
+      operationId: set_checkout_source_color
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/sources/{connection_id}/relink:
+    patch:
+      operationId: relink_checkout_git_source
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/default-source:
+    put:
+      operationId: set_checkout_default_source
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/provider-connections:
+    get:
+      operationId: list_checkout_provider_connections
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: create_checkout_provider_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/provider-connections/{connection_id}:
+    patch:
+      operationId: update_checkout_provider_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/provider-connections/{connection_id}/disabled:
+    put:
+      operationId: set_checkout_provider_connection_disabled
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/providers:
+    get:
+      operationId: list_checkout_providers
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/status:
+    get:
+      operationId: checkout_repository_status
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/size:
+    get:
+      operationId: checkout_repository_size
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/init:
+    post:
+      operationId: initialize_checkout_repository
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/remote:
+    post:
+      operationId: configure_checkout_repository_remote
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/files:
+    get:
+      operationId: checkout_repository_files
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/commits:
+    get:
+      operationId: checkout_repository_commits
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/review:
+    post:
+      operationId: open_checkout_repository_review
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/repository/files/action:
+    post:
+      operationId: checkout_repository_file_action
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/code-review:
+    get:
+      operationId: get_checkout_code_review
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: open_checkout_code_review
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/usage:
+    get:
+      operationId: get_checkout_ticket_usage
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/batch:
+    post:
+      operationId: batch_update_checkout_tickets
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/corrupt-tickets:
+    get:
+      operationId: list_checkout_corrupt_tickets
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/confidence-report:
+    get:
+      operationId: checkout_confidence_report
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/phase-report:
+    get:
+      operationId: checkout_phase_report
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/corrupt-tickets/repair:
+    post:
+      operationId: create_corrupt_ticket_repair
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}:
+    get:
+      operationId: get_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: update_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/duplicate-backlinks:
+    get:
+      operationId: get_checkout_ticket_duplicate_backlinks
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/close:
+    post:
+      operationId: close_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/restore:
+    post:
+      operationId: restore_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/trash/empty:
+    post:
+      operationId: empty_checkout_trash
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/assign:
+    post:
+      operationId: assign_checkout_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments:
+    post:
+      operationId: add_checkout_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: update_checkout_ticket_attachment_metadata
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/by-name/{filename}:
+    get:
+      operationId: get_checkout_ticket_attachment_by_name
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/by-name/{filename}/action:
+    post:
+      operationId: act_on_checkout_ticket_attachment_by_name
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/{attachment_id}:
+    get:
+      operationId: get_checkout_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: update_checkout_ticket_attachment_annotations
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: rename_checkout_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: delete_checkout_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/markup:
+    put:
+      operationId: update_checkout_ticket_attachment_markup
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/original:
+    get:
+      operationId: get_checkout_ticket_attachment_original
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/thumbnail:
+    get:
+      operationId: get_checkout_ticket_attachment_thumbnail
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_checkout_ticket_attachment_thumbnail
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/action:
+    post:
+      operationId: act_on_checkout_ticket_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/tickets/{id}/notes/{note_id}:
+    delete:
+      operationId: delete_checkout_ticket_note
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /stores/{store_id}/tickets:
+    get:
+      operationId: list_store_tickets
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: create_store_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /stores/{store_id}/tickets/{id}:
+    get:
+      operationId: get_store_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: update_store_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /stores/{store_id}/tickets/{id}/close:
+    post:
+      operationId: close_store_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /stores/{store_id}/tickets/{id}/assign:
+    post:
+      operationId: assign_store_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/queued:
+    post:
+      operationId: queue_jira_updates
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/outbox:
+    get:
+      operationId: list_jira_operations
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/outbox/{operation_id}:
+    post:
+      operationId: retry_jira_operation
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: discard_jira_operation
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/ai-feedback:
+    get:
+      operationId: list_provider_ai_feedback
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/notes/{note_id}:
+    delete:
+      operationId: delete_provider_ticket_note
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/close:
+    post:
+      operationId: close_provider_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/restore:
+    post:
+      operationId: restore_provider_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/assign:
+    post:
+      operationId: assign_provider_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/not-working:
+    post:
+      operationId: report_provider_ticket_not_working
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /providers/{connection_id}/tickets/{id}/not-working-json:
+    post:
+      operationId: report_provider_ticket_not_working_json
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /provider-connections:
+    get:
+      operationId: list_provider_connections
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: create_provider_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /provider-connections/{connection_id}:
+    patch:
+      operationId: update_provider_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: delete_provider_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /provider-connections/{connection_id}/disabled:
+    put:
+      operationId: set_provider_connection_disabled
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /accounts:
+    get:
+      operationId: list_accounts_route
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /accounts/{account}:
+    delete:
+      operationId: sign_out_account
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: account
+        in: path
+        required: true
+        schema:
+          type: string
+  /accounts/{account}/identity:
+    post:
+      operationId: identify_github_account
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: account
+        in: path
+        required: true
+        schema:
+          type: string
+  /accounts/{account}/sources/{connection_id}:
+    delete:
+      operationId: remove_unused_account_source
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: account
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /accounts/{account}/github-repositories:
+    get:
+      operationId: list_account_github_repositories
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: account
+        in: path
+        required: true
+        schema:
+          type: string
+  /github-auth/device:
+    post:
+      operationId: start_github_device_auth
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /github-auth/device/{session_id}:
+    get:
+      operationId: wait_github_device_auth
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: cancel_github_device_auth
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /github-auth/device/{session_id}/repositories:
+    get:
+      operationId: list_github_auth_repositories
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+  /provider-attachments/copy:
+    post:
+      operationId: copy_provider_attachment
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /lifecycle/quiescence:
+    get:
+      operationId: lifecycle_quiescence
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /lifecycle/restart:
+    post:
+      operationId: lifecycle_restart
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /resolve/{id}:
+    get:
+      operationId: resolve_ticket
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /permissions/{id}:
+    post:
+      operationId: resolve_permission
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /permissions/ask:
+    post:
+      operationId: ask_permission
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /permissions/bridge-probe:
+    get:
+      operationId: probe_permission_bridge
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /permissions/rules:
+    get:
+      operationId: list_permission_rules
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    patch:
+      operationId: update_permission_rule
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: revoke_permission_rule
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /connections:
+    get:
+      operationId: list_connections
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /connections/{id}/message:
+    post:
+      operationId: message_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /ai-tools:
+    get:
+      operationId: list_ai_tools
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /ai-settings:
+    get:
+      operationId: get_ai_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_ai_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /drive/connections:
+    post:
+      operationId: create_drive_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /drive/sessions:
+    get:
+      operationId: list_drive_sessions
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/drive/connections/{id}:
+    delete:
+      operationId: delete_drive_connection
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /drive/connections/{id}/turns:
+    post:
+      operationId: send_drive_turn
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /drive/connections/{id}/interrupt:
+    post:
+      operationId: interrupt_drive_turn
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /analytics/tickets:
+    get:
+      operationId: ticket_flow_summary
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /analytics/usage:
+    get:
+      operationId: usage_metrics_summary
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /confidence-report:
+    get:
+      operationId: confidence_report
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /phase-report:
+    get:
+      operationId: phase_report
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /commands:
+    get:
+      operationId: list_commands
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_commands
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /command-groups:
+    get:
+      operationId: list_command_groups
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_command_groups
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /views:
+    get:
+      operationId: list_custom_views
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: save_custom_views
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /commands/{id}/run:
+    post:
+      operationId: run_command
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /command-runs:
+    get:
+      operationId: list_command_runs
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /command-runs/{id}:
+    get:
+      operationId: get_command_run
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /command-runs/{id}/cancel:
+    post:
+      operationId: cancel_command_run
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /notifications:
+    get:
+      operationId: list_notifications
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: publish_notification
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notifications/{id}/ack:
+    post:
+      operationId: acknowledge_notification
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /tts/synthesize:
+    post:
+      operationId: synthesize_speech
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminals:
+    get:
+      operationId: list_terminals
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: open_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminal-settings:
+    get:
+      operationId: get_terminal_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_terminal_settings
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminal-limits:
+    get:
+      operationId: get_terminal_limits
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    put:
+      operationId: put_terminal_limits
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminal-limits/reconcile:
+    post:
+      operationId: reconcile_terminal_limits
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminals/{id}:
+    get:
+      operationId: read_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: kill_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/input:
+    post:
+      operationId: write_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/name:
+    put:
+      operationId: rename_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/halt:
+    post:
+      operationId: halt_terminal
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: clear_terminal_halt
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/question:
+    post:
+      operationId: ask_terminal_question
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    get:
+      operationId: poll_terminal_question_answer
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: resolve_terminal_question
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/question/answer:
+    post:
+      operationId: answer_terminal_question
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/ai-connection:
+    post:
+      operationId: connect_terminal_ai
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: disconnect_terminal_ai
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /mcp-presence:
+    get:
+      operationId: list_mcp_presence
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: put_mcp_presence
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /mcp-presence/{lease}:
+    delete:
+      operationId: delete_mcp_presence
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: lease
+        in: path
+        required: true
+        schema:
+          type: string
+  /activity:
+    get:
+      operationId: list_activity
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: ingest_activity
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /announce:
+    post:
+      operationId: post_announce
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /health:
+    get:
+      operationId: health
+      security: []
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /terminals/{id}/attach:
+    get:
+      operationId: attach_terminal
+      security:
+        - HotsheetQuerySecret: []
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+components:
+  securitySchemes:
+    HotsheetSecret:
+      type: apiKey
+      in: header
+      name: X-Hotsheet-Secret
+    HotsheetQuerySecret:
+      type: apiKey
+      in: query
+      name: secret
+  parameters:
+    CheckoutReference:
+      name: reference
+      in: path
+      required: true
+      schema:
+        type: string
+    Connection:
+      name: connection_id
+      in: path
+      required: true
+      schema:
+        type: string
+    NativeId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    FullTicket:
+      description: Full provider-neutral ticket, including notes.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Ticket'
+  schemas:
+    Compatibility:
+      type: object
+      required:
+        - generation
+        - application_version
+        - build_revision
+        - source_revision
+        - source_stale
+        - protocol
+        - store_schema
+        - capabilities
+        - started_at
+        - launcher
+        - executable
+      properties:
+        generation:
+          const: hs2
+        application_version:
+          type: string
+        build_revision:
+          type:
+            - string
+            - 'null'
+        source_revision:
+          type:
+            - string
+            - 'null'
+        source_stale:
+          type: boolean
+        protocol:
+          $ref: '#/components/schemas/VersionRange'
+        store_schema:
+          $ref: '#/components/schemas/VersionRange'
+        capabilities:
+          type: object
+          required:
+            - lifecycle_restart
+            - lifecycle_quiescence
+          properties:
+            lifecycle_restart:
+              type: boolean
+            lifecycle_quiescence:
+              type: boolean
+        started_at:
+          type:
+            - string
+            - 'null'
+        launcher:
+          type: string
+        executable:
+          type:
+            - string
+            - 'null'
+      additionalProperties: true
+    VersionRange:
+      type: object
+      required:
+        - min
+        - max
+      properties:
+        min:
+          type: integer
+        max:
+          type: integer
+    TicketRow:
+      type: object
+      required:
+        - slug
+      properties:
+        slug:
+          type: string
+      additionalProperties: true
+    CheckoutTicketPage:
+      type: object
+      required:
+        - items
+        - counts
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketRow'
+        next_cursor:
+          type: string
+        counts:
+          oneOf:
+            - type: object
+            - type: 'null'
+        source_errors:
+          type: array
+          items:
+            type: string
+      additionalProperties: true
+    Ticket:
+      type: object
+      required:
+        - connection_id
+        - native_id
+        - qualified_id
+        - slug
+        - title
+        - status
+        - notes
+      properties:
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        qualified_id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+      additionalProperties: true
+    Note:
+      type: object
+      required:
+        - id
+        - kind
+        - created_at
+        - edited_at
+        - human_edited
+        - text
+      properties:
+        id:
+          type: string
+        hotsheet_note_id:
+          type: string
+        kind:
+          enum:
+            - regular
+            - activity
+            - feedback_needed
+            - status
+        created_at:
+          type: string
+        edited_at:
+          type: string
+        summary:
+          type: string
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        feedback_for:
+          type: string
+        human_edited:
+          type: boolean
+        text:
+          type: string
+        feedback_request:
+          type: boolean
+        response_to:
+          type: string
+        actor:
+          type: object
+          required:
+            - role
+          properties:
+            role:
+              enum:
+                - human
+                - ai
+                - system
+            id:
+              type: string
+      additionalProperties: true

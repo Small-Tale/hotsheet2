@@ -13,6 +13,12 @@ client holds authoritative state and **no client embeds `hotsheet-core`** — th
 all talk to a running `hotsheet-server`. Two clients on one project show the same
 thing because the server is the single authority.
 
+The versioned [client transport contracts](contracts/README.md) record server
+paths, core ticket and compatibility shapes, and the live-change replay envelope.
+Client implementations should use the shipped server responses as authority;
+the route-only operations in the OpenAPI inventory need fuller DTO definitions
+under `HS2-11BVBS`.
+
 The web client keeps a separate undo/redo history per checkout. Inspector field
 edits, Up Next toggles, and sidebar drops are individual transactions. Undo changes
 only fields that still equal the local operation's after-state, so an interleaved

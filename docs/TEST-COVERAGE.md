@@ -1,5 +1,13 @@
 # Feature Coverage Matrix
 
+HS2-E9AWV8 covers the first versioned client transport contract. The route
+inventory check in `clients/web/tests/contracts.spec.ts` compares every server
+router path and method to OpenAPI, then validates compatibility, ticket, row,
+and replay responses from a real server against the core schemas. The event
+schema also encodes assignment, activity, and turn envelope fields. Detailed
+request and response schemas for operations marked `route-only` are tracked by
+HS2-11BVBS.
+
 HS2-9X1A6G covers Codex chat writes to a linked sibling ticket store. The
 `isolated_codex_home_grants_*` tests in `crates/hotsheet-aitools/src/launch_safety.rs`
 check exact writable roots for a standalone git store and a linked worktree,

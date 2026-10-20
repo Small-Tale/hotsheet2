@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Small-Tale/hotsheet2/main/docs/contracts/v1/poll-envelope.schema.json",
+  "title": "Hot Sheet long-poll envelope v1",
+  "type": "object",
+  "required": ["cursor", "events", "overflow"],
+  "properties": {
+    "cursor": { "type": "integer", "minimum": 0 },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "change-event.schema.json" }
+    },
+    "overflow": {
+      "type": "boolean",
+      "description": "When true, events may have been lost; discard local projections and fetch a full list before resuming."
+    }
+  }
+}

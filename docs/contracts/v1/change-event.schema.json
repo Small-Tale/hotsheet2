@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Small-Tale/hotsheet2/main/docs/contracts/v1/change-event.schema.json",
+  "title": "Hot Sheet live change event v1",
+  "description": "One JSON message from GET /ws/sync, or one element of a GET /ws/poll events array. Event kinds are extensible; clients must ignore unknown kinds and fields.",
+  "type": "object",
+  "required": ["store", "kind", "id", "slug"],
+  "properties": {
+    "cursor": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Present on durable, replayable events; omitted on ephemeral socket announcements. Scoped to the running server instance."
+    },
+    "store": { "type": "string" },
+    "kind": { "type": "string" },
+    "id": { "type": "string" },
+    "slug": { "type": "string" },
+    "message": { "type": "string" },
+    "activity": { "$ref": "#/$defs/activity" },
+    "assignment": {
+      "type": "object",
+      "required": ["newly_assigned", "review_requested", "requested_by"],
+      "properties": {
+        "newly_assigned": { "type": "array", "items": { "type": "string" } },
+        "review_requested": { "type": "array", "items": { "type": "string" } },
+        "requested_by": { "type": ["string", "null"] }
+      }
+    },
+    "turn": { "$ref": "#/$defs/turn" }
+  },
+  "$defs": {
+    "activity": {
+      "type": "object",
+      "required": ["id", "ts", "tool", "kind", "summary", "importance"],
+      "properties": {
+        "id": { "type": "string" },
+        "ts": { "type": "string" },
+        "tool": { "type": "string" },
+        "project": { "type": "string" },
+        "ticket": { "type": "string" },
+        "session": { "type": "string" },
+        "kind": { "type": "string" },
+        "summary": { "type": "string" },
+        "detail": {},
+        "importance": { "enum": ["low", "normal", "high"] }
+      }
+    },
+    "turn": {
+      "type": "object",
+      "required": ["connection_id", "event"],
+      "properties": {
+        "connection_id": { "type": "string" },
+        "ticket": { "type": "string" },
+        "turn_id": { "type": "string" },
+        "at_ms": { "type": "integer", "minimum": 0 },
+        "in_flight_tool": {
+          "type": "object",
+          "required": ["name", "started_at_ms", "count"],
+          "properties": {
+            "name": { "type": "string" },
+            "started_at_ms": { "type": "integer", "minimum": 0 },
+            "count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "event": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

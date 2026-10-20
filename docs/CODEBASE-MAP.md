@@ -52,6 +52,13 @@ The numbered requirements docs (source of truth for behavior; status in
 - [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
 
+Versioned client HTTP and event contracts live in
+[`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
+synchronized from `crates/hotsheet-server/src/lib.rs` by
+`clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
+`clients/web/tests/contracts.spec.ts`. Routes marked `route-only` await detailed
+DTO schemas in `HS2-11BVBS`.
+
 ## Directory tree
 
 ```
