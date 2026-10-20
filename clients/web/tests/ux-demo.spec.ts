@@ -6102,6 +6102,40 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
   await expect(gallery).toBeVisible();
 });
 
+test('pinches media without moving the gallery toolbar on a phone (HS2-BM78ME)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/ux-demo?component=attachment-gallery');
+  const gallery = page.locator('[data-component="attachment-gallery"]'),
+    stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
+    image = gallery.locator('.attachment-gallery__media-wrap'),
+    toolbar = gallery.locator('.attachment-gallery__toolbar');
+  await expect(gallery).toBeVisible();
+  await expect(stage).toHaveCSS('touch-action', 'pan-x pan-y');
+  const beforeToolbar = (await toolbar.boundingBox())!,
+    beforeImage = (await image.boundingBox())!;
+  await stage.evaluate((node) => {
+    const touch = (x: number) => new Touch({ identifier: x, target: node, clientX: x, clientY: 100 });
+    const send = (type: string, gap: number, count = 2) =>
+      node.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: count === 2 ? [touch(0), touch(gap)] : [],
+        }),
+      );
+    send('touchstart', 100);
+    send('touchmove', 130);
+    send('touchend', 0, 0);
+  });
+  await expect.poll(async () => (await image.boundingBox())!.width).toBeGreaterThan(beforeImage.width);
+  expect(await toolbar.boundingBox()).toEqual(beforeToolbar);
+  await expect(gallery.getByRole('button', { name: 'Close image gallery' })).toBeVisible();
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-bm78me-pinch-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(gallery.getByRole('button', { name: 'Close image gallery' })).toBeInViewport();
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-bm78me-pinch-wide.png' });
+});
+
 test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM9)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=attachment-gallery');

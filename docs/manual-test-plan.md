@@ -367,6 +367,11 @@ available, open an AI chat in the terminal drawer and in the conversation dialog
 - Activity groups and skipped-message dividers read as ordinary rows without a selection state.
 - Their Activity toggle remains operable.
 
+## Mobile gallery pinch (HS2-BM78ME)
+
+- On a physical iPhone in Safari, open an image in the media gallery and pinch outward over the media. Confirm that only the media enlarges while the top and bottom controls remain visible and usable.
+- Pan enlarged media with one finger, pinch inward, then repeat after closing and reopening the gallery. Confirm that normal Safari pinch behavior remains available outside the media stage.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

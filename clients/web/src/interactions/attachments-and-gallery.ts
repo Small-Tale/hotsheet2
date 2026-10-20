@@ -1271,6 +1271,9 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
       if (next !== undefined) attachmentGalleryScale.value = next;
     },
+    beginPinch: () => {
+      dependencies.attachmentSwipeGesture = undefined;
+    },
     toggleMarkup: () => {
       if (attachmentGallerySaveState?.value === 'saving') return;
       if (attachmentGalleryMarkup.value) {

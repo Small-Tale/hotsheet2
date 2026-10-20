@@ -20,6 +20,8 @@ export interface AttachmentGalleryControlBindings {
   readonly close: () => void;
   readonly shift: (delta: -1 | 1) => void;
   readonly zoom: (direction: 'in' | 'out') => void;
+  /** Cancel a pending one-finger gallery swipe when a second finger begins zooming. */
+  readonly beginPinch: () => void;
   readonly toggleMarkup: () => void;
   readonly toggleDraw: () => void;
   readonly togglePlayback: () => void;
@@ -76,6 +78,90 @@ export function wireAttachmentGalleryControls(
     delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.selector, (_event, target) => {
       bindings.zoom((target as HTMLElement).dataset.zoomDirection === 'out' ? 'out' : 'in');
     }),
+  );
+  // Only gestures beginning over the scrollable media stage own gallery zoom. The surrounding
+  // toolbar stays at its normal size, and one-finger stage panning remains native.
+  let touchDistance: number | undefined;
+  let safariGestureScale: number | undefined;
+  let pinchSource: 'touch' | 'gesture' | undefined;
+  const overStage = (event: Event) =>
+    Boolean((event.target as Element | null)?.closest('[data-gallery-zoom-stage="true"]'));
+  const distance = (touches: TouchList) =>
+    Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  const step = (value: number, anchor: number): number => {
+    if (value >= anchor * 1.18) {
+      bindings.zoom('in');
+      return value;
+    }
+    if (value <= anchor / 1.18) {
+      bindings.zoom('out');
+      return value;
+    }
+    return anchor;
+  };
+  root.addEventListener(
+    'touchstart',
+    (event) => {
+      if (event.touches.length !== 2 || !overStage(event)) return;
+      touchDistance = distance(event.touches);
+      pinchSource = undefined;
+      bindings.beginPinch();
+      if (event.cancelable) event.preventDefault();
+    },
+    { passive: false, signal: lifetime.signal },
+  );
+  root.addEventListener(
+    'touchmove',
+    (event) => {
+      if (touchDistance === undefined || event.touches.length !== 2) return;
+      if (event.cancelable) event.preventDefault();
+      if (pinchSource !== 'gesture') {
+        pinchSource = 'touch';
+        touchDistance = step(distance(event.touches), touchDistance);
+      }
+    },
+    { passive: false, signal: lifetime.signal },
+  );
+  const endTouch = (event: TouchEvent) => {
+    if (event.touches.length < 2) {
+      touchDistance = undefined;
+      pinchSource = undefined;
+    }
+  };
+  root.addEventListener('touchend', endTouch, { signal: lifetime.signal });
+  root.addEventListener('touchcancel', endTouch, { signal: lifetime.signal });
+  // iOS Safari also sends gesture events; suppress its page magnification. When WebKit
+  // supplies gesturechange without touchmove, use its scale as the fallback input.
+  root.addEventListener(
+    'gesturestart',
+    (event) => {
+      if (!overStage(event)) return;
+      safariGestureScale = 1;
+      if (touchDistance === undefined) bindings.beginPinch();
+      if (event.cancelable) event.preventDefault();
+    },
+    { passive: false, signal: lifetime.signal },
+  );
+  root.addEventListener(
+    'gesturechange',
+    (event) => {
+      if (safariGestureScale === undefined) return;
+      if (event.cancelable) event.preventDefault();
+      if (pinchSource === 'touch') return;
+      const scale = (event as Event & { scale?: number }).scale;
+      if (scale && Number.isFinite(scale)) {
+        pinchSource = 'gesture';
+        safariGestureScale = step(scale, safariGestureScale);
+      }
+    },
+    { passive: false, signal: lifetime.signal },
+  );
+  root.addEventListener(
+    'gestureend',
+    () => {
+      safariGestureScale = undefined;
+    },
+    { signal: lifetime.signal },
   );
   lifetime.add(
     delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector, () => {

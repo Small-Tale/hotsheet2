@@ -661,6 +661,7 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
     },
     shift: shiftGalleryDemo,
     zoom: zoomGalleryDemo,
+    beginPinch: () => undefined,
     toggleMarkup: () => {
       galleryDemoMarkup.value = !galleryDemoMarkup.value;
       galleryDemoDrawMode.value = false;

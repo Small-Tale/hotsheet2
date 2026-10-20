@@ -31742,6 +31742,27 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
   await expect(zoom).toBeVisible();
   await expect(zoom).toHaveCSS('visibility', 'visible');
   await expect(gallery.getByRole('button', { name: 'Zoom In' })).toBeInViewport({ ratio: 1 });
+  const stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
+    media = gallery.locator('.attachment-gallery__media-wrap'),
+    toolbarBeforePinch = (await gallery.locator('[data-component="toolbar"]').first().boundingBox())!,
+    mediaBeforePinch = (await media.boundingBox())!;
+  await stage.evaluate((node) => {
+    const touch = (x: number) => new Touch({ identifier: x, target: node, clientX: x, clientY: 100 });
+    const send = (type: string, gap: number, count = 2) =>
+      node.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: count === 2 ? [touch(0), touch(gap)] : [],
+        }),
+      );
+    send('touchstart', 100);
+    send('touchmove', 130);
+    send('touchend', 0, 0);
+  });
+  await expect.poll(async () => (await media.boundingBox())!.width).toBeGreaterThan(mediaBeforePinch.width);
+  expect(await gallery.locator('[data-component="toolbar"]').first().boundingBox()).toEqual(toolbarBeforePinch);
+  await gallery.screenshot({ path: testInfo.outputPath('hs2-bm78me-production-pinch-phone.png') });
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
   const markup = gallery.getByRole('toolbar', { name: 'Media Markup' });
   await expect(markup).toBeVisible();

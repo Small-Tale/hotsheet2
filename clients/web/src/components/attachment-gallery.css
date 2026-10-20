@@ -103,6 +103,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  touch-action: pan-x pan-y;
 }
 .attachment-gallery__canvas {
   display: grid;

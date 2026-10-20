@@ -61,11 +61,12 @@ describe('wireAttachmentGalleryControls (HS2-1KM6MB)', () => {
   const ownerDocument = new EventTarget();
   vi.stubGlobal('document', ownerDocument);
   let video: unknown = {};
-  const root = { querySelector: () => video } as unknown as HTMLElement;
+  const root = Object.assign(new EventTarget(), { querySelector: () => video }) as unknown as HTMLElement;
   const bindings = {
     close: vi.fn(),
     shift: vi.fn(),
     zoom: vi.fn(),
+    beginPinch: vi.fn(),
     toggleMarkup: vi.fn(),
     toggleDraw: vi.fn(),
     togglePlayback: vi.fn(),
@@ -184,6 +185,70 @@ describe('wireAttachmentGalleryControls (HS2-1KM6MB)', () => {
     pointerdown(down, handle('selected', 'start'));
     ownerDocument.dispatchEvent(pointer('pointercancel', 1));
     expect(bindings.finishRange.mock.calls).toEqual([[false], [true]]);
+  });
+
+  it('steps only a media-stage pinch and resets after end, cancel, and Safari gesture fallback', () => {
+    bindings.zoom.mockClear();
+    bindings.beginPinch.mockClear();
+    const touch = (type: string, gap: number, onStage = true, count = 2) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperties(event, {
+        target: { value: { closest: () => (onStage ? {} : null) } },
+        touches: {
+          value:
+            count === 2
+              ? [
+                  { clientX: 0, clientY: 0 },
+                  { clientX: gap, clientY: 0 },
+                ]
+              : [],
+        },
+      });
+      root.dispatchEvent(event);
+      return event;
+    };
+    expect(touch('touchstart', 100, false).defaultPrevented).toBe(false);
+    touch('touchmove', 130);
+    expect(bindings.zoom).not.toHaveBeenCalled();
+    expect(touch('touchstart', 100).defaultPrevented).toBe(true);
+    touch('touchmove', 110);
+    touch('touchmove', 125);
+    touch('touchmove', 150);
+    touch('touchmove', 100);
+    expect(bindings.zoom.mock.calls).toEqual([['in'], ['in'], ['out']]);
+    touch('touchend', 0, true, 0);
+    touch('touchmove', 170);
+    touch('touchstart', 100);
+    touch('touchmove', 80);
+    touch('touchcancel', 0, true, 0);
+    expect(bindings.zoom.mock.calls.at(-1)).toEqual(['out']);
+    expect(bindings.beginPinch).toHaveBeenCalledTimes(2);
+
+    const gesture = (type: string, scale: number, onStage = true) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperties(event, {
+        target: { value: { closest: () => (onStage ? {} : null) } },
+        scale: { value: scale },
+      });
+      root.dispatchEvent(event);
+      return event;
+    };
+    expect(gesture('gesturestart', 1, false).defaultPrevented).toBe(false);
+    gesture('gesturechange', 2);
+    expect(gesture('gesturestart', 1).defaultPrevented).toBe(true);
+    expect(gesture('gesturechange', 1.3).defaultPrevented).toBe(true);
+    gesture('gestureend', 1);
+    gesture('gesturechange', 2);
+    expect(bindings.zoom.mock.calls.at(-1)).toEqual(['in']);
+    expect(bindings.beginPinch).toHaveBeenCalledTimes(3);
+    bindings.zoom.mockClear();
+    touch('touchstart', 100);
+    gesture('gesturestart', 1);
+    gesture('gesturechange', 1.3);
+    touch('touchmove', 140);
+    expect(bindings.zoom.mock.calls).toEqual([['in']]);
+    touch('touchend', 0, true, 0);
+    gesture('gestureend', 1);
   });
 
   it('stops listening to document pointer events once disposed', () => {

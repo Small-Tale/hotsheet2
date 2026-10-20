@@ -974,3 +974,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: The preview's Show all answers control uses the same centered secondary pill presentation as Load more tickets and opens the full dialog by pointer or keyboard, keeping its bounded pagination.
 - Unit: `clients/web/src/components/permission-components.test.ts` checks the shared button presentation and action.
 - End to end: `clients/web/tests/providers.spec.ts` checks Enter activation, continued list opening and pagination, and wide and phone captures.
+
+### Media gallery pinch zoom (HS2-BM78ME)
+
+- Behavior: A two-finger pinch on the media stage changes gallery media zoom while the gallery toolbar and footer stay in place; one-finger panning and gestures outside the stage retain browser behavior.
+- Unit: `clients/web/src/components/attachment-gallery-interactions.test.ts` checks touch and Safari gesture transitions, cancellation, and stage scoping.
+- End to end: `clients/web/tests/ux-demo.spec.ts` pinches the rendered phone gallery and checks media growth, toolbar geometry, and close-button reachability.
+- Manual: `docs/manual-test-plan.md` calls for a real iOS Safari pinch and one-finger pan check.
