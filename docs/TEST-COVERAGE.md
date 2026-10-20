@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-X2A3C1 covers persisted-content command and kept-group revisions in server
+HTTP tests (stale editor, same-session overlap, missing precondition, restart),
+command workflow unit tests (tab conflict and draft retention), and the real-server
+browser command editor flow (remote edit, stale save conflict, reload recovery).
+
 HS2-TVASVW covers bounded direct change-poll fallback in
 `change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker
 and shared-worker transport tests, and the eight-project older-bridge browser

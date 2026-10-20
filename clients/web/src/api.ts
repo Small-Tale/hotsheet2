@@ -1582,27 +1582,91 @@ export class Api {
       body: JSON.stringify({ name }),
     });
   commands = () => this.parsed(parseCommandDefinition.list, '/commands');
+  commandsWithRevision = async (): Promise<{ definitions: CommandDefinition[]; revision: string }> => {
+    let revision = '*';
+    const definitions = await this.parsed(parseCommandDefinition.list, '/commands', {}, true, (response) => {
+      revision = response.headers.get('ETag') ?? '*';
+    });
+    return { definitions, revision };
+  };
   saveCommands = (
     definitions: CommandDefinition[],
-    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } } = {},
+    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number }; expectedRevision: string },
   ) =>
     this.parsed(parseCommandDefinition.list, '/commands', {
       method: 'PUT',
       body: JSON.stringify(definitions),
       ...(options.keepalive ? { keepalive: true } : {}),
-      ...(options.writeOrder
-        ? {
-            headers: {
+      headers: {
+        'If-Match': options.expectedRevision,
+        ...(options.writeOrder
+          ? {
               'X-Hotsheet-Command-Write-Session': options.writeOrder.session,
               'X-Hotsheet-Command-Write-Sequence': String(options.writeOrder.sequence),
-            },
-          }
-        : {}),
+            }
+          : {}),
+      },
     });
+  saveCommandsWithRevision = async (
+    definitions: CommandDefinition[],
+    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number }; expectedRevision: string },
+  ): Promise<{ definitions: CommandDefinition[]; revision: string }> => {
+    let revision = options.expectedRevision;
+    const saved = await this.parsed(
+      parseCommandDefinition.list,
+      '/commands',
+      {
+        method: 'PUT',
+        body: JSON.stringify(definitions),
+        ...(options.keepalive ? { keepalive: true } : {}),
+        headers: {
+          'If-Match': options.expectedRevision,
+          ...(options.writeOrder
+            ? {
+                'X-Hotsheet-Command-Write-Session': options.writeOrder.session,
+                'X-Hotsheet-Command-Write-Sequence': String(options.writeOrder.sequence),
+              }
+            : {}),
+        },
+      },
+      true,
+      (response) => {
+        revision = response.headers.get('ETag') ?? revision;
+      },
+    );
+    return { definitions: saved, revision };
+  };
   /** Command groups kept even while empty, stored beside `commands` (HS2-EZ5KMC). */
   commandGroups = () => this.parsed(parseStringList, '/command-groups');
-  saveCommandGroups = (groups: string[]) =>
-    this.parsed(parseStringList, '/command-groups', { method: 'PUT', body: JSON.stringify(groups) });
+  commandGroupsWithRevision = async (): Promise<{ groups: string[]; revision: string }> => {
+    let revision = '*';
+    const groups = await this.parsed(parseStringList, '/command-groups', {}, true, (response) => {
+      revision = response.headers.get('ETag') ?? '*';
+    });
+    return { groups, revision };
+  };
+  saveCommandGroups = (groups: string[], expectedRevision: string) =>
+    this.parsed(parseStringList, '/command-groups', {
+      method: 'PUT',
+      body: JSON.stringify(groups),
+      headers: { 'If-Match': expectedRevision },
+    });
+  saveCommandGroupsWithRevision = async (
+    groups: string[],
+    expectedRevision: string,
+  ): Promise<{ groups: string[]; revision: string }> => {
+    let revision = expectedRevision;
+    const saved = await this.parsed(
+      parseStringList,
+      '/command-groups',
+      { method: 'PUT', body: JSON.stringify(groups), headers: { 'If-Match': expectedRevision } },
+      true,
+      (response) => {
+        revision = response.headers.get('ETag') ?? revision;
+      },
+    );
+    return { groups: saved, revision };
+  };
   customViews = () => this.parsed(parseCustomView.list, '/views');
   saveCustomViews = (views: CustomView[]) =>
     this.parsed(parseCustomView.list, '/views', { method: 'PUT', body: JSON.stringify(views) });

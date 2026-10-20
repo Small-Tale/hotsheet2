@@ -1351,9 +1351,14 @@ be present together. The server returns `409` when a request's sequence is no
 newer than the last committed one for that checkout and editor session, so a
 delayed autosave cannot replace a later page-hide save. The write and live
 definition update share the ordering guard. The browser keeps its sequence in
-session storage across reloads; callers without these headers retain the legacy
-unconditional write contract. This guard is per editor session and server
-process; concurrent independent editors still need a shared revision protocol.
+session storage across reloads. `GET /commands` and `GET /command-groups` return
+strong content revisions in `ETag`; both root and checkout-scoped `PUT` routes
+require `If-Match` with the revision the writer read. Missing preconditions return
+`428`, and a stale revision returns `409`. `If-Match: *` explicitly requests an
+unconditional administrative replacement. Revisions derive from persisted content,
+so a stale editor remains stale after a server restart or a CLI settings edit. A
+newer sequence from the same editor can follow its own in-flight save's revision,
+but a write by a different editor still conflicts (HS2-X2A3C1).
 The CLI exposes that same live runner without opening the web client. Start a server for
 the selected `-C` ticket store, then use a registered checkout id, alias, or path:
 
@@ -1380,7 +1385,9 @@ reload until the user deletes it. `GET`/`PUT /command-groups` (and the checkout-
 `/checkouts/{reference}/command-groups` the client uses) read and replace it; writes are
 trimmed, blank names dropped, and duplicates collapsed. The generic settings writer
 rejects anything but a list of strings, so `hotsheet-cli settings set command_groups`
-is the equivalent headless path.
+is the equivalent headless path. Group writes use their own `ETag`/`If-Match`
+revision, independent of command definitions. The browser retains a conflicting
+draft and asks the editor to copy it before reloading the current remote settings.
 
 Rich-activity distillation is a stricter case: consent is read from the **local scope
 only**, even though normal effective settings permit shared/global fallback. A committed

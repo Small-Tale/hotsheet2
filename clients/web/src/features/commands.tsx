@@ -211,8 +211,9 @@ export function createCommandsController({
     },
     groupsLoaded: setCommandSettingsExtraGroups,
     nextWriteOrder: nextCommandWriteOrder,
-    saveCommands: (path, definitions, options) => new Api(path).saveCommands(definitions, options),
-    saveGroups: (path, groups) => new Api(path).saveCommandGroups(groups),
+    saveCommands: (path, definitions, options) => new Api(path).saveCommandsWithRevision(definitions, options),
+    saveGroups: (path, groups, expectedRevision) =>
+      new Api(path).saveCommandGroupsWithRevision(groups, expectedRevision),
   });
   function changeCommandGroups(projectId: string, groups: readonly string[]) {
     const before = commandSettingsExtraGroups(projectId);
@@ -231,6 +232,12 @@ export function createCommandsController({
   /** Adopt the server's kept command groups unless a local group save is still in flight. */
   function loadCommandGroups(projectId: string, groups: readonly string[]) {
     commandSettingsSaves.loadGroups(projectId, groups);
+  }
+  function loadCommandRevisions(projectId: string, commands: string, groups: string) {
+    commandSettingsSaves.loadRevisions(projectId, commands, groups);
+  }
+  function hasCommandSettingsConflict(projectId: string) {
+    return commandSettingsSaves.hasConflict(projectId);
   }
   function reorderCommandSettings(projectId: string, sourceIds: readonly string[], target: CommandDropTarget) {
     const next = reorderCommandSettingsState(
@@ -321,6 +328,8 @@ export function createCommandsController({
     deleteCommandSetting,
     commandSettingsExtraGroups,
     loadCommandGroups,
+    loadCommandRevisions,
+    hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
     deleteCommandGroup,

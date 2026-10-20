@@ -38,10 +38,12 @@ struct LiveRun {
     next_seq: u64,
 }
 
+type CommandWriteSequences = HashMap<(String, String), (u64, Option<String>)>;
+
 #[derive(Clone)]
 pub struct CommandManager {
     definitions: Arc<Mutex<HashMap<String, Vec<CommandDefinition>>>>,
-    write_sequences: Arc<Mutex<HashMap<(String, String), u64>>>,
+    write_sequences: Arc<Mutex<CommandWriteSequences>>,
     roots: Arc<Mutex<HashMap<String, PathBuf>>>,
     runs: Arc<Mutex<HashMap<String, LiveRun>>>,
     order: Arc<Mutex<VecDeque<String>>>,
@@ -80,6 +82,10 @@ impl CommandManager {
             .lock_or_recover()
             .insert(String::new(), definitions);
     }
+    pub fn with_settings_lock<T>(&self, read: impl FnOnce() -> T) -> T {
+        let _guard = self.write_sequences.lock_or_recover();
+        read()
+    }
     /// Serialize an editor session's writes through persistence and live-state replacement.
     /// A delayed older request must not commit after a newer sequence for the same project.
     pub fn write_if_newer<T, E>(
@@ -93,16 +99,48 @@ impl CommandManager {
             let key = (project.to_owned(), session.to_owned());
             if sequences
                 .get(&key)
-                .is_some_and(|current| *current >= sequence)
+                .is_some_and(|current| current.0 >= sequence)
             {
                 return Ok(None);
             }
             let result = write()?;
-            sequences.insert(key, sequence);
+            sequences.insert(key, (sequence, None));
             Ok(Some(result))
         } else {
             write().map(Some)
         }
+    }
+
+    /// Compare a persisted content revision under the same project write lock as persistence.
+    /// A newer write from the same editor may follow its own earlier in-flight save, provided
+    /// no independent writer changed the resource in between.
+    pub fn write_if_current<T, E>(
+        &self,
+        project: &str,
+        order: Option<(&str, u64)>,
+        expected: &str,
+        current_revision: impl Fn() -> Result<String, E>,
+        write: impl FnOnce() -> Result<T, E>,
+    ) -> Result<Option<(T, String)>, E> {
+        let mut sequences = self.write_sequences.lock_or_recover();
+        let key = order.map(|(session, _)| (project.to_owned(), session.to_owned()));
+        let prior = key.as_ref().and_then(|key| sequences.get(key));
+        if order.is_some_and(|(_, sequence)| prior.is_some_and(|(current, _)| *current >= sequence))
+        {
+            return Ok(None);
+        }
+        let current = current_revision()?;
+        let follows_own_write =
+            prior.is_some_and(|(_, revision)| revision.as_deref() == Some(&current));
+        if expected != "*" && expected != current && !follows_own_write {
+            return Ok(None);
+        }
+        let result = write()?;
+        let revision = current_revision()?;
+        if let (Some(key), Some((_, sequence))) = (key, order) {
+            sequences.insert(key, (sequence, Some(revision.clone())));
+        }
+        Ok(Some((result, revision)))
     }
     pub fn replace_project(
         &self,

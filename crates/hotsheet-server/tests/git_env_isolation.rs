@@ -323,6 +323,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     }]);
     let saved = ureq::put(&format!("{}/commands", info.url))
         .set("x-hotsheet-secret", &info.secret)
+        .set("if-match", "*")
         .set("content-type", "application/json")
         .send_string(&definitions.to_string())
         .unwrap();

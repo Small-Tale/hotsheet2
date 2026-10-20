@@ -15,6 +15,7 @@ import {
 import { filterAdvancedSearchResults, usesAdvancedSearchExpression } from '../advanced-search';
 import {
   Api,
+  ApiHttpError,
   type Capabilities,
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
@@ -842,6 +843,8 @@ export async function startHotSheetWebClient() {
     deleteCommandSetting,
     commandSettingsExtraGroups,
     loadCommandGroups,
+    loadCommandRevisions,
+    hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
     deleteCommandGroup,
@@ -2890,16 +2893,26 @@ export async function startHotSheetWebClient() {
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         previous = JSON.stringify(commandDefinitions.value, null, 2),
-        [definitions, runs, groups] = await Promise.all([
-          client.commands(),
+        [commandResult, runs, groupResult] = await Promise.all([
+          client.commandsWithRevision(),
           client.commandRuns(),
           /* An older server without kept command groups (HS2-EZ5KMC) must not block commands. */ client
-            .commandGroups()
-            .catch(() => undefined),
+            .commandGroupsWithRevision()
+            .catch((reason: unknown) => {
+              if (reason instanceof ApiHttpError && reason.status === 404) return undefined;
+              throw reason;
+            }),
         ]);
       if (!active()) return;
-      commandDefinitions.value = definitions;
       commandRuns.value = runs;
+      if (hasCommandSettingsConflict(current.id)) return;
+      const { definitions, revision } = commandResult,
+        groups = groupResult?.groups,
+        draft = commandSettingsDraftsByProject.value[current.id];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A project may not have opened the command settings editor yet.
+      if (draft === undefined || draft === previous)
+        loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*');
+      commandDefinitions.value = definitions;
       if (groups) loadCommandGroups(current.id, groups);
       const projection = projectProjectionById.value[current.id];
       projectProjectionById.value = {
@@ -2915,7 +2928,6 @@ export async function startHotSheetWebClient() {
           commandRuns: runs,
         },
       };
-      const draft = commandSettingsDraftsByProject.value[current.id];
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
       if (viewMode.value !== 'settings' || draft === undefined || draft === previous)
         setCommandSettingsDraft(current.id, JSON.stringify(definitions, null, 2));

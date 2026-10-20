@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { CommandDefinition } from './api';
+import { ApiHttpError, type CommandDefinition } from './api';
 import {
   addCommandGroupName,
   commandDefinitionsFromDraft,
@@ -39,6 +39,79 @@ afterEach(() => {
 });
 
 describe('command settings workflow (HS2-1M05KF)', () => {
+  it('keeps a conflicting tab draft until reload and then saves against the new revision (HS2-X2A3C1)', async () => {
+    let revision = 'r0',
+      persisted = [shell('initial')];
+    const makeEditor = (draft: { value: CommandDefinition[] }, messages: string[]) =>
+      new CommandSettingsSaves({
+        projectPath: () => '/api/p',
+        definitions: () => draft.value,
+        groups: () => [],
+        setMessage: (_project, message) => messages.push(message),
+        commandSaved: (_project, definitions) => {
+          draft.value = definitions;
+        },
+        groupsLoaded: () => undefined,
+        saveCommands: async (_path, definitions, options) => {
+          if (options.expectedRevision !== revision) throw new ApiHttpError('conflict', 409);
+          persisted = definitions;
+          revision = `r${Number(revision.slice(1)) + 1}`;
+          return { definitions, revision };
+        },
+        saveGroups: async () => undefined,
+      });
+    const firstDraft = { value: [shell('first')] },
+      secondDraft = { value: [shell('second')] },
+      secondMessages: string[] = [],
+      first = makeEditor(firstDraft, []),
+      second = makeEditor(secondDraft, secondMessages);
+    first.loadRevisions('p', 'r0', 'g0');
+    second.loadRevisions('p', 'r0', 'g0');
+    await first.save('p');
+    await second.save('p');
+    expect(persisted).toEqual([shell('first')]);
+    expect(secondDraft.value).toEqual([shell('second')]);
+    expect(second.hasConflict('p')).toBe(true);
+    expect(secondMessages.at(-1)).toContain('Copy your draft');
+    second.loadRevisions('p', 'r1', 'g1');
+    await second.save('p');
+    expect(persisted).toEqual([shell('first')]);
+    const reloaded = makeEditor(secondDraft, []);
+    reloaded.loadRevisions('p', 'r1', 'g1');
+    await reloaded.save('p');
+    expect(persisted).toEqual([shell('second')]);
+  });
+
+  it('holds a local group edit when another tab changes kept groups (HS2-X2A3C1)', async () => {
+    let revision = 'g0',
+      persisted: string[] = ['Remote'];
+    const draft = { value: ['Local'] },
+      messages: string[] = [],
+      loaded = vi.fn(),
+      saves = new CommandSettingsSaves({
+        projectPath: () => '/api/p',
+        definitions: () => [],
+        groups: () => draft.value,
+        setMessage: (_project, message) => messages.push(message),
+        commandSaved: () => undefined,
+        groupsLoaded: loaded,
+        saveCommands: async () => [],
+        saveGroups: async (_path, groups, expected) => {
+          if (expected !== revision) throw new ApiHttpError('conflict', 409);
+          persisted = groups;
+          revision = 'g1';
+          return { groups, revision };
+        },
+      });
+    saves.loadRevisions('p', 'r0', 'g0');
+    revision = 'g1';
+    await saves.saveGroups('p');
+    expect(saves.hasConflict('p')).toBe(true);
+    expect(messages.at(-1)).toContain('Copy your draft');
+    saves.loadGroups('p', persisted);
+    expect(loaded).not.toHaveBeenCalled();
+    expect(draft.value).toEqual(['Local']);
+  });
   it('keeps the shipped controller wired to project-scoped drafts and selections', () => {
     vi.useFakeTimers();
     const project = (id: string): Project => ({
@@ -115,7 +188,7 @@ describe('command settings workflow (HS2-1M05KF)', () => {
       ]),
       calls: Array<{
         path: string;
-        options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } };
+        options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number }; expectedRevision: string };
       }> = [],
       messages: string[] = [],
       nextSequence = { value: 0 },
@@ -140,12 +213,17 @@ describe('command settings workflow (HS2-1M05KF)', () => {
     await vi.advanceTimersByTimeAsync(300);
     saves.schedule('a');
     await vi.advanceTimersByTimeAsync(300);
-    expect(calls).toEqual([{ path: '/api/b', options: { writeOrder: { session: 'editor', sequence: 1 } } }]);
+    expect(calls).toEqual([
+      { path: '/api/b', options: { expectedRevision: '', writeOrder: { session: 'editor', sequence: 1 } } },
+    ]);
     saves.flush();
     await Promise.resolve();
     expect(calls).toEqual([
-      { path: '/api/b', options: { writeOrder: { session: 'editor', sequence: 1 } } },
-      { path: '/api/a', options: { keepalive: true, writeOrder: { session: 'editor', sequence: 2 } } },
+      { path: '/api/b', options: { expectedRevision: '', writeOrder: { session: 'editor', sequence: 1 } } },
+      {
+        path: '/api/a',
+        options: { keepalive: true, expectedRevision: '', writeOrder: { session: 'editor', sequence: 2 } },
+      },
     ]);
     await vi.advanceTimersByTimeAsync(600);
     expect(calls).toHaveLength(2);

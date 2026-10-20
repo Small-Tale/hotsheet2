@@ -6,10 +6,11 @@ use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
 use crate::{AppState, commands, custom_views, notifications, tts};
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use hotsheet_ticketing::{Settings, TicketQuery, ops};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 pub(crate) async fn ticket_flow_summary(
     State(state): State<AppState>,
@@ -132,10 +133,54 @@ pub(crate) async fn usage_metrics_summary(
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
+fn command_revision<T: Serialize>(value: &T) -> Result<String, ApiError> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(format!("\"{:x}\"", Sha256::digest(bytes)))
+}
+
+fn revision_response<T: Serialize>(value: T) -> Result<(HeaderMap, Json<T>), ApiError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::ETAG,
+        command_revision(&value)?.parse().map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("invalid command revision: {error}"),
+            )
+        })?,
+    );
+    Ok((headers, Json(value)))
+}
+
+fn expected_command_revision(headers: &HeaderMap) -> Result<&str, ApiError> {
+    let value = headers.get(header::IF_MATCH).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            "command settings writes require If-Match",
+        )
+    })?;
+    value
+        .to_str()
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid If-Match revision"))
+}
+
 pub(crate) async fn list_commands(
     State(state): State<AppState>,
-) -> Json<Vec<hotsheet_ticketing::commands::CommandDefinition>> {
-    Json(state.commands.definitions())
+) -> Result<
+    (
+        HeaderMap,
+        Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+    ),
+    ApiError,
+> {
+    state.commands.with_settings_lock(|| {
+        let definitions =
+            hotsheet_ticketing::commands::from_settings(&Settings::new(state.store.root()))
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        state.commands.replace_definitions(definitions.clone());
+        revision_response(definitions)
+    })
 }
 
 fn validate_command_definitions(
@@ -172,16 +217,31 @@ pub(crate) async fn save_commands(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
-) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+) -> Result<
+    (
+        HeaderMap,
+        Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+    ),
+    ApiError,
+> {
     validate_command_definitions(&definitions)?;
     let order = command_write_order(&headers)?;
-    let written = state.commands.write_if_newer(
+    let expected = expected_command_revision(&headers)?;
+    let settings = Settings::new(state.store.root());
+    let current_revision = || {
+        let current = hotsheet_ticketing::commands::from_settings(&settings)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        command_revision(&current)
+    };
+    let written = state.commands.write_if_current(
         "",
         order
             .as_ref()
             .map(|(session, seq)| (session.as_str(), *seq)),
+        expected,
+        current_revision,
         || {
-            Settings::new(state.store.root())
+            settings
                 .set(
                     "commands",
                     serde_json::to_value(&definitions).map_err(|error| {
@@ -200,7 +260,7 @@ pub(crate) async fn save_commands(
             "a newer command settings write already completed",
         ));
     }
-    Ok(Json(definitions))
+    revision_response(definitions)
 }
 
 fn command_write_order(headers: &HeaderMap) -> Result<Option<(String, u64)>, ApiError> {
@@ -247,57 +307,96 @@ pub(crate) fn checkout_settings(
 pub(crate) async fn list_checkout_commands(
     State(state): State<AppState>,
     Path(reference): Path<String>,
-) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+) -> Result<
+    (
+        HeaderMap,
+        Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+    ),
+    ApiError,
+> {
     let (checkout, settings) = checkout_settings(&state, &reference)?;
-    let definitions = hotsheet_ticketing::commands::from_settings(&settings)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-    state
-        .commands
-        .replace_project(checkout.id, checkout.root.into(), definitions.clone());
-    Ok(Json(definitions))
+    state.commands.with_settings_lock(|| {
+        let definitions = hotsheet_ticketing::commands::from_settings(&settings)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        state
+            .commands
+            .replace_project(checkout.id, checkout.root.into(), definitions.clone());
+        revision_response(definitions)
+    })
 }
 
-fn read_command_groups(settings: &Settings) -> Result<Json<Vec<String>>, ApiError> {
-    hotsheet_ticketing::commands::groups_from_settings(settings)
-        .map(Json)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+fn read_command_groups(settings: &Settings) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
+    let groups = hotsheet_ticketing::commands::groups_from_settings(settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    revision_response(groups)
 }
 
 /// Persist the kept (possibly empty) command groups beside `commands`, in the same
 /// machine-local scope, so an "Add group" survives a reload (HS2-EZ5KMC).
 fn write_command_groups(
+    state: &AppState,
+    project: &str,
     settings: &Settings,
+    headers: &HeaderMap,
     groups: Vec<String>,
-) -> Result<Json<Vec<String>>, ApiError> {
+) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
+    let expected = expected_command_revision(headers)?;
     let groups = hotsheet_ticketing::commands::normalize_groups(groups);
-    settings
-        .set(
-            hotsheet_ticketing::commands::COMMAND_GROUPS_KEY,
-            serde_json::to_value(&groups)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-            hotsheet_ticketing::Scope::Local,
-        )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-    Ok(Json(groups))
+    let current_revision = || {
+        let current = hotsheet_ticketing::commands::groups_from_settings(settings)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        command_revision(&current)
+    };
+    let written = state.commands.write_if_current(
+        &format!("{project}:groups"),
+        None,
+        expected,
+        current_revision,
+        || {
+            settings
+                .set(
+                    hotsheet_ticketing::commands::COMMAND_GROUPS_KEY,
+                    serde_json::to_value(&groups).map_err(|error| {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    })?,
+                    hotsheet_ticketing::Scope::Local,
+                )
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        },
+    )?;
+    if written.is_none() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "command groups changed in another editor",
+        ));
+    }
+    revision_response(groups)
 }
 
 pub(crate) async fn list_command_groups(
     State(state): State<AppState>,
-) -> Result<Json<Vec<String>>, ApiError> {
+) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
     read_command_groups(&Settings::new(state.store.root()))
 }
 
 pub(crate) async fn save_command_groups(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(groups): Json<Vec<String>>,
-) -> Result<Json<Vec<String>>, ApiError> {
-    write_command_groups(&Settings::new(state.store.root()), groups)
+) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
+    write_command_groups(
+        &state,
+        "",
+        &Settings::new(state.store.root()),
+        &headers,
+        groups,
+    )
 }
 
 pub(crate) async fn list_checkout_command_groups(
     State(state): State<AppState>,
     Path(reference): Path<String>,
-) -> Result<Json<Vec<String>>, ApiError> {
+) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
     let (_checkout, settings) = checkout_settings(&state, &reference)?;
     read_command_groups(&settings)
 }
@@ -305,10 +404,11 @@ pub(crate) async fn list_checkout_command_groups(
 pub(crate) async fn save_checkout_command_groups(
     State(state): State<AppState>,
     Path(reference): Path<String>,
+    headers: HeaderMap,
     Json(groups): Json<Vec<String>>,
-) -> Result<Json<Vec<String>>, ApiError> {
-    let (_checkout, settings) = checkout_settings(&state, &reference)?;
-    write_command_groups(&settings, groups)
+) -> Result<(HeaderMap, Json<Vec<String>>), ApiError> {
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    write_command_groups(&state, &checkout.id, &settings, &headers, groups)
 }
 
 pub(crate) async fn save_checkout_commands(
@@ -316,16 +416,30 @@ pub(crate) async fn save_checkout_commands(
     Path(reference): Path<String>,
     headers: HeaderMap,
     Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
-) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+) -> Result<
+    (
+        HeaderMap,
+        Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+    ),
+    ApiError,
+> {
     validate_command_definitions(&definitions)?;
     let (checkout, settings) = checkout_settings(&state, &reference)?;
     let order = command_write_order(&headers)?;
+    let expected = expected_command_revision(&headers)?;
     let project = checkout.id.clone();
-    let written = state.commands.write_if_newer(
+    let current_revision = || {
+        let current = hotsheet_ticketing::commands::from_settings(&settings)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        command_revision(&current)
+    };
+    let written = state.commands.write_if_current(
         &project,
         order
             .as_ref()
             .map(|(session, seq)| (session.as_str(), *seq)),
+        expected,
+        current_revision,
         || {
             settings
                 .set(
@@ -348,7 +462,7 @@ pub(crate) async fn save_checkout_commands(
             "a newer command settings write already completed",
         ));
     }
-    Ok(Json(definitions))
+    revision_response(definitions)
 }
 
 pub(crate) async fn list_custom_views(

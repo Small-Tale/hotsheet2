@@ -334,6 +334,14 @@ fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
         .unwrap()
 }
 
+fn command_replace(uri: &str, body: &str) -> Request<Body> {
+    let mut request = authed("PUT", uri, Some(body));
+    request
+        .headers_mut()
+        .insert(header::IF_MATCH, "*".parse().unwrap());
+    request
+}
+
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap()
@@ -5842,20 +5850,18 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     );
     let commands = application
         .clone()
-        .oneshot(authed(
-            "PUT",
+        .oneshot(command_replace(
             &format!("/checkouts/{checkout_id}/commands"),
-            Some(r#"[{"id":"check","title":"Check","program":"true","args":[]}]"#),
+            r#"[{"id":"check","title":"Check","program":"true","args":[]}]"#,
         ))
         .await
         .unwrap();
     assert_eq!(commands.status(), StatusCode::OK);
     let command_groups = application
         .clone()
-        .oneshot(authed(
-            "PUT",
+        .oneshot(command_replace(
             &format!("/checkouts/{checkout_id}/command-groups"),
-            Some(r#"["Ideas"]"#),
+            r#"["Ideas"]"#,
         ))
         .await
         .unwrap();
@@ -6027,10 +6033,9 @@ async fn checkout_command_definitions_and_runs_do_not_leak_between_projects() {
     }
     let saved = application
         .clone()
-        .oneshot(authed(
-            "PUT",
+        .oneshot(command_replace(
             &format!("/checkouts/{}/commands", ids[0]),
-            Some(r#"[{"id":"wait","title":"Wait","program":"/bin/sh","args":["-c","sleep 2"]}]"#),
+            r#"[{"id":"wait","title":"Wait","program":"/bin/sh","args":["-c","sleep 2"]}]"#,
         ))
         .await
         .unwrap();
@@ -11145,7 +11150,7 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"cwd":".","group":"AI"},{"id":"ai-review","title":"AI review","kind":"ai","prompt":"Review the change","tool":"claude","model":"opus","effort":"high"}]"#;
     let saved = app
         .clone()
-        .oneshot(authed("PUT", "/commands", Some(definitions)))
+        .oneshot(command_replace("/commands", definitions))
         .await
         .unwrap();
     assert_eq!(saved.status(), StatusCode::OK);
@@ -11172,10 +11177,9 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     assert_eq!(event.kind, "command_updated");
     assert_eq!(event.slug, "review");
     let invalid = app
-        .oneshot(authed(
-            "PUT",
+        .oneshot(command_replace(
             "/commands",
-            Some(r#"[{"id":"same","title":"One","program":"true","args":[]},{"id":"same","title":"Two","program":"true","args":[]}]"#),
+            r#"[{"id":"same","title":"One","program":"true","args":[]},{"id":"same","title":"Two","program":"true","args":[]}]"#,
         ))
         .await
         .unwrap();
@@ -11191,6 +11195,9 @@ async fn older_ordered_command_write_cannot_replace_newer_settings() {
     };
     let ordered = |sequence: u64, body: String| {
         let mut request = authed("PUT", "/commands", Some(&body));
+        request
+            .headers_mut()
+            .insert(header::IF_MATCH, "*".parse().unwrap());
         request.headers_mut().insert(
             "x-hotsheet-command-write-session",
             "editor-session".parse().unwrap(),
@@ -11251,6 +11258,211 @@ async fn older_ordered_command_write_cannot_replace_newer_settings() {
 }
 
 #[tokio::test]
+async fn command_revisions_reject_stale_editors_and_survive_server_restart() {
+    let (dir, st) = state();
+    let application = app(st);
+    let command = |title: &str| {
+        format!(r#"[{{"id":"review","title":"{title}","kind":"shell","command":"echo review"}}]"#)
+    };
+    let initial = application
+        .clone()
+        .oneshot(authed("GET", "/commands", None))
+        .await
+        .unwrap();
+    let baseline = initial.headers()[header::ETAG].to_str().unwrap().to_owned();
+    let mut first = authed("PUT", "/commands", Some(&command("First")));
+    first
+        .headers_mut()
+        .insert(header::IF_MATCH, baseline.parse().unwrap());
+    let saved = application.clone().oneshot(first).await.unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    let newer = saved.headers()[header::ETAG].to_str().unwrap().to_owned();
+    assert_ne!(baseline, newer);
+    let mut stale = authed("PUT", "/commands", Some(&command("Stale")));
+    stale
+        .headers_mut()
+        .insert(header::IF_MATCH, baseline.parse().unwrap());
+    assert_eq!(
+        application.clone().oneshot(stale).await.unwrap().status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(authed("PUT", "/commands", Some(&command("Unconditional"))))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::PRECONDITION_REQUIRED
+    );
+    let mut current = authed("PUT", "/commands", Some(&command("Current")));
+    current
+        .headers_mut()
+        .insert(header::IF_MATCH, newer.parse().unwrap());
+    assert_eq!(
+        application.clone().oneshot(current).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    let group_initial = application
+        .clone()
+        .oneshot(authed("GET", "/command-groups", None))
+        .await
+        .unwrap();
+    let group_baseline = group_initial.headers()[header::ETAG]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let mut group_first = authed("PUT", "/command-groups", Some(r#"["Ideas"]"#));
+    group_first
+        .headers_mut()
+        .insert(header::IF_MATCH, group_baseline.parse().unwrap());
+    let group_saved = application.clone().oneshot(group_first).await.unwrap();
+    assert_eq!(group_saved.status(), StatusCode::OK);
+    let mut group_stale = authed("PUT", "/command-groups", Some(r#"["Stale"]"#));
+    group_stale
+        .headers_mut()
+        .insert(header::IF_MATCH, group_baseline.parse().unwrap());
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(group_stale)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+
+    let restarted = app(
+        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home")),
+    );
+    let listed = restarted
+        .clone()
+        .oneshot(authed("GET", "/commands", None))
+        .await
+        .unwrap();
+    let before_cli_edit = listed.headers()[header::ETAG].to_str().unwrap().to_owned();
+    assert_eq!(body_json(listed).await[0]["title"], "Current");
+    let groups = restarted
+        .clone()
+        .oneshot(authed("GET", "/command-groups", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(groups).await, serde_json::json!(["Ideas"]));
+    let mut stale_after_restart = authed("PUT", "/commands", Some(&command("Stale")));
+    stale_after_restart
+        .headers_mut()
+        .insert(header::IF_MATCH, baseline.parse().unwrap());
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(stale_after_restart)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    // The generic CLI settings writer edits the same persisted key out of band.
+    Settings::new(dir.path())
+        .set(
+            "commands",
+            serde_json::from_str(&command("CLI edit")).unwrap(),
+            Scope::Local,
+        )
+        .unwrap();
+    let after_cli_edit = restarted
+        .clone()
+        .oneshot(authed("GET", "/commands", None))
+        .await
+        .unwrap();
+    assert_ne!(
+        after_cli_edit.headers()[header::ETAG].to_str().unwrap(),
+        before_cli_edit
+    );
+    assert_eq!(body_json(after_cli_edit).await[0]["title"], "CLI edit");
+    let mut stale_from_before_cli = authed("PUT", "/commands", Some(&command("Stale again")));
+    stale_from_before_cli
+        .headers_mut()
+        .insert(header::IF_MATCH, before_cli_edit.parse().unwrap());
+    assert_eq!(
+        restarted
+            .oneshot(stale_from_before_cli)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+}
+
+#[tokio::test]
+async fn later_same_editor_save_can_follow_its_own_stale_revision() {
+    let (_dir, st) = state();
+    let application = app(st);
+    let initial = application
+        .clone()
+        .oneshot(authed("GET", "/commands", None))
+        .await
+        .unwrap();
+    let baseline = initial.headers()[header::ETAG].to_str().unwrap().to_owned();
+    let ordered = |session: &str, sequence: u64, title: &str| {
+        let body = format!(
+            r#"[{{"id":"review","title":"{title}","kind":"shell","command":"echo review"}}]"#
+        );
+        let mut request = authed("PUT", "/commands", Some(&body));
+        request
+            .headers_mut()
+            .insert(header::IF_MATCH, baseline.parse().unwrap());
+        request
+            .headers_mut()
+            .insert("x-hotsheet-command-write-session", session.parse().unwrap());
+        request.headers_mut().insert(
+            "x-hotsheet-command-write-sequence",
+            sequence.to_string().parse().unwrap(),
+        );
+        request
+    };
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(ordered("tab-one", 1, "First"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(ordered("tab-one", 2, "Latest"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(ordered("tab-two", 1, "Stale"))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        body_json(
+            application
+                .oneshot(authed("GET", "/commands", None))
+                .await
+                .unwrap()
+        )
+        .await[0]["title"],
+        "Latest"
+    );
+}
+
+#[tokio::test]
 async fn kept_command_groups_round_trip_beside_local_commands() {
     // HS2-EZ5KMC: an empty "Add group" group persists in the same local scope as commands.
     let (dir, st) = state();
@@ -11264,10 +11476,9 @@ async fn kept_command_groups_round_trip_beside_local_commands() {
     assert_eq!(body_json(initial).await, serde_json::json!([]));
     let saved = app
         .clone()
-        .oneshot(authed(
-            "PUT",
+        .oneshot(command_replace(
             "/command-groups",
-            Some(r#"[" Ideas ","","Later","Ideas"]"#),
+            r#"[" Ideas ","","Later","Ideas"]"#,
         ))
         .await
         .unwrap();

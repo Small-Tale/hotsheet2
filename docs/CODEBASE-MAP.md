@@ -66,8 +66,11 @@ sort, selection, history, workspace search, and change-stream modules against
 those language-neutral expected states.
 
 `clients/web/src/command-settings-workflow.ts` owns command editor draft
-transitions, validation, group retention/reorder, and project-keyed save timing
-and response guards. `features/commands.tsx` adapts that workflow to project
+transitions, validation, group retention/reorder, project-keyed save timing,
+revision baselines, and conflict retention. The server's `routes/project_tools.rs`
+returns persisted-content `ETag` values and checks `If-Match` under the command
+manager's write lock, including same-session ordered saves.
+`features/commands.tsx` adapts the workflow to project
 signals, API calls, prompts, popovers, and the rendered command surfaces.
 
 Development request-stage tracing lives in `clients/web/src/dev-request-timing.ts`

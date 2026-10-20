@@ -14730,6 +14730,7 @@ test('keeps a command edit made just before a reload through the real server (HS
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            'If-Match': '*',
             'X-Hotsheet-Command-Write-Session': session,
             'X-Hotsheet-Command-Write-Sequence': String(sequence),
           },
@@ -14741,6 +14742,45 @@ test('keeps a command edit made just before a reload through the real server (HS
     );
     expect(staleStatus).toBe(409);
     await expect.poll(storedTitles).toEqual(['Ship it now']);
+
+    // A second editor commits while this tab still holds its prior revision. Keep its
+    // subsequent GETs stale to model a tab that has not received the remote refresh yet.
+    const current = await fetch(`${server.url}/checkouts/${server.checkoutId}/commands`, {
+      headers: { 'X-Hotsheet-Secret': server.secret },
+    });
+    const baselineRevision = current.headers.get('etag')!,
+      priorDefinitions = (await current.json()) as Array<Record<string, unknown>>;
+    const commandRoute = /\/__hotsheet\/project-api\/demo-checkout\/commands$/,
+      staleCommands = async (route: Route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        return route.fulfill({
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: baselineRevision },
+          body: JSON.stringify(priorDefinitions),
+        });
+      };
+    await page.route(commandRoute, staleCommands);
+    const remote = priorDefinitions.map((definition) => ({ ...definition, title: 'Remote edit' }));
+    const remoteSave = await fetch(`${server.url}/checkouts/${server.checkoutId}/commands`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Hotsheet-Secret': server.secret,
+        'If-Match': baselineRevision,
+      },
+      body: JSON.stringify(remote),
+    });
+    expect(remoteSave.status).toBe(200);
+    await editor.locator('.command-settings-editor__row', { hasText: 'Ship it now' }).dblclick();
+    await commandDialog.getByLabel('Button Label').fill('Local stale edit');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect(editor.getByRole('status')).toContainText('Copy your draft');
+    await expect.poll(storedTitles).toEqual(['Remote edit']);
+    await page.unroute(commandRoute, staleCommands);
+    await page.reload();
+    await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+    await openCommandSettings();
+    await expect(editor.locator('.command-settings-editor__row', { hasText: 'Remote edit' })).toBeVisible();
   } finally {
     await server.stop();
   }

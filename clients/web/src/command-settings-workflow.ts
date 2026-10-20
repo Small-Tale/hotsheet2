@@ -1,4 +1,5 @@
 import type { CommandDefinition } from './api';
+import { ApiHttpError } from './api';
 import {
   type CommandDropTarget,
   keptCommandGroups,
@@ -171,9 +172,9 @@ export interface CommandSettingsSavePort {
   saveCommands(
     path: string,
     definitions: CommandDefinition[],
-    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } },
-  ): Promise<CommandDefinition[]>;
-  saveGroups(path: string, groups: string[]): Promise<unknown>;
+    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number }; expectedRevision: string },
+  ): Promise<CommandDefinition[] | { definitions: CommandDefinition[]; revision: string }>;
+  saveGroups(path: string, groups: string[], expectedRevision: string): Promise<unknown>;
   setTimer?(callback: () => void, milliseconds: number): ReturnType<typeof setTimeout>;
   clearTimer?(timer: ReturnType<typeof setTimeout>): void;
 }
@@ -185,7 +186,20 @@ export class CommandSettingsSaves {
   private readonly groupGenerations = new Map<string, number>();
   private readonly groupPending = new Map<string, number>();
   private readonly groupTail = new Map<string, Promise<unknown>>();
+  private readonly commandRevisions = new Map<string, string>();
+  private readonly groupRevisions = new Map<string, string>();
+  private readonly conflicts = new Set<string>();
   constructor(private readonly port: CommandSettingsSavePort) {}
+
+  loadRevisions(projectId: string, commands: string, groups: string): void {
+    if (this.conflicts.has(projectId)) return;
+    this.commandRevisions.set(projectId, commands);
+    this.groupRevisions.set(projectId, groups);
+  }
+
+  hasConflict(projectId: string): boolean {
+    return this.conflicts.has(projectId);
+  }
 
   schedule(projectId: string): void {
     const clear = (timer: ReturnType<typeof setTimeout> | undefined) => {
@@ -231,12 +245,18 @@ export class CommandSettingsSaves {
     try {
       const saved = await this.port.saveCommands(path, definitions, {
         ...options,
+        expectedRevision: this.commandRevisions.get(projectId) ?? '',
         ...(this.port.nextWriteOrder ? { writeOrder: this.port.nextWriteOrder() } : {}),
       });
-      if (this.current(projectId, path, generation)) this.port.commandSaved(projectId, saved);
+      if (this.current(projectId, path, generation)) {
+        if (Array.isArray(saved)) this.port.commandSaved(projectId, saved);
+        else {
+          this.commandRevisions.set(projectId, saved.revision);
+          this.port.commandSaved(projectId, saved.definitions);
+        }
+      }
     } catch (reason) {
-      if (this.current(projectId, path, generation))
-        this.port.setMessage(projectId, reason instanceof Error ? reason.message : String(reason));
+      if (this.current(projectId, path, generation)) this.saveError(projectId, reason);
     }
   }
 
@@ -255,14 +275,18 @@ export class CommandSettingsSaves {
       task = previous
         .catch(() => undefined)
         .then(async () => {
-          if (this.port.projectPath(projectId) === path) await this.port.saveGroups(path, groups);
+          if (this.port.projectPath(projectId) === path) {
+            const saved = await this.port.saveGroups(path, groups, this.groupRevisions.get(projectId) ?? '');
+            if (saved && typeof saved === 'object' && 'revision' in saved && typeof saved.revision === 'string')
+              this.groupRevisions.set(projectId, saved.revision);
+          }
         });
     this.groupTail.set(projectId, task);
     try {
       await task;
     } catch (reason) {
       if (this.port.projectPath(projectId) === path && this.groupGenerations.get(projectId) === generation)
-        this.port.setMessage(projectId, reason instanceof Error ? reason.message : String(reason));
+        this.saveError(projectId, reason);
     } finally {
       const remaining = (this.groupPending.get(projectId) ?? 1) - 1;
       if (remaining > 0) this.groupPending.set(projectId, remaining);
@@ -271,7 +295,19 @@ export class CommandSettingsSaves {
     }
   }
 
+  private saveError(projectId: string, reason: unknown): void {
+    if (reason instanceof ApiHttpError && reason.status === 409) {
+      this.conflicts.add(projectId);
+      this.port.setMessage(
+        projectId,
+        'Command settings changed elsewhere. Copy your draft, then reload to review the latest settings.',
+      );
+      return;
+    }
+    this.port.setMessage(projectId, reason instanceof Error ? reason.message : String(reason));
+  }
+
   loadGroups(projectId: string, groups: readonly string[]): void {
-    if (!this.groupPending.has(projectId)) this.port.groupsLoaded(projectId, groups);
+    if (!this.groupPending.has(projectId) && !this.conflicts.has(projectId)) this.port.groupsLoaded(projectId, groups);
   }
 }
