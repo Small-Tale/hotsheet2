@@ -3943,10 +3943,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         serde_json::from_str(&std::fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
     assert_eq!(mcp["mcpServers"]["user-server"]["command"], "user-command");
     assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--path");
-    assert_eq!(
-        mcp["mcpServers"]["hotsheet"]["args"][1],
-        store.canonicalize().unwrap().to_string_lossy().as_ref()
-    );
+    assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][1], ".");
 
     let origin = Command::from_std(hotsheet_ticketing::git::command())
         .args(["-C", store.to_str().unwrap(), "remote", "get-url", "origin"])
