@@ -2,8 +2,9 @@ import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireContentItems } from '@kerfjs/ui/wire-content-items';
-import { delegate, delegateCapture, effect, type SafeHtml, signal } from 'kerfjs';
+import { delegate, effect, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { AIContentLabel } from '../components/ai-content-label';
@@ -23,13 +24,13 @@ import {
   wireTicketTitleEditor,
 } from '../components/ticket-field-editor-interactions';
 import type { InspectorTab } from '../components/ticket-inspector';
-import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
+import { TicketReader } from '../components/ticket-reader';
 import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { beginFeedbackPromptEdit } from '../feedback-prompt-edits';
 import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
-import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
+import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import {
@@ -233,6 +234,7 @@ export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({
 export const readerTab = signal<InspectorTab>('info');
 export const readerLargeText = signal(false);
 export const readerDialogOpen = signal(true);
+let previousReaderDemoSelection: string | undefined;
 /** The reader demo's own ticket title and its title-edit state (HS2-0VFPD5): the reader shows a different
  * demo ticket than the sidebar inspector, so it projects its own editing signals into TicketReader. */
 export const READER_TITLE_INITIAL = 'Build TicketReader component and UX demo';
@@ -468,11 +470,10 @@ export function AIContentLabelDemo() {
   );
 }
 
-export function openDemoTicketReader(root: HTMLElement): void {
+export function openDemoTicketReader(): void {
   readerDialogOpen.value = false;
   selectDemo('ticket-reader');
   requestAnimationFrame(() => {
-    showTicketReaderDialog(root, 'ux-demo-ticket-reader');
     readerDialogOpen.value = true;
   });
 }
@@ -480,12 +481,14 @@ export function openDemoTicketReader(root: HTMLElement): void {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireContentComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  demoListeners.add(wireDialogStack(document.body));
   // Open the reader whenever its entry is selected, from a deep link or the catalog sidebar, so the
   // stage never shows an empty TicketReader (HS2-G2XKEH).
   demoListeners.add(
     effect(() => {
-      if (selectedId.value === 'ticket-reader')
-        requestAnimationFrame(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
+      const selection = selectedId.value;
+      if (selection === 'ticket-reader' && previousReaderDemoSelection !== selection) readerDialogOpen.value = true;
+      previousReaderDemoSelection = selection;
     }),
   );
   demoListeners.add(
@@ -694,7 +697,7 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', '[data-action="open-ticket-reader"], [data-action="respond-to-feedback"]', () => {
       recordCollectionEvent('Ticket reader requested');
-      openDemoTicketReader(root);
+      openDemoTicketReader();
     }),
   );
   // The production MarkdownEditor handlers with fixture side effects (HS2-KM3DNM).
@@ -725,12 +728,22 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
       },
     }),
   );
-  demoListeners.add(
-    delegateCapture(root, 'wa-after-hide', DEMO_COMPONENTS.ticketReader.selector, () => {
-      readerDialogOpen.value = false;
+  const onReaderCloseRequest = (event: Event) => {
+    if (!(event.target instanceof HTMLDialogElement) || !event.target.matches('.ticket-reader-dialog')) return;
+    readerDialogOpen.value = false;
+  };
+  document.addEventListener('kui-request-close', onReaderCloseRequest, true);
+  demoListeners.add(() => {
+    document.removeEventListener('kui-request-close', onReaderCloseRequest, true);
+  });
+  const onReaderClosed = (event: Event) => {
+    if (event.target instanceof HTMLDialogElement && event.target.matches('.ticket-reader-dialog'))
       selectDemo('ticket-info-panel');
-    }),
-  );
+  };
+  document.addEventListener('close', onReaderClosed, true);
+  demoListeners.add(() => {
+    document.removeEventListener('close', onReaderClosed, true);
+  });
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.toggleReaderTextSize.selector, () => {
       readerLargeText.value = !readerLargeText.value;

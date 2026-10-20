@@ -1,48 +1,44 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { showTicketReaderDialog, type TicketReaderDialogElement } from './ticket-reader';
+import { TicketReader } from './ticket-reader';
 
-/** A shadow `<dialog>` fake with Web Awesome 3.14's own label (HS2-BH7NZ4). */
-function nativeDialog(open: boolean) {
-  const attributes = new Map([['aria-label', 'Read and edit HS2-1']]);
-  return {
-    open,
-    attributes,
-    getAttribute: (name: string) => attributes.get(name) ?? null,
-    hasAttribute: (name: string) => attributes.has(name),
-    setAttribute: vi.fn((name: string, value: string) => attributes.set(name, value)),
-    removeAttribute: (name: string) => attributes.delete(name),
-  };
-}
+const ticket = {
+  slug: 'HS2-1',
+  title: 'Reader',
+  status: 'started' as const,
+  priority: 'default' as const,
+  category: 'task',
+  tags: [],
+  details: 'Details',
+};
 
-describe('showTicketReaderDialog', () => {
-  it('repairs a declarative open host whose native dialog has not opened', () => {
-    vi.stubGlobal('CSS', { escape: (value: string) => value });
-    const show = vi.fn(),
-      native = nativeDialog(false),
-      dialog = {
-        open: true,
-        shadowRoot: { querySelector: () => native },
-        show,
-      } as unknown as TicketReaderDialogElement,
-      root = { querySelector: () => dialog } as unknown as ParentNode;
-    expect(showTicketReaderDialog(root, 'reader')).toBe(true);
-    expect(show).toHaveBeenCalledOnce();
-    expect(native.setAttribute).toHaveBeenCalledWith('role', 'presentation');
-    // The host stays the one named dialog: Web Awesome's inner label is stripped.
-    expect(native.hasAttribute('aria-label')).toBe(false);
+describe('TicketReader controlled layers', () => {
+  it('uses Kerf geometry and names the active native modal', () => {
+    const markup = String(TicketReader({ ...ticket, frameId: 'front', stackPosition: 2, stackSize: 2 }));
+    expect(markup).toContain('<dialog');
+    expect(markup).toContain('class="kui-dialog-surface ticket-reader-dialog"');
+    expect(markup).toContain('aria-label="Read and edit HS2-1"');
+    expect(markup).toContain('aria-modal="true"');
+    expect(markup).toContain('data-stack-open="true"');
+    expect(markup).toContain('data-stack-active="true"');
+    expect(markup).toContain('data-stack-position="2"');
+    expect(markup).toContain('data-stack-count="2"');
+    expect(markup).toContain('data-height=""');
+    expect(markup).toContain('data-body-layout="fill"');
+    expect(markup).toContain('data-reader-frame-id="front"');
+    expect(markup).toContain('data-component="ticket-reader"');
   });
-  it('does not reopen an already visible native dialog', () => {
-    vi.stubGlobal('CSS', { escape: (value: string) => value });
-    const show = vi.fn(),
-      native = nativeDialog(true),
-      dialog = {
-        open: true,
-        shadowRoot: { querySelector: () => native },
-        show,
-      } as unknown as TicketReaderDialogElement,
-      root = { querySelector: () => dialog } as unknown as ParentNode;
-    expect(showTicketReaderDialog(root, 'reader')).toBe(false);
-    expect(show).not.toHaveBeenCalled();
+
+  it('keeps covered and closed layers inaccessible without losing their identity', () => {
+    const covered = String(TicketReader({ ...ticket, active: false, frameId: 'back', stackSize: 2 }));
+    expect(covered).toContain('aria-modal="false"');
+    expect(covered).toContain('aria-hidden="true"');
+    expect(covered).toContain(' inert');
+    expect(covered).toContain('-0.625rem');
+    const closed = String(TicketReader({ ...ticket, open: false, frameId: 'back' }));
+    expect(closed).toContain('data-stack-open="false"');
+    expect(closed).toContain('data-stack-active="false"');
+    expect(closed).not.toContain('data-component="ticket-reader"');
+    expect(closed).toContain('data-reader-frame-id="back"');
   });
 });

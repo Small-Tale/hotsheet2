@@ -246,7 +246,7 @@ export function ticketInspectorPanel({
   );
   // The reader modal is not a Workbench panel: it keeps its own close control (HS2-QQW6CT).
   const close = (
-    <button type="button" data-dialog="close" data-action="close-ticket-reader" aria-label="Close Ticket Reader">
+    <button type="button" data-dialog-close="" data-action="close-ticket-reader" aria-label="Close Ticket Reader">
       <LucideIcon icon={X} name="x" />
     </button>
   );

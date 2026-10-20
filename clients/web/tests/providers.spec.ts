@@ -10519,7 +10519,7 @@ test('refreshes repository status from the project long-poll stream without simp
   expect(statusRequests).toBe(3);
 });
 
-test('keeps exactly 24px above and below the nearly full-height ticket reader', async ({ page }) => {
+test('keeps 24px desktop and 16px narrow gutters around the ticket reader', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
@@ -10527,15 +10527,16 @@ test('keeps exactly 24px above and below the nearly full-height ticket reader', 
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
-  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
-    wide = await reader.boundingBox();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await expect.poll(async () => (await reader.boundingBox())?.y).toBe(24);
+  const wide = await reader.boundingBox();
   expect(wide!.y).toBe(24);
   expect(wide!.height).toBe(852);
   await page.screenshot({ path: 'target/visual-captures/hs2-h5vjet-reader-height-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
   const narrow = await reader.boundingBox();
-  expect(narrow!.y).toBe(24);
-  expect(narrow!.height).toBe(852);
+  expect(narrow!.y).toBe(16);
+  expect(narrow!.height).toBe(868);
   await page.screenshot({ path: 'target/visual-captures/hs2-h5vjet-reader-height-narrow.png', fullPage: true });
 });
 
@@ -21905,9 +21906,7 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
-  expect(
-    await reader.evaluate((host) => (host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).matches(':modal')),
-  ).toBe(true);
+  expect(await reader.evaluate((dialog) => dialog.matches(':modal'))).toBe(true);
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   await reader.getByRole('button', { name: 'More Actions for proof.png' }).click();
   const menu = page.locator('[data-context-menu="attachment"]');
@@ -23183,6 +23182,53 @@ test('links ticket references in details and notes and layers the referenced tic
   );
 });
 
+test('pushes, covers, and pops native reader layers with Escape at desktop and phone widths (HS2-F25C3V)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.route('**/tickets/*01', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { store: 'git-local', ...full, details: 'Continue in HS2-BACK01.', notes: [] } })
+      : route.fallback(),
+  );
+  await page.route('**/tickets/*03', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: { store: 'git-local', ...backlogRow, details: 'Finish in HS2-ARCH01.', notes: [], attachments: [] },
+        })
+      : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
+    await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const layers = page.locator('dialog.ticket-reader-dialog');
+    await expect(layers).toHaveCount(1);
+    await layers.last().getByRole('link', { name: 'HS2-BACK01' }).click();
+    await expect(layers).toHaveCount(2);
+    await expect(layers.nth(0)).toHaveAttribute('aria-modal', 'false');
+    await expect(layers.nth(0)).toHaveAttribute('inert', '');
+    await expect(layers.nth(1)).toHaveAttribute('aria-modal', 'true');
+    await layers.nth(1).getByRole('link', { name: 'HS2-ARCH01' }).click();
+    await expect(layers).toHaveCount(3);
+    await expect(layers.nth(2)).toHaveAttribute('data-stack-active', 'true');
+    await expect.poll(async () => (await layers.nth(2).boundingBox())?.x).toBe(width === 390 ? 16 : 128);
+    await page.screenshot({ path: `target/visual-captures/hs2-f25c3v-reader-stack-${width}.png`, fullPage: true });
+    await page.keyboard.press('Escape');
+    await expect(layers).toHaveCount(2);
+    await expect(layers.nth(1)).toHaveAttribute('data-stack-active', 'true');
+    await page.keyboard.press('Escape');
+    await expect(layers).toHaveCount(1);
+    await expect(layers.nth(0)).toHaveAttribute('data-stack-active', 'true');
+    await page.keyboard.press('Escape');
+    await expect(layers.nth(0)).not.toHaveAttribute('open');
+  }
+});
+
 test('renders attachment identity from a selected real ticket', async ({ page }) => {
   const hostActions: string[] = [];
   await mockProject(page);
@@ -23242,7 +23288,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(gallery).toHaveCount(0);
   await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
-  await expect(reader.locator('dialog:modal')).toHaveCount(1);
+  await expect(reader).toHaveJSProperty('open', true);
   await reader.locator('.markdown-preview__attachment-image').click();
   await expect(gallery).toBeVisible();
   await gallery.getByRole('button', { name: 'More image actions' }).click();

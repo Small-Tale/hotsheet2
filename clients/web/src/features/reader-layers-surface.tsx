@@ -292,7 +292,6 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         projectName={current.name}
         stackPosition={stackPosition}
         stackSize={stackSize}
-        style={stackPosition < stackSize ? `--ticket-reader-offset:${(stackSize - stackPosition) * -10}px` : undefined}
         attachmentMenu={attachmentMenuSurfaceProps({ readerScope })}
         evidence={changeEvidenceSurfaceProps(readerScope)}
         readOnly={frame ? !capabilities!.update && !capabilities!.note_edit && !capabilities!.notes : !editable}

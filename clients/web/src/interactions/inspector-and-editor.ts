@@ -140,7 +140,6 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly codeReviewLoading: Signal<boolean>;
   readonly refreshCodeReview: () => Promise<void>;
   readonly readerDialog: (id: string) => TicketReaderDialogElement | null;
-  readonly readerApprovedClose: Set<string>;
   readonly approveTicketReaderClose: (dialog: TicketReaderDialogElement) => void;
   readonly finishTicketReaderClose: (dialog: TicketReaderDialogElement) => void;
   readonly readerLargeText: Signal<boolean>;
@@ -214,7 +213,6 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     codeReviewLoading,
     refreshCodeReview,
     readerDialog,
-    readerApprovedClose,
     approveTicketReaderClose,
     finishTicketReaderClose,
     readerLargeText,
@@ -1348,21 +1346,21 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', INSPECTOR_AND_EDITOR_TARGETS.ticketReader.selector, (event, target) => {
-      if (event.target !== target) return;
-      const dialog = target as TicketReaderDialogElement,
-        id = dialog.dataset.readerFrameId;
-      if (!id) return;
-      if (readerApprovedClose.delete(id)) return;
-      event.preventDefault();
-      approveTicketReaderClose(dialog);
-    }),
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketReaderDialog.selector,
+      (event, target) => {
+        if (event.target !== target) return;
+        approveTicketReaderClose(target as TicketReaderDialogElement);
+      },
+    ),
   );
   lifetime.add(
     delegateCapture(
       document.body,
-      'wa-after-hide',
-      INSPECTOR_AND_EDITOR_TARGETS.ticketReader.selector,
+      'close',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketReaderDialog.selector,
       (event, target) => {
         if (event.target === target) finishTicketReaderClose(target as TicketReaderDialogElement);
       },

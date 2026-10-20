@@ -1,13 +1,13 @@
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './ticket-reader.css';
 
+import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs';
 
 import { INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
-import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
 
 export type TicketReaderProps = Omit<TicketInspectorProps, 'presentation'> & {
@@ -18,27 +18,11 @@ export type TicketReaderProps = Omit<TicketInspectorProps, 'presentation'> & {
   stackPosition?: number;
   stackSize?: number;
   readOnly?: boolean;
-  style?: string;
   /** Popover/menu surfaces that must live inside this modal dialog to stay interactive (HS2-EZ10RS). */
   overlay?: SafeHtml;
 };
 
-export interface TicketReaderDialogElement extends HTMLElement {
-  open: boolean;
-  show(): Promise<void>;
-}
-
-export function showTicketReaderDialog(root: ParentNode, frameId: string): boolean {
-  const dialog = root.querySelector<TicketReaderDialogElement>(
-    `[data-component="ticket-reader"][data-reader-frame-id="${CSS.escape(frameId)}"]`,
-  );
-  if (!dialog) return false;
-  // The host is the one exposed dialog; Web Awesome 3.14 would also label the shadow dialog.
-  const nativeDialog = quietWebAwesomeNativeDialog(dialog);
-  if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;
-  void dialog.show();
-  return true;
-}
+export type TicketReaderDialogElement = HTMLDialogElement;
 
 export function TicketReader({
   active = true,
@@ -48,36 +32,43 @@ export function TicketReader({
   stackPosition = 1,
   stackSize = 1,
   readOnly = false,
-  style,
   overlay,
   ...props
 }: TicketReaderProps) {
   const label = `${readOnly ? 'Read' : 'Read and edit'} ${props.slug}${projectName ? ` in ${projectName}` : ''}`;
   return (
-    <wa-dialog
-      class="ticket-reader-dialog"
-      {...INSPECTOR_AND_EDITOR_TARGETS.ticketReader.attrs}
-      data-key={frameId}
-      data-reader-frame-id={frameId}
-      data-large-text={String(props.largeText ?? false)}
-      data-reader-active={String(active)}
-      data-reader-position={stackPosition}
-      data-reader-count={stackSize}
+    <DialogSurface
+      className="ticket-reader-dialog"
       label={label}
-      role="dialog"
-      aria-modal={active ? 'true' : 'false'}
-      aria-label={label}
-      without-header
-      open={open || undefined}
-      data-controlled-open={String(open)}
-      // Kerf 5.0.0-beta.56 leaves a custom element's role/aria-* alone when the template omits it, so
-      // every state renders an explicit value rather than relying on the morph to remove it.
-      aria-hidden={open ? 'false' : 'true'}
-      inert={open ? undefined : true}
-      style={style}
+      withoutHeader
+      preferredWidth={remify(1024)}
+      height="viewport"
+      bodyInset="none"
+      bodyLayout="fill"
+      stack={{
+        open,
+        active: active && open,
+        position: stackPosition,
+        count: stackSize,
+        offset: active ? undefined : remify(-10 * (stackSize - stackPosition)),
+      }}
+      rootAttributes={{
+        ...INSPECTOR_AND_EDITOR_TARGETS.ticketReaderDialog.attrs,
+        'data-key': frameId,
+        'data-reader-frame-id': frameId,
+        'data-reader-active': String(active),
+        'data-reader-position': String(stackPosition),
+        'data-reader-count': String(stackSize),
+        'data-large-text': String(props.largeText ?? false),
+      }}
     >
       {open && (
-        <div class="ticket-reader">
+        <div
+          class="ticket-reader"
+          {...INSPECTOR_AND_EDITOR_TARGETS.ticketReader.attrs}
+          data-reader-frame-id={frameId}
+          data-reader-active={String(active)}
+        >
           {stackSize > 1 && (
             <List dividerSides="b" textInsets="rl" controlInsets="tb">
               <Row hAlign="full" vAlign="middle" gap="m">
@@ -103,6 +94,6 @@ export function TicketReader({
           {overlay}
         </div>
       )}
-    </wa-dialog>
+    </DialogSurface>
   );
 }

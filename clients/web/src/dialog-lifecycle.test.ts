@@ -42,13 +42,14 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).not.toContain("'wa-request-close'");
   });
 
-  it('lets Web Awesome own TicketReader dismissal and completes state changes after hide', () => {
+  it('lets Kerf request TicketReader dismissal and completes state changes after native close', () => {
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-hide',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
+      /delegateCapture\(document\.body,'kui-request-close',INSPECTOR_AND_EDITOR_TARGETS\.ticketReaderDialog\.selector/,
     );
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-after-hide',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
+      /delegateCapture\(document\.body,'close',INSPECTOR_AND_EDITOR_TARGETS\.ticketReaderDialog\.selector/,
     );
+    expect(source).toContainSource('wireDialogStack(appRoot)');
     expect(source).not.toMatch(
       /delegate(?:Capture)?\(document\.body,'keydown',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
     );

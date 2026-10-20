@@ -3630,14 +3630,14 @@ test('opens the TicketReader dialog when its entry is chosen from the catalog si
   await expect(page).toHaveURL('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
   await expect(reader).toBeVisible();
-  await expect(reader.locator('dialog:modal')).toHaveCount(1);
+  await expect(reader).toHaveJSProperty('open', true);
 });
 
-test('lets the TicketReader native dialog complete dismissal before leaving the demo', async ({ page }) => {
+test('closes the TicketReader modal when leaving its demo', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
   await expect(reader).toBeVisible();
-  await expect(reader.locator('dialog:modal')).toHaveCount(1);
+  await expect(reader).toHaveJSProperty('open', true);
   await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-info-panel');
   await expect(reader).toHaveCount(0);

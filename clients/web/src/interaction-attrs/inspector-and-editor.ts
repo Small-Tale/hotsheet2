@@ -59,6 +59,7 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   editBlockedReason: attr('data-edit-blocked-reason', 'true'),
   blockedReasonField: attr('name', 'blocked-reason'),
   ticketReader: attr('data-component', 'ticket-reader'),
+  ticketReaderDialog: attr('data-reader-dialog', ''),
   ticketInspectorHeader: attr('data-component', 'ticket-inspector-header'),
   ticketInspectorBody: attr('data-component', 'ticket-inspector-body'),
 } as const;

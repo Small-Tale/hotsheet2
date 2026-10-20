@@ -281,17 +281,13 @@ describe('content components', () => {
     expect(markup).toContain('aria-label="Notes, 1 note" class="kui-text" data-component="text"');
     expect(markup).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">1<\/span>/);
     expect(markup).toContain('data-has-count="true"');
-    expect(markup).toContain('<wa-dialog');
-    expect(markup).toContain('label="Read and edit HS2-TEST"');
+    expect(markup).toContain('<dialog');
+    expect(markup).toContain('aria-label="Read and edit HS2-TEST"');
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-large-text="false"');
     expect(markup).toContain('data-inspector-tab="attachments"');
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
-    expect(readerCss).toMatch(
-      /\.ticket-reader-dialog \{[^}]*--width: min\(remify\(1024px\), calc\(100vw - remify\(48px\)\)\)/,
-    );
-    expect(readerCss).not.toMatch(/\.ticket-reader-dialog \{[^}]*\b(?:display|height):/);
-    expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - remify\(48px\)\);/);
+    expect(readerCss).not.toMatch(/::part|--width|--ticket-reader-offset|inset-inline/);
     // Large text sets the shared reading-size tokens on the reader's own root; the reading surfaces inside
     // scale themselves and the reader never restyles them (HS2-MGVE50).
     expect(readerCss).toMatchSource(
@@ -312,9 +308,7 @@ describe('content components', () => {
     expect(noteCss).toMatch(
       /\.note-card__feedback-prompt \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* 1em\);/,
     );
-    expect(readerCss).toContainSource(
-      '.ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }',
-    );
+    expect(markup).toContain('data-body-layout="fill"');
   });
 
   it('forwards every shared code-review state through the reader inspector', () => {
@@ -388,7 +382,7 @@ describe('content components', () => {
         stackSize: 3,
       }),
     );
-    expect(markup).toContain('label="Read HS2-LINKED in Other project"');
+    expect(markup).toContain('aria-label="Read HS2-LINKED in Other project"');
     expect(markup).toContain('data-reader-position="2" data-reader-count="3"');
     expect(markup).toContain('<strong>Other project</strong>');
     expect(markup).toMatch(/data-tone="quiet"[^>]*>Reader 2 of 3<\/span>/);

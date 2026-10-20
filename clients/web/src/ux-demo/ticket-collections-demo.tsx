@@ -453,7 +453,7 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
       openReader: (slug) => {
         if (usesCollectionState()) selectCollectionTicket(slug);
         recordCollectionEvent(`Ticket reader opened for ${slug}`);
-        openDemoTicketReader(root);
+        openDemoTicketReader();
       },
       contextMenu: () => {
         const menu = contextMenu.value;

@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
+import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
@@ -65,7 +66,7 @@ import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibi
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketLinkChoice } from '../components/ticket-link-choice-dialog';
-import { showTicketReaderDialog, type TicketReaderDialogElement } from '../components/ticket-reader';
+import { type TicketReaderDialogElement } from '../components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from '../components/ticket-row';
 import { type TrashRetentionDraft } from '../components/trash-settings';
 import { SavedViewContextMenu } from '../components/view-navigation';
@@ -2303,7 +2304,7 @@ export async function startHotSheetWebClient() {
   }
   function readerDialog(id: string) {
     return document.querySelector<TicketReaderDialogElement>(
-      `[data-component="ticket-reader"][data-reader-frame-id="${CSS.escape(id)}"]`,
+      `dialog[data-reader-dialog][data-reader-frame-id="${CSS.escape(id)}"]`,
     );
   }
   function presentTicketReaderDialog(
@@ -2317,9 +2318,7 @@ export async function startHotSheetWebClient() {
     onOpen();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        const dialog = readerDialog(id);
-        if (!dialog) return;
-        showTicketReaderDialog(document, id);
+        if (!readerDialog(id)?.open) return;
         if (afterOpen) afterOpen();
         else focusTopTicketReader();
       }),
@@ -2457,12 +2456,14 @@ export async function startHotSheetWebClient() {
       readerClosing.delete(id);
       if (!saved) return;
       readerApprovedClose.add(id);
-      dialog.open = false;
+      if (id === 'workspace-reader') readerOpen.value = false;
+      else replaceLinkedReaderFrame(id, (frame) => ({ ...frame, open: false }));
     });
   }
   function finishTicketReaderClose(dialog: TicketReaderDialogElement) {
     const id = dialog.dataset.readerFrameId;
-    if (!id) return;
+    // Reordering a native modal stack can also emit close; only a saved dismissal pops a frame.
+    if (!id || !readerApprovedClose.delete(id)) return;
     if (id === 'workspace-reader') {
       const slug = selectedTicket.value?.slug ?? '';
       readerOpen.value = false;
@@ -4026,6 +4027,7 @@ export async function startHotSheetWebClient() {
     workspaceTerminalGroups,
   });
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
+  wireDialogStack(appRoot);
   toastHost.className = 'app-toast-stack';
   (toastHost as HTMLElement & { placement: string }).placement = 'bottom-end';
   document.body.append(toastHost);
@@ -4614,7 +4616,6 @@ export async function startHotSheetWebClient() {
     codeReviewLoading,
     refreshCodeReview,
     readerDialog,
-    readerApprovedClose,
     approveTicketReaderClose,
     finishTicketReaderClose,
     readerLargeText,

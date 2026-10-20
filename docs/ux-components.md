@@ -1373,8 +1373,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   `presentation="reader"` variant, so its sections do not add the 8px margin on top.
   Pending Jira operations sit in a warning `ContentItem` with an inner Kerf `List`; their
   retry and discard controls remain app actions.
-  The reader still uses a raw Web Awesome dialog for controlled stacked layers; Kerf's
-  missing layer API is tracked by KF-XGX98A and HS2-F25C3V.
+  The reader uses Kerf `DialogSurface` controlled stacked layers (KF-XGX98A, HS2-F25C3V).
+  Each layer has a stable identity and native modal presence; the front layer owns focus and
+  modality, while covered layers stay inert. Kerf owns the 1024px preferred width, 24px desktop
+  and 16px phone gutters, viewport height, offsets, and in-dialog overlay host. The app saves
+  edits on `kui-request-close` before clearing the layer's open state.
   **Style ownership (HS2-MGVE50):** each panel styles only its own markup in its own stylesheet —
   `TicketInfoPanel` (`ticket-info-panel__*`), `TicketTimeline` (`ticket-timeline__*`),
   `TicketAttachments` (`ticket-attachments__*`), `TicketCodeReview` (`ticket-code-review--panel`),
