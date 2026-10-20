@@ -13,6 +13,8 @@
 }
 .permission-request-card__description {
   display: grid;
+  width: calc(100% - remify(32px));
+  box-sizing: border-box;
   gap: remify(4px);
   margin: remify(10.4px) remify(16px) 0;
   color: var(--wa-color-neutral-on-quiet);
@@ -30,7 +32,9 @@
   color: var(--wa-color-neutral-on-normal);
 }
 .permission-request-card__description-help {
+  min-width: 0;
   max-width: remify(520px);
+  overflow-wrap: break-word;
 }
 .permission-request-card__actions {
   display: grid;

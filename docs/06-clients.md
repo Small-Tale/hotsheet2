@@ -2788,7 +2788,9 @@ Escape then belongs to the popup as the topmost surface: it acts as Ignore
 (client-only, no decision) and never reaches the modal beneath, so the composer stays open
 (HS2-S8K9BG). When a standalone AI conversation is open, the active permission request
 uses a separate sidecar in that modal's interaction scope. On wide screens the sidecar sits
-beside the conversation; on narrower screens it stacks above a shorter conversation panel.
+beside the conversation; on narrower screens it stacks above a conversation panel that uses
+the lower 40% of the viewport, leaving room for the permission's command, remembered-answer
+name, and decisions. A longer request scrolls within the sidecar.
 Neither surface covers the other's controls, and resolving the request uses the same
 authoritative permission path. Ignoring its popup leaves an unresolved, answerable card in
 the sidecar until the request is decided (HS2-VBG6W5). Standalone conversation dialogs use native light-dismiss and Escape behavior and

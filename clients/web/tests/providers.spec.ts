@@ -19668,6 +19668,17 @@ for (const viewport of [
       })
       .toBe(true);
     await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+    if (viewport.width === 390) {
+      expect(
+        await popup
+          .locator('.permission-request-card__description-help')
+          .evaluate(
+            (node) =>
+              node.getBoundingClientRect().right <=
+              (node.closest('[data-component="permission-request-card"]')?.getBoundingClientRect().right ?? 0) - 8,
+          ),
+      ).toBe(true);
+    }
     await page.screenshot({ path: `target/visual-captures/hs2-vbg6w5-sidecar-${viewport.width}.png` });
   });
 }
@@ -19699,7 +19710,8 @@ for (const viewport of [
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+    // The intentionally long shell popup covers this row before the conversation owns its sidecar.
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').dispatchEvent('click');
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
       sidecar = conversation.locator('.ai-conversation__sidecar'),
