@@ -18,16 +18,19 @@ const streams = vi.hoisted(() => ({
   started: [] as string[],
   stopped: [] as string[],
   onEvents: new Map<string, (response: unknown) => Promise<void>>(),
+  onResync: new Map<string, (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>>(),
 }));
 vi.mock('../project-change-poll', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../project-change-poll')>()),
   startProjectChangeStream: (options: {
     client: { origin?: string };
     onEvents: (response: unknown) => Promise<void>;
+    onResync: (reason: 'initial' | 'reconnect' | 'overflow') => Promise<void>;
   }) => {
     const id = (options.client as unknown as { origin: string }).origin;
     streams.started.push(id);
     streams.onEvents.set(id, options.onEvents);
+    streams.onResync.set(id, options.onResync);
     return () => streams.stopped.push(id);
   },
 }));
@@ -46,6 +49,7 @@ beforeEach(() => {
   streams.started.length = 0;
   streams.stopped.length = 0;
   streams.onEvents.clear();
+  streams.onResync.clear();
   vi.stubGlobal('window', { setTimeout, clearTimeout });
   vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setTimeout(callback, 0));
 });
@@ -132,6 +136,49 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     projects.value = [project('b')];
     owner.syncProjectChangeStreams();
     expect(streams.started).toEqual(['/api/a', '/api/b', '/api/b']);
+  });
+
+  it('change streams: permission events and resyncs refresh only their own project', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      refreshPermissions = vi.fn(async () => undefined),
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get('/api/b')!('reconnect');
+    await streams.onEvents.get('/api/b')!({
+      events: [
+        { kind: 'permission_asked', id: '1' },
+        { kind: 'permission_resolved', id: '2' },
+      ],
+    });
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'permission_asked', id: '3' }] });
+    expect(refreshPermissions.mock.calls).toEqual([['a'], ['b'], ['b'], ['a']]);
+    owner.dispose();
   });
 
   it('change streams: a repository_size event reloads only that project size report (HS2-KKFEY5)', async () => {

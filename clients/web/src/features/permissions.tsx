@@ -102,6 +102,13 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionTimerInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined,
     allowingImmediately = false;
+  const permissionProjectsToRefresh = new Set<string>();
+  const queuePermissionRefresh = (projectId?: string) => {
+    if (projectId === undefined) {
+      permissionRefreshRequested = true;
+      permissionProjectsToRefresh.clear();
+    } else if (!permissionRefreshRequested) permissionProjectsToRefresh.add(projectId);
+  };
   const pendingPermissions = () => permissionInbox.pending();
   const permissionHistory = () => permissionInbox.history();
   const projectPendingPermissions = (projectId = selectedProjectId.value) =>
@@ -117,18 +124,19 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     localStorage.setItem('hotsheet.permission-history', JSON.stringify(permissionInbox.history()));
   };
 
-  async function refreshPermissions() {
+  async function refreshPermissions(projectId?: string) {
     if (permissionPolling) {
-      permissionRefreshRequested = true;
+      queuePermissionRefresh(projectId);
       return;
     }
     permissionPolling = true;
     try {
       const resolutionEpoch = permissionResolutionEpoch;
+      const targets = projectId === undefined ? projects.value : projects.value.filter((item) => item.id === projectId);
       const results = await Promise.all(
-        projects.value.map(async (current) => {
-          // Reconciliation runs on every change-stream resync and permission event, for every open
-          // project: invisible background work that must not drive the server-busy indicator, which
+        targets.map(async (current) => {
+          // Stream events and resyncs reconcile their own project; startup may reconcile every open
+          // project. This invisible background work must not drive the server-busy indicator, which
           // otherwise flashed a generic "Loading…" over unrelated work such as a warm tab switch
           // (HS2-7G3C19).
           const client = new Api(current.apiPath, '', { trackBusy: false });
@@ -150,7 +158,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         }),
       );
       if (resolutionEpoch !== permissionResolutionEpoch) {
-        permissionRefreshRequested = true;
+        queuePermissionRefresh(projectId);
         return;
       }
       const previousPendingKeys = pendingPermissions().map((item) => item.key);
@@ -184,6 +192,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       if (permissionRefreshRequested) {
         permissionRefreshRequested = false;
         void refreshPermissions();
+      } else {
+        const nextProject = permissionProjectsToRefresh.values().next().value;
+        if (nextProject !== undefined) {
+          permissionProjectsToRefresh.delete(nextProject);
+          void refreshPermissions(nextProject);
+        }
       }
     }
   }
@@ -288,7 +302,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         updatePermissionTimer();
         permissionRevision.value += 1;
       }
-      if (noLongerPending) await refreshPermissions();
+      if (noLongerPending) await refreshPermissions(item.projectId);
     }
   }
 

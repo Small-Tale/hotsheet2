@@ -751,6 +751,81 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(serverInFlightCount()).toBe(0);
   });
 
+  it('refreshes only the changed project and retains another project’s pending request', async () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    owner.permissionInbox.reconcile(projects.value[1], [{ id: 2, connection: 'b', tool: 'Edit', action: 'b.ts' }], []);
+    fetchMock.mockImplementation(async () => json([]));
+
+    await owner.refreshPermissions('a');
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/a/permissions', '/api/a/connections']);
+    expect(owner.pendingPermissions().map((item) => item.key)).toEqual(['b:2']);
+  });
+
+  it('coalesces repeated project refreshes without losing interleaved targets or a full refresh', async () => {
+    const owner = createPermissionsController({
+        projects: signal([project('a'), project('b')]),
+        selectedProjectId: signal('a'),
+      }),
+      firstA = deferred<Response>();
+    let held = true;
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/a/permissions' && held) {
+        held = false;
+        return firstA.promise;
+      }
+      return json([]);
+    });
+
+    const first = owner.refreshPermissions('a');
+    await owner.refreshPermissions('b');
+    await owner.refreshPermissions('b');
+    await owner.refreshPermissions('a');
+    firstA.resolve(json([]));
+    await first;
+    await vi.waitFor(() => {
+      expect(fetchMock.mock.calls).toHaveLength(6);
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/a/permissions',
+      '/api/a/connections',
+      '/api/b/permissions',
+      '/api/b/connections',
+      '/api/a/permissions',
+      '/api/a/connections',
+    ]);
+
+    const nextA = deferred<Response>();
+    held = true;
+    fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/a/permissions' && held) {
+        held = false;
+        return nextA.promise;
+      }
+      return json([]);
+    });
+    fetchMock.mockClear();
+    const second = owner.refreshPermissions('a');
+    await owner.refreshPermissions('b');
+    await owner.refreshPermissions();
+    nextA.resolve(json([]));
+    await second;
+    await vi.waitFor(() => {
+      expect(fetchMock.mock.calls).toHaveLength(6);
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/a/permissions',
+      '/api/a/connections',
+      '/api/a/permissions',
+      '/api/a/connections',
+      '/api/b/permissions',
+      '/api/b/connections',
+    ]);
+  });
+
   it('reconciles once on start and makes no permission requests while idle (HS2-NKCXW4)', async () => {
     vi.stubGlobal('window', { setInterval, addEventListener: vi.fn() });
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });

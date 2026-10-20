@@ -467,19 +467,20 @@ test('a stream-triggered permission reconciliation in flight across a warm switc
   await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
   await workspace.clearBusyLog();
 
-  // A permission event on any project's change stream reconciles permissions for every open project
-  // (the same reconciliation every stream resync runs). Park one of its reads so it is provably still
-  // in flight while the user switches to a warm project.
-  workspace.gate(1, '/permissions');
+  // A permission event reconciles only its own project. Park that read so it is provably still
+  // in flight while the user switches to another warm project.
+  const otherBefore = workspace.requestsFor(1, '/permissions');
+  workspace.gate(2, '/permissions');
   await workspace.emit(2, 'permission_asked');
-  await workspace.gateReached(1, '/permissions');
+  await workspace.gateReached(2, '/permissions');
   workspace.hold(1);
   await switchTo(workspace, 1);
   await expect(workspace.ticketRow('HS2-P1A')).toBeVisible({ timeout: 250 });
   await expect(workspace.loading).toHaveCount(0);
   await workspace.release(1);
-  await workspace.openGate(1, '/permissions');
+  await workspace.openGate(2, '/permissions');
   await page.waitForTimeout(600);
+  expect(workspace.requestsFor(1, '/permissions')).toBe(otherBefore);
   // Background reconciliation is invisible work: no busy bars or "Loading…" label at any point.
   expect(await workspace.busyLog()).toEqual([]);
 });

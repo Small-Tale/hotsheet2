@@ -2724,7 +2724,10 @@ The local Allow/Deny path has the same immediate behavior: it optimistically rem
 request and records the presumed decision before awaiting transport. Only a communication
 failure rolls that history back and restores the popup with an inline error, so network
 latency never invites repeated clicks.
-There is no permission polling timer (HS2-NKCXW4). Besides those events, permission state
+There is no permission polling timer (HS2-NKCXW4). Permission events and stream resyncs
+refresh only the project that emitted them; overlapping refreshes coalesce repeated
+project requests without dropping another project's pending reconciliation (HS2-EKATJK).
+Startup can still reconcile every open project. Besides those events, permission state
 reconciles only when a project's change stream (re)establishes continuity: its first
 handshake, a fresh handshake after an outage, or an overflowed replay. A missed event is
 therefore repaired by the reconnect that follows the outage that hid it, while an idle

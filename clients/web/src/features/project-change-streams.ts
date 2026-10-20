@@ -251,7 +251,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           // after an outage or overflow (opening the project already loaded them).
           onResync: async (reason) => {
             await Promise.all([
-              refreshPermissions(),
+              refreshPermissions(current.id),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
@@ -299,7 +299,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             if (
               response.events.some((event) => event.kind === 'permission_asked' || event.kind === 'permission_resolved')
             )
-              await refreshPermissions();
+              await refreshPermissions(current.id);
             // A remembered answer was added or revoked, possibly by another client (HS2-KYK1S7).
             if (response.events.some((event) => event.kind === 'permission_rules_changed'))
               permissionRulesChanged(current.id);
