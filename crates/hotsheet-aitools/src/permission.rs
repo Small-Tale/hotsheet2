@@ -76,6 +76,31 @@ fn safe_bash_description(tool: &str, action: &str) -> Option<&'static str> {
     }
 }
 
+/// Classify non-command tool requests without saving their path, URL, query, or input.
+/// The action is used only by Bash's allowlisted command classifier.
+fn safe_permission_description(tool: &str, action: &str) -> Option<&'static str> {
+    if tool.eq_ignore_ascii_case("bash") {
+        return safe_bash_description(tool, action);
+    }
+    match tool.to_ascii_lowercase().as_str() {
+        "read" => Some("Read file"),
+        "write" => Some("Write file"),
+        "edit" | "multiedit" | "notebookedit" | "filechange" => Some("Edit file"),
+        "webfetch" => Some("Fetch web page"),
+        "websearch" => Some("Search web"),
+        "glob" => Some("Find files"),
+        "grep" => Some("Search file contents"),
+        _ => None,
+    }
+}
+
+fn valid_rule_description(tool: &str, description: &str) -> bool {
+    if tool.eq_ignore_ascii_case("bash") {
+        return valid_bash_description(description);
+    }
+    safe_permission_description(tool, "") == Some(description)
+}
+
 fn valid_bash_description(description: &str) -> bool {
     const ALLOWED: &[&str] = &[
         "Run npm lint script",
@@ -567,9 +592,9 @@ impl PermissionBridge {
             .into_iter()
             .filter_map(|mut rule| {
                 rule.action = stored_action_key(&rule.action, &self.action_key)?;
-                rule.description = rule.description.filter(|value| {
-                    rule.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value)
-                });
+                rule.description = rule
+                    .description
+                    .filter(|value| valid_rule_description(&rule.tool, value));
                 Some(rule)
             })
             .collect();
@@ -652,7 +677,7 @@ impl PermissionBridge {
                     .filter(|value| {
                         req.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
                     })
-                    .or_else(|| safe_bash_description(&req.tool, &req.action))
+                    .or_else(|| safe_permission_description(&req.tool, &req.action))
                     .map(str::to_owned),
                 decision,
                 persist: scope == Scope::Always,
@@ -1286,9 +1311,9 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
         .into_iter()
         .filter_map(|mut rule| {
             rule.action = stored_action_key(&rule.action, &key)?;
-            rule.description = rule.description.filter(|value| {
-                rule.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value)
-            });
+            rule.description = rule
+                .description
+                .filter(|value| valid_rule_description(&rule.tool, value));
             Some(rule)
         })
         .collect();
@@ -1384,7 +1409,7 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
     stored.action = action_key;
     stored.description = stored
         .description
-        .filter(|value| stored.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value));
+        .filter(|value| valid_rule_description(&stored.tool, value));
     rules.push(stored);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1422,6 +1447,49 @@ mod tests {
             assert_eq!(safe_bash_description("Bash", action), None, "{action}");
         }
         assert_eq!(safe_bash_description("WebFetch", "npm test"), None);
+    }
+
+    #[test]
+    fn non_command_descriptions_use_fixed_words_and_survive_a_durable_reload() {
+        let secret = "https://private.example/path?token=secret";
+        assert_eq!(
+            safe_permission_description("WebFetch", secret),
+            Some("Fetch web page")
+        );
+        assert_eq!(
+            safe_permission_description("Read", "/private/customer.txt"),
+            Some("Read file")
+        );
+        assert_eq!(safe_permission_description("UnknownTool", secret), None);
+        assert!(!valid_rule_description("WebFetch", secret));
+        assert!(!valid_rule_description("Read", "Fetch web page"));
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        let mut bridge = PermissionBridge::new();
+        bridge.set_action_key_and_rules(action_key_for(&path).unwrap(), Vec::new());
+        let id = match bridge.request_for_project("p", "chat", "WebFetch", secret) {
+            Outcome::Pending(id) => id,
+            _ => panic!("new action must ask"),
+        };
+        let rule = bridge
+            .resolve(id, Decision::Allow, Scope::Always)
+            .unwrap()
+            .persisted_rule
+            .unwrap();
+        assert_eq!(rule.description.as_deref(), Some("Fetch web page"));
+        append_rule(&path, &rule).unwrap();
+        assert_eq!(
+            load_rules(&path)[0].description.as_deref(),
+            Some("Fetch web page")
+        );
+        assert!(!std::fs::read_to_string(&path).unwrap().contains(secret));
+
+        let mut tampered: Vec<StoredRule> =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        tampered[0].description = Some(secret.into());
+        std::fs::write(&path, serde_json::to_vec(&tampered).unwrap()).unwrap();
+        assert_eq!(load_rules(&path)[0].description, None);
     }
 
     #[test]

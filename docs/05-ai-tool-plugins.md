@@ -944,11 +944,12 @@ the lifetime; a duration edit keeps the answer and changes only a project-wide r
 Chat rules cannot change duration. Durable changes are written to the rule file before
 the in-memory answer or lifetime changes, and a failed write leaves the live rule intact. Settings →
 Permissions lists only the selected project's remembered answers by tool, scope,
-decision, and a short fingerprint identifier. New Bash rules also carry a fixed-vocabulary
-operation description for common commands (for example, npm lint or Rust tests); it never
-copies arguments, paths, or arbitrary command text. Older rules and unrecognized commands
-retain the fingerprint-only label; a safe way to identify those entries is tracked in
-HS2-KSY290. Full command/path details remain hidden and each rule is
+decision, and a short fingerprint identifier. New rules carry a fixed-vocabulary
+operation synopsis for recognized tools (for example, npm lint, reading a file, or fetching a
+web page); it never copies arguments, paths, URLs, or arbitrary command text. Older rules and
+unrecognized commands cannot recover their original prompt from the fingerprint. Settings
+states that limit explicitly; deleting an old answer makes its next matching request ask again.
+Full command/path details remain hidden and each rule is
 revocable. Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
 for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
@@ -973,11 +974,11 @@ project scope that the page already establishes; filtered dialog rows use the ac
 instead (HS2-BH6GCG, HS2-ZQZ3V2).
 Each row retains its tool and short action fingerprint so distinct private commands
 remain distinguishable, including at phone width where the center of a long label
-truncates first; a safe operation description appears when available, and the repeated
+truncates first; a safe operation synopsis appears when available, and the repeated
 privacy reminder appears only in the label's tooltip.
-An unidentified project-wide Bash answer has no recoverable command text. Its row menu offers
-**Forget and Ask Again**: the existing fingerprint is revoked, and the next matching use
-shows the full command in a new permission prompt. The person can then choose an optional
+An older project-wide Bash answer without a synopsis has no recoverable command text. Deleting
+its existing fingerprint makes the next matching use show the full command in a new permission
+prompt. The person can then choose an optional
 fixed-vocabulary label before remembering the answer. The server rejects free text and
 labels on one-time or non-Bash answers; durable files and the rule-list API retain only
 the HMAC fingerprint and validated label. A command never used again remains unidentified

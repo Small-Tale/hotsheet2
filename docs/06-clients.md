@@ -2694,9 +2694,9 @@ already conveyed by the selected filters, and the duplicate result-count line is
 the unfiltered preview still names each answer's decision and lifetime (HS2-7Z3VWR,
 HS2-ZQZ3V2).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
-its leading icon slot. New Bash answers show a fixed-vocabulary operation description where
-available, plus their short fingerprint; older answers keep the fingerprint-only label. The
-unidentified project-wide Bash answer can be deleted and asked again on its next use. The permission
+its leading icon slot. New answers for recognized tools show a fixed-vocabulary operation synopsis
+plus their short fingerprint. Older entries without a synopsis say the original prompt is
+unavailable; a project-wide Bash answer can be deleted and asked again on its next use. The permission
 prompt shows the real command and offers an optional safe label for a remembered answer;
 one-time answers ignore that selector. Labels use a fixed list and never contain command
 arguments or paths (HS2-KSY290). The

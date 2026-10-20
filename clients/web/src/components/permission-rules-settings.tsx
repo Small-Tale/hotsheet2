@@ -91,7 +91,9 @@ function ruleLabel(rule: PermissionRule) {
   const fingerprint = /^hmac-sha256:v2:[a-f0-9]{16}:[a-f0-9]{64}$/.test(rule.action)
     ? rule.action.slice(-8)
     : undefined;
-  const detail = rule.description ? `${rule.tool} · ${rule.description}` : `${rule.tool} request`;
+  const detail = rule.description
+    ? `${rule.tool} · ${rule.description}`
+    : `${rule.tool} · ${rule.tool.toLowerCase() === 'bash' ? 'saved command' : 'saved action'}`;
   return fingerprint ? `${detail} · ${fingerprint}` : detail;
 }
 
@@ -123,8 +125,8 @@ export function PermissionRulesSettings({
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule),
-        unidentifiedBash = rule.tool.toLowerCase() === 'bash' && !rule.description,
-        reapprovalAvailable = unidentifiedBash && rule.scope !== 'chat',
+        promptUnavailable = !rule.description,
+        reapprovalAvailable = promptUnavailable && rule.tool.toLowerCase() === 'bash' && rule.scope !== 'chat',
         selected = surface === 'dialog' ? dialogSelected.has(key) : previewSelected.has(key),
         busy = surface === 'dialog' ? dialog?.busy : preview?.busy;
       return (
@@ -152,17 +154,17 @@ export function PermissionRulesSettings({
               description={
                 surface === 'dialog'
                   ? [
-                      unidentifiedBash ? 'Unidentified command' : undefined,
+                      promptUnavailable ? 'Original prompt unavailable' : undefined,
                       rule.scope === 'chat' ? SCOPE_LABELS.chat : undefined,
                     ]
                       .filter(Boolean)
                       .join(' · ') || undefined
-                  : `${unidentifiedBash ? 'Unidentified command · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`
+                  : `${promptUnavailable ? 'Original prompt unavailable · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`
               }
               title={
                 reapprovalAvailable
                   ? `${label} — The old command cannot be recovered from its fingerprint. Forget this answer to review the command on its next use and choose a safe label when remembering it again.`
-                  : `${label} — Full action details hidden to protect sensitive values`
+                  : `${label} — ${promptUnavailable ? 'The original prompt cannot be recovered from its fingerprint.' : 'Full action details hidden to protect sensitive values.'}`
               }
               pressed={selected}
               disabled={busy || revoking.includes(key)}

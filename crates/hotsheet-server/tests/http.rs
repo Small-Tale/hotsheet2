@@ -15274,6 +15274,59 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 }
 
 #[tokio::test]
+async fn remembered_web_request_lists_only_a_safe_synopsis() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let rules = dir.path().join("permissions.json");
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules);
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let project = dir.path().display().to_string();
+    let private_url = "https://private.example/path?token=secret";
+    let bt = bridge.clone();
+    let waiter = std::thread::spawn(move || {
+        bt.request_blocking_for_project(project, "c", "WebFetch", private_url)
+    });
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(response).await.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await["persisted"], true);
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    let listed = body_json(
+        app.oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["description"], "Fetch web page");
+    assert!(!listed.to_string().contains(private_url));
+    assert!(
+        !std::fs::read_to_string(rules)
+            .unwrap()
+            .contains(private_url)
+    );
+}
+
+#[tokio::test]
 async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() {
     const ACTION: &str = "curl https://private.example/token=secret";
     let dir = tempfile::tempdir().unwrap();

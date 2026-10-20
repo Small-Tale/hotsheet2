@@ -15195,7 +15195,7 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
-  await expect(row).toContainText(`Bash request · ${rememberedActionKey(secretAction).slice(-8)}`);
+  await expect(row).toContainText(`Bash · saved command · ${rememberedActionKey(secretAction).slice(-8)}`);
   await expect(row).toContainText('Allowed · This chat only, until it closes');
   await expect(row).not.toContainText('Details hidden');
   await expect(row).not.toContainText('example-private-value');
@@ -15270,7 +15270,7 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
-  await expect(remembered).toContainText('Unidentified command');
+  await expect(remembered).toContainText('Original prompt unavailable');
   await remembered.locator('[data-permission-rule] [data-action="select-permission-rule-row"]').first().click();
   await remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
   await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
@@ -15337,6 +15337,7 @@ test('previews three recent permission answers and searches the scrollable full 
     scope: index % 2 ? 'session' : 'always',
   }));
   rules[10].description = 'Run npm unit tests';
+  rules[11].description = 'Fetch web page';
   rules.push({
     project: '/work/other.hs2',
     tool: 'OtherProjectTool',
@@ -15362,7 +15363,9 @@ test('previews three recent permission answers and searches the scrollable full 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await expect(recent).toContainText('WebFetch · Fetch web page · 00000011');
   await expect(recent).toContainText('Bash · Run npm unit tests · 00000010');
+  await expect(recent).toContainText('Original prompt unavailable');
   await expect(recent.locator('[data-component="list-item"]')).toHaveCount(3);
   await expect(recent.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(3);
   const deniedBackground = await recent
@@ -15400,6 +15403,11 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(dialog).not.toContainText('6 answers');
   await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
+  await expect(all).toContainText('Original prompt unavailable');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-b36gnr-dialog-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-b36gnr-dialog-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await search.fill('unit tests');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
   await search.clear();
@@ -15433,7 +15441,7 @@ test('previews three recent permission answers and searches the scrollable full 
   await search.fill('WebFetch');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
-  await all.getByRole('button', { name: 'Select WebFetch request · 00000001' }).click();
+  await all.getByRole('button', { name: 'Select WebFetch · saved action · 00000001' }).click();
   await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
@@ -15979,7 +15987,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
-  await preview.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await preview.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
   await page
     .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
     .getByRole('button', { name: 'Selected Answer Actions' })
@@ -15998,7 +16006,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   ).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: 'Permanent', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-btptwk-persistent-wide.png' });
-  await dialog.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await dialog.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
   await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
   await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
@@ -16017,7 +16025,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText('Session (until restart)');
-  await preview.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await preview.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
   await page
     .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
     .getByRole('button', { name: 'Selected Answer Actions' })
@@ -16100,10 +16108,14 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   await first.page.getByRole('menuitem', { name: 'Delete Selected' }).click();
   await first.remembered.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
+  await expect(second.remembered).toContainText(
+    `Bash · saved command · ${rememberedActionKey('npm run lint').slice(-8)}`,
+  );
   await publishRulesChanged(second);
   await expect(second.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).not.toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
+  await expect(second.remembered).not.toContainText(
+    `Bash · saved command · ${rememberedActionKey('npm run lint').slice(-8)}`,
+  );
   // Exactly one refetch, and no polling while nothing changes.
   expect(second.reads.count).toBe(secondReads + 1);
   await second.page.waitForTimeout(1_500);
@@ -16113,7 +16125,9 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   rules = [...rules, rule('cargo test')];
   await expect.poll(() => second.polls.length).toBeGreaterThan(0);
   await publishRulesChanged(second);
-  await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('cargo test').slice(-8)}`);
+  await expect(second.remembered).toContainText(
+    `Bash · saved command · ${rememberedActionKey('cargo test').slice(-8)}`,
+  );
   expect(second.reads.count).toBe(secondReads + 2);
   await second.remembered.screenshot({ path: 'target/visual-captures/hs2-kyk1s7-second-client-rules-1280.png' });
   for (const context of contexts) await context.close();

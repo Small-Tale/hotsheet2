@@ -278,7 +278,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).not.toContain('aria-label="Revoke');
     expect(markup).toContain('data-scope="session"');
     expect(markup).toContain('data-scope="always"');
-    expect(markup).toContain('WebFetch request · 00000011');
+    expect(markup).toContain('WebFetch · saved action · 00000011');
     expect(markup).toContain('Show all 12 answers');
     const disclosure = markup.match(
       /<button class="kui-button"[^>]*data-action="open-permission-rules"[^>]*>[^]*?<\/button>/u,
@@ -487,11 +487,11 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
         message: 'Could not revoke the rule.',
       }),
     );
-    expect(markup).toContain('Bash request · 12345678');
+    expect(markup).toContain('Bash · saved command · 12345678');
     expect(markup).toContain('data-truncate="middle"');
     expect(markup).toContain('kui-text__truncate-tail">12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Unidentified command · Denied · Persistent');
+    expect(markup).toContain('Original prompt unavailable · Denied · Persistent');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
@@ -519,5 +519,22 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
       expect(markup).toContain('Full action details hidden to protect sensitive values');
     }
     expect(permissionRulesList([rule], 'unit tests', 100).rows).toEqual([rule]);
+  });
+  it('shows a safe tool synopsis and explains when an older fingerprint has no prompt', () => {
+    const action = `hmac-sha256:v2:${'a'.repeat(16)}:${'b'.repeat(56)}12345678`;
+    const known: PermissionRule = {
+      project: '/p',
+      tool: 'WebFetch',
+      action,
+      description: 'Fetch web page',
+      decision: 'allow',
+      scope: 'always',
+    };
+    const legacy: PermissionRule = { ...known, action: `${action.slice(0, -8)}87654321`, description: undefined };
+    const markup = String(PermissionRulesSettings({ rules: [known, legacy] }));
+    expect(markup).toContain('WebFetch · Fetch web page · 12345678');
+    expect(markup).toContain('WebFetch · saved action · 87654321');
+    expect(markup).toContain('Original prompt unavailable');
+    expect(markup).not.toContain('private.example');
   });
 });
