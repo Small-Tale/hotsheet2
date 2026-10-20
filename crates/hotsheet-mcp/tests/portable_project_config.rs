@@ -14,7 +14,11 @@ fn portable_project_entry_opens_its_linked_store_and_lists_tools() {
     let nested = project.join("src");
     std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
     std::fs::create_dir_all(&nested).unwrap();
-    std::fs::write(project.join(".hotsheet2/store"), format!("{}\n", store.display())).unwrap();
+    std::fs::write(
+        project.join(".hotsheet2/store"),
+        format!("{}\n", store.display()),
+    )
+    .unwrap();
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
         .arg("--path")
@@ -30,10 +34,18 @@ fn portable_project_entry_opens_its_linked_store_and_lists_tools() {
         .spawn()
         .unwrap();
     let mut stdin = child.stdin.take().unwrap();
-    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{{}}}}"#).unwrap();
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{{}}}}"#
+    )
+    .unwrap();
     drop(stdin);
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(reply["id"], 1);
     assert!(reply["result"]["tools"].as_array().is_some());
