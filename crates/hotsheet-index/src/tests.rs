@@ -1024,20 +1024,24 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
         "flag on after a feedback_needed note"
     );
 
-    // A later regular note is the response and clears the unresolved feedback state.
-    ops::add_note(
+    // A linked regular note answers this independently tracked request.
+    ops::add_note_with_metadata(
         &store,
         &id,
         ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1"),
         Timestamp::new("2026-08-19T02:00:00Z"),
         NoteKind::Regular,
+        ops::NoteMetadataInput {
+            response_to: Some("01ARZ3NDEKTSV4RRFFQ69G5FC0".into()),
+            ..Default::default()
+        },
         "confirmed".into(),
     )
     .unwrap();
     ix.reconcile(&store).unwrap();
     assert!(
         !row(&ix).feedback_needed,
-        "flag clears after a later regular response"
+        "flag clears after a linked response"
     );
 }
 
