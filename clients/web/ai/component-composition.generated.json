@@ -3171,7 +3171,7 @@
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
-      "purpose": "Three newest remembered permission answers for the current project, with concise duration labels, distinct private action fingerprints, a searchable paged full-list dialog, individual revoke actions, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV).",
+      "purpose": "Three newest remembered permission answers for the current project under a Kerf ListHeader, with concise duration labels, distinct private action fingerprints, a searchable paged full-list dialog, individual revoke actions, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV, HS2-KHKM0W).",
       "publicExports": [
         {
           "name": "PermissionRulesSettings"

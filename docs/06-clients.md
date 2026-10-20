@@ -2665,7 +2665,8 @@ Deny HTTP response is still in flight; a delayed response is idempotent and cann
 resurrect or duplicate the resolved request. A `permission_rules_changed` event marks that
 project's remembered answers stale; a shown Settings → Permissions list refetches them once,
 including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
-The settings view previews the three most recently remembered answers, newest first. Show all
+The settings view uses a Kerf ListHeader for the Remembered answers section and previews
+the three most recently remembered answers, newest first. Show all
 opens a searchable dialog with five answers per page, still newest first; search covers only
 the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or
 path. Search changes start at page one, and add/revoke updates clamp the current page. Closing

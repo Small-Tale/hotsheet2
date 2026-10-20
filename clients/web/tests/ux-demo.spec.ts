@@ -798,6 +798,20 @@ test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-
   await expect(dialog).toHaveCount(0);
 });
 
+test('shows the remembered answers under a Kerf ListHeader (HS2-KHKM0W)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  const header = example.locator('[data-component="list-header"]');
+  await expect(header.getByRole('heading', { name: 'Remembered Answers', level: 3 })).toBeVisible();
+  await expect(example.getByRole('list', { name: 'Recent Remembered Answers' })).toBeVisible();
+  await example.screenshot({ path: 'target/visual-captures/hs2-khkm0w-remembered-answers-wide.png' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(header).toBeVisible();
+  await example.screenshot({ path: 'target/visual-captures/hs2-khkm0w-remembered-answers-narrow.png' });
+});
+
 test('lets the remembered-answer demo edit and confirm deletion of a selected page (HS2-C057G5)', async ({ page }) => {
   await page.goto('/ux-demo?component=permission-rules-settings');
   const example = page.locator('[data-demo-permission-rules]');

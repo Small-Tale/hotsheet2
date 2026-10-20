@@ -293,14 +293,14 @@ const permissionRulesDemoDialog = signal<
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
 
-/** Remembered permission answers (HS2-JNHAYB): empty, listed, and a revoke in flight with an error. */
+/** Remembered permission answers: Kerf ListHeader with empty, listed, and revoke-error states. */
 export function PermissionRulesSettingsDemo() {
   return (
     <>
       <CatalogExample label="No Remembered Answers">
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
-      <CatalogExample label="Chat, Session, and Always Rules">
+      <CatalogExample label="ListHeader with Chat, Session, and Always Rules">
         <div data-demo-permission-rules>
           <PermissionRulesSettings rules={permissionRulesDemoRules.value} dialog={permissionRulesDemoDialog.value} />
         </div>

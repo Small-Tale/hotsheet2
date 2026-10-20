@@ -256,6 +256,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
 
   it('shows the newest three and a route to all answers', () => {
     const markup = String(PermissionRulesSettings({ rules }));
+    expect(markup).toMatch(/data-component="list-header"[^]*<h3[^>]*>[^]*Remembered Answers/u);
     expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
     expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(3);
     expect(markup).toContain('data-scope="session"');

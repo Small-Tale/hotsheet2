@@ -5,6 +5,7 @@ import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
@@ -148,9 +149,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
       aria-label="Remembered Permission Answers"
     >
       <List gap="xs">
-        <Text variant="h3" size="compact">
-          Remembered answers
-        </Text>
+        <ListHeader label="Remembered Answers" headingLevel={3} density="compact" />
         {rules.length === 0 ? (
           <EmptyState
             icon={<LucideIcon size="xl" icon={ShieldCheck} name="shield-check" />}
