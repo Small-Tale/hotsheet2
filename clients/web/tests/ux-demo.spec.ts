@@ -580,7 +580,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ai-feedback-dialog', 1],
     ['manual-model-dialog', 1],
     ['connection-details-dialog', 1],
-    ['notification-card', 5],
+    ['notification-card', 6],
     ['corrupt-ticket-inspector', 3],
     ['halted-session-popup', 1],
     ['content-transition', 2],
