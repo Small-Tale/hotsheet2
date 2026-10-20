@@ -188,17 +188,19 @@ describe('AIConversation', () => {
     expect(markup).toContain('Download 2 Messages…');
     expect(markup).toContain('data-conversation-context-action="copy"');
     expect(markup).toContain('data-conversation-context-action="download"');
-    // DialogSurface's fill-last body layout needs the transcript after the transient menu.
+    // DialogSurface's fill-last body layout needs the transcript after a stable menu host.
+    expect(markup).toContain('data-key="ai-conversation-menu-host"');
     expect(markup.indexOf('data-context-menu="conversation"')).toBeLessThan(
       markup.indexOf('ai-conversation__transcript'),
     );
     const embeddedMarkup = String(AIConversation({ ...props, presentation: 'embedded' }));
+    expect(embeddedMarkup).toContain('data-key="ai-conversation-menu-host"');
     expect(embeddedMarkup.indexOf('data-context-menu="conversation"')).toBeLessThan(
       embeddedMarkup.indexOf('ai-conversation__transcript'),
     );
-    expect(String(AIConversation({ ...props, selectionId: 'chat-b' }))).not.toContain(
-      'data-context-menu="conversation"',
-    );
+    const withoutMenu = String(AIConversation({ ...props, selectionId: 'chat-b' }));
+    expect(withoutMenu).not.toContain('data-context-menu="conversation"');
+    expect(withoutMenu).toContain('data-key="ai-conversation-menu-host"');
   });
 
   it('renders permission-paused activity before its later assistant result', () => {

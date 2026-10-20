@@ -742,7 +742,12 @@ export function AIConversation(props: AIConversationProps) {
         scrollClearance="block-end"
         flex={presentation === 'embedded' ? flex(1, 1, px(0)) : undefined}
         className="ai-conversation__transcript"
-        rootAttributes={{ role: 'region', 'aria-label': 'Conversation Transcript', 'aria-live': 'polite' }}
+        rootAttributes={{
+          role: 'region',
+          'aria-label': 'Conversation Transcript',
+          'aria-live': 'polite',
+          'data-key': 'ai-conversation-transcript',
+        }}
       >
         <div class="ai-conversation__transcript-content">
           {messages.length === 0 && (
@@ -859,7 +864,9 @@ export function AIConversation(props: AIConversationProps) {
             render in the drawer's tab toolbar through AIConversationToolbar (HS2-DMH8MX, HS2-59F7WK). */}
         {savedNotice}
         {selectionStatus}
-        {contextMenu}
+        <div data-key="ai-conversation-menu-host" style="display:contents">
+          {contextMenu}
+        </div>
         {transcript}
         {composer}
       </section>
@@ -916,7 +923,9 @@ export function AIConversation(props: AIConversationProps) {
       {savedNotice}
       {selectionStatus}
       {/* Keep the transcript last: DialogSurface's fill-last layout gives that child the scrollport. */}
-      {contextMenu}
+      <div data-key="ai-conversation-menu-host" style="display:contents">
+        {contextMenu}
+      </div>
       {transcript}
     </DialogSurface>
   );
