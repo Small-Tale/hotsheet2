@@ -13,7 +13,7 @@ import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
-import { ChevronRight, Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -214,11 +214,16 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               {ruleRows(ordered.slice(0, 3))}
             </List>
             {ordered.length > 3 && (
-              <ListItem
-                action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value}
-                label={`Show all ${ordered.length} answers`}
-                trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
-              />
+              <Row hAlign="center" controlInsets="tb">
+                <Button
+                  type="button"
+                  emphasis="secondary"
+                  shape="pill"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value}
+                >
+                  {`Show all ${ordered.length} answers`}
+                </Button>
+              </Row>
             )}
           </>
         )}

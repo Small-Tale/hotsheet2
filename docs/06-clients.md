@@ -2678,8 +2678,9 @@ resurrect or duplicate the resolved request. A `permission_rules_changed` event 
 project's remembered answers stale; a shown Settings → Permissions list refetches them once,
 including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
 The settings view uses a Kerf ListHeader for the Remembered answers section and previews
-the three most recently remembered answers, newest first. A list item with a chevron opens
-the searchable dialog (HS2-Q6GKWQ), which starts with 100 answers in a bounded scrolling list
+the three most recently remembered answers, newest first. A centered, bordered secondary pill
+button, matching Load more tickets, opens the searchable dialog by pointer or keyboard
+(HS2-Q6GKWQ, HS2-CSBW35). The dialog starts with 100 answers in a bounded scrolling list
 and loads another 100 on request, still newest first (HS2-988X4X).
 Two segmented controls filter the dialog by Persistent or Session and by Allow or Disallow,
 defaulting to Persistent and Allow. Session includes chat-only answers, whose exact lifetime

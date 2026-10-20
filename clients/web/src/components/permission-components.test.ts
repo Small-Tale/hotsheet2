@@ -278,6 +278,13 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('WebFetch request · 00000011');
     expect(markup).toContain('Show all 12 answers');
+    const disclosure = markup.match(
+      /<button class="kui-button"[^>]*data-action="open-permission-rules"[^>]*>[^]*?<\/button>/u,
+    )?.[0];
+    expect(disclosure).toContain('data-emphasis="secondary"');
+    expect(disclosure).toContain('data-shape="pill"');
+    expect(disclosure).toContain('Show all 12 answers');
+    expect(markup).not.toContain('data-lucide="chevron-right"');
     expect(markup).not.toContain('00000008');
   });
 

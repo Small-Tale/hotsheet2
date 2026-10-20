@@ -966,3 +966,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: The shared ticket context and More actions menus copy one ticket slug or all selected slugs in selection order, separated by line breaks. Copy stays available for read-only providers and reports clipboard success or failure.
 - Unit: `clients/web/src/components/ticket-row-context-menu.test.ts` checks labels and availability; `clients/web/src/components/ticket-collection-interactions.test.ts` checks selected-target routing.
 - End to end: `clients/web/tests/providers.spec.ts` checks clipboard text for one and multiple selected tickets through the production menu.
+
+### Remembered-answer disclosure button (HS2-CSBW35)
+
+- Behavior: The preview's Show all answers control uses the same centered secondary pill presentation as Load more tickets and opens the full dialog by pointer or keyboard, keeping its bounded pagination.
+- Unit: `clients/web/src/components/permission-components.test.ts` checks the shared button presentation and action.
+- End to end: `clients/web/tests/providers.spec.ts` checks Enter activation, continued list opening and pagination, and wide and phone captures.

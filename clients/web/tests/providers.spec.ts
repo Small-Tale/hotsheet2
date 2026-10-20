@@ -15336,6 +15336,13 @@ test('previews three recent permission answers and searches the scrollable full 
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.screenshot({ path: 'target/visual-captures/hs2-16xphh-settings-2048.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-q40bbv-settings-2048.png', fullPage: true });
+  const wideAfter = await page.screenshot({ path: test.info().outputPath('hs2-csbw35-answers-2048.png') });
+  await test.info().attach('hs2-csbw35-answers-2048', { body: wideAfter, contentType: 'image/png' });
+  await preview.getByRole('button', { name: 'Show all 12 answers' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-dialog-component="permission-rules-dialog"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-dialog-component="permission-rules-dialog"]')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await recent.locator('[data-component="list-item"]').first().click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
@@ -15400,6 +15407,8 @@ test('previews three recent permission answers and searches the scrollable full 
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-phone.png' });
   await preview.screenshot({ path: 'target/visual-captures/hs2-q40bbv-preview-phone.png' });
   await preview.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-preview-phone.png' });
+  const phoneAfter = await preview.screenshot({ path: test.info().outputPath('hs2-csbw35-answers-phone.png') });
+  await test.info().attach('hs2-csbw35-answers-phone', { body: phoneAfter, contentType: 'image/png' });
   await preview.getByRole('button', { name: 'Show all 11 answers' }).click();
   await expect(search).toHaveValue('');
   await page.keyboard.press('Escape');
