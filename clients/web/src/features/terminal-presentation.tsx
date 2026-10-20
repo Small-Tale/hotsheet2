@@ -43,6 +43,7 @@ export interface TerminalPresentationDependencies {
     terminalDashboardSize: Signal<{ width: number; height: number }>;
     terminalFitAcross: Signal<number>;
     terminalFitHigh: Signal<number>;
+    terminalFitPhone: Signal<number>;
     magnifiedTerminalKey: Signal<string | undefined>;
     terminalHiddenKeys: (scope: string) => string[];
     terminalVisibleTypes: (scope: string) => readonly TerminalVisibilityType[];
@@ -100,6 +101,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDashboardSize,
     terminalFitAcross,
     terminalFitHigh,
+    terminalFitPhone,
     magnifiedTerminalKey,
     terminalHiddenKeys,
     terminalVisibleTypes,
@@ -187,6 +189,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           height: terminalDashboardSize.value.height,
           fitAcross: terminalFitAcross.value,
           fitHigh: terminalFitHigh.value,
+          fitPhone: terminalFitPhone.value,
           grouping: 'flow',
           magnifiedKey: magnifiedTerminalKey.value,
           mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,

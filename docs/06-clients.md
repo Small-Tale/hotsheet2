@@ -3000,7 +3000,13 @@ stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to t
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
-changing rows, columns, or glyph proportions. Magnified interactive terminals first fit their font
+changing rows, columns, or glyph proportions. At phone
+grid widths of 600px or less, the Workspace Grid defaults to one card across so the scaled
+80×24 preview fills the available width. Its one-to-three-card zoom preference persists
+separately from the desktop across and short-layout high preferences. A dedicated drawer
+terminal moved into a phone Workspace Grid tile also renders and claims 80×24 rather than
+shrinking the PTY to the tile's fitted cell count (HS2-7VV2KN).
+Magnified interactive terminals first fit their font
 metrics to the available modal frame while keeping the same 80×24 rows and columns. Magnifying a grid tile
 keeps the 80×24 contract in its larger interactive frame. While
 that terminal is magnified, its matching grid card replaces the live preview with a solid

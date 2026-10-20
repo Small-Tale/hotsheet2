@@ -32,6 +32,7 @@ import {
   terminalScrollbackLimit,
   terminalShouldUseWebgl,
   terminalTileLayout,
+  terminalTileSizing,
   terminalUsesMobile80xM,
   terminalViewportClaimsSizing,
   terminalViewportScale,
@@ -209,6 +210,26 @@ describe('terminal viewport protocol', () => {
       TERMINAL_DASHBOARD_FONT_SIZE,
       TERMINAL_DASHBOARD_LINE_HEIGHT,
     ]).toEqual([80, 24, 24, 1.085]);
+  });
+  it('claims 80x24 for phone Workspace Grid tiles while retaining other tile sizing', () => {
+    const server = { cols: 100, rows: 30 },
+      current = { cols: 44, rows: 13 };
+    expect(terminalTileSizing({ cols: 44, rows: 13 }, server, current, true)).toEqual({
+      canClaim: true,
+      grid: { cols: 80, rows: 24 },
+    });
+    expect(terminalTileSizing({ cols: 44, rows: 13 }, server, current, false)).toEqual({
+      canClaim: true,
+      grid: { cols: 44, rows: 12 },
+    });
+    expect(terminalTileSizing({ cols: 30, rows: 9 }, server, current, false)).toEqual({
+      canClaim: false,
+      grid: server,
+    });
+    expect(terminalTileSizing({ cols: 30, rows: 9 }, undefined, current, false)).toEqual({
+      canClaim: false,
+      grid: current,
+    });
   });
   it('bases sizing claims on presentation mode instead of keyboard focus', () => {
     expect(terminalViewportClaimsSizing(true, true)).toBe(true);

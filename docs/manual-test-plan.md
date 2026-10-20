@@ -372,6 +372,11 @@ available, open an AI chat in the terminal drawer and in the conversation dialog
 - On a physical iPhone in Safari, open an image in the media gallery and pinch outward over the media. Confirm that only the media enlarges while the top and bottom controls remain visible and usable.
 - Pan enlarged media with one finger, pinch inward, then repeat after closing and reopening the gallery. Confirm that normal Safari pinch behavior remains available outside the media stage.
 
+## Phone Workspace Grid fit (HS2-7VV2KN)
+
+- With two live terminals on a physical phone, including one first opened in the drawer, open the Workspace Grid. Confirm that one full-width 80×24 preview appears per row, that both terminals remain reachable by vertical scrolling, and that tapping a card still opens the magnified terminal. The drawer terminal must keep an 80×24 PTY claim while shown in the phone grid.
+- Zoom out to two cards across, reload, and confirm the phone preference persists. Zoom back in; switch to a desktop viewport and confirm its grid fit is independent.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

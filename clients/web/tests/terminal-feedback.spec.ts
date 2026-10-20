@@ -886,14 +886,71 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   // Evidence: the terminal still renders content (not empty) on a phone-width viewport.
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  // The tile now shows the drawer's own instance (HS2-EYD24K): scaled, and never driving the PTY size.
+  // The tile now shows the drawer's own instance (HS2-EYD24K). At phone width it claims
+  // the same fixed 80×24 grid as a fresh Workspace Grid tile (HS2-7VV2KN).
   const mobileTile = page
     .getByRole('region', { name: 'Workspace Grid' })
     .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-presentation="tile"]');
   await expect(mobileTile).toHaveAttribute('data-connection', 'connected');
-  await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'false');
+  await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'true');
+  await expect(mobileTile).toHaveAttribute('data-grid-size', '80x24');
+  await expect(mobileTile).toHaveAttribute('data-pty-size', '80x24');
   await expect(mobileTile.locator('.xterm-rows')).not.toBeEmpty();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.getByRole('region', { name: 'Workspace Grid' }).screenshot({
+    path: 'target/visual-captures/hs2-7vv2kn-two-tiles-phone-after.png',
+  });
   await page.screenshot({ path: 'target/visual-captures/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
+});
+
+test('fits one 80x24 terminal per phone grid row and keeps phone zoom separate (HS2-7VV2KN)', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installTerminalFixture(page, false, false, { warmLimit: 0 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
+    preview = dashboard.locator('[data-terminal-key="terminal-feedback:nano"] [data-display-mode="scaled-preview"]');
+  await expect(dashboard).toHaveAttribute('data-fit', '1');
+  await expect(preview).toHaveAttribute('data-grid-size', '80x24');
+  await dashboard.getByRole('button', { name: /Zoom Out/ }).click();
+  await expect(dashboard).toHaveAttribute('data-fit', '2');
+  await page.reload();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await expect(dashboard).toHaveAttribute('data-fit', '2');
+  await dashboard.getByRole('button', { name: /Zoom In/ }).click();
+  await expect(dashboard).toHaveAttribute('data-fit', '1');
+  await expect(preview).toHaveAttribute('data-grid-size', '80x24');
+  await expect(preview).toHaveAttribute('data-pty-size', '80x24');
+  await expect
+    .poll(async () =>
+      preview.evaluate((node) => {
+        const tile = node.closest('.terminal-tile')!,
+          screen = node.querySelector('.xterm-screen')!,
+          frame = node.parentElement!;
+        return {
+          rows: node.querySelectorAll('.xterm-rows > div').length,
+          tileWidth: tile.getBoundingClientRect().width,
+          screenWidth: screen.getBoundingClientRect().width,
+          frameWidth: frame.getBoundingClientRect().width,
+        };
+      }),
+    )
+    .toMatchObject({ rows: 24, tileWidth: 366 });
+  const sizes = await preview.evaluate((node) => ({
+    screen: node.querySelector('.xterm-screen')!.getBoundingClientRect().width,
+    frame: node.parentElement!.getBoundingClientRect().width,
+  }));
+  expect(sizes.screen).toBeGreaterThan(sizes.frame * 0.9);
+  await page.screenshot({ path: 'target/visual-captures/hs2-7vv2kn-phone-after.png' });
+  await page.setViewportSize({ width: 390, height: 600 });
+  await expect(dashboard).toHaveAttribute('data-basis', 'across');
+  await expect(dashboard).toHaveAttribute('data-fit', '1');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(dashboard).toHaveAttribute('data-fit', '4');
+  await page.screenshot({ path: 'target/visual-captures/hs2-7vv2kn-wide-after.png' });
 });
 
 test('a zoomed Workspace Grid terminal keeps 80x24 sizing across zoom, unzoom, zoom (HS2-6179FV)', async ({ page }) => {

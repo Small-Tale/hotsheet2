@@ -20,6 +20,7 @@ import {
   type TerminalPasteDetail,
   type TerminalReadTextDetail,
 } from './terminal-clipboard';
+import { TERMINAL_GRID_PHONE_BREAKPOINT } from './terminal-grid-layout';
 import {
   applyTerminalModifiersToText,
   encodeTerminalKey,
@@ -72,6 +73,7 @@ import {
   terminalShouldUseWebgl,
   terminalSocketStale,
   terminalTileLayout,
+  terminalTileSizing,
   terminalUsesMobile80xM,
   terminalViewportClaimsSizing,
   type TerminalViewportPresentationDetail,
@@ -739,11 +741,22 @@ function initializeTerminalViewport(
       element.style.height = `${frame.clientHeight}px`;
       const size = fit.proposeDimensions();
       if (!size) return;
-      // A very small tile cannot host a usable TUI grid; mirror the existing PTY there.
-      tileCanClaim = size.cols >= 40 && size.rows >= 12;
-      tileGridSize = tileCanClaim
-        ? terminalDedicatedGridSize(size.cols, size.rows)
-        : (serverSize ?? { cols: terminal.cols, rows: terminal.rows });
+      // A phone Workspace Grid always shows the same 80×24 PTY as its fixed dashboard
+      // cards, even when this instance moved here from the dedicated drawer. Scale the
+      // grid into the tile instead of shrinking the PTY to the phone card's cell count.
+      const phoneWorkspaceTile =
+        window.innerWidth <= TERMINAL_GRID_PHONE_BREAKPOINT &&
+        Boolean(element.closest('.terminal-dashboard[data-layout-mode="responsive"]'));
+      // Outside the phone Workspace Grid, a very small tile cannot host a usable TUI grid;
+      // mirror the existing PTY there.
+      const sizing = terminalTileSizing(
+        size,
+        serverSize,
+        { cols: terminal.cols, rows: terminal.rows },
+        phoneWorkspaceTile,
+      );
+      tileCanClaim = sizing.canClaim;
+      tileGridSize = sizing.grid;
       resizeTerminalPreservingScroll(terminal, tileGridSize.cols, tileGridSize.rows);
       element.dataset.geometryReady = 'true';
       layoutTile();

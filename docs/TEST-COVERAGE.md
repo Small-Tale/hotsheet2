@@ -981,3 +981,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/components/attachment-gallery-interactions.test.ts` checks touch and Safari gesture transitions, cancellation, and stage scoping.
 - End to end: `clients/web/tests/ux-demo.spec.ts` pinches the rendered phone gallery and checks media growth, toolbar geometry, and close-button reachability.
 - Manual: `docs/manual-test-plan.md` calls for a real iOS Safari pinch and one-finger pan check.
+
+### Phone Workspace Grid fit (HS2-7VV2KN)
+
+- Behavior: Phone widths start with one 80×24 terminal card across; the one-to-three-card phone zoom setting persists without changing desktop grid fit. A dedicated drawer instance moved into the phone Workspace Grid claims the same 80×24 PTY size.
+- Unit: `clients/web/src/terminal-grid-layout.test.ts` checks phone, short-phone, boundary, and desktop layout choices; `clients/web/src/terminal-viewport.test.ts` checks phone fixed, desktop fitted, and too-small mirrored tile sizing.
+- End to end: `clients/web/tests/terminal-feedback.spec.ts` checks rendered 80×24 rows and PTY size, one/two-card zoom and persistence, short viewport, desktop transition, moved drawer instance, and phone/wide captures.
+- Manual: `docs/manual-test-plan.md` checks the grid on a physical phone with more than one live terminal.

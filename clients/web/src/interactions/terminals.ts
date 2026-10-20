@@ -39,7 +39,12 @@ import {
   terminalEditMenuDismissKey,
   writeClipboardText,
 } from '../terminal-clipboard';
-import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
+import {
+  adjustTerminalFit,
+  TERMINAL_GRID_MAX_PHONE,
+  TERMINAL_GRID_PHONE_BREAKPOINT,
+  terminalGridBasis,
+} from '../terminal-grid-layout';
 import {
   NO_TERMINAL_MODIFIERS,
   TERMINAL_KEY_EVENT,
@@ -72,6 +77,7 @@ export interface TerminalInteractionsDependencies {
   readonly terminalDrawerFitHigh: Signal<number>;
   readonly terminalFitAcross: Signal<number>;
   readonly terminalFitHigh: Signal<number>;
+  readonly terminalFitPhone: Signal<number>;
   terminalPreviewClickTimer: number | undefined;
   readonly terminalSession: (key?: string) => TerminalDashboardSession | undefined;
   readonly clearTerminalHalt: (key: string) => Promise<void>;
@@ -161,6 +167,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalDrawerFitHigh,
     terminalFitAcross,
     terminalFitHigh,
+    terminalFitPhone,
     terminalSession,
     clearTerminalHalt,
     magnifiedTerminalKey,
@@ -242,11 +249,18 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     delegate(document.body, 'click', TERMINALS_ACTIONS.zoomTerminalGrid.selector, (_event, target) => {
       const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
         bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
-        basis = drawer ? 'high' : terminalGridBasis(bounds.height),
+        phone = !drawer && bounds.width <= TERMINAL_GRID_PHONE_BREAKPOINT,
+        basis = drawer ? 'high' : terminalGridBasis(bounds.height, bounds.width),
         direction = data(target).zoomDirection as 'in' | 'out';
       if (drawer) {
         terminalDrawerFitHigh.value = adjustTerminalFit(terminalDrawerFitHigh.value, basis, direction);
         localStorage.setItem('hotsheet.terminals.drawer-fit-high', String(terminalDrawerFitHigh.value));
+      } else if (phone) {
+        terminalFitPhone.value = Math.min(
+          TERMINAL_GRID_MAX_PHONE,
+          adjustTerminalFit(terminalFitPhone.value, 'across', direction),
+        );
+        localStorage.setItem('hotsheet.terminals.fit-phone', String(terminalFitPhone.value));
       } else if (basis === 'across') {
         terminalFitAcross.value = adjustTerminalFit(terminalFitAcross.value, basis, direction);
         localStorage.setItem('hotsheet.terminals.fit-across', String(terminalFitAcross.value));

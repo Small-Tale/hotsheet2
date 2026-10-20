@@ -3,6 +3,9 @@ export const TERMINAL_GRID_MIN_FIT = 1;
 export const TERMINAL_GRID_MAX_ACROSS = 10;
 export const TERMINAL_GRID_MAX_HIGH = 3;
 export const TERMINAL_GRID_DEFAULT_ACROSS = 4;
+export const TERMINAL_GRID_DEFAULT_PHONE = 1;
+export const TERMINAL_GRID_MAX_PHONE = 3;
+export const TERMINAL_GRID_PHONE_BREAKPOINT = 600;
 export const TERMINAL_GRID_DEFAULT_HIGH = 2;
 export const TERMINAL_GRID_GAP = 12;
 export const TERMINAL_GRID_CONTENT_PADDING = 12;
@@ -40,8 +43,13 @@ export function terminalGridContentSize(width: number, height: number, padding =
   return { width: Math.max(1, width - padding * 2), height: Math.max(1, height - padding * 2) };
 }
 
-export function terminalGridBasis(containerHeight: number): TerminalGridBasis {
-  return containerHeight > TERMINAL_GRID_HEIGHT_BREAKPOINT ? 'across' : 'high';
+export function terminalGridBasis(
+  containerHeight: number,
+  containerWidth = Number.POSITIVE_INFINITY,
+): TerminalGridBasis {
+  return containerWidth <= TERMINAL_GRID_PHONE_BREAKPOINT || containerHeight > TERMINAL_GRID_HEIGHT_BREAKPOINT
+    ? 'across'
+    : 'high';
 }
 
 export function clampTerminalFit(value: number, basis: TerminalGridBasis): number {
@@ -55,10 +63,12 @@ export function terminalGridLayout(
   height: number,
   fitAcross: number,
   fitHigh: number,
+  fitPhone = TERMINAL_GRID_DEFAULT_PHONE,
 ): TerminalGridLayout {
-  const basis = terminalGridBasis(height);
-  const fit = clampTerminalFit(basis === 'across' ? fitAcross : fitHigh, basis);
-  const max = basis === 'across' ? TERMINAL_GRID_MAX_ACROSS : TERMINAL_GRID_MAX_HIGH;
+  const phone = width <= TERMINAL_GRID_PHONE_BREAKPOINT;
+  const basis = terminalGridBasis(height, width);
+  const max = phone ? TERMINAL_GRID_MAX_PHONE : basis === 'across' ? TERMINAL_GRID_MAX_ACROSS : TERMINAL_GRID_MAX_HIGH;
+  const fit = Math.min(max, clampTerminalFit(phone ? fitPhone : basis === 'across' ? fitAcross : fitHigh, basis));
   if (basis === 'across') {
     const tileWidth = Math.max(1, Math.floor((Math.max(0, width) - TERMINAL_GRID_GAP * (fit - 1)) / fit));
     return { basis, fit, max, tileWidth, tileHeight: terminalTileHeight(tileWidth) };

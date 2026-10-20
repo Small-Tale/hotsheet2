@@ -1807,6 +1807,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDashboardSize: dimensions,
       terminalFitAcross: signal(2),
       terminalFitHigh: signal(1),
+      terminalFitPhone: signal(1),
       magnifiedTerminalKey: magnified,
       terminalHiddenKeys: () => ['hidden'],
       terminalVisibleTypes: () => ['shell', 'ai', 'chat'],

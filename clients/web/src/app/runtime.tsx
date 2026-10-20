@@ -155,7 +155,11 @@ import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { interleaveByRank } from '../tab-order';
-import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
+import {
+  TERMINAL_GRID_DEFAULT_ACROSS,
+  TERMINAL_GRID_DEFAULT_HIGH,
+  TERMINAL_GRID_DEFAULT_PHONE,
+} from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
@@ -383,7 +387,10 @@ export async function startHotSheetWebClient() {
     terminalFitAcross = signal(
       Number(localStorage.getItem('hotsheet.terminals.fit-across')) || TERMINAL_GRID_DEFAULT_ACROSS,
     ),
-    terminalFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.fit-high')) || TERMINAL_GRID_DEFAULT_HIGH);
+    terminalFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.fit-high')) || TERMINAL_GRID_DEFAULT_HIGH),
+    terminalFitPhone = signal(
+      Number(localStorage.getItem('hotsheet.terminals.fit-phone')) || TERMINAL_GRID_DEFAULT_PHONE,
+    );
   const rememberedRoots = [
       ...new Set(stringArray(tryParseJson(localStorage.getItem('hotsheet.open-projects') || '[]'))),
     ],
@@ -3551,6 +3558,7 @@ export async function startHotSheetWebClient() {
         terminalDashboardSize,
         terminalFitAcross,
         terminalFitHigh,
+        terminalFitPhone,
         magnifiedTerminalKey,
         terminalHiddenKeys,
         terminalVisibleTypes,
@@ -4269,6 +4277,7 @@ export async function startHotSheetWebClient() {
     terminalDrawerFitHigh,
     terminalFitAcross,
     terminalFitHigh,
+    terminalFitPhone,
     terminalSession,
     clearTerminalHalt,
     magnifiedTerminalKey,

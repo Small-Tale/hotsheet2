@@ -36,6 +36,15 @@ describe('terminal grid layout', () => {
     });
   });
 
+  it('uses an independent one-card phone fit across tall and short viewports', () => {
+    expect(terminalGridBasis(708, 390)).toBe('across');
+    expect(terminalGridBasis(300, 390)).toBe('across');
+    expect(terminalGridLayout(366, 708, 4, 2)).toMatchObject({ basis: 'across', fit: 1, max: 3, tileWidth: 366 });
+    expect(terminalGridLayout(366, 300, 4, 2, 2)).toMatchObject({ basis: 'across', fit: 2, max: 3, tileWidth: 177 });
+    expect(terminalGridLayout(600, 300, 4, 2, 10)).toMatchObject({ basis: 'across', fit: 3, max: 3 });
+    expect(terminalGridLayout(601, 300, 4, 2, 1)).toMatchObject({ basis: 'high', fit: 2, max: 3 });
+  });
+
   it('clamps independent counts and maps plus/minus to zoom direction', () => {
     expect(clampTerminalFit(10, 'high')).toBe(3);
     expect(adjustTerminalFit(2, 'across', 'in')).toBe(1);

@@ -152,7 +152,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/components/terminal-drawer.tsx # Drawer create action menu uses Kerf PopupMenu placement and keyboard behavior
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
-    src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
+    src/terminal-grid-layout.ts # Pure workspace tile geometry: desktop 1–10-across/1–3-high, independent phone 1–3-across defaulting to one 80×24 card per row, plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/components/note-card.tsx # Kind-specific NoteCard (re-exports ConfidenceBadge for older imports)
