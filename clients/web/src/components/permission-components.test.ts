@@ -365,15 +365,31 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
         dialog: { query: '00000010', visibleCount: 100, lifetime: 'permanent', decision: 'allow' },
       }),
     );
-    expect(one).toContain('1 answer');
-    expect(one).not.toContain('1 answers');
+    expect(one).not.toMatch(/>1 answers?</u);
+    expect(
+      permissionRulesList(listRules, 'persistent', 100, { lifetime: 'permanent', decision: 'allow' }).matches,
+    ).toHaveLength(0);
+  });
+
+  it('places equal filters after search and omits selected filter values from dialog rows (HS2-ZQZ3V2)', () => {
+    const markup = String(PermissionRulesSettings({ rules, dialog: { query: '', visibleCount: 100 } }));
+    const dialog = markup.slice(markup.indexOf('data-dialog-component="permission-rules-dialog"'));
+    expect(dialog.indexOf('aria-label="Search Remembered Answers"')).toBeLessThan(
+      dialog.indexOf('permission-rules-settings__filters'),
+    );
+    expect(
+      dialog.match(/class="kui-segmented-control permission-rules-settings__filter"[^>]*data-layout="equal"/g),
+    ).toHaveLength(2);
+    expect(dialog).not.toContain('Allowed · Persistent');
+    expect(dialog).not.toContain('Denied · Session (until restart)');
+    expect(markup).toContain('Allowed · Persistent');
   });
 
   it('shows a scrollable list and accessible placeholder search (HS2-988X4X, HS2-4HTTMK)', () => {
     const markup = String(
       PermissionRulesSettings({
         rules,
-        dialog: { query: 'deny', visibleCount: 100, lifetime: 'session', decision: 'deny' },
+        dialog: { query: 'WebFetch', visibleCount: 100, lifetime: 'session', decision: 'deny' },
       }),
     );
     expect(markup).toContain('permission-rules-settings__all');

@@ -3,6 +3,24 @@
   --kui-layout-inline-margin: 0;
 }
 
+.permission-rules-settings__filters {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--wa-space-xs);
+}
+
+.permission-rules-settings__filter {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .permission-rules-settings__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .permission-rules-settings [data-selectable] .permission-rules-settings__answer {
   --kui-list-item-selected-background: transparent;
   --kui-list-item-selected-border: transparent;

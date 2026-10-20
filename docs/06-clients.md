@@ -2682,11 +2682,14 @@ the three most recently remembered answers, newest first. A centered, bordered s
 button, matching Load more tickets, opens the searchable dialog by pointer or keyboard
 (HS2-Q6GKWQ, HS2-CSBW35). The dialog starts with 100 answers in a bounded scrolling list
 and loads another 100 on request, still newest first (HS2-988X4X).
-Two segmented controls filter the dialog by Persistent or Session and by Allow or Disallow,
-defaulting to Persistent and Allow. Session includes chat-only answers, whose exact lifetime
-remains in their row. Filters combine with search before batching; changing one resets the
-visible window to 100 and keeps the query and selection across views. The current result
-count appears beside selection controls (HS2-7Z3VWR).
+Search sits above two equal-width segmented controls that filter the dialog by Persistent or
+Session and by Allow or Disallow, defaulting to Persistent and Allow. The controls stack at
+phone width. Session includes chat-only answers, whose exact lifetime remains in their row.
+Filters combine with search before batching; changing one resets the visible window to 100
+and keeps the query and selection across views. Dialog rows omit decision and lifetime text
+already conveyed by the selected filters, and the duplicate result-count line is absent;
+the unfiltered preview still names each answer's decision and lifetime (HS2-7Z3VWR,
+HS2-ZQZ3V2).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. New Bash answers show a fixed-vocabulary operation description where
 available, plus their short fingerprint; older answers keep the fingerprint-only label. The

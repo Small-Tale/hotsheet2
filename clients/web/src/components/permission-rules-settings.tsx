@@ -45,7 +45,7 @@ export interface PermissionRuleFilters {
   decision: PermissionRuleDecisionFilter;
 }
 
-/** The API returns oldest first. Search only fields displayed to the user, never raw actions. */
+/** The API returns oldest first. Search the displayed identity, never raw actions or filtered-out metadata. */
 export function permissionRulesList(
   rules: readonly PermissionRule[],
   query: string,
@@ -61,8 +61,7 @@ export function permissionRulesList(
           (!filters || rule.decision === filters.decision),
       )
       .filter((rule) => {
-        const safeText = `${ruleLabel(rule)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
-        return safeText.toLocaleLowerCase().includes(term);
+        return ruleLabel(rule).toLocaleLowerCase().includes(term);
       }),
     visibleCount = Math.min(
       Math.max(
@@ -170,7 +169,16 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   {label}
                 </Text>
               }
-              description={`${unidentifiedBash ? 'Unidentified command · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
+              description={
+                selectable
+                  ? [
+                      unidentifiedBash ? 'Unidentified command' : undefined,
+                      rule.scope === 'chat' ? SCOPE_LABELS.chat : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || undefined
+                  : `${unidentifiedBash ? 'Unidentified command · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`
+              }
               title={
                 reapprovalAvailable
                   ? `${label} — The old command cannot be recovered from its fingerprint. Forget this answer to review the command on its next use and choose a safe label when remembering it again.`
@@ -255,10 +263,21 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             }
           >
             <List gap="m">
-              <Row gap="xs" wrap>
+              <TextField
+                name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.value}
+                type="search"
+                ariaLabel="Search Remembered Answers"
+                placeholder="Filter"
+                value={dialog?.query ?? ''}
+                clearable
+                autofocus
+              />
+              <div class="permission-rules-settings__filters">
                 <SegmentedControl<PermissionRuleLifetimeFilter>
                   id="permission-rule-lifetime"
                   label="Answer lifetime"
+                  className="permission-rules-settings__filter"
+                  layout="equal"
                   value={filters.lifetime}
                   choices={[
                     { value: 'permanent', label: 'Permanent' },
@@ -270,6 +289,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 <SegmentedControl<PermissionRuleDecisionFilter>
                   id="permission-rule-decision"
                   label="Answer decision"
+                  className="permission-rules-settings__filter"
+                  layout="equal"
                   value={filters.decision}
                   choices={[
                     { value: 'allow', label: 'Allow' },
@@ -278,20 +299,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   action={NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleDecision.value}
                   disabled={dialog?.busy}
                 />
-              </Row>
-              <TextField
-                name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.value}
-                type="search"
-                ariaLabel="Search Remembered Answers"
-                placeholder="Filter"
-                value={dialog?.query ?? ''}
-                clearable
-                autofocus
-              />
+              </div>
               <Row gap="xs" vAlign="middle" wrap>
-                <Text tone="quiet" size="compact">
-                  {`${list.matches.length} ${list.matches.length === 1 ? 'answer' : 'answers'}`}
-                </Text>
                 {selectedCount > 0 && <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>}
                 {selectedCount > 0 && (
                   <Button
@@ -375,7 +384,10 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   </List>
                 </div>
               ) : (
-                <EmptyState title="No Matching Answers" detail="Try a tool, decision, scope, or visible fingerprint." />
+                <EmptyState
+                  title="No Matching Answers"
+                  detail="Try a tool or visible fingerprint, or change the filters."
+                />
               )}
             </List>
           </DialogSurface>

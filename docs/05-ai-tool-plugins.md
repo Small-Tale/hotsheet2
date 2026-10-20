@@ -955,9 +955,11 @@ action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
 a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
 loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
-includes chat-only rules, with their exact scope still shown in the row. The filters and search
-determine the result count and loaded rows; changing a filter resets the loaded window but keeps
-selections. In the dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
+includes chat-only rules, with their exact scope still shown in the row. Search appears above
+two equally sized filter controls, which stack on phone widths. The filters and identity search
+determine the loaded rows; changing a filter resets the loaded window but keeps selections.
+The dialog omits the duplicate result count and decision/lifetime labels already conveyed by
+the selected filters. In the dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
 Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
 The dialog's selected-answer ellipsis menu enables Allow, Deny, Session, Persistent, and Delete
 when at least one answer is selected. Delete requires confirmation. A batch

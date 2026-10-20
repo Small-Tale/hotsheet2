@@ -15394,7 +15394,7 @@ test('previews three recent permission answers and searches the scrollable full 
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
-  await expect(dialog).toContainText('6 answers');
+  await expect(dialog).not.toContainText('6 answers');
   await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
   await search.fill('unit tests');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
@@ -15509,7 +15509,7 @@ test('loads remembered answers in 100-row batches while search and selection cro
 
 test('filters remembered answers by lifetime and decision while preserving search and selection (HS2-7Z3VWR)', async ({
   page,
-}) => {
+}, testInfo) => {
   await mockProject(page);
   const rule = (index: number, scope: 'always' | 'session' | 'chat', decision: 'allow' | 'deny') => ({
     project: '/work/demo.hs2',
@@ -15529,7 +15529,7 @@ test('filters remembered answers by lifetime and decision while preserving searc
     rule(207, 'chat', 'allow'),
   ];
   await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize({ width: 1416, height: 1816 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -15546,7 +15546,25 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(lifetime('permanent')).toHaveAttribute('aria-pressed', 'true');
   await expect(decision('allow')).toHaveAttribute('aria-pressed', 'true');
   await expect(rows).toHaveCount(100);
-  await expect(dialog).toContainText('202 answers');
+  await expect(dialog).not.toContainText('202 answers');
+  await expect(rows.first()).not.toContainText('Allowed · Persistent');
+  const filterGroups = dialog.locator('.permission-rules-settings__filter');
+  const wideWidths = await filterGroups.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
+  expect(wideWidths).toHaveLength(2);
+  expect(Math.abs(wideWidths[0] - wideWidths[1])).toBeLessThan(2);
+  expect(
+    await dialog.evaluate((node) => {
+      const searchField = node.querySelector('[aria-label="Search Remembered Answers"]'),
+        filters = node.querySelector('.permission-rules-settings__filters');
+      return Boolean(
+        searchField && filters && searchField.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }),
+  ).toBe(true);
+  await testInfo.attach('hs2-zqz3v2-filters-wide', {
+    body: await dialog.screenshot({ path: testInfo.outputPath('hs2-zqz3v2-filters-wide.png'), animations: 'disabled' }),
+    contentType: 'image/png',
+  });
   await dialog.getByRole('button', { name: 'Load 100 more answers' }).click();
   await expect(rows).toHaveCount(200);
   await dialog.getByLabel('Scrollable Remembered Answers').focus();
@@ -15554,7 +15572,7 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(dialog).toContainText('200 selected');
   await decision('deny').click();
   await expect(rows).toHaveCount(2);
-  await expect(dialog).toContainText('2 answers');
+  await expect(dialog).not.toContainText('2 answers');
   await expect(dialog).toContainText('200 selected');
   await search.fill('00000203');
   await expect(rows).toHaveCount(1);
@@ -15574,6 +15592,13 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(lifetime('session')).toBeInViewport();
   await expect(decision('deny')).toBeInViewport();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-7z3vwr-filters-phone.png' });
+  await testInfo.attach('hs2-zqz3v2-filters-phone', {
+    body: await dialog.screenshot({
+      path: testInfo.outputPath('hs2-zqz3v2-filters-phone.png'),
+      animations: 'disabled',
+    }),
+    contentType: 'image/png',
+  });
 });
 
 test('selects remembered-answer rows with modifiers and Command-A (HS2-ZVP9CB)', async ({ page }) => {
