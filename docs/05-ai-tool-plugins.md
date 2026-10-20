@@ -714,7 +714,13 @@ unreachable sessions. The headless equivalent is
 > MCP servers from `$CODEX_HOME`, so `trigger` **auto-builds a throwaway MCP-free
 > `CODEX_HOME`** for it (HS2-YRDQNX) — a copy of `auth.json` plus a `config.toml` whose
 > only server is the Hot Sheet shim — so a bare `trigger codex` can't reach the user's
-> global MCP servers (`--env CODEX_HOME=…` overrides). See
+> global MCP servers. For a linked git-backed ticket store, that isolated config grants
+> workspace-write access to the canonical store path and its exact Git metadata directories;
+> Codex otherwise protects `.git` even inside a writable root. The checkout remains the
+> thread's working directory, and other filesystem paths stay sandboxed. The isolated
+> Hot Sheet MCP entry approves its own store-scoped tools so a `never` approval-policy
+> chat can query and create tickets; no other MCP server is loaded. An explicit
+> `--env CODEX_HOME=…` overrides the isolated home. See
 > `crates/hotsheet-aitools/src/launch_safety.rs` and `docs/04` §4.4.
 >
 > **`hotsheet-cli work` is the headless loop (HS2-118)** built on this: it drives one

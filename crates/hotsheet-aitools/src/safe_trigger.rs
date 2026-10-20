@@ -187,6 +187,7 @@ pub fn prepare_trigger_with_home(
         } else {
             launch_safety::IsolatedCodexHome::create(&source, name, &command, &args)?
         };
+        home.allow_linked_store_write(&store_abs)?;
         env.push((
             "CODEX_HOME".to_string(),
             home.path().to_string_lossy().into_owned(),

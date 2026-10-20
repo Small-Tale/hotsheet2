@@ -158,6 +158,69 @@ impl CodexHomeDir {
 }
 
 impl IsolatedCodexHome {
+    /// Let a driven Codex update its linked ticket store while keeping the rest of
+    /// the machine under workspace-write. Git metadata needs its own root because
+    /// Codex protects `.git` even when the surrounding store is writable.
+    pub fn allow_linked_store_write(&self, store: &Path) -> Result<()> {
+        let store = std::fs::canonicalize(store)
+            .with_context(|| format!("resolving linked store {}", store.display()))?;
+        let output = hotsheet_ticketing::git::launch("git")
+            .args(["rev-parse", "--absolute-git-dir", "--git-common-dir"])
+            .current_dir(&store)
+            .output()
+            .context("locating linked store Git metadata")?;
+        if !output.status.success() {
+            anyhow::bail!(
+                "locating linked store Git metadata failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        let git_paths =
+            String::from_utf8(output.stdout).context("Git metadata paths are not UTF-8")?;
+        let mut paths = git_paths.lines();
+        let git_dir = paths.next().context("Git did not return its directory")?;
+        let common_dir = paths
+            .next()
+            .context("Git did not return its common directory")?;
+        let mut roots = vec![store.clone()];
+        for path in [git_dir, common_dir] {
+            let path = Path::new(path);
+            let path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                store.join(path)
+            };
+            roots.push(std::fs::canonicalize(&path).with_context(|| {
+                format!("resolving linked store Git metadata {}", path.display())
+            })?);
+        }
+        roots.sort();
+        roots.dedup();
+
+        let config_path = self.path().join("config.toml");
+        let mut config: toml::Table = std::fs::read_to_string(&config_path)
+            .with_context(|| format!("reading {}", config_path.display()))?
+            .parse()
+            .context("parsing isolated Codex config")?;
+        let mut sandbox = toml::Table::new();
+        sandbox.insert(
+            "writable_roots".into(),
+            toml::Value::Array(
+                roots
+                    .iter()
+                    .map(|path| toml::Value::String(path.to_string_lossy().into_owned()))
+                    .collect(),
+            ),
+        );
+        config.insert(
+            "sandbox_workspace_write".into(),
+            toml::Value::Table(sandbox),
+        );
+        std::fs::write(&config_path, toml::to_string_pretty(&config)?)
+            .with_context(|| format!("writing {}", config_path.display()))?;
+        Ok(())
+    }
+
     /// Build the isolated home for a **direct** `app-server` (a fresh process per
     /// connection): copy `auth.json` from `source_home` (if present, so the launched codex
     /// stays signed in) and write a `config.toml` whose sole MCP server is `server_name` →
@@ -399,6 +462,13 @@ fn isolated_codex_config(server_name: &str, command: &str, args: &[String]) -> S
     entry.insert(
         "args".into(),
         toml::Value::Array(args.iter().cloned().map(toml::Value::String).collect()),
+    );
+    // This home contains only Hot Sheet's own store-scoped MCP shim. Its tools have
+    // the same authority as the hotsheet-cli command made writable above; without
+    // an explicit policy Codex's `never` approval mode rejects even ticket reads.
+    entry.insert(
+        "default_tools_approval_mode".into(),
+        toml::Value::String("approve".into()),
     );
     let mut servers = toml::Table::new();
     servers.insert(server_name.to_string(), toml::Value::Table(entry));
@@ -737,6 +807,7 @@ mod tests {
         assert_eq!(servers.len(), 1, "no user servers leak in");
         let hs = servers["hotsheet"].as_table().unwrap();
         assert_eq!(hs["command"].as_str().unwrap(), "/abs/hotsheet-mcp");
+        assert_eq!(hs["default_tools_approval_mode"].as_str(), Some("approve"));
         let args: Vec<&str> = hs["args"]
             .as_array()
             .unwrap()
@@ -744,6 +815,184 @@ mod tests {
             .map(|a| a.as_str().unwrap())
             .collect();
         assert_eq!(args, vec!["--path", "/store"]);
+    }
+
+    #[test]
+    fn isolated_codex_home_grants_only_the_linked_store_and_git_metadata() {
+        let source = tempfile::tempdir().unwrap();
+        let repo = tempfile::tempdir().unwrap();
+        let git = |cwd: &Path, args: &[&str]| {
+            let output = hotsheet_ticketing::git::launch("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(repo.path(), &["init", "--quiet"]);
+        let home =
+            IsolatedCodexHome::create(source.path(), "hotsheet", "hotsheet-mcp", &[]).unwrap();
+        home.allow_linked_store_write(repo.path()).unwrap();
+        let config: toml::Table = std::fs::read_to_string(home.path().join("config.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        let roots: Vec<_> = config["sandbox_workspace_write"]["writable_roots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(
+            roots,
+            [
+                repo.path().canonicalize().unwrap(),
+                repo.path().join(".git").canonicalize().unwrap()
+            ]
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(config["mcp_servers"].as_table().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn isolated_codex_home_grants_a_worktree_its_separate_git_directories() {
+        let source = tempfile::tempdir().unwrap();
+        let repo = tempfile::tempdir().unwrap();
+        let worktree = repo.path().join("linked");
+        let main = repo.path().join("main");
+        std::fs::create_dir(&main).unwrap();
+        let git = |cwd: &Path, args: &[&str]| {
+            let output = hotsheet_ticketing::git::launch("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&main, &["init", "--quiet"]);
+        git(
+            &main,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "--quiet",
+                "--allow-empty",
+                "-m",
+                "seed",
+            ],
+        );
+        git(
+            &main,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+                worktree.to_str().unwrap(),
+            ],
+        );
+        let home =
+            IsolatedCodexHome::create(source.path(), "hotsheet", "hotsheet-mcp", &[]).unwrap();
+        home.allow_linked_store_write(&worktree).unwrap();
+        let config: toml::Table = std::fs::read_to_string(home.path().join("config.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        let roots: Vec<_> = config["sandbox_workspace_write"]["writable_roots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(roots.len(), 3);
+        assert!(
+            roots.contains(
+                &worktree
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            )
+        );
+        assert!(
+            roots.contains(
+                &main
+                    .join(".git")
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            )
+        );
+        assert!(roots.iter().any(|root| root.contains(".git/worktrees/")));
+    }
+
+    #[test]
+    fn persistent_codex_home_replaces_old_store_roots_on_refresh() {
+        let source = tempfile::tempdir().unwrap();
+        let storage = tempfile::tempdir().unwrap();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        for store in [first.path(), second.path()] {
+            let output = hotsheet_ticketing::git::launch("git")
+                .args(["init", "--quiet"])
+                .current_dir(store)
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+        }
+        let config_path;
+        {
+            let home = IsolatedCodexHome::create_persistent_for_daemon(
+                storage.path(),
+                source.path(),
+                "hotsheet",
+                "hotsheet-mcp",
+                &[],
+                None,
+            )
+            .unwrap();
+            home.allow_linked_store_write(first.path()).unwrap();
+            config_path = home.path().join("config.toml");
+        }
+        let home = IsolatedCodexHome::create_persistent_for_daemon(
+            storage.path(),
+            source.path(),
+            "hotsheet",
+            "hotsheet-mcp",
+            &[],
+            None,
+        )
+        .unwrap();
+        home.allow_linked_store_write(second.path()).unwrap();
+        let config: toml::Table = std::fs::read_to_string(config_path)
+            .unwrap()
+            .parse()
+            .unwrap();
+        let roots = config["sandbox_workspace_write"]["writable_roots"]
+            .as_array()
+            .unwrap();
+        assert!(roots.iter().all(|root| {
+            !root
+                .as_str()
+                .unwrap()
+                .contains(first.path().to_str().unwrap())
+        }));
+        assert!(roots.iter().any(|root| root.as_str().unwrap()
+            == second.path().canonicalize().unwrap().to_str().unwrap()));
     }
 
     #[test]

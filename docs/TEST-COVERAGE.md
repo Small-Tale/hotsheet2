@@ -1,5 +1,16 @@
 # Feature Coverage Matrix
 
+HS2-9X1A6G covers Codex chat writes to a linked sibling ticket store. The
+`isolated_codex_home_grants_*` tests in `crates/hotsheet-aitools/src/launch_safety.rs`
+check exact writable roots for a standalone git store and a linked worktree,
+while preserving the isolated MCP config and its approval mode. A live Codex
+app-server sandbox probe confirmed that the store root alone blocks `.git`
+writes and that adding the exact Git metadata root permits them. A live
+`trigger codex` turn then created and committed a ticket through the Hot Sheet
+MCP tool in a disposable linked store under the headless `never` approval
+policy. The shipped browser chat flow still needs real-client verification and
+a matching after capture before this ticket closes.
+
 HS2-KSY290 covers safe reapproval of unidentified Bash answers. Rust unit coverage in
 `crates/hotsheet-aitools/src/permission.rs` checks revocation, a second prompt,
 validated labels, and opaque durable storage. `crates/hotsheet-server/tests/http.rs`

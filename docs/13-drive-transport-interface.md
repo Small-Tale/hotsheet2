@@ -38,7 +38,10 @@ Option<TurnEvent>` (`Output`/`PermissionAsked`/`Done`) — additive, so the sync
 > Threads open with the chat's selected
 > `approvalPolicy` (default `"never"`; `on-request`/`on-failure`/`untrusted` route approvals to
 > the permission bridge, HS2-NHRDMW) + `sandbox:"workspace-write"` on both `thread/start` and
-> `thread/resume`; a Claude permission-mode value is never forwarded (it maps to `never`). The bytes ride an
+> `thread/resume`; the isolated Codex home adds only the linked ticket store and its Git
+> metadata as writable roots, so a chat launched from a checkout can create tickets in
+> its sibling store, and preapproves only its store-scoped Hot Sheet MCP server so
+> ticket tools run under the headless `never` policy (HS2-9X1A6G). A Claude permission-mode value is never forwarded (it maps to `never`). The bytes ride an
 > injected `RpcTransport` (`send`/`recv` line-oriented JSON — the verified framing):
 > `StdioTransport` runs `codex app-server` **direct** (one persistent process per
 > connection — many turns, no process per play), and `UdsWsTransport` speaks the shared
