@@ -835,7 +835,7 @@ test('lets the remembered-answer demo edit and confirm deletion of a selected pa
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
   await expect(dialog).toContainText('0 selected');
   await expect(
-    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Deny', { exact: false }),
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Denied ·', { exact: false }),
   ).toHaveCount(5);
   await dialog.getByRole('button', { name: 'Select Page' }).click();
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
