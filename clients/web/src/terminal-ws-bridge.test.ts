@@ -17,6 +17,13 @@ import {
 
 const servers: Array<{ close(callback: () => void): void }> = [];
 afterEach(async () => {
+  // ws waits for every connected client before its close callback runs. A bridge may still
+  // have an upstream socket after the browser side closes, so end fixture clients first.
+  for (const server of servers) {
+    if (server instanceof WebSocketServer) {
+      for (const client of server.clients) client.terminate();
+    }
+  }
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -37,6 +44,17 @@ const listen = async (server: ReturnType<typeof createServer>) => {
 };
 
 describe('terminal WebSocket bridge', () => {
+  it('closes a still-connected upstream socket during fixture teardown (HS2-70EEEY)', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    const port = await listen(upstreamHttp),
+      client = new WebSocket(`ws://127.0.0.1:${port}`);
+    client.on('error', () => undefined);
+    await once(client, 'open');
+    expect(upstream.clients.size).toBe(1);
+  });
+
   it('parses only credential-free project terminal attach paths', async () => {
     const resolve = (project: string, terminal: string) => `${project}:${terminal}`;
     await expect(
