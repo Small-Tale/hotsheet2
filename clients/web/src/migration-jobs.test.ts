@@ -111,7 +111,10 @@ describe('durable migration owner transitions', () => {
       const retried = await jobs.start(owner, started.attempt);
       expect(retried.attempt).not.toBe(started.attempt);
       expect(retried.revision).toBeGreaterThan(failed!.revision);
-      await new Promise((resolveDone) => setTimeout(resolveDone, 20));
+      let retryFailure = await jobs.watch(owner.root, retried.revision);
+      while (retryFailure?.status === 'running') retryFailure = await jobs.watch(owner.root, retryFailure.revision);
+      expect(retryFailure?.status).toBe('failed');
+      expect(retryFailure?.error).toBe('Disk full');
       const another = new MigrationJobs(directory, async () => new Promise(() => {}), undefined, locks.lock);
       const running = await another.start(owner, retried.attempt);
       locks.crash();
