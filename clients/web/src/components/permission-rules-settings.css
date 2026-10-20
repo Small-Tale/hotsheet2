@@ -3,27 +3,21 @@
   --kui-layout-inline-margin: 0;
 }
 
+.permission-rules-settings [data-selectable] .permission-rules-settings__answer {
+  --kui-list-item-selected-background: transparent;
+  --kui-list-item-selected-border: transparent;
+}
+
+.permission-rules-settings [data-action='select-permission-rule-row'] {
+  width: 100%;
+}
+
 .permission-rules-settings__rule {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: var(--wa-space-xs);
   border-radius: remify(6px);
-}
-
-.permission-rules-settings__rule[data-selectable] {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-}
-
-.permission-rules-settings__selection {
-  padding-inline-start: var(--wa-space-xs);
-}
-
-.permission-rules-settings__selection input {
-  width: remify(18px);
-  height: remify(18px);
-  margin: 0;
-  accent-color: var(--wa-color-brand-fill-loud);
 }
 
 .permission-rules-settings [data-permission-rule] {
@@ -63,26 +57,21 @@
 
 @media (max-width: 480px) {
   .permission-rules-settings [data-permission-rule][data-selectable] {
-    grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .permission-rules-settings [data-permission-rule][data-selectable] > .permission-rules-settings__selection {
+  .permission-rules-settings [data-permission-rule][data-selectable] > .permission-rules-settings__answer {
     grid-column: 1;
     grid-row: 1 / 3;
   }
 
-  .permission-rules-settings [data-permission-rule][data-selectable] > .permission-rules-settings__answer {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-
   .permission-rules-settings [data-permission-rule][data-selectable] > [data-action='change-permission-rule-scope'] {
-    grid-column: 3;
+    grid-column: 2;
     grid-row: 1;
   }
 
   .permission-rules-settings [data-permission-rule][data-selectable] > [data-action='revoke-permission-rule'] {
-    grid-column: 3;
+    grid-column: 2;
     grid-row: 2;
   }
 }

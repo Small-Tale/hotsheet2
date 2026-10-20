@@ -82,6 +82,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           lifetime: PermissionRuleFilters['lifetime'];
           decision: PermissionRuleFilters['decision'];
           selected?: readonly string[];
+          selectionAnchor?: string;
           busy?: boolean;
           confirmingDelete?: boolean;
         }
@@ -397,6 +398,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         ...permissionRulesDialog.value,
         query,
         visibleCount: PERMISSION_RULE_BATCH_SIZE,
+        selectionAnchor: undefined,
         confirmingDelete: false,
       };
   }
@@ -408,6 +410,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         ...current,
         ...filters,
         visibleCount: PERMISSION_RULE_BATCH_SIZE,
+        selectionAnchor: undefined,
         confirmingDelete: false,
       };
   }
@@ -425,16 +428,31 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesDialog.value = { ...current, visibleCount };
   }
 
-  function selectPermissionRule(projectId: string, key: string, checked: boolean) {
+  function selectPermissionRuleRow(projectId: string, key: string, modifiers: { toggle: boolean; range: boolean }) {
     const dialog = permissionRulesDialog.value;
     if (dialog?.projectId !== projectId || dialog.busy) return;
-    const valid = (permissionRulesByProject.value[projectId] ?? []).some((rule) => permissionRuleKey(rule) === key);
-    if (!valid) return;
-    const selected = new Set(dialog.selected ?? []);
-    if (checked) selected.add(key);
-    else selected.delete(key);
+    const rows = permissionRulesList(
+        permissionRulesByProject.value[projectId] ?? [],
+        dialog.query,
+        dialog.visibleCount,
+        dialog,
+      ).rows.map(permissionRuleKey),
+      index = rows.indexOf(key);
+    if (index < 0) return;
+    const selected = new Set(modifiers.toggle || modifiers.range ? (dialog.selected ?? []) : []);
+    if (modifiers.range && dialog.selectionAnchor && rows.includes(dialog.selectionAnchor)) {
+      const anchorIndex = rows.indexOf(dialog.selectionAnchor);
+      for (const rowKey of rows.slice(Math.min(anchorIndex, index), Math.max(anchorIndex, index) + 1))
+        selected.add(rowKey);
+    } else if (modifiers.toggle && selected.has(key)) selected.delete(key);
+    else selected.add(key);
     permissionRulesMessage.value = '';
-    permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
+    permissionRulesDialog.value = {
+      ...dialog,
+      selected: [...selected],
+      selectionAnchor: modifiers.range && rows.includes(dialog.selectionAnchor ?? '') ? dialog.selectionAnchor : key,
+      confirmingDelete: false,
+    };
   }
 
   function selectVisiblePermissionRules(projectId: string) {
@@ -447,12 +465,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       dialog,
     ).rows;
     const selected = new Set(dialog.selected ?? []);
-    const allSelected = rows.length > 0 && rows.every((rule) => selected.has(permissionRuleKey(rule)));
-    for (const rule of rows) {
-      const key = permissionRuleKey(rule);
-      if (allSelected) selected.delete(key);
-      else selected.add(key);
-    }
+    for (const rule of rows) selected.add(permissionRuleKey(rule));
     permissionRulesMessage.value = '';
     permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
   }
@@ -461,7 +474,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     const dialog = permissionRulesDialog.value;
     if (dialog?.projectId === projectId && !dialog.busy) {
       permissionRulesMessage.value = '';
-      permissionRulesDialog.value = { ...dialog, selected: [], confirmingDelete: false };
+      permissionRulesDialog.value = { ...dialog, selected: [], selectionAnchor: undefined, confirmingDelete: false };
     }
   }
 
@@ -525,6 +538,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         ...current,
         busy: false,
         selected: [...failed].filter((key) => remaining.has(key)),
+        selectionAnchor: undefined,
         visibleCount: permissionRulesList(
           permissionRulesByProject.value[projectId] ?? [],
           current.query,
@@ -665,7 +679,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     searchPermissionRules,
     filterPermissionRules,
     loadMorePermissionRules,
-    selectPermissionRule,
+    selectPermissionRuleRow,
     selectVisiblePermissionRules,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,

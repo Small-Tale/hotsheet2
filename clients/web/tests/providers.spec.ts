@@ -15252,10 +15252,19 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(dialog).toContainText('6 answers');
   await expect(all.locator('[data-component="list-item"]')).toHaveCount(6);
   await expect(all.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(6);
-  await all.locator('[data-action="toggle-permission-rule-row"]').first().click();
-  await expect(all.getByRole('checkbox').first()).toBeChecked();
-  await all.locator('[data-action="toggle-permission-rule-row"]').first().click();
-  await expect(all.getByRole('checkbox').first()).not.toBeChecked();
+  await all.locator('[data-action="select-permission-rule-row"]').first().click();
+  await expect(all.locator('[data-action="select-permission-rule-row"]').first()).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await all
+    .locator('[data-action="select-permission-rule-row"]')
+    .first()
+    .click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(all.locator('[data-action="select-permission-rule-row"]').first()).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
   await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(0);
   await expect(dialog).not.toContainText('OtherProjectTool');
   await expect(dialog.getByRole('button', { name: /Load .* more answers/ })).toHaveCount(0);
@@ -15326,7 +15335,8 @@ test('loads remembered answers in 100-row batches while search and selection cro
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.getByRole('button', { name: 'Load 100 more answers' }).click();
   await expect(list.locator('[data-permission-rule]')).toHaveCount(200);
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await scroll.focus();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
   await expect(dialog).toContainText('200 selected');
   await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('00000204');
   await expect(list.locator('[data-permission-rule]')).toHaveCount(1);
@@ -15383,7 +15393,8 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(dialog).toContainText('202 answers');
   await dialog.getByRole('button', { name: 'Load 100 more answers' }).click();
   await expect(rows).toHaveCount(200);
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await dialog.getByLabel('Scrollable Remembered Answers').focus();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
   await expect(dialog).toContainText('200 selected');
   await decision('deny').click();
   await expect(rows).toHaveCount(2);
@@ -15407,6 +15418,53 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await expect(lifetime('session')).toBeInViewport();
   await expect(decision('deny')).toBeInViewport();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-7z3vwr-filters-phone.png' });
+});
+
+test('selects remembered-answer rows with modifiers and Command-A (HS2-ZVP9CB)', async ({ page }) => {
+  await mockProject(page);
+  const rules = Array.from({ length: 6 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: 'allow',
+    scope: 'always',
+  }));
+  await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
+    rows = dialog
+      .getByRole('list', { name: 'All Remembered Answers' })
+      .locator('[data-action="select-permission-rule-row"]'),
+    scroll = dialog.getByLabel('Scrollable Remembered Answers');
+  await expect(rows).toHaveCount(6);
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Select Shown' })).toHaveCount(0);
+  await rows.nth(0).click();
+  await expect(dialog).toContainText('1 selected');
+  await rows.nth(2).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(dialog).toContainText('2 selected');
+  await rows.nth(4).click({ modifiers: ['Shift'] });
+  await expect(dialog).toContainText('4 selected');
+  await rows.nth(0).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(dialog).toContainText('3 selected');
+  await scroll.focus();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
+  await expect(dialog).toContainText('6 selected');
+  await expect(dialog.locator('[data-action="select-permission-rule-row"][aria-pressed="true"]')).toHaveCount(6);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zvp9cb-selected-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zvp9cb-selected-phone.png' });
+  await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
+  await expect(dialog).toContainText('6 selected');
+  await expect(dialog.getByRole('button', { name: 'Clear' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Clear' }).click();
+  await expect(dialog.getByRole('button', { name: 'Delete Selected' })).toHaveCount(0);
 });
 
 test('bulk edits and deletes mixed remembered answers with partial failure recovery (HS2-C057G5)', async ({ page }) => {
@@ -15445,33 +15503,40 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
     dialog.locator(`[data-action="filter-permission-rule-lifetime"][data-segment-value="${value}"]`);
   const decision = (value: 'allow' | 'deny') =>
     dialog.locator(`[data-action="filter-permission-rule-decision"][data-segment-value="${value}"]`);
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  const selectLoaded = async () => {
+    await dialog.getByLabel('Scrollable Remembered Answers').focus();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
+  };
+  await selectLoaded();
   await lifetime('session').click();
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await selectLoaded();
   await decision('deny').click();
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await selectLoaded();
   await expect(dialog).toContainText('6 selected');
-  const firstRuleOption = dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first();
-  await firstRuleOption.uncheck();
+  const firstRuleOption = dialog
+    .getByRole('list', { name: 'All Remembered Answers' })
+    .locator('[data-action="select-permission-rule-row"]')
+    .first();
+  await firstRuleOption.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await expect(dialog).toContainText('5 selected');
-  await firstRuleOption.check();
+  await firstRuleOption.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await expect(dialog).toContainText('6 selected');
-  await firstRuleOption.uncheck();
+  await firstRuleOption.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-c057g5-selected-wide.png' });
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
   await expect(dialog).toContainText('1 failed and remain selected for retry');
   await expect(dialog).toContainText('1 selected');
   failAction = '';
   await dialog.getByRole('button', { name: 'Allow Selected' }).click();
-  await expect(dialog).toContainText('0 selected');
+  await expect(dialog.getByRole('button', { name: 'Deny Selected' })).toHaveCount(0);
   await lifetime('permanent').click();
   await decision('allow').click();
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await selectLoaded();
   await decision('deny').click();
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await selectLoaded();
   await lifetime('session').click();
-  await dialog.getByRole('button', { name: 'Select Shown' }).click();
-  await firstRuleOption.uncheck();
+  await selectLoaded();
+  await firstRuleOption.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
   await expect(dialog).toContainText('Delete 5 remembered answers?');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -15480,7 +15545,7 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
-  await expect(dialog).toContainText('0 selected');
+  await expect(dialog.getByRole('button', { name: 'Deny Selected' })).toHaveCount(0);
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
   ).toHaveCount(1);

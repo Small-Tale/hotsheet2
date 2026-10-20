@@ -100,8 +100,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
     },
     list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount, filters) : undefined,
     selected = new Set(dialog?.selected ?? []),
-    selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length,
-    visibleSelected = list?.rows.length ? list.rows.every((rule) => selected.has(permissionRuleKey(rule))) : false;
+    selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length;
   function ruleRows(items: readonly PermissionRule[], selectable = false) {
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
@@ -118,23 +117,11 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           data-rule-disabled={dialog?.busy || revoking.includes(key) ? 'true' : undefined}
           data-selectable={selectable ? '' : undefined}
         >
-          {selectable && (
-            <div class="permission-rules-settings__selection">
-              <input
-                type="checkbox"
-                data-action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
-                data-rule-key={key}
-                checked={selected.has(key)}
-                disabled={dialog?.busy}
-                aria-label={`Select ${label}`}
-              />
-            </div>
-          )}
           <div class="permission-rules-settings__answer">
             <ListItem
               action={
                 selectable
-                  ? NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleRow.value
+                  ? NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.value
                   : NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value
               }
               rootAttributes={{ 'data-rule-key': key }}
@@ -149,7 +136,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               title={`${label} — Action details hidden to protect sensitive values`}
               pressed={selectable ? selected.has(key) : undefined}
               disabled={dialog?.busy || revoking.includes(key)}
-              accessibleLabel={`${selectable ? (selected.has(key) ? 'Deselect' : 'Select') : 'View'} ${label}`}
+              accessibleLabel={`${selectable ? 'Select' : 'View'} ${label}`}
             />
           </div>
           {rule.scope !== 'chat' && (
@@ -272,17 +259,10 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 autofocus
               />
               <Row gap="xs" vAlign="middle" wrap>
-                <Button
-                  emphasis="secondary"
-                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.value}
-                  disabled={list.rows.length === 0 || dialog?.busy}
-                >
-                  {visibleSelected ? 'Deselect Shown' : 'Select Shown'}
-                </Button>
-                <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>
                 <Text tone="quiet" size="compact">
                   {`${list.matches.length} ${list.matches.length === 1 ? 'answer' : 'answers'}`}
                 </Text>
+                {selectedCount > 0 && <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>}
                 {selectedCount > 0 && (
                   <Button
                     emphasis="plain"

@@ -946,8 +946,9 @@ a reload according to its lifetime. The full list shows 100 answers initially in
 loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
 includes chat-only rules, with their exact scope still shown in the row. The filters and search
 determine the result count and loaded rows; changing a filter resets the loaded window but keeps
-selections. Users can select individual answers or all shown answers, apply Allow or Deny to mixed
-selections, or delete them after confirmation. A batch
+selections. In the dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
+Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
+Users can apply Allow or Deny to mixed selections or delete them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`

@@ -308,8 +308,10 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     );
     expect(preview).toMatch(/class="kui-list-item__icon"><svg data-lucide="shield-/u);
     expect(dialog).toMatch(
-      /data-action="toggle-permission-rule-row"[^]*class="kui-list-item__icon"><svg data-lucide="shield-/u,
+      /data-action="select-permission-rule-row"[^]*class="kui-list-item__icon"><svg data-lucide="shield-/u,
     );
+    expect(dialog).not.toContain('type="checkbox"');
+    expect(dialog).not.toContain('Select Shown');
   });
 
   it('filters safe labels and moves through 100-row batches across shrink and refill', () => {

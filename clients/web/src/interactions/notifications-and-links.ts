@@ -47,7 +47,11 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly searchPermissionRules: (projectId: string, query: string) => void;
   readonly filterPermissionRules: (projectId: string, filters: Partial<PermissionRuleFilters>) => void;
   readonly loadMorePermissionRules: (projectId: string) => void;
-  readonly selectPermissionRule: (projectId: string, key: string, checked: boolean) => void;
+  readonly selectPermissionRuleRow: (
+    projectId: string,
+    key: string,
+    modifiers: { toggle: boolean; range: boolean },
+  ) => void;
   readonly selectVisiblePermissionRules: (projectId: string) => void;
   readonly clearPermissionRuleSelection: (projectId: string) => void;
   readonly requestDeleteSelectedPermissionRules: (projectId: string, confirming: boolean) => void;
@@ -84,7 +88,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     searchPermissionRules,
     filterPermissionRules,
     loadMorePermissionRules,
-    selectPermissionRule,
+    selectPermissionRuleRow,
     selectVisiblePermissionRules,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,
@@ -244,27 +248,25 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   lifetime.add(
     delegate(
       document.body,
-      'change',
-      NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.selector,
-      (_event, target) => {
-        const key = data(target.closest('[data-rule-key]') ?? target).ruleKey;
-        if (key) selectPermissionRule(selectedProjectId.value, key, (target as Control & { checked: boolean }).checked);
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
       'click',
-      NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleRow.selector,
-      (_event, target) => {
+      NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector,
+      (event, target) => {
         const key = data(target).ruleKey;
-        if (key) selectPermissionRule(selectedProjectId.value, key, target.getAttribute('aria-pressed') !== 'true');
+        if (key) {
+          const pointer = event as MouseEvent;
+          selectPermissionRuleRow(selectedProjectId.value, key, {
+            toggle: pointer.metaKey || pointer.ctrlKey,
+            range: pointer.shiftKey,
+          });
+        }
       },
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.selector, () => {
+    delegate(document.body, 'keydown', '.permission-rules-settings__all', (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (!(keyboard.metaKey || keyboard.ctrlKey) || keyboard.altKey || keyboard.key.toLowerCase() !== 'a') return;
+      keyboard.preventDefault();
       selectVisiblePermissionRules(selectedProjectId.value);
     }),
   );
