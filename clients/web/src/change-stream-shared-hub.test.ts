@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createChangeStreamSharedHub } from './change-stream-shared-hub';
 import type { ProjectChangeTransportOptions } from './project-change-poll';
@@ -37,8 +37,15 @@ class FakeSocket extends EventTarget {
   }
 }
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('SharedWorker change-stream port hub', () => {
   it('shares a bounded direct-poll pool across tabs without a mux path', async () => {
+    // This test covers the shared hub's four-slot pool. The no-Web-Locks pacing
+    // path is covered separately in change-poll-slots.test.ts.
+    vi.stubGlobal('navigator', {
+      locks: { request: (_name: string, _options: unknown, callback: () => Promise<unknown>) => callback() },
+    });
     const calls: Array<{ resolve(response: Response): void }> = [];
     const runs: ProjectChangeTransportOptions[] = [];
     const hub = createChangeStreamSharedHub({
