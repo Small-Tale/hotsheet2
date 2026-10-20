@@ -209,7 +209,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               <TextField
                 name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.value}
                 type="search"
-                label="Search Remembered Answers"
+                ariaLabel="Search Remembered Answers"
+                placeholder="Filter"
                 value={dialog?.query ?? ''}
                 clearable
                 autofocus

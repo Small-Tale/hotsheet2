@@ -288,11 +288,14 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(permissionRulesPage(rules, 'deny', 1).rows).toHaveLength(5);
   });
 
-  it('keeps page context without a separate count and sort line (HS2-M97DKR)', () => {
+  it('keeps page context and presents accessible placeholder search (HS2-M97DKR, HS2-4HTTMK)', () => {
     const markup = String(PermissionRulesSettings({ rules, dialog: { query: 'deny', page: 2 } }));
     expect(markup).toContain('Page 2 of 2');
     expect(markup).not.toContain('matching answers · newest first');
     expect(markup).toContain('All Remembered Answers');
+    expect(markup).toContain('aria-label="Search Remembered Answers"');
+    expect(markup).toContain('placeholder="Filter"');
+    expect(markup).not.toContain('kui-text-field__label');
   });
 });
 
