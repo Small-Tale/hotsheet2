@@ -28555,6 +28555,12 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Auto-allow in');
+  await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const name of ['Deny', 'Allow for This Chat', 'Always Allow', 'Allow Once', 'Ignore', 'Pause Notifications'])
+    await expect(popup.getByRole('button', { name, exact: true })).toBeVisible();
+  await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   // An installed clock keeps following wall time, so exact m:ss text races slow local runs (and a
   // short delay could silently auto-allow mid-test). Use a 60s delay and assert the countdown only
   // moves forward by at least the fast-forwarded amount.

@@ -60,6 +60,9 @@ describe('permission presentation components', () => {
     expect(markup).toContain('Deny');
     expect(markup).toContain('Always Allow');
     expect(markup).toContain('Allow Once');
+    expect(markup).toContain('aria-label="Allow duration"');
+    expect(markup).toContain('data-tone="danger"');
+    expect(markup).toContain('permission-request-card__utilities');
     expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('Auto-allow in');
     expect(markup).toContain('aria-label="Stop auto-allow Countdown"');

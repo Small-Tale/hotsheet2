@@ -8164,11 +8164,13 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(stopAutomationHost.locator('[data-lucide="pause"]')).toBeVisible();
   expect((await stopAutomationHost.textContent())?.trim()).toBe('');
   await expect(card.locator('.permission-request-card__countdown')).toHaveCSS('border-top-style', 'none');
-  const [timerBox, denyBox] = await Promise.all([
-    card.locator('.permission-request-card__timer').boundingBox(),
+  const [timerBox, denyBox, actionsBox] = await Promise.all([
+    card.locator('.permission-request-card__countdown').boundingBox(),
     card.getByRole('button', { name: 'Deny' }).boundingBox(),
+    card.locator('.permission-request-card__actions').boundingBox(),
   ]);
-  expect(Math.abs(timerBox!.y + timerBox!.height / 2 - (denyBox!.y + denyBox!.height / 2))).toBeLessThanOrEqual(1);
+  expect(timerBox!.y).toBeGreaterThan(denyBox!.y + denyBox!.height);
+  expect(Math.abs(timerBox!.x + timerBox!.width / 2 - (actionsBox!.x + actionsBox!.width / 2))).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-xrva64-permission-countdown-wide.png', fullPage: true });
   await stopAutomation.click();
   await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);

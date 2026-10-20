@@ -32,29 +32,47 @@
 .permission-request-card__description-help {
   max-width: remify(520px);
 }
-.permission-request-card__decision-area {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  /* Top-aligned so the countdown stays level with the first row of decisions when the four
-     decisions (with Allow for This Chat, HS2-JNHAYB) wrap onto a second row. */
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: remify(12.8px);
+.permission-request-card__actions {
+  display: grid;
+  width: 100%;
+  gap: remify(12px);
 }
 .permission-request-card__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 2.7fr);
+  gap: remify(16px);
+}
+.permission-request-card__allows {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
   gap: remify(7.2px);
+}
+.permission-request-card__allows[data-allow-count='2'] {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
 }
 /* App-owned decision slots: as grid containers they stretch their Web Awesome button across the
    phone decision grid's track without styling the button itself. */
 .permission-request-card__decision {
   display: grid;
 }
+.permission-request-card__utilities {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: remify(8px);
+}
+.permission-request-card__ignore {
+  grid-column: 1;
+  justify-self: start;
+}
+.permission-request-card__pause {
+  grid-column: 3;
+  justify-self: end;
+}
 .permission-request-card__countdown {
   display: flex;
+  grid-column: 2;
+  justify-self: center;
   /* Never collapse the timer and its Stop control to make room for the decisions. */
   flex: none;
   min-width: 0;
@@ -137,25 +155,29 @@
   }
 }
 @container (max-width: remify(544px)) {
-  .permission-request-card__decision-area {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .permission-request-card__quiet-action {
-    width: fit-content;
-  }
   .permission-request-card__buttons {
-    display: grid;
-    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .permission-request-card__allows {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .permission-request-card__buttons > .permission-request-card__decision:last-child:nth-child(3) {
+  .permission-request-card__allows[data-allow-count='2'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .permission-request-card__allows > .permission-request-card__decision:last-child:nth-child(3) {
     grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .permission-request-card__utilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .permission-request-card__countdown {
-    width: fit-content;
-    max-width: 100%;
-    justify-content: flex-start;
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .permission-request-card__pause {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 @media (max-width: remify(672px)) {

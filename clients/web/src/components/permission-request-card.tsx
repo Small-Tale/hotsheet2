@@ -135,62 +135,15 @@ export function PermissionRequestCard({
               : '--wa-color-brand-fill-loud',
           );
 
-  const footer = history ? undefined : (
-    <>
-      <span class="permission-request-card__quiet-action">
-        <Button
-          emphasis="plain"
-          size="compact"
-          action={NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.value}
-          rootAttributes={{ ...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }, 'data-request-key': item.key }}
-        >
-          Ignore
-        </Button>
-      </span>
-      {presentation === 'popup' && (
-        // Pauses every interruptive notification in all projects; requests keep collecting in
-        // Notifications until Resume (HS2-QYA9SC).
-        <span class="permission-request-card__quiet-action">
-          <Button
-            emphasis="plain"
-            size="compact"
-            action={NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.value}
-            title="Stop permission popups in every project until you resume"
-          >
-            Pause Notifications
-          </Button>
-        </span>
-      )}
-    </>
-  );
   const decisions = history ? undefined : (
-    <div class="permission-request-card__decision-area">
-      {countdown && (
-        <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>
-          <span
-            class="permission-request-card__timer"
-            role="timer"
-            aria-label={`Automatic ${countdownAction} countdown`}
-          >
-            Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong>
-          </span>
-          <Button
-            emphasis="plain"
-            size="compact"
-            className={'permission-request-card__stop-automation'}
-            action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.value}
-            ariaLabel={`Stop auto-${countdownAction} Countdown`}
-            title={`Stop auto-${countdownAction} countdown for this request`}
-            rootAttributes={{ 'data-request-key': item.key }}
-            icon={<LucideIcon size={14.4} icon={Pause} name="pause" />}
-          />
-        </div>
-      )}
+    <div class="permission-request-card__actions">
       <div class="permission-request-card__buttons">
-        <span class="permission-request-card__decision">
+        <span class="permission-request-card__decision permission-request-card__deny">
           <Button
+            tone="danger"
             emphasis="secondary"
             size="compact"
+            fill
             action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
             disabled={state === 'resolving'}
             rootAttributes={{ 'data-decision': 'deny', 'data-scope': 'once', 'data-request-key': item.key }}
@@ -198,44 +151,101 @@ export function PermissionRequestCard({
             Deny
           </Button>
         </span>
-        <span class="permission-request-card__decision">
-          <Button
-            emphasis="secondary"
-            size="compact"
-            action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
-            disabled={state === 'resolving'}
-            title="Allow this exact request again in this chat without asking, until the chat closes"
-            rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
-          >
-            Allow for This Chat
-          </Button>
-        </span>
-        {alwaysSupported && (
+        <div
+          class="permission-request-card__allows"
+          data-allow-count={alwaysSupported ? '3' : '2'}
+          role="group"
+          aria-label="Allow duration"
+        >
           <span class="permission-request-card__decision">
             <Button
               emphasis="secondary"
               size="compact"
+              fill
               action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
               disabled={state === 'resolving'}
-              rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'always', 'data-request-key': item.key }}
+              title="Allow this exact request again in this chat without asking, until the chat closes"
+              rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
             >
-              Always Allow
+              Allow for This Chat
+            </Button>
+          </span>
+          {alwaysSupported && (
+            <span class="permission-request-card__decision">
+              <Button
+                emphasis="secondary"
+                size="compact"
+                fill
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
+                disabled={state === 'resolving'}
+                rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'always', 'data-request-key': item.key }}
+              >
+                Always Allow
+              </Button>
+            </span>
+          )}
+          <span class="permission-request-card__decision">
+            <Button
+              tone={'brand'}
+              emphasis="primary"
+              size="compact"
+              fill
+              className={'permission-request-card__primary'}
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
+              disabled={state === 'resolving'}
+              rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'once', 'data-request-key': item.key }}
+            >
+              {alwaysSupported ? 'Allow Once' : 'Allow'}
+            </Button>
+          </span>
+        </div>
+      </div>
+      <div class="permission-request-card__utilities">
+        <span class="permission-request-card__quiet-action permission-request-card__ignore">
+          <Button
+            emphasis="plain"
+            size="compact"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.value}
+            rootAttributes={{ ...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }, 'data-request-key': item.key }}
+          >
+            Ignore
+          </Button>
+        </span>
+        {countdown && (
+          <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>
+            <span
+              class="permission-request-card__timer"
+              role="timer"
+              aria-label={`Automatic ${countdownAction} countdown`}
+            >
+              Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong>
+            </span>
+            <Button
+              emphasis="plain"
+              size="compact"
+              className={'permission-request-card__stop-automation'}
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.value}
+              ariaLabel={`Stop auto-${countdownAction} Countdown`}
+              title={`Stop auto-${countdownAction} countdown for this request`}
+              rootAttributes={{ 'data-request-key': item.key }}
+              icon={<LucideIcon size={14.4} icon={Pause} name="pause" />}
+            />
+          </div>
+        )}
+        {presentation === 'popup' && (
+          // Pauses every interruptive notification in all projects; requests keep collecting in
+          // Notifications until Resume (HS2-QYA9SC).
+          <span class="permission-request-card__quiet-action permission-request-card__pause">
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.value}
+              title="Stop permission popups in every project until you resume"
+            >
+              Pause Notifications
             </Button>
           </span>
         )}
-        <span class="permission-request-card__decision">
-          <Button
-            tone={'brand'}
-            emphasis="primary"
-            size="compact"
-            className={'permission-request-card__primary'}
-            action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
-            disabled={state === 'resolving'}
-            rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'once', 'data-request-key': item.key }}
-          >
-            {alwaysSupported ? 'Allow Once' : 'Allow'}
-          </Button>
-        </span>
       </div>
     </div>
   );
@@ -265,7 +275,6 @@ export function PermissionRequestCard({
       time={relativeTime(timestamp)}
       summary={{ icon: stateIcon, iconName, label: statusLabel, color: summaryColor }}
       details={{ text: item.action, bounded: true }}
-      quietActions={footer}
       endActions={decisions}
     >
       <>

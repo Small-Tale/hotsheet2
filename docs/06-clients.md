@@ -2814,8 +2814,12 @@ Toasts that confirm the user's own actions are unaffected. Any future interrupti
 surface, such as server `/notifications`, must honor the same pause unless it is an emergency.
 
 Ignore is client-only and hides the popup without answering. When the server advertises
-durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow Once;
-otherwise the final action is simply Allow. Per-project localStorage settings can turn
+durable Always Allow support, decisions span the popup in a red-outlined Deny slot and a
+group of Allow for This Chat, Always Allow, and primary Allow Once choices. Without durable
+support the final choice is simply Allow. Ignore sits at the bottom left, Pause Notifications
+at the bottom right, and the auto-decision countdown with its stop control at the bottom
+center. At phone width the decisions stack while every action stays reachable (HS2-WEMN20).
+Per-project localStorage settings can turn
 on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. Auto-Allow alone also
 offers **0 seconds** (HS2-EBGCGW): each arriving request (and every presented pending request
 when the setting is chosen) is allowed once before anything renders, so its popup never
