@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-1M05KF separates command-settings state and save orchestration into
+`clients/web/src/command-settings-workflow.ts`. Its unit tests cover partial
+drafts, kind/AI edits and validation, empty-group retention, multi-project
+debounce/keepalive flush, late save results and errors, and ordered group saves.
+The composed Settings editor remains covered by the browser command settings
+flows in `clients/web/tests/providers.spec.ts`.
+
 HS2-H6RRZN adds four versioned client-state fixture sequences under
 `docs/contracts/v1/client-state/`. `clients/web/src/client-state-fixtures.test.ts`
 validates their schema and runs collection ordering/filtering plus selection,

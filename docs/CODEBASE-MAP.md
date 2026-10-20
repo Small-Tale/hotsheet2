@@ -65,6 +65,11 @@ Portable client-state transition fixtures and their schema are under
 sort, selection, history, workspace search, and change-stream modules against
 those language-neutral expected states.
 
+`clients/web/src/command-settings-workflow.ts` owns command editor draft
+transitions, validation, group retention/reorder, and project-keyed save timing
+and response guards. `features/commands.tsx` adapts that workflow to project
+signals, API calls, prompts, popovers, and the rendered command surfaces.
+
 ## Directory tree
 
 ```
