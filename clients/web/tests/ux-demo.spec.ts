@@ -928,8 +928,8 @@ test('demos every NotificationCard elevation, footer layout, and details appeara
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/ux-demo?component=notification-card');
   const cards = page.locator('article.notification-card');
-  await expect(cards).toHaveCount(6);
-  for (const elevation of ['popup', 'list', 'flat'])
+  await expect(cards).toHaveCount(7);
+  for (const elevation of ['popup', 'popup-contained', 'list', 'flat'])
     await expect(page.locator(`article.notification-card[data-elevation="${elevation}"]`).first()).toBeVisible();
   await expect(page.locator('article.notification-card[data-footer-layout="stack"]')).toHaveCount(1);
   await expect(page.locator('.notification-card__details[data-appearance="prose"]')).toHaveCount(1);
@@ -8191,7 +8191,7 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-settings-narrow.png', fullPage: true });
 });
 
-test('top-layer permission popup keeps shadow room inside its short-viewport scroller', async ({ page }) => {
+test('top-layer permission popup paints its rounded shadow outside its short-viewport scroller', async ({ page }) => {
   await page.setViewportSize({ width: 1568, height: 832 });
   await page.goto('/ux-demo?component=permission-request');
   await page.getByRole('button', { name: 'Show Settings' }).first().click();
@@ -8206,13 +8206,26 @@ test('top-layer permission popup keeps shadow room inside its short-viewport scr
   const card = popup.locator('[data-component="permission-request-card"]');
   await expect(popup).toBeVisible();
   await expect(popup).toHaveCSS('overflow-y', 'auto');
-  await expect(popup).toHaveCSS('padding-bottom', '16px');
+  await expect(popup).not.toHaveCSS('box-shadow', 'none');
+  await expect(card).toHaveAttribute('data-elevation', 'popup-contained');
+  await expect(card).toHaveCSS('box-shadow', 'none');
+  await expect(popup).toHaveCSS('border-radius', '16px');
   const [popupBox, cardBox] = await Promise.all([popup.boundingBox(), card.boundingBox()]);
-  expect(Math.round(popupBox!.width - cardBox!.width)).toBe(24);
+  expect(Math.round(popupBox!.width - cardBox!.width)).toBe(0);
+  expect(Math.round(popupBox!.x)).toBe(Math.round(cardBox!.x));
   await page.screenshot({ path: 'target/visual-captures/hs2-q3r273-permission-shadow-wide.png', fullPage: true });
+
+  await page.setViewportSize({ width: 1660, height: 1070 });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-q3r273-permission-shadow-review-viewport.png',
+    fullPage: true,
+  });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(card).toBeVisible();
+  const phoneBox = await popup.boundingBox();
+  expect(Math.round(phoneBox!.x)).toBe(8);
+  expect(Math.round(390 - phoneBox!.x - phoneBox!.width)).toBe(8);
   await page.screenshot({ path: 'target/visual-captures/hs2-q3r273-permission-shadow-phone.png', fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 420 });

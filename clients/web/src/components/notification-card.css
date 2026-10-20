@@ -13,6 +13,10 @@
   border-color: var(--wa-color-neutral-border-loud);
   box-shadow: var(--wa-shadow-l);
 }
+.notification-card[data-elevation='popup-contained'] {
+  border-color: var(--wa-color-neutral-border-loud);
+  box-shadow: none;
+}
 .notification-card[data-elevation='flat'] {
   box-shadow: none;
 }

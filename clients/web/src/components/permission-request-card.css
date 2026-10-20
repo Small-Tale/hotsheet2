@@ -81,21 +81,20 @@
   inset: auto;
   max-width: none;
   top: remify(56px);
-  right: remify(4px);
-  width: min(remify(728px), calc(100vw - remify(8px)));
+  right: remify(16px);
+  width: min(remify(704px), calc(100vw - remify(32px)));
   height: auto;
   max-height: calc(100dvh - remify(72px));
   margin: 0;
-  /* The 12px side inset and 16px end inset leave room for NotificationCard's large shadow inside
-     this scrolling dialog. Its wider box and 4px anchor offset keep the card at its old 704px
-     width and 16px right inset (HS2-Q3R273). */
-  padding: 0 remify(12px) remify(16px);
+  padding: 0;
   overflow-y: auto;
   border: 0;
-  border-radius: 0;
+  border-radius: remify(16px);
   color: inherit;
-  background: transparent;
-  box-shadow: none;
+  background: var(--wa-color-surface-default);
+  /* The dialog scrolls on short viewports. Paint its shadow outside that scrollport instead of
+     clipping the child card's blur into a rectangular halo (HS2-Q3R273). */
+  box-shadow: var(--wa-shadow-l);
   transition: none;
 }
 /* Web Awesome's native styles give every `<dialog>` a panel box and transition, and an open one flex. */
@@ -112,8 +111,8 @@
   .permission-request-popup[data-layer='top'] {
     position-anchor: --app-shell-main;
     top: calc(anchor(top, 0px) + remify(56px));
-    right: calc(anchor(right, 0px) + remify(4px));
-    width: min(remify(728px), calc(anchor-size(width, 100vw) - remify(8px)));
+    right: calc(anchor(right, 0px) + remify(16px));
+    width: min(remify(704px), calc(anchor-size(width, 100vw) - remify(32px)));
   }
 }
 @container (max-width: remify(544px)) {
@@ -151,9 +150,7 @@
     overflow-y: auto;
   }
   .permission-request-popup[data-layer='top'] {
-    right: 0;
-    left: 0;
-    padding-right: remify(8px);
-    padding-left: remify(8px);
+    right: remify(8px);
+    left: remify(8px);
   }
 }

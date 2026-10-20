@@ -2764,7 +2764,7 @@
       "id": "notification-card",
       "name": "NotificationCard",
       "kind": "component",
-      "purpose": "Shared notification frame for permission requests and halted AI sessions: identity, project pill, summary, optional details, and footer actions across popup, list, and flat elevations.",
+      "purpose": "Shared notification frame for permission requests and halted AI sessions: identity, project pill, summary, optional details, and footer actions across popup, popup-contained, list, and flat elevations.",
       "publicExports": [
         {
           "name": "NotificationCard"
@@ -2806,7 +2806,7 @@
           "border": "self",
           "padding": "self",
           "notes": [
-            "Owns its card frame, elevation shadow, and footer wrap/stack layout; composers supply the footer actions (HS2-XS71FB, HS2-V2G3W1)."
+            "Owns its card frame, elevation shadow, and footer wrap/stack layout; popup-contained keeps the popup border when a scrolling parent owns the shadow; composers supply the footer actions (HS2-XS71FB, HS2-V2G3W1, HS2-Q3R273)."
           ]
         }
       },

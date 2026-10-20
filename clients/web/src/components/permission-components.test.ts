@@ -107,6 +107,8 @@ describe('permission presentation components', () => {
     expect(inline).not.toContain('popover=');
     expect(inline).not.toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
     expect(top).toContain('data-layer="top"');
+    expect(top).toContain('data-elevation="popup-contained"');
+    expect(inline).toContain('data-elevation="popup"');
     expect(top).toContain('popover="manual"');
     // Both attributes the shared watcher (`openTopLayerOverlays`) selects on, so it calls showPopover().
     expect(top).toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
@@ -132,7 +134,10 @@ describe('permission presentation components', () => {
     );
     expect(css).toContain('@supports (position-anchor: --app-shell-main)');
     expect(css).toMatchSource(
-      /\.permission-request-popup\[data-layer='top'\] \{[^}]*max-width:none;[^}]*border-radius:0;[^}]*box-shadow:none;[^}]*transition:none;/,
+      /\.permission-request-popup\[data-layer='top'\] \{[^}]*max-width:none;[^}]*border-radius:remify\(16px\);[^}]*box-shadow:var\(--wa-shadow-l\);[^}]*transition:none;/,
+    );
+    expect(readFileSync(resolve(import.meta.dirname, 'notification-card.css'), 'utf8')).toMatchSource(
+      /\.notification-card\[data-elevation='popup-contained'\] \{[^}]*border-color:var\(--wa-color-neutral-border-loud\);[^}]*box-shadow:none;/,
     );
     expect(css).toMatchSource(/\.permission-request-popup\[data-layer='top'\]\[open\] \{\s*display:block;/);
     expect(css).toMatchSource(/\.permission-request-popup\[data-layer='top'\]::backdrop \{\s*background:transparent;/);

@@ -15,6 +15,8 @@ export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'd
 export interface PermissionRequestCardProps {
   item: PermissionItem | PermissionHistoryItem;
   presentation?: 'popup' | 'list';
+  /** Use the containing dialog's shadow when its own scrollport would clip the card's blur. */
+  popupShadow?: 'card' | 'container';
   state?: PermissionRequestCardState;
   explanation?: string;
   countdown?: string;
@@ -70,6 +72,7 @@ export function updatePermissionCountdownText(root: ParentNode, key: string, val
 export function PermissionRequestCard({
   item,
   presentation = 'list',
+  popupShadow = 'card',
   state = 'pending',
   explanation,
   countdown,
@@ -231,7 +234,15 @@ export function PermissionRequestCard({
         'data-resolved': history ? 'true' : undefined,
         'data-request-key': item.key,
       }}
-      elevation={presentation === 'popup' ? 'popup' : history ? 'flat' : 'list'}
+      elevation={
+        presentation === 'popup'
+          ? popupShadow === 'container'
+            ? 'popup-contained'
+            : 'popup'
+          : history
+            ? 'flat'
+            : 'list'
+      }
       footerLayout="stack"
       identity={item.agent}
       role={item.role}
@@ -259,7 +270,7 @@ export function PermissionRequestCard({
   );
 }
 
-export interface PermissionRequestPopupProps extends Omit<PermissionRequestCardProps, 'presentation'> {
+export interface PermissionRequestPopupProps extends Omit<PermissionRequestCardProps, 'presentation' | 'popupShadow'> {
   /**
    * Where the popup paints. `inline` (default) anchors it to its positioned host's top-right corner.
    * `flow` places it in its host's layout, so the host positions it, as the AI conversation's
@@ -272,7 +283,9 @@ export interface PermissionRequestPopupProps extends Omit<PermissionRequestCardP
 }
 
 export function PermissionRequestPopup({ layer = 'inline', ...props }: PermissionRequestPopupProps) {
-  const card = <PermissionRequestCard {...props} presentation="popup" />;
+  const card = (
+    <PermissionRequestCard {...props} presentation="popup" popupShadow={layer === 'top' ? 'container' : 'card'} />
+  );
   // The shell's popup is a `<dialog>` so `wireTopLayerOverlays` can lift it with `showModal()` above an
   // open modal dialog, which would otherwise leave it painted on top but inert (HS2-MAE27T). `tabindex`
   // lets the watcher focus the popup itself on a lift, so Enter is never armed on a decision button.

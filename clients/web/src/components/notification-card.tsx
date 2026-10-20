@@ -8,10 +8,11 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Bot, type IconNode } from 'lucide';
 
 /**
- * How the card sits on its surface: `popup` floats above content (loud border, large shadow), `list`
- * rests in a notification list (quiet shadow), and `flat` is a settled history entry without shadow.
+ * How the card sits on its surface: `popup` floats above content (loud border, large shadow),
+ * `popup-contained` keeps the loud border while its container paints the shadow, `list` rests in a
+ * notification list (quiet shadow), and `flat` is a settled history entry without shadow.
  */
-export type NotificationCardElevation = 'popup' | 'list' | 'flat';
+export type NotificationCardElevation = 'popup' | 'popup-contained' | 'list' | 'flat';
 
 /**
  * How the footer adapts when the card is narrow: `wrap` keeps quiet actions and the trailing action on

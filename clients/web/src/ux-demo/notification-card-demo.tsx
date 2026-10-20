@@ -77,7 +77,7 @@ export function NotificationCardDemo() {
   return (
     <>
       <DemoEvent>{notificationCardDemoResult.value}</DemoEvent>
-      {(['popup', 'list', 'flat'] as const).map((elevation) => (
+      {(['popup', 'popup-contained', 'list', 'flat'] as const).map((elevation) => (
         <CatalogExample label={`Elevation: ${elevation}`} viewport={{ width: 'wide' }}>
           <DemoCard elevation={elevation} footerLayout="wrap" />
         </CatalogExample>
