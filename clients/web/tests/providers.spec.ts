@@ -576,7 +576,12 @@ test('prioritizes an ignored foreground permission request over queued halts (HS
     popup = page.getByRole('dialog', { name: 'AI session halted' });
   await expect(permission).toBeVisible();
   await permission.getByRole('button', { name: 'Ignore' }).click();
-  await expect(conversation.locator('[data-component="permission-request-card"]')).toBeVisible();
+  await expect(
+    conversation.locator('.ai-conversation__sidecar [data-component="permission-request-card"]'),
+  ).toBeVisible();
+  await expect(
+    conversation.locator('.ai-conversation__transcript [data-component="permission-request-card"]'),
+  ).toHaveCount(0);
   await fixture.halt('foreground');
   await expect(popup).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();

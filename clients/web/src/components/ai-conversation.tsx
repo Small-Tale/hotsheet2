@@ -615,7 +615,20 @@ export function AIConversation(props: AIConversationProps) {
             ? 'Ready for your first message'
             : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
               conversationHeaderSummary(messages.length, totalUsage);
-  const inlinePermissions = presentation === 'dialog' && (foreground || sidecar) ? [] : permissions,
+  // Ignoring a prompt hides its floating popup, but the unresolved request must remain
+  // answerable. Keep its card in the sidecar rather than moving it into the transcript.
+  const permissionSidecar =
+      sidecar ??
+      (presentation === 'dialog' && permissions.length > 0 ? (
+        <List gap="xs">
+          {permissions.map((item) => (
+            <div data-permission-key={item.key}>
+              <PermissionRequestCard item={item} presentation="list" />
+            </div>
+          ))}
+        </List>
+      ) : undefined),
+    inlinePermissions = presentation === 'dialog' ? [] : permissions,
     selectedIds = new Set(selectedMessageIds),
     selectionEnabled = Boolean(selectionId) && messages.length > 0,
     selectedCount = selectedIds.size;
@@ -859,7 +872,7 @@ export function AIConversation(props: AIConversationProps) {
       resizable
       preferredWidth={remify(768)}
       height={remify(608)}
-      minHeight={remify(sidecar ? 0 : 320)}
+      minHeight={remify(permissionSidecar ? 0 : 320)}
       viewportGutter={remify(8)}
       bodyInset="none"
       footerInset="none"
@@ -899,7 +912,7 @@ export function AIConversation(props: AIConversationProps) {
         trailing={<AIConversationToolbar {...props} presentation="dialog" />}
       />
       {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
-      {sidecar && <div class="ai-conversation__sidecar">{sidecar}</div>}
+      {permissionSidecar && <div class="ai-conversation__sidecar">{permissionSidecar}</div>}
       {savedNotice}
       {selectionStatus}
       {transcript}

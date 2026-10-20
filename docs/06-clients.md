@@ -2769,7 +2769,8 @@ Escape then belongs to the popup as the topmost surface: it acts as Ignore
 uses a separate sidecar in that modal's interaction scope. On wide screens the sidecar sits
 beside the conversation; on narrower screens it stacks above a shorter conversation panel.
 Neither surface covers the other's controls, and resolving the request uses the same
-authoritative permission path (HS2-VBG6W5). Standalone conversation dialogs use native light-dismiss and Escape behavior and
+authoritative permission path. Ignoring its popup leaves an unresolved, answerable card in
+the sidecar until the request is decided (HS2-VBG6W5). Standalone conversation dialogs use native light-dismiss and Escape behavior and
 do not duplicate that dismissal with a header close button. The Notifications view, its
 Pending/24 Hours/7 Days counts, and newest-first machine-local client history are scoped to
 the selected project and switch immediately with its tab; a request that

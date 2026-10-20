@@ -586,7 +586,9 @@ describe('AIConversation', () => {
         );
       const markup = render('connection-1'),
         gridStart = markup.search(/<div[^>]*role="grid"/),
-        grid = markup.slice(gridStart, markup.indexOf('data-permission-key'));
+        permissionIndex = markup.indexOf('data-permission-key'),
+        gridEnd = presentation === 'embedded' ? permissionIndex : markup.indexOf('ai-conversation__error', gridStart),
+        grid = markup.slice(gridStart, gridEnd);
       expect(markup.match(/role="grid"/g)).toHaveLength(1);
       expect(grid).toMatch(
         /^<div[^>]*role="grid"[^>]*aria-label="Conversation Messages"[^>]*aria-multiselectable="true"/,
@@ -600,8 +602,9 @@ describe('AIConversation', () => {
       expect(grid.match(/role="row"/g)).toHaveLength(4);
       expect(grid.match(/role="gridcell"/g)).toHaveLength(4);
       expect(grid).not.toContain('role="option"');
-      // Permission cards and failures stay outside the grid, in the scrolling transcript region.
-      expect(markup.indexOf('data-permission-key')).toBeGreaterThan(gridStart);
+      // Embedded cards follow the grid; dialog cards precede it in a separate sidecar.
+      if (presentation === 'embedded') expect(permissionIndex).toBeGreaterThan(gridStart);
+      else expect(permissionIndex).toBeLessThan(gridStart);
       expect(grid).not.toContain('Conversation Unavailable');
       // Without a selection owner nothing claims grid or row semantics.
       const plain = render(undefined);
@@ -645,6 +648,21 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-layer="flow"');
     expect(css).not.toContain('.permission-request-popup');
     expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);
+  });
+  it('keeps an ignored, unresolved permission answerable in the sidecar', () => {
+    const markup = withToolbar({
+      open: true,
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: true,
+      interruptible: true,
+      permissions: [{ ...permission, ignored: true }],
+    });
+    const sidecar = markup.slice(markup.indexOf('ai-conversation__sidecar'));
+    expect(sidecar).toContain('data-component="permission-request-card"');
+    expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);
+    expect(markup.slice(0, markup.indexOf('ai-conversation__sidecar'))).not.toContain('data-permission-key');
   });
   it('shows the model without an effort badge while retaining the effort menu', () => {
     const markup = withToolbar({

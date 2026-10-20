@@ -1817,7 +1817,8 @@ capability-aware sections when their underlying features and data contracts land
   popup's insets. The standalone conversation uses a fixed, independently scrolling sidecar
   inside the chat modal's interaction scope. At 1280px and wider it places the card beside
   the chat; below that it stacks the card above a shorter chat. The active request is never
-  duplicated in the transcript, and chat controls remain hit-testable (HS2-VBG6W5). The
+  duplicated in the transcript, and chat controls remain hit-testable (HS2-VBG6W5). An
+  ignored prompt keeps an answerable card in that same sidecar until it is resolved. The
   older foreground layer remains available to other `AIConversation` compositions, but the
   shipped standalone chat no longer uses it for permission requests.
   For the shell's `top` layer, the transparent dialog owns short-viewport scrolling and reserves

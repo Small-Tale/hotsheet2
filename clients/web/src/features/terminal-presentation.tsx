@@ -337,6 +337,9 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           progress: state.progress,
           turnProgress: chatTurnProgress(current.id, connectionId, state, connection),
           interruptible: Boolean(connection.actions?.includes('interrupt')),
+          permissions: pendingPermissions().filter(
+            (item) => item.projectId === current.id && item.connection === connectionId,
+          ),
           activity: state.activity,
           totalUsage: conversationUsage(state),
           error: conversationError(state, connection),
