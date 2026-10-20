@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CLOSE_TICKET_CONTEXT_ACTION,
   COMPLETED_TICKET_CONTEXT_ACTIONS,
+  COPY_TICKET_IDS_CONTEXT_ACTION,
   eventTargetsContextMenu,
   REOPEN_TICKET_CONTEXT_ACTION,
   RESTORE_TICKET_CONTEXT_ACTION,
@@ -41,6 +42,19 @@ describe('TicketRowContextMenu', () => {
     expect(markup.indexOf('data-context-action="Move to Backlog"')).toBeLessThan(
       markup.indexOf('data-context-action="Archive ticket"'),
     );
+  });
+
+  it('copies one ticket ID or the selected ticket IDs through the same shared menu', () => {
+    const action = `data-context-action="${COPY_TICKET_IDS_CONTEXT_ACTION.action}"`;
+    const single = String(TicketRowContextMenu({ x: 0, y: 0 }));
+    expect(single).toContain(action);
+    expect(single).toContain('Copy ticket ID');
+    expect(single).toContain('data-lucide="clipboard-copy"');
+    const multiple = String(TicketRowContextMenu({ x: 0, y: 0, selectionCount: 2, canBulkUpdate: false }));
+    expect(multiple).toContain(action);
+    expect(multiple).toContain('Copy ticket IDs');
+    expect(disabledItem(multiple, action)).toBe(false);
+    expect(multiple).not.toContain('data-context-action="Open ticket"');
   });
 
   it('disables destination actions when every selected ticket is already there', () => {

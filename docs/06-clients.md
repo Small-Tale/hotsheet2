@@ -2323,6 +2323,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   The ticket context menu also exposes the server's structured close operation when the
   provider advertises `close` and `close_reasons`. Its pointer anchor remains stable while
   live ticket updates change the menu's available actions (HS2-S1EE53).
+  The same menu, including the ticket's More actions entry, copies the ticket ID (slug);
+  when several rows are selected it copies their IDs in selection order, one per line,
+  even if their providers do not allow updates (HS2-F0XZAX).
   The close dialog records Completed,
   Not planned, Duplicate, or Obsolete rather than approximating those outcomes with a
   status patch or note. Duplicate closure searches every open project, labels each result

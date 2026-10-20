@@ -960,3 +960,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: Each project's change-stream ticket invalidations batch for 180 ms of quiet or at most 900 ms of continuous events. An event during an in-flight read schedules one trailing read. Closing the project cancels a queued read, and activation still performs an authoritative refresh.
 - Unit: `clients/web/src/project-change-refresh.test.ts` covers interleaved and sustained bursts, trailing reads, and cancellation; `clients/web/src/features/runtime-split-controllers.test.ts` covers the stream composition.
 - End to end: `clients/web/tests/change-poll-mux.spec.ts` checks active and background tab freshness, real-server ticket and corrupt-ticket reads, request counts, and latency under dense events.
+
+### Copy selected ticket IDs (HS2-F0XZAX)
+
+- Behavior: The shared ticket context and More actions menus copy one ticket slug or all selected slugs in selection order, separated by line breaks. Copy stays available for read-only providers and reports clipboard success or failure.
+- Unit: `clients/web/src/components/ticket-row-context-menu.test.ts` checks labels and availability; `clients/web/src/components/ticket-collection-interactions.test.ts` checks selected-target routing.
+- End to end: `clients/web/tests/providers.spec.ts` checks clipboard text for one and multiple selected tickets through the production menu.

@@ -304,6 +304,7 @@ function WorkspaceOverflowControls({
   mode,
   projectActionsDisabled,
   ticketActionsDisabled,
+  selectedActionsDisabled,
   searchOpen,
   sort,
   sortDirection,
@@ -316,6 +317,7 @@ function WorkspaceOverflowControls({
   mode: WorkspaceViewMode;
   projectActionsDisabled: boolean;
   ticketActionsDisabled: boolean;
+  selectedActionsDisabled: boolean;
   searchOpen: boolean;
   sort: WorkspaceSort;
   sortDirection: WorkspaceSortDirection;
@@ -358,7 +360,7 @@ function WorkspaceOverflowControls({
         },
         {
           label: 'Show Selected Ticket Actions…',
-          disabled: ticketActionsDisabled,
+          disabled: selectedActionsDisabled,
           icon: overflowIcon(MoreHorizontal, 'ellipsis'),
           attributes: {
             'data-workspace-overflow-kind': 'utility',
@@ -444,7 +446,8 @@ export function WorkspaceControls({
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
   const visibleSearchOpen = searchOpen && !projectActionsDisabled;
-  const ticketActionsDisabled = projectActionsDisabled || selectedTicketCount === 0 || !selectedTicketsMutable;
+  const selectedActionsDisabled = projectActionsDisabled || selectedTicketCount === 0;
+  const ticketActionsDisabled = selectedActionsDisabled || !selectedTicketsMutable;
   const visibleSortOptions = mode === 'board' ? sortOptions.filter((option) => option.value !== 'status') : sortOptions;
   const sortChoices: ReadonlyArray<SelectChoice<WorkspaceSort>> = visibleSortOptions.map((option) => {
     const choiceIcon = workspaceSortTrigger(
@@ -502,7 +505,7 @@ export function WorkspaceControls({
         </button>
         <button
           type="button"
-          disabled={ticketActionsDisabled}
+          disabled={selectedActionsDisabled}
           {...TICKET_SELECTION_ACTIONS.openSelectedTicketActions.attrs}
           aria-label="More Actions for Selected Tickets"
           title="More actions for selected tickets"
@@ -530,6 +533,7 @@ export function WorkspaceControls({
       mode={mode}
       projectActionsDisabled={projectActionsDisabled}
       ticketActionsDisabled={ticketActionsDisabled}
+      selectedActionsDisabled={selectedActionsDisabled}
       searchOpen={visibleSearchOpen}
       sort={sort}
       sortDirection={sortDirection}

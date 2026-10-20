@@ -9,6 +9,7 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { copyText } from '../copy-text';
 import { createCoalescedInput } from '../debounced-autosave';
 import { routeFilePicker } from '../file-picker-routes';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
@@ -48,6 +49,7 @@ export interface TicketSelectionInteractionsDependencies {
   readonly openTicketClose: (ticket: WireTicketRow) => void;
   readonly copySelection: (cut: boolean) => void;
   readonly pasteSelection: () => Promise<void>;
+  readonly showToast: (message: string) => void;
   readonly openBulkTicketDialog: (kind: 'add-tag' | 'remove-tag' | 'delete', targetSlugs?: string[]) => void;
   readonly restoreTrashedTickets: (targetSlugs: readonly string[]) => Promise<void>;
   bulkTicketSlugs: string[];
@@ -99,6 +101,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     openTicketClose,
     copySelection,
     pasteSelection,
+    showToast,
     openBulkTicketDialog,
     restoreTrashedTickets,
     bulkTicketDialog,
@@ -216,6 +219,17 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           void openTicketReader(menuSlug, undefined, row ?? undefined);
           return;
         }
+        if (action === 'Copy ticket IDs') {
+          // Copy before the click gesture ends so Safari's synchronous fallback can run.
+          void copyText(slugs.join('\n'))
+            .then(() => {
+              showToast(slugs.length === 1 ? `${slugs[0]} copied to clipboard.` : `${slugs.length} ticket IDs copied.`);
+            })
+            .catch((reason: unknown) => {
+              showToast(`Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`);
+            });
+          return;
+        }
         if (action === 'Verify ticket') {
           void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'verified' }, slugs);
           return;
@@ -297,7 +311,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           window.innerHeight,
           {
             width: 232,
-            height: 382,
+            height: 422,
           },
         );
       ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };

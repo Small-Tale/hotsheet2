@@ -377,6 +377,18 @@ describe('WorkspaceHeader', () => {
     );
   });
 
+  it('keeps selected-ticket menus available for copying read-only tickets', () => {
+    const markup = String(
+      WorkspaceHeader({ projectName: 'Demo', mode: 'list', selectedTicketCount: 2, selectedTicketsMutable: false }),
+    );
+    expect(markup).not.toMatch(/<button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
+    const overflowAction = markup.match(
+      /<button[^>]*data-workspace-overflow-action="open-selected-ticket-actions"[^>]*>/,
+    )?.[0];
+    expect(overflowAction).toContain('class="kui-popup-menu__item"');
+    expect(overflowAction).not.toContain('aria-disabled="true"');
+  });
+
   it('omits every project control for global shell modes', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Terminals', mode: 'list', controlsVisible: false }));
     expect(markup).toMatch(/^<header class="kui-toolbar workspace-header" data-component="toolbar"/);

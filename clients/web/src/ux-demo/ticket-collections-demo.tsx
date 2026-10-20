@@ -13,6 +13,7 @@ import {
   type TicketSelectionState,
   updateTicketSelection,
 } from '../components/ticket-selection';
+import { copyText } from '../copy-text';
 import { DemoEvent } from './components/demo-event';
 import { contextMenu, selectDemo, selectedId } from './components/demo-state';
 import { openDemoTicketReader } from './content-components-demo';
@@ -476,7 +477,17 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
         });
         recordCollectionEvent(`${field} changed to ${value} for ${chosen.size} ticket${chosen.size === 1 ? '' : 's'}`);
       },
-      onContextAction: (action, _slugs, menuSlug) => {
+      onContextAction: (action, slugs, menuSlug) => {
+        if (action === 'Copy ticket IDs') {
+          void copyText(slugs.join('\n'))
+            .then(() => {
+              recordCollectionEvent(`${slugs.length} ticket ID${slugs.length === 1 ? '' : 's'} copied`);
+            })
+            .catch((reason: unknown) => {
+              recordCollectionEvent(`Copy failed: ${String(reason)}`);
+            });
+          return;
+        }
         if (usesCollectionState()) {
           if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(menuSlug);
           if (action === 'Report not working') {

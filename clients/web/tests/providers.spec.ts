@@ -27019,6 +27019,41 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await page.screenshot({ path: 'target/visual-captures/hs2-czmm6x-hidden-selection-cleared.png', fullPage: true });
 });
 
+test('copies one or every selected ticket ID from row and More actions menus (HS2-F0XZAX)', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
+    menu = page.locator('[data-context-menu="ticket"]');
+  const captureMenu = async (name: string) => {
+    const image = await page.screenshot({ path: test.info().outputPath(`${name}.png`) });
+    await test.info().attach(name, { body: image, contentType: 'image/png' });
+  };
+  await first.click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy ticket ID', exact: true })).toBeVisible();
+  await captureMenu('hs2-f0xzax-single-wide');
+  await menu.getByRole('menuitem', { name: 'Copy ticket ID', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
+  await second.click({ modifiers: ['Meta'] });
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'More Actions for Selected Tickets' }).click();
+  await expect(menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true })).toBeVisible();
+  await captureMenu('hs2-f0xzax-multiple-wide');
+  await menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01\nHS2-START02');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await second.click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true })).toBeVisible();
+  await captureMenu('hs2-f0xzax-multiple-phone');
+});
+
 for (const surface of ['workspace', 'rail'] as const) {
   for (const theme of ['light', 'dark'] as const) {
     test(`projects native tri-state toolbar stars through ${surface} in ${theme} (HS2-WP15AF)`, async ({ page }) => {

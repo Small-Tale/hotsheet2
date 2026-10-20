@@ -158,6 +158,11 @@ describe('wireTicketCollection (HS2-RWY78R)', () => {
     expect(state.select).toHaveBeenCalledWith('C', {}, ['A', 'B', 'C'], rows.get('C'), expect.anything());
     handler('click', '[data-context-action]')(event('click'), action);
     expect(state.onContextAction).toHaveBeenCalledWith('Archive ticket', ['A', 'B'], 'C');
+    contextmenu(event('contextmenu', { clientX: 10, clientY: 20 }), row('A'));
+    handler('click', '[data-context-action]')(event('click'), {
+      dataset: { contextAction: 'Copy ticket IDs' },
+    } as unknown as Element);
+    expect(state.onContextAction).toHaveBeenCalledWith('Copy ticket IDs', ['A', 'B'], 'A');
   });
 
   it('selects a whole column and opens the reader on double-click outside controls', () => {

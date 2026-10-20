@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   CircleDot,
   CircleX,
+  ClipboardCopy,
   Clock3,
   Copy,
   Gauge,
@@ -70,6 +71,12 @@ export const CLOSE_TICKET_CONTEXT_ACTION = {
   label: 'Close ticket…',
   icon: XCircle,
   iconName: 'x-circle',
+} as const;
+
+export const COPY_TICKET_IDS_CONTEXT_ACTION = {
+  action: 'Copy ticket IDs',
+  icon: ClipboardCopy,
+  iconName: 'clipboard-copy',
 } as const;
 
 function contextEntry(
@@ -211,8 +218,15 @@ export function TicketRowContextMenu({
     if (notWorkingAction) entries.push(contextEntry(COMPLETED_TICKET_CONTEXT_ACTIONS[1]));
     entries.push({ kind: 'divider' });
   }
-  // "Open ticket" opens a single ticket, so hide it when several are selected (HS2-XRENF2).
-  if (selectionCount <= 1) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[0]), { kind: 'divider' });
+  // "Open ticket" opens one ticket; the copy action follows the full selection (HS2-F0XZAX).
+  if (selectionCount <= 1) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[0]));
+  entries.push(
+    contextEntry({
+      ...COPY_TICKET_IDS_CONTEXT_ACTION,
+      label: selectionCount <= 1 ? 'Copy ticket ID' : 'Copy ticket IDs',
+    }),
+    { kind: 'divider' },
+  );
   entries.push(
     metadataSubmenu({
       field: 'category',
