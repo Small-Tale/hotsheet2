@@ -2079,6 +2079,8 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   const types = dialog.locator('kui-select[name="terminal-visibility-types"]');
   await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
   await types.locator('.kui-select__trigger').click();
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-kj7fax-types-open-wide.png', fullPage: true });
   await types.locator('button[data-select-action="clear"]').click();
   await expect(types).toHaveAttribute('open', '');
   await expect(types).toHaveJSProperty('value', []);
@@ -2119,6 +2121,11 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
+  await types.locator('.kui-select__trigger').click();
+  await expect(types).toHaveAttribute('open', '');
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-kj7fax-types-open-narrow.png', fullPage: true });
+  await page.keyboard.press('Escape');
   await page.screenshot({ path: 'target/visual-captures/hs2-z0m2vv-visibility-demo-open-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await review.click({ button: 'right' });

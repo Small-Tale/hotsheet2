@@ -174,7 +174,7 @@ export function TerminalVisibilityDialog({
               ))}
             </TabBar>
           </List>
-          <List controlInsets="trbl" dividerSides="b">
+          <List controlInsets="trbl">
             <Select
               name="terminal-visibility-types"
               label="Item Types"

@@ -2119,8 +2119,9 @@ select groups and named-tab context menus rename or delete them, while Default h
 menu. Rows include both terminals and AI chats with their existing stable visibility keys.
 A Web Awesome native multi-select, styled with Kerf's public Select class, filters Shell
 Terminals, AI Terminals, and AI Chat. Kerf's current Select API is single-valued, so this
-composition uses the native multiple contract and one controlled array/property bridge;
-the static native control is a morph-skipped island so its open popup and focus survive
+composition uses the native multiple contract and one controlled array/property bridge.
+The item-type controls flow into the workspace rows without a separating rule (HS2-KJ7FAX).
+The static native control is a morph-skipped island so its open popup and focus survive
 list updates. Select All / Deselect All keep the popup open; Hide listed / Show listed
 change only matching rows, with disabled bulk actions for an empty filter. Reopening resets
 all supported types, while named-group changes retain the filter. Web Browsers remains
