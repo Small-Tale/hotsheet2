@@ -116,10 +116,10 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     commandIcon,
     aiToolLabel,
   } = dependencies;
-  function sidebarSurfaceProps(): SidebarSurfaceProps {
+  function sidebarSurfaceProps(statsSelected = false): SidebarSurfaceProps {
     const current = project()!;
-    if (viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
-    if (viewMode.value === 'notifications') {
+    if (!statsSelected && viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
+    if (!statsSelected && viewMode.value === 'notifications') {
       const history = projectPermissionHistory(current.id),
         now = Date.now();
       return {
@@ -208,7 +208,8 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         conflicted: repo?.conflicted ?? 0,
         repositoryError: Boolean(repositoryError.value),
         views,
-        selectedViewId: searchScope(),
+        selectedViewId: statsSelected ? '' : searchScope(),
+        statsSelected,
         commandGroupLabel: 'Project commands',
         commands: commandDefinitions.value.map((command) => {
           const latest = commandRunFor(command.id);

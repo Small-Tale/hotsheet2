@@ -304,7 +304,11 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   (HS2-4APEJP). The tones, the background trend, and both sizes appear in the catalog. Hosts inset
   the summary with their own wrapper, as the project sidebar's `project-sidebar__summary` does, and
   never restyle its root. The whole summary is an accessible action that opens the selected project's
-  statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
+  statistics surface. It exposes a pressed state while that project's Stats view is open; the
+  selected project tab stays selected while the global Stats switch stays unpressed. Switching
+  projects keeps the project Stats surface open for the newly selected project, and reselecting
+  the current project tab returns to its last ticket list or column view (HS2-JK3DXP).
+  HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail

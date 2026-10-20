@@ -23,6 +23,10 @@
 .project-summary:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
+.project-summary[aria-pressed='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
 /* An inset focus ring, so the ring stays inside the sidebar's inline inset. */
 .project-summary:focus-visible {
   outline: 2px solid var(--wa-color-focus);

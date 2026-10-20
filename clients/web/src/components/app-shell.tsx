@@ -63,6 +63,7 @@ export interface AppShellProps {
   sidebarSize?: number;
   inspectorSize?: number;
   mode?: ProjectTabBarMode;
+  projectStats?: boolean;
   /** Expand the workspace grid by removing the surrounding rails and main toolbar. */
   gridFullscreen?: boolean;
   sidebarVisible?: boolean;
@@ -121,6 +122,7 @@ export function AppShell({
   sidebarSize = APP_REGION_BOUNDS['app-left-rail'].fallback,
   inspectorSize = APP_REGION_BOUNDS['app-right-rail'].fallback,
   mode = 'project',
+  projectStats = false,
   gridFullscreen = false,
   sidebarVisible = true,
   mobile = false,
@@ -276,6 +278,7 @@ export function AppShell({
             <ProjectTabBar
               tabs={tabs}
               mode={mode}
+              projectStats={projectStats}
               workspaceAction={projectTabAction}
               mobile={mobile}
               surface="default"

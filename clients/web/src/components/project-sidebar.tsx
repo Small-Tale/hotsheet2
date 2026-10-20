@@ -21,6 +21,7 @@ export interface ProjectSidebarProps {
   completedToday: number;
   inProgress: number;
   completionTrend: number[];
+  statsSelected?: boolean;
   branch: string;
   unpushed: number;
   behind?: number;
@@ -143,6 +144,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           inProgress={props.inProgress}
           trend={props.completionTrend}
           partial={props.countsPartial}
+          pressed={props.statsSelected}
         />
       </List>
       <RepositorySummary

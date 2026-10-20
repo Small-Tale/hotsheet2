@@ -14,7 +14,13 @@ export type ProjectStripMode = 'project' | 'terminals' | 'stats';
  * Toolbar `leading`) and is declared `rendersAs @kerfjs/ui:toolbar-control-group` so Kerf's
  * composition rule checks each placement (HS2-PNCDAE).
  */
-export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
+export function ProjectDashboardModes({
+  mode,
+  projectStats = false,
+}: {
+  mode: ProjectStripMode;
+  projectStats?: boolean;
+}) {
   return (
     <ToolbarControlGroup
       label="Global Dashboards"
@@ -38,7 +44,7 @@ export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
         {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
         data-shell-mode="stats"
         aria-label="Cross-Project Stats"
-        aria-pressed={String(mode === 'stats')}
+        aria-pressed={String(mode === 'stats' && !projectStats)}
       >
         <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
       </button>

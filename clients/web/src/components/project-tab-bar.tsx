@@ -19,6 +19,8 @@ export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];
   label?: string;
   mode?: ProjectTabBarMode;
+  /** Project-specific Stats keeps the active project tab selected instead of the global Stats switch. */
+  projectStats?: boolean;
   /** The current ticket view's primary action, pinned in TabBar's far-edge `end` zone. It is data, not
    * markup, so the zone renders literal JSX that Kerf's composition rule checks (HS2-PNCDAE). */
   workspaceAction?: TicketViewActionSpec;
@@ -42,6 +44,7 @@ export function ProjectTabBar({
   tabs,
   label = 'Open Projects',
   mode = 'project',
+  projectStats = false,
   workspaceAction,
   mobile = false,
   surface = 'lowered',
@@ -66,7 +69,7 @@ export function ProjectTabBar({
           dividerSides=""
           leading={
             <>
-              <ProjectDashboardModes mode={mode} />
+              <ProjectDashboardModes mode={mode} projectStats={projectStats} />
               {choosable.length > 0 && (
                 <ToolbarControlGroup single appearance="borderless" size="compact">
                   <Select
@@ -140,12 +143,12 @@ export function ProjectTabBar({
         // Add project sits beside the last tab in every shell mode, dashboards included (HS2-HV52WR,
         // HS2-YFKQT1); a project view's workspace action alone uses the far-edge `end` zone.
         trailingPlacement="adjacent"
-        leading={<ProjectDashboardModes mode={mode} />}
+        leading={<ProjectDashboardModes mode={mode} projectStats={projectStats} />}
         trailing={<AddProjectAction />}
         end={workspaceAction && <TicketViewAction action={workspaceAction} />}
       >
         {tabs.map((tab) => (
-          <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />
+          <ProjectTab {...tab} selected={(mode === 'project' || (mode === 'stats' && projectStats)) && tab.selected} />
         ))}
       </TabBar>
     </div>

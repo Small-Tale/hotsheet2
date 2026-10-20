@@ -165,6 +165,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
       const current = project();
       if (!current) return;
       const requested = data(target).projectId;
+      if (requested && requested !== 'all' && requested !== current.id) selectProjectTab(requested);
       statsProjectId.value = requested === 'all' ? undefined : requested || current.id;
       setShellMode('stats');
     }),

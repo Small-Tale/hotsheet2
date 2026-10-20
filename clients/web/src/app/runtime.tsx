@@ -1364,6 +1364,11 @@ export async function startHotSheetWebClient() {
     activateCustomView();
   }
   function selectTicketView(next: TicketView, { refresh = true }: { refresh?: boolean } = {}) {
+    if (shellMode.value === 'stats' && statsProjectId.value !== undefined) {
+      setShellMode('project');
+      viewMode.value = ticketViewMode.value;
+      persistWorkspacePreferences();
+    }
     ticketCollectionRefreshTask.cancel();
     ticketCollectionGeneration += 1;
     const definition = customViewFor(next);
@@ -1626,7 +1631,10 @@ export async function startHotSheetWebClient() {
   function selectProjectTab(next: string) {
     projectSelectionGeneration += 1;
     exitMobileTerminalFocus();
-    setShellMode('project');
+    const projectStatsActive = shellMode.value === 'stats' && statsProjectId.value !== undefined;
+    const keepProjectStats =
+      projectStatsActive && next !== selectedProjectId.value && projects.value.some((item) => item.id === next);
+    if (!keepProjectStats) setShellMode('project');
     const failure = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === next);
     if (failure) {
       selectedProjectRestoreRoot.value = failure.root;
@@ -1645,6 +1653,10 @@ export async function startHotSheetWebClient() {
     }
     selectedProjectRestoreRoot.value = '';
     if (next === selectedProjectId.value) {
+      if (projectStatsActive) {
+        switchWorkspaceView(ticketViewMode.value);
+        return;
+      }
       // Re-selecting the current project from Notifications or Settings returns to the ticket view the user
       // last had open (list or columns), like a home affordance (HS2-42T028).
       if (viewMode.value === 'settings' || viewMode.value === 'notifications')
@@ -1652,7 +1664,10 @@ export async function startHotSheetWebClient() {
       return;
     }
     const activated = activateOpenProject(next);
-    if (activated) void refreshActivatedProject(activated, terminalDrawerVisible.value);
+    if (activated) {
+      if (keepProjectStats) statsProjectId.value = activated.project.id;
+      void refreshActivatedProject(activated, terminalDrawerVisible.value);
+    }
   }
   const status = (value?: string): TicketStatus =>
     ['not_started', 'started', 'completed', 'verified', 'backlog', 'archive', 'deleted'].includes(value ?? '')
@@ -3803,6 +3818,7 @@ export async function startHotSheetWebClient() {
     selectedView,
     settingsCategory,
     shellMode,
+    statsProjectId,
     sidebarCollapsed,
     sidebarSize,
     sidebarSurfaceProps,

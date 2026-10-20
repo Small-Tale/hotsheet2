@@ -136,6 +136,9 @@ export function ProjectSummaryDemo() {
       <DemoFrame label="Default">
         <ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} />
       </DemoFrame>
+      <CatalogExample label="Project Stats Selected" viewport={{ width: 'sidebar' }}>
+        <ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} pressed />
+      </CatalogExample>
       <CatalogExample label="Success Tone" viewport={{ width: 'sidebar' }}>
         <ProjectSummary
           completedToday={12}

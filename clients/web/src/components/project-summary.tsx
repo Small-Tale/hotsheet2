@@ -10,6 +10,7 @@ export interface ProjectSummaryProps {
   trend: number[];
   partial?: boolean;
   projectId?: string;
+  pressed?: boolean;
   chartTone?: 'brand' | 'success';
   chartMaximum?: number;
   backgroundTrend?: number[];
@@ -34,6 +35,7 @@ export function ProjectSummary({
   trend,
   partial = false,
   projectId,
+  pressed = false,
   chartTone = 'brand',
   chartMaximum,
   backgroundTrend,
@@ -52,6 +54,7 @@ export function ProjectSummary({
       data-chart-tone={chartTone}
       data-chart-maximum={maximum}
       data-chart-background={String(Boolean(backgroundTrend))}
+      aria-pressed={String(pressed)}
       {...NAVIGATION_AND_TABS_ACTIONS.openProjectStats.attrs}
       data-project-id={projectId}
       aria-label={`Open project statistics: ${partial ? 'at least ' : ''}${completedToday} completed today, ${partial ? 'at least ' : ''}${inProgress} in progress`}

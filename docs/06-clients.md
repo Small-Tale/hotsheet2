@@ -4064,6 +4064,13 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
 **Project statistics (HS2-Q1WCCY).** Opening a project's statistics (the sidebar
 completion summary) shows its completion-confidence calibration:
 
+- **Navigation (HS2-JK3DXP):** the current project tab stays selected, the sidebar completion
+  summary is pressed, and the Cross-Project Stats switch stays unpressed. Selecting another
+  project keeps Stats open and shows that project's report; selecting the current project tab
+  returns to its last list or column ticket view. Selecting a sidebar ticket view also returns
+  to that workspace. Opening a different project's summary from the Workspace Grid selects
+  that project tab with its report. Cross-Project Stats remains a separate switch.
+
 - **Scrolling:** the center statistics Pane owns vertical scrolling within the work area,
   so long reports remain reachable while the project strip and side rails stay in place.
   The outer ticket workspace does not scroll this Pane (HS2-DX3EWW).

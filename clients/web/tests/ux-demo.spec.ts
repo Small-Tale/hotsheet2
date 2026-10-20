@@ -6429,14 +6429,21 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
   await page.goto('/ux-demo?component=project-summary');
   const summaries = page.locator('[data-component="project-summary"]');
-  await expect(summaries).toHaveCount(3);
+  await expect(summaries).toHaveCount(4);
+  const selectedSummary = page.locator('[data-component="project-summary"][aria-pressed="true"]');
+  await expect(selectedSummary).toHaveCount(1);
   // The compact size is the terminal operations sidebar's per-project summary (HS2-4APEJP).
   const compactSummary = page.locator('[data-component="project-summary"][data-size="compact"]');
   await expect(compactSummary).toHaveCSS('padding', '8px');
   await expect(compactSummary).toHaveCSS('min-height', '68px');
   await expect(compactSummary.locator('.project-summary__chart')).toHaveCSS('height', '44px');
   await expect(compactSummary.locator('[data-background-bar]')).toHaveCount(7);
-  const summary = page.locator('[data-component="project-summary"][data-chart-tone="brand"][data-size="default"]');
+  const summary = page.locator(
+    '[data-component="project-summary"][data-chart-tone="brand"][data-size="default"][aria-pressed="false"]',
+  );
+  expect(await selectedSummary.evaluate((node) => getComputedStyle(node).backgroundColor)).not.toBe(
+    await summary.evaluate((node) => getComputedStyle(node).backgroundColor),
+  );
   const aggregateSummary = page.locator('[data-component="project-summary"][data-chart-tone="success"]');
   await expect(aggregateSummary.locator('[data-bar="0"]')).toHaveCSS('background-color', 'rgb(52, 199, 89)');
   await expect(summary).toContainText('6 completed today');

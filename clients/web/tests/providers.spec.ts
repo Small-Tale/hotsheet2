@@ -21019,6 +21019,9 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await summary.click();
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');
+  await expect(summary).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Cross-Project Stats' })).toHaveAttribute('aria-pressed', 'false');
   // The per-project statistics view hosts the completion-confidence calibration (HS2-Q1WCCY).
   await expect(
     page.getByRole('region', { name: 'demo Project Statistics' }).locator('[data-component="confidence-calibration"]'),
@@ -21037,6 +21040,125 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cross-Project Stats' })).toBeVisible();
+});
+
+test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.route(/\/checkouts\/(?:demo|other)-checkout\/confidence-report$/, (route) =>
+    route.fulfill({
+      json: {
+        completions: 1,
+        scored: 1,
+        bands: [
+          {
+            band: 'verified',
+            range: '90-100',
+            completions: 1,
+            verified: 1,
+            reopened: 0,
+            pending: 0,
+            reopen_rate: 0,
+            mean_confidence: 95,
+          },
+          { band: 'assumed', range: '70-89', completions: 0, verified: 0, reopened: 0, pending: 0 },
+          { band: 'partial', range: '40-69', completions: 0, verified: 0, reopened: 0, pending: 0 },
+          { band: 'unverified', range: '0-39', completions: 0, verified: 0, reopened: 0, pending: 0 },
+          { band: 'unscored', range: 'no score', completions: 0, verified: 0, reopened: 0, pending: 0 },
+        ],
+        events: [{ slug: 'HS2-DEMO01', completed_at: '2026-10-20T00:00:00Z', confidence: 95, outcome: 'verified' }],
+      },
+    }),
+  );
+  await page.route(/\/checkouts\/(?:demo|other)-checkout\/repository\/size$/, (route) => {
+    const checkoutId = route.request().url().includes('/other-checkout/') ? 'other-checkout' : 'demo-checkout';
+    return route.fulfill({
+      json: {
+        checkout_id: checkoutId,
+        thresholds: { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 },
+        level: 'ok',
+        entries: [
+          {
+            kind: 'code',
+            label: checkoutId === 'demo-checkout' ? 'demo' : 'other',
+            locator: checkoutId === 'demo-checkout' ? '/work/demo' : '/work/other',
+            status: 'measured',
+            git: {
+              loose_objects: 0,
+              loose_bytes: 0,
+              packed_objects: 9,
+              packs: 1,
+              packed_bytes: 94_000_000,
+              total_bytes: 94_000_000,
+            },
+            shared_with_code: false,
+            level: 'ok',
+          },
+        ],
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.getByLabel('Columns View').click();
+  await page.locator('[data-component="project-summary"]').click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    globalStats = page.getByRole('button', { name: 'Cross-Project Stats' });
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');
+  await expect(globalStats).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-component="project-summary"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jk3dxp-project-stats-wide.png', fullPage: true });
+  await page.getByRole('tab', { name: 'other' }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(page.getByRole('region', { name: 'other Project Statistics' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  await expect(globalStats).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await expect(page.getByRole('region', { name: 'demo Project Statistics' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const picker = page.locator('kui-select[name="mobile-project"]');
+  await picker.locator('.kui-select__trigger').click();
+  await picker.getByRole('option', { name: /^other/ }).click();
+  await expect(page.getByRole('region', { name: 'other Project Statistics' })).toBeVisible();
+  await expect(globalStats).toHaveAttribute('aria-pressed', 'false');
+  await page.screenshot({ path: 'target/visual-captures/hs2-jk3dxp-project-stats-phone.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'project');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-component="project-summary"]')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('[data-component="project-summary"]').click();
+  await page.getByRole('button', { name: /Backlog/ }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'project');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
+  await globalStats.click();
+  await expect(globalStats).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'false');
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await page.locator('[data-component="project-summary"][data-project-id="other-checkout"]').click();
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(page.getByRole('region', { name: 'other Project Statistics' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  await expect(globalStats).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('uses the compact workspace title and project-tab action on desktop while preserving mobile (HS2-9R1F91)', async ({

@@ -148,9 +148,10 @@ export interface HotSheetShellDependencies {
   selectedView: Signal<TicketView>;
   settingsCategory: () => SettingsCategory;
   shellMode: Signal<ProjectStripMode>;
+  statsProjectId: Signal<string | undefined>;
   sidebarCollapsed: Signal<boolean>;
   sidebarSize: Signal<number>;
-  sidebarSurfaceProps: () => SidebarSurfaceProps;
+  sidebarSurfaceProps: (statsSelected?: boolean) => SidebarSurfaceProps;
   sort: { value: WorkspaceSort };
   sortDirection: { value: WorkspaceSortDirection };
   terminalDrawerMax: Signal<number>;
@@ -235,6 +236,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     selectedView,
     settingsCategory,
     shellMode,
+    statsProjectId,
     sidebarCollapsed,
     sidebarSize,
     sidebarSurfaceProps,
@@ -353,12 +355,15 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         <MainShell
           tabs={tabs}
           mode={shellMode.value}
+          projectStats={shellMode.value === 'stats' && Boolean(statsProjectId.value)}
           gridFullscreen={shellMode.value === 'terminals' && terminalGridFullscreen.value}
           mobile={viewportMobile.value}
           sidebar={
             shellMode.value === 'terminals'
               ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
-              : statsSidebarPanel()
+              : statsProjectId.value
+                ? sidebarSurfacePanel(sidebarSurfaceProps(true))
+                : statsSidebarPanel()
           }
           sidebarVisible={!sidebarCollapsed.value}
           sidebarSize={sidebarSize.value}

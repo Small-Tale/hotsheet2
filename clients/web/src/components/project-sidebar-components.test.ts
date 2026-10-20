@@ -77,6 +77,10 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-action="open-project-stats"');
     expect(markup).toContain('data-project-id="demo"');
     expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
+    expect(markup).toContain('aria-pressed="false"');
+    expect(String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4], pressed: true }))).toContain(
+      'aria-pressed="true"',
+    );
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
     const partial = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4], partial: true }));
     // Lower bounds stay in the accessible name only; the visible counts carry no glyph (HS2-521WNH).

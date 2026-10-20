@@ -5,6 +5,17 @@ import { describe, expect, it } from 'vitest';
 import { ProjectTabBar } from './project-tab-bar';
 
 describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
+  it('keeps the selected project tab active for project Stats without selecting global Stats (HS2-JK3DXP)', () => {
+    const tabs = [{ id: 'demo', name: 'demo', location: 'local' as const, selected: true }];
+    const projectStats = String(ProjectTabBar({ tabs, mode: 'stats', projectStats: true }));
+    expect(projectStats).toContain('aria-label="Cross-Project Stats" aria-pressed="false"');
+    expect(projectStats).toMatch(/role="tab"[^>]*aria-selected="true"/);
+
+    const globalStats = String(ProjectTabBar({ tabs, mode: 'stats' }));
+    expect(globalStats).toContain('aria-label="Cross-Project Stats" aria-pressed="true"');
+    expect(globalStats).not.toMatch(/role="tab"[^>]*aria-selected="true"/);
+  });
+
   it('renders Add project as a native button in a borderless Kerf control group the strip never styles', () => {
     const markup = String(ProjectTabBar({ tabs: [{ id: 'demo', name: 'demo', location: 'local', selected: true }] }));
     expect(markup).toMatch(

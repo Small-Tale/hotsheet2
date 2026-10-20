@@ -148,6 +148,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/app-combobox-wiring.ts # One Kerf Combobox wiring per root; routes Add tag commits to tag editing and retains provider repository choices (HS2-C32ERK)
     src/components/flow-back-button.tsx # Shared chevron back affordance for multi-screen dialog detail screens
     src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, keyed live terminal/shared-read-only-AIConversation preview, and explicit keep-running versus stop-all project-tab dismissal
+    src/components/project-tab-bar.tsx + project-strip-actions.tsx + project-summary.tsx # Project-specific Stats keeps its project tab and sidebar summary selected; the global Stats switch is separate. app/runtime.tsx retains Stats across project switches and returns to the last ticket view on repeat selection (HS2-JK3DXP)
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/components/terminal-drawer.tsx # Drawer create action menu uses Kerf PopupMenu placement and keyboard behavior
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
