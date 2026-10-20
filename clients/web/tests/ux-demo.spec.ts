@@ -3065,8 +3065,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const menu = page.locator('[data-context-menu="ticket"]');
   await expect(menu.getByRole('menu', { name: 'Ticket Actions' })).toBeVisible();
   const menuItems = menu.locator('.kui-popup-menu__item');
-  await expect(menu.locator(TOP_MENU_ITEMS)).toHaveCount(11);
-  await expect(menuItems).toHaveCount(27);
+  await expect(menu.locator(TOP_MENU_ITEMS)).toHaveCount(12);
+  await expect(menuItems).toHaveCount(28);
+  await expect(menu.getByRole('menuitem', { name: 'Copy ticket ID' })).toBeVisible();
   expect(
     await menuItems.evaluateAll((items) => items.every((item) => item.querySelector('[data-lucide]') !== null)),
   ).toBe(true);

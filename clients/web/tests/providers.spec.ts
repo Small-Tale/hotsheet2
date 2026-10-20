@@ -27086,7 +27086,7 @@ test('copies one or every selected ticket ID from row and More actions menus (HS
     second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   const captureMenu = async (name: string) => {
-    const image = await page.screenshot({ path: test.info().outputPath(`${name}.png`) });
+    const image = await page.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled' });
     await test.info().attach(name, { body: image, contentType: 'image/png' });
   };
   await first.click({ button: 'right' });
@@ -27295,7 +27295,12 @@ for (const surface of ['workspace', 'rail'] as const) {
         ? page.locator('#app-right-rail')
         : page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     await expect(controls.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' })).toBeDisabled();
-    await expect(controls.getByRole('button', { name: 'More Actions for Selected Tickets' })).toBeDisabled();
+    const moreActions = controls.getByRole('button', { name: 'More Actions for Selected Tickets' });
+    await expect(moreActions).toBeEnabled();
+    await moreActions.click();
+    const menu = page.locator('[data-context-menu="ticket"]');
+    await expect(menu.getByRole('menuitem', { name: 'Copy ticket ID' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Change priority' })).toBeDisabled();
   });
 }
 
