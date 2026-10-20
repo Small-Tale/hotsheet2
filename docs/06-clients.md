@@ -1630,7 +1630,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   before a new turn is appended. Until a turn streams its first text, its assistant bubble shows
   a labeled Kerf `LoadingSpinner` ("Awaiting response") rather than an empty bubble, in the
   drawer chat and the conversation dialog (HS2-77KJKR). While a turn runs, a progress pill sits
-  above the composer in the drawer and the dialog (HS2-XV1VCR): a Kerf `LoadingSpinner` beside
+  above the composer in the drawer and the dialog (HS2-XV1VCR). Its opaque surface keeps
+  transcript text beneath the floating footer from showing through (HS2-KSE0DC). It shows a
+  Kerf `LoadingSpinner` beside
   "Working · 3m 12s · last activity 8s ago", or "Running Bash · 2m 5s · …" while a tool call is
   open, or "Waiting for permission · …" while a permission request for the chat is pending. The
   timing comes from the server (`turn_started_at_ms`, `last_event_at_ms`, `in_flight_tool` on the

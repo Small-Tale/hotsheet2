@@ -167,6 +167,10 @@
   max-width: 100%;
   align-self: flex-start;
 }
+.ai-conversation__turn-progress:not([data-state='stuck']) {
+  border-radius: 9999px;
+  background: var(--wa-color-surface-default);
+}
 /* The embedded drawer positions the app's composer form over its transcript; Kerf MessageComposer owns the
    frame inside it (KF-S5EG5K). */
 .ai-conversation--embedded > .ai-conversation__composer {

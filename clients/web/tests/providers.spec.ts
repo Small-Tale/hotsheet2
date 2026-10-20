@@ -19892,6 +19892,7 @@ async function runLongTurnUntilStuck(
   await expect(line).toHaveAttribute('data-state', 'tool');
   await expect(line).toContainText(/Running Bash · \d+s · last activity/);
   await expect(line.locator('.kui-loading-spinner')).toBeVisible();
+  expect(await line.evaluate((progress) => getComputedStyle(progress).backgroundColor)).toMatch(/^rgb\(/);
   await delivered;
   // The local render clock advances the line without any network request.
   await page.clock.runFor(125_000);
