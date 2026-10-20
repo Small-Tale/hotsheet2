@@ -26203,17 +26203,15 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await expect(started.locator('[data-selected="true"]')).toHaveCount(startedCount);
   await expect(inspector).toContainText(`${startedCount} items selected`);
   const crossColumn = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]'),
-    closedReader = page.locator('[data-component="ticket-reader"][aria-hidden="true"]');
+    readerModal = page.locator('dialog[data-reader-dialog]:modal');
   await crossColumn.click({ modifiers: ['Shift'] });
   await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(1);
   await expect(crossColumn).toHaveAttribute('data-selected', 'true');
   await expect(crossColumn).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
-  await expect(closedReader).toBeHidden();
-  expect(await closedReader.boundingBox()).toBeNull();
+  await expect(readerModal).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-6thrgf-selected-board-wide.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(closedReader).toBeHidden();
-  expect(await closedReader.boundingBox()).toBeNull();
+  await expect(readerModal).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-6thrgf-selected-board-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page

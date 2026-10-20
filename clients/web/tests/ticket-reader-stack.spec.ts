@@ -253,9 +253,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
     close = reader.getByRole('button', { name: 'Close Ticket Reader' });
   await expect(reader).toBeVisible();
   await expect(close).toBeFocused();
-  expect(
-    await reader.evaluate((host) => (host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).matches(':modal')),
-  ).toBe(true);
+  expect(await reader.evaluate((host) => (host as HTMLDialogElement).matches(':modal'))).toBe(true);
   await page.getByRole('button', { name: 'Add Project' }).evaluate((node) => {
     (node as HTMLElement).focus();
   });
@@ -277,9 +275,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   await page.screenshot({ path: 'target/visual-captures/hs2-x1wgx5-reader-modal-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   let bounds = await reader.evaluate((host) => {
-    const { x, y, width, height } = (
-      host.shadowRoot!.querySelector('dialog') as HTMLDialogElement
-    ).getBoundingClientRect();
+    const { x, y, width, height } = host.getBoundingClientRect();
     return { x, y, width, height };
   });
   expect(bounds.x).toBeGreaterThanOrEqual(0);
@@ -289,9 +285,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   await page.screenshot({ path: 'target/visual-captures/hs2-x1wgx5-reader-modal-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 600, height: 450 });
   bounds = await reader.evaluate((host) => {
-    const { x, y, width, height } = (
-      host.shadowRoot!.querySelector('dialog') as HTMLDialogElement
-    ).getBoundingClientRect();
+    const { x, y, width, height } = host.getBoundingClientRect();
     return { x, y, width, height };
   });
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(600);

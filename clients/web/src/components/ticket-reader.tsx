@@ -68,6 +68,7 @@ export function TicketReader({
           {...INSPECTOR_AND_EDITOR_TARGETS.ticketReader.attrs}
           data-reader-frame-id={frameId}
           data-reader-active={String(active)}
+          data-large-text={String(props.largeText ?? false)}
         >
           {stackSize > 1 && (
             <List dividerSides="b" textInsets="rl" controlInsets="tb">

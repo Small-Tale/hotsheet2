@@ -14,7 +14,9 @@ const ticket = {
 
 describe('TicketReader controlled layers', () => {
   it('uses Kerf geometry and names the active native modal', () => {
-    const markup = String(TicketReader({ ...ticket, frameId: 'front', stackPosition: 2, stackSize: 2 }));
+    const markup = String(
+      TicketReader({ ...ticket, frameId: 'front', stackPosition: 2, stackSize: 2, largeText: true }),
+    );
     expect(markup).toContain('<dialog');
     expect(markup).toContain('class="kui-dialog-surface ticket-reader-dialog"');
     expect(markup).toContain('aria-label="Read and edit HS2-1"');
@@ -27,6 +29,7 @@ describe('TicketReader controlled layers', () => {
     expect(markup).toContain('data-body-layout="fill"');
     expect(markup).toContain('data-reader-frame-id="front"');
     expect(markup).toContain('data-component="ticket-reader"');
+    expect(markup).toMatch(/<div class="ticket-reader"[^>]*data-large-text="true"/);
   });
 
   it('keeps covered and closed layers inaccessible without losing their identity', () => {
