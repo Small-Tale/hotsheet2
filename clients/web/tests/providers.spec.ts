@@ -14724,18 +14724,21 @@ test('keeps a command edit made just before a reload through the real server (HS
     expect(writeOrders.at(-1)?.session).toBe(writeOrders[0]?.session);
     expect(writeOrders.at(-1)?.sequence).toBeGreaterThan(writeOrders[0]?.sequence ?? 0);
     const latest = writeOrders.at(-1)!;
-    const staleStatus = await page.evaluate(async ({ session, sequence }) => {
-      const response = await fetch('/__hotsheet/project-api/demo-checkout/commands', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Hotsheet-Command-Write-Session': session,
-          'X-Hotsheet-Command-Write-Sequence': String(sequence),
-        },
-        body: JSON.stringify([{ id: 'command-1', title: 'Stale', kind: 'shell', command: 'echo stale' }]),
-      });
-      return response.status;
-    }, { ...latest, sequence: latest.sequence - 1 });
+    const staleStatus = await page.evaluate(
+      async ({ session, sequence }) => {
+        const response = await fetch('/__hotsheet/project-api/demo-checkout/commands', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Hotsheet-Command-Write-Session': session,
+            'X-Hotsheet-Command-Write-Sequence': String(sequence),
+          },
+          body: JSON.stringify([{ id: 'command-1', title: 'Stale', kind: 'shell', command: 'echo stale' }]),
+        });
+        return response.status;
+      },
+      { ...latest, sequence: latest.sequence - 1 },
+    );
     expect(staleStatus).toBe(409);
     await expect.poll(storedTitles).toEqual(['Ship it now']);
   } finally {
