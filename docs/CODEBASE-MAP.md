@@ -236,6 +236,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/change-stream-shared-hub.ts # SharedWorker port registry: separate tab runtimes over one per-endpoint socket/poll pool, heartbeat and stale-port cleanup (HS2-NP7R42)
     src/change-stream.shared-worker.ts # Cross-tab SharedWorker entry (HS2-NP7R42)
     src/change-poll-mux.ts # Per-origin ChangePollMultiplexer: v1 per tab or v2 across tab clients; abort+reissue, client/project fan-out, bounded direct fallback on an older bridge (HS2-6W1NNF, HS2-NP7R42, HS2-TVASVW)
+    src/change-poll-slots.ts # Origin-scoped Web Locks cap direct polls across independent tabs/workers; paced zero-wait fallback without locks (HS2-GDF4ZJ)
     src/change-mux-bridge.ts # Bridge half of multiplexed change polls: v1 per-tab and v2 per-poll client identity, first-completion-plus-grace fan-in over upstream `/ws/poll` (HS2-6W1NNF, HS2-NP7R42)
     src/change-ws-mux.ts # Shared change WebSocket protocol: v2 client/project virtual sockets across tabs, direct-socket fallback (HS2-QJR1K6, HS2-NP7R42)
     src/terminal-ws-bridge.ts # Browser WebSocket bridge: per-project terminal proxy; one change socket per authenticated server and client with checkout/store fan-out and old-server fallback (HS2-QJR1K6/HS2-XAGJP3/HS2-NP7R42)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChangeEvent, PollResponse } from './api';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from './change-stream-worker-host';
@@ -183,6 +183,12 @@ describe('change-stream worker protocol (HS2-SH9179)', () => {
 });
 
 describe('change-stream worker runtime (HS2-SH9179)', () => {
+  beforeEach(() => {
+    // These tests exercise the worker transport with a supported Web Locks host.
+    // The no-lock, short-poll behavior is covered in change-poll-slots.test.ts.
+    vi.stubGlobal('navigator', { locks: { request: (_name: string, _options: unknown, run: () => unknown) => run() } });
+  });
+  afterEach(() => vi.unstubAllGlobals());
   it('answers the version handshake and opens one fair transport per project', async () => {
     const posted: ChangeStreamWorkerMessage[] = [];
     const { runs, runTransport } = fakeTransports();

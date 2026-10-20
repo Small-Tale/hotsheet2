@@ -77,6 +77,7 @@ function mux(fetcher: typeof fetch, extra: Partial<ConstructorParameters<typeof 
     fetch: fetcher,
     coalesceMs: 0,
     now: () => 0,
+    crossContextSlots: false,
     ...extra,
   });
 }

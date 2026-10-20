@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-GDF4ZJ coordinates four direct-poll slots across independent tabs with Web
+Locks and paces zero-wait polls when locks are unavailable. `change-poll-slots.test.ts`
+covers two contexts, refill, fallback pacing, and abort; `change-poll-mux.spec.ts`
+opens eight projects in two tabs, checks the shared limit and ordinary API
+responsiveness, then closes and reopens a tab to verify recovery and fairness.
+
 HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
 readers. The dialog Stop browser test opens two independent polls alongside the
 app poll and verifies both readers see the done event while progress clears.
@@ -19,8 +25,8 @@ HS2-TVASVW covers bounded direct change-poll fallback in
 `change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker
 and shared-worker transport tests, and the eight-project older-bridge browser
 flow in `tests/change-poll-mux.spec.ts`, including an ordinary permission read
-while direct polls are active. `HS2-GDF4ZJ` tracks the remaining cross-tab cap
-when SharedWorker is unavailable.
+while direct polls are active. `HS2-GDF4ZJ` adds the cross-tab cap when
+SharedWorker is unavailable.
 
 HS2-HRN55S covers command write ordering in the server command manager and real
 HTTP settings persistence, the client save workflow's ordered metadata, and a

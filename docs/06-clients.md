@@ -1773,9 +1773,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   older server behind a new bridge surfaces as that project's own error, as before. Direct
   fallback in the page, dedicated worker, and shared worker admits at most four browser
   polls at once per origin and caps each one at one second; queued projects rotate in
-  arrival order, while abort and supersede remove obsolete work. This reserves browser
-  connections for ordinary API calls even when many project WebSockets fail. Separate
-  tabs without a SharedWorker can each use their own direct-poll allowance.
+  arrival order, while abort and supersede remove obsolete work. Origin-scoped Web Locks
+  share those four slots across independent tabs and workers, including when SharedWorker
+  is unavailable. A closed tab releases its locks. Browsers without Web Locks use paced
+  zero-wait polls, keeping HTTP connections brief for ordinary API work (HS2-GDF4ZJ).
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
   WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
   the others; every acknowledgement and live event carries its project id and subscription

@@ -21,6 +21,7 @@
  */
 import type { PollResponse } from './api';
 import { CHANGE_MUX_MAX_POLLS, CHANGE_MUX_VERSION, type ChangeMuxPoll } from './change-mux-bridge';
+import { DirectPollSlots } from './change-poll-slots';
 
 export type ChangePollFn = (since?: number, signal?: AbortSignal, timeoutMs?: number) => Promise<PollResponse>;
 
@@ -34,6 +35,8 @@ export interface ChangePollMultiplexerOptions {
   sharedAcrossClients?: boolean;
   /** Older bridges have no mux endpoint, but still need bounded direct polling. */
   directOnly?: boolean;
+  /** Disable cross-context coordination only for isolated multiplexer tests. */
+  crossContextSlots?: boolean;
   parse(value: unknown): PollResponse;
   fetch?: typeof fetch;
   now?: () => number;
@@ -101,6 +104,7 @@ export class ChangePollMultiplexer {
   private readonly pending = new Map<string, Pending>();
   private inflight: InFlight | undefined;
   private readonly directActive = new Set<Pending>();
+  private readonly directSlots: DirectPollSlots | undefined;
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
@@ -113,6 +117,7 @@ export class ChangePollMultiplexer {
     this.fetcher = options.fetch ?? ((input, init) => fetch(input, init));
     this.now = options.now ?? Date.now;
     this.coalesceMs = options.coalesceMs ?? 5;
+    this.directSlots = options.crossContextSlots === false ? undefined : new DirectPollSlots();
   }
 
   get mode(): ChangePollMuxMode {
@@ -337,7 +342,13 @@ export class ChangePollMultiplexer {
       this.directActive.add(entry);
       const timeout = Math.min(DIRECT_POLL_TIMEOUT_MS, Math.max(0, Math.ceil(entry.deadline - this.now())));
       void Promise.resolve()
-        .then(() => entry.direct(entry.since, entry.directController.signal, timeout))
+        .then(() =>
+          this.directSlots
+            ? this.directSlots.run(entry.directController.signal, (slotTimeout) =>
+                entry.direct(entry.since, entry.directController.signal, Math.min(timeout, slotTimeout)),
+              )
+            : entry.direct(entry.since, entry.directController.signal, timeout),
+        )
         .then(
           (page) => {
             this.directActive.delete(entry);

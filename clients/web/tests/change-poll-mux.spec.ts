@@ -559,3 +559,48 @@ for (const advertisesMux of [true, false]) {
     expect(muxRequests).toBe(advertisesMux ? 1 : 0);
   });
 }
+
+test('independent tabs share direct-poll slots and recover them after a tab closes', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  const second = await context.newPage();
+  const active = new Set<{ label: string }>();
+  let peak = 0;
+  const seen = new Set<string>();
+  const prepare = async (tab: Page, label: string) => {
+    await installBridge(tab);
+    await tab.route(`**${MUX}`, (route) => route.fulfill({ status: 404, body: 'Not Found' }));
+    await tab.route('**/ws/poll*', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      seen.add(`${label}:${path}`);
+      const request = { label };
+      active.add(request);
+      peak = Math.max(peak, active.size);
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      active.delete(request);
+      await route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
+    });
+  };
+  await prepare(page, 'first');
+  await prepare(second, 'second');
+  await openAllProjects(page);
+  expect(await page.evaluate(() => Boolean(navigator.locks))).toBe(true);
+  await second.goto('/');
+  await expect(second.getByRole('tab', { name: projects.at(-1)?.name })).toBeVisible();
+  await expect.poll(() => seen.size, { timeout: 20_000 }).toBe(projects.length * 2);
+  expect(peak).toBeLessThanOrEqual(4);
+  await second.bringToFront();
+  const permissions = await page.evaluate(
+    async () => (await fetch('/__hotsheet/project-api/alpha-project/permissions')).status,
+  );
+  expect(permissions).toBe(200);
+  await second.close();
+  for (const request of active) if (request.label === 'second') active.delete(request);
+  const replacement = await context.newPage();
+  await prepare(replacement, 'replacement');
+  await replacement.goto('/');
+  await expect(replacement.getByRole('tab', { name: projects.at(-1)?.name })).toBeVisible();
+  await expect
+    .poll(() => [...seen].filter((path) => path.startsWith('replacement:')).length, { timeout: 20_000 })
+    .toBe(projects.length);
+  expect(peak).toBeLessThanOrEqual(4);
+});
