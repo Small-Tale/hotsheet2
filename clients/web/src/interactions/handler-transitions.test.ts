@@ -570,8 +570,10 @@ describe('keystroke coalescing for re-rendering fields (HS2-9CWDSB)', () => {
 
 describe('interaction group teardown (HS2-NZT3MT)', () => {
   it('removes every delegated and native listener the wired groups registered, once, newest group first', () => {
-    const native = Object.assign(new EventTarget(), { body: {} }),
-      add = vi.spyOn(native, 'addEventListener');
+    const body = new EventTarget(),
+      native = Object.assign(new EventTarget(), { body }),
+      add = vi.spyOn(native, 'addEventListener'),
+      bodyAdd = vi.spyOn(body, 'addEventListener');
     vi.stubGlobal('document', native);
     const opened = signal(true),
       order: string[] = [],
@@ -604,8 +606,11 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     // The gallery's native document listeners all carry the group's lifetime signal.
     // HS2-HTRFDS: the volume popup's outside-click listener moved into Kerf AnchoredSurface dismissal.
     const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
+    const bodySignals = bodyAdd.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
     expect(signals.length).toBe(12);
+    expect(bodySignals.length).toBe(7);
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
+    expect(bodySignals.every((item) => item && !item.aborted)).toBe(true);
 
     // Before teardown the delegated project-dialog dismissal reaches its handler.
     dispatchDelegated(new Event('kui-request-close'), '[data-project-dialog]', target({}));
@@ -614,6 +619,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     teardown();
     expect(registrations.some((registration) => registration.attached)).toBe(false);
     expect(signals.every((item) => item!.aborted)).toBe(true);
+    expect(bodySignals.every((item) => item!.aborted)).toBe(true);
     expect(order).toEqual([
       'shellAndGlobal',
       'inspectorAndEditor',
