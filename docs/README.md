@@ -116,6 +116,10 @@ The versioned [client transport contracts](contracts/README.md) inventory the
 HTTP routes and define the core ticket, compatibility, and live-change wire
 shapes. Operations marked `route-only` still need concrete DTO schemas under
 `HS2-11BVBS`.
+The [client-state fixtures](contracts/v1/client-state/README.md) now pin
+selection, local ordering, optimistic history, stale search responses, and
+change-stream replay as versioned JSON with a web conformance runner; native
+client runners remain unbuilt.
 
 **E · AI-tool integration**
 

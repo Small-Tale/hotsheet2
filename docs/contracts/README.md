@@ -34,3 +34,8 @@ responses in the repository test suite. The Rust wire DTOs in
 `crates/hotsheet-ticketing/src/wire.rs`, the server route handlers, and current
 tests remain authoritative if this documentation is found to disagree with
 the shipped implementation.
+
+The [portable client-state fixtures](v1/client-state/README.md) pin client-owned
+collection, selection, history, stale-response, and replay transitions in
+versioned JSON. The web runner executes them against shipped client modules;
+SwiftUI and Android can use the same inputs and expected outputs.

@@ -1,0 +1,59 @@
+{
+  "format": "hotsheet-client-state/v1",
+  "id": "poll-replay-reconnect-overflow",
+  "kind": "replay",
+  "steps": [
+    {
+      "response": { "cursor": 4, "events": [], "overflow": false },
+      "expect": { "poll_since": [null, 4], "resync": ["initial"], "events": [], "refreshes": 0 }
+    },
+    {
+      "response": {
+        "cursor": 5,
+        "events": [{ "store": "local", "kind": "activity", "id": "1", "slug": "HS2-A" }],
+        "overflow": false
+      },
+      "expect": { "poll_since": [null, 4, 5], "resync": ["initial"], "events": ["activity"], "refreshes": 0 }
+    },
+    {
+      "response": {
+        "cursor": 6,
+        "events": [{ "store": "local", "kind": "updated", "id": "1", "slug": "HS2-A" }],
+        "overflow": false
+      },
+      "expect": {
+        "poll_since": [null, 4, 5, 6],
+        "resync": ["initial"],
+        "events": ["activity", "updated"],
+        "refreshes": 1
+      }
+    },
+    {
+      "error": "server restarted",
+      "expect": {
+        "poll_since": [null, 4, 5, 6, null],
+        "resync": ["initial"],
+        "events": ["activity", "updated"],
+        "refreshes": 1
+      }
+    },
+    {
+      "response": { "cursor": 8, "events": [], "overflow": false },
+      "expect": {
+        "poll_since": [null, 4, 5, 6, null, 8],
+        "resync": ["initial", "reconnect"],
+        "events": ["activity", "updated"],
+        "refreshes": 2
+      }
+    },
+    {
+      "response": { "cursor": 12, "events": [], "overflow": true },
+      "expect": {
+        "poll_since": [null, 4, 5, 6, null, 8, 12],
+        "resync": ["initial", "reconnect", "overflow"],
+        "events": ["activity", "updated"],
+        "refreshes": 3
+      }
+    }
+  ]
+}

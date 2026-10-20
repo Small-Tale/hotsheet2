@@ -1,0 +1,260 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Small-Tale/hotsheet2/main/docs/contracts/v1/client-state/schema.json",
+  "title": "Hot Sheet client-state transition fixture v1",
+  "oneOf": [
+    { "$ref": "#/definitions/collections" },
+    { "$ref": "#/definitions/history" },
+    { "$ref": "#/definitions/stale_search" },
+    { "$ref": "#/definitions/replay" }
+  ],
+  "definitions": {
+    "row": {
+      "type": "object",
+      "required": ["slug", "title"],
+      "properties": {
+        "slug": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "up_next": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "base": {
+      "type": "object",
+      "required": ["format", "id", "kind", "steps"],
+      "properties": {
+        "format": { "const": "hotsheet-client-state/v1" },
+        "id": { "type": "string", "minLength": 1 },
+        "steps": { "type": "array", "minItems": 2 }
+      }
+    },
+    "collections": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "required": ["initial"],
+          "properties": {
+            "kind": { "const": "collections" },
+            "initial": {
+              "type": "object",
+              "required": ["rows", "view", "sort", "direction"],
+              "properties": {
+                "rows": { "type": "array", "items": { "$ref": "#/definitions/row" } },
+                "view": { "type": "string" },
+                "sort": { "enum": ["priority", "status", "title", "updated"] },
+                "direction": { "enum": ["ascending", "descending"] }
+              },
+              "additionalProperties": false
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["action", "expect"],
+                "properties": {
+                  "action": { "enum": ["snapshot", "select", "select_all", "view", "sort", "search"] },
+                  "slug": { "type": "string" },
+                  "range": { "type": "boolean" },
+                  "toggle": { "type": "boolean" },
+                  "value": { "type": "string" },
+                  "direction": { "enum": ["ascending", "descending"] },
+                  "expect": {
+                    "type": "object",
+                    "required": ["visible", "selected"],
+                    "properties": {
+                      "visible": { "type": "array", "items": { "type": "string" } },
+                      "selected": { "type": "array", "items": { "type": "string" } },
+                      "anchor": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "allOf": [
+                  { "if": { "properties": { "action": { "const": "select" } } }, "then": { "required": ["slug"] } },
+                  {
+                    "if": { "properties": { "action": { "enum": ["view", "search"] } } },
+                    "then": { "required": ["value"] }
+                  },
+                  {
+                    "if": { "properties": { "action": { "const": "sort" } } },
+                    "then": { "required": ["value", "direction"] }
+                  }
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "history": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "required": ["initial"],
+          "properties": {
+            "kind": { "const": "history" },
+            "initial": {
+              "type": "object",
+              "required": ["slug", "title", "status", "priority"],
+              "properties": {
+                "slug": { "type": "string" },
+                "title": { "type": "string" },
+                "status": { "type": "string" },
+                "priority": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["action", "expect"],
+                "properties": {
+                  "action": { "enum": ["begin_edit", "ack", "remote", "undo", "redo", "queue_undo"] },
+                  "patch": { "$ref": "#/definitions/patch" },
+                  "expect": {
+                    "type": "object",
+                    "required": ["title", "status", "priority"],
+                    "properties": {
+                      "title": { "type": "string" },
+                      "status": { "type": "string" },
+                      "priority": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "if": { "properties": { "action": { "enum": ["begin_edit", "remote"] } } },
+                "then": { "required": ["patch"] },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "stale_search": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "required": ["initial"],
+          "properties": {
+            "kind": { "const": "stale_search" },
+            "initial": {
+              "type": "object",
+              "required": ["views"],
+              "properties": {
+                "views": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "query"],
+                    "properties": { "id": { "type": "string" }, "query": { "type": "string" } },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["action", "view", "expect"],
+                "properties": {
+                  "action": { "enum": ["request", "resolve"] },
+                  "view": { "type": "string" },
+                  "rows": { "type": "array", "items": { "$ref": "#/definitions/row" } },
+                  "expect": {
+                    "type": "object",
+                    "required": ["visible", "selected_view"],
+                    "properties": {
+                      "visible": { "type": "array", "items": { "type": "string" } },
+                      "selected_view": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "if": { "properties": { "action": { "const": "resolve" } } },
+                "then": { "required": ["rows"] },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "replay": {
+      "allOf": [
+        { "$ref": "#/definitions/base" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "replay" },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["expect"],
+                "oneOf": [{ "required": ["response"] }, { "required": ["error"] }],
+                "properties": {
+                  "response": {
+                    "type": "object",
+                    "required": ["cursor", "events", "overflow"],
+                    "properties": {
+                      "cursor": { "type": "integer", "minimum": 0 },
+                      "events": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["store", "kind", "id", "slug"],
+                          "properties": {
+                            "store": { "type": "string" },
+                            "kind": { "type": "string" },
+                            "id": { "type": "string" },
+                            "slug": { "type": "string" }
+                          }
+                        }
+                      },
+                      "overflow": { "type": "boolean" }
+                    }
+                  },
+                  "error": { "type": "string" },
+                  "expect": {
+                    "type": "object",
+                    "required": ["poll_since", "resync", "events", "refreshes"],
+                    "properties": {
+                      "poll_since": { "type": "array", "items": { "type": ["integer", "null"] } },
+                      "resync": { "type": "array", "items": { "enum": ["initial", "reconnect", "overflow"] } },
+                      "events": { "type": "array", "items": { "type": "string" } },
+                      "refreshes": { "type": "integer", "minimum": 0 }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

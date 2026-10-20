@@ -59,6 +59,12 @@ synchronized from `crates/hotsheet-server/src/lib.rs` by
 `clients/web/tests/contracts.spec.ts`. Routes marked `route-only` await detailed
 DTO schemas in `HS2-11BVBS`.
 
+Portable client-state transition fixtures and their schema are under
+`docs/contracts/v1/client-state/`. The web runner
+`clients/web/src/client-state-fixtures.test.ts` exercises the existing view,
+sort, selection, history, workspace search, and change-stream modules against
+those language-neutral expected states.
+
 ## Directory tree
 
 ```

@@ -1,5 +1,14 @@
 # Feature Coverage Matrix
 
+HS2-H6RRZN adds four versioned client-state fixture sequences under
+`docs/contracts/v1/client-state/`. `clients/web/src/client-state-fixtures.test.ts`
+validates their schema and runs collection ordering/filtering plus selection,
+optimistic edit/undo/redo with a remote conflict, out-of-order search results,
+and change-stream replay/reconnect/overflow through shipped web modules. Existing
+browser flows in `tests/providers.spec.ts`, `tests/project-startup.spec.ts`, and
+`tests/change-poll-mux.spec.ts` cover the composed collection and change-stream
+surfaces. Native runners remain future client work.
+
 HS2-E9AWV8 covers the first versioned client transport contract. The route
 inventory check in `clients/web/tests/contracts.spec.ts` compares every server
 router path and method to OpenAPI, then validates compatibility, ticket, row,

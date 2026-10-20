@@ -1,0 +1,97 @@
+{
+  "format": "hotsheet-client-state/v1",
+  "id": "collections-selection-sequence",
+  "kind": "collections",
+  "initial": {
+    "rows": [
+      {
+        "slug": "HS2-A",
+        "title": "Alpha",
+        "status": "started",
+        "priority": "high",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "up_next": true
+      },
+      {
+        "slug": "HS2-B",
+        "title": "Beta",
+        "status": "backlog",
+        "priority": "urgent",
+        "updated_at": "2026-01-02T00:00:00Z",
+        "up_next": false
+      },
+      {
+        "slug": "HS2-C",
+        "title": "Gamma",
+        "status": "completed",
+        "priority": "default",
+        "updated_at": "2026-01-03T00:00:00Z",
+        "up_next": false
+      },
+      {
+        "slug": "HS2-D",
+        "title": "Delta",
+        "status": "deleted",
+        "priority": "low",
+        "updated_at": "2026-01-04T00:00:00Z",
+        "up_next": false
+      },
+      {
+        "slug": "HS2-E",
+        "title": "Epsilon",
+        "status": "started",
+        "priority": "high",
+        "updated_at": "2026-01-05T00:00:00Z",
+        "up_next": true
+      }
+    ],
+    "view": "all",
+    "sort": "priority",
+    "direction": "descending"
+  },
+  "steps": [
+    { "action": "snapshot", "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": [] } },
+    { "action": "search", "value": "is:started", "expect": { "visible": ["HS2-E", "HS2-A"], "selected": [] } },
+    { "action": "search", "value": "", "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": [] } },
+    {
+      "action": "select",
+      "slug": "HS2-A",
+      "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": ["HS2-A"], "anchor": "HS2-A" }
+    },
+    {
+      "action": "select",
+      "slug": "HS2-C",
+      "range": true,
+      "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": ["HS2-A", "HS2-C"], "anchor": "HS2-A" }
+    },
+    {
+      "action": "select",
+      "slug": "HS2-E",
+      "toggle": true,
+      "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": ["HS2-E", "HS2-A", "HS2-C"], "anchor": "HS2-E" }
+    },
+    { "action": "view", "value": "archive", "expect": { "visible": [], "selected": [] } },
+    { "action": "view", "value": "all", "expect": { "visible": ["HS2-E", "HS2-A", "HS2-C"], "selected": [] } },
+    {
+      "action": "sort",
+      "value": "updated",
+      "direction": "ascending",
+      "expect": { "visible": ["HS2-A", "HS2-C", "HS2-E"], "selected": [] }
+    },
+    {
+      "action": "select_all",
+      "expect": { "visible": ["HS2-A", "HS2-C", "HS2-E"], "selected": ["HS2-A", "HS2-C", "HS2-E"], "anchor": "HS2-A" }
+    },
+    { "action": "view", "value": "trash", "expect": { "visible": ["HS2-D"], "selected": [] } },
+    {
+      "action": "select",
+      "slug": "HS2-D",
+      "expect": { "visible": ["HS2-D"], "selected": ["HS2-D"], "anchor": "HS2-D" }
+    },
+    {
+      "action": "select",
+      "slug": "HS2-A",
+      "expect": { "visible": ["HS2-D"], "selected": ["HS2-D"], "anchor": "HS2-D" }
+    }
+  ]
+}

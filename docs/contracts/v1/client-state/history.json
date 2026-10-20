@@ -1,0 +1,36 @@
+{
+  "format": "hotsheet-client-state/v1",
+  "id": "optimistic-history-and-remote-conflict",
+  "kind": "history",
+  "initial": { "slug": "HS2-A", "title": "Original", "status": "not_started", "priority": "default" },
+  "steps": [
+    {
+      "action": "begin_edit",
+      "patch": { "title": "Local" },
+      "expect": { "title": "Local", "status": "not_started", "priority": "default" }
+    },
+    { "action": "ack", "expect": { "title": "Local", "status": "not_started", "priority": "default" } },
+    {
+      "action": "begin_edit",
+      "patch": { "priority": "high" },
+      "expect": { "title": "Local", "status": "not_started", "priority": "high" }
+    },
+    { "action": "ack", "expect": { "title": "Local", "status": "not_started", "priority": "high" } },
+    { "action": "undo", "expect": { "title": "Local", "status": "not_started", "priority": "default" } },
+    {
+      "action": "remote",
+      "patch": { "title": "Remote" },
+      "expect": { "title": "Remote", "status": "not_started", "priority": "default" }
+    },
+    { "action": "undo", "expect": { "title": "Remote", "status": "not_started", "priority": "default" } },
+    { "action": "redo", "expect": { "title": "Remote", "status": "not_started", "priority": "default" } },
+    {
+      "action": "begin_edit",
+      "patch": { "status": "started" },
+      "expect": { "title": "Remote", "status": "started", "priority": "default" }
+    },
+    { "action": "queue_undo", "expect": { "title": "Remote", "status": "started", "priority": "default" } },
+    { "action": "ack", "expect": { "title": "Remote", "status": "not_started", "priority": "default" } },
+    { "action": "redo", "expect": { "title": "Remote", "status": "started", "priority": "default" } }
+  ]
+}
