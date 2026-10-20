@@ -1,5 +1,9 @@
 # Feature Coverage Matrix
 
+HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
+readers. The dialog Stop browser test opens two independent polls alongside the
+app poll and verifies both readers see the done event while progress clears.
+
 HS2-KYP8ZT tests forced two-process local and shared settings lock interleavings in
 `settings::tests::conditional_write_serializes_with_a_second_process` and
 root command/group HTTP stale, CLI-style out-of-band edit, and explicit force

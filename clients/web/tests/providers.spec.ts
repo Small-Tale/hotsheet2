@@ -1169,7 +1169,6 @@ async function mockProject(
   let mockServerSkewMs: number | undefined;
   let toolConnections: MockToolConnection[] = [],
     driveCursor = 0,
-    driveEvents: MockDriveEvent[] = [],
     drivePermissions: Array<{
       id: number;
       connection: string;
@@ -1177,6 +1176,7 @@ async function mockProject(
       action: string;
       always_allow_supported: boolean;
     }> = [];
+  const driveEvents: MockDriveEvent[] = [];
   // Long polls held open until an event arrives, as the real server holds them (HS2-6H4M85).
   const drivePollWaiters = new Set<() => void>();
   const pushDriveEvent = (event: Omit<MockDriveEvent, 'cursor' | 'store'>) => {
@@ -2061,7 +2061,8 @@ async function mockProject(
       const since = Number(rawSince),
         respond = () => {
           const events = driveEvents.filter((event) => event.cursor > since);
-          if (events.length) driveEvents = [];
+          // Each poll has its own cursor. Keep events available to simultaneous readers,
+          // as the real server does; otherwise another reader can steal a turn's done event.
           return { cursor: events.length ? driveCursor : since, events, overflow: false };
         };
       const immediate = respond();
@@ -20216,8 +20217,38 @@ async function runLongTurnUntilStuck(
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `target/visual-captures/hs2-xv1vcr-${shot}-stuck-${width}.png` });
   }
+  let parallelStopPolls: Promise<boolean[]> | undefined;
+  if (shot === 'dialog') {
+    const cursor = await page.evaluate(
+      async () => (await (await fetch('/__hotsheet/project-api/demo-checkout/ws/poll')).json()).cursor as number,
+    );
+    const readers = new Set<string>();
+    const onRequest = (request: import('@playwright/test').Request) => {
+      const reader = new URL(request.url()).searchParams.get('parallel-stop-reader');
+      if (reader) readers.add(reader);
+    };
+    page.on('request', onRequest);
+    parallelStopPolls = page.evaluate(
+      async (since) =>
+        Promise.all(
+          [1, 2].map(async (reader) => {
+            const response = await fetch(
+              `/__hotsheet/project-api/demo-checkout/ws/poll?since=${since}&timeout_ms=5000&parallel-stop-reader=${reader}`,
+            );
+            const body = (await response.json()) as {
+              events: Array<{ kind: string; turn?: { event?: { type?: string } } }>;
+            };
+            return body.events.some((event) => event.kind === 'turn_event' && event.turn?.event?.type === 'done');
+          }),
+        ),
+      cursor,
+    );
+    await expect.poll(() => readers.size).toBe(2);
+    page.off('request', onRequest);
+  }
   page.once('dialog', (dialog) => void dialog.accept());
   await line.getByRole('button', { name: 'Stop Codex' }).click();
+  if (parallelStopPolls) expect(await parallelStopPolls).toEqual([true, true]);
   await expect(line).toHaveCount(0);
   await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
     'data-status',
