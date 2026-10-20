@@ -1,7 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
-import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -303,6 +302,27 @@ const permissionRulesDemoDialog = signal<
   | undefined
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
+const permissionRulesDemoPreview = signal<
+  { selected: readonly string[]; selectionAnchor?: string; confirmingDelete?: boolean } | undefined
+>(undefined);
+const demoSelectionIsPreview = (target: Element) =>
+  target.closest<HTMLElement>('[data-permission-selection-surface]')?.dataset.permissionSelectionSurface === 'preview';
+function updateDemoSelection(
+  target: Element,
+  update: (state: { selected: readonly string[]; selectionAnchor?: string; confirmingDelete?: boolean }) => {
+    selected: readonly string[];
+    selectionAnchor?: string;
+    confirmingDelete?: boolean;
+  },
+) {
+  if (demoSelectionIsPreview(target)) {
+    permissionRulesDemoPreview.value = update(permissionRulesDemoPreview.value ?? { selected: [] });
+    return;
+  }
+  const dialog = permissionRulesDemoDialog.value;
+  if (dialog)
+    permissionRulesDemoDialog.value = { ...dialog, ...update({ ...dialog, selected: dialog.selected ?? [] }) };
+}
 
 /** Remembered permission answers: Kerf ListHeader with empty, listed, and revoke-error states. */
 export function PermissionRulesSettingsDemo() {
@@ -313,7 +333,11 @@ export function PermissionRulesSettingsDemo() {
       </CatalogExample>
       <CatalogExample label="ListHeader with Chat, Session, and Always Rules">
         <div data-demo-permission-rules>
-          <PermissionRulesSettings rules={permissionRulesDemoRules.value} dialog={permissionRulesDemoDialog.value} />
+          <PermissionRulesSettings
+            rules={permissionRulesDemoRules.value}
+            preview={permissionRulesDemoPreview.value}
+            dialog={permissionRulesDemoDialog.value}
+          />
         </div>
       </CatalogExample>
       <CatalogExample label="Revoking, with a Failure Message">
@@ -458,59 +482,6 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     ),
   );
   demoListeners.add(
-    delegate(root, 'contextmenu', '[data-demo-permission-rules] [data-permission-rule]', (event, target) => {
-      const menu = target.querySelector<HTMLElement>('[data-permission-rule-menu]');
-      if (!menu) return;
-      event.preventDefault();
-      const pointer = event as MouseEvent;
-      openPopupMenuAt(menu, pointer.clientX, pointer.clientY);
-    }),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.selector}`,
-      (_event, target) => {
-        const key = (target as HTMLElement).dataset.ruleKey;
-        if (key)
-          permissionRulesDemoRules.value = permissionRulesDemoRules.value.filter(
-            (rule) => permissionRuleKey(rule) !== key,
-          );
-      },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.selector}`,
-      (_event, target) => {
-        const key = (target as HTMLElement).dataset.ruleKey,
-          decision = (target as HTMLElement).dataset.decision;
-        if (!key || (decision !== 'allow' && decision !== 'deny')) return;
-        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
-          permissionRuleKey(rule) === key ? { ...rule, decision } : rule,
-        );
-      },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.selector}`,
-      (_event, target) => {
-        const key = (target as HTMLElement).dataset.ruleKey,
-          scope = (target as HTMLElement).dataset.scope;
-        if (!key || (scope !== 'session' && scope !== 'always')) return;
-        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
-          permissionRuleKey(rule) === key && rule.scope !== 'chat' ? { ...rule, scope } : rule,
-        );
-      },
-    ),
-  );
-  demoListeners.add(
     delegate(
       root,
       'click',
@@ -521,8 +492,9 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           visibleCount: PERMISSION_RULE_BATCH_SIZE,
           lifetime: 'permanent',
           decision: 'allow',
-          selected: [],
+          selected: permissionRulesDemoPreview.value?.selected ?? [],
         };
+        permissionRulesDemoPreview.value = undefined;
       },
     ),
   );
@@ -603,15 +575,21 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector}`,
       (event, target) => {
-        const state = permissionRulesDemoDialog.value,
+        const preview = demoSelectionIsPreview(target),
+          state = preview ? (permissionRulesDemoPreview.value ?? { selected: [] }) : permissionRulesDemoDialog.value,
           key = (target as HTMLElement).getAttribute('data-rule-key');
         if (!state || !key) return;
-        const rows = permissionRulesList(
-            permissionRulesDemoRules.value,
-            state.query,
-            state.visibleCount,
-            state,
-          ).rows.map(permissionRuleKey),
+        const dialog = permissionRulesDemoDialog.value,
+          rows = (
+            preview
+              ? permissionRulesList(permissionRulesDemoRules.value, '', PERMISSION_RULE_BATCH_SIZE).rows.slice(0, 3)
+              : permissionRulesList(
+                  permissionRulesDemoRules.value,
+                  dialog?.query ?? '',
+                  dialog?.visibleCount ?? PERMISSION_RULE_BATCH_SIZE,
+                  dialog,
+                ).rows
+          ).map(permissionRuleKey),
           index = rows.indexOf(key);
         if (index < 0) return;
         const pointer = event as MouseEvent,
@@ -624,12 +602,12 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
             selected.add(rowKey);
         } else if (toggle && selected.has(key)) selected.delete(key);
         else selected.add(key);
-        permissionRulesDemoDialog.value = {
+        updateDemoSelection(target, () => ({
           ...state,
           selected: [...selected],
           selectionAnchor: range && rows.includes(state.selectionAnchor ?? '') ? state.selectionAnchor : key,
           confirmingDelete: false,
-        };
+        }));
       },
     ),
   );
@@ -647,19 +625,30 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
+    delegate(root, 'keydown', '[data-demo-permission-rules] .permission-rules-settings__recent', (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (!(keyboard.metaKey || keyboard.ctrlKey) || keyboard.altKey || keyboard.key.toLowerCase() !== 'a') return;
+      keyboard.preventDefault();
+      const rows = permissionRulesList(permissionRulesDemoRules.value, '', PERMISSION_RULE_BATCH_SIZE).rows.slice(0, 3);
+      updateDemoSelection(target, (state) => ({
+        ...state,
+        selected: [...new Set([...state.selected, ...rows.map(permissionRuleKey)])],
+        confirmingDelete: false,
+      }));
+    }),
+  );
+  demoListeners.add(
     delegate(
       root,
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.selector}`,
-      () => {
-        const state = permissionRulesDemoDialog.value;
-        if (state)
-          permissionRulesDemoDialog.value = {
-            ...state,
-            selected: [],
-            selectionAnchor: undefined,
-            confirmingDelete: false,
-          };
+      (_event, target) => {
+        updateDemoSelection(target, (state) => ({
+          ...state,
+          selected: [],
+          selectionAnchor: undefined,
+          confirmingDelete: false,
+        }));
       },
     ),
   );
@@ -669,14 +658,17 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.selector}`,
       (_event, target) => {
-        const state = permissionRulesDemoDialog.value,
-          decision = (target as HTMLElement).getAttribute('data-decision');
-        if (!state || (decision !== 'allow' && decision !== 'deny')) return;
+        const decision = (target as HTMLElement).getAttribute('data-decision');
+        if (decision !== 'allow' && decision !== 'deny') return;
+        const state = demoSelectionIsPreview(target)
+          ? permissionRulesDemoPreview.value
+          : permissionRulesDemoDialog.value;
+        if (!state) return;
         const selected = new Set(state.selected ?? []);
         permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
           selected.has(permissionRuleKey(rule)) ? { ...rule, decision } : rule,
         );
-        permissionRulesDemoDialog.value = { ...state, selected: [] };
+        updateDemoSelection(target, (current) => ({ ...current, selected: [], selectionAnchor: undefined }));
       },
     ),
   );
@@ -686,14 +678,17 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.selector}`,
       (_event, target) => {
-        const state = permissionRulesDemoDialog.value,
-          scope = (target as HTMLElement).dataset.scope;
-        if (!state || (scope !== 'session' && scope !== 'always')) return;
+        const scope = (target as HTMLElement).dataset.scope;
+        if (scope !== 'session' && scope !== 'always') return;
+        const state = demoSelectionIsPreview(target)
+          ? permissionRulesDemoPreview.value
+          : permissionRulesDemoDialog.value;
+        if (!state) return;
         const selected = new Set(state.selected ?? []);
         permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
           selected.has(permissionRuleKey(rule)) && rule.scope !== 'chat' ? { ...rule, scope } : rule,
         );
-        permissionRulesDemoDialog.value = { ...state, selected: [], selectionAnchor: undefined };
+        updateDemoSelection(target, (current) => ({ ...current, selected: [], selectionAnchor: undefined }));
       },
     ),
   );
@@ -702,9 +697,8 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       root,
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.selector}`,
-      () => {
-        const state = permissionRulesDemoDialog.value;
-        if (state) permissionRulesDemoDialog.value = { ...state, confirmingDelete: true };
+      (_event, target) => {
+        updateDemoSelection(target, (state) => ({ ...state, confirmingDelete: true }));
       },
     ),
   );
@@ -713,9 +707,8 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       root,
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.selector}`,
-      () => {
-        const state = permissionRulesDemoDialog.value;
-        if (state) permissionRulesDemoDialog.value = { ...state, confirmingDelete: false };
+      (_event, target) => {
+        updateDemoSelection(target, (state) => ({ ...state, confirmingDelete: false }));
       },
     ),
   );
@@ -724,20 +717,23 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       root,
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.selector}`,
-      () => {
-        const state = permissionRulesDemoDialog.value;
+      (_event, target) => {
+        const state = demoSelectionIsPreview(target)
+          ? permissionRulesDemoPreview.value
+          : permissionRulesDemoDialog.value;
         if (!state?.confirmingDelete) return;
         const selected = new Set(state.selected ?? []);
         permissionRulesDemoRules.value = permissionRulesDemoRules.value.filter(
           (rule) => !selected.has(permissionRuleKey(rule)),
         );
-        permissionRulesDemoDialog.value = {
-          ...state,
-          selected: [],
-          confirmingDelete: false,
-          visibleCount: permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount, state)
-            .visibleCount,
-        };
+        updateDemoSelection(target, (current) => ({ ...current, selected: [], confirmingDelete: false }));
+        const dialog = permissionRulesDemoDialog.value;
+        if (!demoSelectionIsPreview(target) && dialog)
+          permissionRulesDemoDialog.value = {
+            ...dialog,
+            visibleCount: permissionRulesList(permissionRulesDemoRules.value, dialog.query, dialog.visibleCount, dialog)
+              .visibleCount,
+          };
       },
     ),
   );

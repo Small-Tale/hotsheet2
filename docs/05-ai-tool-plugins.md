@@ -949,8 +949,8 @@ operation description for common commands (for example, npm lint or Rust tests);
 copies arguments, paths, or arbitrary command text. Older rules and unrecognized commands
 retain the fingerprint-only label; a safe way to identify those entries is tracked in
 HS2-KSY290. Full command/path details remain hidden and each rule is
-revocable. A row's ellipsis menu or right-click offers Allow, Disallow, Delete, and, for
-project-wide rules, switching between Session (until restart) and Persistent; the duration
+revocable. Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
+for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
 a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
@@ -959,17 +959,18 @@ includes chat-only rules, with their exact scope still shown in the row. Search 
 two equally sized filter controls, which stack on phone widths. The filters and identity search
 determine the loaded rows; changing a filter resets the loaded window but keeps selections.
 The dialog omits the duplicate result count and decision/lifetime labels already conveyed by
-the selected filters. In the dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
+the selected filters. In the preview and dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
 Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
-The dialog's selected-answer ellipsis menu enables Allow, Deny, Session, Persistent, and Delete
+The selected-answer toolbar ellipsis menu enables Allow, Deny, Session, Persistent, and Delete
 when at least one answer is selected. Delete requires confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
-Rows label chat, until server restart, and always lifetimes without repeating the
-project scope that the page already establishes (HS2-BH6GCG).
+Preview rows label chat, until server restart, and always lifetimes without repeating the
+project scope that the page already establishes; filtered dialog rows use the active controls
+instead (HS2-BH6GCG, HS2-ZQZ3V2).
 Each row retains its tool and short action fingerprint so distinct private commands
 remain distinguishable, including at phone width where the center of a long label
 truncates first; a safe operation description appears when available, and the repeated

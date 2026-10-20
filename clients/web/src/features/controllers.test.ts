@@ -383,6 +383,33 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.dispose();
   });
 
+  it('selects preview rows for one bulk menu and carries them into the dialog (HS2-QFWSEF)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    const rules = Array.from({ length: 4 }, (_, index) => ({
+      project: '/work/a',
+      tool: 'Bash',
+      action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+      decision: 'allow',
+      scope: 'always',
+    }));
+    fetchMock.mockResolvedValue(json(rules));
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const keys = rules.map(permissionRuleKey).reverse();
+    owner.selectPermissionRuleRow('a', keys[0], { toggle: false, range: false }, 'preview');
+    owner.selectPermissionRuleRow('a', keys[2], { toggle: false, range: true }, 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.selected).toEqual(keys.slice(0, 3));
+    owner.selectPermissionRuleRow('a', keys[0], { toggle: true, range: false }, 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.selected).toEqual(keys.slice(1, 3));
+    owner.requestDeleteSelectedPermissionRules('a', true, 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.confirmingDelete).toBe(true);
+    owner.requestDeleteSelectedPermissionRules('a', false, 'preview');
+    owner.openPermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual(keys.slice(1, 3));
+    expect(owner.permissionRulesPreviewFor('a', true)).toBeUndefined();
+    owner.dispose();
+  });
+
   it('bulk edits mixed remembered answers, retains failures for retry, and confirms deletion (HS2-C057G5)', async () => {
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
     let rules = [

@@ -45,6 +45,7 @@ export interface SettingsWorkspaceProps {
     /** Remembered answers for this project (HS2-JNHAYB). */
     rules?: readonly PermissionRule[];
     dialog?: PermissionRulesSettingsProps['dialog'];
+    preview?: PermissionRulesSettingsProps['preview'];
     revoking?: readonly string[];
     rulesMessage?: string;
   };
@@ -129,6 +130,7 @@ export function SettingsWorkspace({
             <PermissionRulesSettings
               rules={permissions.rules ?? []}
               dialog={permissions.dialog}
+              preview={permissions.preview}
               revoking={permissions.revoking}
               message={permissions.rulesMessage}
             />

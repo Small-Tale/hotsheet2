@@ -13,6 +13,7 @@ import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
@@ -28,6 +29,11 @@ export interface PermissionRulesSettingsProps {
     visibleCount: number;
     lifetime?: PermissionRuleLifetimeFilter;
     decision?: PermissionRuleDecisionFilter;
+    selected?: readonly string[];
+    busy?: boolean;
+    confirmingDelete?: boolean;
+  };
+  preview?: {
     selected?: readonly string[];
     busy?: boolean;
     confirmingDelete?: boolean;
@@ -95,72 +101,46 @@ function ruleLabel(rule: PermissionRule) {
  * outrank project rules for their chat; revoking one makes the next identical request ask again (or
  * fall back to the project rule).
  */
-export function PermissionRulesSettings({ rules, dialog, revoking = [], message = '' }: PermissionRulesSettingsProps) {
+export function PermissionRulesSettings({
+  rules,
+  dialog,
+  preview,
+  revoking = [],
+  message = '',
+}: PermissionRulesSettingsProps) {
   const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
     filters: PermissionRuleFilters = {
       lifetime: dialog?.lifetime ?? 'permanent',
       decision: dialog?.decision ?? 'allow',
     },
     list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount, filters) : undefined,
-    selected = new Set(dialog?.selected ?? []),
-    selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length;
-  function ruleRows(items: readonly PermissionRule[], selectable = false) {
+    dialogSelected = new Set(dialog?.selected ?? []),
+    previewSelected = new Set(preview?.selected ?? []),
+    selectedCount = rules.filter((rule) => dialogSelected.has(permissionRuleKey(rule))).length,
+    previewSelectedCount = rules.filter((rule) => previewSelected.has(permissionRuleKey(rule))).length;
+  function ruleRows(items: readonly PermissionRule[], surface: 'preview' | 'dialog') {
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule),
         unidentifiedBash = rule.tool.toLowerCase() === 'bash' && !rule.description,
         reapprovalAvailable = unidentifiedBash && rule.scope !== 'chat',
-        targetScope = rule.scope === 'session' ? 'Persistent' : 'Session',
-        rowActions: PopupMenuEntry[] = [
-          {
-            label: 'Allow',
-            action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.value,
-            checked: allowed,
-            attributes: { 'data-rule-key': key, 'data-decision': 'allow' },
-          },
-          {
-            label: 'Disallow',
-            action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleDecision.value,
-            checked: !allowed,
-            attributes: { 'data-rule-key': key, 'data-decision': 'deny' },
-          },
-          ...(rule.scope === 'chat'
-            ? []
-            : [
-                { kind: 'divider' } as const,
-                {
-                  label: `Set to ${targetScope}`,
-                  action: NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.value,
-                  attributes: { 'data-rule-key': key, 'data-scope': rule.scope === 'session' ? 'always' : 'session' },
-                },
-              ]),
-          { kind: 'divider' },
-          {
-            label: reapprovalAvailable ? 'Forget and Ask Again' : 'Delete Answer',
-            action: NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value,
-            tone: 'danger',
-            icon: <LucideIcon icon={Trash2} name="trash-2" />,
-            attributes: { 'data-rule-key': key },
-          },
-        ];
+        selected = surface === 'dialog' ? dialogSelected.has(key) : previewSelected.has(key),
+        busy = surface === 'dialog' ? dialog?.busy : preview?.busy;
       return (
         <div
           class="permission-rules-settings__rule"
           data-permission-rule={key}
           data-permission-rule-scope={rule.scope}
           data-permission-rule-decision={rule.decision}
-          data-rule-selected={selectable && selected.has(key) ? 'true' : undefined}
-          data-rule-disabled={dialog?.busy || revoking.includes(key) ? 'true' : undefined}
-          data-selectable={selectable ? '' : undefined}
+          data-rule-selected={selected ? 'true' : undefined}
+          data-rule-disabled={busy || revoking.includes(key) ? 'true' : undefined}
+          data-selectable=""
+          data-permission-selection-surface={surface}
         >
           <div class="permission-rules-settings__answer">
             <ListItem
-              action={
-                selectable
-                  ? NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.value
-                  : NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value
-              }
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.value}
               rootAttributes={{ 'data-rule-key': key }}
               density="compact"
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
@@ -170,7 +150,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 </Text>
               }
               description={
-                selectable
+                surface === 'dialog'
                   ? [
                       unidentifiedBash ? 'Unidentified command' : undefined,
                       rule.scope === 'chat' ? SCOPE_LABELS.chat : undefined,
@@ -184,23 +164,59 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   ? `${label} — The old command cannot be recovered from its fingerprint. Forget this answer to review the command on its next use and choose a safe label when remembering it again.`
                   : `${label} — Full action details hidden to protect sensitive values`
               }
-              pressed={selectable ? selected.has(key) : undefined}
-              disabled={dialog?.busy || revoking.includes(key)}
-              accessibleLabel={`${selectable ? 'Select' : 'View'} ${label}`}
+              pressed={selected}
+              disabled={busy || revoking.includes(key)}
+              accessibleLabel={`Select ${label}`}
             />
           </div>
-          <PopupMenu
-            label={`More Actions for ${label}`}
-            icon={<LucideIcon icon={Ellipsis} name="ellipsis" />}
-            caret={false}
-            placement="bottom-end"
-            disabled={revoking.includes(key) || dialog?.busy}
-            rootAttributes={{ 'data-permission-rule-menu': key }}
-            items={rowActions}
-          />
         </div>
       );
     });
+  }
+  function selectedActions(surface: 'preview' | 'dialog', count: number, busy = false) {
+    const items: PopupMenuEntry[] = [
+      {
+        label: 'Allow Selected',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
+        attributes: { 'data-decision': 'allow' },
+      },
+      {
+        label: 'Deny Selected',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
+        attributes: { 'data-decision': 'deny' },
+      },
+      { kind: 'divider' },
+      {
+        label: 'Set Selected to Session',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
+        attributes: { 'data-scope': 'session' },
+      },
+      {
+        label: 'Set Selected to Persistent',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
+        attributes: { 'data-scope': 'always' },
+      },
+      { kind: 'divider' },
+      {
+        label: 'Delete Selected',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value,
+        tone: 'danger',
+        icon: <LucideIcon icon={Trash2} name="trash-2" />,
+      },
+    ];
+    return (
+      <ToolbarControlGroup single>
+        <PopupMenu
+          label="Selected Answer Actions"
+          icon={<LucideIcon icon={Ellipsis} name="ellipsis" />}
+          caret={false}
+          placement="bottom-end"
+          disabled={count === 0 || busy}
+          rootAttributes={{ 'data-permission-bulk-menu': '', 'data-permission-selection-surface': surface }}
+          items={items}
+        />
+      </ToolbarControlGroup>
+    );
   }
   return (
     <section
@@ -218,10 +234,56 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           />
         ) : (
           <>
-            <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'Recent Remembered Answers' }}>
-              {ruleRows(ordered.slice(0, 3))}
+            <Row gap="xs" hAlign="right" vAlign="middle" wrap>
+              {previewSelectedCount > 0 && (
+                <Text tone="quiet" size="compact">{`${previewSelectedCount} selected`}</Text>
+              )}
+              {previewSelectedCount > 0 && (
+                <Button
+                  emphasis="plain"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.value}
+                  rootAttributes={{ 'data-permission-selection-surface': 'preview' }}
+                  disabled={preview?.busy}
+                >
+                  Clear
+                </Button>
+              )}
+              {selectedActions('preview', previewSelectedCount, preview?.busy)}
+            </Row>
+            {preview?.confirmingDelete && previewSelectedCount > 0 && (
+              <Row
+                gap="xs"
+                vAlign="middle"
+                wrap
+                rootAttributes={{ role: 'group', 'aria-label': 'Confirm preview deletion' }}
+              >
+                <Text size="compact">{`Delete ${previewSelectedCount} remembered answers? Future matching requests will ask again.`}</Text>
+                <Button
+                  emphasis="primary"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.value}
+                  rootAttributes={{ 'data-permission-selection-surface': 'preview' }}
+                  disabled={preview.busy}
+                >
+                  Confirm Delete
+                </Button>
+                <Button
+                  emphasis="plain"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.value}
+                  rootAttributes={{ 'data-permission-selection-surface': 'preview' }}
+                  disabled={preview.busy}
+                >
+                  Cancel
+                </Button>
+              </Row>
+            )}
+            <List
+              gap="xs"
+              className="permission-rules-settings__recent"
+              rootAttributes={{ role: 'list', 'aria-label': 'Recent Remembered Answers' }}
+            >
+              {ruleRows(ordered.slice(0, 3), 'preview')}
             </List>
-            {ordered.length > 3 && (
+            {ordered.length > 0 && (
               <Row hAlign="center" controlInsets="tb">
                 <Button
                   type="button"
@@ -298,55 +360,19 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   disabled={dialog?.busy}
                 />
               </div>
-              <Row gap="xs" vAlign="middle" wrap>
+              <Row gap="xs" hAlign="right" vAlign="middle" wrap>
                 {selectedCount > 0 && <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>}
                 {selectedCount > 0 && (
                   <Button
                     emphasis="plain"
                     action={NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.value}
+                    rootAttributes={{ 'data-permission-selection-surface': 'dialog' }}
                     disabled={dialog?.busy}
                   >
                     Clear
                   </Button>
                 )}
-                <PopupMenu
-                  label="Selected Answer Actions"
-                  icon={<LucideIcon icon={Ellipsis} name="ellipsis" />}
-                  caret={false}
-                  placement="bottom-end"
-                  disabled={selectedCount === 0 || dialog?.busy}
-                  rootAttributes={{ 'data-permission-bulk-menu': '' }}
-                  items={[
-                    {
-                      label: 'Allow Selected',
-                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
-                      attributes: { 'data-decision': 'allow' },
-                    },
-                    {
-                      label: 'Deny Selected',
-                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
-                      attributes: { 'data-decision': 'deny' },
-                    },
-                    { kind: 'divider' },
-                    {
-                      label: 'Set Selected to Session',
-                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
-                      attributes: { 'data-scope': 'session' },
-                    },
-                    {
-                      label: 'Set Selected to Persistent',
-                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
-                      attributes: { 'data-scope': 'always' },
-                    },
-                    { kind: 'divider' },
-                    {
-                      label: 'Delete Selected',
-                      action: NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value,
-                      tone: 'danger',
-                      icon: <LucideIcon icon={Trash2} name="trash-2" />,
-                    },
-                  ]}
-                />
+                {selectedActions('dialog', selectedCount, dialog?.busy)}
               </Row>
               {dialog?.confirmingDelete && selectedCount > 0 && (
                 <Row
@@ -359,6 +385,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   <Button
                     emphasis="primary"
                     action={NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.value}
+                    rootAttributes={{ 'data-permission-selection-surface': 'dialog' }}
                     disabled={dialog.busy}
                   >
                     Confirm Delete
@@ -366,6 +393,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                   <Button
                     emphasis="plain"
                     action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.value}
+                    rootAttributes={{ 'data-permission-selection-surface': 'dialog' }}
                     disabled={dialog.busy}
                   >
                     Cancel
@@ -378,7 +406,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               {list.rows.length ? (
                 <div class="permission-rules-settings__all" tabindex="0" aria-label="Scrollable Remembered Answers">
                   <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'All Remembered Answers' }}>
-                    {ruleRows(list.rows, true)}
+                    {ruleRows(list.rows, 'dialog')}
                   </List>
                 </div>
               ) : (

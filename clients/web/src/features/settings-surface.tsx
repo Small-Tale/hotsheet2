@@ -46,6 +46,7 @@ export interface SettingsSurfaceDependencies {
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
   permissionRulesDialogFor: (projectId: string, visible: boolean) => Props['permissions']['dialog'];
+  permissionRulesPreviewFor: (projectId: string, visible: boolean) => Props['permissions']['preview'];
   permissionRulesMessage: Readable<string>;
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
@@ -94,6 +95,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
+    permissionRulesPreviewFor,
     permissionRulesMessage,
     revokingPermissionRules,
     hideVerifiedColumn,
@@ -176,6 +178,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           // Loaded only while the Permissions category shows (HS2-JNHAYB).
           rules: settingsCategory() === 'permissions' ? permissionRules(current.id) : [],
           dialog: permissionRulesDialogFor(current.id, settingsCategory() === 'permissions'),
+          preview: permissionRulesPreviewFor(current.id, settingsCategory() === 'permissions'),
           revoking: revokingPermissionRules.value,
           rulesMessage: permissionRulesMessage.value,
         }}

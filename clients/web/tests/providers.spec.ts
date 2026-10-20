@@ -15216,8 +15216,10 @@ test('answers identical permission requests for this chat and revokes the rememb
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-390.png' });
   await page.screenshot({ path: 'target/visual-captures/hs2-4mf2m1-remembered-rules-390.png' });
-  await row.getByRole('button', { name: /More Actions for Bash request/ }).click();
-  await page.getByRole('menuitem', { name: 'Delete Answer' }).click();
+  await row.locator('[data-action="select-permission-rule-row"]').click();
+  await remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await remembered.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(remembered).toContainText('No Remembered Answers');
   expect(revokes).toEqual([
     {
@@ -15269,8 +15271,10 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   await expect(remembered).toContainText('Unidentified command');
-  await remembered.getByRole('button', { name: /More Actions for Bash request/ }).click();
-  await page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
+  await remembered.locator('[data-permission-rule] [data-action="select-permission-rule-row"]').first().click();
+  await remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await remembered.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(remembered).toContainText('No Remembered Answers');
 
   pending = [
@@ -15388,7 +15392,7 @@ test('previews three recent permission answers and searches the scrollable full 
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-dialog-component="permission-rules-dialog"]')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await recent.locator('[data-component="list-item"]').first().click();
+  await preview.getByRole('button', { name: 'Show all 12 answers' }).click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
     all = dialog.getByRole('list', { name: 'All Remembered Answers' }),
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
@@ -15429,8 +15433,10 @@ test('previews three recent permission answers and searches the scrollable full 
   await search.fill('WebFetch');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
-  await all.getByRole('button', { name: 'More Actions for WebFetch request · 00000001' }).click();
-  await page.getByRole('menuitem', { name: 'Delete Answer' }).click();
+  await all.getByRole('button', { name: 'Select WebFetch request · 00000001' }).click();
+  await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
   await search.fill('not-a-visible-label');
   await expect(dialog).toContainText('No Matching Answers');
@@ -15648,7 +15654,7 @@ test('selects remembered-answer rows with modifiers and Command-A (HS2-ZVP9CB)',
   await expect(dialog.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
 });
 
-test('opens remembered-answer row and selected-action menus for decisions, duration, and deletion (HS2-X4ES6Z)', async ({
+test('uses selected-answer toolbar menus for decisions, duration, and deletion (HS2-X4ES6Z, HS2-QFWSEF)', async ({
   page,
 }) => {
   await mockProject(page);
@@ -15679,18 +15685,23 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' }),
-    row = preview.locator('[data-permission-rule]').first();
-  await expect(row.locator('[data-action="revoke-permission-rule"]')).toHaveCount(1);
-  await expect(row.getByRole('button', { name: /Revoke/ })).toHaveCount(0);
-  await row.click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: /More Actions for Bash request/ })).toBeVisible();
-  await page.getByRole('menuitemcheckbox', { name: 'Disallow' }).click();
+    row = preview.locator('[data-permission-rule]').first(),
+    previewMenu = page
+      .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
+      .getByRole('button', { name: 'Selected Answer Actions' });
+  await expect(row.locator('[data-permission-rule-menu]')).toHaveCount(0);
+  await expect(previewMenu).toBeDisabled();
+  await row.locator('[data-action="select-permission-rule-row"]').click();
+  await previewMenu.click();
+  await page.getByRole('menuitem', { name: 'Deny Selected' }).click();
   await expect(row).toHaveAttribute('data-permission-rule-decision', 'deny');
-  await preview.getByRole('button', { name: 'More Actions for Bash request · 00000001' }).click();
-  await page.getByRole('menuitem', { name: 'Set to Session' }).click();
+  await row.locator('[data-action="select-permission-rule-row"]').click();
+  await previewMenu.click();
+  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
   await expect(preview.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
-  await preview.getByRole('button', { name: 'More Actions for Bash request · 00000001' }).click();
-  await page.getByRole('menuitem', { name: 'Set to Persistent' }).click();
+  await row.locator('[data-action="select-permission-rule-row"]').click();
+  await previewMenu.click();
+  await page.getByRole('menuitem', { name: 'Set Selected to Persistent' }).click();
   await page.screenshot({ path: 'target/visual-captures/hs2-x4es6z-preview-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -15709,7 +15720,7 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await preview.locator('[data-permission-rule]').first().scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-x4es6z-preview-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await preview.locator('[data-action="open-permission-rules"]').first().click();
+  await page.getByRole('button', { name: 'Show all 3 answers' }).click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
     bulk = dialog.getByRole('button', { name: 'Selected Answer Actions' });
   await expect(bulk).toBeDisabled();
@@ -15727,11 +15738,83 @@ test('opens remembered-answer row and selected-action menus for decisions, durat
   await expect(dialog).toContainText('Updated 2 of 2 answers');
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(2);
-  await dialog.locator('[data-permission-rule]').first().click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
+  await dialog.locator('[data-permission-rule] [data-action="select-permission-rule-row"]').first().click();
+  await bulk.click();
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   expect(edits.filter((edit) => edit.scope === 'session')).toHaveLength(3);
   expect(edits.some((edit) => edit.decision === 'deny')).toBe(true);
+});
+
+test('applies the one selected-answer menu to multiple preview and dialog rows (HS2-QFWSEF)', async ({
+  page,
+}, testInfo) => {
+  await mockProject(page);
+  let rules = Array.from({ length: 4 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: 'allow',
+    scope: 'always',
+  }));
+  const changed: string[] = [];
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: rules });
+    const body = route.request().postDataJSON() as { action: string; scope?: 'session' };
+    changed.push(body.action);
+    if (route.request().method() === 'DELETE') rules = rules.filter((rule) => rule.action !== body.action);
+    else
+      rules = rules.map((rule) => (rule.action === body.action ? { ...rule, scope: body.scope ?? rule.scope } : rule));
+    return route.fulfill({ status: 204, body: '' });
+  });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const settings = page.locator('[data-component="permission-rules-settings"]'),
+    preview = settings.getByRole('list', { name: 'Recent Remembered Answers' }),
+    previewRows = preview.locator('[data-action="select-permission-rule-row"]'),
+    previewMenu = settings.locator('[data-permission-bulk-menu][data-permission-selection-surface="preview"]');
+  await expect(preview.locator('[data-permission-rule-menu]')).toHaveCount(0);
+  await expect(previewMenu.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
+  await previewRows.nth(0).click();
+  await previewRows.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(settings).toContainText('2 selected');
+  await previewMenu.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Set Selected to Session' })).toBeVisible();
+  await testInfo.attach('hs2-qfwsef-preview-wide', {
+    body: await page.screenshot({ path: testInfo.outputPath('hs2-qfwsef-preview-wide.png'), animations: 'disabled' }),
+    contentType: 'image/png',
+  });
+  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
+  await expect(previewMenu.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
+  expect(changed).toHaveLength(2);
+  await page.setViewportSize({ width: 1416, height: 1816 });
+  await settings.getByRole('button', { name: 'Show all 4 answers' }).click();
+  const dialog = settings.locator('[data-dialog-component="permission-rules-dialog"]'),
+    dialogRows = dialog.locator('[data-action="select-permission-rule-row"]'),
+    dialogMenu = dialog.locator('[data-permission-bulk-menu][data-permission-selection-surface="dialog"]');
+  await expect(dialogRows).toHaveCount(2);
+  await dialogRows.first().click();
+  await dialogRows.last().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await dialogMenu.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await testInfo.attach('hs2-qfwsef-dialog-wide', {
+    body: await page.screenshot({ path: testInfo.outputPath('hs2-qfwsef-dialog-wide.png'), animations: 'disabled' }),
+    contentType: 'image/png',
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await testInfo.attach('hs2-qfwsef-dialog-phone', {
+    body: await page.screenshot({ path: testInfo.outputPath('hs2-qfwsef-dialog-phone.png'), animations: 'disabled' }),
+    contentType: 'image/png',
+  });
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
+  await expect(settings).toContainText('Deleted 2 of 2 answers.');
+  expect(changed).toHaveLength(4);
+  expect(rules).toHaveLength(2);
 });
 
 test('keeps phone Settings content inside the viewport after closing its sidebar (HS2-FJ22SA)', async ({ page }) => {
@@ -15896,10 +15979,14 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
-  await preview.getByRole('button', { name: 'More Actions for Bash request · 00000002' }).click();
-  await page.getByRole('menuitem', { name: 'Set to Persistent' }).click();
+  await preview.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await page
+    .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
+    .getByRole('button', { name: 'Selected Answer Actions' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Set Selected to Persistent' }).click();
   await expect(preview.locator('[data-permission-rule-scope="always"]')).toHaveCount(3);
-  await expect(page.locator('[data-component="permission-rules-settings"]')).toContainText('Answer set to Persistent.');
+  await expect(page.locator('[data-component="permission-rules-settings"]')).toContainText('Updated 1 of 1 answers.');
   await page.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -15911,15 +15998,16 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   ).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: 'Permanent', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-btptwk-persistent-wide.png' });
-  await dialog.getByRole('button', { name: 'More Actions for Bash request · 00000002' }).click();
-  await page.getByRole('menuitem', { name: 'Set to Session' }).click();
+  await dialog.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   await expect(
     dialog.locator('[data-permission-rule-decision="deny"][data-permission-rule-scope="session"]'),
   ).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: 'Session', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(dialog).toContainText('Answer set to Session (until restart).');
+  await expect(dialog).toContainText('Updated 1 of 1 answers.');
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-phone.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-btptwk-session-phone.png' });
@@ -15929,8 +16017,12 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText('Session (until restart)');
-  await preview.getByRole('button', { name: 'More Actions for Bash request · 00000002' }).click();
-  await page.getByRole('menuitem', { name: 'Set to Persistent' }).click();
+  await preview.getByRole('button', { name: 'Select Bash request · 00000002' }).click();
+  await page
+    .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
+    .getByRole('button', { name: 'Selected Answer Actions' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Set Selected to Persistent' }).click();
   await expect(preview.locator('[data-permission-rule-scope="always"]')).toHaveCount(3);
   expect(edits.map((edit) => edit.scope)).toEqual(['always', 'session', 'always']);
   expect(edits.every((edit) => edit.action === rules[2].action)).toBe(true);
@@ -16003,8 +16095,10 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   const lint = first.remembered
     .locator('[data-permission-rule-scope="always"]')
     .filter({ hasText: rememberedActionKey('npm run lint').slice(-8) });
-  await lint.getByRole('button', { name: /More Actions for Bash request/ }).click();
-  await first.page.getByRole('menuitem', { name: 'Forget and Ask Again' }).click();
+  await lint.locator('[data-action="select-permission-rule-row"]').click();
+  await first.remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
+  await first.page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  await first.remembered.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
   await expect(second.remembered).toContainText(`Bash request · ${rememberedActionKey('npm run lint').slice(-8)}`);
   await publishRulesChanged(second);

@@ -87,6 +87,16 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           confirmingDelete?: boolean;
         }
       | undefined
+    >(undefined),
+    permissionRulesPreview = signal<
+      | {
+          projectId: string;
+          selected: readonly string[];
+          selectionAnchor?: string;
+          busy?: boolean;
+          confirmingDelete?: boolean;
+        }
+      | undefined
     >(undefined);
   const loadingPermissionRules = new Set<string>();
   const markPermissionRulesStale = (projectId?: string) => {
@@ -408,15 +418,23 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     return visible && current?.projectId === projectId ? current : undefined;
   }
 
+  function permissionRulesPreviewFor(projectId: string, visible: boolean) {
+    const current = permissionRulesPreview.value;
+    if (current && (!visible || current.projectId !== projectId)) permissionRulesPreview.value = undefined;
+    return visible && current?.projectId === projectId ? current : undefined;
+  }
+
   function openPermissionRules(projectId: string) {
+    const preview = permissionRulesPreview.value?.projectId === projectId ? permissionRulesPreview.value : undefined;
     permissionRulesDialog.value = {
       projectId,
       query: '',
       visibleCount: PERMISSION_RULE_BATCH_SIZE,
       lifetime: 'permanent',
       decision: 'allow',
-      selected: [],
+      selected: preview?.selected ?? [],
     };
+    permissionRulesPreview.value = undefined;
   }
 
   function closePermissionRules() {
@@ -459,34 +477,72 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesDialog.value = { ...current, visibleCount };
   }
 
-  function selectPermissionRuleRow(projectId: string, key: string, modifiers: { toggle: boolean; range: boolean }) {
-    const dialog = permissionRulesDialog.value;
-    if (dialog?.projectId !== projectId || dialog.busy) return;
-    const rows = permissionRulesList(
-        permissionRulesByProject.value[projectId] ?? [],
-        dialog.query,
-        dialog.visibleCount,
-        dialog,
-      ).rows.map(permissionRuleKey),
+  function selectPermissionRuleRow(
+    projectId: string,
+    key: string,
+    modifiers: { toggle: boolean; range: boolean },
+    surface: 'preview' | 'dialog' = 'dialog',
+  ) {
+    const state = surface === 'preview' ? permissionRulesPreview.value : permissionRulesDialog.value;
+    if (state?.projectId !== projectId && surface === 'dialog') return;
+    if (state?.busy) return;
+    const rules = permissionRulesByProject.value[projectId] ?? [],
+      rows = (
+        surface === 'preview'
+          ? permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).rows.slice(0, 3)
+          : permissionRulesList(
+              rules,
+              permissionRulesDialog.value?.query ?? '',
+              permissionRulesDialog.value?.visibleCount ?? PERMISSION_RULE_BATCH_SIZE,
+              permissionRulesDialog.value,
+            ).rows
+      ).map(permissionRuleKey),
       index = rows.indexOf(key);
     if (index < 0) return;
-    const selected = new Set(modifiers.toggle || modifiers.range ? (dialog.selected ?? []) : []);
-    if (modifiers.range && dialog.selectionAnchor && rows.includes(dialog.selectionAnchor)) {
-      const anchorIndex = rows.indexOf(dialog.selectionAnchor);
+    const selected = new Set(modifiers.toggle || modifiers.range ? (state?.selected ?? []) : []);
+    if (modifiers.range && state?.selectionAnchor && rows.includes(state.selectionAnchor)) {
+      const anchorIndex = rows.indexOf(state.selectionAnchor);
       for (const rowKey of rows.slice(Math.min(anchorIndex, index), Math.max(anchorIndex, index) + 1))
         selected.add(rowKey);
     } else if (modifiers.toggle && selected.has(key)) selected.delete(key);
     else selected.add(key);
     permissionRulesMessage.value = '';
-    permissionRulesDialog.value = {
-      ...dialog,
-      selected: [...selected],
-      selectionAnchor: modifiers.range && rows.includes(dialog.selectionAnchor ?? '') ? dialog.selectionAnchor : key,
-      confirmingDelete: false,
-    };
+    const selectionAnchor =
+      modifiers.range && rows.includes(state?.selectionAnchor ?? '') ? state?.selectionAnchor : key;
+    if (surface === 'preview')
+      permissionRulesPreview.value = {
+        ...state,
+        projectId,
+        selected: [...selected],
+        selectionAnchor,
+        confirmingDelete: false,
+      };
+    else
+      permissionRulesDialog.value = {
+        ...permissionRulesDialog.value!,
+        selected: [...selected],
+        selectionAnchor,
+        confirmingDelete: false,
+      };
   }
 
-  function selectVisiblePermissionRules(projectId: string) {
+  function selectVisiblePermissionRules(projectId: string, surface: 'preview' | 'dialog' = 'dialog') {
+    if (surface === 'preview') {
+      const current =
+        permissionRulesPreview.value?.projectId === projectId
+          ? permissionRulesPreview.value
+          : { projectId, selected: [] as readonly string[], busy: false };
+      if (current.busy) return;
+      const selected = new Set(current.selected);
+      for (const rule of permissionRulesList(
+        permissionRulesByProject.value[projectId] ?? [],
+        '',
+        PERMISSION_RULE_BATCH_SIZE,
+      ).rows.slice(0, 3))
+        selected.add(permissionRuleKey(rule));
+      permissionRulesPreview.value = { ...current, selected: [...selected], confirmingDelete: false };
+      return;
+    }
     const dialog = permissionRulesDialog.value;
     if (dialog?.projectId !== projectId || dialog.busy) return;
     const rows = permissionRulesList(
@@ -501,7 +557,20 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
   }
 
-  function clearPermissionRuleSelection(projectId: string) {
+  function clearPermissionRuleSelection(projectId: string, surface: 'preview' | 'dialog' = 'dialog') {
+    if (surface === 'preview') {
+      const current = permissionRulesPreview.value;
+      if (current?.projectId === projectId && !current.busy) {
+        permissionRulesMessage.value = '';
+        permissionRulesPreview.value = {
+          ...current,
+          selected: [],
+          selectionAnchor: undefined,
+          confirmingDelete: false,
+        };
+      }
+      return;
+    }
     const dialog = permissionRulesDialog.value;
     if (dialog?.projectId === projectId && !dialog.busy) {
       permissionRulesMessage.value = '';
@@ -509,7 +578,19 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
   }
 
-  function requestDeleteSelectedPermissionRules(projectId: string, confirmingDelete: boolean) {
+  function requestDeleteSelectedPermissionRules(
+    projectId: string,
+    confirmingDelete: boolean,
+    surface: 'preview' | 'dialog' = 'dialog',
+  ) {
+    if (surface === 'preview') {
+      const current = permissionRulesPreview.value;
+      if (current?.projectId === projectId && !current.busy && current.selected.length > 0) {
+        permissionRulesMessage.value = '';
+        permissionRulesPreview.value = { ...current, confirmingDelete };
+      }
+      return;
+    }
     const dialog = permissionRulesDialog.value;
     if (dialog?.projectId === projectId && !dialog.busy && (dialog.selected?.length ?? 0) > 0) {
       permissionRulesMessage.value = '';
@@ -520,13 +601,16 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   async function applySelectedPermissionRules(
     projectId: string,
     operation: 'delete' | 'allow' | 'deny' | 'session' | 'always',
+    surface: 'preview' | 'dialog' = 'dialog',
   ) {
     const dialog = permissionRulesDialog.value,
+      preview = permissionRulesPreview.value,
+      selection = surface === 'preview' ? preview : dialog,
       project = projects.value.find((value) => value.id === projectId);
-    if (!project || dialog?.projectId !== projectId || dialog.busy || !dialog.selected?.length) return;
-    if (operation === 'delete' && !dialog.confirmingDelete) return;
+    if (!project || selection?.projectId !== projectId || selection.busy || !selection.selected?.length) return;
+    if (operation === 'delete' && !selection.confirmingDelete) return;
     const rules = permissionRulesByProject.value[projectId] ?? [],
-      selected = new Set(dialog.selected),
+      selected = new Set(selection.selected),
       scopeChange = operation === 'session' || operation === 'always',
       targets = rules.filter(
         (rule) =>
@@ -538,7 +622,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       if (scopeChange) permissionRulesMessage.value = 'No selected answers need that duration change.';
       return;
     }
-    permissionRulesDialog.value = { ...dialog, busy: true, confirmingDelete: false };
+    if (surface === 'preview') permissionRulesPreview.value = { ...preview!, busy: true, confirmingDelete: false };
+    else permissionRulesDialog.value = { ...dialog!, busy: true, confirmingDelete: false };
     permissionRulesMessage.value = '';
     const succeeded = new Set<string>(),
       failed = new Set<string>();
@@ -577,25 +662,32 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       refreshFailed = true;
       markPermissionRulesStale(projectId);
     }
-    function finishDialog() {
-      const current = permissionRulesDialog.value;
-      if (current?.projectId !== projectId) return false;
+    function finishSelection() {
       const remaining = new Set((permissionRulesByProject.value[projectId] ?? []).map(permissionRuleKey));
-      permissionRulesDialog.value = {
-        ...current,
-        busy: false,
-        selected: [...failed].filter((key) => remaining.has(key)),
-        selectionAnchor: undefined,
-        visibleCount: permissionRulesList(
-          permissionRulesByProject.value[projectId] ?? [],
-          current.query,
-          current.visibleCount,
-          current,
-        ).visibleCount,
-      };
+      const selected = [...failed].filter((key) => remaining.has(key));
+      if (surface === 'preview') {
+        const current = permissionRulesPreview.value;
+        if (current?.projectId !== projectId) return false;
+        permissionRulesPreview.value = { ...current, busy: false, selected, selectionAnchor: undefined };
+      } else {
+        const current = permissionRulesDialog.value;
+        if (current?.projectId !== projectId) return false;
+        permissionRulesDialog.value = {
+          ...current,
+          busy: false,
+          selected,
+          selectionAnchor: undefined,
+          visibleCount: permissionRulesList(
+            permissionRulesByProject.value[projectId] ?? [],
+            current.query,
+            current.visibleCount,
+            current,
+          ).visibleCount,
+        };
+      }
       return true;
     }
-    if (finishDialog())
+    if (finishSelection())
       permissionRulesMessage.value = `${operation === 'delete' ? 'Deleted' : 'Updated'} ${succeeded.size} of ${targets.length} answers.${failed.size ? ` ${failed.size} failed and remain selected for retry.` : ''}${refreshFailed ? ' Could not refresh the list; retry loading to confirm the latest state.' : ''}`;
   }
 
@@ -754,6 +846,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     changePermissionRuleDecision,
     changePermissionRuleScope,
     permissionRulesDialogFor,
+    permissionRulesPreviewFor,
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,

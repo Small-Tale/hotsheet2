@@ -56,13 +56,19 @@ export interface NotificationAndLinkInteractionsDependencies {
     projectId: string,
     key: string,
     modifiers: { toggle: boolean; range: boolean },
+    surface?: 'preview' | 'dialog',
   ) => void;
-  readonly selectVisiblePermissionRules: (projectId: string) => void;
-  readonly clearPermissionRuleSelection: (projectId: string) => void;
-  readonly requestDeleteSelectedPermissionRules: (projectId: string, confirming: boolean) => void;
+  readonly selectVisiblePermissionRules: (projectId: string, surface?: 'preview' | 'dialog') => void;
+  readonly clearPermissionRuleSelection: (projectId: string, surface?: 'preview' | 'dialog') => void;
+  readonly requestDeleteSelectedPermissionRules: (
+    projectId: string,
+    confirming: boolean,
+    surface?: 'preview' | 'dialog',
+  ) => void;
   readonly applySelectedPermissionRules: (
     projectId: string,
     operation: 'delete' | 'allow' | 'deny' | 'session' | 'always',
+    surface?: 'preview' | 'dialog',
   ) => Promise<void>;
   readonly error: Signal<string>;
   readonly selectedProjectId: Signal<string>;
@@ -110,6 +116,10 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
   } = dependencies;
+  const permissionSelectionSurface = (target: Element): 'preview' | 'dialog' =>
+    target.closest<HTMLElement>('[data-permission-selection-surface]')?.dataset.permissionSelectionSurface === 'preview'
+      ? 'preview'
+      : 'dialog';
   lifetime.add(
     delegate(
       document.body,
@@ -313,10 +323,15 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         const key = data(target).ruleKey;
         if (key) {
           const pointer = event as MouseEvent;
-          selectPermissionRuleRow(selectedProjectId.value, key, {
-            toggle: pointer.metaKey || pointer.ctrlKey,
-            range: pointer.shiftKey,
-          });
+          selectPermissionRuleRow(
+            selectedProjectId.value,
+            key,
+            {
+              toggle: pointer.metaKey || pointer.ctrlKey,
+              range: pointer.shiftKey,
+            },
+            permissionSelectionSurface(target),
+          );
         }
       },
     ),
@@ -330,9 +345,22 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.selector, () => {
-      clearPermissionRuleSelection(selectedProjectId.value);
+    delegate(document.body, 'keydown', '.permission-rules-settings__recent', (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (!(keyboard.metaKey || keyboard.ctrlKey) || keyboard.altKey || keyboard.key.toLowerCase() !== 'a') return;
+      keyboard.preventDefault();
+      selectVisiblePermissionRules(selectedProjectId.value, 'preview');
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.selector,
+      (_event, target) => {
+        clearPermissionRuleSelection(selectedProjectId.value, permissionSelectionSurface(target));
+      },
+    ),
   );
   lifetime.add(
     delegate(
@@ -342,7 +370,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const decision = data(target).decision;
         if (decision === 'allow' || decision === 'deny')
-          void applySelectedPermissionRules(selectedProjectId.value, decision);
+          void applySelectedPermissionRules(selectedProjectId.value, decision, permissionSelectionSurface(target));
       },
     ),
   );
@@ -351,8 +379,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       document.body,
       'click',
       NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.selector,
-      () => {
-        requestDeleteSelectedPermissionRules(selectedProjectId.value, true);
+      (_event, target) => {
+        requestDeleteSelectedPermissionRules(selectedProjectId.value, true, permissionSelectionSurface(target));
       },
     ),
   );
@@ -364,7 +392,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const scope = data(target).scope;
         if (scope === 'session' || scope === 'always')
-          void applySelectedPermissionRules(selectedProjectId.value, scope);
+          void applySelectedPermissionRules(selectedProjectId.value, scope, permissionSelectionSurface(target));
       },
     ),
   );
@@ -373,8 +401,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       document.body,
       'click',
       NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.selector,
-      () => {
-        requestDeleteSelectedPermissionRules(selectedProjectId.value, false);
+      (_event, target) => {
+        requestDeleteSelectedPermissionRules(selectedProjectId.value, false, permissionSelectionSurface(target));
       },
     ),
   );
@@ -383,8 +411,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       document.body,
       'click',
       NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.selector,
-      () => {
-        void applySelectedPermissionRules(selectedProjectId.value, 'delete');
+      (_event, target) => {
+        void applySelectedPermissionRules(selectedProjectId.value, 'delete', permissionSelectionSurface(target));
       },
     ),
   );

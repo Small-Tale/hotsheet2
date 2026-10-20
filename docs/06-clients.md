@@ -2695,31 +2695,33 @@ HS2-ZQZ3V2).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. New Bash answers show a fixed-vocabulary operation description where
 available, plus their short fingerprint; older answers keep the fingerprint-only label. The
-unidentified project-wide Bash row menu says **Forget and Ask Again**. On its next use, the permission
+unidentified project-wide Bash answer can be deleted and asked again on its next use. The permission
 prompt shows the real command and offers an optional safe label for a remembered answer;
 one-time answers ignore that selector. Labels use a fixed list and never contain command
 arguments or paths (HS2-KSY290). The
-dialog row is the selection control: plain click selects one,
+preview and dialog rows are selection controls: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
-Command/Ctrl-A while focused in the list adds all loaded rows. Search and filter changes keep
+Command/Ctrl-A while focused in a list adds its visible rows. Search and filter changes keep
 selected keys but reset the range anchor; Load more extends the rows eligible for select-all.
-The preview row opens the dialog. Both row layouts use an ellipsis menu and right-click for
-Allow, Disallow, Delete, and project-wide duration changes. The dialog toolbar offers those
-actions for the current selection in an ellipsis menu; chat-only answers have no duration
-change. Per-row trash and duration buttons are absent (HS2-1Q8EF7, HS2-ZVP9CB, HS2-X4ES6Z).
+Show all opens the dialog at any nonzero answer count and carries preview selection into it.
+Each surface has one bordered toolbar ellipsis menu for the selected rows, with Allow,
+Disallow, Delete, and project-wide duration changes; chat-only answers have no duration
+change. Per-row overflow, trash, and duration buttons are absent (HS2-1Q8EF7,
+HS2-ZVP9CB, HS2-X4ES6Z, HS2-QFWSEF).
 Denied answers have a distinct background in both views; selection and keyboard focus remain
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label
 (HS2-4HTTMK); search covers only
-the safe visible tool, operation description, decision, scope, and opaque fingerprint,
+the safe visible tool, operation description, and opaque fingerprint,
 never the hidden command or path. Search resets the visible window to 100 answers;
 add/revoke updates clamp that window.
 There is no separate count/sort line or page footer (HS2-M97DKR, HS2-988X4X). Closing
 the dialog or switching projects resets its search, visible window, and selection (HS2-16XPHH,
 HS2-C057G5). A selection may span loaded batches and mix decisions and lifetimes. Allow selected
 and Deny selected change only the answer, while Delete selected asks for confirmation.
-Each project-wide answer in the preview and full dialog shows its saved decision and either
-Persistent or Session (until restart). The adjacent Set Persistent/Session action
+Each project-wide answer in the preview shows its saved decision and either Persistent or
+Session (until restart); the filtered dialog conveys those states through its controls.
+The toolbar Set Persistent/Session action
 names the target duration so it cannot be mistaken for the current one (HS2-BTPTWK);
 chat-scoped answers keep their connection lifetime.
 The effective duration updates in both lists after a successful server write, and a

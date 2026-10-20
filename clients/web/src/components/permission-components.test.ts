@@ -271,8 +271,10 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     const markup = String(PermissionRulesSettings({ rules }));
     expect(markup).toMatch(/data-component="list-header"[^]*<h3[^>]*>[^]*Remembered Answers/u);
     expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
-    expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(3);
-    expect(markup.match(/data-permission-rule-menu=/g)).toHaveLength(3);
+    expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(3);
+    expect(markup).not.toContain('data-permission-rule-menu=');
+    expect(markup).toContain('data-permission-selection-surface="preview"');
+    expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).not.toContain('aria-label="Revoke');
     expect(markup).toContain('data-scope="session"');
     expect(markup).toContain('data-scope="always"');
@@ -494,12 +496,11 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
     expect(markup).not.toContain('rm -rf build');
-    expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
-    expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(1);
-    expect(markup).toContain('Set to Session');
-    expect(markup).toContain('Forget and Ask Again');
-    expect(markup).toContain('Delete Answer');
-    expect(markup).toContain('More Actions for Bash request · 87654321');
+    expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(2);
+    expect(markup).not.toContain('data-permission-rule-menu=');
+    expect(markup).toContain('Set Selected to Session');
+    expect(markup).toContain('Delete Selected');
+    expect(markup).toContain('Selected Answer Actions');
     expect(markup).toContain('Could not revoke the rule.');
   });
   it('shows a safe Bash operation in preview and dialog while keeping the fingerprint and private action hidden', () => {
@@ -514,7 +515,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
       const markup = String(PermissionRulesSettings({ rules: [rule], dialog }));
       expect(markup).toContain('Bash · Run npm unit tests · 12345678');
-      expect(markup).toContain('More Actions for Bash · Run npm unit tests · 12345678');
+      expect(markup).toContain('Selected Answer Actions');
       expect(markup).toContain('Full action details hidden to protect sensitive values');
     }
     expect(permissionRulesList([rule], 'unit tests', 100).rows).toEqual([rule]);

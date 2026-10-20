@@ -26,10 +26,7 @@
 }
 
 .permission-rules-settings__rule {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--wa-space-xs);
+  min-width: 0;
   border-radius: remify(6px);
 }
 

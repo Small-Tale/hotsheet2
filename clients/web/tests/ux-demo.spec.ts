@@ -822,6 +822,25 @@ test('lets the remembered-answer demo search and dismiss its scrollable dialog (
   await expect(dialog).toHaveCount(0);
 });
 
+test('uses the selected-answer toolbar in the remembered-answer demo preview (HS2-QFWSEF)', async ({ page }) => {
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  const preview = example.getByRole('list', { name: 'Recent Remembered Answers' });
+  const rows = preview.locator('[data-action="select-permission-rule-row"]');
+  await rows.first().click();
+  await rows.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(example.getByRole('button', { name: 'Selected Answer Actions' })).toBeEnabled();
+  await example.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Deny Selected' }).click();
+  await expect(rows.first()).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('[data-permission-rule-decision="deny"]')).toHaveCount(2);
+  await rows.first().click();
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
+  await expect(dialog.getByText('1 selected')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Selected Answer Actions' })).toBeEnabled();
+});
+
 test('shows the remembered answers under a Kerf ListHeader (HS2-KHKM0W)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=permission-rules-settings');
