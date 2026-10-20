@@ -2667,16 +2667,17 @@ project's remembered answers stale; a shown Settings → Permissions list refetc
 including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
 The settings view uses a Kerf ListHeader for the Remembered answers section and previews
 the three most recently remembered answers, newest first. A list item with a chevron opens
-the searchable dialog (HS2-Q6GKWQ), which shows five answers per page, still newest first.
+the searchable dialog (HS2-Q6GKWQ), which starts with 100 answers in a bounded scrolling list
+and loads another 100 on request, still newest first (HS2-988X4X).
 Denied answers have a distinct background in both views; selection and keyboard focus remain
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label
 (HS2-4HTTMK); search covers only
 the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or
-path. Its footer shows the current page and total pages without a separate count and sort line
-(HS2-M97DKR). Search changes start at page one, and add/revoke updates clamp the current page. Closing
-the dialog or switching projects resets its search, page, and selection (HS2-16XPHH,
-HS2-C057G5). A selection may span pages and mix decisions and lifetimes. Allow selected
+path. Search resets the visible window to 100 answers; add/revoke updates clamp that window.
+There is no separate count/sort line or page footer (HS2-M97DKR, HS2-988X4X). Closing
+the dialog or switching projects resets its search, visible window, and selection (HS2-16XPHH,
+HS2-C057G5). A selection may span loaded batches and mix decisions and lifetimes. Allow selected
 and Deny selected change only the answer, while Delete selected asks for confirmation.
 Each project-wide answer in the preview and full dialog shows its saved decision and either
 Persistent or Session (until restart). The adjacent Set Persistent/Session action

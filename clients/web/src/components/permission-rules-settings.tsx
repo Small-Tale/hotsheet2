@@ -22,24 +22,36 @@ import { type PermissionRule, permissionRuleKey } from '../permission-notificati
 
 export interface PermissionRulesSettingsProps {
   rules: readonly PermissionRule[];
-  dialog?: { query: string; page: number; selected?: readonly string[]; busy?: boolean; confirmingDelete?: boolean };
+  dialog?: {
+    query: string;
+    visibleCount: number;
+    selected?: readonly string[];
+    busy?: boolean;
+    confirmingDelete?: boolean;
+  };
   /** Rule keys whose revoke request is in flight. */
   revoking?: readonly string[];
   message?: string;
 }
 
-const PAGE_SIZE = 5;
+export const PERMISSION_RULE_BATCH_SIZE = 100;
 
 /** The API returns oldest first. Search only fields displayed to the user, never raw actions. */
-export function permissionRulesPage(rules: readonly PermissionRule[], query: string, requestedPage: number) {
+export function permissionRulesList(rules: readonly PermissionRule[], query: string, requestedVisibleCount: number) {
   const term = query.trim().toLocaleLowerCase(),
     matches = [...rules].reverse().filter((rule) => {
       const safeText = `${ruleLabel(rule.tool, rule.action)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
       return safeText.toLocaleLowerCase().includes(term);
     }),
-    pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE)),
-    page = Math.min(Math.max(1, requestedPage), pageCount);
-  return { matches, page, pageCount, rows: matches.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) };
+    visibleCount = Math.min(
+      Math.max(
+        PERMISSION_RULE_BATCH_SIZE,
+        Math.ceil(requestedVisibleCount / PERMISSION_RULE_BATCH_SIZE) * PERMISSION_RULE_BATCH_SIZE,
+      ),
+      Math.max(PERMISSION_RULE_BATCH_SIZE, matches.length),
+    ),
+    rows = matches.slice(0, visibleCount);
+  return { matches, visibleCount, rows, remainingCount: matches.length - rows.length };
 }
 
 const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
@@ -61,11 +73,11 @@ function ruleLabel(tool: string, action: string) {
  * fall back to the project rule).
  */
 export function PermissionRulesSettings({ rules, dialog, revoking = [], message = '' }: PermissionRulesSettingsProps) {
-  const ordered = permissionRulesPage(rules, '', 1).matches,
-    page = dialog ? permissionRulesPage(rules, dialog.query, dialog.page) : undefined,
+  const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
+    list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount) : undefined,
     selected = new Set(dialog?.selected ?? []),
     selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length,
-    pageSelected = page?.rows.length ? page.rows.every((rule) => selected.has(permissionRuleKey(rule))) : false;
+    visibleSelected = list?.rows.length ? list.rows.every((rule) => selected.has(permissionRuleKey(rule))) : false;
   function ruleRows(items: readonly PermissionRule[], selectable = false) {
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
@@ -179,7 +191,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           {message}
         </Text>
       </List>
-      {page && (
+      {list && (
         <div data-key="permission-rules-dialog">
           <DialogSurface
             label="Remembered answers"
@@ -191,25 +203,15 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               'data-controlled-open': 'true',
             }}
             footer={
-              <Row hAlign="space-between" vAlign="middle" gap="xs" wrap>
-                <Text tone="quiet" size="compact">{`Page ${page.page} of ${page.pageCount}`}</Text>
-                <Row gap="xs">
-                  <Button
-                    emphasis="secondary"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.previousPermissionRulesPage.value}
-                    disabled={page.page === 1}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    emphasis="secondary"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.value}
-                    disabled={page.page === page.pageCount}
-                  >
-                    Next
-                  </Button>
-                </Row>
-              </Row>
+              list.remainingCount > 0 ? (
+                <Button
+                  emphasis="plain"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.loadMorePermissionRules.value}
+                  disabled={dialog?.busy}
+                >
+                  {`Load ${Math.min(PERMISSION_RULE_BATCH_SIZE, list.remainingCount)} more answers`}
+                </Button>
+              ) : undefined
             }
           >
             <List gap="m">
@@ -225,10 +227,10 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               <Row gap="xs" vAlign="middle" wrap>
                 <Button
                   emphasis="secondary"
-                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.value}
-                  disabled={page.rows.length === 0 || dialog?.busy}
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.value}
+                  disabled={list.rows.length === 0 || dialog?.busy}
                 >
-                  {pageSelected ? 'Deselect Page' : 'Select Page'}
+                  {visibleSelected ? 'Deselect Shown' : 'Select Shown'}
                 </Button>
                 <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>
                 {selectedCount > 0 && (
@@ -295,10 +297,12 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
               <Text tone="quiet" size="compact" role="status">
                 {dialog?.busy ? 'Updating selected answers…' : message}
               </Text>
-              {page.rows.length ? (
-                <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'All Remembered Answers' }}>
-                  {ruleRows(page.rows, true)}
-                </List>
+              {list.rows.length ? (
+                <div class="permission-rules-settings__all" tabindex="0" aria-label="Scrollable Remembered Answers">
+                  <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'All Remembered Answers' }}>
+                    {ruleRows(list.rows, true)}
+                  </List>
+                </div>
               ) : (
                 <EmptyState title="No Matching Answers" detail="Try a tool, decision, scope, or visible fingerprint." />
               )}

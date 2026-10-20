@@ -287,7 +287,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionCount('b')).toBe(0);
   });
 
-  it('resets remembered-answer search and page across project and settings changes (HS2-16XPHH)', () => {
+  it('resets remembered-answer search and visible rows across project and settings changes (HS2-16XPHH)', () => {
     const projects = signal([project('a'), project('b')]),
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
     owner.openPermissionRules('a');
@@ -295,16 +295,51 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionRulesDialogFor('a', true)).toEqual({
       projectId: 'a',
       query: 'Bash',
-      page: 1,
+      visibleCount: 100,
       selected: [],
       confirmingDelete: false,
     });
     expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
     expect(owner.permissionRulesDialogFor('a', true)).toBeUndefined();
     owner.openPermissionRules('b');
-    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1, selected: [] });
+    expect(owner.permissionRulesDialogFor('b', true)).toEqual({
+      projectId: 'b',
+      query: '',
+      visibleCount: 100,
+      selected: [],
+    });
     expect(owner.permissionRulesDialogFor('b', false)).toBeUndefined();
     expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
+    owner.dispose();
+  });
+
+  it('loads 100-row batches and resets visible rows without losing cross-batch selection (HS2-988X4X)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    const rules = Array.from({ length: 205 }, (_, index) => ({
+      project: '/work/a',
+      tool: 'Bash',
+      action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+      decision: 'allow',
+      scope: 'always',
+    }));
+    fetchMock.mockResolvedValue(json(rules));
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.visibleCount).toBe(100);
+    owner.loadMorePermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.visibleCount).toBe(200);
+    owner.selectVisiblePermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(200);
+    owner.searchPermissionRules('a', '00000204');
+    expect(owner.permissionRulesDialogFor('a', true)).toMatchObject({ visibleCount: 100, selected: expect.any(Array) });
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(200);
+    owner.searchPermissionRules('a', '');
+    owner.loadMorePermissionRules('a');
+    owner.loadMorePermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.visibleCount).toBe(205);
+    owner.selectVisiblePermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(205);
     owner.dispose();
   });
 
@@ -329,7 +364,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.permissionRules('a');
     for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
     owner.openPermissionRules('a');
-    owner.selectPermissionRulesPage('a');
+    owner.selectVisiblePermissionRules('a');
     expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(3);
     await owner.applySelectedPermissionRules('a', 'deny');
     expect(owner.permissionRules('a').map((rule) => [rule.decision, rule.scope])).toEqual([
@@ -342,7 +377,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     failTwo = false;
     await owner.applySelectedPermissionRules('a', 'allow');
     expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
-    owner.selectPermissionRulesPage('a');
+    owner.selectVisiblePermissionRules('a');
     await owner.applySelectedPermissionRules('a', 'delete');
     expect(owner.permissionRules('a')).toHaveLength(3);
     owner.requestDeleteSelectedPermissionRules('a', true);
@@ -409,14 +444,19 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.permissionRules('a');
     for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
     owner.openPermissionRules('a');
-    owner.selectPermissionRulesPage('a');
+    owner.selectVisiblePermissionRules('a');
     const editing = owner.applySelectedPermissionRules('a', 'deny');
     owner.closePermissionRules();
     selectedProjectId.value = 'b';
     owner.openPermissionRules('b');
     pending.resolve(new Response(null, { status: 204 }));
     await editing;
-    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1, selected: [] });
+    expect(owner.permissionRulesDialogFor('b', true)).toEqual({
+      projectId: 'b',
+      query: '',
+      visibleCount: 100,
+      selected: [],
+    });
     expect(owner.permissionRulesMessage.value).toBe('');
     owner.dispose();
   });

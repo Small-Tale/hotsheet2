@@ -15185,7 +15185,9 @@ test('answers identical permission requests for this chat and revokes the rememb
   ]);
 });
 
-test('previews three recent permission answers and searches the paged full list (HS2-16XPHH)', async ({ page }) => {
+test('previews three recent permission answers and searches the scrollable full list (HS2-16XPHH)', async ({
+  page,
+}) => {
   await mockProject(page);
   let rules = Array.from({ length: 12 }, (_, index) => ({
     project: '/work/demo.hs2',
@@ -15243,28 +15245,22 @@ test('previews three recent permission answers and searches the paged full list 
     all = dialog.getByRole('list', { name: 'All Remembered Answers' }),
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
   await expect(dialog).toBeVisible();
-  await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
-  await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(3);
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(12);
+  await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(6);
   await expect(dialog).not.toContainText('OtherProjectTool');
-  await expect(dialog).toContainText('Page 1 of 3');
+  await expect(dialog.getByRole('button', { name: /Load .* more answers/ })).toHaveCount(0);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
-  await dialog.getByRole('button', { name: 'Next' }).click();
-  await expect(all.locator('[data-permission-rule]').first()).toContainText('00000006');
   await search.fill('WebFetch');
-  await expect(dialog).toContainText('Page 1 of 2');
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
-  await dialog.getByRole('button', { name: 'Next' }).click();
-  await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
   await all.getByRole('button', { name: 'Revoke WebFetch request · 00000001' }).click();
-  await expect(dialog).toContainText('Page 1 of 1');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
   await search.fill('not-a-visible-label');
   await expect(dialog).toContainText('No Matching Answers');
   await dialog.getByRole('button', { name: 'Clear' }).click();
   await expect(search).toHaveValue('');
   await expect(search).toBeFocused();
-  await expect(dialog).toContainText('Page 1 of 3');
-  await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(11);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toBeVisible();
   const firstFingerprint = all.locator('[data-permission-rule]').first().locator('.kui-text__truncate-tail');
@@ -15280,6 +15276,53 @@ test('previews three recent permission answers and searches the paged full list 
   await expect(search).toHaveValue('');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+});
+
+test('loads remembered answers in 100-row batches while search and selection cross batch boundaries (HS2-988X4X)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const rules = Array.from({ length: 205 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: index % 2 ? 'deny' : 'allow',
+    scope: 'always',
+  }));
+  await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Show all 205 answers' }).click();
+  const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
+    list = dialog.getByRole('list', { name: 'All Remembered Answers' }),
+    scroll = dialog.getByLabel('Scrollable Remembered Answers');
+  await expect(list.locator('[data-permission-rule]')).toHaveCount(100);
+  expect(await scroll.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await expect(dialog.getByRole('button', { name: 'Load 100 more answers' })).toBeVisible();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-988x4x-initial-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.getByRole('button', { name: 'Load 100 more answers' })).toBeInViewport();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-988x4x-initial-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await dialog.getByRole('button', { name: 'Load 100 more answers' }).click();
+  await expect(list.locator('[data-permission-rule]')).toHaveCount(200);
+  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await expect(dialog).toContainText('200 selected');
+  await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('00000204');
+  await expect(list.locator('[data-permission-rule]')).toHaveCount(1);
+  await expect(dialog).toContainText('200 selected');
+  await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('');
+  await expect(list.locator('[data-permission-rule]')).toHaveCount(100);
+  await dialog.getByRole('button', { name: 'Load 100 more answers' }).click();
+  await dialog.getByRole('button', { name: 'Load 5 more answers' }).click();
+  await expect(list.locator('[data-permission-rule]')).toHaveCount(205);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-988x4x-dialog-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-988x4x-dialog-phone.png' });
 });
 
 test('bulk edits and deletes mixed remembered answers with partial failure recovery (HS2-C057G5)', async ({ page }) => {
@@ -15314,19 +15357,14 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('button', { name: 'Show all 6 answers' }).click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]');
-  await dialog.getByRole('button', { name: 'Select Page' }).click();
-  await expect(dialog).toContainText('5 selected');
-  await dialog.getByRole('button', { name: 'Next' }).click();
-  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Select Shown' }).click();
   await expect(dialog).toContainText('6 selected');
-  await dialog.getByRole('button', { name: 'Deselect Page' }).click();
-  await dialog.getByRole('button', { name: 'Previous' }).click();
-  await expect(dialog).toContainText('5 selected');
   const firstRuleOption = dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first();
   await firstRuleOption.uncheck();
-  await expect(dialog).toContainText('4 selected');
-  await firstRuleOption.check();
   await expect(dialog).toContainText('5 selected');
+  await firstRuleOption.check();
+  await expect(dialog).toContainText('6 selected');
+  await firstRuleOption.uncheck();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-c057g5-selected-wide.png' });
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
   await expect(dialog).toContainText('1 failed and remain selected for retry');
@@ -15334,7 +15372,8 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   failAction = '';
   await dialog.getByRole('button', { name: 'Allow Selected' }).click();
   await expect(dialog).toContainText('0 selected');
-  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await firstRuleOption.uncheck();
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
   await expect(dialog).toContainText('Delete 5 remembered answers?');
   await page.setViewportSize({ width: 390, height: 844 });

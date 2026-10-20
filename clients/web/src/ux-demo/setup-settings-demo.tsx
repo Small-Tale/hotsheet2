@@ -6,7 +6,11 @@ import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
-import { permissionRulesPage, PermissionRulesSettings } from '../components/permission-rules-settings';
+import {
+  PERMISSION_RULE_BATCH_SIZE,
+  permissionRulesList,
+  PermissionRulesSettings,
+} from '../components/permission-rules-settings';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
@@ -285,7 +289,7 @@ const PERMISSION_RULES_DEMO = [
 const permissionRulesDemoDialog = signal<
   | {
       query: string;
-      page: number;
+      visibleCount: number;
       selected?: readonly string[];
       confirmingDelete?: boolean;
     }
@@ -452,7 +456,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector}`,
       () => {
-        permissionRulesDemoDialog.value = { query: '', page: 1, selected: [] };
+        permissionRulesDemoDialog.value = { query: '', visibleCount: PERMISSION_RULE_BATCH_SIZE, selected: [] };
       },
     ),
   );
@@ -461,25 +465,30 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       permissionRulesDemoDialog.value = {
         ...permissionRulesDemoDialog.value,
         query: (target as FormControl).value,
-        page: 1,
+        visibleCount: PERMISSION_RULE_BATCH_SIZE,
         confirmingDelete: false,
       };
     }),
   );
-  for (const [selector, offset] of [
-    [NOTIFICATIONS_AND_LINKS_ACTIONS.previousPermissionRulesPage.selector, -1],
-    [NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.selector, 1],
-  ] as const)
-    demoListeners.add(
-      delegate(root, 'click', `[data-demo-permission-rules] ${selector}`, () => {
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.loadMorePermissionRules.selector}`,
+      () => {
         const state = permissionRulesDemoDialog.value;
         if (state)
           permissionRulesDemoDialog.value = {
             ...state,
-            page: permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page + offset).page,
+            visibleCount: permissionRulesList(
+              permissionRulesDemoRules.value,
+              state.query,
+              state.visibleCount + PERMISSION_RULE_BATCH_SIZE,
+            ).visibleCount,
           };
-      }),
-    );
+      },
+    ),
+  );
   demoListeners.add(
     delegate(
       root,
@@ -489,7 +498,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
         const state = permissionRulesDemoDialog.value;
         if (!state) return;
         const selected = new Set(state.selected ?? []),
-          key = (target as HTMLElement).getAttribute('data-rule-key');
+          key = (target as HTMLElement).closest('[data-rule-key]')?.getAttribute('data-rule-key');
         if (!key) return;
         if ((target as FormControl & { checked: boolean }).checked) selected.add(key);
         else selected.delete(key);
@@ -501,12 +510,12 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.selector}`,
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.selector}`,
       () => {
         const state = permissionRulesDemoDialog.value;
         if (!state) return;
         const selected = new Set(state.selected ?? []),
-          rows = permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page).rows,
+          rows = permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount).rows,
           all = rows.every((rule) => selected.has(permissionRuleKey(rule)));
         for (const rule of rows) {
           const key = permissionRuleKey(rule);
@@ -583,7 +592,8 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           ...state,
           selected: [],
           confirmingDelete: false,
-          page: permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page).page,
+          visibleCount: permissionRulesList(permissionRulesDemoRules.value, state.query, state.visibleCount)
+            .visibleCount,
         };
       },
     ),

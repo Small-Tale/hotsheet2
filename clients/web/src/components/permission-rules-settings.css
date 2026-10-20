@@ -33,6 +33,12 @@
   outline-offset: 1px;
 }
 
+.permission-rules-settings__all {
+  max-height: min(55dvh, remify(560px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 @media (max-width: 480px) {
   .permission-rules-settings [data-permission-rule][data-selectable] {
     display: grid;

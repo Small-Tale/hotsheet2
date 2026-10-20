@@ -942,7 +942,8 @@ decision, and a short fingerprint identifier, with command/path details hidden a
 revocable. Each project-wide row in the recent and full lists can switch between
 Session (until restart) and Persistent; the action names its target scope (HS2-BTPTWK).
 The new duration appears immediately and survives
-a reload according to its lifetime. The full list supports selecting individual answers or a visible page, then
+a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
+loads 100 more on request, and supports selecting individual answers or all shown answers, then
 applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a

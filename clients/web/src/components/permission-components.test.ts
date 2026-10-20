@@ -18,7 +18,7 @@ import {
   PermissionRequestPopup,
   updatePermissionCountdownText,
 } from './permission-request-card';
-import { permissionRulesPage, PermissionRulesSettings } from './permission-rules-settings';
+import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList, PermissionRulesSettings } from './permission-rules-settings';
 
 const pending: PermissionItem = {
   id: 7,
@@ -281,32 +281,37 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     const preview = String(PermissionRulesSettings({ rules }));
     expect(preview).toContain('data-permission-rule-decision="deny"');
     const dialog = String(
-      PermissionRulesSettings({ rules, dialog: { query: '', page: 1, selected: [selectedKey], busy: true } }),
+      PermissionRulesSettings({
+        rules,
+        dialog: { query: '', visibleCount: PERMISSION_RULE_BATCH_SIZE, selected: [selectedKey], busy: true },
+      }),
     );
     expect(dialog).toContain('data-rule-selected="true"');
     expect(dialog).toContain('data-rule-disabled="true"');
   });
 
-  it('filters safe visible labels, clamps pages after removal, and refills an empty result', () => {
-    const first = permissionRulesPage(rules, 'deny', 1);
-    expect(first.rows.map((rule) => rule.action.slice(-8))).toEqual([
-      '00000011',
-      '00000009',
-      '00000007',
-      '00000005',
-      '00000003',
-    ]);
-    expect(permissionRulesPage(rules, 'deny', 2).rows.map((rule) => rule.action.slice(-8))).toEqual(['00000001']);
-    expect(permissionRulesPage(rules.slice(0, 5), 'deny', 2).page).toBe(1);
-    expect(permissionRulesPage([], 'Bash', 5).rows).toEqual([]);
-    expect(permissionRulesPage(rules, '00000010', 1).rows).toHaveLength(1);
-    expect(permissionRulesPage([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 1).rows).toEqual([]);
-    expect(permissionRulesPage(rules, 'deny', 1).rows).toHaveLength(5);
+  it('filters safe labels and moves through 100-row batches across shrink and refill', () => {
+    const many = Array.from({ length: 205 }, (_, index) => ({
+      ...rules[index % rules.length],
+      action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    }));
+    const first = permissionRulesList(many, '', 100);
+    expect(first.rows).toHaveLength(100);
+    expect(first.remainingCount).toBe(105);
+    expect(permissionRulesList(many, '', 200).rows).toHaveLength(200);
+    expect(permissionRulesList(many, '', 300).rows).toHaveLength(205);
+    expect(permissionRulesList(many.slice(0, 60), '', 300).visibleCount).toBe(100);
+    expect(permissionRulesList([], 'Bash', 300).rows).toEqual([]);
+    expect(permissionRulesList(many, '', 100).rows).toHaveLength(100);
+    expect(permissionRulesList(rules, '00000010', 100).rows).toHaveLength(1);
+    expect(permissionRulesList([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 100).rows).toEqual([]);
   });
 
-  it('keeps page context and presents accessible placeholder search (HS2-M97DKR, HS2-4HTTMK)', () => {
-    const markup = String(PermissionRulesSettings({ rules, dialog: { query: 'deny', page: 2 } }));
-    expect(markup).toContain('Page 2 of 2');
+  it('shows a scrollable list and accessible placeholder search (HS2-988X4X, HS2-4HTTMK)', () => {
+    const markup = String(PermissionRulesSettings({ rules, dialog: { query: 'deny', visibleCount: 100 } }));
+    expect(markup).toContain('permission-rules-settings__all');
+    expect(markup).not.toContain('Previous');
+    expect(markup).not.toContain('Next');
     expect(markup).not.toContain('matching answers · newest first');
     expect(markup).toContain('All Remembered Answers');
     expect(markup).toContain('aria-label="Search Remembered Answers"');

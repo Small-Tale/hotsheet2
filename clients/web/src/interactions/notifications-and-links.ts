@@ -44,9 +44,9 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
-  readonly movePermissionRulesPage: (projectId: string, offset: number) => void;
+  readonly loadMorePermissionRules: (projectId: string) => void;
   readonly selectPermissionRule: (projectId: string, key: string, checked: boolean) => void;
-  readonly selectPermissionRulesPage: (projectId: string) => void;
+  readonly selectVisiblePermissionRules: (projectId: string) => void;
   readonly clearPermissionRuleSelection: (projectId: string) => void;
   readonly requestDeleteSelectedPermissionRules: (projectId: string, confirming: boolean) => void;
   readonly applySelectedPermissionRules: (projectId: string, operation: 'delete' | 'allow' | 'deny') => Promise<void>;
@@ -80,9 +80,9 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
-    movePermissionRulesPage,
+    loadMorePermissionRules,
     selectPermissionRule,
-    selectPermissionRulesPage,
+    selectVisiblePermissionRules,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,
     applySelectedPermissionRules,
@@ -211,13 +211,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.previousPermissionRulesPage.selector, () => {
-      movePermissionRulesPage(selectedProjectId.value, -1);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.selector, () => {
-      movePermissionRulesPage(selectedProjectId.value, 1);
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.loadMorePermissionRules.selector, () => {
+      loadMorePermissionRules(selectedProjectId.value);
     }),
   );
   lifetime.add(
@@ -232,8 +227,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.selector, () => {
-      selectPermissionRulesPage(selectedProjectId.value);
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.selectVisiblePermissionRules.selector, () => {
+      selectVisiblePermissionRules(selectedProjectId.value);
     }),
   );
   lifetime.add(

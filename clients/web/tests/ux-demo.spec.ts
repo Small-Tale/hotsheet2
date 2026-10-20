@@ -781,7 +781,7 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-dialog-remote-narrow.png' });
 });
 
-test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-16XPHH)', async ({ page }) => {
+test('lets the remembered-answer demo search and dismiss its scrollable dialog (HS2-16XPHH)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=permission-rules-settings');
   const example = page.locator('[data-demo-permission-rules]'),
@@ -790,7 +790,9 @@ test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-
   await example.getByRole('button', { name: 'Show all 6 answers' }).click();
   const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Page 1 of 2');
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
+  ).toHaveCount(6);
   await expect(dialog).not.toContainText('matching answers · newest first');
   await expect(dialog.getByRole('searchbox', { name: 'Search Remembered Answers' })).toHaveAttribute(
     'placeholder',
@@ -803,10 +805,10 @@ test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-
   await dialog.screenshot({ path: 'target/visual-captures/hs2-m97dkr-remembered-dialog-narrow.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-4httmk-filter-narrow.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await dialog.getByRole('button', { name: 'Next' }).click();
-  await expect(dialog).toContainText('Page 2 of 2');
   await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('WebFetch');
-  await expect(dialog).toContainText('Page 1 of 1');
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
+  ).toHaveCount(2);
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
 });
@@ -825,19 +827,22 @@ test('shows the remembered answers under a Kerf ListHeader (HS2-KHKM0W)', async 
   await example.screenshot({ path: 'target/visual-captures/hs2-khkm0w-remembered-answers-narrow.png' });
 });
 
-test('lets the remembered-answer demo edit and confirm deletion of a selected page (HS2-C057G5)', async ({ page }) => {
+test('lets the remembered-answer demo edit and confirm deletion of shown answers (HS2-C057G5)', async ({ page }) => {
   await page.goto('/ux-demo?component=permission-rules-settings');
   const example = page.locator('[data-demo-permission-rules]');
   await example.getByRole('button', { name: 'Show all 6 answers' }).click();
   const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
-  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  const firstRule = dialog.getByRole('list', { name: 'All Remembered Answers' }).getByRole('checkbox').first();
+  await firstRule.uncheck();
   await expect(dialog).toContainText('5 selected');
   await dialog.getByRole('button', { name: 'Deny Selected' }).click();
   await expect(dialog).toContainText('0 selected');
   await expect(
     dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Denied ·', { exact: false }),
   ).toHaveCount(5);
-  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Select Shown' }).click();
+  await firstRule.uncheck();
   await dialog.getByRole('button', { name: 'Delete Selected' }).click();
   await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();

@@ -18,7 +18,7 @@ import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
-import { PermissionRulesSettings } from './permission-rules-settings';
+import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
 import {
@@ -44,7 +44,7 @@ export interface SettingsWorkspaceProps {
     delays: readonly number[];
     /** Remembered answers for this project (HS2-JNHAYB). */
     rules?: readonly PermissionRule[];
-    dialog?: { query: string; page: number };
+    dialog?: PermissionRulesSettingsProps['dialog'];
     revoking?: readonly string[];
     rulesMessage?: string;
   };
