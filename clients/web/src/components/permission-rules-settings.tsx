@@ -61,7 +61,7 @@ export function permissionRulesList(
           (!filters || rule.decision === filters.decision),
       )
       .filter((rule) => {
-        const safeText = `${ruleLabel(rule.tool, rule.action)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
+        const safeText = `${ruleLabel(rule)} ${rule.decision} ${SCOPE_LABELS[rule.scope]}`;
         return safeText.toLocaleLowerCase().includes(term);
       }),
     visibleCount = Math.min(
@@ -81,10 +81,13 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   always: 'Persistent',
 };
 
-/** Opaque ID distinguishes otherwise similar rules without exposing command/path text. */
-function ruleLabel(tool: string, action: string) {
-  const fingerprint = /^hmac-sha256:v2:[a-f0-9]{16}:[a-f0-9]{64}$/.test(action) ? action.slice(-8) : undefined;
-  return fingerprint ? `${tool} request · ${fingerprint}` : `${tool} request`;
+/** Keep the fingerprint so two operations with the same safe description remain distinct. */
+function ruleLabel(rule: PermissionRule) {
+  const fingerprint = /^hmac-sha256:v2:[a-f0-9]{16}:[a-f0-9]{64}$/.test(rule.action)
+    ? rule.action.slice(-8)
+    : undefined;
+  const detail = rule.description ? `${rule.tool} · ${rule.description}` : `${rule.tool} request`;
+  return fingerprint ? `${detail} · ${fingerprint}` : detail;
 }
 
 /**
@@ -106,7 +109,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
-        label = ruleLabel(rule.tool, rule.action),
+        label = ruleLabel(rule),
         targetScope = rule.scope === 'session' ? 'Persistent' : 'Session',
         rowActions: PopupMenuEntry[] = [
           {
@@ -166,7 +169,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 </Text>
               }
               description={`${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`}
-              title={`${label} — Action details hidden to protect sensitive values`}
+              title={`${label} — Full action details hidden to protect sensitive values`}
               pressed={selectable ? selected.has(key) : undefined}
               disabled={dialog?.busy || revoking.includes(key)}
               accessibleLabel={`${selectable ? 'Select' : 'View'} ${label}`}

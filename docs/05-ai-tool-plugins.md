@@ -938,7 +938,11 @@ the lifetime; a duration edit keeps the answer and changes only a project-wide r
 Chat rules cannot change duration. Durable changes are written to the rule file before
 the in-memory answer or lifetime changes, and a failed write leaves the live rule intact. Settings →
 Permissions lists only the selected project's remembered answers by tool, scope,
-decision, and a short fingerprint identifier, with command/path details hidden and each rule
+decision, and a short fingerprint identifier. New Bash rules also carry a fixed-vocabulary
+operation description for common commands (for example, npm lint or Rust tests); it never
+copies arguments, paths, or arbitrary command text. Older rules and unrecognized commands
+retain the fingerprint-only label; a safe way to identify those entries is tracked in
+HS2-KSY290. Full command/path details remain hidden and each rule is
 revocable. A row's ellipsis menu or right-click offers Allow, Disallow, Delete, and, for
 project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
@@ -960,7 +964,8 @@ Rows label chat, until server restart, and always lifetimes without repeating th
 project scope that the page already establishes (HS2-BH6GCG).
 Each row retains its tool and short action fingerprint so distinct private commands
 remain distinguishable, including at phone width where the center of a long label
-truncates first; the repeated privacy reminder appears only in the label's tooltip.
+truncates first; a safe operation description appears when available, and the repeated
+privacy reminder appears only in the label's tooltip.
 When loading an older rule file with repeated exact project/tool/action
 slots, Hot Sheet keeps the newest answer and rewrites the file (HS2-Q40BBV).
 

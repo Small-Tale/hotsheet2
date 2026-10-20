@@ -33,6 +33,76 @@ const LEGACY_FINGERPRINT_PREFIX: &str = "sha256:v1:";
 const ACTION_FINGERPRINT_PREFIX: &str = "hmac-sha256:v2:";
 pub type ActionKey = [u8; 32];
 
+/// Describe common Bash operations with fixed words only. This must never copy an
+/// argument, path, environment assignment, or arbitrary command into a rule file.
+fn safe_bash_description(tool: &str, action: &str) -> Option<&'static str> {
+    if !tool.eq_ignore_ascii_case("bash")
+        || action.bytes().any(|byte| {
+            matches!(
+                byte,
+                b'\n' | b'\r' | b';' | b'|' | b'&' | b'<' | b'>' | b'$' | b'`'
+            )
+        })
+    {
+        return None;
+    }
+    let mut words = action.split_ascii_whitespace();
+    let command = words.next()?;
+    let subcommand = words.next();
+    let detail = words.next();
+    match (command, subcommand, detail) {
+        ("npm", Some("run"), Some("lint")) => Some("Run npm lint script"),
+        ("npm", Some("run"), Some("typecheck")) => Some("Run npm typecheck script"),
+        ("npm", Some("run"), Some("build")) => Some("Run npm build script"),
+        ("npm", Some("run"), Some("test:unit")) => Some("Run npm unit tests"),
+        ("npm", Some("run"), Some("test:e2e")) => Some("Run npm end-to-end tests"),
+        ("npm", Some("run"), _) => Some("Run npm script"),
+        ("npm", Some("test"), _) => Some("Run npm tests"),
+        ("npm", Some("ci"), _) => Some("Install npm dependencies"),
+        ("npm", _, _) => Some("Run npm command"),
+        ("cargo", Some("test" | "nextest"), _) => Some("Run Rust tests"),
+        ("cargo", Some("check"), _) => Some("Check Rust code"),
+        ("cargo", Some("fmt"), _) => Some("Format Rust code"),
+        ("cargo", Some("build"), _) => Some("Build Rust code"),
+        ("cargo", _, _) => Some("Run Cargo command"),
+        ("git", Some("status"), _) => Some("Check Git status"),
+        ("git", Some("diff"), _) => Some("Review Git changes"),
+        ("git", _, _) => Some("Run Git command"),
+        ("rg", _, _) => Some("Search files"),
+        ("ls", _, _) => Some("List files"),
+        ("date", _, _) => Some("Check date"),
+        ("make", _, _) => Some("Run Make target"),
+        _ => None,
+    }
+}
+
+fn valid_bash_description(description: &str) -> bool {
+    const ALLOWED: &[&str] = &[
+        "Run npm lint script",
+        "Run npm typecheck script",
+        "Run npm build script",
+        "Run npm unit tests",
+        "Run npm end-to-end tests",
+        "Run npm script",
+        "Run npm tests",
+        "Install npm dependencies",
+        "Run npm command",
+        "Run Rust tests",
+        "Check Rust code",
+        "Format Rust code",
+        "Build Rust code",
+        "Run Cargo command",
+        "Check Git status",
+        "Review Git changes",
+        "Run Git command",
+        "Search files",
+        "List files",
+        "Check date",
+        "Run Make target",
+    ];
+    ALLOWED.contains(&description)
+}
+
 fn fresh_action_key() -> io::Result<ActionKey> {
     let mut key = [0; 32];
     getrandom::fill(&mut key).map_err(io::Error::other)?;
@@ -227,6 +297,8 @@ pub struct Rule {
     pub project: String,
     pub tool: String,
     pub action: String,
+    /// A description from a fixed vocabulary. Never contains command arguments or paths.
+    pub description: Option<String>,
     pub decision: Decision,
     /// `true` for an `Always` rule the caller should persist; `false` for a `Session`
     /// or `Chat` rule that lives only in memory.
@@ -294,6 +366,8 @@ pub struct RuleInfo {
     pub connection: Option<String>,
     pub tool: String,
     pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub decision: Decision,
     pub scope: Scope,
 }
@@ -305,6 +379,7 @@ impl From<&Rule> for RuleInfo {
             connection: rule.connection.clone(),
             tool: rule.tool.clone(),
             action: rule.action.clone(),
+            description: rule.description.clone(),
             decision: rule.decision,
             scope: if rule.connection.is_some() {
                 Scope::Chat
@@ -474,6 +549,9 @@ impl PermissionBridge {
             .into_iter()
             .filter_map(|mut rule| {
                 rule.action = stored_action_key(&rule.action, &self.action_key)?;
+                rule.description = rule.description.filter(|value| {
+                    rule.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value)
+                });
                 Some(rule)
             })
             .collect();
@@ -540,6 +618,7 @@ impl PermissionBridge {
                 project: req.project.clone(),
                 tool: req.tool.clone(),
                 action: action_fingerprint(&self.action_key, &req.action),
+                description: safe_bash_description(&req.tool, &req.action).map(str::to_owned),
                 decision,
                 persist: scope == Scope::Always,
                 connection: (scope == Scope::Chat).then(|| req.connection.clone()),
@@ -1107,6 +1186,8 @@ pub struct StoredRule {
     pub project: String,
     pub tool: String,
     pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub decision: Decision,
 }
 
@@ -1116,6 +1197,7 @@ impl From<&Rule> for StoredRule {
             project: r.project.clone(),
             tool: r.tool.clone(),
             action: r.action.clone(),
+            description: r.description.clone(),
             decision: r.decision,
         }
     }
@@ -1128,6 +1210,7 @@ impl StoredRule {
             project: self.project,
             tool: self.tool,
             action: self.action,
+            description: self.description,
             decision: self.decision,
             persist: true,
             connection: None,
@@ -1153,6 +1236,9 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
         .into_iter()
         .filter_map(|mut rule| {
             rule.action = stored_action_key(&rule.action, &key)?;
+            rule.description = rule.description.filter(|value| {
+                rule.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value)
+            });
             Some(rule)
         })
         .collect();
@@ -1246,6 +1332,9 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
     rules.retain(|r| !(r.project == rule.project && r.tool == rule.tool && r.action == action_key));
     let mut stored = StoredRule::from(rule);
     stored.action = action_key;
+    stored.description = stored
+        .description
+        .filter(|value| stored.tool.eq_ignore_ascii_case("bash") && valid_bash_description(value));
     rules.push(stored);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1259,6 +1348,90 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bash_description_uses_only_fixed_vocabulary_and_rejects_compound_commands() {
+        assert_eq!(
+            safe_bash_description("Bash", "npm run test:unit -- --token=secret"),
+            Some("Run npm unit tests")
+        );
+        assert_eq!(
+            safe_bash_description("Bash", "cargo test private::case"),
+            Some("Run Rust tests")
+        );
+        assert_eq!(
+            safe_bash_description("Bash", "npm run private-script"),
+            Some("Run npm script")
+        );
+        for action in [
+            "API_TOKEN=secret npm test",
+            "npm test && echo secret",
+            "npm test; cat secret",
+            "npm test\ncat secret",
+            "npm test $(cat secret)",
+            "curl https://example.test/private",
+        ] {
+            assert_eq!(safe_bash_description("Bash", action), None, "{action}");
+        }
+        assert_eq!(safe_bash_description("WebFetch", "npm test"), None);
+    }
+
+    #[test]
+    fn bash_descriptions_follow_out_of_order_rules_and_scrub_untrusted_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        let mut bridge = PermissionBridge::new();
+        bridge.set_action_key_and_rules(action_key_for(&path).unwrap(), Vec::new());
+        let known = match bridge.request_for_project("p", "chat", "Bash", "npm run test:unit") {
+            Outcome::Pending(id) => id,
+            _ => panic!("known operation must ask"),
+        };
+        let unknown = match bridge.request_for_project("p", "chat", "Bash", "curl private-url") {
+            Outcome::Pending(id) => id,
+            _ => panic!("unknown operation must ask"),
+        };
+        bridge
+            .resolve(unknown, Decision::Deny, Scope::Session)
+            .unwrap();
+        let saved = bridge
+            .resolve(known, Decision::Allow, Scope::Always)
+            .unwrap()
+            .persisted_rule
+            .unwrap();
+        assert_eq!(bridge.rules()[0].description, None);
+        assert_eq!(
+            bridge.rules()[1].description.as_deref(),
+            Some("Run npm unit tests")
+        );
+        assert_eq!(saved.description.as_deref(), Some("Run npm unit tests"));
+
+        append_rule(&path, &saved).unwrap();
+        assert_eq!(
+            load_rules(&path)[0].description.as_deref(),
+            Some("Run npm unit tests")
+        );
+
+        let mut stored: Vec<StoredRule> =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        stored[0].description = Some("private command text".into());
+        std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+        assert_eq!(load_rules(&path)[0].description, None);
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("private command text")
+        );
+
+        let mut untrusted = saved;
+        untrusted.description = Some("private command text".into());
+        append_rule(&path, &untrusted).unwrap();
+        assert_eq!(load_rules(&path)[0].description, None);
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("private command text")
+        );
+    }
+
+    #[test]
     fn session_and_always_edits_preserve_answer_and_mirror_only_after_durable_success() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rules.json");
@@ -1268,6 +1441,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: action.clone(),
+            description: None,
             decision: Decision::Deny,
             persist: false,
             connection: None,
@@ -1356,6 +1530,7 @@ mod tests {
                     project: "p".into(),
                     tool: "Bash".into(),
                     action: action.into(),
+                    description: None,
                     decision: Decision::Allow,
                     persist: true,
                     connection: None,
@@ -1425,6 +1600,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                description: None,
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
@@ -1608,6 +1784,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                description: None,
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
@@ -1627,6 +1804,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                description: None,
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
@@ -1668,6 +1846,7 @@ mod tests {
             project: String::new(),
             tool: "Bash".into(),
             action: "ls".into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -1709,6 +1888,7 @@ mod tests {
             project: "/one".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -1747,6 +1927,7 @@ mod tests {
             project: "/one".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            description: None,
             decision: Decision::Deny,
         });
         std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
@@ -1851,6 +2032,7 @@ mod tests {
                 project: "p".into(),
                 tool: "Bash".into(),
                 action: secret.into(),
+                description: None,
                 decision: Decision::Allow,
             }])
             .unwrap(),
@@ -1884,6 +2066,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: action.into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -1925,6 +2108,7 @@ mod tests {
                 project: "p".into(),
                 tool: "Bash".into(),
                 action: v1.clone(),
+                description: None,
                 decision: Decision::Allow,
             }])
             .unwrap(),
@@ -1948,6 +2132,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: "npm test".into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -2062,6 +2247,7 @@ mod tests {
             project: String::new(),
             tool: "Bash".into(),
             action: "git status".into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -2258,6 +2444,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            description: None,
             decision: Decision::Allow,
             persist: true,
             connection: None,
@@ -2344,6 +2531,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            description: None,
             decision: Decision::Allow,
             persist: false,
             connection: None,

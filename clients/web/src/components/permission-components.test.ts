@@ -464,4 +464,21 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('More Actions for Bash request · 87654321');
     expect(markup).toContain('Could not revoke the rule.');
   });
+  it('shows a safe Bash operation in preview and dialog while keeping the fingerprint and private action hidden', () => {
+    const rule: PermissionRule = {
+      project: '/p',
+      tool: 'Bash',
+      action: `hmac-sha256:v2:${'a'.repeat(16)}:${'b'.repeat(56)}12345678`,
+      description: 'Run npm unit tests',
+      decision: 'allow',
+      scope: 'always',
+    };
+    for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
+      const markup = String(PermissionRulesSettings({ rules: [rule], dialog }));
+      expect(markup).toContain('Bash · Run npm unit tests · 12345678');
+      expect(markup).toContain('More Actions for Bash · Run npm unit tests · 12345678');
+      expect(markup).toContain('Full action details hidden to protect sensitive values');
+    }
+    expect(permissionRulesList([rule], 'unit tests', 100).rows).toEqual([rule]);
+  });
 });

@@ -15275,7 +15275,7 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 
 #[tokio::test]
 async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
-    const ACTION: &str = "API_TOKEN=private-value curl https://example.test";
+    const ACTION: &str = "npm run test:unit -- --token=private-value";
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
@@ -15318,6 +15318,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
     let file = std::fs::read_to_string(&rules_path).unwrap();
     assert!(!file.contains("private-value"));
+    assert!(file.contains("Run npm unit tests"));
     let listed = body_json(
         app.clone()
             .oneshot(authed("GET", "/permissions/rules", None))
@@ -15327,6 +15328,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     .await;
     let listed_text = listed.to_string();
     assert!(!listed_text.contains("private-value"));
+    assert_eq!(listed[0]["description"], "Run npm unit tests");
     let action_key = listed[0]["action"].as_str().unwrap();
     assert!(action_key.starts_with("hmac-sha256:v2:"));
     let edit = serde_json::json!({
@@ -15354,6 +15356,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     .await;
     assert_eq!(changed[0]["decision"], "deny");
     assert_eq!(changed[0]["scope"], "always");
+    assert_eq!(changed[0]["description"], "Run npm unit tests");
     assert_eq!(
         hotsheet_aitools::load_permission_rules(&rules_path)[0].decision,
         hotsheet_aitools::PermissionDecision::Deny
@@ -15422,6 +15425,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     .await;
     assert_eq!(restored[0]["scope"], "always");
     assert_eq!(restored[0]["decision"], "deny");
+    assert_eq!(restored[0]["description"], "Run npm unit tests");
     let after_always_restart = hotsheet_server::app(
         AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
@@ -15436,6 +15440,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     .await;
     assert_eq!(reloaded[0]["scope"], "always");
     assert_eq!(reloaded[0]["decision"], "deny");
+    assert_eq!(reloaded[0]["description"], "Run npm unit tests");
     let mut invalid = duration_edit.clone();
     invalid["scope"] = serde_json::json!("chat");
     let response = app

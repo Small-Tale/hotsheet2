@@ -15185,13 +15185,21 @@ test('previews three recent permission answers and searches the scrollable full 
   page,
 }) => {
   await mockProject(page);
-  let rules = Array.from({ length: 12 }, (_, index) => ({
+  let rules: Array<{
+    project: string;
+    tool: string;
+    action: string;
+    description?: string;
+    decision: string;
+    scope: string;
+  }> = Array.from({ length: 12 }, (_, index) => ({
     project: '/work/demo.hs2',
     tool: index % 2 ? 'WebFetch' : 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
     decision: index % 2 ? 'deny' : 'allow',
     scope: index % 2 ? 'session' : 'always',
   }));
+  rules[10].description = 'Run npm unit tests';
   rules.push({
     project: '/work/other.hs2',
     tool: 'OtherProjectTool',
@@ -15217,6 +15225,7 @@ test('previews three recent permission answers and searches the scrollable full 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await expect(recent).toContainText('Bash · Run npm unit tests · 00000010');
   await expect(recent.locator('[data-component="list-item"]')).toHaveCount(3);
   await expect(recent.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(3);
   const deniedBackground = await recent
@@ -15246,6 +15255,10 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(dialog).toContainText('6 answers');
+  await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
+  await search.fill('unit tests');
+  await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
+  await search.clear();
   await expect(all.locator('[data-component="list-item"]')).toHaveCount(6);
   await expect(all.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(6);
   await all.locator('[data-action="select-permission-rule-row"]').first().click();
@@ -15266,6 +15279,10 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(dialog.getByRole('button', { name: /Load .* more answers/ })).toHaveCount(0);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-dialog-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-jesmcs-dialog-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await dialog.locator('[data-action="filter-permission-rule-decision"][data-segment-value="deny"]').click();
   await expect(all.locator('[data-permission-rule-decision="deny"]')).toHaveCount(6);

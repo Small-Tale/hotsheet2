@@ -14,6 +14,11 @@ running process. A development source edit is not activation; rebuilding/restart
 running an explicit migration is. The retained `prerelease-*` fixtures are a regression
 baseline, not a promise that every pre-release byte shape is permanent.
 
+The local permission-rule JSON may include an optional fixed-vocabulary `description`
+for newly remembered Bash actions (HS2-JESMCS). Older files omit it and remain readable;
+older writers may drop it, leaving the fingerprint-only label. The action fingerprint
+remains the sole matching and revocation key.
+
 ## 19.2 Starting with the first public release
 
 Every release permanently reads every ticket, `hotsheet-store.json`, checkout/project

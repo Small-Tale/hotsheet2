@@ -2675,7 +2675,9 @@ remains in their row. Filters combine with search before batching; changing one 
 visible window to 100 and keeps the query and selection across views. The current result
 count appears beside selection controls (HS2-7Z3VWR).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
-its leading icon slot. The dialog row is the selection control: plain click selects one,
+its leading icon slot. New Bash answers show a fixed-vocabulary operation description where
+available, plus their short fingerprint; older answers keep the fingerprint-only label. The
+dialog row is the selection control: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
 Command/Ctrl-A while focused in the list adds all loaded rows. Search and filter changes keep
 selected keys but reset the range anchor; Load more extends the rows eligible for select-all.
@@ -2687,8 +2689,9 @@ Denied answers have a distinct background in both views; selection and keyboard 
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label
 (HS2-4HTTMK); search covers only
-the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or
-path. Search resets the visible window to 100 answers; add/revoke updates clamp that window.
+the safe visible tool, operation description, decision, scope, and opaque fingerprint,
+never the hidden command or path. Search resets the visible window to 100 answers;
+add/revoke updates clamp that window.
 There is no separate count/sort line or page footer (HS2-M97DKR, HS2-988X4X). Closing
 the dialog or switching projects resets its search, visible window, and selection (HS2-16XPHH,
 HS2-C057G5). A selection may span loaded batches and mix decisions and lifetimes. Allow selected

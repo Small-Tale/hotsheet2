@@ -48,6 +48,8 @@ export interface PermissionRule {
   connection?: string;
   tool: string;
   action: string;
+  /** Fixed-vocabulary operation label; never raw command text. Older rules omit it. */
+  description?: string;
   decision: PermissionDecision;
   scope: 'chat' | 'session' | 'always';
 }
