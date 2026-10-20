@@ -8763,22 +8763,24 @@ test('collapses AI chat activity to its latest item and toggles it at wide and n
   await expect(rows).toHaveCount(2);
 });
 
-test('shows the chat model and effort inside the settings menu trigger (HS2-XWSXWD)', async ({ page }) => {
+test('shows the chat model in the trigger and effort in the settings menu (HS2-XWSXWD, HS2-PP5ZN7)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=ai-conversation');
   const control = page.locator('[data-component="conversation-model-control"]').first();
   await expect(control).toBeVisible();
   await expect(control.locator('[data-component="text"][data-wrap="truncate"]')).toContainText('GPT-5.6');
-  await expect(control.locator('[data-component="badge"]')).toContainText('high');
+  await expect(control.locator('[data-component="badge"]')).toHaveCount(0);
   const trigger = page.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').first();
   await expect(trigger.locator('[data-component="conversation-model-control"]')).toBeVisible();
   await expect(trigger).toContainText('GPT-5.6');
-  await expect(trigger).toContainText('high');
+  await expect(trigger).not.toContainText('high');
   expect((await trigger.locator('[data-component="text"]').boundingBox())!.height).toBeGreaterThan(10);
   await trigger.click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Effort/ })).toContainText('high');
   await page.screenshot({ path: 'target/visual-captures/hs2-r5f7a5-chat-model-popup.png' });
   // Selecting a different provider from the submenu switches the chat (HS2-PRBGRB). The nested
   // Web Awesome submenu reveal is the library's; our contract is the data-action item + handler, so
