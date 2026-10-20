@@ -20249,6 +20249,9 @@ async function runLongTurnUntilStuck(
   page.once('dialog', (dialog) => void dialog.accept());
   await line.getByRole('button', { name: 'Stop Codex' }).click();
   if (parallelStopPolls) expect(await parallelStopPolls).toEqual([true, true]);
+  // The page clock is frozen after runFor. A transport between WebSocket retries
+  // needs its virtual retry timer to advance before it can read the done event.
+  await page.clock.runFor(31_000);
   await expect(line).toHaveCount(0);
   await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
     'data-status',

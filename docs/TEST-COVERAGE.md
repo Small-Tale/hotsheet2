@@ -8,7 +8,9 @@ responsiveness, then closes and reopens a tab to verify recovery and fairness.
 
 HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
 readers. The dialog Stop browser test opens two independent polls alongside the
-app poll and verifies both readers see the done event while progress clears.
+app poll and verifies both readers see the done event. It advances the installed
+virtual clock through the transport's bounded reconnect window before asserting
+the interrupted state, so a frozen test clock cannot strand a pending retry.
 
 HS2-KYP8ZT tests forced two-process local and shared settings lock interleavings in
 `settings::tests::conditional_write_serializes_with_a_second_process` and
