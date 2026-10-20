@@ -6,7 +6,7 @@ use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
 use crate::{AppState, commands, custom_views, notifications, tts};
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use hotsheet_ticketing::{Settings, TicketQuery, ops};
 use serde::Deserialize;
@@ -170,19 +170,66 @@ fn validate_command_definitions(
 
 pub(crate) async fn save_commands(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
 ) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
     validate_command_definitions(&definitions)?;
-    Settings::new(state.store.root())
-        .set(
-            "commands",
-            serde_json::to_value(&definitions)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-            hotsheet_ticketing::Scope::Local,
-        )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-    state.commands.replace_definitions(definitions.clone());
+    let order = command_write_order(&headers)?;
+    let written = state.commands.write_if_newer(
+        "",
+        order
+            .as_ref()
+            .map(|(session, seq)| (session.as_str(), *seq)),
+        || {
+            Settings::new(state.store.root())
+                .set(
+                    "commands",
+                    serde_json::to_value(&definitions).map_err(|error| {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    })?,
+                    hotsheet_ticketing::Scope::Local,
+                )
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            state.commands.replace_definitions(definitions.clone());
+            Ok::<(), ApiError>(())
+        },
+    )?;
+    if written.is_none() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "a newer command settings write already completed",
+        ));
+    }
     Ok(Json(definitions))
+}
+
+fn command_write_order(headers: &HeaderMap) -> Result<Option<(String, u64)>, ApiError> {
+    let session = headers.get("x-hotsheet-command-write-session");
+    let sequence = headers.get("x-hotsheet-command-write-sequence");
+    match (session, sequence) {
+        (None, None) => Ok(None),
+        (Some(session), Some(sequence)) => {
+            let session = session.to_str().unwrap_or("");
+            let sequence = sequence.to_str().unwrap_or("").parse::<u64>().unwrap_or(0);
+            if session.is_empty()
+                || session.len() > 64
+                || !session
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                || sequence == 0
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid command write order",
+                ));
+            }
+            Ok(Some((session.to_owned(), sequence)))
+        }
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "incomplete command write order",
+        )),
+    }
 }
 
 pub(crate) fn checkout_settings(
@@ -267,21 +314,40 @@ pub(crate) async fn save_checkout_command_groups(
 pub(crate) async fn save_checkout_commands(
     State(state): State<AppState>,
     Path(reference): Path<String>,
+    headers: HeaderMap,
     Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
 ) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
     validate_command_definitions(&definitions)?;
     let (checkout, settings) = checkout_settings(&state, &reference)?;
-    settings
-        .set(
-            "commands",
-            serde_json::to_value(&definitions)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
-            hotsheet_ticketing::Scope::Local,
-        )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-    state
-        .commands
-        .replace_project(checkout.id, checkout.root.into(), definitions.clone());
+    let order = command_write_order(&headers)?;
+    let project = checkout.id.clone();
+    let written = state.commands.write_if_newer(
+        &project,
+        order
+            .as_ref()
+            .map(|(session, seq)| (session.as_str(), *seq)),
+        || {
+            settings
+                .set(
+                    "commands",
+                    serde_json::to_value(&definitions).map_err(|error| {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    })?,
+                    hotsheet_ticketing::Scope::Local,
+                )
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            state
+                .commands
+                .replace_project(checkout.id, checkout.root.into(), definitions.clone());
+            Ok::<(), ApiError>(())
+        },
+    )?;
+    if written.is_none() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "a newer command settings write already completed",
+        ));
+    }
     Ok(Json(definitions))
 }
 

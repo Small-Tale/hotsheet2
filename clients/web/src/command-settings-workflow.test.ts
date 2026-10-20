@@ -113,8 +113,12 @@ describe('command settings workflow (HS2-1M05KF)', () => {
         ['a', [shell('a')]],
         ['b', [shell('b')]],
       ]),
-      calls: Array<{ path: string; options: { keepalive?: boolean } }> = [],
+      calls: Array<{
+        path: string;
+        options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } };
+      }> = [],
       messages: string[] = [],
+      nextSequence = { value: 0 },
       saves = new CommandSettingsSaves({
         projectPath: (id) => `/api/${id}`,
         definitions: (id) => definitions.get(id)!,
@@ -124,6 +128,7 @@ describe('command settings workflow (HS2-1M05KF)', () => {
         },
         commandSaved: () => undefined,
         groupsLoaded: () => undefined,
+        nextWriteOrder: () => ({ session: 'editor', sequence: ++nextSequence.value }),
         saveCommands: async (path, _items, options) => {
           calls.push({ path, options });
           return definitions.get(path.slice(5))!;
@@ -135,12 +140,12 @@ describe('command settings workflow (HS2-1M05KF)', () => {
     await vi.advanceTimersByTimeAsync(300);
     saves.schedule('a');
     await vi.advanceTimersByTimeAsync(300);
-    expect(calls).toEqual([{ path: '/api/b', options: {} }]);
+    expect(calls).toEqual([{ path: '/api/b', options: { writeOrder: { session: 'editor', sequence: 1 } } }]);
     saves.flush();
     await Promise.resolve();
     expect(calls).toEqual([
-      { path: '/api/b', options: {} },
-      { path: '/api/a', options: { keepalive: true } },
+      { path: '/api/b', options: { writeOrder: { session: 'editor', sequence: 1 } } },
+      { path: '/api/a', options: { keepalive: true, writeOrder: { session: 'editor', sequence: 2 } } },
     ]);
     await vi.advanceTimersByTimeAsync(600);
     expect(calls).toHaveLength(2);

@@ -728,9 +728,10 @@ preview/download, server directory browser) are separate design work.
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the
   primary editing interface. Each project keeps its own pending save, and hiding or unloading
   the page flushes every pending one with a `keepalive` write to preserve an edit made just
-  before a reload or tab close (HS2-25HAK3). Overlapping writes can still commit out of order
-  on the server; `HS2-HRN55S` tracks server-backed ordering for that case. A late save result
-  cannot replace a newer local edit or a reopened project's settings; group writes run in edit
+  before a reload or tab close (HS2-25HAK3). The browser keeps an increasing command write
+  sequence in session storage across reloads; the server rejects an older write from that editor
+  session after a newer one commits (HS2-HRN55S). A late save result cannot replace a newer local
+  edit or a reopened project's settings; group writes run in edit
   order and an in-flight group save keeps an older refresh from discarding an empty group.
   Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`

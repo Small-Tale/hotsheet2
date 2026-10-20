@@ -167,10 +167,11 @@ export interface CommandSettingsSavePort {
   setMessage(projectId: string, message: string): void;
   commandSaved(projectId: string, definitions: CommandDefinition[]): void;
   groupsLoaded(projectId: string, groups: readonly string[]): void;
+  nextWriteOrder?(): { session: string; sequence: number };
   saveCommands(
     path: string,
     definitions: CommandDefinition[],
-    options: { keepalive?: boolean },
+    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } },
   ): Promise<CommandDefinition[]>;
   saveGroups(path: string, groups: string[]): Promise<unknown>;
   setTimer?(callback: () => void, milliseconds: number): ReturnType<typeof setTimeout>;
@@ -228,7 +229,10 @@ export class CommandSettingsSaves {
     }
     this.port.setMessage(projectId, '');
     try {
-      const saved = await this.port.saveCommands(path, definitions, options);
+      const saved = await this.port.saveCommands(path, definitions, {
+        ...options,
+        ...(this.port.nextWriteOrder ? { writeOrder: this.port.nextWriteOrder() } : {}),
+      });
       if (this.current(projectId, path, generation)) this.port.commandSaved(projectId, saved);
     } catch (reason) {
       if (this.current(projectId, path, generation))

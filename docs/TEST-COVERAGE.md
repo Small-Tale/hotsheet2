@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-HRN55S covers command write ordering in the server command manager and real
+HTTP settings persistence, the client save workflow's ordered metadata, and a
+real-server browser page-hide/reload/edit sequence. Cross-editor conflict
+resolution remains outside the per-session ordering guarantee.
+
 HS2-1M05KF separates command-settings state and save orchestration into
 `clients/web/src/command-settings-workflow.ts`. Its unit tests cover partial
 drafts, kind/AI edits and validation, empty-group retention, multi-project

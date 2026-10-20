@@ -28,6 +28,41 @@ export interface CommandsDependencies {
   storedWorkspacePreferences: Pick<WorkspacePreferences, 'commandGroupExpanded' | 'commandGroupsCollapsed'>;
 }
 
+const COMMAND_WRITE_ORDER_KEY = 'hotsheet.command-write-order.v1';
+let fallbackWriteOrder: { session: string; sequence: number } | undefined;
+
+/** Session storage survives reload, so the page-hide write stays ordered against the next page. */
+function nextCommandWriteOrder(): { session: string; sequence: number } {
+  let current = fallbackWriteOrder;
+  try {
+    const saved: unknown = JSON.parse(window.sessionStorage.getItem(COMMAND_WRITE_ORDER_KEY) ?? 'null');
+    if (
+      typeof saved === 'object' &&
+      saved !== null &&
+      'session' in saved &&
+      typeof saved.session === 'string' &&
+      'sequence' in saved &&
+      typeof saved.sequence === 'number' &&
+      Number.isSafeInteger(saved.sequence) &&
+      saved.sequence >= 0
+    )
+      current = { session: saved.session, sequence: saved.sequence };
+  } catch {
+    // Storage may be disabled; in-memory ordering still protects this page's concurrent writes.
+  }
+  const next = {
+    session: current?.session ?? crypto.randomUUID(),
+    sequence: (current?.sequence ?? 0) + 1,
+  };
+  fallbackWriteOrder = next;
+  try {
+    window.sessionStorage.setItem(COMMAND_WRITE_ORDER_KEY, JSON.stringify(next));
+  } catch {
+    // A disabled store limits ordering to this page lifetime.
+  }
+  return next;
+}
+
 /** Own project command drafts, selection, autosave and run-dialog projection. */
 export function createCommandsController({
   projects,
@@ -175,6 +210,7 @@ export function createCommandsController({
       if (selectedProjectId.value === projectId) commandDefinitions.value = definitions;
     },
     groupsLoaded: setCommandSettingsExtraGroups,
+    nextWriteOrder: nextCommandWriteOrder,
     saveCommands: (path, definitions, options) => new Api(path).saveCommands(definitions, options),
     saveGroups: (path, groups) => new Api(path).saveCommandGroups(groups),
   });

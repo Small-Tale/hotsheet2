@@ -463,7 +463,21 @@ paths:
     put:
       operationId: save_checkout_commands
       x-hotsheet-contract-depth: route-only
+      parameters:
+        - name: X-Hotsheet-Command-Write-Session
+          in: header
+          description: Optional editor session id; send with X-Hotsheet-Command-Write-Sequence.
+          schema:
+            type: string
+        - name: X-Hotsheet-Command-Write-Sequence
+          in: header
+          description: Increasing positive integer within the editor session.
+          schema:
+            type: integer
+            format: int64
       responses:
+        '409':
+          description: A newer command write from this editor session has already committed.
         default:
           description: Response shape still follows the server handler and wire DTO.
     parameters:
@@ -1959,7 +1973,21 @@ paths:
     put:
       operationId: save_commands
       x-hotsheet-contract-depth: route-only
+      parameters:
+        - name: X-Hotsheet-Command-Write-Session
+          in: header
+          description: Optional editor session id; send with X-Hotsheet-Command-Write-Sequence.
+          schema:
+            type: string
+        - name: X-Hotsheet-Command-Write-Sequence
+          in: header
+          description: Increasing positive integer within the editor session.
+          schema:
+            type: integer
+            format: int64
       responses:
+        '409':
+          description: A newer command write from this editor session has already committed.
         default:
           description: Response shape still follows the server handler and wire DTO.
   /command-groups:

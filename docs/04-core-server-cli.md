@@ -1345,6 +1345,15 @@ the checkout-scoped command runner uses the code-project root; HS1 migration set
 code-project root so imported shell and AI command buttons retain their working-directory
 semantics without embedding a shell-formatted `cd` string. Definitions, run history,
 lookup, and cancellation are isolated by checkout on a shared server.
+The command editor sends `X-Hotsheet-Command-Write-Session` and an increasing
+`X-Hotsheet-Command-Write-Sequence` with each `PUT /commands`. Both headers must
+be present together. The server returns `409` when a request's sequence is no
+newer than the last committed one for that checkout and editor session, so a
+delayed autosave cannot replace a later page-hide save. The write and live
+definition update share the ordering guard. The browser keeps its sequence in
+session storage across reloads; callers without these headers retain the legacy
+unconditional write contract. This guard is per editor session and server
+process; concurrent independent editors still need a shared revision protocol.
 The CLI exposes that same live runner without opening the web client. Start a server for
 the selected `-C` ticket store, then use a registered checkout id, alias, or path:
 

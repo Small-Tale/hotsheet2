@@ -41,6 +41,7 @@ struct LiveRun {
 #[derive(Clone)]
 pub struct CommandManager {
     definitions: Arc<Mutex<HashMap<String, Vec<CommandDefinition>>>>,
+    write_sequences: Arc<Mutex<HashMap<(String, String), u64>>>,
     roots: Arc<Mutex<HashMap<String, PathBuf>>>,
     runs: Arc<Mutex<HashMap<String, LiveRun>>>,
     order: Arc<Mutex<VecDeque<String>>>,
@@ -53,6 +54,7 @@ impl CommandManager {
         let roots = HashMap::from([(String::new(), root)]);
         Self {
             definitions: Arc::new(Mutex::new(definitions)),
+            write_sequences: Default::default(),
             roots: Arc::new(Mutex::new(roots)),
             runs: Default::default(),
             order: Default::default(),
@@ -77,6 +79,30 @@ impl CommandManager {
         self.definitions
             .lock_or_recover()
             .insert(String::new(), definitions);
+    }
+    /// Serialize an editor session's writes through persistence and live-state replacement.
+    /// A delayed older request must not commit after a newer sequence for the same project.
+    pub fn write_if_newer<T, E>(
+        &self,
+        project: &str,
+        order: Option<(&str, u64)>,
+        write: impl FnOnce() -> Result<T, E>,
+    ) -> Result<Option<T>, E> {
+        let mut sequences = self.write_sequences.lock_or_recover();
+        if let Some((session, sequence)) = order {
+            let key = (project.to_owned(), session.to_owned());
+            if sequences
+                .get(&key)
+                .is_some_and(|current| *current >= sequence)
+            {
+                return Ok(None);
+            }
+            let result = write()?;
+            sequences.insert(key, sequence);
+            Ok(Some(result))
+        } else {
+            write().map(Some)
+        }
     }
     pub fn replace_project(
         &self,
@@ -342,6 +368,59 @@ fn shell_execution(command: &str) -> Result<(String, Vec<String>), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordered_writes_reject_repeats_and_older_sequences_per_project_and_session() {
+        let manager = CommandManager::new(PathBuf::from("/tmp"), Vec::new());
+        let mut writes = Vec::new();
+        assert_eq!(
+            manager.write_if_newer("a", Some(("editor", 2)), || {
+                writes.push(2);
+                Ok::<_, ()>(())
+            }),
+            Ok(Some(()))
+        );
+        assert_eq!(
+            manager.write_if_newer("a", Some(("editor", 1)), || {
+                writes.push(1);
+                Ok::<_, ()>(())
+            }),
+            Ok(None)
+        );
+        assert_eq!(
+            manager.write_if_newer("a", Some(("editor", 2)), || {
+                writes.push(2);
+                Ok::<_, ()>(())
+            }),
+            Ok(None)
+        );
+        assert_eq!(
+            manager.write_if_newer("b", Some(("editor", 1)), || {
+                writes.push(3);
+                Ok::<_, ()>(())
+            }),
+            Ok(Some(()))
+        );
+        assert_eq!(
+            manager.write_if_newer("a", Some(("other", 1)), || {
+                writes.push(4);
+                Ok::<_, ()>(())
+            }),
+            Ok(Some(()))
+        );
+        assert_eq!(
+            manager.write_if_newer("a", Some(("editor", 3)), || Err::<(), _>("failed")),
+            Err("failed")
+        );
+        assert_eq!(
+            manager.write_if_newer("a", Some(("editor", 3)), || {
+                writes.push(5);
+                Ok::<_, ()>(())
+            }),
+            Ok(Some(()))
+        );
+        assert_eq!(writes, [2, 3, 4, 5]);
+    }
 
     #[test]
     fn native_shell_and_ai_definitions_resolve_machine_details_only_at_runtime() {

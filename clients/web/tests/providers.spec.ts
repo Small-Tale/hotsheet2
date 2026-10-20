@@ -14665,6 +14665,15 @@ test('keeps a command edit made just before a reload through the real server (HS
   test.setTimeout(120_000);
   const server = await realTicketServer();
   try {
+    const writeOrders: Array<{ session: string; sequence: number }> = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'PUT' || !new URL(request.url()).pathname.endsWith('/commands')) return;
+      const headers = request.headers();
+      writeOrders.push({
+        session: headers['x-hotsheet-command-write-session'] ?? '',
+        sequence: Number(headers['x-hotsheet-command-write-sequence']),
+      });
+    });
     await mockProject(page);
     // Only project discovery is a fixture; commands are the real server's (see HS2-EZ5KMC above).
     await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
@@ -14709,6 +14718,25 @@ test('keeps a command edit made just before a reload through the real server (HS
     await editor.locator('.command-settings-editor__row', { hasText: 'Ship it' }).dblclick();
     await commandDialog.getByLabel('Button Label').fill('Ship it now');
     await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(storedTitles).toEqual(['Ship it now']);
+    expect(writeOrders.length).toBeGreaterThanOrEqual(2);
+    expect(writeOrders[0]?.session).toBeTruthy();
+    expect(writeOrders.at(-1)?.session).toBe(writeOrders[0]?.session);
+    expect(writeOrders.at(-1)?.sequence).toBeGreaterThan(writeOrders[0]?.sequence ?? 0);
+    const latest = writeOrders.at(-1)!;
+    const staleStatus = await page.evaluate(async ({ session, sequence }) => {
+      const response = await fetch('/__hotsheet/project-api/demo-checkout/commands', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Hotsheet-Command-Write-Session': session,
+          'X-Hotsheet-Command-Write-Sequence': String(sequence),
+        },
+        body: JSON.stringify([{ id: 'command-1', title: 'Stale', kind: 'shell', command: 'echo stale' }]),
+      });
+      return response.status;
+    }, { ...latest, sequence: latest.sequence - 1 });
+    expect(staleStatus).toBe(409);
     await expect.poll(storedTitles).toEqual(['Ship it now']);
   } finally {
     await server.stop();

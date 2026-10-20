@@ -1576,11 +1576,22 @@ export class Api {
       body: JSON.stringify({ name }),
     });
   commands = () => this.parsed(parseCommandDefinition.list, '/commands');
-  saveCommands = (definitions: CommandDefinition[], options: { keepalive?: boolean } = {}) =>
+  saveCommands = (
+    definitions: CommandDefinition[],
+    options: { keepalive?: boolean; writeOrder?: { session: string; sequence: number } } = {},
+  ) =>
     this.parsed(parseCommandDefinition.list, '/commands', {
       method: 'PUT',
       body: JSON.stringify(definitions),
       ...(options.keepalive ? { keepalive: true } : {}),
+      ...(options.writeOrder
+        ? {
+            headers: {
+              'X-Hotsheet-Command-Write-Session': options.writeOrder.session,
+              'X-Hotsheet-Command-Write-Sequence': String(options.writeOrder.sequence),
+            },
+          }
+        : {}),
     });
   /** Command groups kept even while empty, stored beside `commands` (HS2-EZ5KMC). */
   commandGroups = () => this.parsed(parseStringList, '/command-groups');

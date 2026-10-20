@@ -11183,6 +11183,74 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
 }
 
 #[tokio::test]
+async fn older_ordered_command_write_cannot_replace_newer_settings() {
+    let (dir, st) = state();
+    let app = app(st);
+    let command = |title: &str| {
+        format!(r#"[{{"id":"review","title":"{title}","kind":"shell","command":"echo review"}}]"#)
+    };
+    let ordered = |sequence: u64, body: String| {
+        let mut request = authed("PUT", "/commands", Some(&body));
+        request.headers_mut().insert(
+            "x-hotsheet-command-write-session",
+            "editor-session".parse().unwrap(),
+        );
+        request.headers_mut().insert(
+            "x-hotsheet-command-write-sequence",
+            sequence.to_string().parse().unwrap(),
+        );
+        request
+    };
+    assert_eq!(
+        app.clone()
+            .oneshot(ordered(2, command("Newest")))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(ordered(1, command("Old")))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        body_json(
+            app.clone()
+                .oneshot(authed("GET", "/commands", None))
+                .await
+                .unwrap()
+        )
+        .await[0]["title"],
+        "Newest"
+    );
+    let persisted =
+        hotsheet_ticketing::commands::from_settings(&hotsheet_ticketing::Settings::new(dir.path()))
+            .unwrap();
+    assert_eq!(persisted[0].title, "Newest");
+    assert_eq!(
+        app.clone()
+            .oneshot(ordered(3, command("Final")))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let mut incomplete = authed("PUT", "/commands", Some(&command("Invalid")));
+    incomplete.headers_mut().insert(
+        "x-hotsheet-command-write-session",
+        "editor-session".parse().unwrap(),
+    );
+    assert_eq!(
+        app.oneshot(incomplete).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
 async fn kept_command_groups_round_trip_beside_local_commands() {
     // HS2-EZ5KMC: an empty "Add group" group persists in the same local scope as commands.
     let (dir, st) = state();
