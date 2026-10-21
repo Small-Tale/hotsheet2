@@ -1063,7 +1063,7 @@
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
-      "purpose": "Three newest remembered permission answers for the current project under a Kerf ListHeader, with decision shields and accessible Allowed status, concise duration labels, distinct private action fingerprints, a searchable paged full-list dialog, individual revoke actions, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV, HS2-KHKM0W, HS2-0HKES8).",
+      "purpose": "Three newest remembered permission answers for the current project under a Kerf ListHeader, with decision shields and accessible Allowed status, concise duration and reviewed-pattern labels without a redundant exact-match summary, distinct private action fingerprints, a searchable paged full-list dialog, individual revoke actions, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV, HS2-KHKM0W, HS2-0HKES8, HS2-2TNY72).",
       "useWhen": [
         "Hot Sheet needs to list a project's remembered permission answers and let the user edit or revoke them individually or in bulk."
       ],

@@ -15394,7 +15394,8 @@ test('answers identical permission requests for this chat and revokes the rememb
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
   await expect(row).toContainText(secretAction);
-  await expect(row).toContainText('This chat only, until it closes · Exact match');
+  await expect(row).toContainText('This chat only, until it closes');
+  await expect(row.getByText('Exact match', { exact: true })).toHaveCount(0);
   await expect(row).not.toContainText('Details hidden');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await row.getByRole('button', { name: 'Copy Exact Action for Bash' }).click();
@@ -15432,7 +15433,7 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
-  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7)`, async ({
+  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72)`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -15468,9 +15469,11 @@ for (const width of [1280, 390]) {
     await expect(row.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
     await expect(row.locator('[data-lucide="shield-check"]')).toBeVisible();
     await expect(row.getByText('Allowed', { exact: true })).toHaveCount(0);
+    await expect(row.getByText('Persistent', { exact: true })).toBeVisible();
+    await expect(row).not.toContainText('Exact match');
     await expect(row.locator('.kui-list-item__description')).toHaveCount(0);
     await preview.screenshot({
-      path: `target/visual-captures/hs2-0hkes8-preview-${width}.png`,
+      path: `target/visual-captures/hs2-2tny72-preview-${width}.png`,
       animations: 'disabled',
     });
     await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
@@ -15478,7 +15481,8 @@ for (const width of [1280, 390]) {
     await expect(dialog.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
     await expect(dialog.locator('[data-lucide="shield-check"]')).toBeVisible();
     await expect(dialog.getByText('Allowed', { exact: true })).toHaveCount(0);
-    await dialog.screenshot({ path: `target/visual-captures/hs2-0hkes8-dialog-${width}.png`, animations: 'disabled' });
+    await expect(dialog.locator('[data-permission-rule]')).not.toContainText('Exact match');
+    await dialog.screenshot({ path: `target/visual-captures/hs2-2tny72-dialog-${width}.png`, animations: 'disabled' });
   });
 }
 

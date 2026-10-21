@@ -92,11 +92,7 @@ function ruleLabel(rule: PermissionRule) {
 }
 
 function matchLabel(rule: PermissionRule) {
-  return rule.match_type === 'template'
-    ? 'Placeholder match'
-    : rule.match_type === 'regex'
-      ? 'Regex match'
-      : 'Exact match';
+  return rule.match_type === 'template' ? 'Placeholder match' : rule.match_type === 'regex' ? 'Regex match' : undefined;
 }
 
 /**
@@ -158,7 +154,8 @@ export function PermissionRulesSettings({
               <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>
               <span>{rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}</span>
               <span>
-                {SCOPE_LABELS[rule.scope]} · {matchLabel(rule)}
+                {SCOPE_LABELS[rule.scope]}
+                {matchLabel(rule) && ` · ${matchLabel(rule)}`}
               </span>
               {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
               {rule.exact_action && (

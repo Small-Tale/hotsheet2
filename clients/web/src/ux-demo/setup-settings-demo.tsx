@@ -331,7 +331,7 @@ export function PermissionRulesSettingsDemo() {
       <CatalogExample label="No Remembered Answers">
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
-      <CatalogExample label="Chat, Session, and Always Rules with Allowed Status in the Shield and Accessible Name">
+      <CatalogExample label="Chat, Session, and Always Rules with Decision Shields and Concise Match Metadata">
         <div data-demo-permission-rules>
           <PermissionRulesSettings
             rules={permissionRulesDemoRules.value}

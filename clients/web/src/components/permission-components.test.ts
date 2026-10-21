@@ -306,6 +306,23 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     }
   });
 
+  it('omits exact-match row metadata and preserves reviewed pattern labels and editor options (HS2-2TNY72)', () => {
+    for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
+      for (const match_type of [undefined, 'exact', 'template', 'regex'] as const) {
+        const pattern =
+          match_type === 'template' || match_type === 'regex'
+            ? { version: 1 as const, kind: match_type, expression: 'npm {{token}}' }
+            : undefined;
+        const markup = String(PermissionRulesSettings({ rules: [{ ...rules[0], match_type, pattern }], dialog }));
+        expect(markup).not.toContain('Exact match');
+        expect(markup).not.toContain('Persistent · </span>');
+        expect(markup).toContain('Exact action</option>');
+        if (match_type === 'template') expect(markup).toContain('Persistent · Placeholder match');
+        if (match_type === 'regex') expect(markup).toContain('Persistent · Regex match');
+      }
+    }
+  });
+
   it('uses singular and plural answer counts in the disclosure (HS2-9QK0V7)', () => {
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 1) }))).toContain('Show all 1 answer<');
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 2) }))).toContain('Show all 2 answers<');
@@ -405,9 +422,9 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
       dialog.indexOf('permission-rules-settings__filters'),
     );
     expect(dialog.match(/class="kui-segmented-control"[^>]*data-layout="equal"/g)).toHaveLength(2);
-    expect(dialog).toContain('Persistent · Exact match');
-    expect(dialog).not.toContain('Session (until restart) · Exact match');
-    expect(markup).toContain('Persistent · Exact match');
+    expect(dialog).toContain('>Persistent<');
+    expect(dialog).not.toContain('>Session (until restart)<');
+    expect(markup).toContain('>Persistent<');
   });
 
   it('shows a scrollable list and accessible placeholder search (HS2-988X4X, HS2-4HTTMK)', () => {
@@ -554,7 +571,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     );
     expect(markup).toContain('npm test');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Persistent · Exact match');
+    expect(markup).toContain('>Persistent<');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).toContain('rm -rf build');
