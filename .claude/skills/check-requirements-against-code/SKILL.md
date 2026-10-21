@@ -13,7 +13,7 @@ surface:
 - the web client (`clients/web`);
 - the migrator (`migrator/`).
 
-Also verify that the AI synthesis docs and `CLAUDE.md` agree with the requirements and the
+Also verify that the AI synthesis docs and `AGENTS.md` agree with the requirements and the
 code:
 
 - the requirements summary table in `docs/README.md`;
@@ -42,10 +42,10 @@ synthesis docs in place.
      `docs/CODEBASE-MAP.md`.
    - **Clients**: the UI surface exists, is wired in the real app (not only in `/ux-demo`),
      and behaves as `docs/06-clients.md` and `docs/ux-components.md` describe.
-   - **Headless parity** (CLAUDE.md): every setup, bootstrap, recovery, source-linking,
+   - **Headless parity** (AGENTS.md): every setup, bootstrap, recovery, source-linking,
      skill, or MCP workflow available in a client also has an idempotent CLI path. Flag
      client-only capabilities.
-   - **Provider neutrality** (CLAUDE.md, `docs/16-external-sync-interface.md`): documented
+   - **Provider neutrality** (AGENTS.md, `docs/16-external-sync-interface.md`): documented
      provider capabilities match what each provider implementation enforces.
 
 3. **Check for undocumented features.** Look for CLI subcommands, server routes, settings
@@ -56,7 +56,7 @@ synthesis docs in place.
    longer exists or changed, and for status markers (Shipped / Partial / Design only /
    Deferred) that no longer match reality.
 
-5. **Verify `CLAUDE.md`.** Its project test setup, commands, gates, and client rules must match
+5. **Verify `AGENTS.md`.** Its project test setup, commands, gates, and client rules must match
    the actual scripts (`clients/web/package.json`, `migrator/package.json`,
    `.cargo/config.toml`, `.github/workflows/*.yml`). Flag any command that no longer exists
    and any enforced gate it doesn't mention.
@@ -82,7 +82,7 @@ synthesis docs in place.
    - Flag shipped features missing a row.
    - Fix the rows you can verify.
 
-9. **Final consistency pass.** Make `CLAUDE.md`, `docs/README.md`, `docs/CODEBASE-MAP.md`,
+9. **Final consistency pass.** Make `AGENTS.md`, `docs/README.md`, `docs/CODEBASE-MAP.md`,
    and `docs/TEST-COVERAGE.md` agree with each other and with the source docs and code.
    Resolve every disagreement in favor of the code or the numbered source doc. The most
    common drift: a CLI subcommand, server route, or settings key added with only its doc
@@ -107,7 +107,7 @@ For each discrepancy:
 - **`docs/CODEBASE-MAP.md`**: sections edited and why (or "no changes needed").
 - **`docs/README.md` requirements summary**: rows edited and why.
 - **`docs/TEST-COVERAGE.md`**: rows edited and why.
-- **`CLAUDE.md`**: drift found. Report it; edit only factual command or gate names.
+- **`AGENTS.md`**: drift found. Report it; edit only factual command or gate names.
 
 ### Questions
 

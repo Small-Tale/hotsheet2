@@ -1,11 +1,64 @@
 //! End-to-end tests driving the built `hotsheet` binary (double coverage per
-//! CLAUDE.md — the store/import logic is unit-tested; this exercises real user flows
+//! AGENTS.md — the store/import logic is unit-tested; this exercises real user flows
 //! through the CLI).
 
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::Path;
 use std::sync::OnceLock;
+
+#[test]
+fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    for path in [&store, &project, &home] {
+        std::fs::create_dir(path).unwrap();
+    }
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    std::fs::write(
+        project.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["claude"]}"#,
+    )
+    .unwrap();
+    let body = include_str!("../../../plugins/claude/instructions.md").trim_end();
+    std::fs::write(project.join("CLAUDE.md"), format!(
+        "Claude-local policy.\n\n<!-- BEGIN hotsheet:claude -->\n{body}\n<!-- END hotsheet:claude -->\n\n{}",
+        include_str!("../../../plugins/shared/testing-philosophy.md"))).unwrap();
+    let run = |args: &[&str]| {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(args)
+            .arg("--project")
+            .arg(&project)
+            .assert()
+            .success();
+    };
+    run(&["setup", "claude"]);
+    let canonical = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
+    let native = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
+    assert!(canonical.contains(body));
+    assert_eq!(
+        canonical.matches("section=testing-philosophy v=").count(),
+        1
+    );
+    assert!(native.starts_with("Claude-local policy.\n"));
+    assert_eq!(native.matches("@AGENTS.md").count(), 1);
+    assert!(!native.contains("## Hot Sheet"));
+    for _ in 0..2 {
+        run(&["setup", "--refresh"]);
+        assert_eq!(
+            std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+            canonical
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+            native
+        );
+    }
+}
 
 #[test]
 fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
@@ -1838,9 +1891,8 @@ fn setup_refresh_removes_a_disabled_tools_owned_artifacts() {
     assert!(enabled.iter().all(Option::is_some), "{enabled:?}");
     assert!(enabled[2].as_deref().unwrap().contains("hotsheet-mcp"));
 
-    // Disable Codex by enabling only Claude (whose targets never overlap Codex's; it may or
-    // may not be detected here). An empty list would disable every tool (HS2-8B3VJP).
-    enable(r#""claude""#);
+    // Disable every tool explicitly; Claude now shares AGENTS.md with Codex.
+    enable("");
     for pass in 0..2 {
         let output = hs(&store)
             .env("HOTSHEET_HOME", &home)

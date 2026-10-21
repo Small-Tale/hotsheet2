@@ -365,6 +365,15 @@ pub struct Instructions {
     /// Install Hot Sheet's independently versioned, shared project guidance.
     #[serde(default)]
     pub shared_guidance: bool,
+    /// Optional shared source plus the tool-native import written to `target`.
+    #[serde(default)]
+    pub canonical: Option<CanonicalInstructions>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CanonicalInstructions {
+    pub target: String,
+    pub import: String,
 }
 
 /// The worklist skill: where it's written, and its source in the plugin.
@@ -542,6 +551,9 @@ impl Plugin {
             self.manifest.instructions.target.as_str(),
             self.manifest.mcp.target.as_str(),
         ];
+        if let Some(canonical) = &self.manifest.instructions.canonical {
+            v.push(canonical.target.as_str());
+        }
         if let Some(s) = &self.manifest.skills {
             v.push(s.target.as_str());
         }

@@ -25,6 +25,10 @@ Reusable guidance is maintained in `Small-Tale/ai-playbook`. Local provenance li
 the eight embedded destinations from a committed source revision. Its Node tests cover
 offline checks, drift, and real-git restoration; CI also verifies the pinned upstream.
 See [snapshot maintenance](../guidance/README.md).
+`AGENTS.md` owns this repository's engineering guidance; `CLAUDE.md` is its native
+import. The Claude manifest declares a canonical instruction target and import;
+`crates/hotsheet-plugins/src/setup.rs` plans legacy migration, shared membership, adapter
+cleanup, and read-only findings together.
 
 ## Requirements docs
 

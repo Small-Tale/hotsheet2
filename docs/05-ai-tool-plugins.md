@@ -103,8 +103,9 @@ instead of one copy per tool:
 
 **Versioned shared guidance (HS2-GG03S7).** The four built-in tool manifests opt into
 four independently versioned sections from `plugins/shared/`: ticket work,
-testing, requirements documentation, and visual QA. Setup installs each section once per instruction
-target (`CLAUDE.md` or `AGENTS.md`), even when several tools share the target. Refresh
+testing, requirements documentation, and visual QA. First-party setup uses `AGENTS.md`
+as their shared source, even for Claude; `CLAUDE.md` imports it with `@AGENTS.md`.
+Setup installs each section once per canonical target, even when several tools share it. Refresh
 upgrades only an exact known predecessor in `plugins/shared/legacy-*.md`. It preserves nested
 project `hotsheet:specifics` text, unrelated content, equal-version edits, unknown older
 variants, and newer versions. Disabled tools retire unmodified default sections only
@@ -120,6 +121,24 @@ remain offline and require no Rulesync installation. The source SHA and body has
 are recorded in `guidance/ai-playbook.lock.json`; CI compares them with that exact
 upstream revision. See [snapshot maintenance](../guidance/README.md) for the
 reproducible update and legacy migration process (HS2-46J829, HS2-R5V3AZ).
+
+**Canonical instruction imports (HS2-HP1S4H).** A plugin may keep its native
+`instructions.target` and declare `instructions.canonical.target` plus the native
+`instructions.canonical.import` text. Claude declares `CLAUDE.md`, canonical
+`AGENTS.md`, and `@AGENTS.md`. Setup writes the common workflow and sections into
+the canonical file and a small managed `hotsheet:claude` import adapter into the
+native file. The adapter carries workflow v64 so an older writer preserves its
+per-tool block. An existing plain `@AGENTS.md` line is reused. Claude-local content
+outside managed blocks stays beside that import.
+
+Refresh moves recognized legacy managed sections from CLAUDE to AGENTS, merges
+identical defaults, and carries nested project specifics when the destination has
+none or the same specifics. A newer or equal-version customized legacy workflow,
+unknown section, malformed markers, or conflicting specifics retain the legacy
+layout for manual reconciliation. No customization is guessed away. Repeated
+refresh is a no-op. Disabling Claude removes its owned import and membership while
+other enabled tools keep the canonical guidance; re-enabling restores the import.
+Read-only diagnosis includes both the native adapter and canonical source paths.
 
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
@@ -184,7 +203,7 @@ v2 section and retains local paths inside `hotsheet:specifics`.
   (`AGENTS.md` → `agents-md`). The second line lists the served tool ids, sorted; it is
   membership, not content.
 - A shared section is used once two or more tools write the file, or when the file already
-  has one. A single tool writing a clean file (Claude's `CLAUDE.md`) keeps its per-tool
+  has one. A single tool writing a clean canonical file keeps its per-tool
   `hotsheet:<tool>` section, so nothing churns for unshared files.
 - Setup and refresh **migrate** existing per-tool copies of the writing tools into the
   shared section — placed where the existing shared section or the first per-tool copy was,

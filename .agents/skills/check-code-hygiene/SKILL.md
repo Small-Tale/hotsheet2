@@ -4,8 +4,8 @@ description: Check Hot Sheet 2's CLI, server, core crates, web client, and migra
 allowed-tools: Read, Grep, Glob, Bash, Agent
 ---
 
-> **Rules live in CLAUDE.md and the docs, not here.** Before flagging anything against a
-> rule, open `CLAUDE.md` and `docs/12-code-organization-and-testing.md` and read the current
+> **Rules live in AGENTS.md and the docs, not here.** Before flagging anything against a
+> rule, open `AGENTS.md` and `docs/12-code-organization-and-testing.md` and read the current
 > text. Treat any figure below as a pointer to the right section. The mechanical recipes
 > (greps, `wc`, ast-grep patterns) are the durable part of this skill.
 

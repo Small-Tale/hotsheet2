@@ -19,6 +19,10 @@ shared_guidance = true
 target = "CLAUDE.md"
 section = "instructions.md"
 
+[instructions.canonical]
+target = "AGENTS.md"
+import = "@AGENTS.md"
+
 [skills]
 # Where the worklist skill is written in the project, and its source in this plugin.
 target = ".claude/skills/hotsheet/SKILL.md"

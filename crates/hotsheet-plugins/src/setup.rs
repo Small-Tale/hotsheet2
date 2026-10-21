@@ -413,9 +413,17 @@ pub fn plan_refresh_setup_in(
     let all = all_plugins(plugin_dirs);
     let mut reconcile_targets: Vec<String> = Vec::new();
     for plugin in &all {
-        let target = &plugin.manifest.instructions.target;
-        if crate::is_safe_rel_path(target) && !reconcile_targets.contains(target) {
-            reconcile_targets.push(target.clone());
+        for target in std::iter::once(&plugin.manifest.instructions.target).chain(
+            plugin
+                .manifest
+                .instructions
+                .canonical
+                .as_ref()
+                .map(|canonical| &canonical.target),
+        ) {
+            if crate::is_safe_rel_path(target) && !reconcile_targets.contains(target) {
+                reconcile_targets.push(target.clone());
+            }
         }
     }
     // Tools the project explicitly left out of `enabled_plugins` (HS2-FKC8VN). Without an
@@ -562,7 +570,14 @@ fn collect_findings(
             let before = original.read(&path).ok();
             let after = fs.read(&path).ok();
             let installed = match kind {
-                ArtifactKind::Instructions => has_tool_instructions(&original, project, &plugin),
+                ArtifactKind::Instructions => before.as_ref().is_some_and(|bytes| {
+                    let contents = String::from_utf8_lossy(bytes);
+                    contents.contains(&begin_marker(plugin.id()))
+                        || parse_shared_section(&contents, &shared_section_key(rel))
+                            .is_some_and(|shared| shared.tools.iter().any(|tool| tool == plugin.id()))
+                        || (rel == plugin.manifest.instructions.target && plugin.manifest.instructions.canonical.as_ref()
+                            .is_some_and(|canonical| contents.lines().any(|line| line.trim() == canonical.import.trim())))
+                }),
                 ArtifactKind::Hooks => has_hotsheet_hooks(&original, &path),
                 _ => before.is_some(),
             };
@@ -581,6 +596,9 @@ fn collect_findings(
             artifacts.push(ArtifactFinding { kind, path: rel.to_string(), status, detail });
         };
         add(ArtifactKind::Instructions, &plugin.manifest.instructions.target, preserved);
+        if let Some(canonical) = &plugin.manifest.instructions.canonical {
+            add(ArtifactKind::Instructions, &canonical.target, preserved);
+        }
         if let Some((path, _)) = plugin.skill() { add(ArtifactKind::Skill, path, preserved); }
         add(ArtifactKind::Mcp, &plugin.manifest.mcp.target, false);
         if let Some(hooks) = &plugin.manifest.hooks { add(ArtifactKind::Hooks, &hooks.target, false); }
@@ -694,11 +712,33 @@ fn remove_disabled_tool_artifacts(
     let instructions = crate::is_safe_rel_path(rel)
         .then(|| fs.read_to_string(&project.join(rel)).ok())
         .flatten();
-    let workflow_preserved =
-        per_tool_section_requires_preservation(plugin, instructions.as_deref())
-            || skill_requires_preservation(fs, project, plugin);
+    let mut canonical_plugin = plugin.clone();
+    if let Some(canonical) = &plugin.manifest.instructions.canonical {
+        canonical_plugin.manifest.instructions.target = canonical.target.clone();
+        canonical_plugin.manifest.instructions.canonical = None;
+    }
+    let native_is_reference = instructions.as_ref().is_some_and(|contents| {
+        instruction_reference_block(plugin).is_some_and(|block| contents.contains(&block))
+    });
+    let workflow_preserved = (!native_is_reference
+        && per_tool_section_requires_preservation(plugin, instructions.as_deref()))
+        || skill_requires_preservation(fs, project, plugin)
+        || (plugin.manifest.instructions.canonical.is_some()
+            && installed_workflow_requires_preservation(fs, project, &canonical_plugin));
     if !workflow_preserved {
-        report.record(rel, remove_disabled_tool_section(fs, project, plugin)?);
+        if !native_is_reference {
+            report.record(rel, remove_disabled_tool_section(fs, project, plugin)?);
+        }
+        if plugin.manifest.instructions.canonical.is_some() {
+            report.record(
+                &canonical_plugin.manifest.instructions.target,
+                remove_disabled_tool_section(fs, project, &canonical_plugin)?,
+            );
+            report.record(
+                rel,
+                write_instruction_reference(fs, project, plugin, false)?,
+            );
+        }
         if let Some((rel, _)) = plugin.skill() {
             if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
                 report.record(rel, remove_managed_file(fs, project, rel, false)?);
@@ -960,13 +1000,195 @@ fn has_managed_setup(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
 
 fn has_tool_instructions(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
     let marker = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
-    let target = &plugin.manifest.instructions.target;
-    fs.read_to_string(&project_dir.join(target))
-        .is_ok_and(|contents| {
-            contents.contains(&marker)
-                || parse_shared_section(&contents, &shared_section_key(target))
-                    .is_some_and(|shared| shared.tools.iter().any(|tool| tool == plugin.id()))
+    std::iter::once(&plugin.manifest.instructions.target)
+        .chain(
+            plugin
+                .manifest
+                .instructions
+                .canonical
+                .as_ref()
+                .map(|canonical| &canonical.target),
+        )
+        .any(|target| {
+            fs.read_to_string(&project_dir.join(target))
+                .is_ok_and(|contents| {
+                    contents.contains(&marker)
+                        || (target == &plugin.manifest.instructions.target
+                            && contents
+                                .contains(&begin_marker(&format!("{}-reference", plugin.id()))))
+                        || parse_shared_section(&contents, &shared_section_key(target)).is_some_and(
+                            |shared| shared.tools.iter().any(|tool| tool == plugin.id()),
+                        )
+                })
         })
+}
+
+/// Move owned legacy instruction blocks to a shared source before normal planning.
+/// Ambiguous/customized layouts retain their existing target and writer protections.
+fn canonical_instruction_plugin(
+    fs: &mut PlanFs,
+    project: &Path,
+    plugin: &Plugin,
+) -> Result<Plugin, SetupError> {
+    let mut effective = plugin.clone();
+    let Some(canonical) = &plugin.manifest.instructions.canonical else {
+        return Ok(effective);
+    };
+    let native_path = project.join(&plugin.manifest.instructions.target);
+    let native = fs.read_to_string(&native_path).unwrap_or_default();
+    let reference = instruction_reference_block(plugin);
+    let native_is_reference = reference
+        .as_ref()
+        .is_some_and(|block| native.contains(block));
+    if (!native_is_reference && per_tool_section_requires_preservation(plugin, Some(&native)))
+        || skill_requires_preservation(fs, project, plugin)
+        || parse_shared_section(
+            &native,
+            &shared_section_key(&plugin.manifest.instructions.target),
+        )
+        .is_some()
+    {
+        return Ok(effective);
+    }
+    let canonical_path = project.join(&canonical.target);
+    let mut incoming = fs.read_to_string(&canonical_path).unwrap_or_default();
+    let mut source_plugin = plugin.clone();
+    source_plugin.manifest.instructions.target = canonical.target.clone();
+    source_plugin.manifest.instructions.canonical = None;
+    if !native_is_reference
+        && native.contains(&begin_marker(plugin.id()))
+        && installed_workflow_requires_preservation(fs, project, &source_plugin)
+    {
+        return Ok(effective);
+    }
+    let mut outgoing = native.clone();
+    let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+    while let Some((start, finish)) = find_block(&outgoing, &begin, &end) {
+        let block = &outgoing[start..finish];
+        if reference.as_deref() == Some(block) {
+            // The native reference stays in place; only older full blocks move.
+            break;
+        } else if let Some((a, b)) = find_block(&incoming, &begin, &end) {
+            if &incoming[a..b] != block {
+                return Ok(effective);
+            }
+        } else {
+            incoming = append_block(&incoming, block);
+        }
+        outgoing = remove_range(&outgoing, (start, finish));
+    }
+    if !native_is_reference && outgoing.contains(&begin) {
+        return Ok(effective);
+    }
+    for section in GUIDANCE_SECTIONS {
+        let Some((start, finish)) = guidance_bounds(&outgoing, section.name) else {
+            if outgoing.contains(&format!("<!-- hotsheet:begin section={}", section.name)) {
+                return Ok(effective);
+            }
+            continue;
+        };
+        let Some((generic, specifics)) = guidance_parts(&outgoing[start..finish], section.name)
+        else {
+            return Ok(effective);
+        };
+        let known = |body: &str| {
+            body == section.current.trim()
+                || section.legacy.iter().any(|legacy| body == legacy.trim())
+        };
+        if !known(&generic) {
+            return Ok(effective);
+        }
+        if let Some((a, b)) = guidance_bounds(&incoming, section.name) {
+            let Some((other_generic, other_specifics)) =
+                guidance_parts(&incoming[a..b], section.name)
+            else {
+                return Ok(effective);
+            };
+            if !known(&other_generic)
+                || (specifics.is_some()
+                    && other_specifics.is_some()
+                    && specifics != other_specifics)
+            {
+                return Ok(effective);
+            }
+            let merged = guidance_with_specifics(
+                section.current,
+                section.name,
+                specifics.or(other_specifics),
+            );
+            incoming.replace_range(a..b, &merged);
+        } else {
+            incoming = append_block(
+                &incoming,
+                &guidance_with_specifics(section.current, section.name, specifics),
+            );
+        }
+        outgoing = remove_range(&outgoing, (start, finish));
+    }
+    if outgoing != native {
+        if outgoing.trim().is_empty() {
+            remove_managed_file(fs, project, &plugin.manifest.instructions.target, false)?;
+        } else {
+            fs.write(&native_path, outgoing.as_bytes());
+        }
+        fs.write(&canonical_path, incoming.as_bytes());
+    }
+    effective.manifest.instructions.target = canonical.target.clone();
+    Ok(effective)
+}
+
+fn instruction_reference_block(plugin: &Plugin) -> Option<String> {
+    let canonical = plugin.manifest.instructions.canonical.as_ref()?;
+    let version = marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX)?;
+    Some(format!(
+        "{}\n{INSTRUCTIONS_VERSION_PREFIX}{version} -->\n\n{}\n{}",
+        begin_marker(plugin.id()),
+        canonical.import.trim(),
+        end_marker(plugin.id())
+    ))
+}
+
+fn write_instruction_reference(
+    fs: &mut PlanFs,
+    project: &Path,
+    plugin: &Plugin,
+    active: bool,
+) -> Result<Option<Change>, SetupError> {
+    let Some(canonical) = &plugin.manifest.instructions.canonical else {
+        return Ok(None);
+    };
+    let rel = &plugin.manifest.instructions.target;
+    let target = project.join(rel);
+    let existing = fs.read_to_string(&target).unwrap_or_default();
+    let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+    let Some(block) = instruction_reference_block(plugin) else {
+        return Ok(None);
+    };
+    let rendered = if active {
+        if existing
+            .lines()
+            .any(|line| line.trim() == canonical.import.trim())
+        {
+            return Ok(None);
+        }
+        // An edited reference belongs to the project, just like an edited instruction block.
+        if existing.contains(&begin) {
+            return Ok(None);
+        }
+        append_block(&existing, &block)
+    } else if let Some((start, finish)) = find_block(&existing, &begin, &end) {
+        if existing[start..finish] != block {
+            return Ok(None);
+        }
+        remove_range(&existing, (start, finish))
+    } else {
+        return Ok(None);
+    };
+    if rendered.trim().is_empty() {
+        return remove_managed_file(fs, project, rel, false);
+    }
+    fs.write(&target, rendered.as_bytes());
+    Ok(Some(Change::Edited))
 }
 
 fn has_hotsheet_hooks(fs: &PlanFs, path: &Path) -> bool {
@@ -1023,6 +1245,11 @@ fn setup_plugins_with_fs(
         }
     }
 
+    let declared_plugins = plugins;
+    let plugins = declared_plugins
+        .iter()
+        .map(|plugin| canonical_instruction_plugin(fs, project_dir, plugin))
+        .collect::<Result<Vec<_>, _>>()?;
     let preserved: Vec<bool> = plugins
         .iter()
         .map(|p| installed_workflow_requires_preservation(fs, project_dir, p))
@@ -1050,7 +1277,7 @@ fn setup_plugins_with_fs(
     }
     // These independently versioned, project-neutral sections are shared by opted-in
     // tools that read an instruction target. They are not copies of this
-    // repository's CLAUDE.md, whose nested specifics remain project-owned.
+    // repository's AGENTS.md, whose nested specifics remain project-owned.
     let guidance_targets: HashSet<&str> = plugins
         .iter()
         .filter(|plugin| plugin.manifest.instructions.shared_guidance)
@@ -1067,13 +1294,23 @@ fn setup_plugins_with_fs(
             write_guidance_target(fs, project_dir, target, false)?;
         }
     }
+    for (declared, effective) in declared_plugins.iter().zip(&plugins) {
+        if declared.manifest.instructions.target != effective.manifest.instructions.target {
+            write_instruction_reference(fs, project_dir, declared, true)?;
+        }
+    }
 
     let mut reports = Vec::new();
     let result = (|| -> Result<(), SetupError> {
-        for (p, preserve_installed_workflow) in plugins.iter().zip(preserved) {
+        for ((p, declared), preserve_installed_workflow) in
+            plugins.iter().zip(&declared_plugins).zip(preserved)
+        {
             let mut wrote = Vec::new();
             if !preserve_installed_workflow {
                 wrote.push(p.manifest.instructions.target.clone());
+                if p.manifest.instructions.target != declared.manifest.instructions.target {
+                    wrote.push(declared.manifest.instructions.target.clone());
+                }
                 if let Some(skill) = write_skill(fs, project_dir, p)? {
                     wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
                 }
@@ -1291,12 +1528,25 @@ fn skill_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> 
 }
 
 fn installed_workflow_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> bool {
+    if let Some(canonical) = &plugin.manifest.instructions.canonical {
+        if canonical.target != plugin.manifest.instructions.target {
+            let mut source_plugin = plugin.clone();
+            source_plugin.manifest.instructions.target = canonical.target.clone();
+            source_plugin.manifest.instructions.canonical = None;
+            if installed_workflow_requires_preservation(fs, project, &source_plugin) {
+                return true;
+            }
+        }
+    }
     let bundled_instruction_version =
         marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
     let instructions = fs
         .read_to_string(&project.join(&plugin.manifest.instructions.target))
         .ok();
-    if per_tool_section_requires_preservation(plugin, instructions.as_deref()) {
+    let is_reference = instructions.as_ref().is_some_and(|contents| {
+        instruction_reference_block(plugin).is_some_and(|block| contents.contains(&block))
+    });
+    if !is_reference && per_tool_section_requires_preservation(plugin, instructions.as_deref()) {
         return true;
     }
     // A shared section in the same file is this tool's installed instructions too (it
@@ -2428,6 +2678,207 @@ args = ["--path", "{{store}}"]
     }
 
     #[test]
+    fn claude_import_migrates_legacy_guidance_and_survives_disable_and_reenable() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        run_setup_in(store.path(), root, Some("codex"), false, None, &[]).unwrap();
+        let claude = crate::builtin_plugins()
+            .into_iter()
+            .find(|plugin| plugin.id() == "claude")
+            .unwrap();
+        let specifics = "<!-- hotsheet:begin specifics=testing-philosophy v=1 -->\nLocal runner.\n<!-- hotsheet:end specifics=testing-philosophy -->";
+        let mut legacy = format!(
+            "Claude-local preface.\n\n{}\n",
+            per_tool("claude", claude.instructions_body().trim_end())
+        );
+        for section in GUIDANCE_SECTIONS {
+            let body = section.legacy.first().copied().unwrap_or(section.current);
+            legacy = append_block(
+                &legacy,
+                &guidance_with_specifics(
+                    body,
+                    section.name,
+                    (section.name == "testing-philosophy").then_some(specifics),
+                ),
+            );
+        }
+        std::fs::write(root.join("CLAUDE.md"), legacy).unwrap();
+        run_setup_in(store.path(), root, Some("claude"), false, None, &[]).unwrap();
+        let enabled = HashSet::from(["claude".to_string(), "codex".to_string()]);
+        refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+        let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap();
+        let adapter = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+        assert_eq!(agents.matches("## Hot Sheet — ticket workflow").count(), 1);
+        assert_eq!(agents.matches(specifics).count(), 1);
+        assert!(agents.contains("hotsheet-shared-section: claude, codex"));
+        assert!(adapter.starts_with("Claude-local preface.\n"));
+        assert_eq!(adapter.matches("@AGENTS.md").count(), 1);
+        assert!(!adapter.contains("section=testing-philosophy"));
+        refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            agents
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            adapter
+        );
+        refresh_setup_in(
+            store.path(),
+            root,
+            Some(&HashSet::from(["codex".to_string()])),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            "Claude-local preface.\n"
+        );
+        assert!(
+            std::fs::read_to_string(root.join("AGENTS.md"))
+                .unwrap()
+                .contains(specifics)
+        );
+        run_setup_in(store.path(), root, Some("claude"), false, None, &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("CLAUDE.md"))
+                .unwrap()
+                .matches("@AGENTS.md")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn claude_import_preserves_protected_legacy_workflow_and_conflicting_specifics() {
+        let store = tempfile::tempdir().unwrap();
+        let claude = crate::builtin_plugins()
+            .into_iter()
+            .find(|plugin| plugin.id() == "claude")
+            .unwrap();
+        for body in [
+            claude
+                .instructions_body()
+                .replace("## Hot Sheet", "## Customized Hot Sheet"),
+            claude.instructions_body().replace(
+                &format!(
+                    "version: {}",
+                    marked_version(claude.instructions_body(), INSTRUCTIONS_VERSION_PREFIX)
+                        .unwrap()
+                ),
+                "version: 999",
+            ),
+        ] {
+            let project = tempfile::tempdir().unwrap();
+            let legacy = per_tool("claude", body.trim_end());
+            std::fs::write(project.path().join("CLAUDE.md"), &legacy).unwrap();
+            run_setup_in(
+                store.path(),
+                project.path(),
+                Some("claude"),
+                false,
+                None,
+                &[],
+            )
+            .unwrap();
+            let after = std::fs::read_to_string(project.path().join("CLAUDE.md")).unwrap();
+            assert!(after.starts_with(&legacy));
+            assert!(!after.contains("@AGENTS.md"));
+            assert!(!project.path().join("AGENTS.md").exists());
+        }
+        let project = tempfile::tempdir().unwrap();
+        let section = &GUIDANCE_SECTIONS[1];
+        let local = |text| {
+            format!(
+                "<!-- hotsheet:begin specifics={} v=1 -->\n{text}\n<!-- hotsheet:end specifics={} -->",
+                section.name, section.name
+            )
+        };
+        let native =
+            guidance_with_specifics(section.current, section.name, Some(&local("Claude runner")));
+        let canonical =
+            guidance_with_specifics(section.current, section.name, Some(&local("Shared runner")));
+        std::fs::write(project.path().join("CLAUDE.md"), &native).unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), &canonical).unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("claude"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap(),
+            canonical
+        );
+        let after = std::fs::read_to_string(project.path().join("CLAUDE.md")).unwrap();
+        assert!(after.contains("Claude runner"));
+        assert!(!after.contains("@AGENTS.md"));
+        let project = tempfile::tempdir().unwrap();
+        let native = per_tool("claude", claude.instructions_body().trim_end());
+        let newer = shared_block(
+            "agents-md",
+            &std::collections::BTreeSet::from(["codex".to_string()]),
+            &claude.instructions_body().replace(
+                &format!(
+                    "version: {}",
+                    marked_version(claude.instructions_body(), INSTRUCTIONS_VERSION_PREFIX)
+                        .unwrap()
+                ),
+                "version: 999",
+            ),
+        );
+        std::fs::write(project.path().join("CLAUDE.md"), &native).unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), &newer).unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("claude"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap(),
+            newer
+        );
+        assert!(
+            !std::fs::read_to_string(project.path().join("CLAUDE.md"))
+                .unwrap()
+                .contains("@AGENTS.md")
+        );
+    }
+
+    #[test]
+    fn claude_import_accepts_an_existing_unmanaged_native_import() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("CLAUDE.md"), "@AGENTS.md\n").unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("claude"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(project.path().join("CLAUDE.md")).unwrap(),
+            "@AGENTS.md\n"
+        );
+        assert!(
+            std::fs::read_to_string(project.path().join("AGENTS.md"))
+                .unwrap()
+                .contains("## Hot Sheet")
+        );
+    }
+
+    #[test]
     fn fresh_second_project_installs_all_four_tools_and_refreshes_guidance() {
         let store = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
@@ -2445,8 +2896,9 @@ args = ["--path", "{{store}}"]
         assert!(claude.starts_with("Local Claude text.\n"));
         for section in GUIDANCE_SECTIONS {
             assert_eq!(agents.matches(section.current.trim()).count(), 1);
-            assert_eq!(claude.matches(section.current.trim()).count(), 1);
+            assert_eq!(claude.matches(section.current.trim()).count(), 0);
         }
+        assert_eq!(claude.matches("@AGENTS.md").count(), 1);
         for rule in [
             "meaningful subtask starts and finishes",
             "separate history entries",
@@ -2455,7 +2907,6 @@ args = ["--path", "{{store}}"]
             "`--note-file <path>`",
         ] {
             assert!(agents.contains(rule), "AGENTS.md omitted {rule}");
-            assert!(claude.contains(rule), "CLAUDE.md omitted {rule}");
         }
         let enabled = ["claude", "codex", "antigravity", "opencode"]
             .into_iter()
@@ -2466,7 +2917,7 @@ args = ["--path", "{{store}}"]
         let refreshed_claude = std::fs::read_to_string(&claude_path).unwrap();
         for section in GUIDANCE_SECTIONS {
             assert_eq!(refreshed_agents.matches(section.current.trim()).count(), 1);
-            assert_eq!(refreshed_claude.matches(section.current.trim()).count(), 1);
+            assert_eq!(refreshed_claude.matches(section.current.trim()).count(), 0);
         }
         refresh_setup_in(store.path(), project.path(), Some(&enabled), &dirs).unwrap();
         assert_eq!(
@@ -2551,12 +3002,15 @@ args = ["--path", "{{store}}"]
         )
         .unwrap();
         let claude = std::fs::read_to_string(claude_project.path().join("CLAUDE.md")).unwrap();
-        assert!(claude.contains(&guidance_with_specifics(
+        let claude_source =
+            std::fs::read_to_string(claude_project.path().join("AGENTS.md")).unwrap();
+        assert!(claude_source.contains(&guidance_with_specifics(
             rules,
             testing.name,
             Some(specifics)
         )));
         assert!(claude.starts_with("Local preface.\n"));
+        assert!(claude.contains("@AGENTS.md"));
 
         let codex_project = tempfile::tempdir().unwrap();
         run_setup_in(
@@ -2605,10 +3059,10 @@ args = ["--path", "{{store}}"]
         }
         let specifics = "<!-- hotsheet:begin specifics=requirements-documentation v=1 -->\nCode map: notes/map.md. Status summary: notes/status.md.\n<!-- hotsheet:end specifics=requirements-documentation -->";
         let store = tempfile::tempdir().unwrap();
-        for (tool, filename) in [("claude", "CLAUDE.md"), ("codex", "AGENTS.md")] {
+        for tool in ["claude", "codex"] {
             let project = tempfile::tempdir().unwrap();
             run_setup_in(store.path(), project.path(), Some(tool), false, None, &[]).unwrap();
-            let path = project.path().join(filename);
+            let path = project.path().join("AGENTS.md");
             let fresh = std::fs::read_to_string(&path).unwrap();
             assert_eq!(fresh.matches(section.current.trim()).count(), 1);
             assert!(!project.path().join("docs").exists());

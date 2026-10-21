@@ -521,7 +521,7 @@ ticket's `## Preliminary thoughts` note, or in its claim note for trivial work:
 
 The T2 surfaces are the merge driver, claims and leases, index reconcile, the sync engine,
 the file-format parser, the terminal-sizing arbiter, auth/credentials/TLS, data migration,
-shared components, and the shared guidance templates. The list is kept in `CLAUDE.md`.
+shared components, and the shared guidance templates. The list is kept in `AGENTS.md`.
 The bundled testing guidance (`plugins/shared/testing-philosophy.md` v5) carries the same
 tiers for every project; each project names its own T2 surfaces. A reviewer may raise a tier.
 The completion `## Confidence` verification factor is judged against the tier.
@@ -567,7 +567,7 @@ instructions (v61) carry the same rule.
 
 ### 12.7.3 Stateful modules → transition-matrix + adversarial sequences
 
-Per the CLAUDE.md mandate, enumerate states **and** transitions and walk realistic
+Per the AGENTS.md mandate, enumerate states **and** transitions and walk realistic
 multi-step sequences across boundaries for: the **claim/lease** machine, the **index
 reconcile** (create/edit/delete/move/rename, git-HEAD-moves), the **terminal-sizing
 arbiter** (viewport focus/blur/join/leave/disconnect → size decisions —

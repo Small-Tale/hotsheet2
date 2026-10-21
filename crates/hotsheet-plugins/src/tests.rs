@@ -595,6 +595,23 @@ fn safe_rel_path_rejects_escapes() {
 }
 
 #[test]
+fn canonical_instruction_targets_share_the_setup_path_boundary() {
+    let mut plugin = builtin_plugins()
+        .into_iter()
+        .find(|plugin| plugin.id() == "claude")
+        .unwrap();
+    assert!(plugin.target_paths().contains(&"AGENTS.md"));
+    plugin
+        .manifest
+        .instructions
+        .canonical
+        .as_mut()
+        .unwrap()
+        .target = "../outside.md".into();
+    assert_eq!(plugin.unsafe_targets(), vec!["../outside.md"]);
+}
+
+#[test]
 fn a_plugin_with_an_escaping_target_is_flagged() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("evil");

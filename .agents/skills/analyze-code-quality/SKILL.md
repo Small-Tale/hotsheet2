@@ -7,7 +7,7 @@ allowed-tools: Read, Grep, Glob, Bash, Agent
 > **Thresholds, gates, and file lists live in their config files, not here.** CI
 > (`.github/workflows/ci.yml`) owns the Rust coverage floor, `migrator/vitest.config.mjs` owns
 > the migrator thresholds, `.cargo/config.toml` owns the `cargo lint` deny list,
-> `clients/web/package.json` owns the web scripts, and `CLAUDE.md` owns the conventions. Read
+> `clients/web/package.json` owns the web scripts, and `AGENTS.md` owns the conventions. Read
 > the source of truth; treat any figure below as a pointer to where to look.
 
 Analyze the overall quality of Hot Sheet 2 and produce one report covering every surface:
@@ -29,7 +29,7 @@ bugs (see step 7). Weight the report accordingly.
 
 Run independent suites in parallel where the machine allows. Playwright and some vitest
 end-to-end files spawn processes or browsers that fail inside a command sandbox; rerun
-those unsandboxed before treating a failure as a regression (CLAUDE.md, memory notes).
+those unsandboxed before treating a failure as a regression (AGENTS.md, memory notes).
 
 1. **Rust format, lint, and tests** (CLI, server, and every other crate)
 
@@ -94,12 +94,12 @@ those unsandboxed before treating a failure as a regression (CLAUDE.md, memory n
    ```
 
    Then read `docs/TEST-COVERAGE.md`. List features marked `unit-only`, `e2e-only`, or
-   manual-only (CLAUDE.md requires double coverage), and cross-check
+   manual-only (AGENTS.md requires double coverage), and cross-check
    `docs/manual-test-plan.md` for items that are now automatable.
 
-7. **Anti-patterns documented in CLAUDE.md and the docs**
+7. **Anti-patterns documented in AGENTS.md and the docs**
 
-   Read `CLAUDE.md`, `docs/12-code-organization-and-testing.md`, and `docs/ux-components.md`
+   Read `AGENTS.md`, `docs/12-code-organization-and-testing.md`, and `docs/ux-components.md`
    first; they are authoritative and evolve. Prefer **ast-grep** for structural checks
    (`ast-grep run --lang <rust|ts|tsx> -p '<pattern>' <path>`) over text grep. Check every
    surface:
@@ -110,7 +110,7 @@ those unsandboxed before treating a failure as a regression (CLAUDE.md, memory n
      - Lint suppressions (`#[allow(...)]`) without a stated compatibility reason.
      - Headless parity: a project bootstrap, recovery, source-linking, skill-install, or
        MCP/AI setup capability reachable only from the web client, with no `hotsheet-cli`
-       path (CLAUDE.md, "Headless setup parity").
+       path (AGENTS.md, "Headless setup parity").
      - Provider neutrality: ticket routing that does not use the qualified
        `(connection_id, native_id)` identity, or a provider operation that silently no-ops
        instead of failing explicitly through capabilities.
@@ -145,7 +145,7 @@ those unsandboxed before treating a failure as a regression (CLAUDE.md, memory n
 
    1. **Identify the stateful modules.** Look for internal modes or phases, state machines or
       lifecycles, caches with a miss path, leases or debounces, "first vs subsequent" or
-      "empty vs populated" branching, and accumulated mutable state. CLAUDE.md names the
+      "empty vs populated" branching, and accumulated mutable state. AGENTS.md names the
       canonical ones: claim/lease, index reconcile, the terminal-sizing arbiter, and the sync
       engine. Also consider the terminal broker lifecycle, command runs, the live-update
       replay/cursor channel, client autosave drafts and recovery, and the workbench and
