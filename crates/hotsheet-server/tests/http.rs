@@ -15664,7 +15664,7 @@ async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installe
                 "chat",
                 "Bash",
                 "ls",
-                std::time::Duration::from_secs(2),
+                std::time::Duration::from_secs(10),
                 hotsheet_aitools::PermissionDecision::Deny,
             )
         })
@@ -15700,7 +15700,7 @@ async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installe
         .oneshot(authed("GET", "/permissions/rules", None))
         .await
         .unwrap();
-    assert!(body_json(response).await.as_array().unwrap().is_empty());
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(
         worker.join().unwrap(),
         hotsheet_aitools::PermissionDecision::Deny
@@ -15708,7 +15708,7 @@ async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installe
 }
 
 #[tokio::test]
-async fn remembered_web_request_lists_only_a_safe_synopsis() {
+async fn remembered_web_request_lists_exact_action_only_after_authentication() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = dir.path().join("permissions.json");
@@ -15745,6 +15745,17 @@ async fn remembered_web_request_lists_only_a_safe_synopsis() {
         .unwrap();
     assert_eq!(body_json(response).await["persisted"], true);
     assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    let denied = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/permissions/rules")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     let listed = body_json(
         app.oneshot(authed("GET", "/permissions/rules", None))
             .await
@@ -15752,7 +15763,8 @@ async fn remembered_web_request_lists_only_a_safe_synopsis() {
     )
     .await;
     assert_eq!(listed[0]["description"], "Fetch web page");
-    assert!(!listed.to_string().contains(private_url));
+    assert_eq!(listed[0]["exact_action"], private_url);
+    assert_eq!(listed[0]["match_type"], "exact");
     assert!(
         !std::fs::read_to_string(rules)
             .unwrap()
@@ -15818,14 +15830,14 @@ async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() 
     )
     .await;
     assert_eq!(listed[0]["description"], "Network command");
-    for exposed in [durable, listed.to_string()] {
-        assert!(!exposed.contains("private.example"));
-        assert!(!exposed.contains("secret"));
-    }
+    assert!(!durable.contains("private.example"));
+    assert!(!durable.contains("secret"));
+    assert_eq!(listed[0]["exact_action"], ACTION);
 }
 
 #[tokio::test]
-async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
+async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in_authenticated_list()
+ {
     const ACTION: &str = "npm run test:unit -- --token=private-value";
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
@@ -15878,8 +15890,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
             .unwrap(),
     )
     .await;
-    let listed_text = listed.to_string();
-    assert!(!listed_text.contains("private-value"));
+    assert_eq!(listed[0]["exact_action"], ACTION);
     assert_eq!(listed[0]["description"], "Run npm unit tests");
     let action_key = listed[0]["action"].as_str().unwrap();
     assert!(action_key.starts_with("hmac-sha256:v2:"));
@@ -16036,6 +16047,108 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     assert!(hotsheet_aitools::load_permission_rules(&rules_path).is_empty());
+}
+
+#[tokio::test]
+async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answers() {
+    const ACTION: &str = "npm run test --token=private";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let rules_path = dir.path().join("permissions.json");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let worker_bridge = bridge.clone();
+    let worker_project = project.clone();
+    let waiter = std::thread::spawn(move || {
+        worker_bridge.request_blocking_for_project(worker_project, "chat", "Bash", ACTION)
+    });
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(response).await.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(bridge.rules().len(), 1);
+
+    std::fs::write(&rules_path, "corrupt ciphertext").unwrap();
+    let key = bridge
+        .rules()
+        .into_iter()
+        .find(|rule| rule.project == project)
+        .unwrap()
+        .action;
+    let revoke = serde_json::json!({"project": project, "tool": "Bash", "action": key}).to_string();
+    let response = app
+        .clone()
+        .oneshot(authed("DELETE", "/permissions/rules", Some(&revoke)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        bridge.rules().len(),
+        1,
+        "failed durable revoke keeps the live answer until health validation"
+    );
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        !String::from_utf8_lossy(
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+        )
+        .contains(ACTION)
+    );
+    assert!(bridge.rules().is_empty());
+    std::fs::remove_file(&rules_path).unwrap();
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "a missing vault must stay locked after the durable rules are withdrawn"
+    );
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            &project,
+            "other-chat",
+            "Bash",
+            ACTION,
+            std::time::Duration::from_millis(10),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
 }
 
 #[tokio::test]

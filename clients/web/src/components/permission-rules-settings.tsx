@@ -14,7 +14,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { Copy, Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -41,6 +41,7 @@ export interface PermissionRulesSettingsProps {
   /** Rule keys whose revoke request is in flight. */
   revoking?: readonly string[];
   message?: string;
+  locked?: boolean;
 }
 
 export const PERMISSION_RULE_BATCH_SIZE = 100;
@@ -51,7 +52,7 @@ export interface PermissionRuleFilters {
   decision: PermissionRuleDecisionFilter;
 }
 
-/** The API returns oldest first. Search the displayed identity, never raw actions or filtered-out metadata. */
+/** The API returns oldest first. Search the action and its visible context. */
 export function permissionRulesList(
   rules: readonly PermissionRule[],
   query: string,
@@ -86,15 +87,8 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   always: 'Persistent',
 };
 
-/** Keep the fingerprint so two operations with the same safe description remain distinct. */
 function ruleLabel(rule: PermissionRule) {
-  const fingerprint = /^hmac-sha256:v2:[a-f0-9]{16}:[a-f0-9]{64}$/.test(rule.action)
-    ? rule.action.slice(-8)
-    : undefined;
-  const detail = rule.description
-    ? `${rule.tool} · ${rule.description}`
-    : `${rule.tool} · ${rule.tool.toLowerCase() === 'bash' ? 'saved command' : 'saved action'}`;
-  return fingerprint ? `${detail} · ${fingerprint}` : detail;
+  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${rule.project} · ${SCOPE_LABELS[rule.scope]} · Exact match`;
 }
 
 /**
@@ -109,6 +103,7 @@ export function PermissionRulesSettings({
   preview,
   revoking = [],
   message = '',
+  locked = false,
 }: PermissionRulesSettingsProps) {
   const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
     filters: PermissionRuleFilters = {
@@ -125,8 +120,6 @@ export function PermissionRulesSettings({
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule),
-        promptUnavailable = !rule.description,
-        reapprovalAvailable = promptUnavailable && rule.tool.toLowerCase() === 'bash' && rule.scope !== 'chat',
         selected = surface === 'dialog' ? dialogSelected.has(key) : previewSelected.has(key),
         busy = surface === 'dialog' ? dialog?.busy : preview?.busy;
       return (
@@ -146,31 +139,31 @@ export function PermissionRulesSettings({
               rootAttributes={{ 'data-rule-key': key }}
               density="compact"
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
-              label={
-                <Text variant="span" wrap="truncate" truncate="middle" truncateKeep={8} flush>
-                  {label}
-                </Text>
-              }
-              description={
-                surface === 'dialog'
-                  ? [
-                      promptUnavailable ? 'Original prompt unavailable' : undefined,
-                      rule.scope === 'chat' ? SCOPE_LABELS.chat : undefined,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || undefined
-                  : `${promptUnavailable ? 'Original prompt unavailable · ' : ''}${allowed ? 'Allowed' : 'Denied'} · ${SCOPE_LABELS[rule.scope]}`
-              }
-              title={
-                reapprovalAvailable
-                  ? `${label} — The old command cannot be recovered from its fingerprint. Forget this answer to review the command on its next use and choose a safe label when remembering it again.`
-                  : `${label} — ${promptUnavailable ? 'The original prompt cannot be recovered from its fingerprint.' : 'Full action details hidden to protect sensitive values.'}`
-              }
+              label={rule.tool}
+              description={allowed ? 'Allowed' : 'Denied'}
+              title={label}
               pressed={selected}
               disabled={busy || revoking.includes(key)}
               accessibleLabel={`Select ${label}`}
             />
+            <div class="permission-rules-settings__details">
+              <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>
+              <span>{rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}</span>
+              <span>{SCOPE_LABELS[rule.scope]} · Exact match</span>
+            </div>
           </div>
+          {rule.exact_action && (
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.value}
+              rootAttributes={{ 'data-rule-key': key }}
+              icon={<LucideIcon icon={Copy} name="copy" />}
+              ariaLabel={`Copy Exact Action for ${rule.tool}`}
+            >
+              Copy
+            </Button>
+          )}
         </div>
       );
     });
@@ -228,7 +221,13 @@ export function PermissionRulesSettings({
     >
       <List gap="xs">
         <ListHeader label="Remembered Answers" headingLevel={3} density="compact" />
-        {rules.length === 0 ? (
+        {locked ? (
+          <EmptyState
+            icon={<LucideIcon size="xl" icon={ShieldX} name="shield-x" />}
+            title="Remembered Answers Locked"
+            detail="The permission key or encrypted rule data is unavailable. Saved rules cannot approve requests until access is restored."
+          />
+        ) : rules.length === 0 ? (
           <EmptyState
             icon={<LucideIcon size="xl" icon={ShieldCheck} name="shield-check" />}
             title="No Remembered Answers"

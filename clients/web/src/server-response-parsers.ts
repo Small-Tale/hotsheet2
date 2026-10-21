@@ -490,7 +490,7 @@ export const parsePermissionRule = shape<PermissionRule>(
     decision: (field) => field === 'allow' || field === 'deny',
     scope: (field) => field === 'chat' || field === 'session' || field === 'always',
   },
-  { connection: isString, description: isString },
+  { connection: isString, description: isString, exact_action: isString, match_type: (field) => field === 'exact' },
 );
 
 export const parseToolConnection = shape<ToolConnection>(

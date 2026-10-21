@@ -11,30 +11,35 @@
 .permission-request-card__error {
   color: var(--wa-color-danger-on-quiet);
 }
-.permission-request-card__description {
+.permission-request-card__confirmation {
   display: grid;
-  width: calc(100% - remify(32px));
-  box-sizing: border-box;
-  gap: remify(4px);
-  margin: remify(10.4px) remify(16px) 0;
-  color: var(--wa-color-neutral-on-quiet);
+  width: 100%;
+  gap: remify(8px);
+  padding: remify(12px) remify(16px);
   font-size: var(--wa-font-size-xs);
 }
-.permission-request-card__description select {
-  width: min(100%, remify(280px));
-  min-height: remify(32px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-neutral-fill-normal);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
+.permission-request-card__confirmation dl {
+  display: grid;
+  grid-template-columns: minmax(remify(90px), auto) minmax(0, 1fr);
+  gap: remify(4px) remify(12px);
+  margin: 0;
 }
-.permission-request-card__description-preview {
-  color: var(--wa-color-neutral-on-normal);
+.permission-request-card__confirmation dt {
+  color: var(--wa-color-neutral-on-quiet);
 }
-.permission-request-card__description-help {
+.permission-request-card__confirmation dd {
   min-width: 0;
-  max-width: remify(520px);
-  overflow-wrap: break-word;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.permission-request-card__exact-action {
+  white-space: pre-wrap;
+}
+.permission-request-card__confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: remify(8px);
 }
 .permission-request-card__actions {
   display: grid;

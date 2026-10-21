@@ -22,6 +22,7 @@ use hotsheet_sync::LockExt;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -360,7 +361,7 @@ fn effective_rule<'a>(
 
 /// A remembered rule as a client lists it (HS2-JNHAYB): which scope holds it and what it
 /// answers. `scope` is `chat`, `session`, or `always`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct RuleInfo {
     pub project: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -368,9 +369,29 @@ pub struct RuleInfo {
     pub tool: String,
     pub action: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub exact_action: Option<String>,
+    pub match_type: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub decision: Decision,
     pub scope: Scope,
+}
+
+impl std::fmt::Debug for RuleInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuleInfo")
+            .field("project", &"[redacted]")
+            .field("tool", &self.tool)
+            .field("action", &"[redacted]")
+            .field(
+                "exact_action",
+                &self.exact_action.as_ref().map(|_| "[redacted]"),
+            )
+            .field("match_type", &self.match_type)
+            .field("decision", &self.decision)
+            .field("scope", &self.scope)
+            .finish()
+    }
 }
 
 impl From<&Rule> for RuleInfo {
@@ -380,6 +401,8 @@ impl From<&Rule> for RuleInfo {
             connection: rule.connection.clone(),
             tool: rule.tool.clone(),
             action: rule.action.clone(),
+            exact_action: rule.exact_action.clone(),
+            match_type: "exact",
             description: rule.description.clone(),
             decision: rule.decision,
             scope: if rule.connection.is_some() {
@@ -554,6 +577,8 @@ impl PermissionBridge {
                 {
                     rule.exact_action = Some(rule.action.clone());
                 }
+                // A fingerprint without its authenticated plaintext cannot be reviewed.
+                rule.exact_action.as_ref()?;
                 rule.action = stored_action_key(&rule.action, &self.action_key)?;
                 rule.description = rule
                     .description
@@ -724,6 +749,8 @@ pub struct SharedPermissionBridge {
     /// (HS2-9R9YZW). `None` = headless / no observer.
     on_pending: Mutex<Option<RequestCallback>>,
     on_removed: Mutex<Option<RequestCallback>>,
+    durable_validator: Mutex<Option<Box<dyn Fn() -> bool + Send + Sync>>>,
+    durable_locked: AtomicBool,
 }
 
 impl SharedPermissionBridge {
@@ -735,6 +762,8 @@ impl SharedPermissionBridge {
             async_notify: tokio::sync::Notify::new(),
             on_pending: Mutex::new(None),
             on_removed: Mutex::new(None),
+            durable_validator: Mutex::new(None),
+            durable_locked: AtomicBool::new(false),
         }
     }
 
@@ -748,6 +777,39 @@ impl SharedPermissionBridge {
         *self.on_removed.lock_or_recover() = Some(Box::new(f));
     }
 
+    /// Recheck the host key and encrypted rule data before any durable auto-answer.
+    /// On failure, old in-memory approvals are withdrawn and the request asks again.
+    pub fn set_durable_validator(&self, f: impl Fn() -> bool + Send + Sync + 'static) {
+        *self.durable_validator.lock_or_recover() = Some(Box::new(f));
+    }
+
+    fn enforce_durable_health(&self, bridge: &mut PermissionBridge) {
+        if !bridge.rules.iter().any(|rule| rule.persist) {
+            return;
+        }
+        if self
+            .durable_validator
+            .lock_or_recover()
+            .as_ref()
+            .is_some_and(|check| !check())
+        {
+            self.durable_locked.store(true, Ordering::Release);
+            bridge.rules.retain(|rule| !rule.persist);
+        }
+    }
+
+    pub fn drop_durable_rules(&self) {
+        self.durable_locked.store(true, Ordering::Release);
+        self.inner
+            .lock_or_recover()
+            .rules
+            .retain(|rule| !rule.persist);
+    }
+
+    pub fn durable_rules_locked(&self) -> bool {
+        self.durable_locked.load(Ordering::Acquire)
+    }
+
     /// Replace the bridge's allow-rules (e.g. seeding durable `Always` rules loaded from
     /// disk at startup) without disturbing the observer or any in-flight waiters.
     pub fn reseed_rules(&self, rules: Vec<Rule>) {
@@ -759,12 +821,16 @@ impl SharedPermissionBridge {
         self.inner
             .lock_or_recover()
             .set_action_key_and_rules(key, rules);
+        self.durable_locked.store(false, Ordering::Release);
     }
 
     /// Add another project's durable rules without disturbing already seeded projects.
     pub fn add_rules(&self, rules: impl IntoIterator<Item = Rule>) {
         let mut bridge = self.inner.lock_or_recover();
         for mut rule in rules {
+            if rule.exact_action.is_none() {
+                continue;
+            }
             if let Some(action) = stored_action_key(&rule.action, &bridge.action_key) {
                 rule.action = action;
                 bridge.rules.push(rule);
@@ -798,12 +864,17 @@ impl SharedPermissionBridge {
             tool.into(),
             action.into(),
         );
-        let id = match self.inner.lock_or_recover().request_for_project(
-            project.clone(),
-            connection.clone(),
-            tool.clone(),
-            action.clone(),
-        ) {
+        let outcome = {
+            let mut bridge = self.inner.lock_or_recover();
+            self.enforce_durable_health(&mut bridge);
+            bridge.request_for_project(
+                project.clone(),
+                connection.clone(),
+                tool.clone(),
+                action.clone(),
+            )
+        };
+        let id = match outcome {
             Outcome::Auto(d) => return d, // a rule answered — no human needed
             Outcome::Pending(id) => id,
         };
@@ -952,13 +1023,18 @@ impl SharedPermissionBridge {
             action,
             agent,
         } = ask;
-        let id = match self.inner.lock_or_recover().request_for_project_as(
-            project.clone(),
-            connection.clone(),
-            tool.clone(),
-            action.clone(),
-            agent.clone(),
-        ) {
+        let outcome = {
+            let mut bridge = self.inner.lock_or_recover();
+            self.enforce_durable_health(&mut bridge);
+            bridge.request_for_project_as(
+                project.clone(),
+                connection.clone(),
+                tool.clone(),
+                action.clone(),
+                agent.clone(),
+            )
+        };
+        let id = match outcome {
             Outcome::Auto(d) => return Enqueued::Answered(d),
             Outcome::Pending(id) => id,
         };
@@ -1096,6 +1172,43 @@ impl SharedPermissionBridge {
         self.inner
             .lock_or_recover()
             .revoke(project, connection, tool, action)
+    }
+
+    /// Persist a durable revocation before removing the live answer. A failed vault write
+    /// must leave the remembered rule intact so Settings can report and retry it.
+    pub fn revoke_with_storage(
+        &self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+        durable_path: Option<&Path>,
+    ) -> io::Result<Option<Rule>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let Some(current) = bridge.rules.iter().find(|rule| {
+            rule.project == project
+                && rule.connection.as_deref() == connection
+                && rule.tool == tool
+                && (rule.action == action
+                    || rule.matches(project, tool, action, &bridge.action_key))
+        }) else {
+            return Ok(None);
+        };
+        if current.persist {
+            let path = durable_path
+                .ok_or_else(|| io::Error::other("permission rule store unavailable"))?;
+            if !remove_rule(path, project, tool, action)? {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "durable permission rule missing",
+                ));
+            }
+        }
+        let removed = bridge.revoke(project, connection, tool, action);
+        if removed.as_ref().is_some_and(|rule| rule.persist) {
+            bridge.revoke("", None, tool, action);
+        }
+        Ok(removed)
     }
 
     /// Change an exact remembered answer while holding the bridge lock across durable
@@ -1322,6 +1435,11 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
             rule.into_rule(&key)
         })
         .collect()
+}
+
+/// Check key availability and authenticate the on-disk envelope for a local server.
+pub fn rules_health(path: &Path) -> io::Result<()> {
+    crate::permission_vault::load(path).map(|_| ())
 }
 
 /// Remove a durable rule for `(project, tool, action)` from `path` (HS2-JNHAYB revoke).
@@ -2138,7 +2256,7 @@ mod tests {
     }
 
     #[test]
-    fn secret_bearing_actions_remain_exact_but_never_enter_rule_exports_or_storage() {
+    fn secret_bearing_actions_remain_exact_and_are_redacted_from_debug() {
         let secret = "curl -H 'Authorization: Bearer sk-example-private' https://example.test";
         let near = "curl -H 'Authorization: Bearer sk-example-other' https://example.test";
         let dir = tempfile::tempdir().unwrap();
@@ -2159,11 +2277,8 @@ mod tests {
             .iter()
             .map(RuleInfo::from)
             .collect::<Vec<_>>();
-        assert!(
-            !serde_json::to_string(&listed)
-                .unwrap()
-                .contains("sk-example-private")
-        );
+        assert_eq!(listed[0].exact_action.as_deref(), Some(secret));
+        assert!(!format!("{:?}", listed[0]).contains("sk-example-private"));
         assert_eq!(
             bridge.request_for_project("project", "other-chat", "Bash", secret),
             Outcome::Auto(Decision::Allow)

@@ -48,6 +48,7 @@ export interface SettingsSurfaceDependencies {
   permissionRulesDialogFor: (projectId: string, visible: boolean) => Props['permissions']['dialog'];
   permissionRulesPreviewFor: (projectId: string, visible: boolean) => Props['permissions']['preview'];
   permissionRulesMessage: Readable<string>;
+  lockedPermissionRules: Readable<ReadonlySet<string>>;
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
@@ -97,6 +98,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     permissionRulesDialogFor,
     permissionRulesPreviewFor,
     permissionRulesMessage,
+    lockedPermissionRules,
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
@@ -181,6 +183,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           preview: permissionRulesPreviewFor(current.id, settingsCategory() === 'permissions'),
           revoking: revokingPermissionRules.value,
           rulesMessage: permissionRulesMessage.value,
+          locked: lockedPermissionRules.value.has(current.id),
         }}
         columns={{ hideVerified: hideVerifiedColumn() }}
         general={{ showLoadingActivity: showLoadingActivity.value }}

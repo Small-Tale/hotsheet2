@@ -14,11 +14,10 @@ import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
 import { NotificationsPausedBanner } from './notifications-paused-banner';
 import {
-  clearSelectedBashDescription,
   PermissionRequestCard,
   PermissionRequestPopup,
-  selectedBashDescription,
-  setSelectedBashDescription,
+  rememberedPermissionPreview,
+  setRememberedPermissionPreview,
   updatePermissionCountdownText,
 } from './permission-request-card';
 import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList, PermissionRulesSettings } from './permission-rules-settings';
@@ -266,6 +265,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     project: '/p',
     tool: index % 2 ? 'WebFetch' : 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-${index.toString().padStart(8, '0')}`,
     decision: index % 2 ? 'deny' : 'allow',
     scope: index % 2 ? 'session' : 'always',
   }));
@@ -281,7 +281,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).not.toContain('aria-label="Revoke');
     expect(markup).toContain('data-scope="session"');
     expect(markup).toContain('data-scope="always"');
-    expect(markup).toContain('WebFetch · saved action · 00000011');
+    expect(markup).toContain('command-00000011');
     expect(markup).toContain('Show all 12 answers');
     const disclosure = markup.match(
       /<button class="kui-button"[^>]*data-action="open-permission-rules"[^>]*>[^]*?<\/button>/u,
@@ -290,7 +290,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(disclosure).toContain('data-shape="pill"');
     expect(disclosure).toContain('Show all 12 answers');
     expect(markup).not.toContain('data-lucide="chevron-right"');
-    expect(markup).not.toContain('00000008');
+    expect(markup).not.toContain('command-00000008');
   });
 
   it('marks denied, selected, and busy answers in both row compositions', () => {
@@ -335,6 +335,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     const many = Array.from({ length: 205 }, (_, index) => ({
       ...rules[index % rules.length],
       action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+      exact_action: `command-${index.toString().padStart(8, '0')}`,
     }));
     const first = permissionRulesList(many, '', 100);
     expect(first.rows).toHaveLength(100);
@@ -345,7 +346,10 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(permissionRulesList([], 'Bash', 300).rows).toEqual([]);
     expect(permissionRulesList(many, '', 100).rows).toHaveLength(100);
     expect(permissionRulesList(rules, '00000010', 100).rows).toHaveLength(1);
-    expect(permissionRulesList([{ ...rules[0], action: 'secret-shell-command' }], 'secret', 100).rows).toEqual([]);
+    expect(
+      permissionRulesList([{ ...rules[0], action: 'opaque-key', exact_action: 'secret-shell-command' }], 'secret', 100)
+        .rows,
+    ).toHaveLength(1);
   });
 
   it('combines lifetime, decision, and search before batching (HS2-7Z3VWR)', () => {
@@ -373,7 +377,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(one).not.toMatch(/>1 answers?</u);
     expect(
       permissionRulesList(listRules, 'persistent', 100, { lifetime: 'permanent', decision: 'allow' }).matches,
-    ).toHaveLength(0);
+    ).toHaveLength(6);
   });
 
   it('places equal filters after search and omits selected filter values from dialog rows (HS2-ZQZ3V2)', () => {
@@ -383,9 +387,9 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
       dialog.indexOf('permission-rules-settings__filters'),
     );
     expect(dialog.match(/class="kui-segmented-control"[^>]*data-layout="equal"/g)).toHaveLength(2);
-    expect(dialog).not.toContain('Allowed · Persistent');
-    expect(dialog).not.toContain('Denied · Session (until restart)');
-    expect(markup).toContain('Allowed · Persistent');
+    expect(dialog).toContain('Persistent · Exact match');
+    expect(dialog).not.toContain('Session (until restart) · Exact match');
+    expect(markup).toContain('Persistent · Exact match');
   });
 
   it('shows a scrollable list and accessible placeholder search (HS2-988X4X, HS2-4HTTMK)', () => {
@@ -442,24 +446,25 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
 });
 
 describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
-  it('keeps a pending Bash label through rerenders and clears it for the next request (HS2-KSY290)', () => {
+  it('keeps a remembered-rule preview on its request and clears it after use', () => {
     const other = { ...pending, key: `${pending.key}-other` };
-    setSelectedBashDescription(pending.key, 'Network command');
-    expect(selectedBashDescription(pending.key)).toBe('Network command');
-    expect(String(PermissionRequestCard({ item: pending }))).toContain('value="Network command" selected');
-    expect(String(PermissionRequestCard({ item: pending }))).toContain('Network command</output>');
-    expect(String(PermissionRequestCard({ item: other }))).not.toContain('value="Network command" selected');
-    clearSelectedBashDescription(pending.key);
-    expect(selectedBashDescription(pending.key)).toBeUndefined();
-    expect(String(PermissionRequestCard({ item: pending }))).toContain('value="" selected');
+    setRememberedPermissionPreview(pending.key, 'always');
+    expect(rememberedPermissionPreview(pending.key)).toBe('always');
+    const markup = String(PermissionRequestCard({ item: pending }));
+    expect(markup).toContain('Review the rule to remember');
+    expect(markup).toContain('npm run test');
+    expect(markup).toContain('Exact action only');
+    expect(markup).toContain('All chats in this project');
+    expect(markup).toContain('Persistent, until revoked');
+    expect(markup).toContain('data-rule-confirmed="true"');
+    expect(String(PermissionRequestCard({ item: other }))).not.toContain('Review the rule to remember');
+    setRememberedPermissionPreview(pending.key);
+    expect(rememberedPermissionPreview(pending.key)).toBeUndefined();
   });
   it('offers Allow for This Chat and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));
     expect(single).toMatch(/data-scope="chat"[^>]*>[^]*Allow for This Chat/);
-    expect(single).toContain('aria-label="Remembered Bash answer name"');
-    expect(single).toContain('Settings preview: Bash ·');
-    expect(single).toContain('automatic name if recognized</output>');
-    expect(single).toContain('value="Network command"');
+    expect(single).not.toContain('Remembered Bash answer name');
     expect(single).not.toContain('data-permission-group-count');
     const grouped = String(PermissionRequestCard({ item: pending, presentation: 'popup', groupCount: 3 }));
     expect(grouped).toContain('data-permission-group-count="3"');
@@ -469,7 +474,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     );
     expect(remembered).toContain('allowed for this chat');
     expect(remembered).not.toContain('Allow for This Chat');
-    expect(remembered).not.toContain('Remembered Bash answer name');
+    expect(remembered).not.toContain('Review the rule to remember');
   });
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));
@@ -484,24 +489,29 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
             connection: 'chat-a',
             tool: 'Bash',
             action: first,
+            exact_action: 'npm test',
             decision: 'allow',
             scope: 'chat',
           },
-          { project: '/p', tool: 'Bash', action: second, decision: 'deny', scope: 'always' },
+          {
+            project: '/p',
+            tool: 'Bash',
+            action: second,
+            exact_action: 'rm -rf build',
+            decision: 'deny',
+            scope: 'always',
+          },
         ],
         revoking: [JSON.stringify(['/p', '', 'Bash', second])],
         message: 'Could not revoke the rule.',
       }),
     );
-    expect(markup).toContain('Bash · saved command · 12345678');
-    expect(markup).toContain('data-truncate="middle"');
-    expect(markup).toContain('kui-text__truncate-tail">12345678');
+    expect(markup).toContain('npm test');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Original prompt unavailable · Denied · Persistent');
+    expect(markup).toContain('Persistent · Exact match');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
-    expect(markup).not.toContain('npm test');
-    expect(markup).not.toContain('rm -rf build');
+    expect(markup).toContain('rm -rf build');
     expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(2);
     expect(markup).not.toContain('data-permission-rule-menu=');
     expect(markup).toContain('Set Selected to Session');
@@ -509,38 +519,43 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('Selected Answer Actions');
     expect(markup).toContain('Could not revoke the rule.');
   });
-  it('shows a safe Bash operation in preview and dialog while keeping the fingerprint and private action hidden', () => {
+  it('shows the exact action in preview and dialog without showing the fingerprint', () => {
     const rule: PermissionRule = {
       project: '/p',
       tool: 'Bash',
       action: `hmac-sha256:v2:${'a'.repeat(16)}:${'b'.repeat(56)}12345678`,
       description: 'Run npm unit tests',
+      exact_action: 'npm run test',
       decision: 'allow',
       scope: 'always',
     };
     for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
       const markup = String(PermissionRulesSettings({ rules: [rule], dialog }));
-      expect(markup).toContain('Bash · Run npm unit tests · 12345678');
+      expect(markup).toContain('npm run test');
       expect(markup).toContain('Selected Answer Actions');
-      expect(markup).toContain('Full action details hidden to protect sensitive values');
+      expect(markup).toContain('data-action="copy-permission-rule-action"');
     }
-    expect(permissionRulesList([rule], 'unit tests', 100).rows).toEqual([rule]);
+    expect(permissionRulesList([rule], 'npm run test', 100).rows).toEqual([rule]);
   });
-  it('shows a safe tool synopsis and explains when an older fingerprint has no prompt', () => {
+  it('shows a locked fallback for an older rule without decryptable action', () => {
     const action = `hmac-sha256:v2:${'a'.repeat(16)}:${'b'.repeat(56)}12345678`;
     const known: PermissionRule = {
       project: '/p',
       tool: 'WebFetch',
       action,
       description: 'Fetch web page',
+      exact_action: 'https://private.example',
       decision: 'allow',
       scope: 'always',
     };
-    const legacy: PermissionRule = { ...known, action: `${action.slice(0, -8)}87654321`, description: undefined };
+    const legacy: PermissionRule = {
+      ...known,
+      action: `${action.slice(0, -8)}87654321`,
+      exact_action: undefined,
+      description: undefined,
+    };
     const markup = String(PermissionRulesSettings({ rules: [known, legacy] }));
-    expect(markup).toContain('WebFetch · Fetch web page · 12345678');
-    expect(markup).toContain('WebFetch · saved action · 87654321');
-    expect(markup).toContain('Original prompt unavailable');
-    expect(markup).not.toContain('private.example');
+    expect(markup).toContain('https://private.example');
+    expect(markup).toContain('Action unavailable — revoke and review again');
   });
 });

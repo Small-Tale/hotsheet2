@@ -3,7 +3,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
-import { selectedBashDescription, setSelectedBashDescription } from '../components/permission-request-card';
+import { rememberedPermissionPreview, setRememberedPermissionPreview } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -191,28 +191,43 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       const key = data(target).requestKey,
         item = pendingPermissions().find((value) => value.key === key);
       if (item) {
-        void resolvePermission(
-          item,
-          data(target).decision as PermissionDecision,
-          data(target).scope as PermissionScope,
-          false,
-          true,
-          selectedBashDescription(item.key),
-        );
+        const scope = data(target).scope as PermissionScope;
+        if ((scope === 'chat' || scope === 'always') && target.getAttribute('data-rule-confirmed') !== 'true') {
+          setRememberedPermissionPreview(item.key, scope);
+          permissionRevision.value += 1;
+          return;
+        }
+        if ((scope === 'chat' || scope === 'always') && rememberedPermissionPreview(item.key) !== scope) return;
+        void resolvePermission(item, data(target).decision as PermissionDecision, scope, false, true);
       }
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[data-permission-description]', (_event, target) => {
-      const key = target.closest('[data-request-key]')?.getAttribute('data-request-key');
-      if (!key) return;
-      const description = (target as HTMLSelectElement).value;
-      setSelectedBashDescription(key, description);
-      const preview = target
-        .closest('[data-request-key]')
-        ?.querySelector<HTMLOutputElement>('[data-permission-description-preview]');
-      if (preview) preview.textContent = description || 'automatic name if recognized';
-    }),
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.cancelRememberedPermission.selector,
+      (_event, target) => {
+        const key = data(target).requestKey;
+        if (!key) return;
+        setRememberedPermissionPreview(key);
+        permissionRevision.value += 1;
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.selector,
+      (_event, target) => {
+        const action = target.closest('[data-permission-rule]')?.querySelector('[data-exact-action]')?.textContent;
+        if (action)
+          void navigator.clipboard.writeText(action).catch(() => {
+            error.value = 'Could not copy the action.';
+          });
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'contextmenu', '[data-permission-rule]', (event, target) => {

@@ -2740,18 +2740,16 @@ Search sits above two equal-width segmented controls that filter the dialog by P
 Session and by Allow or Disallow, defaulting to Persistent and Allow. The controls stack at
 phone width. Session includes chat-only answers, whose exact lifetime remains in their row.
 Filters combine with search before batching; changing one resets the visible window to 100
-and keeps the query and selection across views. Dialog rows omit decision and lifetime text
-already conveyed by the selected filters, and the duplicate result-count line is absent;
-the unfiltered preview still names each answer's decision and lifetime (HS2-7Z3VWR,
-HS2-ZQZ3V2).
+and keeps the query and selection across views. Both dialog and preview rows retain the
+decision, lifetime, and exact match label so each rule is independently reviewable; the
+duplicate result-count line is absent (HS2-CA5MSD).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
-its leading icon slot. New answers for recognized tools show a fixed-vocabulary operation synopsis
-plus their short fingerprint. Older entries without a synopsis say the original prompt is
-unavailable; a project-wide Bash answer can be deleted and asked again on its next use. The permission
-prompt keeps the real command readable and offers an optional safe name only for a remembered
-Bash answer. It previews the resulting Settings label as the choice changes and explains that
-the name does not broaden exact matching. One-time answers ignore that selector. Names use a
-fixed list and never contain command arguments or paths (HS2-KSY290, HS2-777E9V). The
+its leading icon slot. Each row shows its exact action, tool, project/chat reach, decision,
+lifetime, and exact match type, with a Copy button. An action that cannot be decrypted shows
+an unavailable state so it can be revoked and reviewed on its next request. The permission
+prompt keeps the real command readable; choosing a remembered scope opens a separate review
+of the exact action and rule reach before confirmation. The optional Bash name selector and
+short fingerprint label have been removed (HS2-CA5MSD). The
 preview and dialog rows are selection controls: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and
 Command/Ctrl-A while focused in a list adds its visible rows. Search and filter changes keep
@@ -2765,8 +2763,7 @@ Denied answers have a distinct background in both views; selection and keyboard 
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label
 (HS2-4HTTMK); search covers only
-the safe visible tool, operation description, and opaque fingerprint,
-never the hidden command or path. Search resets the visible window to 100 answers;
+the visible tool, exact action, project, reach, and lifetime. Search resets the visible window to 100 answers;
 add/revoke updates clamp that window.
 There is no separate count/sort line or page footer (HS2-M97DKR, HS2-988X4X). Closing
 the dialog or switching projects resets its search, visible window, and selection (HS2-16XPHH,

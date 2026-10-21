@@ -15293,6 +15293,8 @@ test('answers identical permission requests for this chat and revokes the rememb
         connection: 'hotsheet-drawer-chat-1',
         tool: 'Bash',
         action: rememberedActionKey(secretAction),
+        exact_action: secretAction,
+        match_type: 'exact',
         decision: 'allow',
         scope: 'chat',
       },
@@ -15319,6 +15321,16 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-grouped-popup-390.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await popup.getByRole('button', { name: 'Allow for This Chat', exact: true }).click();
+  await expect(popup).toContainText('Review the rule to remember');
+  await expect(popup).toContainText(secretAction);
+  await expect(popup).toContainText('This chat only');
+  await expect(popup).toContainText('Exact action only');
+  expect(answers).toEqual([]);
+  await popup.getByRole('button', { name: 'Back' }).click();
+  await expect(popup).not.toContainText('Review the rule to remember');
+  await popup.getByRole('button', { name: 'Allow for This Chat', exact: true }).click();
+  expect(answers).toEqual([]);
+  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
   await expect(popup).toHaveCount(0);
   // One remembered answer covers the group: only the first request is sent, scoped to the chat.
   expect(answers).toEqual([{ id: '81', body: { decision: 'allow', scope: 'chat' } }]);
@@ -15327,10 +15339,12 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
-  await expect(row).toContainText(`Bash · saved command · ${rememberedActionKey(secretAction).slice(-8)}`);
-  await expect(row).toContainText('Allowed · This chat only, until it closes');
+  await expect(row).toContainText(secretAction);
+  await expect(row).toContainText('This chat only, until it closes · Exact match');
   await expect(row).not.toContainText('Details hidden');
-  await expect(row).not.toContainText('example-private-value');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await row.getByRole('button', { name: 'Copy Exact Action for Bash' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secretAction);
   await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.screenshot({ path: 'target/visual-captures/hs2-4mf2m1-remembered-rules-2048.png' });
@@ -15363,9 +15377,22 @@ test('answers identical permission requests for this chat and revokes the rememb
   ]);
 });
 
-test('reapproves an unidentified Bash answer with a safe label after showing the command again (HS2-KSY290)', async ({
-  page,
-}) => {
+test('shows locked remembered answers when the vault read fails (HS2-CA5MSD)', async ({ page }) => {
+  await mockProject(page);
+  await page.route('**/permissions/rules', (route) =>
+    route.fulfill({ status: 503, json: { error: 'permission-rule store locked or unavailable' } }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const remembered = page.locator('[data-component="permission-rules-settings"]');
+  await expect(remembered).toContainText('Remembered Answers Locked');
+  await expect(remembered).not.toContainText('No Remembered Answers');
+});
+
+test('reapproves a legacy Bash answer after reviewing the exact command again (HS2-CA5MSD)', async ({ page }) => {
   await mockProject(page);
   const action = 'curl https://private.example/token=secret',
     fingerprint = rememberedActionKey(action),
@@ -15392,7 +15419,7 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
     const body = route.request().postDataJSON() as Record<string, unknown>;
     answers.push(body);
     pending = [];
-    rules = [{ ...oldRule, description: body.description }];
+    rules = [{ ...oldRule, exact_action: action, match_type: 'exact' }];
     return route.fulfill({ json: { connection: 'chat', decision: 'allow', persisted: true } });
   });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -15402,7 +15429,7 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
-  await expect(remembered).toContainText('Original prompt unavailable');
+  await expect(remembered).toContainText('Action unavailable');
   await remembered.locator('[data-permission-rule] [data-action="select-permission-rule-row"]').first().click();
   await remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
   await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
@@ -15424,26 +15451,21 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText(action);
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-reapproval-wide.png', fullPage: true });
-  await expect(popup.locator('[data-permission-description-preview]')).toHaveText('automatic name if recognized');
-  await popup.getByRole('combobox', { name: 'Remembered Bash answer name' }).selectOption('Network command');
-  await expect(popup.locator('[data-permission-description-preview]')).toHaveText('Network command');
-  await popup.getByRole('combobox', { name: 'Remembered Bash answer name' }).selectOption('');
-  await expect(popup.locator('[data-permission-description-preview]')).toHaveText('automatic name if recognized');
-  await popup.getByRole('combobox', { name: 'Remembered Bash answer name' }).selectOption('Network command');
+  await popup.getByRole('button', { name: 'Always Allow', exact: true }).click();
+  await expect(popup).toContainText('Review the rule to remember');
+  await expect(popup).toContainText(action);
   await popup.screenshot({ path: 'target/visual-captures/hs2-777e9v-popup-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(350);
   await popup.screenshot({ path: 'target/visual-captures/hs2-777e9v-popup-phone.png' });
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-reapproval-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(popup.getByRole('combobox', { name: 'Remembered Bash answer name' })).toHaveValue('Network command');
-  await popup.getByRole('button', { name: 'Always Allow' }).click();
+  await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
   await expect(popup).toHaveCount(0);
-  expect(answers).toEqual([{ decision: 'allow', scope: 'always', description: 'Network command' }]);
+  expect(answers).toEqual([{ decision: 'allow', scope: 'always' }]);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
-  await expect(remembered).toContainText('Bash · Network command');
-  await expect(remembered).not.toContainText('private.example');
+  await expect(remembered).toContainText(action);
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -15453,7 +15475,7 @@ test('reapproves an unidentified Bash answer with a safe label after showing the
   await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
   // The phone rail's exit transition can still cover the content after its toggle flips.
   await page.waitForTimeout(350);
-  await expect(remembered).toContainText('Bash · Network command');
+  await expect(remembered).toContainText(action);
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-phone.png', fullPage: true });
 });
 
@@ -15465,6 +15487,7 @@ test('previews three recent permission answers and searches the scrollable full 
     project: string;
     tool: string;
     action: string;
+    exact_action?: string;
     description?: string;
     decision: string;
     scope: string;
@@ -15472,6 +15495,7 @@ test('previews three recent permission answers and searches the scrollable full 
     project: '/work/demo.hs2',
     tool: index % 2 ? 'WebFetch' : 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-${index.toString().padStart(8, '0')}`,
     decision: index % 2 ? 'deny' : 'allow',
     scope: index % 2 ? 'session' : 'always',
   }));
@@ -15502,9 +15526,8 @@ test('previews three recent permission answers and searches the scrollable full 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
-  await expect(recent).toContainText('WebFetch · Fetch web page · 00000011');
-  await expect(recent).toContainText('Bash · Run npm unit tests · 00000010');
-  await expect(recent).toContainText('Original prompt unavailable');
+  await expect(recent).toContainText('command-00000011');
+  await expect(recent).toContainText('command-00000010');
   await expect(recent.locator('[data-component="list-item"]')).toHaveCount(3);
   await expect(recent.locator('[data-component="list-item"] .kui-list-item__icon')).toHaveCount(3);
   const deniedBackground = await recent
@@ -15541,13 +15564,12 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(dialog).not.toContainText('6 answers');
-  await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
-  await expect(all).toContainText('Original prompt unavailable');
+  await expect(all).toContainText('command-00000010');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-b36gnr-dialog-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-b36gnr-dialog-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await search.fill('unit tests');
+  await search.fill('command-00000010');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(1);
   await search.clear();
   await expect(all.locator('[data-component="list-item"]')).toHaveCount(6);
@@ -15571,7 +15593,7 @@ test('previews three recent permission answers and searches the scrollable full 
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-dialog-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(all).toContainText('Bash · Run npm unit tests · 00000010');
+  await expect(all).toContainText('command-00000010');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-jesmcs-dialog-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
@@ -15580,7 +15602,11 @@ test('previews three recent permission answers and searches the scrollable full 
   await search.fill('WebFetch');
   await expect(all.locator('[data-permission-rule]')).toHaveCount(6);
   await expect(all.locator('[data-permission-rule]').first()).toContainText('00000011');
-  await all.getByRole('button', { name: 'Select WebFetch · saved action · 00000001' }).click();
+  await all
+    .locator('[data-permission-rule]')
+    .filter({ hasText: 'command-00000001' })
+    .locator('[data-action="select-permission-rule-row"]')
+    .click();
   await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
   await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
@@ -15593,9 +15619,9 @@ test('previews three recent permission answers and searches the scrollable full 
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toBeVisible();
-  const firstFingerprint = all.locator('[data-permission-rule]').first().locator('.kui-text__truncate-tail');
-  await expect(firstFingerprint).toHaveText('00000011');
-  await expect(firstFingerprint).toBeInViewport();
+  const firstAction = all.locator('[data-permission-rule]').first().locator('[data-exact-action]');
+  await expect(firstAction).toHaveText('command-00000011');
+  await expect(firstAction).toBeInViewport();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-phone.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-q40bbv-dialog-phone.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-1q8ef7-dialog-phone.png' });
@@ -15620,6 +15646,7 @@ test('loads remembered answers in 100-row batches while search and selection cro
     project: '/work/demo.hs2',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-0000000${index}`,
     decision: 'allow',
     scope: 'always',
   }));
@@ -15669,6 +15696,7 @@ test('filters remembered answers by lifetime and decision while preserving searc
     ...(scope === 'chat' ? { connection: 'chat-a' } : {}),
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-${index.toString().padStart(8, '0')}`,
     scope,
     decision,
   });
@@ -15902,6 +15930,7 @@ test('applies the one selected-answer menu to multiple preview and dialog rows (
     project: '/work/demo.hs2',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-${index.toString().padStart(8, '0')}`,
     decision: 'allow',
     scope: 'always',
   }));
@@ -16108,6 +16137,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
     ...(index === 0 ? { connection: 'chat-a' } : {}),
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    exact_action: `command-${index.toString().padStart(8, '0')}`,
     decision: index === 2 ? 'deny' : 'allow',
     scope: index === 0 ? 'chat' : index === 2 ? 'session' : 'always',
   }));
@@ -16126,7 +16156,11 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
-  await preview.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
+  await preview
+    .locator('[data-permission-rule]')
+    .filter({ hasText: 'command-00000002' })
+    .locator('[data-action="select-permission-rule-row"]')
+    .click();
   await page
     .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
     .getByRole('button', { name: 'Selected Answer Actions' })
@@ -16145,7 +16179,11 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   ).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: 'Permanent', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-btptwk-persistent-wide.png' });
-  await dialog.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
+  await dialog
+    .locator('[data-permission-rule]')
+    .filter({ hasText: 'command-00000002' })
+    .locator('[data-action="select-permission-rule-row"]')
+    .click();
   await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
   await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
@@ -16164,7 +16202,11 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText('Session (until restart)');
-  await preview.getByRole('button', { name: 'Select Bash · saved command · 00000002' }).click();
+  await preview
+    .locator('[data-permission-rule]')
+    .filter({ hasText: 'command-00000002' })
+    .locator('[data-action="select-permission-rule-row"]')
+    .click();
   await page
     .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
     .getByRole('button', { name: 'Selected Answer Actions' })
@@ -16184,6 +16226,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
     project: '/work/demo.hs2',
     tool: 'Bash',
     action: rememberedActionKey(action),
+    exact_action: action,
     decision: 'allow',
     scope: 'always',
   });
@@ -16239,22 +16282,16 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   const secondReads = second.reads.count;
 
   // The first client revokes a rule; the second's open list follows the server's event.
-  const lint = first.remembered
-    .locator('[data-permission-rule-scope="always"]')
-    .filter({ hasText: rememberedActionKey('npm run lint').slice(-8) });
+  const lint = first.remembered.locator('[data-permission-rule-scope="always"]').filter({ hasText: 'npm run lint' });
   await lint.locator('[data-action="select-permission-rule-row"]').click();
   await first.remembered.getByRole('button', { name: 'Selected Answer Actions' }).first().click();
   await first.page.getByRole('menuitem', { name: 'Delete Selected' }).click();
   await first.remembered.getByRole('button', { name: 'Confirm Delete' }).click();
   await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).toContainText(
-    `Bash · saved command · ${rememberedActionKey('npm run lint').slice(-8)}`,
-  );
+  await expect(second.remembered).toContainText('npm run lint');
   await publishRulesChanged(second);
   await expect(second.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
-  await expect(second.remembered).not.toContainText(
-    `Bash · saved command · ${rememberedActionKey('npm run lint').slice(-8)}`,
-  );
+  await expect(second.remembered).not.toContainText('npm run lint');
   // Exactly one refetch, and no polling while nothing changes.
   expect(second.reads.count).toBe(secondReads + 1);
   await second.page.waitForTimeout(1_500);
@@ -16264,9 +16301,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   rules = [...rules, rule('cargo test')];
   await expect.poll(() => second.polls.length).toBeGreaterThan(0);
   await publishRulesChanged(second);
-  await expect(second.remembered).toContainText(
-    `Bash · saved command · ${rememberedActionKey('cargo test').slice(-8)}`,
-  );
+  await expect(second.remembered).toContainText('cargo test');
   expect(second.reads.count).toBe(secondReads + 2);
   await second.remembered.screenshot({ path: 'target/visual-captures/hs2-kyk1s7-second-client-rules-1280.png' });
   for (const context of contexts) await context.close();
@@ -16380,6 +16415,7 @@ for (const width of [1280, 390]) {
       fullPage: true,
     });
     await popup.getByRole('button', { name: width === 1280 ? 'Always Allow' : 'Allow Once' }).click();
+    if (width === 1280) await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
     await expect(popup).toHaveCount(0);
     await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
     await expect.poll(() => polls.length).toBeGreaterThan(0);
@@ -28649,6 +28685,7 @@ test('shows and resolves cross-project permission notifications with badges and 
   await expect(popup).toBeInViewport();
   await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-shell-narrow.png' });
   await popup.getByRole('button', { name: 'Always Allow' }).click();
+  await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
   await expect.poll(() => answer).toEqual({ decision: 'allow', scope: 'always' });
   await expect(popup).toHaveCount(0);
   await expect(page.getByText('allowed this kind of request')).toHaveCount(0);

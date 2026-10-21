@@ -48,6 +48,7 @@ export interface SettingsWorkspaceProps {
     preview?: PermissionRulesSettingsProps['preview'];
     revoking?: readonly string[];
     rulesMessage?: string;
+    locked?: boolean;
   };
   columns: { hideVerified: boolean };
   general: { showLoadingActivity: boolean };
@@ -133,6 +134,7 @@ export function SettingsWorkspace({
               preview={permissions.preview}
               revoking={permissions.revoking}
               message={permissions.rulesMessage}
+              locked={permissions.locked}
             />
           </List>
         )}

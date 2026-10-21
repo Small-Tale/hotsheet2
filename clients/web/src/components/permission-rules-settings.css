@@ -26,8 +26,29 @@
 }
 
 .permission-rules-settings__rule {
+  display: flex;
   min-width: 0;
+  align-items: center;
   border-radius: remify(6px);
+}
+.permission-rules-settings__answer {
+  flex: 1;
+}
+.permission-rules-settings__details {
+  display: grid;
+  min-width: 0;
+  gap: remify(4px);
+  padding: 0 remify(8px) remify(8px) remify(36px);
+  font-size: var(--wa-font-size-xs);
+}
+.permission-rules-settings__details code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.permission-rules-settings__details span {
+  color: var(--wa-color-neutral-on-quiet);
+  overflow-wrap: anywhere;
 }
 
 .permission-rules-settings [data-permission-rule] {

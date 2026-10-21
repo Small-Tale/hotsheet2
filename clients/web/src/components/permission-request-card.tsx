@@ -12,17 +12,14 @@ import { NotificationCard } from './notification-card';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 
-/** Ephemeral choices keyed by the pending request; never stored with rule fingerprints. */
-const selectedBashDescriptions = new Map<string, string>();
-export function setSelectedBashDescription(key: string, description: string) {
-  if (description) selectedBashDescriptions.set(key, description);
-  else selectedBashDescriptions.delete(key);
+/** Ephemeral confirmation state; never persisted or sent in notification events. */
+const rememberedPreviews = new Map<string, 'chat' | 'always'>();
+export function rememberedPermissionPreview(key: string) {
+  return rememberedPreviews.get(key);
 }
-export function selectedBashDescription(key: string) {
-  return selectedBashDescriptions.get(key);
-}
-export function clearSelectedBashDescription(key: string) {
-  selectedBashDescriptions.delete(key);
+export function setRememberedPermissionPreview(key: string, scope?: 'chat' | 'always') {
+  if (scope) rememberedPreviews.set(key, scope);
+  else rememberedPreviews.delete(key);
 }
 
 export interface PermissionRequestCardProps {
@@ -95,8 +92,7 @@ export function PermissionRequestCard({
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
-  const bashRequest = !history && item.tool.toLowerCase() === 'bash';
-  const selectedDescription = bashRequest ? selectedBashDescription(item.key) : undefined;
+  const previewScope = history ? undefined : rememberedPermissionPreview(item.key);
   const statusLabel = history ? `${item.tool}: ${historyLabel(item)}` : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
@@ -135,7 +131,47 @@ export function PermissionRequestCard({
               : '--wa-color-brand-fill-loud',
           );
 
-  const decisions = history ? undefined : (
+  const decisions = history ? undefined : previewScope ? (
+    <div class="permission-request-card__confirmation" role="group" aria-label="Confirm remembered permission">
+      <strong>Review the rule to remember</strong>
+      <dl>
+        <dt>Tool</dt>
+        <dd>{item.tool}</dd>
+        <dt>Exact action</dt>
+        <dd class="permission-request-card__exact-action">{item.action}</dd>
+        <dt>Match</dt>
+        <dd>Exact action only</dd>
+        <dt>Project</dt>
+        <dd>{item.projectName}</dd>
+        <dt>Applies to</dt>
+        <dd>{previewScope === 'chat' ? 'This chat only' : 'All chats in this project'}</dd>
+        <dt>Lifetime</dt>
+        <dd>{previewScope === 'chat' ? 'Until this chat closes' : 'Persistent, until revoked'}</dd>
+      </dl>
+      <div class="permission-request-card__confirmation-actions">
+        <Button
+          emphasis="plain"
+          size="compact"
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelRememberedPermission.value}
+          rootAttributes={{ 'data-request-key': item.key }}
+        >
+          Back
+        </Button>
+        <Button
+          emphasis="primary"
+          size="compact"
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
+          disabled={state === 'resolving'}
+          rootAttributes={{
+            'data-decision': 'allow',
+            'data-scope': previewScope,
+            'data-request-key': item.key,
+            'data-rule-confirmed': 'true',
+          }}
+        >{`Confirm ${previewScope === 'chat' ? 'Allow for This Chat' : 'Always Allow'}`}</Button>
+      </div>
+    </div>
+  ) : (
     <div class="permission-request-card__actions">
       <div class="permission-request-card__buttons">
         <span class="permission-request-card__decision permission-request-card__deny">
@@ -284,41 +320,6 @@ export function PermissionRequestCard({
           </p>
         )}
         {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
-        {bashRequest && (
-          <label class="permission-request-card__description">
-            Name shown if you remember this command
-            <select data-permission-description aria-label="Remembered Bash answer name">
-              <option value="" selected={!selectedDescription}>
-                Choose a safe name automatically
-              </option>
-              <option value="Build or test command" selected={selectedDescription === 'Build or test command'}>
-                Build or test command
-              </option>
-              <option value="Version control command" selected={selectedDescription === 'Version control command'}>
-                Version control command
-              </option>
-              <option value="File operation command" selected={selectedDescription === 'File operation command'}>
-                File operation command
-              </option>
-              <option value="Network command" selected={selectedDescription === 'Network command'}>
-                Network command
-              </option>
-              <option value="Other Bash command" selected={selectedDescription === 'Other Bash command'}>
-                Other Bash command
-              </option>
-            </select>
-            <span class="permission-request-card__description-preview">
-              Settings preview: Bash ·{' '}
-              <output data-permission-description-preview>
-                {selectedDescription ?? 'automatic name if recognized'}
-              </output>
-            </span>
-            <span class="permission-request-card__description-help">
-              If remembered, the command is saved as an opaque identifier. This name does not broaden which command
-              matches.
-            </span>
-          </label>
-        )}
         {error && (
           <p class="permission-request-card__error" role="alert">
             {error}

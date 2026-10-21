@@ -60,7 +60,7 @@ pub use permission::{
     SharedPermissionBridge, StoredRule as StoredPermissionRule,
     action_key_for as permission_action_key_for, append_rule as append_permission_rule,
     load_rules as load_permission_rules, remove_rule as remove_permission_rule,
-    valid_user_bash_description,
+    rules_health as permission_rules_health, valid_user_bash_description,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,

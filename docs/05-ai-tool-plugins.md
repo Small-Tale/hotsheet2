@@ -943,14 +943,17 @@ opaque keyed action identifier (removing a durable rule from the encrypted store
 the lifetime; a duration edit keeps the answer and changes only a project-wide rule.
 Chat rules cannot change duration. Durable changes are written before
 the in-memory answer or lifetime changes. A failed keychain read, authentication check,
-or write leaves an Always request pending without installing or cascading an approval. Settings →
-Permissions lists only the selected project's remembered answers by tool, scope,
-decision, and a short fingerprint identifier. New rules carry a fixed-vocabulary
-operation synopsis for recognized tools (for example, npm lint, reading a file, or fetching a
-web page); it never copies arguments, paths, URLs, or arbitrary command text. The current
-Settings UI still shows keyed identifiers, pending the exact-rule UI in HS2-CA5MSD.
-Full command/path details remain hidden and each rule is
-revocable. Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
+or write leaves an Always request pending without installing or cascading an approval. Before
+remembering a chat or persistent answer, the popup reviews the tool, exact action, project,
+chat reach, match type, and lifetime, then requires a separate confirmation. Settings →
+Permissions lists only the selected project's remembered answers with decrypted exact actions,
+tool, project/chat reach, lifetime, decision, and exact match type. Users can copy an action
+or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
+shown as a label. The exact action is returned only by the authenticated local rules API, not
+events or logs. If the credential key or encrypted file is unavailable, the list shows a locked
+state and durable in-memory rules are withdrawn before any automatic answer. Revocation writes
+the durable file before removing the live answer. Restored vault data currently reloads after
+server restart (HS2-8DAA0P). Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
 for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
@@ -969,20 +972,12 @@ refreshes the list. Remembering an answer, editing or revoking one, and closing 
 drive connection that held chat rules each publish a replayable `permission_rules_changed`
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
-Preview rows label chat, until server restart, and always lifetimes without repeating the
-project scope that the page already establishes; filtered dialog rows use the active controls
-instead (HS2-BH6GCG, HS2-ZQZ3V2).
-Each row retains its tool and short action fingerprint so distinct private commands
-remain distinguishable, including at phone width where the center of a long label
-truncates first; a safe operation synopsis appears when available, and the repeated
-privacy reminder appears only in the label's tooltip.
-The person can choose an optional
-fixed-vocabulary name before remembering the answer. The popup previews that name as it will
-appear in Settings; its automatic option says a safe name appears only for recognized commands.
-The choice changes the displayed name, never which exact command matches. The server rejects free text and
-labels on one-time or non-Bash answers; the rule-list API currently returns the HMAC
-fingerprint and validated label. The encrypted file retains the exact action for later
-authenticated local display; old fingerprint-only files are discarded on upgrade and
+Preview and dialog rows show chat, session, and persistent lifetimes alongside the exact
+action and project/chat reach, including at phone width. The popup reviews the exact action
+before a remembered approval; it does not ask for an optional Bash label. The rule-list API
+returns both the decrypted exact action for authenticated display and an HMAC fingerprint
+for edit/revoke identity. The encrypted file retains the exact action; old fingerprint-only
+files are discarded on upgrade and
 require fresh approval. No migration guesses an action from its fingerprint.
 When loading an encrypted file with repeated exact project/tool/action slots, Hot Sheet
 keeps the newest answer and rewrites the file (HS2-Q40BBV).

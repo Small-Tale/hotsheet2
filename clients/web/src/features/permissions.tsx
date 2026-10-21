@@ -3,7 +3,7 @@ import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
-import { clearSelectedBashDescription, updatePermissionCountdownText } from '../components/permission-request-card';
+import { setRememberedPermissionPreview, updatePermissionCountdownText } from '../components/permission-request-card';
 import {
   PERMISSION_RULE_BATCH_SIZE,
   type PermissionRuleFilters,
@@ -67,6 +67,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   // (HS2-KYK1S7). Freshness is reactive, so a shown list refetches once when it goes stale. Never polled.
   const permissionRulesByProject = signal<Record<string, PermissionRule[]>>({}),
     permissionRulesMessage = signal(''),
+    lockedPermissionRules = signal<ReadonlySet<string>>(new Set()),
     revokingPermissionRules = signal<readonly string[]>([]),
     permissionRulesDialog = signal<
       | {
@@ -120,7 +121,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     updateTimer: () => {
       updatePermissionTimer();
     },
-    clearDescription: clearSelectedBashDescription,
+    clearDescription: (key) => {
+      setRememberedPermissionPreview(key);
+    },
     beginTiming: (item) => beginInteractionTiming('permission-decision', { project: item.projectId }),
   });
   const {
@@ -541,10 +544,19 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
     } catch (reason) {
       loadingPermissionRules.delete(project.id);
-      permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+      permissionRulesByProject.value = { ...permissionRulesByProject.value, [project.id]: [] };
+      if (reason instanceof ApiHttpError && reason.status === 503) {
+        lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
+        permissionRulesMessage.value =
+          'Remembered answers are locked. Restore the host credential store and encrypted rule file, then restart Hot Sheet to reload saved rules.';
+      } else {
+        permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+      }
       return;
     }
     loadingPermissionRules.delete(project.id);
+    lockedPermissionRules.value = new Set([...lockedPermissionRules.value].filter((id) => id !== project.id));
+    permissionRulesMessage.value = '';
     permissionRulesByProject.value = {
       ...permissionRulesByProject.value,
       [project.id]: projectPermissionRules(rules, project),
@@ -674,6 +686,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRules,
     permissionRulesChanged,
     permissionRulesMessage,
+    lockedPermissionRules,
     revokingPermissionRules,
     revokePermissionRule,
     changePermissionRuleDecision,

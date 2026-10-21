@@ -42,13 +42,16 @@ export interface PermissionHistoryItem extends PermissionItem {
   resolvedAt: number;
   automatic?: boolean;
 }
-/** A remembered answer as `GET /permissions/rules` lists it. `action` is an opaque fingerprint. */
+/** A remembered answer as the authenticated `GET /permissions/rules` route lists it. */
 export interface PermissionRule {
   project: string;
   connection?: string;
   tool: string;
   action: string;
-  /** Fixed-vocabulary operation label; never raw command text. Older rules omit it. */
+  /** Decrypted command/action, confined to the authenticated response and local view. */
+  exact_action?: string;
+  match_type?: 'exact';
+  /** Legacy label retained for older clients, never used as the rule identity. */
   description?: string;
   decision: PermissionDecision;
   scope: 'chat' | 'session' | 'always';

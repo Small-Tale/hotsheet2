@@ -1077,15 +1077,42 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
 /// are omitted.
 pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
-) -> Json<Vec<hotsheet_aitools::PermissionRuleInfo>> {
-    Json(
+) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
+    if state.permissions.durable_rules_locked() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission-rule store locked or unavailable",
+        ));
+    }
+    if let Some(path) = state
+        .permission_rule_paths
+        .lock_or_recover()
+        .get("")
+        .cloned()
+    {
+        let has_durable_rules = state
+            .permissions
+            .rules()
+            .iter()
+            .any(|rule| rule.scope == hotsheet_aitools::PermissionScope::Always);
+        if (has_durable_rules && !path.is_file())
+            || hotsheet_aitools::permission_rules_health(&path).is_err()
+        {
+            state.permissions.drop_durable_rules();
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "permission-rule store locked or unavailable",
+            ));
+        }
+    }
+    Ok(Json(
         state
             .permissions
             .rules()
             .into_iter()
             .filter(|rule| !rule.project.is_empty())
             .collect(),
-    )
+    ))
 }
 
 /// Body for `DELETE /permissions/rules`: the exact remembered slot to forget.
@@ -1161,9 +1188,16 @@ pub(crate) async fn update_permission_rule(
         let status = if error.kind() == std::io::ErrorKind::InvalidInput {
             StatusCode::BAD_REQUEST
         } else {
-            StatusCode::INTERNAL_SERVER_ERROR
+            StatusCode::SERVICE_UNAVAILABLE
         };
-        ApiError::new(status, error.to_string())
+        ApiError::new(
+            status,
+            if status == StatusCode::BAD_REQUEST {
+                "invalid permission rule change"
+            } else {
+                "permission-rule store locked or unavailable"
+            },
+        )
     })?;
     updated.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
     emit_permission_rules_changed(&state, &body.project);
@@ -1177,33 +1211,27 @@ pub(crate) async fn revoke_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<RevokePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
-    let removed = state
+    let path = state
+        .permission_rule_paths
+        .lock_or_recover()
+        .get(&body.project)
+        .cloned();
+    state
         .permissions
-        .revoke(
+        .revoke_with_storage(
             &body.project,
             body.connection.as_deref(),
             &body.tool,
             &body.action,
+            path.as_deref(),
         )
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
-    if removed.persist {
-        // The legacy empty-project copy seeded from the same file must go too.
-        state.permissions.revoke("", None, &body.tool, &body.action);
-        let path = state
-            .permission_rule_paths
-            .lock_or_recover()
-            .get(&body.project)
-            .cloned();
-        if let Some(path) = path {
-            hotsheet_aitools::remove_permission_rule(
-                &path,
-                &body.project,
-                &body.tool,
-                &body.action,
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "permission-rule store locked or unavailable",
             )
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-        }
-    }
+        })?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
     emit_permission_rules_changed(&state, &body.project);
     Ok(StatusCode::NO_CONTENT)
 }
