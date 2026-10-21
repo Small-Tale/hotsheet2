@@ -93,7 +93,7 @@ the default-on path is checked by hand.
    disposable exact command with Always. Restart the server and confirm only that
    command in the same project is auto-answered. Check the OS credential entry exists.
 2. Inspect the machine-local permission JSON and lock file: owner-only file access,
-   version-3 envelope, no command, path, key, or safe synopsis in plaintext. Check
+   version-4 envelope, no command, path, key, or safe synopsis in plaintext. Check
    exported files and logs for the same secret string.
 3. With a disposable store, lock the credential service, remove its key, and corrupt
    the ciphertext in separate runs. Confirm no remembered action is auto-approved;
@@ -102,7 +102,12 @@ the default-on path is checked by hand.
 4. Present a pre-v3 fingerprint-only array and its `.action-key`, restart, and confirm
    the old answers do not activate, the file becomes an empty encrypted envelope, and
    the obsolete key file is removed.
-5. With a live server, make the vault temporarily unavailable, then restore the same
+5. Open several hosted stores with existing v3 permission files. Confirm each migrates
+   to v4 without losing its approvals. On the next server launch, confirm all stores
+   read the same master Keychain item once; an ad hoc signed rebuild may prompt once
+   again for that item. After removing the master and restarting, every existing v4
+   vault must be disabled.
+6. With a live server, make the vault temporarily unavailable, then restore the same
    authenticated file and credential. Reload the Settings page without restarting the
    server: persistent answers return once, while a chat answer, session answer, and
    pending request remain. Repeat with a different authenticated vault file and confirm

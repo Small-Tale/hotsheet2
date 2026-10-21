@@ -15,13 +15,14 @@ running an explicit migration is. The retained `prerelease-*` fixtures are a reg
 baseline, not a promise that every pre-release byte shape is permanent.
 
 The unreleased fingerprint-only local permission-rule array is intentionally not migrated.
-On first use, HS2 replaces it atomically with an empty version-3 authenticated encrypted
+On first use, HS2 replaces it atomically with an empty version-4 authenticated encrypted
 envelope and removes the obsolete `.action-key`; every remembered answer requires fresh
 approval (HS2-1S4QEX). The new key lives in the host OS credential store. An encrypted
 file whose key is missing, unavailable, or corrupt is never rekeyed or activated; the
 person must reapprove after explicitly clearing the unusable local store and, for a
-corrupt key, its credential-store entry. Old clients
-must not write the v3 file.
+corrupt key, its credential-store entry. Existing version-3 encrypted permission files
+migrate on first access with their approvals intact and then use a shared master
+credential with file-specific derived keys. Old clients must not write the v4 file.
 
 ## 19.2 Starting with the first public release
 

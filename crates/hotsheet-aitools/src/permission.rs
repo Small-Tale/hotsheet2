@@ -1603,7 +1603,7 @@ impl Drop for AsyncAsk<'_> {
 
 // ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
 
-/// The plaintext form inside the authenticated encrypted v3 envelope. This type must
+/// The plaintext form inside the authenticated encrypted v4 envelope. This type must
 /// never be serialized directly to the rule path, an event, or a log.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredRule {
@@ -2814,7 +2814,7 @@ mod tests {
             first_export, second_export,
             "different installs use different keys"
         );
-        assert!(first_export.contains("\"version\":3"));
+        assert!(first_export.contains("\"version\":4"));
         assert!(!first_export.contains("sha256:v1:"));
         #[cfg(unix)]
         {
@@ -2875,7 +2875,7 @@ mod tests {
         let old = load_rules(&path).pop().unwrap();
         let before = fs::read(&path).unwrap();
         crate::permission_vault::with_secrets(|store| {
-            let account = crate::permission_vault::account(&path)?;
+            let account = crate::permission_vault::master_account(&path)?;
             store.delete(&account).map_err(io::Error::other)?;
             Ok(())
         })

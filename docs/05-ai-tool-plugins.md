@@ -947,10 +947,12 @@ rules take precedence over patterns at the same chat/project reach. The action, 
 and match scope are shown before confirmation; a matching future request can then be
 answered automatically. Remembered identities are keyed HMAC-SHA-256 values, while the
 original action and optional pattern live only in memory and in the authenticated,
-encrypted v3 machine-local store. Its key comes from the OS credential store and is
-read at most once per process per rules file, so the Keychain is not consulted on every
-rule load, list, or health check (HS2-V18XZ5). Missing
-keys or invalid ciphertext disable durable approvals. Legacy fingerprint-only rules
+encrypted machine-local store. One OS credential-store master key is read at most once
+per process for all hosted stores; each rules file uses a distinct derived key. Existing
+v3 files migrate to v4 on first access after their own legacy key is read, preserving
+approvals. A missing master or legacy key and invalid ciphertext disable durable
+approvals. Rebuilt ad hoc signed development binaries may still request access to the
+master item again on a new launch. Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
@@ -1123,8 +1125,10 @@ The API adds no copy of a suggested value, and classifier diagnostics carry only
 and labels. A suggestion never installs or changes a rule by itself.
 
 Persistent rules are
-stored inside a version-3 AES-256-GCM envelope with a fresh nonce; the key is generated
-in the host OS credential store and never written to exported rule JSON, logs, or events.
+stored inside a version-4 AES-256-GCM envelope with a fresh nonce. One master key is
+generated in the host OS credential store, with distinct keys derived for each rules
+file; neither is written to exported rule JSON, logs, or events. Version-3 envelopes
+migrate on first access after their original OS-stored key is read.
 Exact text is decrypted only in server memory. A missing, corrupt, or unavailable key
 and a corrupt envelope fail closed. Atomic owner-only writes and a cross-process file
 lock guard edits. Authenticated Settings lists the decrypted action and any reviewed

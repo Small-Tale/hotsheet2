@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
@@ -16,8 +16,10 @@ use sha2::{Digest, Sha256};
 
 use crate::permission::{ActionKey, StoredRule};
 
-const VERSION: u8 = 3;
+const VERSION: u8 = 4;
+const LEGACY_VERSION: u8 = 3;
 const ACCOUNT_PREFIX: &str = "permission-rules-v3-";
+const MASTER_PREFIX: &str = "permission-rules-v4-master-";
 const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_PLAINTEXT_BYTES: usize = 5 * 1024 * 1024;
 
@@ -48,33 +50,136 @@ pub(super) fn account(path: &Path) -> io::Result<String> {
     Ok(format!("{ACCOUNT_PREFIX}{:x}", hash.finalize()))
 }
 
-fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
+fn legacy_key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
     let account = account(path)?;
     if let Some(encoded) = secrets.get(&account).map_err(io::Error::other)? {
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(encoded)
-            .map_err(|_| invalid("invalid permission-rule credential"))?;
-        return bytes
-            .try_into()
-            .map_err(|_| invalid("invalid permission-rule credential"));
+        return decode_key(encoded);
     }
-    // A missing key for a v3 envelope means the old approvals are unrecoverable. Do not
-    // replace it and accidentally activate a different rule set under a fresh key.
-    if let Ok(mut file) = File::open(path) {
-        let mut first = [0];
-        if file.read(&mut first)? != 1 || first != *b"[" {
-            return Err(invalid("permission-rule credential missing"));
+    Err(invalid("permission-rule credential missing"))
+}
+
+pub(super) fn master_account(path: &Path) -> io::Result<String> {
+    let parent = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .canonicalize()?;
+    Ok(format!(
+        "{MASTER_PREFIX}{:x}",
+        Sha256::digest(parent.to_string_lossy().as_bytes())
+    ))
+}
+
+fn decode_key(encoded: String) -> io::Result<ActionKey> {
+    base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| invalid("invalid permission-rule credential"))?
+        .try_into()
+        .map_err(|_| invalid("invalid permission-rule credential"))
+}
+
+fn existing_v4_vault(path: &Path) -> io::Result<bool> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let candidate = entry.path();
+        if candidate
+            .extension()
+            .is_none_or(|extension| extension != "json")
+            || candidate == path
+        {
+            continue;
+        }
+        if fs::metadata(&candidate)?.len() > MAX_FILE_BYTES {
+            continue;
+        }
+        let bytes = fs::read(&candidate)?;
+        if serde_json::from_slice::<Envelope>(&bytes)
+            .is_ok_and(|envelope| envelope.version == VERSION)
+        {
+            return Ok(true);
         }
     }
-    let mut key = [0; 32];
-    getrandom::fill(&mut key).map_err(io::Error::other)?;
-    secrets
-        .set(
-            &account,
-            &base64::engine::general_purpose::STANDARD.encode(key),
-        )
-        .map_err(io::Error::other)?;
-    Ok(key)
+    Ok(false)
+}
+
+fn master_key_with(
+    path: &Path,
+    secrets: &dyn SecretStore,
+    may_create: bool,
+) -> io::Result<ActionKey> {
+    // Every rules file in this directory shares one master. Serialize creation across
+    // processes, including simultaneous first opens of different hosted stores.
+    let _lock = Lock::acquire(
+        &path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(".permission-master"),
+    )?;
+    let master_account = master_account(path)?;
+    let master = match secrets.get(&master_account).map_err(io::Error::other)? {
+        Some(encoded) => decode_key(encoded)?,
+        None if may_create => {
+            // If the master was removed, a newly opened store must not replace it and
+            // make already encrypted stores permanently unreadable.
+            if existing_v4_vault(path)? {
+                return Err(invalid("permission-rule credential missing"));
+            }
+            let mut key = [0; 32];
+            getrandom::fill(&mut key).map_err(io::Error::other)?;
+            secrets
+                .set(
+                    &master_account,
+                    &base64::engine::general_purpose::STANDARD.encode(key),
+                )
+                .map_err(io::Error::other)?;
+            key
+        }
+        None => return Err(invalid("permission-rule credential missing")),
+    };
+    let salt = ring::hkdf::Salt::new(ring::hkdf::HKDF_SHA256, b"hotsheet-permissions-v4");
+    let key = salt.extract(&master);
+    let identity = account(path)?;
+    let info = [identity.as_bytes()];
+    let derived = key
+        .expand(&info, ring::hkdf::HKDF_SHA256)
+        .map_err(|_| invalid("invalid permission-rule key"))?;
+    let mut bytes = [0; 32];
+    derived
+        .fill(&mut bytes)
+        .map_err(|_| invalid("invalid permission-rule key"))?;
+    Ok(bytes)
+}
+
+fn file_version(path: &Path) -> io::Result<Option<u8>> {
+    if fs::metadata(path).is_ok_and(|info| info.len() > MAX_FILE_BYTES) {
+        return Err(invalid("permission-rule file exceeds size limit"));
+    }
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if bytes.starts_with(b"[") {
+        return Ok(None);
+    }
+    let envelope: Envelope =
+        serde_json::from_slice(&bytes).map_err(|_| invalid("invalid permission-rule envelope"))?;
+    Ok(Some(envelope.version))
+}
+
+fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
+    match file_version(path)? {
+        Some(LEGACY_VERSION) => {
+            let legacy_key = legacy_key_with(path, secrets)?;
+            let rules = read_locked(path, &legacy_key, LEGACY_VERSION)?;
+            let key = master_key_with(path, secrets, true)?;
+            write_locked(path, &key, &rules)?;
+            Ok(key)
+        }
+        Some(VERSION) => master_key_with(path, secrets, false),
+        None => master_key_with(path, secrets, true),
+        Some(_) => Err(invalid("unsupported permission-rule version")),
+    }
 }
 
 /// A Keychain approval belongs to the process, not to every vault access: remember each
@@ -182,7 +287,7 @@ pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRul
     let _lock = Lock::acquire(path)?;
     with_secrets(|store| {
         let key = key_with(path, store)?;
-        let mut rules = read_locked(path, &key)?;
+        let mut rules = read_locked(path, &key, VERSION)?;
         if dedupe(&mut rules) {
             write_locked(path, &key, &rules)?;
         }
@@ -197,7 +302,7 @@ pub(super) fn mutate<T>(
     let _lock = Lock::acquire(path)?;
     with_secrets(|store| {
         let key = key_with(path, store)?;
-        let mut rules = read_locked(path, &key)?;
+        let mut rules = read_locked(path, &key, VERSION)?;
         dedupe(&mut rules);
         let value = change(&mut rules)?;
         write_locked(path, &key, &rules)?;
@@ -215,7 +320,7 @@ fn dedupe(rules: &mut Vec<StoredRule>) -> bool {
     rules.len() != before
 }
 
-fn read_locked(path: &Path, key: &ActionKey) -> io::Result<Vec<StoredRule>> {
+fn read_locked(path: &Path, key: &ActionKey, version: u8) -> io::Result<Vec<StoredRule>> {
     if fs::metadata(path).is_ok_and(|info| info.len() > MAX_FILE_BYTES) {
         return Err(invalid("permission-rule file exceeds size limit"));
     }
@@ -232,7 +337,7 @@ fn read_locked(path: &Path, key: &ActionKey) -> io::Result<Vec<StoredRule>> {
     }
     let envelope: Envelope =
         serde_json::from_slice(&bytes).map_err(|_| invalid("invalid permission-rule envelope"))?;
-    if envelope.version != VERSION {
+    if envelope.version != version {
         return Err(invalid("unsupported permission-rule version"));
     }
     let nonce: [u8; 12] = base64::engine::general_purpose::STANDARD
@@ -247,7 +352,11 @@ fn read_locked(path: &Path, key: &ActionKey) -> io::Result<Vec<StoredRule>> {
     let plaintext = cipher
         .open_in_place(
             Nonce::assume_unique_for_key(nonce),
-            Aad::from(b"hotsheet-permissions-v3"),
+            Aad::from(if version == LEGACY_VERSION {
+                b"hotsheet-permissions-v3".as_slice()
+            } else {
+                b"hotsheet-permissions-v4".as_slice()
+            }),
             &mut ciphertext,
         )
         .map_err(|_| invalid("permission-rule authentication failed"))?;
@@ -262,6 +371,15 @@ fn cipher(key: &ActionKey) -> io::Result<LessSafeKey> {
 }
 
 fn write_locked(path: &Path, key: &ActionKey, rules: &[StoredRule]) -> io::Result<()> {
+    write_locked_version(path, key, rules, VERSION)
+}
+
+fn write_locked_version(
+    path: &Path,
+    key: &ActionKey,
+    rules: &[StoredRule],
+    version: u8,
+) -> io::Result<()> {
     let mut nonce = [0; 12];
     getrandom::fill(&mut nonce).map_err(io::Error::other)?;
     let mut ciphertext = serde_json::to_vec(rules).map_err(io::Error::other)?;
@@ -271,12 +389,16 @@ fn write_locked(path: &Path, key: &ActionKey, rules: &[StoredRule]) -> io::Resul
     cipher(key)?
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce),
-            Aad::from(b"hotsheet-permissions-v3"),
+            Aad::from(if version == LEGACY_VERSION {
+                b"hotsheet-permissions-v3".as_slice()
+            } else {
+                b"hotsheet-permissions-v4".as_slice()
+            }),
             &mut ciphertext,
         )
         .map_err(|_| invalid("permission-rule encryption failed"))?;
     let envelope = Envelope {
-        version: VERSION,
+        version,
         nonce: base64::engine::general_purpose::STANDARD.encode(nonce),
         ciphertext: base64::engine::general_purpose::STANDARD.encode(ciphertext),
     };
@@ -439,7 +561,11 @@ mod tests {
         .unwrap();
         let original = fs::read(&path).unwrap();
         with_secrets(|store| {
-            assert!(store.delete(&account(&path)?).map_err(io::Error::other)?);
+            assert!(
+                store
+                    .delete(&master_account(&path)?)
+                    .map_err(io::Error::other)?
+            );
             Ok(())
         })
         .unwrap();
@@ -461,6 +587,75 @@ mod tests {
         })
         .unwrap();
         assert_eq!(load(&path).unwrap(), vec![rule("pwd")]);
+    }
+
+    #[test]
+    fn hosted_vaults_share_one_master_but_keep_distinct_keys_and_migrate_v3() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("first.json");
+        let second = dir.path().join("second.json");
+        fs::write(
+            dir.path().join("hotsheet-store.json"),
+            r#"{"version":2,"store":"HS"}"#,
+        )
+        .unwrap();
+        let legacy_key = [7; 32];
+        with_secrets(|store| {
+            store
+                .set(
+                    &account(&first)?,
+                    &base64::engine::general_purpose::STANDARD.encode(legacy_key),
+                )
+                .map_err(io::Error::other)
+        })
+        .unwrap();
+        write_locked_version(&first, &legacy_key, &[rule("old approval")], LEGACY_VERSION).unwrap();
+
+        let first_key = key_for(&first).unwrap();
+        assert_eq!(file_version(&first).unwrap(), Some(VERSION));
+        assert_eq!(load(&first).unwrap(), vec![rule("old approval")]);
+        mutate(&second, |rules| {
+            rules.push(rule("other approval"));
+            Ok(())
+        })
+        .unwrap();
+        let second_key = key_for(&second).unwrap();
+        assert_ne!(first_key, second_key);
+        assert_eq!(load(&second).unwrap(), vec![rule("other approval")]);
+        assert_eq!(load(&first).unwrap(), vec![rule("old approval")]);
+
+        // A v3 item is no longer read once its file has moved to the shared master.
+        with_secrets(|store| {
+            assert!(store.delete(&account(&first)?).map_err(io::Error::other)?);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(load(&first).unwrap(), vec![rule("old approval")]);
+        // Removing the master disables both existing vaults instead of activating them
+        // with a replacement key.
+        with_secrets(|store| {
+            assert!(
+                store
+                    .delete(&master_account(&first)?)
+                    .map_err(io::Error::other)?
+            );
+            Ok(())
+        })
+        .unwrap();
+        assert!(load(&first).is_err());
+        assert!(load(&second).is_err());
+        let third = dir.path().join("third.json");
+        assert!(key_for(&third).is_err());
+        with_secrets(|store| {
+            assert!(
+                store
+                    .get(&master_account(&third)?)
+                    .map_err(io::Error::other)?
+                    .is_none()
+            );
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -530,6 +725,23 @@ mod tests {
         store.set("a", "three").unwrap();
         assert_eq!(store.get("a").unwrap().as_deref(), Some("three"));
         assert_eq!(backend.gets.load(Ordering::SeqCst), 4);
+
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("first.json");
+        let second = dir.path().join("second.json");
+        assert_ne!(
+            key_with(&first, &store).unwrap(),
+            key_with(&second, &store).unwrap()
+        );
+        assert_eq!(
+            key_with(&first, &store).unwrap(),
+            key_with(&first, &store).unwrap()
+        );
+        assert_eq!(
+            backend.gets.load(Ordering::SeqCst),
+            5,
+            "all hosted stores read one master credential"
+        );
     }
 
     #[test]
