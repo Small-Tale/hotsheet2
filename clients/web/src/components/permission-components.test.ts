@@ -306,6 +306,11 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     }
   });
 
+  it('uses singular and plural answer counts in the disclosure (HS2-9QK0V7)', () => {
+    expect(String(PermissionRulesSettings({ rules: rules.slice(0, 1) }))).toContain('Show all 1 answer<');
+    expect(String(PermissionRulesSettings({ rules: rules.slice(0, 2) }))).toContain('Show all 2 answers<');
+  });
+
   it('marks denied, selected, and busy answers in both row compositions', () => {
     const selectedKey = permissionRuleKey(rules[11]);
     const preview = String(PermissionRulesSettings({ rules }));

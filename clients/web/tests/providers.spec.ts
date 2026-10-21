@@ -15432,7 +15432,7 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
-  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8)`, async ({
+  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7)`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -15473,7 +15473,7 @@ for (const width of [1280, 390]) {
       path: `target/visual-captures/hs2-0hkes8-preview-${width}.png`,
       animations: 'disabled',
     });
-    await preview.getByRole('button', { name: 'Show all 1 answers' }).click();
+    await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
     await expect(dialog.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
     await expect(dialog.locator('[data-lucide="shield-check"]')).toBeVisible();

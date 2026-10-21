@@ -339,7 +339,7 @@ export function PermissionRulesSettings({
                   shape="pill"
                   action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.value}
                 >
-                  {`Show all ${ordered.length} answers`}
+                  {`Show all ${ordered.length} ${ordered.length === 1 ? 'answer' : 'answers'}`}
                 </Button>
               </Row>
             )}

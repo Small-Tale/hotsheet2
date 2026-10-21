@@ -1007,7 +1007,9 @@ chat and session answers and pending requests remain in memory (HS2-8DAA0P). Sel
 for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
-a reload according to its lifetime. The full list shows 100 answers initially in a scrolling region,
+a reload according to its lifetime. The preview disclosure uses singular `answer` for one
+remembered rule and plural `answers` for multiple rules (HS2-9QK0V7).
+The full list shows 100 answers initially in a scrolling region,
 loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
 includes chat-only rules, with their exact scope still shown in the row. Search appears above
 two equally sized filter controls, which stack on phone widths. The filters and identity search
