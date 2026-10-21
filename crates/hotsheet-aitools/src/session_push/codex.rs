@@ -236,6 +236,7 @@ mod tests {
 
     const THREAD: &str = "01a14736-2ae1-7e92-8da0-5f8db11b19b0";
 
+    #[cfg(unix)]
     fn prompt(text: &str) -> PushMessage {
         PushMessage::Prompt {
             text: text.into(),
