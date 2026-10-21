@@ -19938,7 +19938,7 @@ for (const viewport of [
     if (viewport.width === 390) {
       expect(
         await popup
-          .locator('.permission-request-card__description-help')
+          .locator('.notification-card__details')
           .evaluate(
             (node) =>
               node.getBoundingClientRect().right <=
