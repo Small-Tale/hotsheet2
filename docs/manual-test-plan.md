@@ -288,6 +288,15 @@ appears in the session and a turn starts, and the agent indicator switches (Buil
 Automated tests replay the protocol but cannot see the rendered TUI. Last verified on
 2026-10-17 with opencode 1.17.18 (spike PTY capture plus a live Hot Sheet launch).
 
+### OpenCode Drive command dispatch (HS2-AE37AJ)
+
+OpenCode 1.17.18 exposes the Hot Sheet skill as `hotsheet` in `GET /command` for this checkout.
+In a disposable project with a harmless `hotsheet` skill, `POST /tui/execute-command` with
+`{"command":"hotsheet"}` returned `200 true`, but the attached TUI did not start a session and
+`GET /session?roots=true` remained empty. Do not treat that response as confirmation of skill
+execution. Drive sends its normal prompt through `prompt_async` until a direct command path
+has an observable completion signal and a live TUI check.
+
 ### Codex first message (HS2-8R7SN0)
 
 Open a new Codex AI terminal in Hot Sheet and, before typing into it, send a prompt through

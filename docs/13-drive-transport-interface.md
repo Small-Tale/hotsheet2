@@ -521,7 +521,12 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-se
   `--model`, so the adapter passes the launch model (`provider/model`); the OpenCode `[launch]`
   now also applies a chosen model with `--model`.
 - **Command.** `POST /tui/execute-command {"command"}` (verified: `agent_cycle` switched Build to
-  Plan). Unconfirmed, as above.
+  Plan). Unconfirmed, as above. OpenCode 1.17.18 lists `hotsheet` as a skill-sourced command
+  in `GET /command`, but sending `{"command":"hotsheet"}` to this TUI endpoint returned `true`
+  without creating a session or submitting the skill prompt in a disposable live TUI. The
+  endpoint also returns `true` for unknown commands, so the Drive control keeps using its
+  confirmed prompt delivery path rather than interpreting this response as skill execution
+  (HS2-AE37AJ).
 - The port is allocated by binding `127.0.0.1:0` and releasing it before launch; if another
   process takes it first the tool fails to bind and the push reports `session_unreachable`
   (the per-session password keeps it from reaching another process's API).
