@@ -141,13 +141,7 @@ jobs:
       - name: Test
         run: |
           sudo apt-get install -y libsecret-tools gnome-keyring dbus-user-session
-          dbus-run-session -- bash -c '
-            set -euo pipefail
-            printf "ci-ephemeral-keyring\n" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
-            printf "ready" | secret-tool store --label "HS2 CI keyring probe" service hs2-ci account probe
-            test "$(secret-tool lookup service hs2-ci account probe)" = "ready"
-            cargo nextest run --all-features
-          '
+          dbus-run-session -- bash .github/scripts/with-secret-service.sh cargo nextest run --all-features
 
       # Node side: the migrator + the cross-language conformance test (docs/12 §12.7).
       # Node version is pinned in .nvmrc so CI matches local dev.
@@ -277,14 +271,14 @@ jobs:
         # These are Ubuntu packages; unrelated runner-image sources can fail independently.
         run: |
           sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
-          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libsecret-tools gnome-keyring dbus-user-session
 
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
         # runs the tests + collects profiles once; the report/gate steps reuse them.
         env:
           RUSTFLAGS: ''
-        run: cargo llvm-cov nextest --all-features --no-report
+        run: dbus-run-session -- bash .github/scripts/with-secret-service.sh cargo llvm-cov nextest --all-features --no-report
 
       - name: Rust coverage lcov (artifact)
         env:
@@ -348,7 +342,7 @@ jobs:
         # These are Ubuntu packages; unrelated runner-image sources can fail independently.
         run: |
           sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
-          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libsecret-tools gnome-keyring dbus-user-session
 
       - name: Build the CLI and server that the real-server flows spawn
         run: cargo build -p hotsheet-cli -p hotsheet-server --bins
@@ -409,7 +403,7 @@ jobs:
           # Bounded retries for this job only (HS2-8YHY6V): the merged report and the job summary list
           # every test that needed one, and each gets a follow-up ticket (docs/test-quarantine.md).
           HOTSHEET_PLAYWRIGHT_RETRIES: '2'
-        run: npx playwright test --shard=${{ matrix.shard }}/4 --fully-parallel --workers=2 --reporter=blob
+        run: dbus-run-session -- bash ../../.github/scripts/with-secret-service.sh npx playwright test --shard=${{ matrix.shard }}/4 --fully-parallel --workers=2 --reporter=blob
 
       - name: Upload the shard's blob report
         if: always()
