@@ -155,6 +155,11 @@ jobs:
             migrator/package-lock.json
             spikes/kerf-webawesome/package-lock.json
 
+      - name: Verify pinned ai-playbook guidance and snapshot tooling
+        run: |
+          node --test scripts/sync-ai-playbook.test.mjs
+          node scripts/sync-ai-playbook.mjs --check --fetch
+
       - name: Validate feature double-coverage matrix
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 

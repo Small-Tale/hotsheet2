@@ -113,6 +113,14 @@ Plugin authors opt in with `instructions.shared_guidance = true`; external plugi
 receive these defaults unless they explicitly request them. Repository-specific policies
 remain local to each project.
 
+The maintained reusable section and workflow prose now comes from versioned
+[`Small-Tale/ai-playbook`](https://github.com/Small-Tale/ai-playbook) sources.
+Hot Sheet ships pinned snapshots at the existing embedded paths; setup and refresh
+remain offline and require no Rulesync installation. The source SHA and body hashes
+are recorded in `guidance/ai-playbook.lock.json`; CI compares them with that exact
+upstream revision. See [snapshot maintenance](../guidance/README.md) for the
+reproducible update and legacy migration process (HS2-46J829, HS2-R5V3AZ).
+
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only

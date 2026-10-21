@@ -20,6 +20,12 @@ evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 > Tauri/native clients. Git-aware fast-path reindex, Tier-1
 > mTLS, and version-pinned/live AI-tool protocol verification are built.
 
+Reusable guidance is maintained in `Small-Tale/ai-playbook`. Local provenance lives in
+`guidance/ai-playbook.lock.json`; `scripts/sync-ai-playbook.mjs` verifies or regenerates
+the eight embedded destinations from a committed source revision. Its Node tests cover
+offline checks, drift, and real-git restoration; CI also verifies the pinned upstream.
+See [snapshot maintenance](../guidance/README.md).
+
 ## Requirements docs
 
 The numbered requirements docs (source of truth for behavior; status in

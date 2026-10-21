@@ -6,6 +6,10 @@ in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
 AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
 These documents remain the source of truth for what we are building and why.
 
+**Shipped guidance provenance:** reusable rules are maintained in `Small-Tale/ai-playbook`;
+Hot Sheet embeds pinned offline snapshots with upstream drift checks. See
+[snapshot maintenance](../guidance/README.md) and [plugin setup](05-ai-tool-plugins.md).
+
 > Status legend used throughout: **Decided** (recommendation made, ready to
 > build) · **Proposed** (recommendation made, wants maintainer confirmation) ·
 > **Open** (genuinely undecided, needs a decision) · **Deferred** (out of the
