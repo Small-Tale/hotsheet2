@@ -1115,6 +1115,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `crates/hotsheet-server/tests/http.rs` checks authenticated suggestion delivery and no rule creation before explicit approval; `clients/web/tests/providers.spec.ts` checks the popup controls, submitted pattern, and wide/phone layout.
 - Manual: Try a disposable token in a simple command and the skipped examples in `docs/manual-test-plan.md`; inspect the generated expression before confirming.
 
+### Auto-Allow during Always review (HS2-WZK2QK)
+
+- Behavior: The timeout sends Allow Once immediately, retains the draft ahead of other pending requests, and lets the person save a durable rule or skip it afterward.
+- Unit: `clients/web/src/features/controllers.test.ts` checks the countdown, held draft, and next-request transition; `crates/hotsheet-aitools/src/permission.rs` covers rule persistence and cascades.
+- End to end: `crates/hotsheet-server/tests/http.rs` checks the authenticated continuation route and retry after a vault failure; `clients/web/tests/providers.spec.ts` checks the real popup at wide and phone sizes.
+
 ### Codex Work ticket usage capture (HS2-2K2D7E)
 
 - Behavior: CLI and MCP claim release capture numeric usage from the exact local Codex session and worker binding. Each response belongs to one unexpired claim interval or stays unassigned; repeated capture does not double count. A server-managed terminal session is skipped.

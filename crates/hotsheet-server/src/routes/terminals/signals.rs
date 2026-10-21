@@ -912,6 +912,9 @@ pub(crate) struct PermissionAnswer {
     description: Option<String>,
     #[serde(default)]
     pattern: Option<hotsheet_aitools::PermissionPattern>,
+    /// Keep the original request available for a reviewed Always rule after Allow Once.
+    #[serde(default)]
+    continue_review: bool,
 }
 
 fn default_scope() -> hotsheet_aitools::PermissionScope {
@@ -938,6 +941,25 @@ pub(crate) async fn resolve_permission(
     Path(id): Path<u64>,
     Json(body): Json<PermissionAnswer>,
 ) -> Result<Json<PermissionResolved>, ApiError> {
+    if body.continue_review
+        && (body.decision != hotsheet_aitools::PermissionDecision::Allow
+            || body.scope != hotsheet_aitools::PermissionScope::Once)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "rule review continuation requires Allow Once",
+        ));
+    }
+    let review_request = body
+        .continue_review
+        .then(|| {
+            state
+                .permissions
+                .pending()
+                .into_iter()
+                .find(|request| request.id == id)
+        })
+        .flatten();
     if let Some(description) = body.description.as_deref() {
         let matching_bash_request = state
             .permissions
@@ -1023,6 +1045,23 @@ pub(crate) async fn resolve_permission(
                 ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
             })?
     };
+    if let Some(request) = review_request {
+        let mut continuations = state.permission_rule_continuations.lock_or_recover();
+        let now = std::time::Instant::now();
+        continuations.retain(|_, (_, created)| {
+            now.duration_since(*created) < std::time::Duration::from_secs(3600)
+        });
+        if continuations.len() >= 64 {
+            if let Some(oldest) = continuations
+                .iter()
+                .min_by_key(|(_, (_, created))| *created)
+                .map(|(id, _)| *id)
+            {
+                continuations.remove(&oldest);
+            }
+        }
+        continuations.insert(id, (request, now));
+    }
     // Resolution can happen through another client or transport. Publish a replayable
     // nudge so every notification inbox reconciles the now-absent request into history.
     state.emit(ChangeEvent {
@@ -1070,6 +1109,82 @@ pub(crate) async fn resolve_permission(
             .map(|cascaded| cascaded.id)
             .collect(),
     }))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RememberAfterAllow {
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    pattern: Option<hotsheet_aitools::PermissionPattern>,
+}
+
+/// Finish a reviewed Always rule after the original request was allowed once.
+pub(crate) async fn remember_permission_after_allow(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+    Json(body): Json<RememberAfterAllow>,
+) -> Result<StatusCode, ApiError> {
+    let mut continuations = state.permission_rule_continuations.lock_or_recover();
+    let now = std::time::Instant::now();
+    continuations.retain(|_, (_, created)| {
+        now.duration_since(*created) < std::time::Duration::from_secs(3600)
+    });
+    let request = continuations
+        .get(&id)
+        .map(|(request, _)| request.clone())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no active permission rule review"))?;
+    if let Some(description) = body.description.as_deref() {
+        if !request.tool.eq_ignore_ascii_case("bash")
+            || !hotsheet_aitools::valid_user_bash_description(description)
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "choose a recognized Bash description for a remembered answer",
+            ));
+        }
+    }
+    let path = state
+        .permission_rule_paths
+        .lock_or_recover()
+        .get(&request.project)
+        .cloned()
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "permission-rule store unavailable",
+            )
+        })?;
+    let cascaded = state
+        .permissions
+        .remember_allowed_request(&request, body.description.as_deref(), body.pattern, &path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::InvalidInput {
+                ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+            } else {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "permission-rule store unavailable",
+                )
+            }
+        })?;
+    continuations.remove(&id);
+    drop(continuations);
+    emit_permission_rules_changed(&state, &request.project);
+    for answered in cascaded {
+        state.emit(ChangeEvent {
+            cursor: None,
+            store: answered.project,
+            kind: "permission_resolved".to_string(),
+            id: answered.id.to_string(),
+            slug: String::new(),
+            message: Some("allow:always".to_string()),
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Publish a replayable `permission_rules_changed` nudge for `project` (HS2-KYK1S7): a rule

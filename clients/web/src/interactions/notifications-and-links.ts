@@ -40,6 +40,11 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly permissionRevision: Signal<number>;
   readonly permissionInbox: PermissionInbox;
   readonly pendingPermissions: () => PermissionItem[];
+  readonly reviewAfterAuto: Signal<
+    { item: PermissionItem; settling: boolean; allowed: boolean; error?: string } | undefined
+  >;
+  readonly rememberPermissionAfterAuto: (item: PermissionItem, pattern?: PermissionPattern) => Promise<void>;
+  readonly dismissReviewAfterAuto: (key: string) => void;
   /** App-wide notification pause (HS2-QYA9SC). */
   readonly setNotificationsPaused: (paused: boolean) => void;
   readonly resolvePermission: (
@@ -107,6 +112,9 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     permissionRevision,
     permissionInbox,
     pendingPermissions,
+    reviewAfterAuto,
+    rememberPermissionAfterAuto,
+    dismissReviewAfterAuto,
     resolvePermission,
     revokePermissionRule,
     changePermissionRuleDecision,
@@ -130,6 +138,10 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
   } = dependencies;
+  const heldReviewItem = (key: string | undefined) => {
+    const item = reviewAfterAuto.value?.item;
+    return item?.key === key ? item : undefined;
+  };
   const permissionSelectionSurface = (target: Element): 'preview' | 'dialog' =>
     target.closest<HTMLElement>('[data-permission-selection-surface]')?.dataset.permissionSelectionSurface === 'preview'
       ? 'preview'
@@ -203,7 +215,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.selector, (_event, target) => {
       const key = data(target).requestKey,
-        item = pendingPermissions().find((value) => value.key === key);
+        item = pendingPermissions().find((value) => value.key === key) ?? heldReviewItem(key);
       if (item) {
         const scope = data(target).scope as PermissionScope;
         if ((scope === 'chat' || scope === 'always') && target.getAttribute('data-rule-confirmed') !== 'true') {
@@ -212,6 +224,10 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
           return;
         }
         if ((scope === 'chat' || scope === 'always') && rememberedPermissionPreview(item.key)?.scope !== scope) return;
+        if (reviewAfterAuto.value?.item.key === item.key) {
+          if (scope === 'always') void rememberPermissionAfterAuto(item, reviewedPermissionPattern(item.key));
+          return;
+        }
         void resolvePermission(
           item,
           data(target).decision as PermissionDecision,
@@ -232,7 +248,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       const current = rememberedPermissionPreview(key);
       if (!current) return;
       const kind = control.value as 'exact' | 'template' | 'regex';
-      const action = pendingPermissions().find((item) => item.key === key)?.action ?? '';
+      const action = (pendingPermissions().find((item) => item.key === key) ?? heldReviewItem(key))?.action ?? '';
       setRememberedPermissionPattern(
         key,
         kind,
@@ -245,7 +261,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     delegate(document.body, 'click', '[data-permission-suggestion-index]', (_event, target) => {
       const key = data(target).requestKey;
       const index = Number((target as HTMLElement).dataset.permissionSuggestionIndex);
-      const item = pendingPermissions().find((value) => value.key === key);
+      const item = pendingPermissions().find((value) => value.key === key) ?? heldReviewItem(key);
       if (!item || !Number.isInteger(index)) return;
       toggleRememberedPermissionSuggestion(item, index);
       permissionRevision.value += 1;
@@ -300,6 +316,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         const key = data(target).requestKey;
         if (!key) return;
         setRememberedPermissionPreview(key);
+        dismissReviewAfterAuto(key);
         permissionRevision.value += 1;
       },
     ),

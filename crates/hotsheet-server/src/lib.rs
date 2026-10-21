@@ -143,8 +143,8 @@ pub(crate) use routes::terminals::{
     kill_terminal, list_permission_rules, list_terminals, open_terminal,
     poll_terminal_question_answer, put_checkout_terminal_settings, put_checkout_trash_settings,
     put_terminal_limits, put_terminal_settings, read_terminal, reconcile_terminal_limits,
-    rename_terminal, resolve_permission, resolve_terminal_question, revoke_permission_rule,
-    update_permission_rule, write_terminal,
+    remember_permission_after_allow, rename_terminal, resolve_permission,
+    resolve_terminal_question, revoke_permission_rule, update_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -261,6 +261,15 @@ pub struct AppState {
     /// Where `Always` allow-rules persist (a store-local JSON file), so remembered answers
     /// survive a restart. `None` in tests (they don't touch disk for rules).
     permission_rule_paths: Arc<Mutex<std::collections::HashMap<String, std::path::PathBuf>>>,
+    /// One-time Allows whose reviewed persistent rule is still being composed (HS2-WZK2QK).
+    permission_rule_continuations: Arc<
+        Mutex<
+            std::collections::HashMap<
+                u64,
+                (hotsheet_aitools::PermissionRequest, std::time::Instant),
+            >,
+        >,
+    >,
     /// The **shared** connection registry for the driving loop (HS2-TCV3BF): each ticket the
     /// server is driving registers here for its turn, so `GET /connections` shows what's
     /// live and (once driving is concurrent) the in-flight bound can consult busy state.
@@ -516,6 +525,7 @@ impl AppState {
             worklist_refresher: Default::default(),
             permissions,
             permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            permission_rule_continuations: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but
             // the shared one tracks "currently driving" by registration, not the window.
             drive_registry: Arc::new(Mutex::new(hotsheet_aitools::ConnectionRegistry::new(
@@ -1486,6 +1496,10 @@ pub fn app(state: AppState) -> Router {
         // answer one (allow/deny + once/session/always).
         .route("/permissions", get(list_permissions))
         .route("/permissions/{id}", post(resolve_permission))
+        .route(
+            "/permissions/{id}/remember",
+            post(remember_permission_after_allow),
+        )
         // Raise a blocking permission request (the asking side — e.g. a Claude PreToolUse
         // hook), HS2-YMR9HE. Blocks until answered over the route-back, or times out.
         .route("/permissions/ask", post(ask_permission))

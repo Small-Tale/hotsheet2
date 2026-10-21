@@ -16350,6 +16350,146 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
 }
 
 #[tokio::test]
+async fn allow_once_can_finish_a_reviewed_rule_after_the_request_is_settled() {
+    const ACTION: &str = "npm run test";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let rules_path = dir.path().join("permissions.json");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let first_bridge = bridge.clone();
+    let first_project = project.clone();
+    let first = std::thread::spawn(move || {
+        first_bridge.request_blocking_for_project(first_project, "chat-a", "Bash", ACTION)
+    });
+    let first_id = loop {
+        let pending = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(id) = pending
+            .as_array()
+            .unwrap()
+            .first()
+            .and_then(|item| item["id"].as_u64())
+        {
+            break id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{first_id}"),
+            Some(r#"{"decision":"allow","scope":"once","continue_review":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        first.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert!(
+        bridge.rules().is_empty(),
+        "the review has not chosen a rule yet"
+    );
+
+    let second_bridge = bridge.clone();
+    let second_project = project.clone();
+    let second = std::thread::spawn(move || {
+        second_bridge.request_blocking_for_project(second_project, "chat-b", "Bash", ACTION)
+    });
+    let second_id = loop {
+        let pending = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(id) = pending
+            .as_array()
+            .unwrap()
+            .first()
+            .and_then(|item| item["id"].as_u64())
+        {
+            break id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{second_id}"),
+            Some(r#"{"decision":"deny","scope":"once","continue_review":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(bridge.pending().len(), 1);
+
+    std::fs::write(&rules_path, "corrupt vault").unwrap();
+    let unavailable = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{first_id}/remember"),
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(bridge.rules().is_empty());
+    assert_eq!(bridge.pending().len(), 1);
+    std::fs::remove_file(&rules_path).unwrap();
+    let remembered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{first_id}/remember"),
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(remembered.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        second.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path).len(),
+        1
+    );
+    let rules = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rules[0]["scope"], "always");
+    let repeat = app
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{first_id}/remember"),
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(repeat.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

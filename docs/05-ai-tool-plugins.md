@@ -916,6 +916,12 @@ Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each
 pending request so clients only render that action when durable rule storage is active.
+If a visible auto-Allow countdown expires during an Always review, the client sends
+`POST /permissions/{id}` with Allow Once and `continue_review: true`. The server answers
+the original request immediately and retains a bounded, short-lived snapshot for
+`POST /permissions/{id}/remember` with the reviewed description and pattern. That second
+request validates and persists the rule before installing it and resolving matching
+pending asks. A failed persistence attempt leaves the snapshot available for retry.
 If the asking hook disconnects, its pending request is removed and the clients are
 notified immediately; an abandoned request does not remain as a false popup.
 The same removal applies to a driven Codex app-server approval when its RPC connection

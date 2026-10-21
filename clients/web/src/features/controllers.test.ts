@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationState } from '../ai-conversation';
 import { Api, type CommandDefinition, type FullTicket, type RepositoryFile, type ToolConnection } from '../api';
+import { setRememberedPermissionPreview } from '../components/permission-request-card';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { MobileMagnifiedTerminal, TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { ConversationExportOpenResult } from '../conversation-export';
@@ -954,6 +955,58 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     await refresh;
     expect(owner.pendingPermissions()).toEqual([]);
     expect(owner.permissionPopupSurface()).toBeUndefined();
+  });
+
+  it('allows once at the timeout while keeping an Always review ahead of the next request (HS2-WZK2QK)', async () => {
+    const projects = signal([project('a')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),
+      firstAnswer = deferred<Response>(),
+      rememberResponses = [new Response('vault unavailable', { status: 503 }), new Response(null, { status: 204 })],
+      posts: { url: string; body: Record<string, unknown> }[] = [];
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === 'POST') {
+        posts.push({ url, body: JSON.parse(init.body as string) as Record<string, unknown> });
+        if (url.endsWith('/permissions/1')) return firstAnswer.promise;
+        if (url.endsWith('/permissions/1/remember')) return rememberResponses.shift()!;
+        return new Response(null, { status: 204 });
+      }
+      return json([]);
+    });
+    owner.permissionAutomationByProject.value = { a: { action: 'allow', delayMs: 1_000 } };
+    owner.permissionInbox.reconcile(
+      projects.value[0],
+      [
+        { id: 1, connection: 'chat-a', tool: 'Bash', action: 'npm test' },
+        { id: 2, connection: 'chat-b', tool: 'Edit', action: 'next.ts' },
+      ],
+      [],
+    );
+    const first = owner.pendingPermissions()[0];
+    setRememberedPermissionPreview(first.key, 'always', first.action);
+    owner.updatePermissionTimer();
+    vi.advanceTimersByTime(1_000);
+    owner.updatePermissionTimer();
+    expect(posts).toEqual([
+      { url: '/api/a/permissions/1', body: { decision: 'allow', scope: 'once', continue_review: true } },
+    ]);
+    expect(owner.pendingPermissions().map((item) => item.key)).toEqual(['a:2']);
+    expect(owner.reviewAfterAuto.value).toMatchObject({ item: { key: 'a:1' }, settling: true });
+    expect(String(owner.permissionPopupSurface())).toContain('Review the rule to remember');
+    expect(String(owner.permissionPopupSurface())).not.toContain('next.ts');
+    firstAnswer.resolve(json({ connection: 'chat-a', decision: 'allow', persisted: false }));
+    await vi.waitFor(() => {
+      expect(owner.reviewAfterAuto.value?.settling).toBe(false);
+    });
+    await owner.rememberPermissionAfterAuto(first);
+    expect(posts[1]).toEqual({ url: '/api/a/permissions/1/remember', body: {} });
+    expect(owner.reviewAfterAuto.value).toMatchObject({ item: { key: 'a:1' }, settling: false, allowed: true });
+    expect(String(owner.permissionPopupSurface())).not.toContain('next.ts');
+    await owner.rememberPermissionAfterAuto(first);
+    expect(posts[2]).toEqual({ url: '/api/a/permissions/1/remember', body: {} });
+    expect(owner.reviewAfterAuto.value).toBeUndefined();
+    expect(String(owner.permissionPopupSurface())).toContain('next.ts');
+    setRememberedPermissionPreview(first.key);
   });
 
   it('auto-allows immediately (0 s) without presenting the popup while still recording and sending it (HS2-EBGCGW)', async () => {

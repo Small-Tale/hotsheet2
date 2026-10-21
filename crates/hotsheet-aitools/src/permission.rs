@@ -713,71 +713,13 @@ impl PermissionBridge {
         };
         let req = self.queue.remove(pos).expect("position just found");
 
-        let mut persisted_rule = None;
-        let mut cascaded = Vec::new();
-        if scope != Scope::Once {
-            let rule = Rule {
-                project: req.project.clone(),
-                tool: req.tool.clone(),
-                action: action_fingerprint(
-                    &self.action_key,
-                    &pattern
-                        .as_ref()
-                        .map_or_else(|| req.action.clone(), PatternSpec::identity),
-                ),
-                exact_action: Some(req.action.clone()),
-                pattern,
-                description: description
-                    .filter(|value| {
-                        req.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
-                    })
-                    .or_else(|| safe_permission_description(&req.tool, &req.action))
-                    .map(str::to_owned),
-                decision,
-                persist: scope == Scope::Always,
-                connection: (scope == Scope::Chat).then(|| req.connection.clone()),
-            };
-            // A later rule for the same key (and the same chat, for a chat rule) supersedes
-            // an earlier one; chat and project rules coexist and precedence picks between them.
-            self.rules.retain(|r| !r.same_key(&rule));
-            if scope == Scope::Always {
-                persisted_rule = Some(rule.clone());
-            }
-            self.rules.push(rule);
-            // Identical asks already waiting are answered by the new rule now (HS2-JNHAYB).
-            let rules = &self.rules;
-            let (answered, waiting): (Vec<Request>, Vec<Request>) =
-                self.queue.drain(..).partition(|queued| {
-                    effective_rule(
-                        rules,
-                        &queued.project,
-                        &queued.connection,
-                        &queued.tool,
-                        &queued.action,
-                        &self.action_key,
-                    )
-                    .is_some()
-                });
-            self.queue = waiting.into();
-            for queued in answered {
-                let decision = effective_rule(
-                    &self.rules,
-                    &queued.project,
-                    &queued.connection,
-                    &queued.tool,
-                    &queued.action,
-                    &self.action_key,
-                )
-                .map(|rule| rule.decision)
-                .expect("partitioned by a matching rule");
-                cascaded.push(CascadedResolution {
-                    id: queued.id,
-                    project: queued.project,
-                    connection: queued.connection,
-                    decision,
-                });
-            }
-        }
+        let (persisted_rule, cascaded) = if scope == Scope::Once {
+            (None, Vec::new())
+        } else {
+            let rule = self.rule_for_request(&req, decision, scope, description, pattern);
+            let persisted = (scope == Scope::Always).then(|| rule.clone());
+            (persisted, self.install_rule(rule))
+        };
 
         Ok(Some(Resolved {
             project: req.project,
@@ -786,6 +728,99 @@ impl PermissionBridge {
             persisted_rule,
             cascaded,
         }))
+    }
+
+    fn rule_for_request(
+        &self,
+        request: &Request,
+        decision: Decision,
+        scope: Scope,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+    ) -> Rule {
+        Rule {
+            project: request.project.clone(),
+            tool: request.tool.clone(),
+            action: action_fingerprint(
+                &self.action_key,
+                &pattern
+                    .as_ref()
+                    .map_or_else(|| request.action.clone(), PatternSpec::identity),
+            ),
+            exact_action: Some(request.action.clone()),
+            pattern,
+            description: description
+                .filter(|value| {
+                    request.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
+                })
+                .or_else(|| safe_permission_description(&request.tool, &request.action))
+                .map(str::to_owned),
+            decision,
+            persist: scope == Scope::Always,
+            connection: (scope == Scope::Chat).then(|| request.connection.clone()),
+        }
+    }
+
+    fn install_rule(&mut self, rule: Rule) -> Vec<CascadedResolution> {
+        self.rules.retain(|existing| !existing.same_key(&rule));
+        self.rules.push(rule);
+        let rules = &self.rules;
+        let (answered, waiting): (Vec<Request>, Vec<Request>) =
+            self.queue.drain(..).partition(|queued| {
+                effective_rule(
+                    rules,
+                    &queued.project,
+                    &queued.connection,
+                    &queued.tool,
+                    &queued.action,
+                    &self.action_key,
+                )
+                .is_some()
+            });
+        self.queue = waiting.into();
+        answered
+            .into_iter()
+            .map(|queued| {
+                let decision = effective_rule(
+                    &self.rules,
+                    &queued.project,
+                    &queued.connection,
+                    &queued.tool,
+                    &queued.action,
+                    &self.action_key,
+                )
+                .expect("partitioned by a matching rule")
+                .decision;
+                CascadedResolution {
+                    id: queued.id,
+                    project: queued.project,
+                    connection: queued.connection,
+                    decision,
+                }
+            })
+            .collect()
+    }
+
+    /// Install a reviewed rule after its original request was already allowed once.
+    /// Pending requests that match the new rule are resolved normally.
+    pub fn remember_allowed_request(
+        &mut self,
+        request: &Request,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+    ) -> io::Result<(Rule, Vec<CascadedResolution>)> {
+        if let Some(pattern) = &pattern {
+            pattern.validate(&request.action)?;
+        }
+        let rule = self.rule_for_request(
+            request,
+            Decision::Allow,
+            Scope::Always,
+            description,
+            pattern,
+        );
+        let cascaded = self.install_rule(rule.clone());
+        Ok((rule, cascaded))
     }
 }
 
@@ -1248,6 +1283,32 @@ impl SharedPermissionBridge {
         }
         self.wake_waiters();
         Ok(Some(resolved))
+    }
+
+    /// Persist a reviewed Always rule after the original request was allowed once.
+    /// A failed write leaves both live rules and other pending asks unchanged.
+    pub fn remember_allowed_request(
+        &self,
+        request: &Request,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+        path: &Path,
+    ) -> io::Result<Vec<CascadedResolution>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let mut proposed = bridge.clone();
+        let (rule, cascaded) = proposed.remember_allowed_request(request, description, pattern)?;
+        append_rule(path, &rule)?;
+        *bridge = proposed;
+        drop(bridge);
+        if !cascaded.is_empty() {
+            let mut results = self.results.lock_or_recover();
+            for answered in &cascaded {
+                results.insert(answered.id, answered.decision);
+            }
+            drop(results);
+            self.wake_waiters();
+        }
+        Ok(cascaded)
     }
 
     /// Every remembered rule, newest last (HS2-JNHAYB settings list).

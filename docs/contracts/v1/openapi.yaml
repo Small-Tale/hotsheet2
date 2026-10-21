@@ -2331,6 +2331,19 @@ paths:
         required: true
         schema:
           type: string
+  /permissions/{id}/remember:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: remember_permission_after_allow
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
 components:
   securitySchemes:
     HotsheetSecret:

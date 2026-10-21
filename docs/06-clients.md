@@ -2900,6 +2900,10 @@ request while leaving it open for a manual decision. Timer ticks update only tha
 node—not the application root—so an unrelated open Web Awesome select or popup retains
 its live element, open state, focus, and selection. Automatic decisions use the same
 authenticated route as clicks and are distinguished in client history.
+If an auto-Allow countdown expires while the person is reviewing an Always rule, the
+client sends Allow Once immediately and keeps that review open with an allowed status.
+The next pending permission waits behind it until the person saves the durable rule or
+chooses Skip Rule. A failed rule save keeps the review and its choices for retry.
 
 The long tail of HS1 UI (rule-oriented query builders, saved-view management, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The

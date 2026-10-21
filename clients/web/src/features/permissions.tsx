@@ -3,7 +3,11 @@ import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
-import { setRememberedPermissionPreview, updatePermissionCountdownText } from '../components/permission-request-card';
+import {
+  rememberedPermissionPreview,
+  setRememberedPermissionPreview,
+  updatePermissionCountdownText,
+} from '../components/permission-request-card';
 import {
   PERMISSION_RULE_BATCH_SIZE,
   type PermissionRuleFilters,
@@ -26,6 +30,7 @@ import {
   parsePermissionHistory,
   type PermissionAutomation,
   PermissionInbox,
+  type PermissionItem,
   type PermissionPattern,
   type PermissionRule,
   permissionRuleKey,
@@ -97,6 +102,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const loadingPermissionRules = new Set<string>();
   // App-wide pause (HS2-QYA9SC): no popup in any project while set, so its countdown also freezes.
   const notificationsPaused = signal(loadNotificationsPaused());
+  const reviewAfterAuto = signal<
+    { item: PermissionItem; settling: boolean; allowed: boolean; error?: string } | undefined
+  >(undefined);
   let permissionTimerInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined,
     allowingImmediately = false;
@@ -123,7 +131,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       updatePermissionTimer();
     },
     clearDescription: (key) => {
-      setRememberedPermissionPreview(key);
+      if (reviewAfterAuto.peek()?.item.key !== key) setRememberedPermissionPreview(key);
     },
     beginTiming: (item) => beginInteractionTiming('permission-decision', { project: item.projectId }),
   });
@@ -194,6 +202,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   }
 
   function updatePermissionTimer() {
+    if (reviewAfterAuto.value) {
+      permissionTimer.hide();
+      permissionCountdown = undefined;
+      return;
+    }
     allowImmediatePermissions();
     const item = visiblePermission();
     if (!item) {
@@ -211,7 +224,48 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionCountdown = remaining === undefined ? undefined : { key: item.key, remainingMs: remaining };
     if (remaining !== undefined)
       updatePermissionCountdownText(document, item.key, formatPermissionCountdown(remaining));
-    if (remaining === 0) void resolvePermission(item, setting.action, 'once', true);
+    if (remaining === 0) {
+      if (setting.action === 'allow' && rememberedPermissionPreview(item.key)?.scope === 'always') {
+        reviewAfterAuto.value = { item, settling: true, allowed: false };
+        void resolvePermission(item, 'allow', 'once', true, false, undefined, undefined, true).then(() => {
+          if (reviewAfterAuto.peek()?.item.key !== item.key) return;
+          reviewAfterAuto.value = pendingPermissions().some((pending) => pending.key === item.key)
+            ? undefined
+            : { item, settling: false, allowed: true };
+          permissionRevision.value += 1;
+        });
+      } else void resolvePermission(item, setting.action, 'once', true);
+    }
+  }
+
+  async function rememberPermissionAfterAuto(item: PermissionItem, pattern?: PermissionPattern) {
+    const review = reviewAfterAuto.peek();
+    if (review?.item.key !== item.key || review.settling) return;
+    const owning = projects.value.find((project) => project.id === item.projectId);
+    if (!owning) return;
+    reviewAfterAuto.value = { item, settling: true, allowed: true };
+    try {
+      await new Api(owning.apiPath).rememberPermissionAfterAllow(item.id, undefined, pattern);
+      setRememberedPermissionPreview(item.key);
+      reviewAfterAuto.value = undefined;
+      markPermissionRulesStale(item.projectId);
+      updatePermissionTimer();
+    } catch (reason) {
+      reviewAfterAuto.value = {
+        item,
+        settling: false,
+        allowed: true,
+        error: `Could not remember the rule. ${reason instanceof Error ? reason.message : String(reason)}`,
+      };
+    }
+    permissionRevision.value += 1;
+  }
+
+  function dismissReviewAfterAuto(key: string) {
+    if (reviewAfterAuto.peek()?.item.key !== key) return;
+    reviewAfterAuto.value = undefined;
+    updatePermissionTimer();
+    permissionRevision.value += 1;
   }
 
   /**
@@ -219,23 +273,25 @@ export function createPermissionsController(dependencies: PermissionsDependencie
    * (HS2-M2W2DP); the shell passes `top` so its popup paints in the top layer (HS2-ZESCM2).
    */
   function permissionPopupSurface(layer: 'flow' | 'top' = 'flow') {
-    const permission = visiblePermission();
+    const held = notificationsPaused.value ? undefined : reviewAfterAuto.value;
+    const permission = held?.item ?? visiblePermission();
     if (!permission) return undefined;
     const automation = permissionAutomation(permission.projectId),
       countdown =
-        permissionCountdown?.key === permission.key
+        !held && permissionCountdown?.key === permission.key
           ? formatPermissionCountdown(permissionCountdown.remainingMs)
           : undefined,
-      error = permissionResolutionErrors.value[permission.key];
+      error = held?.error ?? permissionResolutionErrors.value[permission.key];
     return (
       <PermissionPopupSurface
         popup={{
           layer,
           item: permission,
-          state: error ? 'failed' : 'pending',
+          state: held?.settling ? 'resolving' : error ? 'failed' : 'pending',
           error,
+          reviewAlreadyAllowed: held?.allowed,
           countdown,
-          countdownAction: automation.action === 'off' ? undefined : automation.action,
+          countdownAction: held || automation.action === 'off' ? undefined : automation.action,
           groupCount: permissionInbox.identical(permission.key).length,
         }}
       />
@@ -738,6 +794,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     refreshPermissions,
     startPermissionUpdates,
     resolvePermission,
+    reviewAfterAuto,
+    rememberPermissionAfterAuto,
+    dismissReviewAfterAuto,
     serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,

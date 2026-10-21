@@ -1701,6 +1701,7 @@ export class Api {
     scope: 'once' | 'chat' | 'always',
     description?: string,
     pattern?: PermissionPattern,
+    continueReview = false,
   ) =>
     this.parsed(parsePermissionDecision, `/permissions/${id}`, {
       method: 'POST',
@@ -1709,7 +1710,13 @@ export class Api {
         scope,
         ...(description ? { description } : {}),
         ...(pattern ? { pattern } : {}),
+        ...(continueReview ? { continue_review: true } : {}),
       }),
+    });
+  rememberPermissionAfterAllow = (id: number, description?: string, pattern?: PermissionPattern) =>
+    this.parsed(ignoreBody, `/permissions/${id}/remember`, {
+      method: 'POST',
+      body: JSON.stringify({ ...(description ? { description } : {}), ...(pattern ? { pattern } : {}) }),
     });
   /** Remembered permission answers: chat, session, and durable rules (HS2-JNHAYB). */
   permissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules');

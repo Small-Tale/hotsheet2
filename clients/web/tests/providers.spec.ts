@@ -29164,6 +29164,67 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await expect.poll(() => answers).toBe(1);
 });
 
+test('auto-allows during an Always review, then remembers the rule before showing the next request (HS2-WZK2QK)', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockProject(page);
+  let pending = [
+    { id: 1, connection: 'chat-a', tool: 'Bash', action: 'npm test', always_allow_supported: true },
+    { id: 2, connection: 'chat-b', tool: 'Edit', action: 'next.ts', always_allow_supported: true },
+  ];
+  const answers: Array<Record<string, unknown>> = [];
+  let remembered = 0;
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/1', (route) => {
+    answers.push(route.request().postDataJSON() as Record<string, unknown>);
+    pending = pending.filter((item) => item.id !== 1);
+    return route.fulfill({ json: { connection: 'chat-a', decision: 'allow', persisted: false } });
+  });
+  await page.route('**/permissions/1/remember', (route) => {
+    remembered += 1;
+    return route.fulfill({ status: 204, body: '' });
+  });
+  await page.route('**/permissions/2', (route) => {
+    pending = pending.filter((item) => item.id !== 2);
+    return route.fulfill({ json: { connection: 'chat-b', decision: 'allow', persisted: false } });
+  });
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'hotsheet.project.demo-checkout.permission-automation',
+      JSON.stringify({ action: 'allow', delayMs: 60_000 }),
+    );
+  });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toContainText('npm test');
+  await expect(popup).toContainText('Auto-allow in');
+  await expect(popup.locator('.permission-request-card__countdown')).toContainText('1:00');
+  await popup.getByRole('button', { name: 'Always Allow', exact: true }).click();
+  await expect(popup).toContainText('Review the rule to remember');
+  await page.clock.runFor(65_000);
+  await expect.poll(() => answers.length).toBe(1);
+  expect(answers[0]).toMatchObject({ decision: 'allow', scope: 'once', continue_review: true });
+  await expect(popup).toContainText('Review the rule to remember');
+  await expect(popup).toContainText('This request was allowed. Finish the rule');
+  await expect(popup).not.toContainText('next.ts');
+  await popup.screenshot({ path: 'target/visual-captures/hs2-wzk2qk-review-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await popup.screenshot({ path: 'target/visual-captures/hs2-wzk2qk-review-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
+  await expect.poll(() => remembered).toBe(1);
+  await expect(popup).toContainText('next.ts');
+  await popup.getByRole('button', { name: 'Always Allow', exact: true }).click();
+  await page.clock.runFor(65_000);
+  await expect(popup).toContainText('This request was allowed. Finish the rule');
+  await popup.getByRole('button', { name: 'Skip Rule' }).click();
+  await expect(popup).toHaveCount(0);
+  expect(remembered).toBe(1);
+});
+
 test('pauses and resumes notifications app-wide from the popup, sidebar, and banner (HS2-QYA9SC)', async ({ page }) => {
   await page.clock.install();
   await mockProject(page);

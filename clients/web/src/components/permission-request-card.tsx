@@ -71,6 +71,8 @@ export interface PermissionRequestCardProps {
   countdown?: string;
   countdownAction?: 'allow' | 'deny';
   error?: string;
+  /** Allow Once already reached the tool; this surface remains for the reviewed rule. */
+  reviewAlreadyAllowed?: boolean;
   /** Pending requests identical to this one, itself included (HS2-JNHAYB); one answer covers them all. */
   groupCount?: number;
 }
@@ -127,13 +129,18 @@ export function PermissionRequestCard({
   countdown,
   countdownAction = 'allow',
   error,
+  reviewAlreadyAllowed = false,
   groupCount = 1,
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
   const preview = history ? undefined : rememberedPermissionPreview(item.key);
   const previewScope = preview?.scope;
-  const statusLabel = history ? `${item.tool}: ${historyLabel(item)}` : operationLabel(item);
+  const statusLabel = history
+    ? `${item.tool}: ${historyLabel(item)}`
+    : reviewAlreadyAllowed
+      ? `${item.tool}: this request was allowed`
+      : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
     ? item.decision === 'allow'
@@ -174,6 +181,9 @@ export function PermissionRequestCard({
   const decisions = history ? undefined : previewScope ? (
     <div class="permission-request-card__confirmation" role="group" aria-label="Confirm remembered permission">
       <strong>Review the rule to remember</strong>
+      {reviewAlreadyAllowed && (
+        <p role="status">This request was allowed. Finish the rule to remember future matching requests.</p>
+      )}
       <dl>
         <dt>Tool</dt>
         <dd>{item.tool}</dd>
@@ -282,7 +292,7 @@ export function PermissionRequestCard({
           action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelRememberedPermission.value}
           rootAttributes={{ 'data-request-key': item.key }}
         >
-          Back
+          {reviewAlreadyAllowed ? 'Skip Rule' : 'Back'}
         </Button>
         <Button
           emphasis="primary"

@@ -32,6 +32,7 @@ export interface PermissionDecisionDependencies {
     scope: PermissionScope,
     description?: string,
     pattern?: PermissionPattern,
+    continueReview?: boolean,
   ) => Promise<void>;
 }
 
@@ -57,8 +58,9 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
       scope: PermissionScope,
       description?: string,
       pattern?: PermissionPattern,
+      continueReview = false,
     ) => {
-      await new Api(owning.apiPath).resolvePermission(item.id, decision, scope, description, pattern);
+      await new Api(owning.apiPath).resolvePermission(item.id, decision, scope, description, pattern, continueReview);
     });
   const permissionRevision = signal(0),
     permissionResolutionErrors = signal<Record<string, string>>({}),
@@ -173,6 +175,7 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
     grouped = !automatic,
     description?: string,
     pattern?: PermissionPattern,
+    continueReview = false,
   ) {
     const owning = projects.value.find((value) => value.id === item.projectId);
     if (!owning) return;
@@ -200,7 +203,7 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
     permissionRevision.value += 1;
     finishTiming?.();
     try {
-      await send(owning, item, decision, scope, scope === 'once' ? undefined : description, pattern);
+      await send(owning, item, decision, scope, scope === 'once' ? undefined : description, pattern, continueReview);
       clearDescription(item.key);
     } catch (reason) {
       const noLongerPending = reason instanceof ApiHttpError && reason.status === 404;
