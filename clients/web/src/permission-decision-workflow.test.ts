@@ -63,6 +63,7 @@ describe('permission decision workflow (HS2-GGJ57M)', () => {
       'chat',
       undefined,
       pattern,
+      false,
     );
   });
   it('groups remembered answers into one send and marks rules stale', async () => {
@@ -78,10 +79,27 @@ describe('permission decision workflow (HS2-GGJ57M)', () => {
       'always',
       'safe command',
       undefined,
+      false,
     );
     expect(inbox.pending()).toEqual([]);
     expect(workflow.freshPermissionRules.value.size).toBe(0);
     expect(inbox.history().map((item) => item.id)).toEqual([2, 1]);
+  });
+
+  it('forwards the automatic Allow Once review continuation flag (HS2-WZK2QK)', async () => {
+    const { projects, inbox, send, workflow } = setup();
+    inbox.reconcile(projects.value[0], [request(1)], []);
+    await workflow.resolvePermission(inbox.pending()[0], 'allow', 'once', true, false, undefined, undefined, true);
+    expect(send).toHaveBeenCalledWith(
+      projects.value[0],
+      expect.objectContaining({ id: 1 }),
+      'allow',
+      'once',
+      undefined,
+      undefined,
+      true,
+    );
+    expect(inbox.pending()).toEqual([]);
   });
 
   it('sends once per grouped one-time answer and restores only a failed request', async () => {
