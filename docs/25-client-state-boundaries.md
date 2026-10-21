@@ -36,6 +36,11 @@ projection, queued reset, failure, retry, and discard transitions to
 `clients/web/src/gallery-annotation-workflow.ts`. `gallery.tsx` still owns media
 effects, provider API calls, server ticket reconciliation, and presentation.
 
+`HS2-GGJ57M` extracted permission inbox reconciliation, grouped optimistic
+decisions, rollback, 404 cleanup, rule freshness, and API effects to
+`clients/web/src/permission-decision-workflow.ts`. `permissions.tsx` keeps
+browser storage, countdown presentation, window listeners, and Settings UI.
+
 ### Shared Rust reducer evaluation (HS2-EJ7NWH, 2026-10-21)
 
 **Decision: no-go for shared client-state Rust now.** The isolated

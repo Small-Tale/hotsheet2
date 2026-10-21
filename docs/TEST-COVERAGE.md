@@ -1083,3 +1083,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/gallery-annotation-workflow.test.ts` walks unchanged, save/fail/retry, revision conflict, crop projection, queued reset, discard, and refill sequences; `features/controllers.test.ts` verifies composed gallery ownership and failure recovery.
 - End to end: `clients/web/tests/providers.spec.ts` checks crop, revision forwarding, failed save, retry, discard, and wide/phone presentation; `ticket-reader-stack.spec.ts` checks saves through the linked reader's project.
 - Manual: Wide and phone failure captures were inspected; `HS2-KTHP6F` tracks a real provider's revision conflict and retry/discard path.
+
+### Permission decision workflow (HS2-GGJ57M)
+
+- Behavior: Grouped and one-time decisions settle optimistically, restore failed sends, avoid automatic retry loops, treat 404 as external resolution, mark remembered rules stale, and reconcile empty/refill or closed-project requests.
+- Unit: `clients/web/src/permission-decision-workflow.test.ts` walks grouped, retry, auto failure, 404, refill, and project close sequences; `permission-notifications.test.ts` checks inbox and timer rules; `features/controllers.test.ts` checks the composed adapter.
+- End to end: `clients/web/tests/providers.spec.ts` covers grouped answers, failed optimistic send, 404 cleanup, immediate auto-allow, cross-project routing, and wide/phone popup states.
+- Manual: Wide and phone grouped-popup captures were inspected; live provider permission behavior remains in the existing terminal verification tickets.

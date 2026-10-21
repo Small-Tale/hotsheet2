@@ -17,6 +17,7 @@ import {
   notificationsPausedFromStorageEvent,
   saveNotificationsPaused,
 } from '../notification-pause';
+import { createPermissionDecisionWorkflow } from '../permission-decision-workflow';
 import {
   allowsImmediately,
   DEFAULT_PERMISSION_AUTOMATION,
@@ -24,13 +25,9 @@ import {
   parsePermissionAutomation,
   parsePermissionHistory,
   type PermissionAutomation,
-  permissionBelongsToProject,
-  type PermissionDecision,
   PermissionInbox,
-  type PermissionItem,
   type PermissionRule,
   permissionRuleKey,
-  type PermissionScope,
   projectPermissionRules,
   VisiblePermissionTimer,
 } from '../permission-notifications';
@@ -61,11 +58,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const storedPermissionHistory = loadPermissionHistory();
   // Owns the countdown interval and cross-window storage listener (HS2-30J7W5).
   let lifetime = createScope();
-  const permissionRevision = signal(0),
-    permissionInbox = new PermissionInbox(storedPermissionHistory),
+  const permissionInbox = new PermissionInbox(storedPermissionHistory),
     permissionTimer = new VisiblePermissionTimer();
   const permissionAutomationByProject = signal<Record<string, PermissionAutomation>>({});
-  const permissionResolutionErrors = signal<Record<string, string>>({});
   // Remembered answers per project for Settings → Permissions (HS2-JNHAYB). Loaded when that view
   // shows a project whose list is missing or stale; any permission resolution marks every project
   // stale, and a `permission_rules_changed` event from another client marks its project stale
@@ -73,7 +68,6 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const permissionRulesByProject = signal<Record<string, PermissionRule[]>>({}),
     permissionRulesMessage = signal(''),
     revokingPermissionRules = signal<readonly string[]>([]),
-    freshPermissionRules = signal<ReadonlySet<string>>(new Set()),
     permissionRulesDialog = signal<
       | {
           projectId: string;
@@ -99,26 +93,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       | undefined
     >(undefined);
   const loadingPermissionRules = new Set<string>();
-  const markPermissionRulesStale = (projectId?: string) => {
-    const fresh = freshPermissionRules.peek();
-    if (projectId === undefined ? fresh.size > 0 : fresh.has(projectId))
-      freshPermissionRules.value = new Set(projectId === undefined ? [] : [...fresh].filter((id) => id !== projectId));
-  };
   // App-wide pause (HS2-QYA9SC): no popup in any project while set, so its countdown also freezes.
   const notificationsPaused = signal(loadNotificationsPaused());
-  let permissionPolling = false,
-    permissionRefreshRequested = false,
-    permissionResolutionEpoch = 0,
-    permissionTimerInterval: number | undefined,
+  let permissionTimerInterval: number | undefined,
     permissionCountdown: { key: string; remainingMs: number } | undefined,
     allowingImmediately = false;
-  const permissionProjectsToRefresh = new Set<string>();
-  const queuePermissionRefresh = (projectId?: string) => {
-    if (projectId === undefined) {
-      permissionRefreshRequested = true;
-      permissionProjectsToRefresh.clear();
-    } else if (!permissionRefreshRequested) permissionProjectsToRefresh.add(projectId);
-  };
   const pendingPermissions = () => permissionInbox.pending();
   const permissionHistory = () => permissionInbox.history();
   const projectPendingPermissions = (projectId = selectedProjectId.value) =>
@@ -133,84 +112,26 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const persistPermissionHistory = () => {
     localStorage.setItem('hotsheet.permission-history', JSON.stringify(permissionInbox.history()));
   };
-
-  async function refreshPermissions(projectId?: string) {
-    if (permissionPolling) {
-      queuePermissionRefresh(projectId);
-      return;
-    }
-    permissionPolling = true;
-    try {
-      const resolutionEpoch = permissionResolutionEpoch;
-      const targets = projectId === undefined ? projects.value : projects.value.filter((item) => item.id === projectId);
-      const results = await Promise.all(
-        targets.map(async (current) => {
-          // Stream events and resyncs reconcile their own project; startup may reconcile every open
-          // project. This invisible background work must not drive the server-busy indicator, which
-          // otherwise flashed a generic "Loading…" over unrelated work such as a warm tab switch
-          // (HS2-7G3C19).
-          const client = new Api(current.apiPath, '', { trackBusy: false });
-          try {
-            const [requests, connections] = await Promise.all([
-              client.permissions(),
-              client.activeToolConnections().catch(() => []),
-            ]);
-            return {
-              current,
-              requests: requests.filter((request) =>
-                permissionBelongsToProject(request, connections, projects.value, current.id),
-              ),
-              connections,
-            };
-          } catch {
-            return { current };
-          }
-        }),
-      );
-      if (resolutionEpoch !== permissionResolutionEpoch) {
-        queuePermissionRefresh(projectId);
-        return;
-      }
-      const previousPendingKeys = pendingPermissions().map((item) => item.key);
-      let changed = false;
-      for (const result of results) {
-        if (result.requests && projects.value.some((project) => project.id === result.current.id)) {
-          changed =
-            permissionInbox.reconcile(result.current, result.requests, result.connections, Date.now()) || changed;
-          continue;
-        }
-        const stale = permissionInbox.pending().filter((item) => item.projectId === result.current.id);
-        for (const item of stale) {
-          permissionTimer.remove(item.key);
-          clearSelectedBashDescription(item.key);
-        }
-        if (stale.some((item) => item.key in permissionResolutionErrors.value))
-          permissionResolutionErrors.value = Object.fromEntries(
-            Object.entries(permissionResolutionErrors.value).filter(([key]) => !stale.some((item) => item.key === key)),
-          );
-        changed = permissionInbox.discardProject(result.current.id) || changed;
-      }
-      const currentPendingKeys = new Set(pendingPermissions().map((item) => item.key));
-      for (const key of previousPendingKeys) if (!currentPendingKeys.has(key)) clearSelectedBashDescription(key);
-      if (changed) {
-        updatePermissionTimer();
-        permissionRevision.value += 1;
-        persistPermissionHistory();
-      }
-    } finally {
-      permissionPolling = false;
-      if (permissionRefreshRequested) {
-        permissionRefreshRequested = false;
-        void refreshPermissions();
-      } else {
-        const nextProject = permissionProjectsToRefresh.values().next().value;
-        if (nextProject !== undefined) {
-          permissionProjectsToRefresh.delete(nextProject);
-          void refreshPermissions(nextProject);
-        }
-      }
-    }
-  }
+  const decisionWorkflow = createPermissionDecisionWorkflow({
+    projects,
+    inbox: permissionInbox,
+    timer: permissionTimer,
+    persistHistory: persistPermissionHistory,
+    updateTimer: () => {
+      updatePermissionTimer();
+    },
+    clearDescription: clearSelectedBashDescription,
+    beginTiming: (item) => beginInteractionTiming('permission-decision', { project: item.projectId }),
+  });
+  const {
+    permissionRevision,
+    permissionResolutionErrors,
+    freshPermissionRules,
+    markPermissionRulesStale,
+    refreshPermissions,
+    resolvePermission,
+    serverResolvedPermission,
+  } = decisionWorkflow;
 
   /**
    * Start the local countdown and reconcile once. Later changes arrive only through the
@@ -243,94 +164,6 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       });
     }
     void refreshPermissions();
-  }
-
-  async function resolvePermission(
-    item: PermissionItem,
-    decision: PermissionDecision,
-    scope: PermissionScope,
-    automatic = false,
-    grouped = !automatic,
-    description?: string,
-  ) {
-    const owning = projects.value.find((value) => value.id === item.projectId);
-    if (!owning) return;
-    // One answer covers every identical waiting request (HS2-JNHAYB). A remembered answer is sent
-    // once — the server resolves the identical asks with the new rule; a one-time answer is sent
-    // for each request in the group.
-    const group = grouped ? permissionInbox.identical(item.key) : [item];
-    if (group.length > 1) {
-      const [first, ...rest] = group;
-      // A remembered answer resolves the rest on the server; settle them here now (a failed send
-      // restores only the first, and the next reconcile re-adds anything still pending).
-      if (scope !== 'once')
-        for (const other of rest)
-          if (permissionInbox.resolve(other.key, decision, scope)) permissionTimer.remove(other.key);
-      await Promise.all([
-        resolvePermission(first, decision, scope, automatic, false, description),
-        ...(scope === 'once' ? rest.map((other) => resolvePermission(other, decision, scope, false, false)) : []),
-      ]);
-      return;
-    }
-    const finishTiming = beginInteractionTiming('permission-decision', { project: item.projectId });
-    permissionResolutionErrors.value = Object.fromEntries(
-      Object.entries(permissionResolutionErrors.value).filter(([key]) => key !== item.key),
-    );
-    if (!permissionInbox.resolve(item.key, decision, scope, automatic)) return;
-    if (scope !== 'once') markPermissionRulesStale();
-    permissionResolutionEpoch += 1;
-    persistPermissionHistory();
-    permissionTimer.remove(item.key);
-    updatePermissionTimer();
-    permissionRevision.value += 1;
-    finishTiming();
-    try {
-      await new Api(owning.apiPath).resolvePermission(
-        item.id,
-        decision,
-        scope,
-        scope === 'once' ? undefined : description,
-      );
-      clearSelectedBashDescription(item.key);
-    } catch (reason) {
-      const noLongerPending = reason instanceof ApiHttpError && reason.status === 404;
-      permissionInbox.restore(item);
-      if (noLongerPending) {
-        permissionInbox.removeExternal(item.key);
-        clearSelectedBashDescription(item.key);
-      }
-      persistPermissionHistory();
-      // A failed automatic decision falls back to a manual one: never retry it on the next timer tick,
-      // which for an immediate (0 s) Auto-allow would become a once-per-second request loop.
-      if (automatic && !noLongerPending) permissionTimer.cancel(item.key);
-      if (!noLongerPending)
-        permissionResolutionErrors.value = {
-          ...permissionResolutionErrors.value,
-          [item.key]: `Could not send the permission decision. ${reason instanceof Error ? reason.message : String(reason)}`,
-        };
-      if (!noLongerPending) {
-        updatePermissionTimer();
-        permissionRevision.value += 1;
-      }
-      if (noLongerPending) await refreshPermissions(item.projectId);
-    }
-  }
-
-  function serverResolvedPermission(
-    key: string,
-    resolution?: { decision: PermissionDecision; scope: PermissionScope },
-  ) {
-    permissionResolutionEpoch += 1;
-    if (resolution?.scope !== 'once') markPermissionRulesStale();
-    const removed = resolution
-      ? permissionInbox.resolve(key, resolution.decision, resolution.scope)
-      : permissionInbox.removeExternal(key);
-    if (!removed) return;
-    clearSelectedBashDescription(key);
-    permissionTimer.remove(key);
-    updatePermissionTimer();
-    permissionRevision.value += 1;
-    persistPermissionHistory();
   }
 
   /**

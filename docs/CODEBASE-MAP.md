@@ -114,13 +114,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
     src/repository-state.ts   #   Pure repository setup/view/detail state contracts shared by workflow and UI
     src/gallery-annotation-workflow.ts # Pure gallery annotation session and save transitions (HS2-8SD6XQ)
+    src/permission-decision-workflow.ts # Injectable permission inbox, optimistic decision, and reconciliation workflow (HS2-GGJ57M)
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
       repository.tsx          # Repository form/visibility/observer adapter, review, and evidence projection
       repository-workflow.ts  # API-consumer setup, status, and paging transitions without DOM dependencies
-      permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
+      permissions.tsx         # Browser permission storage/countdown, Settings rules UI, and popup adapter
       halted-sessions.tsx     # Halt/question prompt acknowledgment, direct Claude question answers and terminal fallback, cross-window persistence, and Open/Dismiss wiring (HS2-E6KAWY/HS2-SWY32A)
       gallery.tsx             # Gallery gestures/playback/measurement, annotation API/browser adapter, and surfaces
       drive-conversations.ts  # Drive/sidebar AI conversations: session-push routing before dedicated chat fallback, persisted transcripts, drafts, start/send/stop/refresh (HS2-K7SYHQ, HS2-FWCE1Y)

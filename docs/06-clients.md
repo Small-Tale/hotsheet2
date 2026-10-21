@@ -2725,6 +2725,12 @@ Deny HTTP response is still in flight; a delayed response is idempotent and cann
 resurrect or duplicate the resolved request. A `permission_rules_changed` event marks that
 project's remembered answers stale; a shown Settings → Permissions list refetches them once,
 including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
+The browser's API-consumer permission decision workflow (HS2-GGJ57M) owns grouped
+optimistic answers, send outcomes, 404 cleanup, retry state, request
+reconciliation, and remembered-rule freshness. It removes pending requests for
+projects that have closed on a full refresh. The browser adapter owns local
+storage, countdown text, window lifecycle, dialogs, and popup rendering; the
+server still decides whether a permission or remembered rule is accepted.
 The settings view uses a Kerf ListHeader for the Remembered answers section and previews
 the three most recently remembered answers, newest first. A centered, bordered secondary pill
 button, matching Load more tickets, opens the searchable dialog by pointer or keyboard
