@@ -1076,3 +1076,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/features/repository-workflow.test.ts` checks setup failure/retry, remote trimming, project-switch request races, and paged empty/refill transitions; `controllers.test.ts` checks the composed browser owner.
 - End to end: `clients/web/tests/repository-setup.spec.ts` exercises initialization, a failed remote request and retry, observer-driven second-page loading, and wide/narrow rendered setup states.
 - Manual: Inspect the wide/narrow setup captures and verify observer-driven paging in a real repository with more than one page.
+
+### Gallery annotation workflow (HS2-8SD6XQ)
+
+- Behavior: Session snapshots, crop projection, revision-based markup choice, queued media change, failed-save retry, and discard preserve the current draft and owning project until the server returns a new ticket.
+- Unit: `clients/web/src/gallery-annotation-workflow.test.ts` walks unchanged, save/fail/retry, revision conflict, crop projection, queued reset, discard, and refill sequences; `features/controllers.test.ts` verifies composed gallery ownership and failure recovery.
+- End to end: `clients/web/tests/providers.spec.ts` checks crop, revision forwarding, failed save, retry, discard, and wide/phone presentation; `ticket-reader-stack.spec.ts` checks saves through the linked reader's project.
+- Manual: Wide and phone failure captures were inspected; `HS2-KTHP6F` tracks a real provider's revision conflict and retry/discard path.

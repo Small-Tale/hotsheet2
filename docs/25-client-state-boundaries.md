@@ -31,6 +31,11 @@ form values, popover visibility, observer callbacks, device state, and rendering
 The workflow stays an API consumer; the server still decides Git initialization
 and remote configuration outcomes.
 
+`HS2-8SD6XQ` extracted gallery annotation session, save planning, canonical
+projection, queued reset, failure, retry, and discard transitions to
+`clients/web/src/gallery-annotation-workflow.ts`. `gallery.tsx` still owns media
+effects, provider API calls, server ticket reconciliation, and presentation.
+
 ### Shared Rust reducer evaluation (HS2-EJ7NWH, 2026-10-21)
 
 **Decision: no-go for shared client-state Rust now.** The isolated

@@ -113,6 +113,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
     src/repository-state.ts   #   Pure repository setup/view/detail state contracts shared by workflow and UI
+    src/gallery-annotation-workflow.ts # Pure gallery annotation session and save transitions (HS2-8SD6XQ)
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
@@ -121,7 +122,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       repository-workflow.ts  # API-consumer setup, status, and paging transitions without DOM dependencies
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
       halted-sessions.tsx     # Halt/question prompt acknowledgment, direct Claude question answers and terminal fallback, cross-window persistence, and Open/Dismiss wiring (HS2-E6KAWY/HS2-SWY32A)
-      gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces
+      gallery.tsx             # Gallery gestures/playback/measurement, annotation API/browser adapter, and surfaces
       drive-conversations.ts  # Drive/sidebar AI conversations: session-push routing before dedicated chat fallback, persisted transcripts, drafts, start/send/stop/refresh (HS2-K7SYHQ, HS2-FWCE1Y)
       claim-clock.ts          # Local live-claim ETA tick and lease-expiry wake-up timers (no network polling)
       corrupt-ticket-recovery.ts # Corrupt-ticket recovery state plus reveal and queue-AI-repair actions

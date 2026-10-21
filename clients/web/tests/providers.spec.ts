@@ -22812,13 +22812,13 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   expect(writes).toHaveLength(2);
 });
 
-test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-smoke', async ({ page }) => {
+test('keeps failed gallery markup through retry or discard (HS2-VXCSMZ, HS2-8SD6XQ) @ci-smoke', async ({ page }) => {
   await mockProject(page);
   let attempts = 0;
   await page.route('**/attachments/A1', (route) => {
     if (route.request().method() !== 'PUT') return route.fallback();
     attempts += 1;
-    return attempts === 1
+    return attempts === 1 || attempts === 3
       ? route.fulfill({ status: 503, json: { error: 'Temporary save failure' } })
       : route.fallback();
   });
@@ -22861,6 +22861,19 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   await expect(gallery.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
   expect(attempts).toBe(2);
+  await gallery.getByRole('button', { name: 'Annotate media, 1 annotation' }).click();
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.85, box.y + box.height * 0.65);
+  await page.mouse.up();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect(gallery.getByRole('alert')).toContainText('Markup was not saved');
+  await gallery.getByRole('button', { name: 'Discard Changes' }).click();
+  await expect(gallery.getByRole('alert')).toHaveCount(0);
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  expect(attempts).toBe(3);
 });
 
 test('keeps the markup-saved toast clear of the gallery zoom controls at wide and phone widths (HS2-DSW9TY)', async ({

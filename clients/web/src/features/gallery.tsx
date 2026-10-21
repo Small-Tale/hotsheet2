@@ -20,6 +20,16 @@ import {
 import type { AttachmentContextMenuSurface } from '../components/reader-overlay-surfaces';
 import { GallerySurface } from '../components/reader-overlay-surfaces';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
+import {
+  beginGallerySession,
+  completeGallerySave,
+  discardGallerySession,
+  failGallerySave,
+  finishGallerySession,
+  type GalleryAnnotationState,
+  queueGalleryReset,
+  updateGallerySessionOriginal,
+} from '../gallery-annotation-workflow';
 import { croppableImageHeader, projectGalleryAnnotations, restoreGalleryAnnotations } from '../gallery-crop';
 import type { AttachmentMenu, GallerySource, Project } from '../interactions/types';
 
@@ -99,21 +109,12 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   let attachmentRangeGesture:
     { annotationId: string; endpoint: 'start' | 'end'; before: MediaAnnotation[] } | undefined;
   let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
-  let attachmentAnnotationSession:
-    | {
-        projectId: string;
-        ticketId: string;
-        qualifiedId: string;
-        attachmentId: string;
-        before: MediaAnnotation[];
-        original: MediaAnnotation[];
-        crop?: Attachment['crop'];
-        revision?: string;
-        originalSize: { width: number; height: number };
-      }
-    | undefined;
+  let annotationWorkflow: GalleryAnnotationState = { saveState: 'idle' };
   const attachmentGallerySaveState = signal<'idle' | 'saving' | 'failed'>('idle');
-  let pendingGalleryReset: { url?: string; source?: GallerySource } | undefined;
+  const setAnnotationWorkflow = (state: GalleryAnnotationState) => {
+    annotationWorkflow = state;
+    attachmentGallerySaveState.value = state.saveState;
+  };
 
   let attachmentGallerySvgFrame: number | undefined, attachmentGallerySvgPreviousFrame: number | undefined;
   let attachmentGalleryLivePlayhead = 0,
@@ -296,8 +297,8 @@ export function createGalleryController(dependencies: GalleryDependencies) {
 
   /** Show `url` (or close without one). A `source` opens it for that ticket; shifting keeps the current one. */
   function resetAttachmentGallery(url?: string, source?: GallerySource) {
-    if (attachmentAnnotationSession) {
-      pendingGalleryReset = { url, source };
+    if (annotationWorkflow.session) {
+      setAnnotationWorkflow(queueGalleryReset(annotationWorkflow, { url, source }));
       if (attachmentGallerySaveState.value !== 'saving') finishGalleryAnnotationSession();
       return;
     }
@@ -480,18 +481,19 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       ticket = sourceTicket(),
       attachment = activeGalleryAttachment();
     if (!current || !ticket || !attachment) return;
-    attachmentAnnotationSession = {
-      projectId: current.id,
-      ticketId: ticket.id,
-      qualifiedId: ticket.qualified_id,
-      attachmentId: attachment.id,
-      before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
-      original: structuredClone(attachment.annotations ?? []),
-      crop: attachment.crop,
-      revision: attachment.revision,
-      originalSize: attachmentGalleryOriginalSize.value,
-    };
-    attachmentGallerySaveState.value = 'idle';
+    setAnnotationWorkflow(
+      beginGallerySession(annotationWorkflow, {
+        projectId: current.id,
+        ticketId: ticket.id,
+        qualifiedId: ticket.qualified_id,
+        attachmentId: attachment.id,
+        before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
+        original: structuredClone(attachment.annotations ?? []),
+        crop: attachment.crop,
+        revision: attachment.revision,
+        originalSize: attachmentGalleryOriginalSize.value,
+      }),
+    );
   }
 
   async function beginGalleryCrop() {
@@ -504,16 +506,13 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     const enter = (width: number, height: number) => {
       if (!attachmentGalleryMarkup.value) return;
       const canonical = restoreGalleryAnnotations(
-        attachmentAnnotationSession?.original ?? attachment.annotations ?? [],
+        annotationWorkflow.session?.original ?? attachment.annotations ?? [],
         attachmentGalleryAnnotations.value,
         attachmentGalleryCrop.value,
         width,
         height,
       );
-      if (attachmentAnnotationSession) {
-        attachmentAnnotationSession.original = canonical;
-        attachmentAnnotationSession.originalSize = { width, height };
-      }
+      setAnnotationWorkflow(updateGallerySessionOriginal(annotationWorkflow, canonical, { width, height }));
       attachmentGalleryOriginalSize.value = { width, height };
       attachmentGalleryAnnotations.value = canonical;
       attachmentGalleryCropMode.value = true;
@@ -574,7 +573,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     } else attachmentGalleryPreviewUrl.value = originalUrl;
     if (oldPreview?.startsWith('blob:')) URL.revokeObjectURL(oldPreview);
     attachmentGalleryAnnotations.value = projectGalleryAnnotations(
-      attachmentAnnotationSession?.original ?? attachmentGalleryAnnotations.value,
+      annotationWorkflow.session?.original ?? attachmentGalleryAnnotations.value,
       crop,
       size.width,
       size.height,
@@ -586,32 +585,20 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   }
 
   function finishGalleryAnnotationSession() {
-    const session = attachmentAnnotationSession;
-    if (!session || attachmentGallerySaveState.value === 'saving') return;
-    const annotations = attachmentGalleryAnnotations.value.map((item) => ({ ...item }));
-    const crop = attachmentGalleryCrop.value,
-      cropChanged = JSON.stringify(session.crop) !== JSON.stringify(crop),
-      changed = JSON.stringify(session.before) !== JSON.stringify(annotations) || cropChanged;
-    if (!changed) {
-      attachmentAnnotationSession = undefined;
-      attachmentGallerySaveState.value = 'idle';
-      const reset = pendingGalleryReset;
-      pendingGalleryReset = undefined;
-      if (reset) performGalleryReset(reset.url, reset.source);
-      else if (attachmentGalleryCropMode.value && attachmentGalleryUrl.value)
-        performGalleryReset(attachmentGalleryUrl.value);
+    const outcome = finishGallerySession(
+      annotationWorkflow,
+      attachmentGalleryAnnotations.value,
+      attachmentGalleryCrop.value,
+      attachmentGalleryCropMode.value,
+      attachmentGalleryUrl.value,
+    );
+    if (outcome.kind === 'none') return;
+    setAnnotationWorkflow(outcome.state);
+    if (outcome.kind === 'unchanged') {
+      if (outcome.reset) performGalleryReset(outcome.reset.url, outcome.reset.source);
       return;
     }
-    const canonical = attachmentGalleryCropMode.value
-      ? annotations
-      : restoreGalleryAnnotations(
-          session.original,
-          annotations,
-          crop,
-          session.originalSize.width,
-          session.originalSize.height,
-        );
-    attachmentGallerySaveState.value = 'saving';
+    const { session, crop, cropChanged, annotations, method } = outcome.plan;
     // Markup on a stacked reader's media saves through that reader's own project (HS2-W8VEMP).
     const owner = gallerySource.value?.project,
       client = owner?.id === session.projectId && apiFor ? apiFor(owner) : api();
@@ -619,12 +606,12 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       let result;
       try {
         result =
-          cropChanged || session.revision
+          method === 'markup'
             ? await client.updateCheckoutAttachmentMarkup(
                 session.projectId,
                 session.qualifiedId,
                 session.attachmentId,
-                canonical,
+                annotations,
                 crop,
                 session.revision,
               )
@@ -632,11 +619,12 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 session.projectId,
                 session.qualifiedId,
                 session.attachmentId,
-                canonical,
+                annotations,
               );
       } catch (reason) {
-        error.value = reason instanceof Error ? reason.message : String(reason);
-        attachmentGallerySaveState.value = 'failed';
+        const failed = failGallerySave(annotationWorkflow, reason instanceof Error ? reason.message : String(reason));
+        setAnnotationWorkflow(failed);
+        error.value = failed.failure ?? '';
         attachmentGalleryMarkup.value = true;
         return;
       }
@@ -647,12 +635,11 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       }
       if (selectedTicket.value?.id === session.ticketId && project()?.id === session.projectId)
         selectedTicket.value = result.ticket;
-      attachmentAnnotationSession = undefined;
-      attachmentGallerySaveState.value = 'idle';
+      const completed = completeGallerySave(annotationWorkflow);
+      setAnnotationWorkflow(completed.state);
       error.value = '';
       attachmentGalleryRevision.value++;
-      const reset = pendingGalleryReset;
-      pendingGalleryReset = undefined;
+      const reset = completed.reset;
       if (reset) performGalleryReset(reset.url, reset.source);
       else if (attachmentGalleryUrl.value && activeGalleryAttachment()?.id === session.attachmentId)
         performGalleryReset(attachmentGalleryUrl.value);
@@ -661,14 +648,11 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   }
 
   function discardGalleryAnnotationSession() {
-    if (!attachmentAnnotationSession || attachmentGallerySaveState.value === 'saving') return;
-    attachmentAnnotationSession = undefined;
-    attachmentGallerySaveState.value = 'idle';
+    const discarded = discardGallerySession(annotationWorkflow, attachmentGalleryUrl.value);
+    if (discarded.state === annotationWorkflow) return;
+    setAnnotationWorkflow(discarded.state);
     error.value = '';
-    const reset = pendingGalleryReset;
-    pendingGalleryReset = undefined;
-    if (reset) performGalleryReset(reset.url, reset.source);
-    else performGalleryReset(attachmentGalleryUrl.value);
+    if (discarded.reset) performGalleryReset(discarded.reset.url, discarded.reset.source);
   }
 
   function shiftGallery(delta: number) {

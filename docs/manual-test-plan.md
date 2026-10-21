@@ -5,6 +5,14 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Gallery annotation conflict (HS2-8SD6XQ, HS2-KTHP6F)
+
+With a real attachment provider, open the same image in two clients, save a markup
+change in one, then finish a conflicting draft in the other. Confirm the latter
+keeps its draft and reports the server conflict. Retry or discard, then confirm
+the displayed ticket matches the server result. Inspect the failed-save banner
+at wide and phone widths.
+
 ### Repository setup and paging (HS2-J4WR11)
 
 - In a project folder without Git, open Repository Status at wide and narrow widths. Initialize, enter an unavailable remote, retry with a valid remote, and confirm existing files remain untracked.

@@ -2253,6 +2253,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   visible with Retry save and Discard changes controls. Retry sends the current draft once;
   Discard restores the persisted attachment state. A successful retry resumes the requested
   navigation or closes the gallery (HS2-VXCSMZ).
+  The client annotation workflow (HS2-8SD6XQ) keeps the session snapshot,
+  canonical crop projection, endpoint choice, queued navigation, failure message,
+  and retry/discard transitions independent of DOM and canvas effects. The gallery
+  adapter sends requests through the owning project, applies server-returned ticket
+  state, and renders the result. A revision conflict retains the draft and revision
+  until retry or discard; the server remains authoritative for whether a write succeeds.
   For a supported PNG, JPEG, WebP, GIF, AVIF, BMP, ICO, or SVG attachment on a provider advertising `attachment_crop`,
   markup also offers Crop in a regular floating ToolbarControlGroup; Restore Original appears
   beside it when a crop exists, and the active Crop button shows its pressed state. Dragging
