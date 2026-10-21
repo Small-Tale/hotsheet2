@@ -25,4 +25,35 @@ This is a code inventory as of 2026-10-20, not a proposal to share the server's 
 3. `HS2-J4WR11` can separate repository setup and page-state transitions while leaving the observer and form in the browser. `HS2-1M05KF` can then extract per-project command draft/save state; test edit during save, switch project, page hide, and a failed save followed by a new edit.
 4. `HS2-H6RRZN` should consume the stable API/event contracts and use small input/output fixtures for these pure transitions, including reset and stale-response sequences. `HS2-EJ7NWH` should only compare a separate shared reducer after the same fixtures run in web and native prototypes.
 
+### Shared Rust reducer evaluation (HS2-EJ7NWH, 2026-10-21)
+
+**Decision: no-go for shared client-state Rust now.** The isolated
+[`history` spike](../experiments/client-state-reducer/README.md) passed the 12
+portable history steps in native Rust and Node WebAssembly. This proves the
+small reducer can be moved across the two runtimes, but the shipped browser
+already runs those steps in TypeScript and there are no SwiftUI or Kotlin client
+implementations whose duplicated transitions could be removed. The spike
+implements only a subset of shipped `TicketHistory` behavior; it does not cover
+external undo closures, multi-ticket operations, failure handling, or the full
+async sequence. Server ticket authority stays on the server.
+
+On this Mac, with cached dependencies, the native release build took 2.43 s;
+the Wasm release build took 4.09 s. Artifacts were 492,544 bytes (macOS dylib)
+and 142,418 bytes (uncompressed Wasm). Node reported 0.5 ms for one cold Wasm
+compile/instantiate call. These are local prototype measurements, not browser
+download/startup or complete app size. The JS host also has to allocate Wasm
+memory, copy JSON, manage ownership, and map errors. The minimal ABI returned
+only a success count, so a production bridge would need typed results and error
+handling. Swift would need C or generated bindings plus framework packaging for
+macOS, iOS device, and simulator. Kotlin would need JNI bindings, Android ABI
+builds, packaging, and lifecycle ownership. Swift 6.4 was present locally;
+Kotlin and Android build tools were unavailable, so no native binding or startup
+measurements were possible. Including browser, macOS, iOS device/simulator, and
+two Android ABIs would require at least six build artifacts and CI paths.
+
+The current fixture contract is the lower-maintenance sharing boundary. Revisit
+the reducer only after real native clients have duplicated complex transitions
+and a second fixture family shows enough shared logic to offset bindings,
+platform packaging, async adapters, and CI maintenance.
+
 The four existing extraction tickets already describe the needed seams and are blocked by this inventory. Their scope and dependency links need no change. Keep their real-browser tests for composition and use the portable fixtures for deterministic logic; neither replaces the other. The main risk is moving server authority into a client while extracting convenience validation or optimistic state. A second risk is making the controller tests pass while the shipped parent view no longer wires a child action.

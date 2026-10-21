@@ -2615,6 +2615,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
 - **Native API client** talking HTTP/WS to a `hotsheet-server` — **not** an
   embedded-core app. No `uniffi` bindings are needed (they were only for the retired
   embedded-core plan).
+- The [shared client-state reducer evaluation](25-client-state-boundaries.md#shared-rust-reducer-evaluation-hs2-ej7nwh-2026-10-21)
+  keeps client transitions in each platform for now. Portable fixtures provide
+  parity without adding Rust bindings or embedding server authority.
 - **Why native (not just Tauri on iOS):** a first-class iOS experience — real
   navigation, share sheet, notifications, widgets — and macOS menu-bar integration.
   The identical domain behavior across surfaces comes from every surface talking to

@@ -63,7 +63,9 @@ Portable client-state transition fixtures and their schema are under
 `docs/contracts/v1/client-state/`. The web runner
 `clients/web/src/client-state-fixtures.test.ts` exercises the existing view,
 sort, selection, history, workspace search, and change-stream modules against
-those language-neutral expected states.
+those language-neutral expected states. The isolated
+`experiments/client-state-reducer/` crate evaluates native Rust and WebAssembly
+history fixture parity; it is not shipped client code.
 
 `clients/web/src/command-settings-workflow.ts` owns command editor draft
 transitions, validation, group retention/reorder, project-keyed save timing,
