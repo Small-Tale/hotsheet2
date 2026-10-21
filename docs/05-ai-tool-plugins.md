@@ -972,6 +972,31 @@ longer than client-side automation windows: an ignored or otherwise hidden popup
 not advance a client's visible-presentation countdown and must not disappear after the
 old five-minute transport timeout.
 
+**Rule reach, origin, and lifetime (HS2-J6009Z).** These are separate concepts.
+The bridge matches a rule's project, tool, and exact action or reviewed pattern;
+connection-scoped rules additionally match the raising connection. Both driven agents
+and terminal permission hooks use that bridge. A project-wide rule can therefore answer
+matching requests from either kind of AI connection within its project identity.
+
+The shipped remembered-rule response retains `connection` only for `scope: "chat"`.
+Project-wide `session` and `always` rules retain no originating connection, terminal id,
+agent, or source kind. A live hook can supply `terminal_id` to associate a pending request
+with its terminal, but that provenance is not copied into the remembered rule. The row's
+current “All chats” text is derived from scope; it is not evidence that the request came
+from a driven chat. A connection id alone is not a reliable source-kind label.
+
+Recommended presentation, pending `HS2-AT46VG`: use “All AI sessions” for project-wide
+reach and the generic “This AI session only” for connection-scoped reach when source kind
+is unknown. Keep lifetime separate: “Until Hot Sheet restarts” describes the in-memory
+project-wide `session` lifetime; “Persistent” describes `always`. Do not infer origin from
+command text or broaden matching while changing labels. The project/store identity shown
+beside reach is investigated separately in `HS2-3Z16CB`.
+
+Implementation references: `crates/hotsheet-aitools/src/permission.rs` (`Scope`,
+`rule_for_request`, `effective_rule`, `RuleInfo`),
+`crates/hotsheet-server/src/routes/permissions.rs` (`AskBody`, `ask_permission`), and
+`clients/web/src/components/permission-rules-settings.tsx` (`ruleRows`).
+
 **Fewer repeat prompts (HS2-JNHAYB).** Besides Allow Once and Always Allow, the popup offers
 **Allow for This Chat** (`scope: "chat"`): an in-memory rule for the asking connection only,
 dropped when that drive connection closes and never written to disk. Rules apply by
