@@ -997,6 +997,43 @@ Implementation references: `crates/hotsheet-aitools/src/permission.rs` (`Scope`,
 `crates/hotsheet-server/src/routes/permissions.rs` (`AskBody`, `ask_permission`), and
 `clients/web/src/components/permission-rules-settings.tsx` (`ruleRows`).
 
+**Project versus ticket-source ownership (HS2-3Z16CB).** The `project` field in a
+permission rule is an exact matching namespace, not a guarantee of checkout ownership.
+The current terminal launcher resolves the deepest registered checkout containing its
+working directory and uses that checkout's default git source (or first git source)
+locator. Without a git source it uses the checkout root; without a matching checkout it
+uses the working directory, and a missing working directory uses the server's store root.
+CLI-launched AI tools similarly export the selected git store root as `HOTSHEET_PROJECT`.
+The hook forwards that identity; an empty request identity falls back to the server store.
+
+The bridge matches the identity exactly. Two code projects using the same store namespace
+can consequently share a project-wide rule, whereas two stores linked to one checkout
+do not automatically share it. `projectPermissionRules` aggregates the selected checkout
+id/root and linked-store identities for display; that aggregation does not broaden matching.
+Ticket-provider connection ids are not part of the rule's authorization key.
+
+Durable rules are machine-local encrypted files selected per hosted git store, not files
+inside or synchronized with the ticket repository. Startup seeds the primary store namespace
+and a legacy empty namespace; hosting another store adds its own file and namespace.
+Checkout-driven sessions can instead use the checkout root. The difference between those
+launch identities, external-only checkouts, and registered persistence keys needs explicit
+acceptance coverage before claiming provider-neutral checkout ownership (`HS2-G8ZSPQ`).
+
+Recommendation: preserve existing matching, identify the actual ticket source or checkout
+when that context disambiguates reach, and omit an identity line only when the parent
+already establishes the same matching namespace. Never rename a store-scoped approval as
+checkout-wide. `HS2-7T5GPN` tracks this presentation; `HS2-G8ZSPQ` tracks a checkout-owned
+design and explicit migration/consent before any authorization reach changes.
+
+Implementation references: `crates/hotsheet-server/src/routes/terminals/launch.rs`
+(`terminal_project_for_cwd`), `crates/hotsheet-cli/src/dispatch/setup.rs`
+(`permission_project`), `crates/hotsheet-server/src/hosting.rs` (`host_store`),
+`crates/hotsheet-server/src/lib.rs` (`with_permission_rules`),
+`crates/hotsheet-server/src/multistore.rs` (`permission_rules_path_for`), and
+`clients/web/src/permission-notifications.ts` (`projectPermissionRules`). Existing
+server regression coverage: `permission_rules_are_isolated_and_persisted_per_hosted_project`
+in `crates/hotsheet-server/tests/http.rs`.
+
 **Fewer repeat prompts (HS2-JNHAYB).** Besides Allow Once and Always Allow, the popup offers
 **Allow for This Chat** (`scope: "chat"`): an in-memory rule for the asking connection only,
 dropped when that drive connection closes and never written to disk. Rules apply by
