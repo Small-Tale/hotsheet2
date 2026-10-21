@@ -2720,6 +2720,8 @@ triggers one fetch of that project's authenticated permission and connection sta
 replayable `permission_resolved` event triggers the same reconciliation, so decisions made
 by another client or transport become history entries instead of silently disappearing;
 empty-action generic requests such as `ToolSearch` follow the same lifecycle. That
+event corrects a provisional external-history entry if an empty permission-list refresh
+arrives first, so a known Allow or Deny decision is preserved (HS2-314DYB). That
 authoritative resolution immediately removes the popup even while this client's Allow or
 Deny HTTP response is still in flight; a delayed response is idempotent and cannot
 resurrect or duplicate the resolved request. A `permission_rules_changed` event marks that

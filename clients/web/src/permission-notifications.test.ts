@@ -106,6 +106,18 @@ describe('permission notifications', () => {
       decision: 'external',
       resolvedAt: 20,
     });
+    expect(inbox.resolve('p:81', 'allow', 'once', false, 30)).toBe(true);
+    expect(inbox.resolve('p:81', 'allow', 'once', false, 40)).toBe(false);
+    expect(inbox.history(40)).toEqual([
+      expect.objectContaining({
+        key: 'p:81',
+        tool: 'ToolSearch',
+        action: '',
+        decision: 'allow',
+        scope: 'once',
+        resolvedAt: 30,
+      }),
+    ]);
   });
   it('counts only visible presentation time and pauses while hidden', () => {
     const timer = new VisiblePermissionTimer();

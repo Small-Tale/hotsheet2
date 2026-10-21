@@ -277,7 +277,14 @@ export class PermissionInbox {
   }
   resolve(key: string, decision: PermissionDecision, scope: PermissionScope, automatic = false, now = Date.now()) {
     const item = this.pendingItems.get(key);
-    if (!item) return false;
+    if (!item) {
+      // A collection refresh can observe the empty queue before the resolution event.
+      // Replace only that provisional external history with the server's known answer.
+      const external = this.historyItems.find((value) => value.key === key && value.decision === 'external');
+      if (!external) return false;
+      this.record({ ...external, decision, scope, resolvedAt: now, automatic });
+      return true;
+    }
     this.pendingItems.delete(key);
     this.record({ ...item, decision, scope, resolvedAt: now, automatic });
     return true;

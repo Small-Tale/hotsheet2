@@ -17035,12 +17035,13 @@ test('records externally resolved empty-action permissions in notification histo
   await expect(popup).toContainText('Wants permission to use ToolSearch');
   await expect(popup.locator('.notification-card__details')).toHaveCount(0);
   pending = [];
+  // An empty collection may arrive before the server's resolved event under load.
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   cursor += 1;
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'permission_resolved', id: '81', slug: '', message: 'allow:once' }],
+      events: [{ store: '', kind: 'permission_asked', id: '81', slug: 'ToolSearch' }],
       overflow: false,
     },
   });
@@ -17052,6 +17053,16 @@ test('records externally resolved empty-action permissions in notification histo
       '[data-component="notification-center"] [data-component="permission-request-card"][data-presentation="list"]',
     )
     .filter({ hasText: 'ToolSearch' });
+  await expect(previous).toContainText('Decision made outside Hot Sheet');
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  cursor += 1;
+  await polls.shift()!.fulfill({
+    json: {
+      cursor,
+      events: [{ store: '', kind: 'permission_resolved', id: '81', slug: '', message: 'allow:once' }],
+      overflow: false,
+    },
+  });
   await expect(previous).toContainText('allowed permission');
   await expect(previous.locator('.notification-card__details')).toHaveCount(0);
   await expect(previous.locator('.notification-card__footer')).toHaveCount(0);
@@ -17067,6 +17078,16 @@ test('records externally resolved empty-action permissions in notification histo
   await page.screenshot({ path: 'target/visual-captures/hs2-f058ae-responded-notification-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Hide Notification Inspector' }).click();
   await page.setViewportSize({ width: 760, height: 844 });
+  const rail = page.locator('[aria-label="Sidebar rail"]');
+  await expect(rail).toHaveAttribute('data-collapsed', 'true');
+  await expect
+    .poll(async () =>
+      rail
+        .locator('.kui-workbench__panel-content')
+        .first()
+        .evaluate((element) => element.getBoundingClientRect().right),
+    )
+    .toBeLessThanOrEqual(0);
   await expect(previous).toBeInViewport();
   await expect(previous.locator('.notification-card__summary')).toHaveCSS('margin-bottom', '16px');
   await page.screenshot({
