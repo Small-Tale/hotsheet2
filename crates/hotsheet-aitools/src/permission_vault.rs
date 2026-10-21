@@ -184,10 +184,18 @@ fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
 
 /// A Keychain approval belongs to the process, not to every vault access: remember each
 /// key once it is read or created so later loads, mutations, and health checks never
-/// prompt again. Only present keys are cached; a missing key is re-checked every time.
+/// prompt again. A denied read is also remembered for this process, so a refused
+/// startup request cannot produce an immediate chain of identical prompts. Missing
+/// keys are re-checked because another process may create them.
+#[derive(Clone)]
+enum CachedRead {
+    Present(String),
+    Error(String),
+}
+
 struct CachedSecrets<'a, S> {
     backend: S,
-    cache: &'a std::sync::Mutex<std::collections::HashMap<String, String>>,
+    cache: &'a std::sync::Mutex<std::collections::HashMap<String, CachedRead>>,
 }
 
 impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
@@ -200,7 +208,7 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
         self.cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(account.into(), value.into());
+            .insert(account.into(), CachedRead::Present(value.into()));
         Ok(())
     }
 
@@ -213,13 +221,24 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(value) = cache.get(account) {
-            return Ok(Some(value.clone()));
+            return match value {
+                CachedRead::Present(value) => Ok(Some(value.clone())),
+                CachedRead::Error(error) => Err(hotsheet_ticketing::secrets::SecretError::Backend(
+                    error.clone(),
+                )),
+            };
         }
-        let value = self.backend.get(account)?;
-        if let Some(value) = &value {
-            cache.insert(account.into(), value.clone());
+        let value = self.backend.get(account);
+        match &value {
+            Ok(Some(value)) => {
+                cache.insert(account.into(), CachedRead::Present(value.clone()));
+            }
+            Err(error) => {
+                cache.insert(account.into(), CachedRead::Error(error.to_string()));
+            }
+            Ok(None) => {}
         }
-        Ok(value)
+        value
     }
 
     fn delete(&self, account: &str) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
@@ -236,7 +255,7 @@ fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Res
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
-    static KEYS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    static KEYS: OnceLock<Mutex<HashMap<String, CachedRead>>> = OnceLock::new();
     f(&CachedSecrets {
         backend: OsKeychain,
         cache: KEYS.get_or_init(|| Mutex::new(HashMap::new())),
@@ -742,6 +761,50 @@ mod tests {
             5,
             "all hosted stores read one master credential"
         );
+    }
+
+    #[test]
+    fn denied_credential_is_not_requested_again_during_the_process() {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct Denied(AtomicUsize);
+        impl SecretStore for &Denied {
+            fn set(
+                &self,
+                _account: &str,
+                _value: &str,
+            ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
+                unreachable!()
+            }
+            fn get(
+                &self,
+                _account: &str,
+            ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Err(hotsheet_ticketing::secrets::SecretError::Backend(
+                    "user denied access".into(),
+                ))
+            }
+            fn delete(
+                &self,
+                _account: &str,
+            ) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
+                unreachable!()
+            }
+        }
+
+        let backend = Denied(AtomicUsize::new(0));
+        let cache = Mutex::new(HashMap::new());
+        let store = CachedSecrets {
+            backend: &backend,
+            cache: &cache,
+        };
+        for _ in 0..20 {
+            assert!(store.get("permission-rules-v4-master").is_err());
+        }
+        assert_eq!(backend.0.load(Ordering::SeqCst), 1);
     }
 
     #[test]

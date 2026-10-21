@@ -210,6 +210,11 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Claim the machine server before store initialization. Startup can read permission
+    // vaults and provider credentials; losing launchers must not open Keychain items.
+    let writer_lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
     let store = FsStore::open(&cli.path)?;
 
     let addr: SocketAddr = cli
@@ -305,11 +310,6 @@ async fn main() -> Result<()> {
     );
     let _jira_dispatch =
         hotsheet_server::provider_write_behind::spawn_jira_dispatch_loop(state.clone());
-
-    // Take the exclusive index-writer lock before binding — a second server on this store
-    // would otherwise double-write the index (join-don't-collide, HS2-59).
-    let writer_lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;

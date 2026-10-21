@@ -17,7 +17,7 @@ type Revision = [u8; 32];
 #[derive(Default)]
 struct CacheState {
     revision: Option<Revision>,
-    values: HashMap<String, String>,
+    values: HashMap<String, Result<String, String>>,
 }
 
 #[derive(Clone, Default)]
@@ -66,7 +66,7 @@ impl<S: SecretStore> SecretStore for CachedSecretStore<S> {
         }
         let mut state = self.state()?;
         self.backend.set(account, secret)?;
-        state.values.insert(account.into(), secret.into());
+        state.values.insert(account.into(), Ok(secret.into()));
         Ok(())
     }
 
@@ -77,13 +77,21 @@ impl<S: SecretStore> SecretStore for CachedSecretStore<S> {
         // Hold one mutex across the OS read: parallel startup requests share one prompt.
         let mut state = self.state()?;
         if let Some(secret) = state.values.get(account) {
-            return Ok(Some(secret.clone()));
+            return secret.clone().map(Some).map_err(SecretError::Backend);
         }
-        let value = self.backend.get(account)?;
-        if let Some(secret) = &value {
-            state.values.insert(account.into(), secret.clone());
+        let value = self.backend.get(account);
+        match &value {
+            Ok(Some(secret)) => {
+                state.values.insert(account.into(), Ok(secret.clone()));
+            }
+            Err(error) => {
+                // A refusal fails closed for this process instead of opening another
+                // Keychain dialog on the next startup request.
+                state.values.insert(account.into(), Err(error.to_string()));
+            }
+            Ok(None) => {}
         }
-        Ok(value)
+        value
     }
 
     fn delete(&self, account: &str) -> Result<bool, SecretError> {
@@ -172,5 +180,33 @@ mod tests {
         backend.set("other", "second").unwrap();
         assert_eq!(store.get("other").unwrap().as_deref(), Some("second"));
         assert_eq!(backend.reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn refused_managed_read_is_attempted_only_once_per_revision() {
+        struct Denied(Arc<AtomicUsize>);
+        impl SecretStore for Denied {
+            fn set(&self, _: &str, _: &str) -> Result<(), SecretError> {
+                unreachable!()
+            }
+            fn get(&self, _: &str) -> Result<Option<String>, SecretError> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Err(SecretError::Backend("user denied access".into()))
+            }
+            fn delete(&self, _: &str) -> Result<bool, SecretError> {
+                unreachable!()
+            }
+        }
+
+        let home = tempfile::tempdir().unwrap();
+        let reads = Arc::new(AtomicUsize::new(0));
+        let store = ManagedSecretCache::default().store(home.path().into(), Denied(reads.clone()));
+        for _ in 0..20 {
+            assert!(store.get("github-app-one").is_err());
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+        fs::write(home.path().join("keys.json"), "{}\n").unwrap();
+        assert!(store.get("github-app-one").is_err());
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
     }
 }
