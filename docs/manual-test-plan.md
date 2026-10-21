@@ -102,6 +102,11 @@ the default-on path is checked by hand.
 4. Present a pre-v3 fingerprint-only array and its `.action-key`, restart, and confirm
    the old answers do not activate, the file becomes an empty encrypted envelope, and
    the obsolete key file is removed.
+5. With a live server, make the vault temporarily unavailable, then restore the same
+   authenticated file and credential. Reload the Settings page without restarting the
+   server: persistent answers return once, while a chat answer, session answer, and
+   pending request remain. Repeat with a different authenticated vault file and confirm
+   only its persistent answers return (HS2-8DAA0P).
 
 ### Permission secret suggestions (HS2-5ZRSJW)
 

@@ -16225,6 +16225,7 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
     );
     assert_eq!(bridge.rules().len(), 1);
 
+    let healthy_vault = std::fs::read(&rules_path).unwrap();
     std::fs::write(&rules_path, "corrupt ciphertext").unwrap();
     let key = bridge
         .rules()
@@ -16281,6 +16282,71 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
         ),
         hotsheet_aitools::PermissionDecision::Deny
     );
+
+    std::fs::write(&rules_path, &healthy_vault).unwrap();
+    let restored = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(restored.as_array().unwrap().len(), 1);
+    assert_eq!(restored[0]["scope"], "always");
+    assert_eq!(
+        bridge.rules().len(),
+        2,
+        "legacy and project copies are seeded"
+    );
+    let repeated = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(repeated, restored, "repeated reads do not duplicate rules");
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            &project,
+            "restored-chat",
+            "Bash",
+            ACTION,
+            std::time::Duration::from_millis(10),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+
+    std::fs::remove_file(&rules_path).unwrap();
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let replacement = hotsheet_aitools::PermissionRule {
+        project: project.clone(),
+        tool: "Bash".into(),
+        action: "replacement-action".into(),
+        exact_action: Some("replacement-action".into()),
+        pattern: None,
+        description: None,
+        decision: hotsheet_aitools::PermissionDecision::Deny,
+        persist: true,
+        connection: None,
+    };
+    hotsheet_aitools::append_permission_rule(&rules_path, &replacement).unwrap();
+    let replaced = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(replaced.as_array().unwrap().len(), 1);
+    assert_eq!(replaced[0]["exact_action"], "replacement-action");
+    assert_eq!(replaced[0]["decision"], "deny");
 }
 
 #[tokio::test]

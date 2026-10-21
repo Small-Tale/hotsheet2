@@ -119,6 +119,10 @@ pub(super) fn key_for(path: &Path) -> io::Result<ActionKey> {
 }
 
 pub(super) fn load(path: &Path) -> io::Result<Vec<StoredRule>> {
+    load_with_key(path).map(|(_, rules)| rules)
+}
+
+pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRule>)> {
     let _lock = Lock::acquire(path)?;
     with_secrets(|store| {
         let key = key_with(path, store)?;
@@ -126,7 +130,7 @@ pub(super) fn load(path: &Path) -> io::Result<Vec<StoredRule>> {
         if dedupe(&mut rules) {
             write_locked(path, &key, &rules)?;
         }
-        Ok(rules)
+        Ok((key, rules))
     })
 }
 

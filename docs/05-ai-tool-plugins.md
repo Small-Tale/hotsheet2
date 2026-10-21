@@ -955,8 +955,9 @@ pattern, copy an action, or revoke its rule. The opaque keyed `action` field rem
 shown as a label. The exact action is returned only by the authenticated local rules API, not
 events or logs. If the credential key or encrypted file is unavailable, the list shows a locked
 state and durable in-memory rules are withdrawn before any automatic answer. Revocation writes
-the durable file before removing the live answer. Restored vault data currently reloads after
-server restart (HS2-8DAA0P). Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
+the durable file before removing the live answer. After the vault or credential recovers,
+reloading the web page and opening Settings reauthenticates and restores durable answers without a server restart;
+chat and session answers and pending requests remain in memory (HS2-8DAA0P). Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
 for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives

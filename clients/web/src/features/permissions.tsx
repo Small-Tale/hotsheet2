@@ -549,7 +549,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       if (reason instanceof ApiHttpError && reason.status === 503) {
         lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
         permissionRulesMessage.value =
-          'Remembered answers are locked. Restore the host credential store and encrypted rule file, then restart Hot Sheet to reload saved rules.';
+          'Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry.';
       } else {
         permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
       }

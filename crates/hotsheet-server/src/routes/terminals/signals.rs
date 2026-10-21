@@ -1097,10 +1097,31 @@ pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
     if state.permissions.durable_rules_locked() {
-        return Err(ApiError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "permission-rule store locked or unavailable",
-        ));
+        let path = state
+            .permission_rule_paths
+            .lock_or_recover()
+            .get("")
+            .cloned();
+        let restored = path
+            .filter(|path| path.is_file())
+            .and_then(|path| hotsheet_aitools::load_permission_rules_with_key(&path).ok());
+        let Some((key, stored)) = restored else {
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "permission-rule store locked or unavailable",
+            ));
+        };
+        let project = state.store.root().display().to_string();
+        let mut rules = stored.clone();
+        for rule in &mut rules {
+            rule.project.clear();
+        }
+        rules.extend(stored.into_iter().map(|mut rule| {
+            rule.project = project.clone();
+            rule
+        }));
+        state.permissions.restore_durable_rules_with_key(key, rules);
+        emit_permission_rules_changed(&state, &project);
     }
     if let Some(path) = state
         .permission_rule_paths

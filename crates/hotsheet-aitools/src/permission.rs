@@ -503,6 +503,25 @@ impl PermissionBridge {
         self.set_rules(rules);
     }
 
+    /// Replace only durable rules after a vault recovers. Session and chat answers
+    /// remain in effect, and their opaque action ids are derived from the restored key.
+    pub fn restore_durable_rules(&mut self, key: ActionKey, mut rules: Vec<Rule>) {
+        let live_rules = self
+            .rules
+            .drain(..)
+            .filter(|rule| !rule.persist)
+            .map(|mut rule| {
+                if let Some(exact_action) = &rule.exact_action {
+                    rule.action = exact_action.clone();
+                }
+                rule
+            })
+            .collect::<Vec<_>>();
+        rules.extend(live_rules);
+        self.action_key = key;
+        self.set_rules(rules);
+    }
+
     /// Raise a permission request. If an existing rule answers `(tool, action)` it
     /// auto-resolves; otherwise the request is enqueued FIFO and its id returned.
     pub fn request(
@@ -867,6 +886,13 @@ impl SharedPermissionBridge {
         self.inner
             .lock_or_recover()
             .set_action_key_and_rules(key, rules);
+        self.durable_locked.store(false, Ordering::Release);
+    }
+
+    pub fn restore_durable_rules_with_key(&self, key: ActionKey, rules: Vec<Rule>) {
+        self.inner
+            .lock_or_recover()
+            .restore_durable_rules(key, rules);
         self.durable_locked.store(false, Ordering::Release);
     }
 
@@ -1584,13 +1610,16 @@ impl StoredRule {
 /// Load authenticated encrypted durable rules. Legacy fingerprint arrays are discarded
 /// on upgrade, and an unavailable key or invalid envelope activates no rules.
 pub fn load_rules(path: &Path) -> Vec<Rule> {
-    let Ok(key) = action_key_for(path) else {
-        return Vec::new();
-    };
-    let Ok(stored) = crate::permission_vault::load(path) else {
-        return Vec::new();
-    };
-    stored
+    load_rules_with_key(path)
+        .map(|(_, rules)| rules)
+        .unwrap_or_default()
+}
+
+/// Read and authenticate the vault and its action key under one file lock. Callers
+/// recovering a locked bridge must see failures instead of treating them as an empty vault.
+pub fn load_rules_with_key(path: &Path) -> io::Result<(ActionKey, Vec<Rule>)> {
+    let (key, stored) = crate::permission_vault::load_with_key(path)?;
+    let rules = stored
         .into_iter()
         .filter_map(|mut rule| {
             rule.description = rule
@@ -1605,7 +1634,8 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
             }
             Some(rule.into_rule(&key))
         })
-        .collect()
+        .collect();
+    Ok((key, rules))
 }
 
 /// Check key availability and authenticate the on-disk envelope for a local server.
@@ -3155,6 +3185,62 @@ mod tests {
         );
         assert_eq!(load_rules(&path).len(), 1);
         assert!(!remove_rule(&dir.path().join("missing.json"), "p", "Bash", "ls").unwrap());
+    }
+
+    #[test]
+    fn restoring_durable_rules_preserves_chat_session_and_pending_state() {
+        let mut bridge = PermissionBridge::new();
+        let chat_id = pending(bridge.request_for_project("p", "chat-a", "Bash", "chat-action"));
+        bridge
+            .resolve(chat_id, Decision::Deny, Scope::Chat)
+            .unwrap();
+        let session_id =
+            pending(bridge.request_for_project("p", "chat-a", "Bash", "session-action"));
+        bridge
+            .resolve(session_id, Decision::Allow, Scope::Session)
+            .unwrap();
+        let waiting = pending(bridge.request_for_project("p", "chat-a", "Bash", "waiting"));
+        let durable = Rule {
+            project: "p".into(),
+            tool: "Bash".into(),
+            action: "durable-action".into(),
+            exact_action: None,
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist: true,
+            connection: None,
+        };
+        bridge.restore_durable_rules(fresh_action_key().unwrap(), vec![durable]);
+        assert_eq!(
+            bridge
+                .pending()
+                .map(|request| request.id)
+                .collect::<Vec<_>>(),
+            [waiting]
+        );
+        assert_eq!(bridge.rules().len(), 3);
+        assert_eq!(
+            bridge.request_for_project("p", "chat-a", "Bash", "chat-action"),
+            Outcome::Auto(Decision::Deny)
+        );
+        assert_eq!(
+            bridge.request_for_project("p", "chat-b", "Bash", "session-action"),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert_eq!(
+            bridge.request_for_project("p", "chat-b", "Bash", "durable-action"),
+            Outcome::Auto(Decision::Allow)
+        );
+        bridge.restore_durable_rules(fresh_action_key().unwrap(), Vec::new());
+        assert_eq!(bridge.rules().len(), 2);
+        assert_eq!(
+            bridge
+                .pending()
+                .map(|request| request.id)
+                .collect::<Vec<_>>(),
+            [waiting]
+        );
     }
 
     fn ask(action: &str) -> PermissionAsk {

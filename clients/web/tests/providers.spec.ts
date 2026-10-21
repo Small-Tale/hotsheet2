@@ -15446,6 +15446,50 @@ test('shows locked remembered answers when the vault read fails (HS2-CA5MSD)', a
   await expect(remembered).not.toContainText('No Remembered Answers');
 });
 
+test('reloads remembered answers after the vault recovers without restarting the server (HS2-8DAA0P)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let locked = true;
+  await page.route('**/permissions/rules', (route) =>
+    locked
+      ? route.fulfill({ status: 503, json: { error: 'permission-rule store locked or unavailable' } })
+      : route.fulfill({
+          json: [
+            {
+              project: '/work/demo.hs2',
+              tool: 'Bash',
+              action: rememberedActionKey('npm run check'),
+              exact_action: 'npm run check',
+              decision: 'allow',
+              scope: 'always',
+              match_type: 'exact',
+            },
+          ],
+        }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const remembered = page.locator('[data-component="permission-rules-settings"]');
+  await expect(remembered).toContainText('Remembered Answers Locked');
+  await page.screenshot({ path: 'target/visual-captures/hs2-8daa0p-locked-1280.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8daa0p-locked-390.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  locked = false;
+  await page.reload();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await expect(remembered).toContainText('npm run check');
+  await expect(remembered).not.toContainText('Remembered Answers Locked');
+  await page.screenshot({ path: 'target/visual-captures/hs2-8daa0p-restored-1280.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8daa0p-restored-390.png', fullPage: true });
+});
+
 test('reapproves a legacy Bash answer after reviewing the exact command again (HS2-CA5MSD)', async ({ page }) => {
   await mockProject(page);
   const action = 'curl https://private.example/token=secret',
