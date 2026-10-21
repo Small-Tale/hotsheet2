@@ -26,6 +26,7 @@ import {
   parsePermissionHistory,
   type PermissionAutomation,
   PermissionInbox,
+  type PermissionPattern,
   type PermissionRule,
   permissionRuleKey,
   projectPermissionRules,
@@ -639,6 +640,24 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
   }
 
+  async function changePermissionRulePattern(projectId: string, key: string, pattern: PermissionPattern | 'exact') {
+    const project = projects.value.find((value) => value.id === projectId),
+      rule = permissionRules(projectId).find((value) => permissionRuleKey(value) === key);
+    if (!project || !rule || revokingPermissionRules.value.includes(key)) return;
+    revokingPermissionRules.value = [...revokingPermissionRules.value, key];
+    permissionRulesMessage.value = '';
+    try {
+      await new Api(project.apiPath).updatePermissionRulePattern(rule, pattern);
+      markPermissionRulesStale(projectId);
+      await loadPermissionRules(project);
+      permissionRulesMessage.value = 'Reviewed match updated.';
+    } catch (reason) {
+      permissionRulesMessage.value = `Could not update the match. ${reason instanceof Error ? reason.message : String(reason)}`;
+    } finally {
+      revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
+    }
+  }
+
   /** Forget one remembered answer from Settings → Permissions (HS2-JNHAYB). */
   async function revokePermissionRule(projectId: string, key: string) {
     const project = projects.value.find((value) => value.id === projectId),
@@ -691,6 +710,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     revokePermissionRule,
     changePermissionRuleDecision,
     changePermissionRuleScope,
+    changePermissionRulePattern,
     permissionRulesDialogFor,
     permissionRulesPreviewFor,
     openPermissionRules,

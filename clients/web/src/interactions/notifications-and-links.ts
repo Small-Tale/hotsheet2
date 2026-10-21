@@ -3,7 +3,12 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
-import { rememberedPermissionPreview, setRememberedPermissionPreview } from '../components/permission-request-card';
+import {
+  rememberedPermissionPreview,
+  reviewedPermissionPattern,
+  setRememberedPermissionPattern,
+  setRememberedPermissionPreview,
+} from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -15,6 +20,7 @@ import {
   type PermissionDecision,
   type PermissionInbox,
   type PermissionItem,
+  type PermissionPattern,
   type PermissionScope,
   type VisiblePermissionTimer,
 } from '../permission-notifications';
@@ -42,11 +48,17 @@ export interface NotificationAndLinkInteractionsDependencies {
     automatic?: boolean,
     grouped?: boolean,
     description?: string,
+    pattern?: PermissionPattern,
   ) => Promise<void>;
   /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
   readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
   readonly changePermissionRuleDecision: (projectId: string, key: string, decision: 'allow' | 'deny') => Promise<void>;
   readonly changePermissionRuleScope: (projectId: string, key: string, scope: 'session' | 'always') => Promise<void>;
+  readonly changePermissionRulePattern: (
+    projectId: string,
+    key: string,
+    pattern: PermissionPattern | 'exact',
+  ) => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
@@ -98,6 +110,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     revokePermissionRule,
     changePermissionRuleDecision,
     changePermissionRuleScope,
+    changePermissionRulePattern,
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
@@ -193,13 +206,78 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       if (item) {
         const scope = data(target).scope as PermissionScope;
         if ((scope === 'chat' || scope === 'always') && target.getAttribute('data-rule-confirmed') !== 'true') {
-          setRememberedPermissionPreview(item.key, scope);
+          setRememberedPermissionPreview(item.key, scope, item.action);
           permissionRevision.value += 1;
           return;
         }
-        if ((scope === 'chat' || scope === 'always') && rememberedPermissionPreview(item.key) !== scope) return;
-        void resolvePermission(item, data(target).decision as PermissionDecision, scope, false, true);
+        if ((scope === 'chat' || scope === 'always') && rememberedPermissionPreview(item.key)?.scope !== scope) return;
+        void resolvePermission(
+          item,
+          data(target).decision as PermissionDecision,
+          scope,
+          false,
+          true,
+          undefined,
+          reviewedPermissionPattern(item.key),
+        );
       }
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', '[data-permission-pattern-kind]', (_event, target) => {
+      const control = target as HTMLSelectElement,
+        key = control.dataset.permissionPatternKind;
+      if (!key) return;
+      const current = rememberedPermissionPreview(key);
+      if (!current) return;
+      const kind = control.value as 'exact' | 'template' | 'regex';
+      const action = pendingPermissions().find((item) => item.key === key)?.action ?? '';
+      setRememberedPermissionPattern(
+        key,
+        kind,
+        kind === 'regex' ? `^${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$` : action,
+      );
+      permissionRevision.value += 1;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', '[data-permission-pattern-expression]', (_event, target) => {
+      const control = target as HTMLTextAreaElement,
+        key = control.dataset.permissionPatternExpression;
+      if (key) setRememberedPermissionPattern(key, rememberedPermissionPreview(key)?.kind ?? 'template', control.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-permission-insert-placeholder]', (_event, target) => {
+      const key = (target as HTMLElement).dataset.permissionInsertPlaceholder;
+      const field =
+        key &&
+        [...document.querySelectorAll<HTMLTextAreaElement>('[data-permission-pattern-expression]')].find(
+          (item) => item.dataset.permissionPatternExpression === key,
+        );
+      if (!key || !field || field.selectionStart === field.selectionEnd) return;
+      const start = field.selectionStart,
+        end = field.selectionEnd;
+      field.value = `${field.value.slice(0, start)}{{token}}${field.value.slice(end)}`;
+      setRememberedPermissionPattern(key, 'template', field.value);
+      field.focus();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-permission-rule-pattern-save]', (_event, target) => {
+      const key = (target as HTMLElement).dataset.permissionRulePatternSave;
+      const editor = target.closest<HTMLElement>('[data-permission-pattern-editor]');
+      const kind = editor?.querySelector<HTMLSelectElement>('[data-permission-rule-pattern-kind]')?.value;
+      const expression =
+        editor?.querySelector<HTMLTextAreaElement>('[data-permission-rule-pattern-expression]')?.value ?? '';
+      if (!key || !editor || !kind) return;
+      const pattern: PermissionPattern | 'exact' | undefined =
+        kind === 'exact'
+          ? 'exact'
+          : kind === 'template' || kind === 'regex'
+            ? { version: 1 as const, kind, expression }
+            : undefined;
+      if (pattern) void changePermissionRulePattern(selectedProjectId.value, key, pattern);
     }),
   );
   lifetime.add(

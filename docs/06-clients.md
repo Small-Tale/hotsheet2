@@ -2745,10 +2745,13 @@ decision, lifetime, and exact match label so each rule is independently reviewab
 duplicate result-count line is absent (HS2-CA5MSD).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. Each row shows its exact action, tool, project/chat reach, decision,
-lifetime, and exact match type, with a Copy button. An action that cannot be decrypted shows
+lifetime, and match type, with a Copy button and inline match editor. A patterned row shows
+its reviewed expression; a person can replace it or restore exact matching. An action that cannot be decrypted shows
 an unavailable state so it can be revoked and reviewed on its next request. The permission
 prompt keeps the real command readable; choosing a remembered scope opens a separate review
-of the exact action and rule reach before confirmation. The optional Bash name selector and
+of the exact action, editable match type, example, warning, and rule reach before confirmation.
+Selecting an action span and inserting a placeholder is supported; constrained regex is
+also available with server validation. The optional Bash name selector and
 short fingerprint label have been removed (HS2-CA5MSD). The
 preview and dialog rows are selection controls: plain click selects one,
 Command/Ctrl-click toggles a row, Shift-click extends from the last visible anchor, and

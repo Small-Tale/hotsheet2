@@ -15479,6 +15479,98 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-phone.png', fullPage: true });
 });
 
+test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCSNZ0)', async ({ page }) => {
+  await mockProject(page);
+  const action = "curl -H 'Bearer private' https://site.test";
+  let pending: Array<Record<string, unknown>> = [
+    {
+      id: 92,
+      project: '/work/demo.hs2',
+      connection: 'chat',
+      tool: 'Bash',
+      action,
+      agent: 'claude',
+      always_allow_supported: true,
+    },
+  ];
+  let rules: Array<Record<string, unknown>> = [];
+  const answers: Array<Record<string, unknown>> = [],
+    edits: Array<Record<string, unknown>> = [];
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      edits.push(body);
+      rules = rules.map((rule) => ({ ...rule, pattern: body.pattern, match_type: 'regex' }));
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ json: rules });
+  });
+  await page.route(/\/permissions\/\d+$/, (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    answers.push(body);
+    pending = [];
+    rules = [
+      {
+        project: '/work/demo.hs2',
+        connection: 'chat',
+        tool: 'Bash',
+        action: rememberedActionKey(action),
+        exact_action: action,
+        decision: 'allow',
+        scope: 'chat',
+        match_type: 'template',
+        pattern: body.pattern,
+      },
+    ];
+    return route.fulfill({ json: { connection: 'chat', decision: 'allow', persisted: false } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await popup.getByRole('button', { name: 'Allow for This Chat' }).click();
+  await popup.getByLabel('Permission rule type').selectOption('template');
+  await popup.getByLabel('Reviewed permission pattern').fill("curl -H 'Bearer {{token}}' https://site.test");
+  await expect(popup).toContainText('future matching actions without asking');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-phone.png' });
+  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
+  await expect(popup).toHaveCount(0);
+  expect(answers[0].pattern).toEqual({
+    version: 1,
+    kind: 'template',
+    expression: "curl -H 'Bearer {{token}}' https://site.test",
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const remembered = page.locator('[data-component="permission-rules-settings"]');
+  await expect(remembered).toContainText("curl -H 'Bearer {{token}}' https://site.test");
+  await remembered.getByText('Edit match').first().click();
+  await remembered.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-settings-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  await page.waitForTimeout(350);
+  await remembered.getByText('Edit match').first().click();
+  await remembered.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-settings-phone.png' });
+  await remembered.getByLabel('Rule type for Bash').first().selectOption('regex');
+  await remembered.getByLabel('Pattern for Bash').first().fill("^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$");
+  await remembered.getByRole('button', { name: 'Save Reviewed Match' }).first().click();
+  await expect.poll(() => edits.length).toBe(1);
+  expect(edits[0].pattern).toEqual({
+    version: 1,
+    kind: 'regex',
+    expression: "^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$",
+  });
+  await expect(remembered).toContainText("^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$");
+});
+
 test('previews three recent permission answers and searches the scrollable full list (HS2-16XPHH)', async ({
   page,
 }) => {

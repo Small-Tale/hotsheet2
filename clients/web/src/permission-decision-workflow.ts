@@ -8,6 +8,7 @@ import {
   type PermissionDecision,
   type PermissionInbox,
   type PermissionItem,
+  type PermissionPattern,
   type PermissionScope,
   type VisiblePermissionTimer,
 } from './permission-notifications';
@@ -30,6 +31,7 @@ export interface PermissionDecisionDependencies {
     decision: PermissionDecision,
     scope: PermissionScope,
     description?: string,
+    pattern?: PermissionPattern,
   ) => Promise<void>;
 }
 
@@ -54,8 +56,9 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
       decision: PermissionDecision,
       scope: PermissionScope,
       description?: string,
+      pattern?: PermissionPattern,
     ) => {
-      await new Api(owning.apiPath).resolvePermission(item.id, decision, scope, description);
+      await new Api(owning.apiPath).resolvePermission(item.id, decision, scope, description, pattern);
     });
   const permissionRevision = signal(0),
     permissionResolutionErrors = signal<Record<string, string>>({}),
@@ -169,6 +172,7 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
     automatic = false,
     grouped = !automatic,
     description?: string,
+    pattern?: PermissionPattern,
   ) {
     const owning = projects.value.find((value) => value.id === item.projectId);
     if (!owning) return;
@@ -178,7 +182,7 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
       if (scope !== 'once')
         for (const other of rest) if (inbox.resolve(other.key, decision, scope)) timer.remove(other.key);
       await Promise.all([
-        resolvePermission(first, decision, scope, automatic, false, description),
+        resolvePermission(first, decision, scope, automatic, false, description, pattern),
         ...(scope === 'once' ? rest.map((other) => resolvePermission(other, decision, scope, false, false)) : []),
       ]);
       return;
@@ -196,7 +200,7 @@ export function createPermissionDecisionWorkflow(dependencies: PermissionDecisio
     permissionRevision.value += 1;
     finishTiming?.();
     try {
-      await send(owning, item, decision, scope, scope === 'once' ? undefined : description);
+      await send(owning, item, decision, scope, scope === 'once' ? undefined : description, pattern);
       clearDescription(item.key);
     } catch (reason) {
       const noLongerPending = reason instanceof ApiHttpError && reason.status === 404;

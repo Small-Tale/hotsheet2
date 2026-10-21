@@ -15773,6 +15773,85 @@ async fn remembered_web_request_lists_exact_action_only_after_authentication() {
 }
 
 #[tokio::test]
+async fn reviewed_chat_pattern_round_trips_through_approval_and_settings_edit() {
+    const ACTION: &str = "curl -H 'Bearer first' https://site.test";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let worker_bridge = bridge.clone();
+    let worker_project = project.clone();
+    let waiter = std::thread::spawn(move || {
+        worker_bridge.request_blocking_for_project(worker_project, "chat", "Bash", ACTION)
+    });
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(response).await.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let invalid = app.clone().oneshot(authed("POST", &format!("/permissions/{id}"),
+        Some(r#"{"decision":"allow","scope":"chat","pattern":{"version":1,"kind":"regex","expression":".*"}}"#))).await.unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(bridge.pending().len(), 1);
+    let approved = app.clone().oneshot(authed("POST", &format!("/permissions/{id}"),
+        Some(r#"{"decision":"allow","scope":"chat","pattern":{"version":1,"kind":"template","expression":"curl -H 'Bearer {{token}}' https://site.test"}}"#))).await.unwrap();
+    assert_eq!(approved.status(), StatusCode::OK);
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["match_type"], "template");
+    assert_eq!(
+        listed[0]["pattern"]["expression"],
+        "curl -H 'Bearer {{token}}' https://site.test"
+    );
+    let fingerprint = listed[0]["action"].as_str().unwrap();
+    let combined = serde_json::json!({"project": project, "connection": "chat", "tool": "Bash", "action": fingerprint,
+        "decision": "deny", "pattern": "exact"});
+    let rejected = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&combined.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    let edit = serde_json::json!({"project": project, "connection": "chat", "tool": "Bash", "action": fingerprint, "pattern": "exact"});
+    let changed = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(changed.status(), StatusCode::NO_CONTENT);
+    let listed = body_json(
+        app.oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["match_type"], "exact");
+    assert!(listed[0].get("pattern").is_none());
+}
+
+#[tokio::test]
 async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() {
     const ACTION: &str = "curl https://private.example/token=secret";
     let dir = tempfile::tempdir().unwrap();

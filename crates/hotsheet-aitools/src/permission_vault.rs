@@ -150,7 +150,7 @@ fn dedupe(rules: &mut Vec<StoredRule>) -> bool {
     let mut seen = HashSet::new();
     rules.reverse();
     rules
-        .retain(|rule| seen.insert((rule.project.clone(), rule.tool.clone(), rule.action.clone())));
+        .retain(|rule| seen.insert((rule.project.clone(), rule.tool.clone(), rule.key_material())));
     rules.reverse();
     rules.len() != before
 }
@@ -326,6 +326,7 @@ mod tests {
             project: "project".into(),
             tool: "Bash".into(),
             action: action.into(),
+            pattern: None,
             description: None,
             decision: Decision::Allow,
         }

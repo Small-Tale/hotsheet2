@@ -50,6 +50,55 @@
   color: var(--wa-color-neutral-on-quiet);
   overflow-wrap: anywhere;
 }
+.permission-rules-settings__details details {
+  min-width: 0;
+  margin-top: remify(4px);
+  padding: remify(8px);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-medium);
+}
+.permission-rules-settings__details details summary {
+  cursor: pointer;
+  margin-bottom: remify(8px);
+}
+.permission-rules-settings__details details label {
+  display: grid;
+  gap: remify(4px);
+  margin-block: remify(6px);
+}
+.permission-rules-settings__details select,
+.permission-rules-settings__details textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: remify(6px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-small);
+  font: inherit;
+}
+.permission-rules-settings__details textarea {
+  resize: var(--hotsheet-textarea-resize, vertical);
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  overflow-wrap: anywhere;
+}
+.permission-rules-settings__details details small {
+  display: block;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.permission-rules-settings__details details button {
+  display: inline-block;
+  margin-top: remify(10px);
+  padding: remify(6px) remify(10px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-small);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  font: inherit;
+  cursor: pointer;
+}
 
 .permission-rules-settings [data-permission-rule] {
   min-width: 0;

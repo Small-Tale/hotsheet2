@@ -88,7 +88,15 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
 };
 
 function ruleLabel(rule: PermissionRule) {
-  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${rule.project} · ${SCOPE_LABELS[rule.scope]} · Exact match`;
+  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${rule.project} · ${SCOPE_LABELS[rule.scope]} · ${rule.match_type ?? 'exact'} match · ${rule.pattern?.expression ?? ''}`;
+}
+
+function matchLabel(rule: PermissionRule) {
+  return rule.match_type === 'template'
+    ? 'Placeholder match'
+    : rule.match_type === 'regex'
+      ? 'Regex match'
+      : 'Exact match';
 }
 
 /**
@@ -149,7 +157,46 @@ export function PermissionRulesSettings({
             <div class="permission-rules-settings__details">
               <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>
               <span>{rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}</span>
-              <span>{SCOPE_LABELS[rule.scope]} · Exact match</span>
+              <span>
+                {SCOPE_LABELS[rule.scope]} · {matchLabel(rule)}
+              </span>
+              {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
+              {rule.exact_action && (
+                <details data-permission-pattern-editor={key}>
+                  <summary>Edit match</summary>
+                  <label>
+                    Rule type
+                    <select data-permission-rule-pattern-kind={key} aria-label={`Rule type for ${rule.tool}`}>
+                      <option value="exact" selected={!rule.pattern}>
+                        Exact action
+                      </option>
+                      <option value="template" selected={rule.pattern?.kind === 'template'}>
+                        Placeholders
+                      </option>
+                      <option value="regex" selected={rule.pattern?.kind === 'regex'}>
+                        Constrained regex
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    Pattern
+                    <textarea
+                      data-permission-rule-pattern-expression={key}
+                      aria-label={`Pattern for ${rule.tool}`}
+                      rows={3}
+                    >
+                      {rule.pattern?.expression ?? rule.exact_action}
+                    </textarea>
+                  </label>
+                  <small>
+                    The complete action must match. Template placeholders: {'{{token}}'} or {'{{quoted}}'}. This can
+                    change which future requests are answered automatically.
+                  </small>
+                  <button type="button" data-permission-rule-pattern-save={key}>
+                    Save Reviewed Match
+                  </button>
+                </details>
+              )}
             </div>
           </div>
           {rule.exact_action && (

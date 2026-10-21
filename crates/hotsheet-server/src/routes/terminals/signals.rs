@@ -910,6 +910,8 @@ pub(crate) struct PermissionAnswer {
     /// Optional user-selected category for a remembered Bash answer. Free text is rejected.
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    pattern: Option<hotsheet_aitools::PermissionPattern>,
 }
 
 fn default_scope() -> hotsheet_aitools::PermissionScope {
@@ -986,9 +988,18 @@ pub(crate) async fn resolve_permission(
             })?;
         state
             .permissions
-            .resolve_persisted(id, body.decision, body.description.as_deref(), &path)
+            .resolve_persisted_with_pattern(
+                id,
+                body.decision,
+                body.description.as_deref(),
+                body.pattern,
+                &path,
+            )
             .map_err(|error| {
                 tracing::warn!(%error, "permission-rule persistence failed");
+                if error.kind() == std::io::ErrorKind::InvalidInput {
+                    return ApiError::new(StatusCode::BAD_REQUEST, error.to_string());
+                }
                 ApiError::new(
                     StatusCode::SERVICE_UNAVAILABLE,
                     "permission-rule store unavailable",
@@ -1000,7 +1011,14 @@ pub(crate) async fn resolve_permission(
     } else {
         state
             .permissions
-            .resolve_with_description(id, body.decision, body.scope, body.description.as_deref())
+            .resolve_with_reviewed_pattern(
+                id,
+                body.decision,
+                body.scope,
+                body.description.as_deref(),
+                body.pattern,
+            )
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
             .ok_or_else(|| {
                 ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
             })?
@@ -1138,6 +1156,16 @@ pub(crate) struct UpdatePermissionRule {
     decision: Option<hotsheet_aitools::PermissionDecision>,
     #[serde(default)]
     scope: Option<hotsheet_aitools::PermissionScope>,
+    /// Present when the user replaces the match expression; `"exact"` restores exact matching.
+    #[serde(default)]
+    pattern: Option<PermissionPatternChange>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum PermissionPatternChange {
+    Exact(String),
+    Pattern(hotsheet_aitools::PermissionPattern),
 }
 
 pub(crate) async fn update_permission_rule(
@@ -1153,7 +1181,27 @@ pub(crate) async fn update_permission_rule(
         (path, mirror_legacy)
     };
     let updated = match (body.decision, body.scope) {
-        (Some(decision), None) => state.permissions.update_decision(
+        (None, None) if body.pattern.is_some() => {
+            let pattern = match body.pattern {
+                Some(PermissionPatternChange::Exact(value)) if value == "exact" => None,
+                Some(PermissionPatternChange::Pattern(pattern)) => Some(pattern),
+                _ => {
+                    return Err(ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "invalid permission pattern",
+                    ));
+                }
+            };
+            state.permissions.update_pattern(
+                &body.project,
+                body.connection.as_deref(),
+                &body.tool,
+                &body.action,
+                pattern,
+                path.as_deref(),
+            )
+        }
+        (Some(decision), None) if body.pattern.is_none() => state.permissions.update_decision(
             &body.project,
             body.connection.as_deref(),
             &body.tool,
@@ -1161,22 +1209,26 @@ pub(crate) async fn update_permission_rule(
             decision,
             path.as_deref(),
         ),
-        (None, Some(hotsheet_aitools::PermissionScope::Session)) => state.permissions.update_scope(
-            &body.project,
-            body.connection.as_deref(),
-            &body.tool,
-            &body.action,
-            false,
-            path.as_deref().map(|path| (path, mirror_legacy)),
-        ),
-        (None, Some(hotsheet_aitools::PermissionScope::Always)) => state.permissions.update_scope(
-            &body.project,
-            body.connection.as_deref(),
-            &body.tool,
-            &body.action,
-            true,
-            path.as_deref().map(|path| (path, mirror_legacy)),
-        ),
+        (None, Some(hotsheet_aitools::PermissionScope::Session)) if body.pattern.is_none() => {
+            state.permissions.update_scope(
+                &body.project,
+                body.connection.as_deref(),
+                &body.tool,
+                &body.action,
+                false,
+                path.as_deref().map(|path| (path, mirror_legacy)),
+            )
+        }
+        (None, Some(hotsheet_aitools::PermissionScope::Always)) if body.pattern.is_none() => {
+            state.permissions.update_scope(
+                &body.project,
+                body.connection.as_deref(),
+                &body.tool,
+                &body.action,
+                true,
+                path.as_deref().map(|path| (path, mirror_legacy)),
+            )
+        }
         _ => {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,

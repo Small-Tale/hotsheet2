@@ -1,6 +1,7 @@
 import { browserRandomId } from './browser-id';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
+import type { PermissionPattern } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -1698,10 +1699,16 @@ export class Api {
     decision: 'allow' | 'deny',
     scope: 'once' | 'chat' | 'always',
     description?: string,
+    pattern?: PermissionPattern,
   ) =>
     this.parsed(parsePermissionDecision, `/permissions/${id}`, {
       method: 'POST',
-      body: JSON.stringify({ decision, scope, ...(description ? { description } : {}) }),
+      body: JSON.stringify({
+        decision,
+        scope,
+        ...(description ? { description } : {}),
+        ...(pattern ? { pattern } : {}),
+      }),
     });
   /** Remembered permission answers: chat, session, and durable rules (HS2-JNHAYB). */
   permissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules');
@@ -1717,6 +1724,20 @@ export class Api {
         tool: rule.tool,
         action: rule.action,
         decision,
+      }),
+    });
+  updatePermissionRulePattern = (
+    rule: { project: string; connection?: string; tool: string; action: string },
+    pattern: PermissionPattern | 'exact',
+  ) =>
+    this.parsed(ignoreBody, '/permissions/rules', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        project: rule.project,
+        connection: rule.connection,
+        tool: rule.tool,
+        action: rule.action,
+        pattern,
       }),
     });
   updatePermissionRuleScope = (

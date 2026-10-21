@@ -20,6 +20,7 @@ pub mod launch_safety;
 pub mod live;
 pub mod model_catalog;
 pub mod permission;
+pub mod permission_pattern;
 mod permission_vault;
 pub mod ports;
 pub mod probe;
@@ -61,6 +62,9 @@ pub use permission::{
     action_key_for as permission_action_key_for, append_rule as append_permission_rule,
     load_rules as load_permission_rules, remove_rule as remove_permission_rule,
     rules_health as permission_rules_health, valid_user_bash_description,
+};
+pub use permission_pattern::{
+    PatternKind as PermissionPatternKind, PatternSpec as PermissionPattern,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,

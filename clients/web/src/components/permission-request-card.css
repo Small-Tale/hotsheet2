@@ -35,6 +35,31 @@
 .permission-request-card__exact-action {
   white-space: pre-wrap;
 }
+.permission-request-card__confirmation dd label {
+  display: grid;
+  gap: remify(4px);
+  margin-block: remify(6px);
+}
+.permission-request-card__confirmation select,
+.permission-request-card__confirmation textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: remify(6px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-small);
+  font: inherit;
+}
+.permission-request-card__confirmation textarea {
+  resize: var(--hotsheet-textarea-resize, vertical);
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  overflow-wrap: anywhere;
+}
+.permission-request-card__pattern-warning {
+  color: var(--wa-color-warning-on-quiet);
+}
 .permission-request-card__confirmation-actions {
   display: flex;
   flex-wrap: wrap;

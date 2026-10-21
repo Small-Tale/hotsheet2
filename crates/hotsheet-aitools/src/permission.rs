@@ -26,6 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::permission_pattern::{PatternKind, PatternSpec};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -281,6 +282,8 @@ pub struct Rule {
     /// Original exact action, retained only in memory and inside authenticated
     /// encrypted storage. Never include this in logs or an unauthenticated event.
     pub exact_action: Option<String>,
+    /// An explicitly reviewed whole-action matcher. `None` is exact-only.
+    pub pattern: Option<PatternSpec>,
     /// A description from a fixed vocabulary. Never contains command arguments or paths.
     pub description: Option<String>,
     pub decision: Decision,
@@ -302,6 +305,7 @@ impl std::fmt::Debug for Rule {
                 "exact_action",
                 &self.exact_action.as_ref().map(|_| "[redacted]"),
             )
+            .field("pattern", &self.pattern)
             .field("description", &self.description)
             .field("decision", &self.decision)
             .field("persist", &self.persist)
@@ -314,7 +318,9 @@ impl Rule {
     fn matches(&self, project: &str, tool: &str, action: &str, key: &ActionKey) -> bool {
         self.project == project
             && self.tool == tool
-            && if is_action_fingerprint(&self.action, key) {
+            && if let Some(pattern) = &self.pattern {
+                pattern.matches(action)
+            } else if is_action_fingerprint(&self.action, key) {
                 self.action == action_fingerprint(key, action)
             } else if self.action.starts_with(ACTION_FINGERPRINT_PREFIX)
                 || is_legacy_fingerprint(&self.action)
@@ -344,19 +350,19 @@ fn effective_rule<'a>(
     action: &str,
     key: &ActionKey,
 ) -> Option<&'a Rule> {
-    rules
-        .iter()
-        .rev()
-        .find(|rule| {
-            rule.connection.as_deref() == Some(connection)
-                && rule.matches(project, tool, action, key)
-        })
-        .or_else(|| {
-            rules
-                .iter()
-                .rev()
-                .find(|rule| rule.connection.is_none() && rule.matches(project, tool, action, key))
-        })
+    for chat in [true, false] {
+        for exact in [true, false] {
+            if let Some(rule) = rules.iter().rev().find(|rule| {
+                (rule.connection.as_deref() == Some(connection) && chat
+                    || rule.connection.is_none() && !chat)
+                    && rule.pattern.is_none() == exact
+                    && rule.matches(project, tool, action, key)
+            }) {
+                return Some(rule);
+            }
+        }
+    }
+    None
 }
 
 /// A remembered rule as a client lists it (HS2-JNHAYB): which scope holds it and what it
@@ -371,6 +377,8 @@ pub struct RuleInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exact_action: Option<String>,
     pub match_type: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<PatternSpec>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub decision: Decision,
@@ -388,6 +396,7 @@ impl std::fmt::Debug for RuleInfo {
                 &self.exact_action.as_ref().map(|_| "[redacted]"),
             )
             .field("match_type", &self.match_type)
+            .field("pattern", &self.pattern)
             .field("decision", &self.decision)
             .field("scope", &self.scope)
             .finish()
@@ -402,7 +411,12 @@ impl From<&Rule> for RuleInfo {
             tool: rule.tool.clone(),
             action: rule.action.clone(),
             exact_action: rule.exact_action.clone(),
-            match_type: "exact",
+            match_type: match rule.pattern.as_ref().map(|pattern| pattern.kind) {
+                Some(PatternKind::Template) => "template",
+                Some(PatternKind::Regex) => "regex",
+                None => "exact",
+            },
+            pattern: rule.pattern.clone(),
             description: rule.description.clone(),
             decision: rule.decision,
             scope: if rule.connection.is_some() {
@@ -651,7 +665,33 @@ impl PermissionBridge {
         scope: Scope,
         description: Option<&str>,
     ) -> Option<Resolved> {
-        let pos = self.queue.iter().position(|r| r.id == id)?;
+        self.resolve_with_pattern(id, decision, scope, description, None)
+            .expect("exact permission rule is valid")
+    }
+
+    pub fn resolve_with_pattern(
+        &mut self,
+        id: u64,
+        decision: Decision,
+        scope: Scope,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+    ) -> io::Result<Option<Resolved>> {
+        if let Some(pattern) = &pattern {
+            if scope == Scope::Once {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "one-time answers cannot contain a pattern",
+                ));
+            }
+            let Some(request) = self.queue.iter().find(|request| request.id == id) else {
+                return Ok(None);
+            };
+            pattern.validate(&request.action)?;
+        }
+        let Some(pos) = self.queue.iter().position(|r| r.id == id) else {
+            return Ok(None);
+        };
         let req = self.queue.remove(pos).expect("position just found");
 
         let mut persisted_rule = None;
@@ -660,8 +700,14 @@ impl PermissionBridge {
             let rule = Rule {
                 project: req.project.clone(),
                 tool: req.tool.clone(),
-                action: action_fingerprint(&self.action_key, &req.action),
+                action: action_fingerprint(
+                    &self.action_key,
+                    &pattern
+                        .as_ref()
+                        .map_or_else(|| req.action.clone(), PatternSpec::identity),
+                ),
                 exact_action: Some(req.action.clone()),
+                pattern,
                 description: description
                     .filter(|value| {
                         req.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
@@ -714,13 +760,13 @@ impl PermissionBridge {
             }
         }
 
-        Some(Resolved {
+        Ok(Some(Resolved {
             project: req.project,
             connection: req.connection,
             decision,
             persisted_rule,
             cascaded,
-        })
+        }))
     }
 }
 
@@ -1099,12 +1145,28 @@ impl SharedPermissionBridge {
         scope: Scope,
         description: Option<&str>,
     ) -> Option<Resolved> {
-        let resolved = self.inner.lock_or_recover().resolve_with_description(
+        self.resolve_with_reviewed_pattern(id, decision, scope, description, None)
+            .expect("exact permission rule is valid")
+    }
+
+    pub fn resolve_with_reviewed_pattern(
+        &self,
+        id: u64,
+        decision: Decision,
+        scope: Scope,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+    ) -> io::Result<Option<Resolved>> {
+        let Some(resolved) = self.inner.lock_or_recover().resolve_with_pattern(
             id,
             decision,
             scope,
             description,
-        )?;
+            pattern,
+        )?
+        else {
+            return Ok(None);
+        };
         {
             let mut results = self.results.lock_or_recover();
             results.insert(id, decision);
@@ -1114,7 +1176,7 @@ impl SharedPermissionBridge {
             }
         }
         self.wake_waiters();
-        Some(resolved)
+        Ok(Some(resolved))
     }
 
     /// Persist an Always answer before installing it or waking any queued request.
@@ -1126,10 +1188,21 @@ impl SharedPermissionBridge {
         description: Option<&str>,
         path: &Path,
     ) -> io::Result<Option<Resolved>> {
+        self.resolve_persisted_with_pattern(id, decision, description, None, path)
+    }
+
+    pub fn resolve_persisted_with_pattern(
+        &self,
+        id: u64,
+        decision: Decision,
+        description: Option<&str>,
+        pattern: Option<PatternSpec>,
+        path: &Path,
+    ) -> io::Result<Option<Resolved>> {
         let mut bridge = self.inner.lock_or_recover();
         let mut proposed = bridge.clone();
         let Some(resolved) =
-            proposed.resolve_with_description(id, decision, Scope::Always, description)
+            proposed.resolve_with_pattern(id, decision, Scope::Always, description, pattern)?
         else {
             return Ok(None);
         };
@@ -1242,6 +1315,85 @@ impl SharedPermissionBridge {
             bridge.update_decision("", None, tool, action, decision);
         }
         Ok(updated)
+    }
+
+    /// Replace a reviewed matcher without changing the decision or lifetime. The
+    /// encrypted file is written before the live rule changes.
+    pub fn update_pattern(
+        &self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+        pattern: Option<PatternSpec>,
+        durable_path: Option<&Path>,
+    ) -> io::Result<Option<Rule>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let Some(index) = bridge.rules.iter().position(|rule| {
+            rule.project == project
+                && rule.connection.as_deref() == connection
+                && rule.tool == tool
+                && rule.action == action
+        }) else {
+            return Ok(None);
+        };
+        let current = bridge.rules[index].clone();
+        let original = current.exact_action.as_deref().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "remembered action unavailable")
+        })?;
+        if let Some(spec) = &pattern {
+            spec.validate(original)?;
+        }
+        let key_material = pattern
+            .as_ref()
+            .map_or_else(|| original.to_owned(), PatternSpec::identity);
+        let next_action = action_fingerprint(&bridge.action_key, &key_material);
+        if bridge.rules.iter().enumerate().any(|(position, rule)| {
+            position != index
+                && rule.project == project
+                && rule.connection.as_deref() == connection
+                && rule.tool == tool
+                && rule.action == next_action
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "matching rule already exists",
+            ));
+        }
+        if current.persist {
+            let path = durable_path
+                .ok_or_else(|| io::Error::other("permission rule store unavailable"))?;
+            crate::permission_vault::mutate(path, |rules| {
+                let stored = rules
+                    .iter_mut()
+                    .find(|rule| {
+                        rule.project == project
+                            && rule.tool == tool
+                            && action_fingerprint(&bridge.action_key, &rule.key_material())
+                                == action
+                    })
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::NotFound, "durable permission rule missing")
+                    })?;
+                stored.pattern = pattern.clone();
+                Ok(())
+            })?;
+        }
+        bridge.rules[index].pattern = pattern.clone();
+        bridge.rules[index].action = next_action.clone();
+        if current.persist {
+            for rule in &mut bridge.rules {
+                if rule.project.is_empty()
+                    && rule.connection.is_none()
+                    && rule.tool == tool
+                    && rule.action == action
+                {
+                    rule.pattern = pattern.clone();
+                    rule.action = next_action.clone();
+                }
+            }
+        }
+        Ok(Some(bridge.rules[index].clone()))
     }
 
     /// Change a project-wide rule between server-session and durable lifetimes. Write the
@@ -1373,6 +1525,8 @@ pub struct StoredRule {
     pub tool: String,
     pub action: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<PatternSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub decision: Decision,
 }
@@ -1383,6 +1537,7 @@ impl std::fmt::Debug for StoredRule {
             .field("project", &"[redacted]")
             .field("tool", &self.tool)
             .field("action", &"[redacted]")
+            .field("pattern", &self.pattern)
             .field("description", &"[redacted]")
             .field("decision", &self.decision)
             .finish()
@@ -1395,6 +1550,7 @@ impl From<&Rule> for StoredRule {
             project: r.project.clone(),
             tool: r.tool.clone(),
             action: r.exact_action.clone().unwrap_or_else(|| r.action.clone()),
+            pattern: r.pattern.clone(),
             description: r.description.clone(),
             decision: r.decision,
         }
@@ -1402,13 +1558,21 @@ impl From<&Rule> for StoredRule {
 }
 
 impl StoredRule {
+    pub(crate) fn key_material(&self) -> String {
+        self.pattern
+            .as_ref()
+            .map_or_else(|| self.action.clone(), PatternSpec::identity)
+    }
+
     /// Rehydrate a durable (persisted) [`Rule`] for seeding a bridge.
     pub fn into_rule(self, key: &ActionKey) -> Rule {
+        let key_material = self.key_material();
         Rule {
             project: self.project,
             tool: self.tool,
-            action: action_fingerprint(key, &self.action),
+            action: action_fingerprint(key, &key_material),
             exact_action: Some(self.action),
+            pattern: self.pattern,
             description: self.description,
             decision: self.decision,
             persist: true,
@@ -1428,11 +1592,18 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
     };
     stored
         .into_iter()
-        .map(|mut rule| {
+        .filter_map(|mut rule| {
             rule.description = rule
                 .description
                 .filter(|value| valid_rule_description(&rule.tool, value));
-            rule.into_rule(&key)
+            if rule
+                .pattern
+                .as_ref()
+                .is_some_and(|pattern| pattern.validate(&rule.action).is_err())
+            {
+                return None;
+            }
+            Some(rule.into_rule(&key))
         })
         .collect()
 }
@@ -1451,7 +1622,7 @@ pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std:
         rules.retain(|r| {
             !((r.project == project || r.project.is_empty())
                 && r.tool == tool
-                && (r.action == action || action_fingerprint(&key, &r.action) == action))
+                && (r.action == action || action_fingerprint(&key, &r.key_material()) == action))
         });
         Ok(rules.len() != before)
     })
@@ -1472,7 +1643,8 @@ fn update_stored_rule_decision(
         for rule in rules {
             if (rule.project == project || rule.project.is_empty())
                 && rule.tool == tool
-                && (rule.action == action || action_fingerprint(&key, &rule.action) == action)
+                && (rule.action == action
+                    || action_fingerprint(&key, &rule.key_material()) == action)
             {
                 rule.decision = decision;
                 found = true;
@@ -1503,12 +1675,17 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
     }
     let mut stored = StoredRule::from(rule);
     stored.action = action.into();
+    if let Some(pattern) = &stored.pattern {
+        pattern.validate(&stored.action)?;
+    }
     stored.description = stored
         .description
         .filter(|value| valid_rule_description(&stored.tool, value));
     crate::permission_vault::mutate(path, |rules| {
         rules.retain(|r| {
-            !(r.project == stored.project && r.tool == stored.tool && r.action == stored.action)
+            !(r.project == stored.project
+                && r.tool == stored.tool
+                && r.key_material() == stored.key_material())
         });
         rules.push(stored);
         Ok(())
@@ -1519,6 +1696,108 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn reviewed_pattern_is_scoped_and_exact_rule_takes_precedence() {
+        let mut bridge = PermissionBridge::new();
+        let exact = match bridge.request_for_project(
+            "p",
+            "chat-a",
+            "Bash",
+            "curl -H 'Bearer fixed' https://site.test",
+        ) {
+            Outcome::Pending(id) => id,
+            _ => panic!("new action must ask"),
+        };
+        bridge.resolve(exact, Decision::Deny, Scope::Chat);
+        let first = match bridge.request_for_project(
+            "p",
+            "chat-a",
+            "Bash",
+            "curl -H 'Bearer old' https://site.test",
+        ) {
+            Outcome::Pending(id) => id,
+            _ => panic!("new action must ask"),
+        };
+        let pattern = PatternSpec {
+            version: 1,
+            kind: PatternKind::Template,
+            expression: "curl -H 'Bearer {{token}}' https://site.test".into(),
+        };
+        assert!(
+            bridge
+                .resolve_with_pattern(
+                    first,
+                    Decision::Allow,
+                    Scope::Chat,
+                    None,
+                    Some(PatternSpec {
+                        version: 1,
+                        kind: PatternKind::Regex,
+                        expression: ".*".into()
+                    })
+                )
+                .is_err()
+        );
+        assert!(bridge.pending().any(|request| request.id == first));
+        bridge
+            .resolve_with_pattern(first, Decision::Allow, Scope::Chat, None, Some(pattern))
+            .unwrap();
+        assert_eq!(
+            bridge.request_for_project(
+                "p",
+                "chat-a",
+                "Bash",
+                "curl -H 'Bearer fixed' https://site.test"
+            ),
+            Outcome::Auto(Decision::Deny)
+        );
+        assert_eq!(
+            bridge.request_for_project(
+                "p",
+                "chat-a",
+                "Bash",
+                "curl -H 'Bearer next' https://site.test"
+            ),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(matches!(
+            bridge.request_for_project(
+                "p",
+                "chat-b",
+                "Bash",
+                "curl -H 'Bearer next' https://site.test"
+            ),
+            Outcome::Pending(_)
+        ));
+        assert!(matches!(
+            bridge.request_for_project(
+                "other",
+                "chat-a",
+                "Bash",
+                "curl -H 'Bearer next' https://site.test"
+            ),
+            Outcome::Pending(_)
+        ));
+        assert!(matches!(
+            bridge.request_for_project(
+                "p",
+                "chat-a",
+                "WebFetch",
+                "curl -H 'Bearer next' https://site.test"
+            ),
+            Outcome::Pending(_)
+        ));
+        assert!(matches!(
+            bridge.request_for_project(
+                "p",
+                "chat-a",
+                "Bash",
+                "curl -H 'Bearer next' https://evil.test"
+            ),
+            Outcome::Pending(_)
+        ));
+    }
 
     #[test]
     fn bash_description_uses_only_fixed_vocabulary_and_rejects_compound_commands() {
@@ -1723,6 +2002,7 @@ mod tests {
             tool: "Bash".into(),
             action: action.clone(),
             exact_action: Some("private command".into()),
+            pattern: None,
             description: None,
             decision: Decision::Deny,
             persist: false,
@@ -1802,6 +2082,65 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_pattern_edit_updates_encrypted_rule_and_restart_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        let key = action_key_for(&path).unwrap();
+        let original = "curl -H 'Bearer old' https://site.test";
+        let action = action_fingerprint(&key, original);
+        let rule = Rule {
+            project: "p".into(),
+            tool: "Bash".into(),
+            action: action.clone(),
+            exact_action: Some(original.into()),
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist: true,
+            connection: None,
+        };
+        append_rule(&path, &rule).unwrap();
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        bridge.reseed_rules_with_key(key, load_rules(&path));
+        let pattern = PatternSpec {
+            version: 1,
+            kind: PatternKind::Template,
+            expression: "curl -H 'Bearer {{token}}' https://site.test".into(),
+        };
+        let changed = bridge
+            .update_pattern(
+                "p",
+                None,
+                "Bash",
+                &action,
+                Some(pattern.clone()),
+                Some(&path),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(changed.pattern, Some(pattern));
+        assert_ne!(changed.action, action);
+        assert!(!fs::read_to_string(&path).unwrap().contains("{{token}}"));
+        let restarted = SharedPermissionBridge::new(PermissionBridge::new());
+        restarted.reseed_rules_with_key(key, load_rules(&path));
+        assert_eq!(
+            restarted.inner.lock_or_recover().request_for_project(
+                "p",
+                "chat",
+                "Bash",
+                "curl -H 'Bearer next' https://site.test"
+            ),
+            Outcome::Auto(Decision::Allow)
+        );
+        let exact = bridge
+            .update_pattern("p", None, "Bash", &changed.action, None, Some(&path))
+            .unwrap()
+            .unwrap();
+        assert_eq!(exact.action, action);
+        assert_eq!(load_rules(&path)[0].pattern, None);
+    }
+
+    #[test]
     fn editing_durable_rule_keeps_storage_order_and_rejects_missing_slots() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rules.json");
@@ -1813,6 +2152,7 @@ mod tests {
                     tool: "Bash".into(),
                     action: action.into(),
                     exact_action: None,
+                    pattern: None,
                     description: None,
                     decision: Decision::Allow,
                     persist: true,
@@ -1884,6 +2224,7 @@ mod tests {
                 tool: "Bash".into(),
                 action: "ls".into(),
                 exact_action: None,
+                pattern: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -2069,6 +2410,7 @@ mod tests {
                 tool: "Bash".into(),
                 action: "ls".into(),
                 exact_action: None,
+                pattern: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -2090,6 +2432,7 @@ mod tests {
                 tool: "Bash".into(),
                 action: "ls".into(),
                 exact_action: None,
+                pattern: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -2133,6 +2476,7 @@ mod tests {
             tool: "Bash".into(),
             action: "ls".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2151,6 +2495,7 @@ mod tests {
             &Rule {
                 action: "rm".into(),
                 exact_action: None,
+                pattern: None,
                 ..allow.clone()
             },
         )
@@ -2177,6 +2522,7 @@ mod tests {
             tool: "Bash".into(),
             action: "ls".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2188,6 +2534,7 @@ mod tests {
             &Rule {
                 action: "pwd".into(),
                 exact_action: None,
+                pattern: None,
                 ..first.clone()
             },
         )
@@ -2215,6 +2562,7 @@ mod tests {
                 project: "/one".into(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                pattern: None,
                 description: None,
                 decision: Decision::Deny,
             });
@@ -2322,6 +2670,7 @@ mod tests {
                 project: "p".into(),
                 tool: "Bash".into(),
                 action: secret.into(),
+                pattern: None,
                 description: None,
                 decision: Decision::Allow,
             }])
@@ -2355,6 +2704,7 @@ mod tests {
             tool: "Bash".into(),
             action: action.into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2398,6 +2748,7 @@ mod tests {
                 project: "p".into(),
                 tool: "Bash".into(),
                 action: v1.clone(),
+                pattern: None,
                 description: None,
                 decision: Decision::Allow,
             }])
@@ -2423,6 +2774,7 @@ mod tests {
             tool: "Bash".into(),
             action: "npm test".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2580,6 +2932,7 @@ mod tests {
             tool: "Bash".into(),
             action: "git status".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2778,6 +3131,7 @@ mod tests {
             tool: "Bash".into(),
             action: "ls".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2789,6 +3143,7 @@ mod tests {
             &Rule {
                 action: "pwd".into(),
                 exact_action: None,
+                pattern: None,
                 ..rule.clone()
             },
         )
@@ -2867,6 +3222,7 @@ mod tests {
             tool: "Bash".into(),
             action: "ls".into(),
             exact_action: None,
+            pattern: None,
             description: None,
             decision: Decision::Allow,
             persist: false,

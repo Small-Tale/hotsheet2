@@ -17,6 +17,7 @@ import {
   PermissionRequestCard,
   PermissionRequestPopup,
   rememberedPermissionPreview,
+  setRememberedPermissionPattern,
   setRememberedPermissionPreview,
   updatePermissionCountdownText,
 } from './permission-request-card';
@@ -449,7 +450,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
   it('keeps a remembered-rule preview on its request and clears it after use', () => {
     const other = { ...pending, key: `${pending.key}-other` };
     setRememberedPermissionPreview(pending.key, 'always');
-    expect(rememberedPermissionPreview(pending.key)).toBe('always');
+    expect(rememberedPermissionPreview(pending.key)?.scope).toBe('always');
     const markup = String(PermissionRequestCard({ item: pending }));
     expect(markup).toContain('Review the rule to remember');
     expect(markup).toContain('npm run test');
@@ -460,6 +461,15 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(String(PermissionRequestCard({ item: other }))).not.toContain('Review the rule to remember');
     setRememberedPermissionPreview(pending.key);
     expect(rememberedPermissionPreview(pending.key)).toBeUndefined();
+  });
+  it('shows the reviewed template and warning before a remembered answer', () => {
+    setRememberedPermissionPreview(pending.key, 'chat', pending.action);
+    setRememberedPermissionPattern(pending.key, 'template', 'npm run {{token}}');
+    const markup = String(PermissionRequestCard({ item: pending }));
+    expect(markup).toContain('npm run {{token}}');
+    expect(markup).toContain('future matching actions without asking');
+    expect(markup).toContain('This chat only');
+    setRememberedPermissionPreview(pending.key);
   });
   it('offers Allow for This Chat and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));

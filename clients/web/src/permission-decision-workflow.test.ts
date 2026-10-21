@@ -51,6 +51,20 @@ function deferred<T>() {
 }
 
 describe('permission decision workflow (HS2-GGJ57M)', () => {
+  it('forwards the reviewed matcher only with a remembered decision', async () => {
+    const { projects, inbox, send, workflow } = setup();
+    inbox.reconcile(projects.value[0], [request(1)], []);
+    const pattern = { version: 1 as const, kind: 'template' as const, expression: 'npm run {{token}}' };
+    await workflow.resolvePermission(inbox.pending()[0], 'allow', 'chat', false, true, undefined, pattern);
+    expect(send).toHaveBeenCalledWith(
+      projects.value[0],
+      expect.objectContaining({ id: 1 }),
+      'allow',
+      'chat',
+      undefined,
+      pattern,
+    );
+  });
   it('groups remembered answers into one send and marks rules stale', async () => {
     const { projects, inbox, send, workflow } = setup();
     inbox.reconcile(projects.value[0], [request(1), request(2)], []);
@@ -63,6 +77,7 @@ describe('permission decision workflow (HS2-GGJ57M)', () => {
       'allow',
       'always',
       'safe command',
+      undefined,
     );
     expect(inbox.pending()).toEqual([]);
     expect(workflow.freshPermissionRules.value.size).toBe(0);

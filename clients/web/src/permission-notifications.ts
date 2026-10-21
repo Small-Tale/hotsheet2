@@ -50,11 +50,18 @@ export interface PermissionRule {
   action: string;
   /** Decrypted command/action, confined to the authenticated response and local view. */
   exact_action?: string;
-  match_type?: 'exact';
+  match_type?: 'exact' | 'template' | 'regex';
+  pattern?: PermissionPattern;
   /** Legacy label retained for older clients, never used as the rule identity. */
   description?: string;
   decision: PermissionDecision;
   scope: 'chat' | 'session' | 'always';
+}
+
+export interface PermissionPattern {
+  version: 1;
+  kind: 'template' | 'regex';
+  expression: string;
 }
 
 /** The remembered rules that belong to `project` (its checkout root or one of its stores). */

@@ -490,7 +490,19 @@ export const parsePermissionRule = shape<PermissionRule>(
     decision: (field) => field === 'allow' || field === 'deny',
     scope: (field) => field === 'chat' || field === 'session' || field === 'always',
   },
-  { connection: isString, description: isString, exact_action: isString, match_type: (field) => field === 'exact' },
+  {
+    connection: isString,
+    description: isString,
+    exact_action: isString,
+    match_type: (field) => field === 'exact' || field === 'template' || field === 'regex',
+    pattern: (field) =>
+      typeof field === 'object' &&
+      field !== null &&
+      !Array.isArray(field) &&
+      (field as Record<string, unknown>).version === 1 &&
+      ((field as Record<string, unknown>).kind === 'template' || (field as Record<string, unknown>).kind === 'regex') &&
+      typeof (field as Record<string, unknown>).expression === 'string',
+  },
 );
 
 export const parseToolConnection = shape<ToolConnection>(

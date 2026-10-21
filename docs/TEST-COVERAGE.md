@@ -1098,3 +1098,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks exact matching, redacted debug output, vault failure, and persisted revocation; `clients/web/src/components/permission-components.test.ts` checks preview and list rendering, copy control, and locked fallback.
 - End to end: `crates/hotsheet-server/tests/http.rs` checks authenticated list disclosure, denied unauthenticated access, encrypted storage, and failed vault behavior; `clients/web/tests/providers.spec.ts` checks preview to confirmation to Settings, copy, revoke, and wide/phone layouts.
 - Manual: Inspect the matching popup and Settings captures at 1280 and 390 pixels. Check a real host credential-store lock and restore cycle where available.
+
+### Reviewed remembered permission patterns (HS2-JCSNZ0)
+
+- Behavior: Exact matching is the default. A separately reviewed template or constrained regex must match the complete original action, retain project/tool/chat reach, and reject broad or invalid expressions before resolution. Exact rules win over patterns at equal reach. Settings shows, edits, and revokes the actual expression.
+- Unit: `crates/hotsheet-aitools/src/permission_pattern.rs` tests whole-action placeholders, quoting, and broad regex rejection; `permission.rs` tests rejection without consuming a request, scoped pattern matching, and exact precedence. Web component and workflow tests cover editor rendering and submitted pattern data.
+- End to end: `crates/hotsheet-server/tests/http.rs` tests authenticated approval validation, rule listing, and match editing; `clients/web/tests/providers.spec.ts` covers the approval editor and Settings match controls.
+- Manual: Review a secret-bearing approval and matching/nonmatching follow-ups at wide and phone widths. Confirm the pattern and warning remain legible and that editing a durable rule survives restart.

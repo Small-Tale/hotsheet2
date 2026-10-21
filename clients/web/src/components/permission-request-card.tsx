@@ -6,20 +6,35 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
 
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
-import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
+import type { PermissionHistoryItem, PermissionItem, PermissionPattern } from '../permission-notifications';
 import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCard } from './notification-card';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 
 /** Ephemeral confirmation state; never persisted or sent in notification events. */
-const rememberedPreviews = new Map<string, 'chat' | 'always'>();
+interface RememberedPreview {
+  scope: 'chat' | 'always';
+  kind: 'exact' | 'template' | 'regex';
+  expression: string;
+}
+const rememberedPreviews = new Map<string, RememberedPreview>();
 export function rememberedPermissionPreview(key: string) {
   return rememberedPreviews.get(key);
 }
-export function setRememberedPermissionPreview(key: string, scope?: 'chat' | 'always') {
-  if (scope) rememberedPreviews.set(key, scope);
+export function setRememberedPermissionPreview(key: string, scope?: 'chat' | 'always', action = '') {
+  if (scope) rememberedPreviews.set(key, { scope, kind: 'exact', expression: action });
   else rememberedPreviews.delete(key);
+}
+export function setRememberedPermissionPattern(key: string, kind: RememberedPreview['kind'], expression: string) {
+  const preview = rememberedPreviews.get(key);
+  if (preview) rememberedPreviews.set(key, { ...preview, kind, expression });
+}
+export function reviewedPermissionPattern(key: string): PermissionPattern | undefined {
+  const preview = rememberedPreviews.get(key);
+  return preview && preview.kind !== 'exact'
+    ? { version: 1, kind: preview.kind, expression: preview.expression }
+    : undefined;
 }
 
 export interface PermissionRequestCardProps {
@@ -92,7 +107,8 @@ export function PermissionRequestCard({
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
-  const previewScope = history ? undefined : rememberedPermissionPreview(item.key);
+  const preview = history ? undefined : rememberedPermissionPreview(item.key);
+  const previewScope = preview?.scope;
   const statusLabel = history ? `${item.tool}: ${historyLabel(item)}` : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
@@ -140,7 +156,68 @@ export function PermissionRequestCard({
         <dt>Exact action</dt>
         <dd class="permission-request-card__exact-action">{item.action}</dd>
         <dt>Match</dt>
-        <dd>Exact action only</dd>
+        <dd>
+          <label>
+            Rule type
+            <select data-permission-pattern-kind={item.key} aria-label="Permission rule type">
+              <option value="exact" selected={preview.kind === 'exact'}>
+                Exact action
+              </option>
+              <option value="template" selected={preview.kind === 'template'}>
+                Placeholders
+              </option>
+              <option value="regex" selected={preview.kind === 'regex'}>
+                Constrained regex
+              </option>
+            </select>
+          </label>
+          {preview.kind !== 'exact' && (
+            <>
+              <label>
+                Reviewed pattern
+                <textarea
+                  data-permission-pattern-expression={item.key}
+                  aria-label="Reviewed permission pattern"
+                  rows={3}
+                >
+                  {preview.expression}
+                </textarea>
+              </label>
+              {preview.kind === 'template' && (
+                <button type="button" data-permission-insert-placeholder={item.key}>
+                  Replace selected text with {'{{token}}'}
+                </button>
+              )}
+              {preview.kind === 'template' && (
+                <p>
+                  Select a secret span above, then replace it in the pattern with <code>{'{{token}}'}</code> (one
+                  unquoted token) or <code>{'{{quoted}}'}</code> (text inside existing quotes). The surrounding command
+                  stays literal.
+                </p>
+              )}
+              {preview.kind === 'regex' && (
+                <p>
+                  Use <code>^</code> and <code>$</code> around the complete action. Repetitions must be bounded; broad
+                  wildcards and alternation are rejected.
+                </p>
+              )}
+              <p>
+                <strong>Reviewed request:</strong> {item.action}
+              </p>
+              {preview.kind === 'template' && (
+                <p>
+                  <strong>Example future match:</strong>{' '}
+                  {preview.expression.replaceAll('{{token}}', 'sample').replaceAll('{{quoted}}', 'sample')}
+                </p>
+              )}
+              <p class="permission-request-card__pattern-warning">
+                This rule may answer future matching actions without asking. Review the whole pattern and its project,
+                tool, and chat reach.
+              </p>
+            </>
+          )}
+          {preview.kind === 'exact' && 'Exact action only'}
+        </dd>
         <dt>Project</dt>
         <dd>{item.projectName}</dd>
         <dt>Applies to</dt>

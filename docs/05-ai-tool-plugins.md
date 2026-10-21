@@ -898,18 +898,20 @@ another client or transport answers: every attached client refetches pending req
 retains the disappeared request in notification history, including generic tools such as
 `ToolSearch` whose action/details string is empty.
 
-`Always Allow` rules match the same project, tool, and exact action (for example,
-the same Bash command); a different command asks again. Remembered rules hold a keyed
-HMAC-SHA-256 identifier of the action, not the command or path text. The original
-action is shown only in the pending request so the person can decide. A separate
-256-bit per-install key in `${HOTSHEET_HOME}/permissions/.action-key` (owner-only on
-Unix) is required to match rules after restart. Exporting or syncing the rule JSON
-alone does not allow offline testing of guessed command or path text; keep the key
-private and do not export or sync it with rules. Existing raw-action files are scrubbed
-to keyed identifiers before activation. Earlier unkeyed `sha256:v1` rules cannot be
-rekeyed without their original actions and are removed; their next request needs a new
-human answer. Losing or corrupting the key also disables the old approvals rather than
-guessing a replacement. A file that cannot be scrubbed contributes no active rules.
+By default, `Always Allow` rules match the same project, tool, and exact action (for
+example, the same Bash command); a different command asks again. A person can explicitly
+replace selected action spans with `{{token}}` or `{{quoted}}` placeholders, or enter a
+constrained regex, in the separate approval review. Pattern syntax is versioned (`1`),
+anchored to the complete action, length bounded, and validated against the original
+request before it is saved. Regex rules require a literal prefix and positive bounded
+character classes; broad wildcards, branches, and optional segments are rejected. Exact
+rules take precedence over patterns at the same chat/project reach. The action, pattern,
+and match scope are shown before confirmation; a matching future request can then be
+answered automatically. Remembered identities are keyed HMAC-SHA-256 values, while the
+original action and optional pattern live only in memory and in the authenticated,
+encrypted v3 machine-local store. Its key comes from the OS credential store. Missing
+keys or invalid ciphertext disable durable approvals. Legacy fingerprint-only rules
+are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each
@@ -939,7 +941,8 @@ sent for each. `GET /permissions/rules` lists every remembered rule with its sco
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
 opaque keyed action identifier (removing a durable rule from the encrypted store too);
 `PATCH /permissions/rules` accepts the same exact slot plus either
-`decision: "allow" | "deny"` or `scope: "session" | "always"`. A decision edit keeps
+`decision: "allow" | "deny"`, `scope: "session" | "always"`, or a versioned
+`pattern` (`"exact"` to restore literal matching). A decision edit keeps
 the lifetime; a duration edit keeps the answer and changes only a project-wide rule.
 Chat rules cannot change duration. Durable changes are written before
 the in-memory answer or lifetime changes. A failed keychain read, authentication check,
@@ -947,8 +950,8 @@ or write leaves an Always request pending without installing or cascading an app
 remembering a chat or persistent answer, the popup reviews the tool, exact action, project,
 chat reach, match type, and lifetime, then requires a separate confirmation. Settings →
 Permissions lists only the selected project's remembered answers with decrypted exact actions,
-tool, project/chat reach, lifetime, decision, and exact match type. Users can copy an action
-or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
+reviewed patterns, tool, project/chat reach, lifetime, and decision. Users can edit the
+pattern, copy an action, or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
 shown as a label. The exact action is returned only by the authenticated local rules API, not
 events or logs. If the credential key or encrypted file is unavailable, the list shows a locked
 state and durable in-memory rules are withdrawn before any automatic answer. Revocation writes
@@ -982,18 +985,18 @@ require fresh approval. No migration guesses an action from its fingerprint.
 When loading an encrypted file with repeated exact project/tool/action slots, Hot Sheet
 keeps the newest answer and rewrites the file (HS2-Q40BBV).
 
-Remembered answers match the **exact project, tool, and action**. For Claude and Codex
+Remembered answers match the **exact project and tool**, and the exact action unless a
+person explicitly reviews and saves a bounded matcher. For Claude and Codex
 permission hooks, the action is the command, path, or serialized tool input; Codex
 app-server approvals use a command, call ID, path, or reason. Persistent rules are
 stored inside a version-3 AES-256-GCM envelope with a fresh nonce; the key is generated
 in the host OS credential store and never written to exported rule JSON, logs, or events.
 Exact text is decrypted only in server memory. A missing, corrupt, or unavailable key
 and a corrupt envelope fail closed. Atomic owner-only writes and a cross-process file
-lock guard edits. The current list remains fingerprint-only until HS2-CA5MSD; wildcard
-matching is not offered for remembered answers.
+lock guard edits. Authenticated Settings lists the decrypted action and any reviewed
+matcher; unauthenticated events and logs do not expose either.
 The `*` matcher on Claude's hook registration selects which tool events reach Hot
-Sheet; it does not broaden a remembered answer. Patterned rules require a separate
-scoped design with an inspectable grant and safe revocation (HS2-HT4SJN).
+Sheet; it does not broaden a remembered answer.
 
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
