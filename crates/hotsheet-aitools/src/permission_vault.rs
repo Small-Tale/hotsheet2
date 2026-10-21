@@ -77,9 +77,65 @@ fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
     Ok(key)
 }
 
+/// A Keychain approval belongs to the process, not to every vault access: remember each
+/// key once it is read or created so later loads, mutations, and health checks never
+/// prompt again. Only present keys are cached; a missing key is re-checked every time.
+struct CachedSecrets<'a, S> {
+    backend: S,
+    cache: &'a std::sync::Mutex<std::collections::HashMap<String, String>>,
+}
+
+impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
+    fn set(
+        &self,
+        account: &str,
+        value: &str,
+    ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
+        self.backend.set(account, value)?;
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(account.into(), value.into());
+        Ok(())
+    }
+
+    fn get(
+        &self,
+        account: &str,
+    ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
+        let mut cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(value) = cache.get(account) {
+            return Ok(Some(value.clone()));
+        }
+        let value = self.backend.get(account)?;
+        if let Some(value) = &value {
+            cache.insert(account.into(), value.clone());
+        }
+        Ok(value)
+    }
+
+    fn delete(&self, account: &str) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(account);
+        self.backend.delete(account)
+    }
+}
+
 #[cfg(not(test))]
 fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
-    f(&OsKeychain)
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    static KEYS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    f(&CachedSecrets {
+        backend: OsKeychain,
+        cache: KEYS.get_or_init(|| Mutex::new(HashMap::new())),
+    })
 }
 
 #[cfg(test)]
@@ -405,6 +461,75 @@ mod tests {
         })
         .unwrap();
         assert_eq!(load(&path).unwrap(), vec![rule("pwd")]);
+    }
+
+    #[test]
+    fn cached_secrets_read_the_backend_once_per_present_key() {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Default)]
+        struct Counting {
+            values: Mutex<HashMap<String, String>>,
+            gets: AtomicUsize,
+        }
+        impl SecretStore for &Counting {
+            fn set(
+                &self,
+                account: &str,
+                value: &str,
+            ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
+                self.values
+                    .lock()
+                    .unwrap()
+                    .insert(account.into(), value.into());
+                Ok(())
+            }
+            fn get(
+                &self,
+                account: &str,
+            ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
+                self.gets.fetch_add(1, Ordering::SeqCst);
+                Ok(self.values.lock().unwrap().get(account).cloned())
+            }
+            fn delete(
+                &self,
+                account: &str,
+            ) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
+                Ok(self.values.lock().unwrap().remove(account).is_some())
+            }
+        }
+
+        let backend = Counting::default();
+        let cache = Mutex::new(HashMap::new());
+        let store = CachedSecrets {
+            backend: &backend,
+            cache: &cache,
+        };
+        // A missing key is never cached, so a later creation is still seen.
+        assert_eq!(store.get("a").unwrap(), None);
+        assert_eq!(store.get("a").unwrap(), None);
+        assert_eq!(backend.gets.load(Ordering::SeqCst), 2);
+        backend
+            .values
+            .lock()
+            .unwrap()
+            .insert("a".into(), "one".into());
+        for _ in 0..5 {
+            assert_eq!(store.get("a").unwrap().as_deref(), Some("one"));
+        }
+        assert_eq!(backend.gets.load(Ordering::SeqCst), 3);
+        // A key this process creates is served without reading it back.
+        store.set("b", "two").unwrap();
+        assert_eq!(store.get("b").unwrap().as_deref(), Some("two"));
+        assert_eq!(backend.gets.load(Ordering::SeqCst), 3);
+        // Deleting forgets the cached value; refill then reads the backend again.
+        assert!(store.delete("a").unwrap());
+        assert_eq!(store.get("a").unwrap(), None);
+        store.set("a", "three").unwrap();
+        assert_eq!(store.get("a").unwrap().as_deref(), Some("three"));
+        assert_eq!(backend.gets.load(Ordering::SeqCst), 4);
     }
 
     #[test]
