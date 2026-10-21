@@ -962,23 +962,49 @@ pub(crate) async fn resolve_permission(
         hotsheet_aitools::PermissionScope::Session => "session",
         hotsheet_aitools::PermissionScope::Always => "always",
     };
-    let resolved = state
-        .permissions
-        .resolve_with_description(id, body.decision, body.scope, body.description.as_deref())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}")))?;
-    // Persist an `Always` rule so the remembered answer survives a restart.
-    let mut persisted = false;
-    let rules_path = state
-        .permission_rule_paths
-        .lock_or_recover()
-        .get(&resolved.project)
-        .cloned();
-    if let (Some(rule), Some(path)) = (&resolved.persisted_rule, rules_path.as_ref()) {
-        match hotsheet_aitools::append_permission_rule(path, rule) {
-            Ok(()) => persisted = true,
-            Err(e) => tracing::warn!(error = %e, "failed to persist permission rule"),
-        }
-    }
+    let persisted = body.scope == hotsheet_aitools::PermissionScope::Always;
+    let resolved = if persisted {
+        let project = state
+            .permissions
+            .pending()
+            .iter()
+            .find(|request| request.id == id)
+            .map(|request| request.project.clone())
+            .ok_or_else(|| {
+                ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
+            })?;
+        let path = state
+            .permission_rule_paths
+            .lock_or_recover()
+            .get(&project)
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "permission-rule store unavailable",
+                )
+            })?;
+        state
+            .permissions
+            .resolve_persisted(id, body.decision, body.description.as_deref(), &path)
+            .map_err(|error| {
+                tracing::warn!(%error, "permission-rule persistence failed");
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "permission-rule store unavailable",
+                )
+            })?
+            .ok_or_else(|| {
+                ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
+            })?
+    } else {
+        state
+            .permissions
+            .resolve_with_description(id, body.decision, body.scope, body.description.as_deref())
+            .ok_or_else(|| {
+                ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
+            })?
+    };
     // Resolution can happen through another client or transport. Publish a replayable
     // nudge so every notification inbox reconciles the now-absent request into history.
     state.emit(ChangeEvent {

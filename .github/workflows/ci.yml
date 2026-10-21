@@ -89,6 +89,11 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip
 
+      - name: Exercise encrypted permission-vault locking on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-aitools permission_vault::tests
+
       - name: Exercise trusted Antigravity CLI discovery on Windows
         env:
           CC: cl
@@ -134,7 +139,15 @@ jobs:
         run: cargo lint
 
       - name: Test
-        run: cargo nextest run --all-features
+        run: |
+          sudo apt-get install -y libsecret-tools gnome-keyring dbus-user-session
+          dbus-run-session -- bash -c '
+            set -euo pipefail
+            printf "ci-ephemeral-keyring\n" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            printf "ready" | secret-tool store --label "HS2 CI keyring probe" service hs2-ci account probe
+            test "$(secret-tool lookup service hs2-ci account probe)" = "ready"
+            cargo nextest run --all-features
+          '
 
       # Node side: the migrator + the cross-language conformance test (docs/12 §12.7).
       # Node version is pinned in .nvmrc so CI matches local dev.

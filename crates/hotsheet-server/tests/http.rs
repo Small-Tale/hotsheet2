@@ -15643,6 +15643,71 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 }
 
 #[tokio::test]
+async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installed() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let rules = dir.path().join("permissions.json");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    std::fs::write(
+        &rules,
+        b"{\"version\":3,\"nonce\":\"bad\",\"ciphertext\":\"bad\"}",
+    )
+    .unwrap();
+    let worker = {
+        let bridge = bridge.clone();
+        std::thread::spawn(move || {
+            bridge.request_blocking_timeout(
+                "chat",
+                "Bash",
+                "ls",
+                std::time::Duration::from_secs(2),
+                hotsheet_aitools::PermissionDecision::Deny,
+            )
+        })
+    };
+    let id = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(request) = body_json(response).await.as_array().unwrap().first() {
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/permissions", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await.as_array().unwrap().len(), 1);
+    let response = app
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+    assert_eq!(
+        worker.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+}
+
+#[tokio::test]
 async fn remembered_web_request_lists_only_a_safe_synopsis() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
@@ -15804,7 +15869,8 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
     let file = std::fs::read_to_string(&rules_path).unwrap();
     assert!(!file.contains("private-value"));
-    assert!(file.contains("Run npm unit tests"));
+    assert!(!file.contains("Run npm unit tests"));
+    assert!(file.contains("\"ciphertext\""));
     let listed = body_json(
         app.clone()
             .oneshot(authed("GET", "/permissions/rules", None))

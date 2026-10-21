@@ -937,18 +937,18 @@ waiting — the resolve response lists them in `also_resolved` and each gets its
 connection, tool, and action) into one popup that names the count; a one-time answer is
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
-opaque keyed action identifier (removing a durable rule from the store's rule file too);
+opaque keyed action identifier (removing a durable rule from the encrypted store too);
 `PATCH /permissions/rules` accepts the same exact slot plus either
 `decision: "allow" | "deny"` or `scope: "session" | "always"`. A decision edit keeps
 the lifetime; a duration edit keeps the answer and changes only a project-wide rule.
-Chat rules cannot change duration. Durable changes are written to the rule file before
-the in-memory answer or lifetime changes, and a failed write leaves the live rule intact. Settings →
+Chat rules cannot change duration. Durable changes are written before
+the in-memory answer or lifetime changes. A failed keychain read, authentication check,
+or write leaves an Always request pending without installing or cascading an approval. Settings →
 Permissions lists only the selected project's remembered answers by tool, scope,
 decision, and a short fingerprint identifier. New rules carry a fixed-vocabulary
 operation synopsis for recognized tools (for example, npm lint, reading a file, or fetching a
-web page); it never copies arguments, paths, URLs, or arbitrary command text. Older rules and
-unrecognized commands cannot recover their original prompt from the fingerprint. Settings
-states that limit explicitly; deleting an old answer makes its next matching request ask again.
+web page); it never copies arguments, paths, URLs, or arbitrary command text. The current
+Settings UI still shows keyed identifiers, pending the exact-rule UI in HS2-CA5MSD.
 Full command/path details remain hidden and each rule is
 revocable. Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
 for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
@@ -976,24 +976,26 @@ Each row retains its tool and short action fingerprint so distinct private comma
 remain distinguishable, including at phone width where the center of a long label
 truncates first; a safe operation synopsis appears when available, and the repeated
 privacy reminder appears only in the label's tooltip.
-An older project-wide Bash answer without a synopsis has no recoverable command text. Deleting
-its existing fingerprint makes the next matching use show the full command in a new permission
-prompt. The person can then choose an optional
+The person can choose an optional
 fixed-vocabulary name before remembering the answer. The popup previews that name as it will
 appear in Settings; its automatic option says a safe name appears only for recognized commands.
 The choice changes the displayed name, never which exact command matches. The server rejects free text and
-labels on one-time or non-Bash answers; durable files and the rule-list API retain only
-the HMAC fingerprint and validated label. A command never used again remains unidentified
-unless its old answer is deleted; no migration guesses a command from its fingerprint
-(HS2-KSY290).
-When loading an older rule file with repeated exact project/tool/action
-slots, Hot Sheet keeps the newest answer and rewrites the file (HS2-Q40BBV).
+labels on one-time or non-Bash answers; the rule-list API currently returns the HMAC
+fingerprint and validated label. The encrypted file retains the exact action for later
+authenticated local display; old fingerprint-only files are discarded on upgrade and
+require fresh approval. No migration guesses an action from its fingerprint.
+When loading an encrypted file with repeated exact project/tool/action slots, Hot Sheet
+keeps the newest answer and rewrites the file (HS2-Q40BBV).
 
 Remembered answers match the **exact project, tool, and action**. For Claude and Codex
 permission hooks, the action is the command, path, or serialized tool input; Codex
-app-server approvals use a command, call ID, path, or reason. Persistent actions are
-stored as keyed fingerprints, so the list cannot reconstruct a command or path and
-cannot use a glob over it. Wildcard matching is not offered for remembered answers.
+app-server approvals use a command, call ID, path, or reason. Persistent rules are
+stored inside a version-3 AES-256-GCM envelope with a fresh nonce; the key is generated
+in the host OS credential store and never written to exported rule JSON, logs, or events.
+Exact text is decrypted only in server memory. A missing, corrupt, or unavailable key
+and a corrupt envelope fail closed. Atomic owner-only writes and a cross-process file
+lock guard edits. The current list remains fingerprint-only until HS2-CA5MSD; wildcard
+matching is not offered for remembered answers.
 The `*` matcher on Claude's hook registration selects which tool events reach Hot
 Sheet; it does not broaden a remembered answer. Patterned rules require a separate
 scoped design with an inspectable grant and safe revocation (HS2-HT4SJN).

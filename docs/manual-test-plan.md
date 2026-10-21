@@ -72,6 +72,22 @@ the default-on path is checked by hand.
    Credential Manager under `com.smalltale.hotsheet2/test-provider`. Confirm a missing
    credential is reported as absent and other Win32 failures remain visible.
 
+### Encrypted remembered permissions (HS2-1S4QEX)
+
+1. On macOS Keychain, Windows Credential Manager, and Linux Secret Service, approve a
+   disposable exact command with Always. Restart the server and confirm only that
+   command in the same project is auto-answered. Check the OS credential entry exists.
+2. Inspect the machine-local permission JSON and lock file: owner-only file access,
+   version-3 envelope, no command, path, key, or safe synopsis in plaintext. Check
+   exported files and logs for the same secret string.
+3. With a disposable store, lock the credential service, remove its key, and corrupt
+   the ciphertext in separate runs. Confirm no remembered action is auto-approved;
+   an attempted Always answer remains pending and reports an unavailable store. Restore
+   the service or explicitly clear the unusable rule file before fresh approval.
+4. Present a pre-v3 fingerprint-only array and its `.action-key`, restart, and confirm
+   the old answers do not activate, the file becomes an empty encrypted envelope, and
+   the obsolete key file is removed.
+
 ### Cross-device terminal sizing
 
 1. Attach macOS and iOS-sized viewers to the same remote terminal.

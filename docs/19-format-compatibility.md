@@ -14,10 +14,14 @@ running process. A development source edit is not activation; rebuilding/restart
 running an explicit migration is. The retained `prerelease-*` fixtures are a regression
 baseline, not a promise that every pre-release byte shape is permanent.
 
-The local permission-rule JSON may include an optional fixed-vocabulary `description`
-for newly remembered Bash actions (HS2-JESMCS). Older files omit it and remain readable;
-older writers may drop it, leaving the fingerprint-only label. The action fingerprint
-remains the sole matching and revocation key.
+The unreleased fingerprint-only local permission-rule array is intentionally not migrated.
+On first use, HS2 replaces it atomically with an empty version-3 authenticated encrypted
+envelope and removes the obsolete `.action-key`; every remembered answer requires fresh
+approval (HS2-1S4QEX). The new key lives in the host OS credential store. An encrypted
+file whose key is missing, unavailable, or corrupt is never rekeyed or activated; the
+person must reapprove after explicitly clearing the unusable local store and, for a
+corrupt key, its credential-store entry. Old clients
+must not write the v3 file.
 
 ## 19.2 Starting with the first public release
 

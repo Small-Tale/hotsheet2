@@ -152,7 +152,8 @@ args = ["--permission", "Bash", "rm important"]
     .unwrap();
     assert!(output.contains("permission:allow"), "{output}");
     let saved = std::fs::read_to_string(rules).unwrap();
-    assert!(saved.contains("\"action\": \"hmac-sha256:v2:"), "{saved}");
+    assert!(saved.contains("\"version\":3"), "{saved}");
+    assert!(saved.contains("\"ciphertext\":"), "{saved}");
     assert!(!saved.contains("rm important"), "{saved}");
 }
 

@@ -19,10 +19,9 @@
 //! are the server/plugin wiring on top (HS2-113 / HS2-0QGW07).
 
 use hotsheet_sync::LockExt;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::collections::{HashMap, VecDeque};
+use std::io;
+use std::path::Path;
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -208,72 +207,10 @@ fn stored_action_key(action: &str, key: &ActionKey) -> Option<String> {
     }
 }
 
-fn action_key_path(rules_path: &Path) -> PathBuf {
-    rules_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".action-key")
-}
-
-/// Open or create the separate, machine-local key shared by rules in one permissions
-/// directory. An invalid or unreadable key fails closed; it is never silently replaced.
+/// Obtain the machine-local rule key from the OS credential store. A missing or
+/// unreadable key for an existing encrypted file fails closed.
 pub fn action_key_for(rules_path: &Path) -> io::Result<ActionKey> {
-    let path = action_key_path(rules_path);
-    match fs::read_to_string(&path) {
-        Ok(text) => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if fs::metadata(&path)?.permissions().mode() & 0o077 != 0 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "permission action key is accessible to other users",
-                    ));
-                }
-            }
-            let text = text.trim_end_matches('\n');
-            if !is_hex(text, 64) {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "invalid permission action key",
-                ));
-            }
-            let mut key = [0; 32];
-            for (index, byte) in key.iter_mut().enumerate() {
-                *byte = u8::from_str_radix(&text[index * 2..index * 2 + 2], 16)
-                    .map_err(io::Error::other)?;
-            }
-            Ok(key)
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let key = fresh_action_key()?;
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            match options.open(&path) {
-                Ok(mut file) => {
-                    for byte in key {
-                        write!(file, "{byte:02x}")?;
-                    }
-                    writeln!(file)?;
-                    file.sync_all()?;
-                    Ok(key)
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                    action_key_for(rules_path)
-                }
-                Err(error) => Err(error),
-            }
-        }
-        Err(error) => Err(error),
-    }
+    crate::permission_vault::key_for(rules_path)
 }
 
 /// Eventual safe-deny guard for an unattended permission request. Client automation is
@@ -335,11 +272,14 @@ pub struct PermissionAsk {
 
 /// A remembered allow-rule: auto-answer any request matching the exact original action.
 /// New rules hold only its fingerprint; raw actions occur only in legacy caller fixtures.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Rule {
     pub project: String,
     pub tool: String,
     pub action: String,
+    /// Original exact action, retained only in memory and inside authenticated
+    /// encrypted storage. Never include this in logs or an unauthenticated event.
+    pub exact_action: Option<String>,
     /// A description from a fixed vocabulary. Never contains command arguments or paths.
     pub description: Option<String>,
     pub decision: Decision,
@@ -349,6 +289,24 @@ pub struct Rule {
     /// `Some(connection)` for a chat rule (HS2-JNHAYB) that answers only that connection's
     /// requests; `None` for a project-wide rule.
     pub connection: Option<String>,
+}
+
+impl std::fmt::Debug for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Rule")
+            .field("project", &"[redacted]")
+            .field("tool", &self.tool)
+            .field("action", &"[redacted]")
+            .field(
+                "exact_action",
+                &self.exact_action.as_ref().map(|_| "[redacted]"),
+            )
+            .field("description", &self.description)
+            .field("decision", &self.decision)
+            .field("persist", &self.persist)
+            .field("connection", &self.connection)
+            .finish()
+    }
 }
 
 impl Rule {
@@ -467,7 +425,7 @@ pub struct CascadedResolution {
 }
 
 /// The permission bridge: a FIFO queue of pending requests + the active allow-rules.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PermissionBridge {
     next_id: u64,
     queue: VecDeque<Request>,
@@ -591,6 +549,11 @@ impl PermissionBridge {
         self.rules = rules
             .into_iter()
             .filter_map(|mut rule| {
+                if rule.exact_action.is_none()
+                    && !is_action_fingerprint(&rule.action, &self.action_key)
+                {
+                    rule.exact_action = Some(rule.action.clone());
+                }
                 rule.action = stored_action_key(&rule.action, &self.action_key)?;
                 rule.description = rule
                     .description
@@ -673,6 +636,7 @@ impl PermissionBridge {
                 project: req.project.clone(),
                 tool: req.tool.clone(),
                 action: action_fingerprint(&self.action_key, &req.action),
+                exact_action: Some(req.action.clone()),
                 description: description
                     .filter(|value| {
                         req.tool.eq_ignore_ascii_case("bash") && valid_user_bash_description(value)
@@ -1077,6 +1041,40 @@ impl SharedPermissionBridge {
         Some(resolved)
     }
 
+    /// Persist an Always answer before installing it or waking any queued request.
+    /// An unavailable key or failed encrypted write leaves the original request pending.
+    pub fn resolve_persisted(
+        &self,
+        id: u64,
+        decision: Decision,
+        description: Option<&str>,
+        path: &Path,
+    ) -> io::Result<Option<Resolved>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let mut proposed = bridge.clone();
+        let Some(resolved) =
+            proposed.resolve_with_description(id, decision, Scope::Always, description)
+        else {
+            return Ok(None);
+        };
+        let rule = resolved
+            .persisted_rule
+            .as_ref()
+            .expect("Always creates a durable rule");
+        append_rule(path, rule)?;
+        *bridge = proposed;
+        drop(bridge);
+        {
+            let mut results = self.results.lock_or_recover();
+            results.insert(id, decision);
+            for cascaded in &resolved.cascaded {
+                results.insert(cascaded.id, cascaded.decision);
+            }
+        }
+        self.wake_waiters();
+        Ok(Some(resolved))
+    }
+
     /// Every remembered rule, newest last (HS2-JNHAYB settings list).
     pub fn rules(&self) -> Vec<RuleInfo> {
         self.inner
@@ -1253,9 +1251,9 @@ impl Drop for AsyncAsk<'_> {
 
 // ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
 
-/// The on-disk form of an `Always` allow-rule. `action` is an opaque exact-match
-/// fingerprint, never the command/path text. The transient `persist` flag isn't stored.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// The plaintext form inside the authenticated encrypted v3 envelope. This type must
+/// never be serialized directly to the rule path, an event, or a log.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredRule {
     #[serde(default)]
     pub project: String,
@@ -1266,12 +1264,24 @@ pub struct StoredRule {
     pub decision: Decision,
 }
 
+impl std::fmt::Debug for StoredRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredRule")
+            .field("project", &"[redacted]")
+            .field("tool", &self.tool)
+            .field("action", &"[redacted]")
+            .field("description", &"[redacted]")
+            .field("decision", &self.decision)
+            .finish()
+    }
+}
+
 impl From<&Rule> for StoredRule {
     fn from(r: &Rule) -> Self {
         StoredRule {
             project: r.project.clone(),
             tool: r.tool.clone(),
-            action: r.action.clone(),
+            action: r.exact_action.clone().unwrap_or_else(|| r.action.clone()),
             description: r.description.clone(),
             decision: r.decision,
         }
@@ -1280,11 +1290,12 @@ impl From<&Rule> for StoredRule {
 
 impl StoredRule {
     /// Rehydrate a durable (persisted) [`Rule`] for seeding a bridge.
-    pub fn into_rule(self) -> Rule {
+    pub fn into_rule(self, key: &ActionKey) -> Rule {
         Rule {
             project: self.project,
             tool: self.tool,
-            action: self.action,
+            action: action_fingerprint(key, &self.action),
+            exact_action: Some(self.action),
             description: self.description,
             decision: self.decision,
             persist: true,
@@ -1293,67 +1304,39 @@ impl StoredRule {
     }
 }
 
-/// Load durable allow-rules from `path` (a JSON array). Raw actions migrate to keyed v2.
-/// Unkeyed v1 digests and v2 digests from a lost key cannot be rekeyed, so they are removed
-/// and require reapproval. A failed scrub activates no rules.
+/// Load authenticated encrypted durable rules. Legacy fingerprint arrays are discarded
+/// on upgrade, and an unavailable key or invalid envelope activates no rules.
 pub fn load_rules(path: &Path) -> Vec<Rule> {
     let Ok(key) = action_key_for(path) else {
         return Vec::new();
     };
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let Ok(stored) = crate::permission_vault::load(path) else {
         return Vec::new();
     };
-    let Ok(mut stored) = serde_json::from_str::<Vec<StoredRule>>(&text) else {
-        return Vec::new();
-    };
-    let old = stored.clone();
-    stored = stored
+    stored
         .into_iter()
-        .filter_map(|mut rule| {
-            rule.action = stored_action_key(&rule.action, &key)?;
+        .map(|mut rule| {
             rule.description = rule
                 .description
                 .filter(|value| valid_rule_description(&rule.tool, value));
-            Some(rule)
+            rule.into_rule(&key)
         })
-        .collect();
-    // An older or imported file can contain repeated exact slots. Matching already uses
-    // the newest rule; keep that one and retain its position in the newest-first UI.
-    let mut seen = HashSet::new();
-    stored.reverse();
-    stored
-        .retain(|rule| seen.insert((rule.project.clone(), rule.tool.clone(), rule.action.clone())));
-    stored.reverse();
-    let migrated = stored != old;
-    if migrated {
-        let Ok(json) = serde_json::to_string_pretty(&stored) else {
-            return Vec::new();
-        };
-        if std::fs::write(path, json).is_err() {
-            return Vec::new();
-        }
-    }
-    stored.into_iter().map(StoredRule::into_rule).collect()
+        .collect()
 }
 
 /// Remove a durable rule for `(project, tool, action)` from `path` (HS2-JNHAYB revoke).
 /// Returns whether one was removed; a missing file removes nothing.
 pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std::io::Result<bool> {
     let key = action_key_for(path)?;
-    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
-    let before = rules.len();
-    // Durable rules may be stored with the project or with the legacy empty project.
-    rules.retain(|r| {
-        !((r.project == project || r.project.is_empty())
-            && r.tool == tool
-            && (r.action == action || r.action == action_fingerprint(&key, action)))
-    });
-    if rules.len() == before {
-        return Ok(false);
-    }
-    let json = serde_json::to_string_pretty(&rules).map_err(std::io::Error::other)?;
-    std::fs::write(path, json)?;
-    Ok(true)
+    crate::permission_vault::mutate(path, |rules| {
+        let before = rules.len();
+        rules.retain(|r| {
+            !((r.project == project || r.project.is_empty())
+                && r.tool == tool
+                && (r.action == action || action_fingerprint(&key, &r.action) == action))
+        });
+        Ok(rules.len() != before)
+    })
 }
 
 /// Edit a durable answer in place. Preserve its file order so an edit does not change
@@ -1366,61 +1349,58 @@ fn update_stored_rule_decision(
     decision: Decision,
 ) -> io::Result<()> {
     let key = action_key_for(path)?;
-    let action_key = stored_action_key(action, &key).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "permission rule has an obsolete key",
-        )
-    })?;
-    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
-    let mut found = false;
-    for rule in &mut rules {
-        if (rule.project == project || rule.project.is_empty())
-            && rule.tool == tool
-            && rule.action == action_key
-        {
-            rule.decision = decision;
-            found = true;
+    crate::permission_vault::mutate(path, |rules| {
+        let mut found = false;
+        for rule in rules {
+            if (rule.project == project || rule.project.is_empty())
+                && rule.tool == tool
+                && (rule.action == action || action_fingerprint(&key, &rule.action) == action)
+            {
+                rule.decision = decision;
+                found = true;
+            }
         }
-    }
-    if !found {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "durable permission rule missing",
-        ));
-    }
-    let json = serde_json::to_string_pretty(&rules).map_err(io::Error::other)?;
-    std::fs::write(path, json)
+        if found {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "durable permission rule missing",
+            ))
+        }
+    })
 }
 
 /// Persist an `Always` allow-rule to `path`, replacing any existing rule for the same
 /// `(project, tool, action)` (a later answer wins) — so remembered answers survive a restart.
 pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
-    let key = action_key_for(path)?;
-    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
-    let action_key = stored_action_key(&rule.action, &key).ok_or_else(|| {
-        io::Error::new(
+    let action = rule.exact_action.as_deref().unwrap_or(&rule.action);
+    if rule.exact_action.is_none()
+        && (action.starts_with(ACTION_FINGERPRINT_PREFIX) || is_legacy_fingerprint(action))
+    {
+        return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "permission rule has an obsolete key",
-        )
-    })?;
-    rules.retain(|r| !(r.project == rule.project && r.tool == rule.tool && r.action == action_key));
+            "permission rule lacks exact action",
+        ));
+    }
     let mut stored = StoredRule::from(rule);
-    stored.action = action_key;
+    stored.action = action.into();
     stored.description = stored
         .description
         .filter(|value| valid_rule_description(&stored.tool, value));
-    rules.push(stored);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let json = serde_json::to_string_pretty(&rules).map_err(std::io::Error::other)?;
-    std::fs::write(path, json)
+    crate::permission_vault::mutate(path, |rules| {
+        rules.retain(|r| {
+            !(r.project == stored.project && r.tool == stored.tool && r.action == stored.action)
+        });
+        rules.push(stored);
+        Ok(())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn bash_description_uses_only_fixed_vocabulary_and_rejects_compound_commands() {
@@ -1485,10 +1465,11 @@ mod tests {
         );
         assert!(!std::fs::read_to_string(&path).unwrap().contains(secret));
 
-        let mut tampered: Vec<StoredRule> =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        tampered[0].description = Some(secret.into());
-        std::fs::write(&path, serde_json::to_vec(&tampered).unwrap()).unwrap();
+        crate::permission_vault::mutate(&path, |rules| {
+            rules[0].description = Some(secret.into());
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(load_rules(&path)[0].description, None);
     }
 
@@ -1527,10 +1508,11 @@ mod tests {
             Some("Run npm unit tests")
         );
 
-        let mut stored: Vec<StoredRule> =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        stored[0].description = Some("private command text".into());
-        std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+        crate::permission_vault::mutate(&path, |rules| {
+            rules[0].description = Some("private command text".into());
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(load_rules(&path)[0].description, None);
         assert!(
             !std::fs::read_to_string(&path)
@@ -1591,7 +1573,11 @@ mod tests {
             Outcome::Auto(Decision::Allow)
         );
         let durable = std::fs::read_to_string(&path).unwrap();
-        assert!(durable.contains("Network command"));
+        assert_eq!(
+            load_rules(&path)[0].description.as_deref(),
+            Some("Network command")
+        );
+        assert!(!durable.contains("Network command"));
         assert!(!durable.contains("private.example"));
         assert!(!durable.contains("secret"));
 
@@ -1618,6 +1604,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: action.clone(),
+            exact_action: Some("private command".into()),
             description: None,
             decision: Decision::Deny,
             persist: false,
@@ -1707,6 +1694,7 @@ mod tests {
                     project: "p".into(),
                     tool: "Bash".into(),
                     action: action.into(),
+                    exact_action: None,
                     description: None,
                     decision: Decision::Allow,
                     persist: true,
@@ -1777,6 +1765,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                exact_action: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -1961,6 +1950,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                exact_action: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -1981,6 +1971,7 @@ mod tests {
                 project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
+                exact_action: None,
                 description: None,
                 decision: Decision::Allow,
                 persist: true,
@@ -2023,6 +2014,7 @@ mod tests {
             project: String::new(),
             tool: "Bash".into(),
             action: "ls".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2040,6 +2032,7 @@ mod tests {
             &path,
             &Rule {
                 action: "rm".into(),
+                exact_action: None,
                 ..allow.clone()
             },
         )
@@ -2065,6 +2058,7 @@ mod tests {
             project: "/one".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2075,6 +2069,7 @@ mod tests {
             &path,
             &Rule {
                 action: "pwd".into(),
+                exact_action: None,
                 ..first.clone()
             },
         )
@@ -2096,18 +2091,18 @@ mod tests {
         )
         .unwrap();
 
-        // A legacy/imported file may repeat a slot in raw form. Its last decision must
-        // remain effective, while other actions and projects keep their own rows.
-        let mut stored: Vec<StoredRule> =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        stored.push(StoredRule {
-            project: "/one".into(),
-            tool: "Bash".into(),
-            action: "ls".into(),
-            description: None,
-            decision: Decision::Deny,
-        });
-        std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+        // An encrypted file may still contain duplicate slots after an older writer.
+        crate::permission_vault::mutate(&path, |stored| {
+            stored.push(StoredRule {
+                project: "/one".into(),
+                tool: "Bash".into(),
+                action: "ls".into(),
+                description: None,
+                decision: Decision::Deny,
+            });
+            Ok(())
+        })
+        .unwrap();
 
         let loaded = load_rules(&path);
         assert_eq!(loaded.len(), 4);
@@ -2128,10 +2123,13 @@ mod tests {
             loaded,
             "a second load does not add or reorder rows"
         );
-        let persisted: Vec<StoredRule> =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        assert_eq!(persisted.len(), 4);
-        assert!(persisted.iter().all(|r| r.action != "ls"));
+        assert!(
+            fs::read_to_string(&path)
+                .unwrap()
+                .contains("\"ciphertext\"")
+        );
+        assert!(!fs::read_to_string(&path).unwrap().contains("\"ls\""));
+        assert_eq!(crate::permission_vault::load(&path).unwrap().len(), 4);
 
         append_rule(&path, &first).unwrap();
         let replaced = load_rules(&path);
@@ -2199,7 +2197,7 @@ mod tests {
     }
 
     #[test]
-    fn loading_a_legacy_rule_scrubs_raw_action_before_activation() {
+    fn loading_a_legacy_rule_scrubs_raw_action_and_requires_reapproval() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rules.json");
         let secret = "API_TOKEN=private-value npm test";
@@ -2217,8 +2215,7 @@ mod tests {
         .unwrap();
         let rules = load_rules(&path);
         let key = action_key_for(&path).unwrap();
-        assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].action, action_fingerprint(&key, secret));
+        assert!(rules.is_empty());
         assert!(
             !std::fs::read_to_string(&path)
                 .unwrap()
@@ -2226,11 +2223,10 @@ mod tests {
         );
         let mut bridge = PermissionBridge::new();
         bridge.set_action_key_and_rules(key, rules);
-        assert_eq!(
+        assert!(matches!(
             bridge.request_for_project("p", "c", "Bash", secret),
-            Outcome::Auto(Decision::Allow)
-        );
-        assert!(remove_rule(&path, "p", "Bash", &action_fingerprint(&key, secret)).unwrap());
+            Outcome::Pending(_)
+        ));
         assert!(load_rules(&path).is_empty());
     }
 
@@ -2243,6 +2239,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: action.into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2261,16 +2258,17 @@ mod tests {
             first_export, second_export,
             "different installs use different keys"
         );
-        assert!(first_export.contains("hmac-sha256:v2:"));
+        assert!(first_export.contains("\"version\":3"));
         assert!(!first_export.contains("sha256:v1:"));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(action_key_path(&first_path))
-                .unwrap()
-                .permissions()
-                .mode();
-            assert_eq!(mode & 0o077, 0, "the key is owner-only");
+            let mode = fs::metadata(&first_path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o077, 0, "the encrypted file is owner-only");
+            assert!(
+                !first.path().join(".action-key").exists(),
+                "key is not stored in the file tree"
+            );
         }
     }
 
@@ -2302,13 +2300,14 @@ mod tests {
     }
 
     #[test]
-    fn lost_key_discards_old_approvals_and_rejects_an_old_fingerprint() {
+    fn lost_key_fails_closed_and_preserves_encrypted_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rules.json");
         let rule = Rule {
             project: "p".into(),
             tool: "Bash".into(),
             action: "npm test".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2316,19 +2315,60 @@ mod tests {
         };
         append_rule(&path, &rule).unwrap();
         let old = load_rules(&path).pop().unwrap();
-        fs::remove_file(action_key_path(&path)).unwrap();
+        let before = fs::read(&path).unwrap();
+        crate::permission_vault::with_secrets(|store| {
+            let account = crate::permission_vault::account(&path)?;
+            store.delete(&account).map_err(io::Error::other)?;
+            Ok(())
+        })
+        .unwrap();
         assert!(load_rules(&path).is_empty());
-        assert!(!fs::read_to_string(&path).unwrap().contains(&old.action));
+        assert_eq!(fs::read(&path).unwrap(), before);
         assert_eq!(
             append_rule(&path, &old).unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
         let mut bridge = PermissionBridge::new();
-        bridge.set_action_key_and_rules(action_key_for(&path).unwrap(), vec![old]);
+        bridge.set_action_key_and_rules([0; 32], vec![old]);
         assert!(matches!(
             bridge.request_for_project("p", "chat", "Bash", "npm test"),
             Outcome::Pending(_)
         ));
+    }
+
+    #[test]
+    fn failed_persistent_write_keeps_request_pending_and_does_not_cascade() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        fs::write(&path, b"corrupt").unwrap();
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        let first = match bridge
+            .inner
+            .lock_or_recover()
+            .request_for_project("p", "a", "Bash", "ls")
+        {
+            Outcome::Pending(id) => id,
+            _ => panic!(),
+        };
+        let second = match bridge
+            .inner
+            .lock_or_recover()
+            .request_for_project("p", "b", "Bash", "ls")
+        {
+            Outcome::Pending(id) => id,
+            _ => panic!(),
+        };
+        assert!(
+            bridge
+                .resolve_persisted(first, Decision::Allow, None, &path)
+                .is_err()
+        );
+        assert_eq!(
+            bridge.pending().iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec![first, second]
+        );
+        assert!(bridge.rules().is_empty());
+        assert!(bridge.results.lock_or_recover().is_empty());
     }
 
     #[test]
@@ -2424,6 +2464,7 @@ mod tests {
             project: String::new(),
             tool: "Bash".into(),
             action: "git status".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2621,6 +2662,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: true,
@@ -2631,6 +2673,7 @@ mod tests {
             &path,
             &Rule {
                 action: "pwd".into(),
+                exact_action: None,
                 ..rule.clone()
             },
         )
@@ -2708,6 +2751,7 @@ mod tests {
             project: "p".into(),
             tool: "Bash".into(),
             action: "ls".into(),
+            exact_action: None,
             description: None,
             decision: Decision::Allow,
             persist: false,

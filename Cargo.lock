@@ -1048,6 +1048,7 @@ dependencies = [
  "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
+ "ring",
  "serde",
  "serde_json",
  "sha2",
