@@ -15363,28 +15363,34 @@ test('answers identical permission requests for this chat and revokes the rememb
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await expect(popup).toContainText('2 identical requests are waiting');
-  await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-grouped-popup-1280.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-at46vg-popup-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(popup).toBeVisible();
-  for (const name of ['Deny', 'Allow for This Chat', 'Always Allow', 'Allow Once']) {
+  for (const name of ['Deny', 'Allow This AI Session', 'Always Allow', 'Allow Once']) {
     const bounds = await popup.getByRole('button', { name, exact: true }).boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    const label = popup.getByRole('button', { name, exact: true }).locator('.kui-button__label');
+    expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   }
-  await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-grouped-popup-390.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-at46vg-popup-390.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await popup.getByRole('button', { name: 'Allow for This Chat', exact: true }).click();
+  await popup.getByRole('button', { name: 'Allow This AI Session', exact: true }).click();
   await expect(popup).toContainText('Review the rule to remember');
   await expect(popup).toContainText(secretAction);
-  await expect(popup).toContainText('This chat only');
+  await expect(popup).toContainText('This AI session only');
   await expect(popup).toContainText('Exact action only');
+  await popup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await popup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-390.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   expect(answers).toEqual([]);
   await popup.getByRole('button', { name: 'Back' }).click();
   await expect(popup).not.toContainText('Review the rule to remember');
-  await popup.getByRole('button', { name: 'Allow for This Chat', exact: true }).click();
+  await popup.getByRole('button', { name: 'Allow This AI Session', exact: true }).click();
   expect(answers).toEqual([]);
-  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
+  await popup.getByRole('button', { name: 'Confirm Allow This AI Session' }).click();
   await expect(popup).toHaveCount(0);
   // One remembered answer covers the group: only the first request is sent, scoped to the chat.
   expect(answers).toEqual([{ id: '81', body: { decision: 'allow', scope: 'chat' } }]);
@@ -15394,7 +15400,7 @@ test('answers identical permission requests for this chat and revokes the rememb
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
   await expect(row).toContainText(secretAction);
-  await expect(row).toContainText('This chat only, until it closes');
+  await expect(row).toContainText('Until this AI session ends');
   await expect(row.getByText('Exact match', { exact: true })).toHaveCount(0);
   await expect(row).not.toContainText('Details hidden');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -15517,7 +15523,7 @@ for (const width of [1280, 390]) {
     await expect(dialogTitle).toHaveAttribute('data-max-lines', '2');
     await dialog.getByRole('button', { name: 'Expand action', exact: true }).click();
     await expect(dialogTitle).not.toHaveAttribute('data-max-lines', '2');
-    await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('zsh');
+    await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('All AI sessions');
     await expect(dialogTitle).not.toHaveAttribute('data-max-lines', '2');
     await dialog.screenshot({
       path: `target/visual-captures/hs2-y8fyvy-dialog-expanded-${width}.png`,
@@ -15530,7 +15536,7 @@ for (const width of [1280, 390]) {
 
 for (const width of [1280, 390]) {
   test(`wraps remembered tool and lifetime badges without overflowing at ${width}px (HS2-R3R7JE)`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 1000 });
+    await page.setViewportSize({ width, height: 1440 });
     await mockProject(page);
     const tool = 'mcp__very_long_provider_connection__review_the_requested_operation';
     await page.route('**/permissions/rules', (route) =>
@@ -15557,8 +15563,8 @@ for (const width of [1280, 390]) {
     if (await hideSidebar.isVisible()) await hideSidebar.click();
     const preview = page.locator('[data-component="permission-rules-settings"]');
     await expect(preview.locator('[data-rule-lifetime-badge]')).toHaveText([
-      'This chat only, until it closes',
-      'Session (until restart)',
+      'Until this AI session ends',
+      'Until Hot Sheet restarts',
       'Persistent',
     ]);
     const checkBounds = async (surface: typeof preview) => {
@@ -15570,7 +15576,7 @@ for (const width of [1280, 390]) {
     };
     await checkBounds(preview);
     await preview.screenshot({
-      path: `target/visual-captures/hs2-r3r7je-lifetimes-${width}.png`,
+      path: `target/visual-captures/hs2-at46vg-lifetimes-${width}.png`,
       animations: 'disabled',
     });
     await preview.getByRole('button', { name: 'Show all 3 answers', exact: true }).click();
@@ -15579,12 +15585,12 @@ for (const width of [1280, 390]) {
     await checkBounds(dialog);
     await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
     await expect(dialog.locator('[data-rule-lifetime-badge]')).toHaveText([
-      'This chat only, until it closes',
-      'Session (until restart)',
+      'Until this AI session ends',
+      'Until Hot Sheet restarts',
     ]);
     await checkBounds(dialog);
     await dialog.screenshot({
-      path: `target/visual-captures/hs2-r3r7je-session-badges-${width}.png`,
+      path: `target/visual-captures/hs2-at46vg-temporary-${width}.png`,
       animations: 'disabled',
     });
   });
@@ -15786,7 +15792,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
-  await popup.getByRole('button', { name: 'Allow for This Chat' }).click();
+  await popup.getByRole('button', { name: 'Allow This AI Session' }).click();
   await popup.getByLabel('Permission rule type').selectOption('template');
   await popup.getByLabel('Reviewed permission pattern').fill("curl -H 'Bearer {{token}}' https://site.test");
   await expect(popup).toContainText('future matching actions without asking');
@@ -15794,7 +15800,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-phone.png' });
-  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
+  await popup.getByRole('button', { name: 'Confirm Allow This AI Session' }).click();
   await expect(popup).toHaveCount(0);
   expect(answers[0].pattern).toEqual({
     version: 1,
@@ -15860,7 +15866,7 @@ test('offers secret spans without changing the exact default and lets each be re
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
-  await popup.getByRole('button', { name: 'Allow for This Chat' }).click();
+  await popup.getByRole('button', { name: 'Allow This AI Session' }).click();
   await expect(popup.getByLabel('Permission rule type')).toHaveValue('exact');
   expect(answers).toHaveLength(0);
   const hints = popup.locator('[data-permission-suggestion-index]');
@@ -15878,7 +15884,7 @@ test('offers secret spans without changing the exact default and lets each be re
   await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-phone.png' });
-  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
+  await popup.getByRole('button', { name: 'Confirm Allow This AI Session' }).click();
   await expect(popup).toHaveCount(0);
   expect(answers[0].pattern).toEqual({
     version: 1,
@@ -15947,7 +15953,7 @@ test('previews three recent permission answers and searches the scrollable full 
     .first()
     .evaluate((row) => getComputedStyle(row).backgroundColor);
   expect(deniedBackground).not.toBe(allowedBackground);
-  await expect(recent).toContainText('Session (until restart)');
+  await expect(recent).toContainText('Until Hot Sheet restarts');
   await expect(preview).not.toContainText('This project,');
   await expect(preview).not.toContainText('Details hidden');
   await expect(preview).not.toContainText('OtherProjectTool');
@@ -16280,7 +16286,7 @@ test('uses selected-answer toolbar menus for decisions, duration, and deletion (
   await expect(row).toHaveAttribute('data-permission-rule-decision', 'deny');
   await row.locator('[data-action="select-permission-rule-row"]').click();
   await previewMenu.click();
-  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
+  await page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' }).click();
   await expect(preview.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   await row.locator('[data-action="select-permission-rule-row"]').click();
   await previewMenu.click();
@@ -16311,13 +16317,13 @@ test('uses selected-answer toolbar menus for decisions, duration, and deletion (
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
   await expect(dialog).toContainText('2 selected');
   await bulk.click();
-  await expect(page.getByRole('menuitem', { name: 'Set Selected to Session' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'target/visual-captures/hs2-x4es6z-menu-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'target/visual-captures/hs2-x4es6z-menu-phone.png' });
-  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
+  await page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' }).click();
   await expect(dialog).toContainText('Updated 2 of 2 answers');
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(2);
@@ -16368,12 +16374,12 @@ test('applies the one selected-answer menu to multiple preview and dialog rows (
   await previewRows.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await expect(settings).toContainText('2 selected');
   await previewMenu.getByRole('button', { name: 'Selected Answer Actions' }).click();
-  await expect(page.getByRole('menuitem', { name: 'Set Selected to Session' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' })).toBeVisible();
   await testInfo.attach('hs2-qfwsef-preview-wide', {
     body: await page.screenshot({ path: testInfo.outputPath('hs2-qfwsef-preview-wide.png'), animations: 'disabled' }),
     contentType: 'image/png',
   });
-  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
+  await page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' }).click();
   await expect(previewMenu.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
   expect(changed).toHaveLength(2);
   await page.setViewportSize({ width: 1416, height: 1816 });
@@ -16593,13 +16599,13 @@ test('changes remembered answer duration in compact and expanded lists and keeps
     .locator('[data-action="select-permission-rule-row"]')
     .click();
   await dialog.getByRole('button', { name: 'Selected Answer Actions' }).click();
-  await page.getByRole('menuitem', { name: 'Set Selected to Session' }).click();
+  await page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' }).click();
   await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
   await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
   await expect(
     dialog.locator('[data-permission-rule-decision="deny"][data-permission-rule-scope="session"]'),
   ).toHaveCount(1);
-  await expect(dialog.getByRole('button', { name: 'Session', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: 'Temporary', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog).toContainText('Updated 1 of 1 answers.');
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-phone.png' });
@@ -16609,7 +16615,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
-  await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText('Session (until restart)');
+  await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText('Until Hot Sheet restarts');
   await preview
     .locator('[data-permission-rule]')
     .filter({ hasText: 'command-00000002' })
@@ -29280,7 +29286,7 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await expect(popup).toContainText('Auto-allow in');
   await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const name of ['Deny', 'Allow for This Chat', 'Always Allow', 'Allow Once', 'Ignore', 'Pause Notifications'])
+  for (const name of ['Deny', 'Allow This AI Session', 'Always Allow', 'Allow Once', 'Ignore', 'Pause Notifications'])
     await expect(popup.getByRole('button', { name, exact: true })).toBeVisible();
   await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });

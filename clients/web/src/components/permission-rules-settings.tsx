@@ -85,13 +85,17 @@ export function permissionRulesList(
 }
 
 const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
-  chat: 'This chat only, until it closes',
-  session: 'Session (until restart)',
+  chat: 'Until this AI session ends',
+  session: 'Until Hot Sheet restarts',
   always: 'Persistent',
 };
 
 function ruleLabel(rule: PermissionRule) {
-  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${rule.project} · ${SCOPE_LABELS[rule.scope]} · ${rule.match_type ?? 'exact'} match · ${rule.pattern?.expression ?? ''}`;
+  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${reachLabel(rule)} in ${rule.project} · ${SCOPE_LABELS[rule.scope]} · ${rule.match_type ?? 'exact'} match · ${rule.pattern?.expression ?? ''}`;
+}
+
+function reachLabel(rule: PermissionRule) {
+  return rule.scope === 'chat' ? 'This AI session only' : 'All AI sessions';
 }
 
 function matchLabel(rule: PermissionRule) {
@@ -183,9 +187,7 @@ export function PermissionRulesSettings({
                 </Badge>
               </Row>
 
-              <span class="permission-rules-settings__context">
-                {rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}
-              </span>
+              <span class="permission-rules-settings__context">{`${reachLabel(rule)} in ${rule.project}`}</span>
               {matchLabel(rule) && <span class="permission-rules-settings__context">{matchLabel(rule)}</span>}
               {rule.exact_action && (
                 <Row gap="xs">
@@ -270,7 +272,7 @@ export function PermissionRulesSettings({
       },
       { kind: 'divider' },
       {
-        label: 'Set Selected to Session',
+        label: 'Remember Until Hot Sheet Restarts',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
         attributes: { 'data-scope': 'session' },
       },
@@ -319,7 +321,7 @@ export function PermissionRulesSettings({
           <EmptyState
             icon={<LucideIcon size="xl" icon={ShieldCheck} name="shield-check" />}
             title="No Remembered Answers"
-            detail="Answers you give with Allow for This Chat or Always Allow appear here so you can revoke them."
+            detail="Answers you give with Allow This AI Session or Always Allow appear here so you can revoke them."
           />
         ) : (
           <>
@@ -431,7 +433,11 @@ export function PermissionRulesSettings({
                   value={filters.lifetime}
                   choices={[
                     { value: 'permanent', label: 'Permanent' },
-                    { value: 'session', label: 'Session', title: 'Session and chat-only answers' },
+                    {
+                      value: 'session',
+                      label: 'Temporary',
+                      title: 'Answers that end with an AI session or Hot Sheet restart',
+                    },
                   ]}
                   action={NOTIFICATIONS_AND_LINKS_ACTIONS.filterPermissionRuleLifetime.value}
                   disabled={dialog?.busy}

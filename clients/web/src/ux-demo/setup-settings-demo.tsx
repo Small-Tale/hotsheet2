@@ -351,7 +351,7 @@ export function PermissionRulesSettingsDemo() {
       <CatalogExample label="No Remembered Answers">
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
-      <CatalogExample label="Command Titles with Two-Line Previews, Expansion, and Flowing Badges">
+      <CatalogExample label="Command Titles, Flowing Badges, AI-Session Reach, and Explicit Lifetimes">
         <div data-demo-permission-rules>
           <PermissionRulesSettings
             rules={permissionRulesDemoRules.value}

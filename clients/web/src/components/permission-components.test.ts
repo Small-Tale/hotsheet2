@@ -374,6 +374,26 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     }
   });
 
+  it('separates AI-session reach from restart lifetime without origin inference (HS2-AT46VG)', () => {
+    for (const scope of ['chat', 'session', 'always'] as const) {
+      const rule = { ...rules[0], scope, connection: scope === 'chat' ? 'opaque-terminal-or-chat-id' : undefined };
+      const markup = String(PermissionRulesSettings({ rules: [rule] }));
+      expect(markup).toContain(scope === 'chat' ? 'This AI session only in /p' : 'All AI sessions in /p');
+      expect(markup).toContain(
+        scope === 'chat'
+          ? 'Until this AI session ends'
+          : scope === 'session'
+            ? 'Until Hot Sheet restarts'
+            : 'Persistent',
+      );
+      expect(markup).not.toContain('All chats');
+      expect(markup).not.toContain('Session (until restart)');
+      expect(
+        permissionRulesList([rule], scope === 'chat' ? 'This AI session only' : 'All AI sessions', 100).matches,
+      ).toEqual([rule]);
+    }
+  });
+
   it('uses singular and plural answer counts in the disclosure (HS2-9QK0V7)', () => {
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 1) }))).toContain('Show all 1 answer<');
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 2) }))).toContain('Show all 2 answers<');
@@ -474,7 +494,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     );
     expect(dialog.match(/class="kui-segmented-control"[^>]*data-layout="equal"/g)).toHaveLength(2);
     expect(dialog).toContain('>Persistent<');
-    expect(dialog).not.toContain('>Session (until restart)<');
+    expect(dialog).not.toContain('>Until Hot Sheet restarts<');
     expect(markup).toContain('>Persistent<');
   });
 
@@ -540,7 +560,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('Review the rule to remember');
     expect(markup).toContain('npm run test');
     expect(markup).toContain('Exact action only');
-    expect(markup).toContain('All chats in this project');
+    expect(markup).toContain('All AI sessions');
     expect(markup).toContain('Persistent, until revoked');
     expect(markup).toContain('data-rule-confirmed="true"');
     expect(String(PermissionRequestCard({ item: other }))).not.toContain('Review the rule to remember');
@@ -553,7 +573,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     const markup = String(PermissionRequestCard({ item: pending }));
     expect(markup).toContain('npm run {{token}}');
     expect(markup).toContain('future matching actions without asking');
-    expect(markup).toContain('This chat only');
+    expect(markup).toContain('This AI session only');
     setRememberedPermissionPreview(pending.key);
   });
   it('keeps suggestions review-only until a person selects and can remove them', () => {
@@ -575,9 +595,9 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(reviewedPermissionPattern(item.key)).toBeUndefined();
     setRememberedPermissionPreview(item.key);
   });
-  it('offers Allow for This Chat and announces a group of identical requests', () => {
+  it('offers Allow This AI Session and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));
-    expect(single).toMatch(/data-scope="chat"[^>]*>[^]*Allow for This Chat/);
+    expect(single).toMatch(/data-scope="chat"[^>]*>[^]*Allow This AI Session/);
     expect(single).not.toContain('Remembered Bash answer name');
     expect(single).not.toContain('data-permission-group-count');
     const grouped = String(PermissionRequestCard({ item: pending, presentation: 'popup', groupCount: 3 }));
@@ -586,8 +606,8 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     const remembered = String(
       PermissionRequestCard({ item: { ...pending, decision: 'allow', scope: 'chat', resolvedAt: 20 } }),
     );
-    expect(remembered).toContain('allowed for this chat');
-    expect(remembered).not.toContain('Allow for This Chat');
+    expect(remembered).toContain('allowed for this AI session');
+    expect(remembered).not.toContain('Allow This AI Session');
     expect(remembered).not.toContain('Review the rule to remember');
   });
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
@@ -621,14 +641,14 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
       }),
     );
     expect(markup).toContain('npm test');
-    expect(markup).toContain('This chat only, until it closes');
+    expect(markup).toContain('Until this AI session ends');
     expect(markup).toContain('>Persistent<');
     expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).toContain('rm -rf build');
     expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(2);
     expect(markup).not.toContain('data-permission-rule-menu=');
-    expect(markup).toContain('Set Selected to Session');
+    expect(markup).toContain('Remember Until Hot Sheet Restarts');
     expect(markup).toContain('Delete Selected');
     expect(markup).toContain('Selected Answer Actions');
     expect(markup).toContain('Could not revoke the rule.');

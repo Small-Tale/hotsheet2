@@ -981,14 +981,16 @@ matching requests from either kind of AI connection within its project identity.
 The shipped remembered-rule response retains `connection` only for `scope: "chat"`.
 Project-wide `session` and `always` rules retain no originating connection, terminal id,
 agent, or source kind. A live hook can supply `terminal_id` to associate a pending request
-with its terminal, but that provenance is not copied into the remembered rule. The row's
-current “All chats” text is derived from scope; it is not evidence that the request came
+with its terminal, but that provenance is not copied into the remembered rule. The legacy row's
+“All chats” text was derived from scope; it was not evidence that the request came
 from a driven chat. A connection id alone is not a reliable source-kind label.
 
-Recommended presentation, pending `HS2-AT46VG`: use “All AI sessions” for project-wide
+Shipped presentation (`HS2-AT46VG`): use “All AI sessions” for project-wide
 reach and the generic “This AI session only” for connection-scoped reach when source kind
 is unknown. Keep lifetime separate: “Until Hot Sheet restarts” describes the in-memory
-project-wide `session` lifetime; “Persistent” describes `always`. Do not infer origin from
+project-wide `session` lifetime; “Until this AI session ends” describes connection-only lifetime,
+and “Persistent” describes `always`. The Temporary filter includes both temporary lifetimes.
+Do not infer origin from
 command text or broaden matching while changing labels. The project/store identity shown
 beside reach is investigated separately in `HS2-3Z16CB`.
 
@@ -1035,7 +1037,7 @@ server regression coverage: `permission_rules_are_isolated_and_persisted_per_hos
 in `crates/hotsheet-server/tests/http.rs`.
 
 **Fewer repeat prompts (HS2-JNHAYB).** Besides Allow Once and Always Allow, the popup offers
-**Allow for This Chat** (`scope: "chat"`): an in-memory rule for the asking connection only,
+**Allow This AI Session** (`scope: "chat"`): an in-memory rule for the asking connection only,
 dropped when that drive connection closes and never written to disk. Rules apply by
 precedence **chat > project > ask**: the newest chat rule for the raising connection wins,
 else the newest project rule (`session` or `always`), else a human is asked. Remembering
@@ -1054,11 +1056,11 @@ Chat rules cannot change duration. Durable changes are written before
 the in-memory answer or lifetime changes. A failed keychain read, authentication check,
 or write leaves an Always request pending without installing or cascading an approval. Before
 remembering a chat or persistent answer, the popup reviews the tool, exact action, project,
-chat reach, match type, and lifetime, then requires a separate confirmation. Settings →
+AI-session reach, match type, and lifetime, then requires a separate confirmation. Settings →
 Permissions lists only the selected project's remembered answers with decrypted exact actions,
 and allowed rows convey the decision through their shield and accessible name without a
 redundant visible Allowed label in the preview or full dialog (HS2-0HKES8). The rows retain
-reviewed patterns, tool, project/chat reach, lifetime, and decision. Tool and lifetime use
+reviewed patterns, tool, project/AI-session reach, lifetime, and decision. Tool and lifetime use
 compact badges in a naturally wrapping group in both preview and full dialog; the row
 accessible name retains their full text (HS2-R3R7JE). The exact command is the primary
 monospace title without a shaded code background, limited to two lines until Expand action
@@ -1072,7 +1074,7 @@ state and durable in-memory rules are withdrawn before any automatic answer. Rev
 the durable file before removing the live answer. After the vault or credential recovers,
 reloading the web page and opening Settings reauthenticates and restores durable answers without a server restart;
 chat and session answers and pending requests remain in memory (HS2-8DAA0P). Selectable preview and dialog rows feed one toolbar ellipsis menu on each surface
-for Allow, Disallow, Delete, and, for project-wide rules, switching between Session (until restart) and Persistent; the duration
+for Allow, Disallow, Delete, and, for project-wide rules, switching between Until Hot Sheet restarts and Persistent; the duration
 action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
 a reload according to its lifetime. Exact-action rows omit the redundant Exact match summary; reviewed placeholder and regex
@@ -1080,14 +1082,14 @@ labels remain visible, and the editor retains every match type (HS2-2TNY72).
 The preview disclosure uses singular `answer` for one
 remembered rule and plural `answers` for multiple rules (HS2-9QK0V7).
 The full list shows 100 answers initially in a scrolling region,
-loads 100 more on request, and filters by Persistent or Session and Allow or Disallow. Session
-includes chat-only rules, with their exact scope still shown in the row. Search appears above
+loads 100 more on request, and filters by Permanent or Temporary and Allow or Disallow. Temporary
+includes connection-only and until-restart rules, with their exact scope still shown in the row. Search appears above
 two equally sized filter controls, which stack on phone widths. The filters and identity search
 determine the loaded rows; changing a filter resets the loaded window but keeps selections.
-The dialog omits the duplicate result count and decision/lifetime labels already conveyed by
-the selected filters. In the preview and dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
+The dialog omits the duplicate result count; per-rule lifetime badges distinguish connection-only
+from until-restart answers within Temporary. In the preview and dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
 Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
-The selected-answer toolbar ellipsis menu enables Allow, Deny, Session, Persistent, and Delete
+The selected-answer toolbar ellipsis menu enables Allow, Deny, Remember Until Hot Sheet Restarts, Persistent, and Delete
 when at least one answer is selected. Delete requires confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a
@@ -1095,7 +1097,7 @@ drive connection that held chat rules each publish a replayable `permission_rule
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
 Preview and dialog rows show chat, session, and persistent lifetimes alongside the exact
-action and project/chat reach, including at phone width. The popup reviews the exact action
+action and project/AI-session reach, including at phone width. The popup reviews the exact action
 before a remembered approval; it does not ask for an optional Bash label. The rule-list API
 returns both the decrypted exact action for authenticated display and an HMAC fingerprint
 for edit/revoke identity. The encrypted file retains the exact action; old fingerprint-only

@@ -208,7 +208,7 @@ export function PermissionRequestDemo() {
     // top-layer popup positions against, and its centered 640px content column stands in for the AI
     // conversation's foreground that lays out the in-flow popup (KF-D532S2, HS2-ZESCM2, HS2-M2W2DP).
     <CatalogExample
-      label="Interactive"
+      label="Interactive AI-Session Reach and Lifetime Review"
       viewport={{
         width: 'full',
         minHeight: 'app',

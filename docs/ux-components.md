@@ -2280,7 +2280,8 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   shaded code background; Expand action removes its two-line limit and Collapse action
   restores it. Expansion is independent of selection, transfers into the full dialog, and
   resets on dialog close or project/settings changes (HS2-Y8FYVY). Tool and lifetime use
-  wrapping compact badges; the decision shield and accessible row name retain Allow status
+  wrapping compact badges with explicit AI-session/restart lifetime; reach uses origin-neutral
+  AI-session wording (HS2-AT46VG). The decision shield and accessible row name retain Allow status
   without redundant visible copy (HS2-R3R7JE, HS2-0HKES8).
   A Kerf dialog searches displayed action/context and loads the complete list in 100-row
   batches, with lifetime/decision filters. Users can select across batches, edit decisions

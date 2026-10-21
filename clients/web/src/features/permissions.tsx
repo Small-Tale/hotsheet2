@@ -708,7 +708,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         ),
       };
       if (selectedProjectId.value === projectId)
-        permissionRulesMessage.value = `Answer set to ${scope === 'always' ? 'Persistent' : 'Session (until restart)'}.`;
+        permissionRulesMessage.value = `Answer set to ${scope === 'always' ? 'Persistent' : 'Until Hot Sheet restarts'}.`;
     } catch (reason) {
       if (selectedProjectId.value === projectId)
         permissionRulesMessage.value = `Could not change how long the answer is remembered. ${reason instanceof Error ? reason.message : String(reason)}`;

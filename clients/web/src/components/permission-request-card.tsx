@@ -95,7 +95,7 @@ function historyLabel(item: PermissionHistoryItem): string {
   const prefix = item.automatic ? 'Automatically ' : '';
   if (item.decision === 'deny') return `${prefix}denied permission`;
   if (item.scope === 'always') return `${prefix}allowed this kind of request`;
-  if (item.scope === 'chat') return `${prefix}allowed for this chat`;
+  if (item.scope === 'chat') return `${prefix}allowed for this AI session`;
   return `${prefix}allowed permission`;
 }
 
@@ -272,7 +272,7 @@ export function PermissionRequestCard({
               )}
               <p class="permission-request-card__pattern-warning">
                 This rule may answer future matching actions without asking. Review the whole pattern and its project,
-                tool, and chat reach.
+                tool, and AI-session reach.
               </p>
             </>
           )}
@@ -281,9 +281,9 @@ export function PermissionRequestCard({
         <dt>Project</dt>
         <dd>{item.projectName}</dd>
         <dt>Applies to</dt>
-        <dd>{previewScope === 'chat' ? 'This chat only' : 'All chats in this project'}</dd>
+        <dd>{previewScope === 'chat' ? 'This AI session only' : 'All AI sessions'}</dd>
         <dt>Lifetime</dt>
-        <dd>{previewScope === 'chat' ? 'Until this chat closes' : 'Persistent, until revoked'}</dd>
+        <dd>{previewScope === 'chat' ? 'Until this AI session ends' : 'Persistent, until revoked'}</dd>
       </dl>
       <div class="permission-request-card__confirmation-actions">
         <Button
@@ -305,7 +305,7 @@ export function PermissionRequestCard({
             'data-request-key': item.key,
             'data-rule-confirmed': 'true',
           }}
-        >{`Confirm ${previewScope === 'chat' ? 'Allow for This Chat' : 'Always Allow'}`}</Button>
+        >{`Confirm ${previewScope === 'chat' ? 'Allow This AI Session' : 'Always Allow'}`}</Button>
       </div>
     </div>
   ) : (
@@ -337,10 +337,10 @@ export function PermissionRequestCard({
               fill
               action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
               disabled={state === 'resolving'}
-              title="Allow this exact request again in this chat without asking, until the chat closes"
+              title="Allow this exact request again in this AI session without asking, until it ends"
               rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
             >
-              Allow for This Chat
+              Allow This AI Session
             </Button>
           </span>
           {alwaysSupported && (
