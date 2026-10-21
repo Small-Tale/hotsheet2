@@ -31,14 +31,19 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
             .permissions
             .pending()
             .into_iter()
-            .map(|request| PermissionInfo {
-                id: request.id,
-                project: request.project.clone(),
-                connection: request.connection,
-                tool: request.tool,
-                action: request.action,
-                agent: request.agent,
-                always_allow_supported: rule_projects.contains_key(&request.project),
+            .map(|request| {
+                let suggestions =
+                    hotsheet_aitools::suggest_secret_spans(&request.tool, &request.action);
+                PermissionInfo {
+                    id: request.id,
+                    project: request.project.clone(),
+                    connection: request.connection,
+                    tool: request.tool,
+                    action: request.action,
+                    agent: request.agent,
+                    always_allow_supported: rule_projects.contains_key(&request.project),
+                    suggestions,
+                }
             })
             .collect(),
     )
@@ -56,6 +61,7 @@ pub(crate) struct PermissionInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     agent: Option<String>,
     always_allow_supported: bool,
+    suggestions: Vec<hotsheet_aitools::PermissionSecretSuggestion>,
 }
 
 /// Body for `POST /permissions/ask`: who's asking + what.

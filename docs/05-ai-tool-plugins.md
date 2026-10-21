@@ -988,7 +988,18 @@ keeps the newest answer and rewrites the file (HS2-Q40BBV).
 Remembered answers match the **exact project and tool**, and the exact action unless a
 person explicitly reviews and saves a bounded matcher. For Claude and Codex
 permission hooks, the action is the command, path, or serialized tool input; Codex
-app-server approvals use a command, call ID, path, or reason. Persistent rules are
+app-server approvals use a command, call ID, path, or reason.
+For pending requests, `GET /permissions` also returns up to four deterministic suspected
+secret spans as UTF-16 offsets and fixed labels (HS2-5ZRSJW). The classifier recognizes
+secret-named assignments and flags, bearer/API-key headers, URL credentials and secret
+query values, and `/secrets/` path segments. It skips ambiguous shell syntax, multiline
+actions, short or example values, and values a bounded template cannot match. Suggestions
+are advisory: the popup starts with exact matching, and each span must be explicitly
+selected, reviewed, edited, or removed before the separate remembered-answer confirmation.
+The API adds no copy of a suggested value, and classifier diagnostics carry only offsets
+and labels. A suggestion never installs or changes a rule by itself.
+
+Persistent rules are
 stored inside a version-3 AES-256-GCM envelope with a fresh nonce; the key is generated
 in the host OS credential store and never written to exported rule JSON, logs, or events.
 Exact text is decrypted only in server memory. A missing, corrupt, or unavailable key

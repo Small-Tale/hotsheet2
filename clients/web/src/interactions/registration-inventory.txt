@@ -238,6 +238,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="ignore-per
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-permission-automation"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="resolve-permission"]'
 notifications-and-links	delegate	document.body	'change'	'[data-permission-pattern-kind]'
+notifications-and-links	delegate	document.body	'click'	'[data-permission-suggestion-index]'
 notifications-and-links	delegate	document.body	'input'	'[data-permission-pattern-expression]'
 notifications-and-links	delegate	document.body	'click'	'[data-permission-insert-placeholder]'
 notifications-and-links	delegate	document.body	'click'	'[data-permission-rule-pattern-save]'

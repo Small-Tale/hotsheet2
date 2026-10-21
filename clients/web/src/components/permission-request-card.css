@@ -60,6 +60,44 @@
 .permission-request-card__pattern-warning {
   color: var(--wa-color-warning-on-quiet);
 }
+.permission-request-card__suggestions {
+  display: grid;
+  gap: remify(6px);
+  margin-bottom: remify(10px);
+}
+.permission-request-card__suggestions p {
+  margin: 0;
+  color: var(--wa-color-neutral-on-quiet);
+}
+.permission-request-card__suggestions ul {
+  display: grid;
+  gap: remify(6px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.permission-request-card__suggestions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: remify(8px);
+  min-width: 0;
+}
+.permission-request-card__suggestions mark {
+  padding: 0 remify(2px);
+  background: var(--wa-color-warning-fill-quiet);
+  overflow-wrap: anywhere;
+}
+.permission-request-card__suggestions button {
+  flex: none;
+  padding: remify(4px) remify(8px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-small);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  font: inherit;
+  cursor: pointer;
+}
 .permission-request-card__confirmation-actions {
   display: flex;
   flex-wrap: wrap;

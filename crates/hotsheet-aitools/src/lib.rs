@@ -21,6 +21,7 @@ pub mod live;
 pub mod model_catalog;
 pub mod permission;
 pub mod permission_pattern;
+pub mod permission_suggestions;
 mod permission_vault;
 pub mod ports;
 pub mod probe;
@@ -65,6 +66,9 @@ pub use permission::{
 };
 pub use permission_pattern::{
     PatternKind as PermissionPatternKind, PatternSpec as PermissionPattern,
+};
+pub use permission_suggestions::{
+    SecretSuggestion as PermissionSecretSuggestion, suggest_secret_spans,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,

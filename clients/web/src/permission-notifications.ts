@@ -3,6 +3,12 @@ export type PermissionDecision = 'allow' | 'deny';
 export type PermissionScope = 'once' | 'chat' | 'always';
 export type PermissionHistoryDecision = PermissionDecision | 'external';
 export type PermissionAutomationAction = 'off' | 'allow' | 'deny';
+export interface PermissionSecretSuggestion {
+  start: number;
+  end: number;
+  label: string;
+  placeholder: 'token' | 'quoted';
+}
 
 export interface WirePermissionRequest {
   id: number;
@@ -12,6 +18,7 @@ export interface WirePermissionRequest {
   action: string;
   agent?: string;
   always_allow_supported?: boolean;
+  suggestions?: PermissionSecretSuggestion[];
 }
 export interface ToolConnection {
   id: string;

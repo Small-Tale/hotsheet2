@@ -17,18 +17,42 @@ interface RememberedPreview {
   scope: 'chat' | 'always';
   kind: 'exact' | 'template' | 'regex';
   expression: string;
+  selected: number[];
 }
 const rememberedPreviews = new Map<string, RememberedPreview>();
 export function rememberedPermissionPreview(key: string) {
   return rememberedPreviews.get(key);
 }
 export function setRememberedPermissionPreview(key: string, scope?: 'chat' | 'always', action = '') {
-  if (scope) rememberedPreviews.set(key, { scope, kind: 'exact', expression: action });
+  if (scope) rememberedPreviews.set(key, { scope, kind: 'exact', expression: action, selected: [] });
   else rememberedPreviews.delete(key);
 }
 export function setRememberedPermissionPattern(key: string, kind: RememberedPreview['kind'], expression: string) {
   const preview = rememberedPreviews.get(key);
-  if (preview) rememberedPreviews.set(key, { ...preview, kind, expression });
+  if (preview) rememberedPreviews.set(key, { ...preview, kind, expression, selected: [] });
+}
+export function toggleRememberedPermissionSuggestion(item: PermissionItem, index: number) {
+  const preview = rememberedPreviews.get(item.key);
+  const suggestions = item.suggestions ?? [];
+  if (!preview || !suggestions[index]) return;
+  const selected = preview.selected.includes(index)
+    ? preview.selected.filter((value) => value !== index)
+    : [...preview.selected, index];
+  const spans = selected.map((value) => suggestions[value]).sort((a, b) => a.start - b.start);
+  let cursor = 0;
+  let expression = '';
+  for (const span of spans) {
+    if (span.start < 0 || span.start < cursor || span.start >= span.end || span.end > item.action.length) return;
+    expression += `${item.action.slice(cursor, span.start)}{{${span.placeholder}}}`;
+    cursor = span.end;
+  }
+  expression += item.action.slice(cursor);
+  rememberedPreviews.set(item.key, {
+    ...preview,
+    selected,
+    kind: selected.length ? 'template' : 'exact',
+    expression,
+  });
 }
 export function reviewedPermissionPattern(key: string): PermissionPattern | undefined {
   const preview = rememberedPreviews.get(key);
@@ -157,6 +181,32 @@ export function PermissionRequestCard({
         <dd class="permission-request-card__exact-action">{item.action}</dd>
         <dt>Match</dt>
         <dd>
+          {item.suggestions && item.suggestions.length > 0 && (
+            <div class="permission-request-card__suggestions">
+              <strong>Possible secret spans</strong>
+              <p>
+                Suggestions are guesses. Choose each span you want to replace, then review or edit the pattern. Exact
+                matching stays the default.
+              </p>
+              <ul>
+                {item.suggestions.map((suggestion, index) => (
+                  <li>
+                    <span>
+                      {suggestion.label}: <mark>{item.action.slice(suggestion.start, suggestion.end)}</mark>
+                    </span>
+                    <button
+                      type="button"
+                      data-permission-suggestion-index={index}
+                      data-request-key={item.key}
+                      aria-pressed={preview.selected.includes(index)}
+                    >
+                      {preview.selected.includes(index) ? 'Remove' : 'Use'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <label>
             Rule type
             <select data-permission-pattern-kind={item.key} aria-label="Permission rule type">

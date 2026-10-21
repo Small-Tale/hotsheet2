@@ -15773,6 +15773,59 @@ async fn remembered_web_request_lists_exact_action_only_after_authentication() {
 }
 
 #[tokio::test]
+async fn pending_permission_suggestions_are_review_only_until_explicit_pattern_approval() {
+    const ACTION: &str = "API_TOKEN=abc123 npm test";
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let first_bridge = bridge.clone();
+    let first_project = project.clone();
+    let first = std::thread::spawn(move || {
+        first_bridge.request_blocking_for_project(first_project, "chat", "Bash", ACTION)
+    });
+    let request = loop {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(value) = body_json(response).await.as_array().unwrap().first() {
+            break value.clone();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    assert_eq!(request["suggestions"][0]["label"], "Secret assignment");
+    let start = request["suggestions"][0]["start"].as_u64().unwrap() as usize;
+    let end = request["suggestions"][0]["end"].as_u64().unwrap() as usize;
+    assert_eq!(&ACTION[start..end], "abc123");
+    assert!(
+        bridge.rules().is_empty(),
+        "suggestions do not install rules"
+    );
+    let id = request["id"].as_u64().unwrap();
+    let answered = app.clone().oneshot(authed("POST", &format!("/permissions/{id}"), Some(
+        r#"{"decision":"allow","scope":"chat","pattern":{"version":1,"kind":"template","expression":"API_TOKEN={{token}} npm test"}}"#
+    ))).await.unwrap();
+    assert_eq!(answered.status(), StatusCode::OK);
+    assert_eq!(format!("{:?}", first.join().unwrap()), "Allow");
+    assert_eq!(
+        format!(
+            "{:?}",
+            bridge.request_blocking_for_project(
+                project,
+                "chat",
+                "Bash",
+                "API_TOKEN=changed npm test"
+            )
+        ),
+        "Allow"
+    );
+}
+
+#[tokio::test]
 async fn reviewed_chat_pattern_round_trips_through_approval_and_settings_edit() {
     const ACTION: &str = "curl -H 'Bearer first' https://site.test";
     let dir = tempfile::tempdir().unwrap();

@@ -16,6 +16,7 @@ import {
   parseGitHubAuthStatus,
   parseOpenedCheckout,
   parsePermissionDecision,
+  parsePermissionRequest,
   parsePollResponse,
   parseProviderConnection,
   parseProviderDescriptor,
@@ -158,6 +159,16 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseAiToolDefaults, { tool: 'claude', providers: { claude: { model: 'opus' } } }],
     [parseGitHubAuthStatus, { state: 'pending' }],
     [parsePermissionDecision, { connection: 'c', decision: 'allow', persisted: false }],
+    [
+      parsePermissionRequest,
+      {
+        id: 1,
+        connection: 'c',
+        tool: 'Bash',
+        action: 'TOKEN=abcd',
+        suggestions: [{ start: 6, end: 10, label: 'Secret assignment', placeholder: 'token' }],
+      },
+    ],
   ];
   const invalid: Array<[ResponseParser<unknown>, unknown]> = [
     [parseFullTicket, { ...ticket, notes: undefined }],
@@ -176,6 +187,16 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseTerminalInfo, { id: 't', alive: 'yes', busy: false }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: 'yes' }],
     [parsePermissionDecision, { connection: 'c', decision: 'maybe' }],
+    [
+      parsePermissionRequest,
+      {
+        id: 1,
+        connection: 'c',
+        tool: 'Bash',
+        action: 'TOKEN=abcd',
+        suggestions: [{ start: 6, end: 10, label: 'Secret assignment', placeholder: 'anything' }],
+      },
+    ],
     [parseTrashSettings, { trash_cleanup_days: Number.NaN }],
     [parseCustomView.list, null],
     [parseAiToolDefaults, { tool: 'claude', providers: { claude: 'opus' } }],

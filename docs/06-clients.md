@@ -2731,6 +2731,12 @@ reconciliation, and remembered-rule freshness. It removes pending requests for
 projects that have closed on a full refresh. The browser adapter owns local
 storage, countdown text, window lifecycle, dialogs, and popup rendering; the
 server still decides whether a permission or remembered rule is accepted.
+When a remembered approval has suspected secret spans (HS2-5ZRSJW), the confirmation
+shows each labeled span with an independent Use/Remove control. The initial match is
+still exact. Selecting spans drafts a bounded template from those UTF-16 offsets;
+the person can inspect and edit it, remove individual spans, or return to exact before
+confirming. The server validates the final pattern, and merely displaying or selecting
+a suggestion never answers the pending request.
 The settings view uses a Kerf ListHeader for the Remembered answers section and previews
 the three most recently remembered answers, newest first. A centered, bordered secondary pill
 button, matching Load more tickets, opens the searchable dialog by pointer or keyboard

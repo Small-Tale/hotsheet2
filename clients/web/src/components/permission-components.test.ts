@@ -17,8 +17,10 @@ import {
   PermissionRequestCard,
   PermissionRequestPopup,
   rememberedPermissionPreview,
+  reviewedPermissionPattern,
   setRememberedPermissionPattern,
   setRememberedPermissionPreview,
+  toggleRememberedPermissionSuggestion,
   updatePermissionCountdownText,
 } from './permission-request-card';
 import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList, PermissionRulesSettings } from './permission-rules-settings';
@@ -470,6 +472,25 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).toContain('future matching actions without asking');
     expect(markup).toContain('This chat only');
     setRememberedPermissionPreview(pending.key);
+  });
+  it('keeps suggestions review-only until a person selects and can remove them', () => {
+    const item = {
+      ...pending,
+      key: 'suggested',
+      action: 'API_TOKEN=abc123 npm test',
+      suggestions: [{ start: 10, end: 16, label: 'Secret assignment', placeholder: 'token' as const }],
+    };
+    setRememberedPermissionPreview(item.key, 'chat', item.action);
+    expect(reviewedPermissionPattern(item.key)).toBeUndefined();
+    const initial = String(PermissionRequestCard({ item }));
+    expect(initial).toContain('Possible secret spans');
+    expect(initial).toContain('abc123</mark>');
+    toggleRememberedPermissionSuggestion(item, 0);
+    expect(reviewedPermissionPattern(item.key)?.expression).toBe('API_TOKEN={{token}} npm test');
+    expect(String(PermissionRequestCard({ item }))).toContain('aria-pressed>Remove');
+    toggleRememberedPermissionSuggestion(item, 0);
+    expect(reviewedPermissionPattern(item.key)).toBeUndefined();
+    setRememberedPermissionPreview(item.key);
   });
   it('offers Allow for This Chat and announces a group of identical requests', () => {
     const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));

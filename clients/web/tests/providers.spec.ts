@@ -15571,6 +15571,65 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await expect(remembered).toContainText("^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$");
 });
 
+test('offers secret spans without changing the exact default and lets each be removed (HS2-5ZRSJW)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const action = 'API_TOKEN=abc123 npm test --token=def456';
+  let pending: Array<Record<string, unknown>> = [
+    {
+      id: 93,
+      project: '/work/demo.hs2',
+      connection: 'chat',
+      tool: 'Bash',
+      action,
+      agent: 'claude',
+      always_allow_supported: true,
+      suggestions: [
+        { start: 10, end: 16, label: 'Secret assignment', placeholder: 'token' },
+        { start: 34, end: 40, label: 'Secret assignment', placeholder: 'token' },
+      ],
+    },
+  ];
+  const answers: Array<Record<string, unknown>> = [];
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route(/\/permissions\/\d+$/, (route) => {
+    answers.push(route.request().postDataJSON() as Record<string, unknown>);
+    pending = [];
+    return route.fulfill({ json: { connection: 'chat', decision: 'allow', persisted: false } });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await popup.getByRole('button', { name: 'Allow for This Chat' }).click();
+  await expect(popup.getByLabel('Permission rule type')).toHaveValue('exact');
+  expect(answers).toHaveLength(0);
+  const hints = popup.locator('[data-permission-suggestion-index]');
+  await hints.first().click();
+  await expect(popup.getByLabel('Reviewed permission pattern')).toHaveValue(
+    'API_TOKEN={{token}} npm test --token=def456',
+  );
+  await hints.first().click();
+  await expect(popup.getByLabel('Permission rule type')).toHaveValue('exact');
+  await hints.first().click();
+  await hints.last().click();
+  await expect(popup.getByLabel('Reviewed permission pattern')).toHaveValue(
+    'API_TOKEN={{token}} npm test --token={{token}}',
+  );
+  await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-phone.png' });
+  await popup.getByRole('button', { name: 'Confirm Allow for This Chat' }).click();
+  await expect(popup).toHaveCount(0);
+  expect(answers[0].pattern).toEqual({
+    version: 1,
+    kind: 'template',
+    expression: 'API_TOKEN={{token}} npm test --token={{token}}',
+  });
+});
+
 test('previews three recent permission answers and searches the scrollable full list (HS2-16XPHH)', async ({
   page,
 }) => {

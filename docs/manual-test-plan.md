@@ -88,6 +88,25 @@ the default-on path is checked by hand.
    the old answers do not activate, the file becomes an empty encrypted envelope, and
    the obsolete key file is removed.
 
+### Permission secret suggestions (HS2-5ZRSJW)
+
+1. Ask for approval of a disposable command such as `API_TOKEN=abc123 npm test --password=def456`.
+   Start Allow for This Chat or Always and verify the review starts at Exact action.
+   Use the token hint, inspect its placeholder, then remove it and verify exact matching
+   returns. Use both hints, edit the expression, and confirm only after checking the scope.
+2. Before confirmation, check that the request is still pending and no remembered rule
+   exists. After confirmation, repeat with a changed disposable value and verify only
+   the reviewed pattern is eligible to auto-approve.
+3. Try quoted values, an Authorization bearer header, a URL credential and secret query
+   key, and a `/secrets/` path. Check each offset highlights the intended text. Then try
+   a multiline command, unmatched quote, shell pipe, dynamic expansion, and example
+   values such as `demo`; these should offer no hint. Missing hints are possible: the
+   classifier is intentionally conservative and is not a secret detector.
+4. Inspect the popup at wide and phone widths. Verify that long actions and suggested
+   spans wrap, the individual Use/Remove controls remain reachable, and no raw value
+   appears in server diagnostics or exported rule metadata beyond the already reviewed
+   encrypted exact action.
+
 ### Cross-device terminal sizing
 
 1. Attach macOS and iOS-sized viewers to the same remote terminal.

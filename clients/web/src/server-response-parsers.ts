@@ -46,7 +46,7 @@ import type {
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
-import type { PermissionRule } from './permission-notifications';
+import type { PermissionRule, PermissionSecretSuggestion } from './permission-notifications';
 
 /**
  * Response parsers for successful Hot Sheet server bodies (HS2-34P6XY). `Api` and the
@@ -463,10 +463,22 @@ export const parseCodeReview = shape<CodeReview>(
   { difftool: isString, truncated: isBoolean, summary: isObject, files: listOf(isObject) },
 );
 
+const parsePermissionSecretSuggestion = shape<PermissionSecretSuggestion>('permission secret suggestion', {
+  start: isNumber,
+  end: isNumber,
+  label: isString,
+  placeholder: (field) => field === 'token' || field === 'quoted',
+});
+
 export const parsePermissionRequest = shape<PermissionRequest>(
   'permission request',
   { id: isNumber, connection: isString, tool: isString, action: isString },
-  { project: isString, agent: isString, always_allow_supported: isBoolean },
+  {
+    project: isString,
+    agent: isString,
+    always_allow_supported: isBoolean,
+    suggestions: listOf(parsePermissionSecretSuggestion.check),
+  },
 );
 
 export const parsePermissionDecision = shape<{

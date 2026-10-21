@@ -1105,3 +1105,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-aitools/src/permission_pattern.rs` tests whole-action placeholders, quoting, and broad regex rejection; `permission.rs` tests rejection without consuming a request, scoped pattern matching, and exact precedence. Web component and workflow tests cover editor rendering and submitted pattern data.
 - End to end: `crates/hotsheet-server/tests/http.rs` tests authenticated approval validation, rule listing, and match editing; `clients/web/tests/providers.spec.ts` covers the approval editor and Settings match controls.
 - Manual: Review a secret-bearing approval and matching/nonmatching follow-ups at wide and phone widths. Confirm the pattern and warning remain legible and that editing a durable rule survives restart.
+
+### Permission secret suggestions (HS2-5ZRSJW)
+
+- Behavior: Pending requests expose at most four stable suspected secret spans as offsets and fixed labels. Exact matching remains the default; each suggestion can be used or removed before separate rule confirmation. Ambiguous syntax and unsafe or overly broad candidate values produce no suggestion.
+- Unit: `crates/hotsheet-aitools/src/permission_suggestions.rs` checks multiple, quoted, URL, path, Unicode, malformed, and capped cases; `clients/web/src/components/permission-components.test.ts` checks exact default, selection, and removal.
+- End to end: `crates/hotsheet-server/tests/http.rs` checks authenticated suggestion delivery and no rule creation before explicit approval; `clients/web/tests/providers.spec.ts` checks the popup controls, submitted pattern, and wide/phone layout.
+- Manual: Try a disposable token in a simple command and the skipped examples in `docs/manual-test-plan.md`; inspect the generated expression before confirming.

@@ -1,7 +1,7 @@
 import { browserRandomId } from './browser-id';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
-import type { PermissionPattern } from './permission-notifications';
+import type { PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -660,6 +660,7 @@ export interface PermissionRequest {
   action: string;
   agent?: string;
   always_allow_supported?: boolean;
+  suggestions?: PermissionSecretSuggestion[];
 }
 export interface AiModelDescriptor {
   id: string;

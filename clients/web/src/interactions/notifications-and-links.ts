@@ -8,6 +8,7 @@ import {
   reviewedPermissionPattern,
   setRememberedPermissionPattern,
   setRememberedPermissionPreview,
+  toggleRememberedPermissionSuggestion,
 } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
 import {
@@ -237,6 +238,16 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         kind,
         kind === 'regex' ? `^${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$` : action,
       );
+      permissionRevision.value += 1;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-permission-suggestion-index]', (_event, target) => {
+      const key = data(target).requestKey;
+      const index = Number((target as HTMLElement).dataset.permissionSuggestionIndex);
+      const item = pendingPermissions().find((value) => value.key === key);
+      if (!item || !Number.isInteger(index)) return;
+      toggleRememberedPermissionSuggestion(item, index);
       permissionRevision.value += 1;
     }),
   );
