@@ -140,6 +140,17 @@ refresh is a no-op. Disabling Claude removes its owned import and membership whi
 other enabled tools keep the canonical guidance; re-enabling restores the import.
 Read-only diagnosis includes both the native adapter and canonical source paths.
 
+**Opt-in Rulesync ownership (HS2-QS38E1).**
+`setup --guidance-owner rulesync --project <code-repo>` writes the versioned shared
+`.hotsheet2/guidance-owner.json` marker without rewriting instructions. Explicit
+setup, CLI/server refresh, and disabled-tool cleanup then leave native and canonical
+instruction files untouched while maintaining MCP, hooks, and skills. Diagnostics
+name Rulesync as their owner. An absent marker or owner `builtin` uses the built-in
+offline writer; malformed or unsupported markers fail safely. Selection, lockfiles,
+updates, local customization, migration review, and returning to built-in ownership
+are documented in the [validated Rulesync guide](../guidance/rulesync/README.md).
+Rulesync remains an optional external tool and is not invoked by normal setup.
+
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only

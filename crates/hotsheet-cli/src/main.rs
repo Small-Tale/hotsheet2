@@ -370,6 +370,9 @@ enum Cmd {
         /// Limit --diagnose to one plugin id (for example, codex).
         #[arg(long = "tool", requires = "diagnose")]
         diagnose_tool: Option<String>,
+        /// Select the project instruction writer; does not rewrite instruction content.
+        #[arg(long, value_parser = ["builtin", "rulesync"], conflicts_with = "diagnose")]
+        guidance_owner: Option<String>,
         /// Project directory to write the tool config into (defaults to the store path).
         #[arg(long)]
         project: Option<PathBuf>,

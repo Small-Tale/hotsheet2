@@ -29,6 +29,10 @@ See [snapshot maintenance](../guidance/README.md).
 import. The Claude manifest declares a canonical instruction target and import;
 `crates/hotsheet-plugins/src/setup.rs` plans legacy migration, shared membership, adapter
 cleanup, and read-only findings together.
+The same planner honors `.hotsheet2/guidance-owner.json` (`builtin` or `rulesync`,
+schema 1); the CLI `setup --guidance-owner` command selects ownership without changing
+instruction content. `guidance/rulesync/` holds the tested config, lock, and migration
+guide; `scripts/validate-rulesync.mjs` runs optional real-tool acceptance flows.
 
 ## Requirements docs
 

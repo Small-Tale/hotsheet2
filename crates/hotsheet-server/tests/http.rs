@@ -13733,6 +13733,44 @@ fn hermetic_setup(state: AppState) -> AppState {
 }
 
 #[tokio::test]
+async fn setup_endpoint_preserves_rulesync_owned_instructions() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
+    hotsheet_plugins::setup::set_guidance_owner_in(dir.path(), "rulesync").unwrap();
+    std::fs::write(
+        dir.path().join("AGENTS.md"),
+        "Selected Rulesync guidance and local policy.\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("CLAUDE.md"), "@AGENTS.md\n").unwrap();
+    for tool in ["codex", "claude", "codex"] {
+        let response = app(st.clone())
+            .oneshot(authed("POST", &format!("/setup/{tool}"), None))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let reports = body_json(response).await;
+        let wrote = reports[0]["wrote"].as_array().unwrap();
+        assert!(
+            !wrote
+                .iter()
+                .any(|path| matches!(path.as_str(), Some("AGENTS.md" | "CLAUDE.md")))
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+            "Selected Rulesync guidance and local policy.\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap(),
+            "@AGENTS.md\n"
+        );
+    }
+    assert!(dir.path().join(".agents/skills/hotsheet/SKILL.md").exists());
+    assert!(dir.path().join(".claude/skills/hotsheet/SKILL.md").exists());
+}
+
+#[tokio::test]
 async fn setup_endpoint_prepares_the_project_like_the_cli() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

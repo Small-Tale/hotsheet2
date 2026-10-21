@@ -1,5 +1,8 @@
 # Built-in guidance provenance
 
+For opt-in Rulesync consumption and writer ownership, see the
+[validated consumer guide](rulesync/README.md). The built-in path below is the default.
+
 The maintained reusable prose lives in
 [`Small-Tale/ai-playbook`](https://github.com/Small-Tale/ai-playbook).
 `ai-playbook.lock.json` pins the source commit, release label, rule names, versions,

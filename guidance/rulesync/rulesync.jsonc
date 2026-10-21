@@ -1,0 +1,13 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/config-schema.json",
+  "targets": ["agentsmd"],
+  "features": ["rules"],
+  "sources": [
+    {
+      "source": "https://github.com/Small-Tale/ai-playbook.git",
+      "transport": "git",
+      "ref": "main",
+      "rules": ["*"]
+    }
+  ]
+}

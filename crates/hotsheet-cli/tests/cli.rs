@@ -8,6 +8,66 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    for path in [&store, &project, &home] {
+        std::fs::create_dir(path).unwrap();
+    }
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    std::fs::write(
+        project.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["claude"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        project.join("AGENTS.md"),
+        "Rulesync-generated local and selected guidance.\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("CLAUDE.md"), "@AGENTS.md\n").unwrap();
+    let run = |args: &[&str]| {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(args)
+            .arg("--project")
+            .arg(&project)
+            .assert()
+            .success()
+    };
+    run(&["setup", "--guidance-owner", "rulesync"]);
+    for _ in 0..2 {
+        run(&["setup", "claude"]);
+        run(&["setup", "--refresh"]);
+        assert_eq!(
+            std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
+            "Rulesync-generated local and selected guidance.\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join("CLAUDE.md")).unwrap(),
+            "@AGENTS.md\n"
+        );
+    }
+    assert!(project.join(".claude/skills/hotsheet/SKILL.md").exists());
+    let output = run(&["setup", "--diagnose", "--tool", "claude", "--json"])
+        .get_output()
+        .clone();
+    let diagnostic = String::from_utf8(output.stdout).unwrap();
+    assert!(diagnostic.contains("managed by Rulesync"));
+    run(&["setup", "--guidance-owner", "builtin"]);
+    run(&["setup", "claude"]);
+    let restored = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
+    assert!(restored.starts_with("Rulesync-generated local and selected guidance.\n"));
+    assert_eq!(
+        restored.matches("## Hot Sheet — ticket workflow").count(),
+        1
+    );
+}
+
+#[test]
 fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

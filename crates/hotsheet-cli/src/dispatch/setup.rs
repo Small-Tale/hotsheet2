@@ -28,6 +28,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             refresh,
             diagnose: diagnostic,
             diagnose_tool,
+            guidance_owner,
             project,
             json,
         } => {
@@ -39,7 +40,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     json,
                 )
             } else {
-                cmd_setup(path, tool, detect, refresh, project, json)
+                cmd_setup(path, tool, detect, refresh, project, json, guidance_owner)
             }
         }
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
@@ -554,8 +555,22 @@ pub(crate) fn cmd_setup(
     refresh: bool,
     project: Option<PathBuf>,
     json: bool,
+    guidance_owner: Option<String>,
 ) -> Result<()> {
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
+    if let Some(owner) = guidance_owner {
+        hotsheet_plugins::setup::set_guidance_owner_in(&project_dir, &owner)?;
+        if tool.is_none() && !detect && !refresh {
+            if json {
+                println!("{}", serde_json::json!({"guidance_owner": owner}));
+            } else {
+                println!(
+                    "Instruction guidance owner: {owner}. Existing instruction content was preserved."
+                );
+            }
+            return Ok(());
+        }
+    }
     // Setup also makes the checkout discoverable to server/MCP consumers. This records
     // context; generated MCP config still points directly at the store for headless use.
     let repository = hotsheet_ticketing::git::command()

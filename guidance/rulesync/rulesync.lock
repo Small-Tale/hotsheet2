@@ -1,0 +1,39 @@
+{
+  "lockfileVersion": 1,
+  "sources": {
+    "small-tale/ai-playbook": {
+      "requestedRef": "main",
+      "resolvedRef": "fcb8556bef14a9dfdaf8cc53f8b36dfb13d9a36a",
+      "resolvedAt": "2026-10-21T08:48:40.213Z",
+      "skills": {},
+      "rules": {
+        "hotsheet-requirements-documentation": {
+          "integrity": "sha256-6047eff6cc28576bdf2d686e374e7cee7fae8f9aa0b487e252e22b78f098c362"
+        },
+        "hotsheet-testing-philosophy": {
+          "integrity": "sha256-0559667f980c462d60bfa279aca21dc5a0c5d732581f8e694392e3efb71498b5"
+        },
+        "hotsheet-ticket-driven-work": {
+          "integrity": "sha256-7f833a35a0a55cd5788e444b30f0b7e51e9f888c16ad23e7bd1857bb74b29a4f"
+        },
+        "hotsheet-visual-qa": {
+          "integrity": "sha256-32cdeb7e01a498306668cbefe5555a2e494fdbea9c9440eab386226ea6eaf7f1"
+        },
+        "hotsheet-workflow": {
+          "integrity": "sha256-2029abb0d6214f21a19c18c4562071729b7380ce903e6c5bcc15c542d8c90f77"
+        }
+      },
+      "ruleSelection": [
+        "*"
+      ],
+      "rulesPath": "rules",
+      "resolvedRuleNames": [
+        "hotsheet-requirements-documentation",
+        "hotsheet-testing-philosophy",
+        "hotsheet-ticket-driven-work",
+        "hotsheet-visual-qa",
+        "hotsheet-workflow"
+      ]
+    }
+  }
+}

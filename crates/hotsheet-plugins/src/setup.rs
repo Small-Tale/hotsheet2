@@ -270,6 +270,10 @@ pub enum SetupError {
     NoStore(String),
     #[error("plugin '{id}' declares unsafe target path(s): {targets} (must be project-relative)")]
     UnsafeTargets { id: String, targets: String },
+    #[error(
+        "invalid guidance ownership in {0}: expected schema_version 1 and owner builtin or rulesync"
+    )]
+    InvalidGuidanceOwner(String),
     #[error("unknown MCP config format '{format}' for plugin '{id}'")]
     UnknownMcpFormat { id: String, format: String },
     #[error("unknown hook config format '{format}' for plugin '{id}'")]
@@ -298,6 +302,48 @@ impl SetupError {
             }
         }
     }
+}
+
+pub const GUIDANCE_OWNER_PATH: &str = ".hotsheet2/guidance-owner.json";
+
+/// Explicit project ownership; absent markers retain the built-in offline writer.
+fn rulesync_owns_guidance(fs: &PlanFs, project: &Path) -> Result<bool, SetupError> {
+    let target = project.join(GUIDANCE_OWNER_PATH);
+    let text = match fs.read_to_string(&target) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(source) => {
+            return Err(SetupError::Io {
+                path: target.display().to_string(),
+                source,
+            });
+        }
+    };
+    let invalid = || SetupError::InvalidGuidanceOwner(GUIDANCE_OWNER_PATH.into());
+    let value: serde_json::Value = serde_json::from_str(&text).map_err(|_| invalid())?;
+    if value["schema_version"] != 1 {
+        return Err(invalid());
+    }
+    match value["owner"].as_str() {
+        Some("builtin") => Ok(false),
+        Some("rulesync") => Ok(true),
+        _ => Err(invalid()),
+    }
+}
+
+/// Select the instruction writer without changing any instruction content.
+pub fn set_guidance_owner_in(project: &Path, owner: &str) -> Result<(), SetupError> {
+    if !matches!(owner, "builtin" | "rulesync") {
+        return Err(SetupError::InvalidGuidanceOwner(GUIDANCE_OWNER_PATH.into()));
+    }
+    let path = project.join(GUIDANCE_OWNER_PATH);
+    let text =
+        serde_json::to_string_pretty(&serde_json::json!({"schema_version": 1, "owner": owner}))
+            .unwrap()
+            + "\n";
+    let mut fs = PlanFs::default();
+    fs.write(&path, text.as_bytes());
+    apply_operations(fs.final_operations(project))
 }
 
 /// Resolve the project's `enabled_plugins` shared setting (HS2-94) into the `enabled` set
@@ -410,6 +456,7 @@ pub fn plan_refresh_setup_in(
     plugin_dirs: &[PathBuf],
 ) -> Result<SetupPlan, SetupError> {
     let mut fs = PlanFs::default();
+    let external_guidance = rulesync_owns_guidance(&fs, project_dir)?;
     let all = all_plugins(plugin_dirs);
     let mut reconcile_targets: Vec<String> = Vec::new();
     for plugin in &all {
@@ -458,7 +505,7 @@ pub fn plan_refresh_setup_in(
     let set_up = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
         let run_ids = HashSet::new();
-        for target in &reconcile_targets {
+        for target in reconcile_targets.iter().filter(|_| !external_guidance) {
             write_instruction_target(&mut fs, project_dir, target, &[], Some(&run_ids))?;
             write_guidance_target(&mut fs, project_dir, target, false)?;
         }
@@ -555,6 +602,7 @@ fn collect_findings(
     fs: &PlanFs,
 ) -> Vec<ToolSetupFindings> {
     let original = PlanFs::default();
+    let external_guidance = rulesync_owns_guidance(&original, project).is_ok_and(|owner| owner);
     all_plugins(plugin_dirs).into_iter().map(|plugin| {
         let enabled_tool = enabled.is_none_or(|set| set.contains(plugin.id()));
         let previously_managed = has_managed_setup(&original, project, &plugin);
@@ -562,7 +610,8 @@ fn collect_findings(
         let installed_mcp = installed_mcp_command_args(
             &original, &project.join(&plugin.manifest.mcp.target), &plugin,
         );
-        let preserved = installed_workflow_requires_preservation(&original, project, &plugin);
+        let preserved = if external_guidance { skill_requires_preservation(&original, project, &plugin) }
+            else { installed_workflow_requires_preservation(&original, project, &plugin) };
         let mut artifacts = Vec::new();
         {
         let mut add = |kind, rel: &str, preserved: bool| {
@@ -581,18 +630,20 @@ fn collect_findings(
                 ArtifactKind::Hooks => has_hotsheet_hooks(&original, &path),
                 _ => before.is_some(),
             };
-            let status = if !enabled_tool { ArtifactStatus::Disabled }
+            let externally_owned = external_guidance && kind == ArtifactKind::Instructions;
+            let status = if externally_owned { ArtifactStatus::Preserved }
+                else if !enabled_tool { ArtifactStatus::Disabled }
                 else if !installed { ArtifactStatus::Missing }
                 else if preserved { ArtifactStatus::Preserved }
                 else if before == after { ArtifactStatus::Current }
                 else { ArtifactStatus::Outdated };
-            let detail = match status {
+            let detail = if externally_owned { "managed by Rulesync; Hot Sheet leaves this instruction file untouched".to_string() } else { match status {
                 ArtifactStatus::Current => "matches the installed setup".to_string(),
                 ArtifactStatus::Missing => "artifact is missing".to_string(),
                 ArtifactStatus::Outdated => "artifact differs from the setup refresh output".to_string(),
                 ArtifactStatus::Preserved => "newer or user-modified workflow is preserved".to_string(),
                 ArtifactStatus::Disabled => "tool is excluded by enabled_plugins".to_string(),
-            };
+            }};
             artifacts.push(ArtifactFinding { kind, path: rel.to_string(), status, detail });
         };
         add(ArtifactKind::Instructions, &plugin.manifest.instructions.target, preserved);
@@ -720,24 +771,28 @@ fn remove_disabled_tool_artifacts(
     let native_is_reference = instructions.as_ref().is_some_and(|contents| {
         instruction_reference_block(plugin).is_some_and(|block| contents.contains(&block))
     });
-    let workflow_preserved = (!native_is_reference
-        && per_tool_section_requires_preservation(plugin, instructions.as_deref()))
-        || skill_requires_preservation(fs, project, plugin)
-        || (plugin.manifest.instructions.canonical.is_some()
-            && installed_workflow_requires_preservation(fs, project, &canonical_plugin));
+    let external_guidance = rulesync_owns_guidance(fs, project)?;
+    let workflow_preserved = skill_requires_preservation(fs, project, plugin)
+        || (!external_guidance
+            && ((!native_is_reference
+                && per_tool_section_requires_preservation(plugin, instructions.as_deref()))
+                || (plugin.manifest.instructions.canonical.is_some()
+                    && installed_workflow_requires_preservation(fs, project, &canonical_plugin))));
     if !workflow_preserved {
-        if !native_is_reference {
-            report.record(rel, remove_disabled_tool_section(fs, project, plugin)?);
-        }
-        if plugin.manifest.instructions.canonical.is_some() {
-            report.record(
-                &canonical_plugin.manifest.instructions.target,
-                remove_disabled_tool_section(fs, project, &canonical_plugin)?,
-            );
-            report.record(
-                rel,
-                write_instruction_reference(fs, project, plugin, false)?,
-            );
+        if !external_guidance {
+            if !native_is_reference {
+                report.record(rel, remove_disabled_tool_section(fs, project, plugin)?);
+            }
+            if plugin.manifest.instructions.canonical.is_some() {
+                report.record(
+                    &canonical_plugin.manifest.instructions.target,
+                    remove_disabled_tool_section(fs, project, &canonical_plugin)?,
+                );
+                report.record(
+                    rel,
+                    write_instruction_reference(fs, project, plugin, false)?,
+                );
+            }
         }
         if let Some((rel, _)) = plugin.skill() {
             if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
@@ -1246,57 +1301,72 @@ fn setup_plugins_with_fs(
     }
 
     let declared_plugins = plugins;
+    let external_guidance = rulesync_owns_guidance(fs, project_dir)?;
     let plugins = declared_plugins
         .iter()
-        .map(|plugin| canonical_instruction_plugin(fs, project_dir, plugin))
+        .map(|plugin| {
+            if external_guidance {
+                Ok(plugin.clone())
+            } else {
+                canonical_instruction_plugin(fs, project_dir, plugin)
+            }
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let preserved: Vec<bool> = plugins
         .iter()
-        .map(|p| installed_workflow_requires_preservation(fs, project_dir, p))
+        .map(|p| {
+            if external_guidance {
+                skill_requires_preservation(fs, project_dir, p)
+            } else {
+                installed_workflow_requires_preservation(fs, project_dir, p)
+            }
+        })
         .collect();
     let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
     let membership = refresh_targets.map(|_| &run_ids);
 
     // Instruction targets first, grouped so tools sharing one file (e.g. AGENTS.md) can be
     // served by one shared section instead of byte-identical per-tool copies.
-    let mut targets: Vec<&str> = Vec::new();
-    for (p, preserve) in plugins.iter().zip(&preserved) {
-        let target = p.manifest.instructions.target.as_str();
-        if !preserve && !targets.contains(&target) {
-            targets.push(target);
+    if !external_guidance {
+        let mut targets: Vec<&str> = Vec::new();
+        for (p, preserve) in plugins.iter().zip(&preserved) {
+            let target = p.manifest.instructions.target.as_str();
+            if !preserve && !targets.contains(&target) {
+                targets.push(target);
+            }
         }
-    }
-    for target in &targets {
-        let writers: Vec<&Plugin> = plugins
+        for target in &targets {
+            let writers: Vec<&Plugin> = plugins
+                .iter()
+                .zip(&preserved)
+                .filter(|(p, preserve)| !**preserve && p.manifest.instructions.target == *target)
+                .map(|(p, _)| p)
+                .collect();
+            write_instruction_target(fs, project_dir, target, &writers, membership)?;
+        }
+        // These independently versioned, project-neutral sections are shared by opted-in
+        // tools that read an instruction target. They are not copies of this
+        // repository's AGENTS.md, whose nested specifics remain project-owned.
+        let guidance_targets: HashSet<&str> = plugins
             .iter()
-            .zip(&preserved)
-            .filter(|(p, preserve)| !**preserve && p.manifest.instructions.target == *target)
-            .map(|(p, _)| p)
+            .filter(|plugin| plugin.manifest.instructions.shared_guidance)
+            .map(|plugin| plugin.manifest.instructions.target.as_str())
             .collect();
-        write_instruction_target(fs, project_dir, target, &writers, membership)?;
-    }
-    // These independently versioned, project-neutral sections are shared by opted-in
-    // tools that read an instruction target. They are not copies of this
-    // repository's AGENTS.md, whose nested specifics remain project-owned.
-    let guidance_targets: HashSet<&str> = plugins
-        .iter()
-        .filter(|plugin| plugin.manifest.instructions.shared_guidance)
-        .map(|plugin| plugin.manifest.instructions.target.as_str())
-        .collect();
-    for target in &guidance_targets {
-        write_guidance_target(fs, project_dir, target, true)?;
-    }
-    for target in refresh_targets.unwrap_or_default() {
-        if !targets.contains(&target.as_str()) {
-            write_instruction_target(fs, project_dir, target, &[], membership)?;
+        for target in &guidance_targets {
+            write_guidance_target(fs, project_dir, target, true)?;
         }
-        if !guidance_targets.contains(target.as_str()) {
-            write_guidance_target(fs, project_dir, target, false)?;
+        for target in refresh_targets.unwrap_or_default() {
+            if !targets.contains(&target.as_str()) {
+                write_instruction_target(fs, project_dir, target, &[], membership)?;
+            }
+            if !guidance_targets.contains(target.as_str()) {
+                write_guidance_target(fs, project_dir, target, false)?;
+            }
         }
-    }
-    for (declared, effective) in declared_plugins.iter().zip(&plugins) {
-        if declared.manifest.instructions.target != effective.manifest.instructions.target {
-            write_instruction_reference(fs, project_dir, declared, true)?;
+        for (declared, effective) in declared_plugins.iter().zip(&plugins) {
+            if declared.manifest.instructions.target != effective.manifest.instructions.target {
+                write_instruction_reference(fs, project_dir, declared, true)?;
+            }
         }
     }
 
@@ -1307,8 +1377,12 @@ fn setup_plugins_with_fs(
         {
             let mut wrote = Vec::new();
             if !preserve_installed_workflow {
-                wrote.push(p.manifest.instructions.target.clone());
-                if p.manifest.instructions.target != declared.manifest.instructions.target {
+                if !external_guidance {
+                    wrote.push(p.manifest.instructions.target.clone());
+                }
+                if !external_guidance
+                    && p.manifest.instructions.target != declared.manifest.instructions.target
+                {
                     wrote.push(declared.manifest.instructions.target.clone());
                 }
                 if let Some(skill) = write_skill(fs, project_dir, p)? {
@@ -2674,6 +2748,98 @@ args = ["--path", "{{store}}"]
             let retired =
                 render_guidance_sections(&format!("Before.\n\n{current}\n\nAfter.\n"), false);
             assert_eq!(retired, "Before.\n\nAfter.\n");
+        }
+    }
+
+    #[test]
+    fn rulesync_ownership_preserves_instructions_across_setup_disable_and_return() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        for tool in ["claude", "codex"] {
+            run_setup_in(store.path(), root, Some(tool), false, None, &[]).unwrap();
+        }
+        let agents = format!(
+            "Rulesync project policy.\n{}",
+            std::fs::read_to_string(root.join("AGENTS.md")).unwrap()
+        );
+        std::fs::write(root.join("AGENTS.md"), &agents).unwrap();
+        let native = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+        set_guidance_owner_in(root, "rulesync").unwrap();
+        let enabled = HashSet::from(["claude".to_string(), "codex".to_string()]);
+        for _ in 0..2 {
+            run_setup_in(store.path(), root, Some("claude"), false, None, &[]).unwrap();
+            refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+                agents
+            );
+            assert_eq!(
+                std::fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+                native
+            );
+        }
+        let plan = plan_refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+        assert!(
+            plan.tools
+                .iter()
+                .flat_map(|tool| &tool.artifacts)
+                .filter(|artifact| artifact.kind == ArtifactKind::Instructions)
+                .all(|artifact| artifact.status == ArtifactStatus::Preserved
+                    && artifact.detail.contains("Rulesync"))
+        );
+        refresh_setup_in(store.path(), root, Some(&HashSet::new()), &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            agents
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            native
+        );
+        assert!(!root.join(".claude/skills/hotsheet/SKILL.md").exists());
+        set_guidance_owner_in(root, "builtin").unwrap();
+        for tool in ["claude", "codex"] {
+            run_setup_in(store.path(), root, Some(tool), false, None, &[]).unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            agents
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            native
+        );
+        assert!(root.join(".claude/skills/hotsheet/SKILL.md").exists());
+    }
+
+    #[test]
+    fn rulesync_ownership_does_not_create_missing_instruction_files_and_invalid_modes_fail() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        set_guidance_owner_in(project.path(), "rulesync").unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("claude"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert!(!project.path().join("AGENTS.md").exists());
+        assert!(!project.path().join("CLAUDE.md").exists());
+        for invalid in [
+            "{",
+            r#"{"schema_version":2,"owner":"rulesync"}"#,
+            r#"{"schema_version":1,"owner":"unknown"}"#,
+        ] {
+            std::fs::write(project.path().join(GUIDANCE_OWNER_PATH), invalid).unwrap();
+            assert!(matches!(
+                plan_refresh_setup_in(store.path(), project.path(), None, &[]),
+                Err(SetupError::InvalidGuidanceOwner(_))
+            ));
+            assert!(!project.path().join("AGENTS.md").exists());
         }
     }
 
