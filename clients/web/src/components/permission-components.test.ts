@@ -296,6 +296,16 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).not.toContain('command-00000008');
   });
 
+  it('omits the redundant Allowed text while keeping its shield and accessible decision (HS2-0HKES8)', () => {
+    for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
+      const markup = String(PermissionRulesSettings({ rules: [rules[0]], dialog }));
+      expect(markup).toContain('data-lucide="shield-check"');
+      expect(markup).toContain('; allowed"');
+      expect(markup).not.toContain('>Allowed<');
+      expect(markup).not.toContain('kui-list-item__description');
+    }
+  });
+
   it('marks denied, selected, and busy answers in both row compositions', () => {
     const selectedKey = permissionRuleKey(rules[11]);
     const preview = String(PermissionRulesSettings({ rules }));

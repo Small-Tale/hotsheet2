@@ -15431,6 +15431,57 @@ test('answers identical permission requests for this chat and revokes the rememb
   ]);
 });
 
+for (const width of [1280, 390]) {
+  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    const action = `zsh -ic 'npx playwright test tests/providers.spec.ts tests/ux-demo.spec.ts -g "keeps workspace visibility controls fixed|represents interactive terminal visibility groups" --reporter=line'`;
+    await page.route('**/permissions/rules', (route) =>
+      route.fulfill({
+        json: [
+          {
+            project: '/work/demo.hs2',
+            tool: 'Bash',
+            action: rememberedActionKey(action),
+            exact_action: action,
+            decision: 'allow',
+            scope: 'always',
+            match_type: 'exact',
+          },
+        ],
+      }),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSidebar.isVisible()) await showSidebar.click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (await hideSidebar.isVisible()) await hideSidebar.click();
+    const preview = page.locator('[data-component="permission-rules-settings"]');
+    await expect.poll(async () => (await preview.boundingBox())?.x ?? -1).toBeGreaterThanOrEqual(8);
+    const row = preview.locator('[data-permission-rule]');
+    await expect(row.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
+    await expect(row.locator('[data-lucide="shield-check"]')).toBeVisible();
+    await expect(row.getByText('Allowed', { exact: true })).toHaveCount(0);
+    await expect(row.locator('.kui-list-item__description')).toHaveCount(0);
+    await preview.screenshot({
+      path: `target/visual-captures/hs2-0hkes8-preview-${width}.png`,
+      animations: 'disabled',
+    });
+    await preview.getByRole('button', { name: 'Show all 1 answers' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+    await expect(dialog.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
+    await expect(dialog.locator('[data-lucide="shield-check"]')).toBeVisible();
+    await expect(dialog.getByText('Allowed', { exact: true })).toHaveCount(0);
+    await dialog.screenshot({ path: `target/visual-captures/hs2-0hkes8-dialog-${width}.png`, animations: 'disabled' });
+  });
+}
+
 test('shows locked remembered answers when the vault read fails (HS2-CA5MSD)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/permissions/rules', (route) =>

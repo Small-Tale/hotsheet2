@@ -148,11 +148,11 @@ export function PermissionRulesSettings({
               density="compact"
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
               label={rule.tool}
-              description={allowed ? 'Allowed' : 'Denied'}
+              description={allowed ? undefined : 'Denied'}
               title={label}
               pressed={selected}
               disabled={busy || revoking.includes(key)}
-              accessibleLabel={`Select ${label}`}
+              accessibleLabel={`Select ${label}${allowed ? '; allowed' : ''}`}
             />
             <div class="permission-rules-settings__details">
               <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>

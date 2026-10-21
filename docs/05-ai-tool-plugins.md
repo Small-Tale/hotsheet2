@@ -994,6 +994,8 @@ or write leaves an Always request pending without installing or cascading an app
 remembering a chat or persistent answer, the popup reviews the tool, exact action, project,
 chat reach, match type, and lifetime, then requires a separate confirmation. Settings →
 Permissions lists only the selected project's remembered answers with decrypted exact actions,
+and allowed rows convey the decision through their shield and accessible name without a
+redundant visible Allowed label in the preview or full dialog (HS2-0HKES8). The rows retain
 reviewed patterns, tool, project/chat reach, lifetime, and decision. Users can edit the
 pattern, copy an action, or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
 shown as a label. The exact action is returned only by the authenticated local rules API, not
