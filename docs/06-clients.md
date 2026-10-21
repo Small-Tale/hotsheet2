@@ -2836,7 +2836,9 @@ modal opens, and returns it to a non-blocking popover once no other modal remain
 takes focus itself (never a decision button) and blocks the dialog beneath until answered or
 ignored (HS2-MAE27T). If a text field, select, or other editable control has focus inside the
 modal, the watcher defers lifting a newly arrived permission request so the user can keep editing.
-The request remains in Notifications and the popup lifts when editing focus leaves; a newer modal
+The request remains in Notifications. After editing focus leaves, the watcher waits 500 ms
+before lifting the popup, so a click or move to another text field can finish. If another
+editable field gains focus, the request keeps waiting until that field loses focus too; a newer modal
 also stays above an existing permission popup while its form field is focused (HS2-HZK70N).
 Outside any modal the popup never takes focus: it opens as a popover while briefly `inert`, because
 `showPopover()` on a `<dialog>` otherwise focuses its first button (Ignore) and would blur, and so

@@ -190,6 +190,7 @@ describe('top-layer overlays (HS2-Z9PQSC)', () => {
 
 describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
   it('defers a permission lift while a shadow-root form field has focus, then lifts after focus leaves', async () => {
+    vi.useFakeTimers();
     vi.stubGlobal(
       'MutationObserver',
       class {
@@ -209,15 +210,19 @@ describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
     const dispose = wireTopLayerOverlays(container as unknown as HTMLElement);
     expect(popup.calls).toEqual([]);
     expect(popup.dispatchEvent).not.toHaveBeenCalled();
-    container.dispatch('focusout');
-    await Promise.resolve();
+    container.dispatch('focusout', { composedPath: () => [input, host] });
+    await vi.advanceTimersByTimeAsync(500);
     expect(popup.calls).toEqual([]);
     container.ownerDocument.activeElement = null;
-    container.dispatch('focusout');
-    await Promise.resolve();
+    container.dispatch('focusout', { composedPath: () => [input, host] });
+    open(container); // A DOM mutation must not bypass the blur delay.
+    await vi.advanceTimersByTimeAsync(499);
+    expect(popup.calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
     expect(popup.calls).toEqual(['showModal', 'focus']);
     expect(popup.dispatchEvent).toHaveBeenCalledTimes(1);
     dispose();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 

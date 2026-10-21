@@ -15069,7 +15069,12 @@ for (const width of [1280, 390]) {
     await title.press('!');
     await expect(title).toHaveValue('Writing a ticket!');
     await page.screenshot({ path: test.info().outputPath(`hzk70n-editing-${width}.png`) });
-    await title.evaluate((element) => {
+    const details = composer.locator('textarea[name="new-ticket-details"]');
+    await details.focus();
+    await expect(details).toBeFocused();
+    await page.waitForTimeout(550);
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(false);
+    await details.evaluate((element) => {
       (element as HTMLElement).blur();
     });
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);

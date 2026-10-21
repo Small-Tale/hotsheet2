@@ -34,6 +34,7 @@ const MODAL_HOST_SELECTOR = 'dialog, wa-dialog[open], wa-drawer[open]';
 /** Web Awesome opens and closes its modal dialog after these events, outside any DOM mutation. */
 const MODAL_LIFECYCLE_EVENTS = ['wa-show', 'wa-after-show', 'wa-after-hide'] as const;
 const EDITING_CONTROL_SELECTOR = 'input, textarea, select, [role="textbox"], [role="combobox"]';
+const EDITING_FOCUS_LIFT_DELAY_MS = 500;
 
 type OverlayElement = HTMLElement & {
   showModal?: () => void;
@@ -43,6 +44,12 @@ type OverlayElement = HTMLElement & {
 /** The foreign modal dialogs each overlay was last lifted above. */
 const liftedAbove = new WeakMap<Element, ReadonlySet<Element>>();
 const presentedKeys = new WeakMap<Element, string>();
+const deferredModalLiftUntil = new WeakMap<ParentNode, number>();
+
+function isEditingControl(target: EventTarget): boolean {
+  const element = target as Partial<HTMLElement>;
+  return element.matches?.(EDITING_CONTROL_SELECTOR) === true || element.isContentEditable === true;
+}
 
 function notifyPresented(overlay: OverlayElement): void {
   if (!overlay.matches(':modal') && !overlay.matches(':popover-open')) return;
@@ -105,7 +112,7 @@ export function openTopLayerOverlays(root: ParentNode): void {
       if (modals.length > 0) {
         // A modal lift moves focus into this dialog. Keep a pending request out of the way while
         // someone is editing another modal's form, then lift it when editing focus leaves.
-        if (isEditingFieldFocused(root)) continue;
+        if (isEditingFieldFocused(root) || Date.now() < (deferredModalLiftUntil.get(root) ?? 0)) continue;
         liftAboveModals(overlay, modals);
         continue;
       }
@@ -157,6 +164,7 @@ export function dismissLiftedOverlay(root: ParentNode, event: KeyboardEvent): bo
 
 /** Keep marked overlays under `root` in the top layer as Kerf renders them; returns a disposer. */
 export function wireTopLayerOverlays(root: HTMLElement): () => void {
+  let editingFocusTimer: ReturnType<typeof setTimeout> | undefined;
   const reopen = () => {
       openTopLayerOverlays(root);
     },
@@ -171,8 +179,15 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
     escape = (event: KeyboardEvent) => {
       dismissLiftedOverlay(root, event);
     },
-    editingFocusLeft = () => {
-      queueMicrotask(reopen);
+    editingFocusLeft = (event: FocusEvent) => {
+      if (!event.composedPath().some(isEditingControl)) return;
+      deferredModalLiftUntil.set(root, Date.now() + EDITING_FOCUS_LIFT_DELAY_MS);
+      if (editingFocusTimer) clearTimeout(editingFocusTimer);
+      editingFocusTimer = setTimeout(() => {
+        editingFocusTimer = undefined;
+        deferredModalLiftUntil.delete(root);
+        reopen();
+      }, EDITING_FOCUS_LIFT_DELAY_MS);
     },
     observer = new MutationObserver(reopen);
   observer.observe(root, {
@@ -190,6 +205,8 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
   openTopLayerOverlays(root);
   return () => {
     observer.disconnect();
+    if (editingFocusTimer) clearTimeout(editingFocusTimer);
+    deferredModalLiftUntil.delete(root);
     for (const type of MODAL_LIFECYCLE_EVENTS) root.removeEventListener(type, reopenSoon);
     root.removeEventListener('cancel', preventCancel, true);
     root.removeEventListener('close', reopenSoon, true);
