@@ -24,6 +24,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   filterPermissionRuleLifetime: action('filter-permission-rule-lifetime'),
   filterPermissionRuleDecision: action('filter-permission-rule-decision'),
   selectPermissionRuleRow: action('select-permission-rule-row'),
+  togglePermissionRuleAction: action('toggle-permission-rule-action'),
   clearPermissionRuleSelection: action('clear-permission-rule-selection'),
   editSelectedPermissionRules: action('edit-selected-permission-rules'),
   requestDeleteSelectedPermissionRules: action('request-delete-selected-permission-rules'),

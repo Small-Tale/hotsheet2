@@ -83,6 +83,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           lifetime: PermissionRuleFilters['lifetime'];
           decision: PermissionRuleFilters['decision'];
           selected?: readonly string[];
+          expandedActions?: readonly string[];
           selectionAnchor?: string;
           busy?: boolean;
           confirmingDelete?: boolean;
@@ -93,6 +94,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       | {
           projectId: string;
           selected: readonly string[];
+          expandedActions?: readonly string[];
           selectionAnchor?: string;
           busy?: boolean;
           confirmingDelete?: boolean;
@@ -326,6 +328,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       lifetime: 'permanent',
       decision: 'allow',
       selected: preview?.selected ?? [],
+      ...(preview?.expandedActions ? { expandedActions: preview.expandedActions } : {}),
     };
     permissionRulesPreview.value = undefined;
   }
@@ -368,6 +371,24 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         current,
       ).visibleCount;
     permissionRulesDialog.value = { ...current, visibleCount };
+  }
+
+  function togglePermissionRuleAction(projectId: string, key: string, surface: 'preview' | 'dialog' = 'dialog') {
+    const state = surface === 'preview' ? permissionRulesPreview.value : permissionRulesDialog.value;
+    if ((state && state.projectId !== projectId) || state?.busy) return;
+    if (
+      !(permissionRulesByProject.value[projectId] ?? []).some(
+        (rule) => permissionRuleKey(rule) === key && rule.exact_action,
+      )
+    )
+      return;
+    const expandedActions = new Set(state?.expandedActions ?? []);
+    if (expandedActions.has(key)) expandedActions.delete(key);
+    else expandedActions.add(key);
+    if (surface === 'preview')
+      permissionRulesPreview.value = { projectId, selected: [], ...state, expandedActions: [...expandedActions] };
+    else if (permissionRulesDialog.value?.projectId === projectId)
+      permissionRulesDialog.value = { ...permissionRulesDialog.value, expandedActions: [...expandedActions] };
   }
 
   function selectPermissionRuleRow(
@@ -775,6 +796,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     filterPermissionRules,
     loadMorePermissionRules,
     selectPermissionRuleRow,
+    togglePermissionRuleAction,
     selectVisiblePermissionRules,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,

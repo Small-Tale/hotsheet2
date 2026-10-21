@@ -3,6 +3,13 @@
   --kui-layout-inline-margin: 0;
 }
 
+code.permission-rules-settings__command {
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
 .permission-rules-settings__filters {
   display: grid;
   min-width: 0;
@@ -46,7 +53,7 @@
   overflow-wrap: anywhere;
   font: inherit;
 }
-.permission-rules-settings__details span {
+.permission-rules-settings__context {
   color: var(--wa-color-neutral-on-quiet);
   overflow-wrap: anywhere;
 }

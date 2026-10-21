@@ -15433,7 +15433,7 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
-  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE)`, async ({
+  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY)`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -15475,9 +15475,31 @@ for (const width of [1280, 390]) {
     await expect(row).not.toContainText('Exact match');
     await expect(row.locator('.kui-list-item__description')).toHaveCount(0);
     await preview.screenshot({
-      path: `target/visual-captures/hs2-r3r7je-preview-${width}.png`,
+      path: `target/visual-captures/hs2-y8fyvy-preview-collapsed-${width}.png`,
       animations: 'disabled',
     });
+    const title = row.locator('[data-exact-action]');
+    await expect(title).toHaveAttribute('data-font', 'monospace');
+    await expect(title).toHaveAttribute('data-max-lines', '2');
+    await expect(title).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const collapsedHeight = await title.evaluate((node) => node.getBoundingClientRect().height);
+    await row.getByRole('button', { name: 'Expand action', exact: true }).click();
+    await expect(title).not.toHaveAttribute('data-max-lines', '2');
+    await expect(row.getByRole('button', { name: 'Collapse action', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(await title.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(collapsedHeight);
+    await expect(row).not.toHaveAttribute('data-rule-selected', 'true');
+    await row.locator('[data-action="select-permission-rule-row"]').click();
+    await expect(title).not.toHaveAttribute('data-max-lines', '2');
+    await preview.screenshot({
+      path: `target/visual-captures/hs2-y8fyvy-preview-expanded-${width}.png`,
+      animations: 'disabled',
+    });
+    await row.getByRole('button', { name: 'Collapse action', exact: true }).click();
+    await expect(title).toHaveAttribute('data-max-lines', '2');
+    await expect(row).toHaveAttribute('data-rule-selected', 'true');
     await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
     await expect(dialog.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
@@ -15487,7 +15509,22 @@ for (const width of [1280, 390]) {
     await expect(dialog.locator('[data-rule-tool-badge]')).toHaveText('Bash');
     await expect(dialog.locator('[data-rule-lifetime-badge]')).toHaveText('Persistent');
     await expect(dialog.locator('[data-permission-rule-badges]')).toHaveCSS('flex-wrap', 'wrap');
-    await dialog.screenshot({ path: `target/visual-captures/hs2-r3r7je-dialog-${width}.png`, animations: 'disabled' });
+    await dialog.screenshot({
+      path: `target/visual-captures/hs2-y8fyvy-dialog-collapsed-${width}.png`,
+      animations: 'disabled',
+    });
+    const dialogTitle = dialog.locator('[data-exact-action]');
+    await expect(dialogTitle).toHaveAttribute('data-max-lines', '2');
+    await dialog.getByRole('button', { name: 'Expand action', exact: true }).click();
+    await expect(dialogTitle).not.toHaveAttribute('data-max-lines', '2');
+    await dialog.getByRole('searchbox', { name: 'Search Remembered Answers' }).fill('zsh');
+    await expect(dialogTitle).not.toHaveAttribute('data-max-lines', '2');
+    await dialog.screenshot({
+      path: `target/visual-captures/hs2-y8fyvy-dialog-expanded-${width}.png`,
+      animations: 'disabled',
+    });
+    await dialog.getByRole('button', { name: 'Collapse action', exact: true }).click();
+    await expect(dialogTitle).toHaveAttribute('data-max-lines', '2');
   });
 }
 

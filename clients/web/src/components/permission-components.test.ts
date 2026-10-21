@@ -342,6 +342,38 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     }
   });
 
+  it('uses the action as a plain monospace two-line title with controlled expansion (HS2-Y8FYVY)', () => {
+    const rule = rules[0],
+      key = permissionRuleKey(rule);
+    for (const surface of ['preview', 'dialog'] as const) {
+      for (const expanded of [false, true, false]) {
+        const options = { expandedActions: expanded ? [key] : [] };
+        const rendered = String(
+          PermissionRulesSettings({
+            rules: [rule],
+            ...(surface === 'preview'
+              ? { preview: options }
+              : { dialog: { query: '', visibleCount: 100, ...options } }),
+          }),
+        );
+        const markup =
+          surface === 'dialog'
+            ? rendered.slice(rendered.indexOf('data-dialog-component="permission-rules-dialog"'))
+            : rendered;
+        const title = markup.match(
+          /<span(?=[^>]*data-font="monospace")(?=[^>]*data-exact-action)[^>]*>[^]*?<\/span>/,
+        )?.[0];
+        expect(title).toBeDefined();
+        expect(title).toContain(rule.exact_action);
+        if (expanded) expect(title).not.toContain('data-max-lines');
+        else expect(title).toContain('data-max-lines="2"');
+        expect(markup).toContain(expanded ? 'Collapse action' : 'Expand action');
+        expect(markup.indexOf('data-exact-action')).toBeLessThan(markup.indexOf('data-permission-rule-badges'));
+        expect(markup).not.toContain('<code data-exact-action');
+      }
+    }
+  });
+
   it('uses singular and plural answer counts in the disclosure (HS2-9QK0V7)', () => {
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 1) }))).toContain('Show all 1 answer<');
     expect(String(PermissionRulesSettings({ rules: rules.slice(0, 2) }))).toContain('Show all 2 answers<');

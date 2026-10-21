@@ -248,6 +248,7 @@ const PERMISSION_RULES_DEMO = [
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'a'.repeat(56)}12345678`,
     description: 'Run npm unit tests',
+    exact_action: 'npm run test:unit',
     decision: 'allow',
     scope: 'chat',
   },
@@ -255,6 +256,7 @@ const PERMISSION_RULES_DEMO = [
     project: '/work/demo.hs2',
     tool: 'WebFetch',
     action: `hmac-sha256:v2:${'b'.repeat(16)}:${'b'.repeat(56)}87654321`,
+    exact_action: 'https://example.test/api/status',
     decision: 'allow',
     scope: 'session',
   },
@@ -263,6 +265,7 @@ const PERMISSION_RULES_DEMO = [
     tool: 'Bash',
     action: `hmac-sha256:v2:${'c'.repeat(16)}:${'c'.repeat(56)}feedcafe`,
     description: 'Review Git changes',
+    exact_action: 'git diff --stat',
     decision: 'deny',
     scope: 'always',
   },
@@ -270,6 +273,8 @@ const PERMISSION_RULES_DEMO = [
     project: '/work/demo.hs2',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'d'.repeat(16)}:${'d'.repeat(56)}00000004`,
+    exact_action:
+      "zsh -ic 'npm run lint && npm run typecheck && npx playwright test tests/providers.spec.ts --workers=2 --reporter=line'",
     decision: 'allow',
     scope: 'always',
   },
@@ -277,6 +282,7 @@ const PERMISSION_RULES_DEMO = [
     project: '/work/demo.hs2',
     tool: 'WebFetch',
     action: `hmac-sha256:v2:${'e'.repeat(16)}:${'e'.repeat(56)}00000005`,
+    exact_action: 'https://example.test/changelog',
     decision: 'deny',
     scope: 'session',
   },
@@ -284,6 +290,7 @@ const PERMISSION_RULES_DEMO = [
     project: '/work/demo.hs2',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'f'.repeat(16)}:${'f'.repeat(56)}00000006`,
+    exact_action: 'npm run build',
     decision: 'allow',
     scope: 'chat',
   },
@@ -296,6 +303,7 @@ const permissionRulesDemoDialog = signal<
       lifetime: PermissionRuleFilters['lifetime'];
       decision: PermissionRuleFilters['decision'];
       selected?: readonly string[];
+      expandedActions?: readonly string[];
       selectionAnchor?: string;
       confirmingDelete?: boolean;
     }
@@ -303,14 +311,26 @@ const permissionRulesDemoDialog = signal<
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
 const permissionRulesDemoPreview = signal<
-  { selected: readonly string[]; selectionAnchor?: string; confirmingDelete?: boolean } | undefined
+  | {
+      selected: readonly string[];
+      expandedActions?: readonly string[];
+      selectionAnchor?: string;
+      confirmingDelete?: boolean;
+    }
+  | undefined
 >(undefined);
 const demoSelectionIsPreview = (target: Element) =>
   target.closest<HTMLElement>('[data-permission-selection-surface]')?.dataset.permissionSelectionSurface === 'preview';
 function updateDemoSelection(
   target: Element,
-  update: (state: { selected: readonly string[]; selectionAnchor?: string; confirmingDelete?: boolean }) => {
+  update: (state: {
     selected: readonly string[];
+    expandedActions?: readonly string[];
+    selectionAnchor?: string;
+    confirmingDelete?: boolean;
+  }) => {
+    selected: readonly string[];
+    expandedActions?: readonly string[];
     selectionAnchor?: string;
     confirmingDelete?: boolean;
   },
@@ -331,7 +351,7 @@ export function PermissionRulesSettingsDemo() {
       <CatalogExample label="No Remembered Answers">
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
-      <CatalogExample label="Chat, Session, and Always Rules with Flowing Tool and Lifetime Badges">
+      <CatalogExample label="Command Titles with Two-Line Previews, Expansion, and Flowing Badges">
         <div data-demo-permission-rules>
           <PermissionRulesSettings
             rules={permissionRulesDemoRules.value}
@@ -493,6 +513,7 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           lifetime: 'permanent',
           decision: 'allow',
           selected: permissionRulesDemoPreview.value?.selected ?? [],
+          expandedActions: permissionRulesDemoPreview.value?.expandedActions,
         };
         permissionRulesDemoPreview.value = undefined;
       },
@@ -566,6 +587,23 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
               state,
             ).visibleCount,
           };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleAction.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).getAttribute('data-rule-key');
+        if (!key) return;
+        updateDemoSelection(target, (state) => {
+          const expandedActions = new Set(state.expandedActions ?? []);
+          if (expandedActions.has(key)) expandedActions.delete(key);
+          else expandedActions.add(key);
+          return { ...state, expandedActions: [...expandedActions] };
+        });
       },
     ),
   );

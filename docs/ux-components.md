@@ -2276,15 +2276,19 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   setting (Off, Auto-allow, Auto-deny) shows the delay select disabled and enabled, and Reset
   returns to Ticket sources with automation off (HS2-PS9BQV).
 - `PermissionRulesSettings` — **production + demo built**: shows the latest three project
-  answers in reverse arrival order, with concise duration labels because every row is scoped
-  to the selected project (HS2-BH6GCG). The tool, safe fixed-vocabulary Bash operation description
-  when available, and short private action fingerprint identify distinct rows, including in narrow
-  layouts with middle truncation; a label tooltip explains hidden details
-  (HS2-Q40BBV, HS2-JESMCS). A Kerf dialog searches safe displayed labels and pages
-  the complete list five at a time, while each row keeps its individual revoke action.
-  Users can select answers across pages, set their decisions to Allow or Deny, or confirm
-  a bulk deletion; failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH,
-  HS2-C057G5).
+  answers in reverse arrival order. The exact action is a primary monospace title with no
+  shaded code background; Expand action removes its two-line limit and Collapse action
+  restores it. Expansion is independent of selection, transfers into the full dialog, and
+  resets on dialog close or project/settings changes (HS2-Y8FYVY). Tool and lifetime use
+  wrapping compact badges; the decision shield and accessible row name retain Allow status
+  without redundant visible copy (HS2-R3R7JE, HS2-0HKES8).
+  A Kerf dialog searches displayed action/context and loads the complete list in 100-row
+  batches, with lifetime/decision filters. Users can select across batches, edit decisions
+  or project-rule lifetimes, review match patterns, copy exact actions, or confirm deletion;
+  failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5).
+  Keyed fingerprints remain internal edit/revoke identities. The displayed rules aggregate
+  matching checkout and linked-store namespaces; that does not make each approval
+  checkout-wide (see [05 §5.7](05-ai-tool-plugins.md#57-permissions--user-prompts-permission-checks-and-other-prompts)).
 - `SettingsSection`
 - `EffectiveSettingField`
 - `SettingScopePicker`

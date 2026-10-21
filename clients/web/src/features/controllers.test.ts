@@ -411,6 +411,55 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.dispose();
   });
 
+  it('keeps action expansion independent of selection and resets it across surfaces/projects (HS2-Y8FYVY)', async () => {
+    const owner = createPermissionsController({
+      projects: signal([project('a'), project('b')]),
+      selectedProjectId: signal('a'),
+    });
+    const rules = ['one', 'two'].map((action) => ({
+      project: '/work/a',
+      tool: 'Bash',
+      action,
+      exact_action: action,
+      decision: 'allow',
+      scope: 'always',
+    }));
+    fetchMock.mockResolvedValue(json(rules));
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const keys = rules.map(permissionRuleKey);
+    owner.togglePermissionRuleAction('a', 'missing', 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)).toBeUndefined();
+    owner.togglePermissionRuleAction('a', keys[0], 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)).toMatchObject({ expandedActions: [keys[0]], selected: [] });
+    owner.selectPermissionRuleRow('a', keys[1], { toggle: false, range: false }, 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.expandedActions).toEqual([keys[0]]);
+    owner.togglePermissionRuleAction('a', keys[1], 'preview');
+    owner.togglePermissionRuleAction('a', keys[0], 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.expandedActions).toEqual([keys[1]]);
+    owner.openPermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)).toMatchObject({
+      expandedActions: [keys[1]],
+      selected: [keys[1]],
+    });
+    owner.searchPermissionRules('a', 'one');
+    owner.filterPermissionRules('a', { lifetime: 'session' });
+    expect(owner.permissionRulesDialogFor('a', true)?.expandedActions).toEqual([keys[1]]);
+    owner.togglePermissionRuleAction('a', keys[1]);
+    expect(owner.permissionRulesDialogFor('a', true)?.expandedActions).toEqual([]);
+    owner.closePermissionRules();
+    owner.openPermissionRules('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.expandedActions).toBeUndefined();
+    owner.togglePermissionRuleAction('a', keys[0]);
+    owner.permissionRulesDialogFor('b', true);
+    expect(owner.permissionRulesDialogFor('a', true)).toBeUndefined();
+    owner.togglePermissionRuleAction('a', keys[0], 'preview');
+    expect(owner.permissionRulesPreviewFor('a', true)?.expandedActions).toEqual([keys[0]]);
+    owner.permissionRulesPreviewFor('a', false);
+    expect(owner.permissionRulesPreviewFor('a', true)).toBeUndefined();
+    owner.dispose();
+  });
+
   it('bulk edits mixed remembered answers, retains failures for retry, and confirms deletion (HS2-C057G5)', async () => {
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
     let rules = [

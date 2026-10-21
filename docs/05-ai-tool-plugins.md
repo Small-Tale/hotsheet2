@@ -1060,7 +1060,11 @@ and allowed rows convey the decision through their shield and accessible name wi
 redundant visible Allowed label in the preview or full dialog (HS2-0HKES8). The rows retain
 reviewed patterns, tool, project/chat reach, lifetime, and decision. Tool and lifetime use
 compact badges in a naturally wrapping group in both preview and full dialog; the row
-accessible name retains their full text (HS2-R3R7JE). Users can edit the
+accessible name retains their full text (HS2-R3R7JE). The exact command is the primary
+monospace title without a shaded code background, limited to two lines until Expand action
+is selected. Collapse action restores the limit. Expansion is independent of selection,
+transfers from preview into the full dialog, and resets when that dialog closes or the
+project/settings context changes (HS2-Y8FYVY). Users can edit the
 pattern, copy an action, or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
 shown as a label. The exact action is returned only by the authenticated local rules API, not
 events or logs. If the credential key or encrypted file is unavailable, the list shows a locked

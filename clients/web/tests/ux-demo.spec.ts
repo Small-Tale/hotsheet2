@@ -855,6 +855,23 @@ test('shows the remembered answers under a Kerf ListHeader (HS2-KHKM0W)', async 
   await example.screenshot({ path: 'target/visual-captures/hs2-khkm0w-remembered-answers-narrow.png' });
 });
 
+test('wires remembered command title expansion in preview and dialog (HS2-Y8FYVY)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  const row = example.locator('[data-permission-rule-scope="always"]').first();
+  await expect(row.locator('[data-exact-action]')).toHaveAttribute('data-max-lines', '2');
+  await row.getByRole('button', { name: 'Expand action', exact: true }).click();
+  await expect(row.locator('[data-exact-action]')).not.toHaveAttribute('data-max-lines', '2');
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
+  await expect(dialog.locator('[data-exact-action]')).not.toHaveAttribute('data-max-lines', '2');
+  await dialog.getByRole('button', { name: 'Collapse action', exact: true }).click();
+  await expect(dialog.locator('[data-exact-action]')).toHaveAttribute('data-max-lines', '2');
+  await dialog.getByRole('button', { name: 'Expand action', exact: true }).click();
+  await expect(dialog.locator('[data-exact-action]')).not.toHaveAttribute('data-max-lines', '2');
+});
+
 test('lets the remembered-answer demo edit and confirm deletion of shown answers (HS2-C057G5)', async ({ page }) => {
   await page.goto('/ux-demo?component=permission-rules-settings');
   const example = page.locator('[data-demo-permission-rules]');

@@ -254,6 +254,7 @@ notifications-and-links	delegate	document.body	'input'	'[name="permission-rule-s
 notifications-and-links	delegate	document.body	'click'	'[data-action="load-more-permission-rules"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="filter-permission-rule-lifetime"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="filter-permission-rule-decision"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="toggle-permission-rule-action"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-permission-rule-row"]'
 notifications-and-links	delegate	document.body	'keydown'	'.permission-rules-settings__all'
 notifications-and-links	delegate	document.body	'keydown'	'.permission-rules-settings__recent'

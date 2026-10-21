@@ -31,11 +31,13 @@ export interface PermissionRulesSettingsProps {
     lifetime?: PermissionRuleLifetimeFilter;
     decision?: PermissionRuleDecisionFilter;
     selected?: readonly string[];
+    expandedActions?: readonly string[];
     busy?: boolean;
     confirmingDelete?: boolean;
   };
   preview?: {
     selected?: readonly string[];
+    expandedActions?: readonly string[];
     busy?: boolean;
     confirmingDelete?: boolean;
   };
@@ -126,7 +128,8 @@ export function PermissionRulesSettings({
         allowed = rule.decision === 'allow',
         label = ruleLabel(rule),
         selected = surface === 'dialog' ? dialogSelected.has(key) : previewSelected.has(key),
-        busy = surface === 'dialog' ? dialog?.busy : preview?.busy;
+        busy = surface === 'dialog' ? dialog?.busy : preview?.busy,
+        expanded = (surface === 'dialog' ? dialog?.expandedActions : preview?.expandedActions)?.includes(key) ?? false;
       return (
         <div
           class="permission-rules-settings__rule"
@@ -146,19 +149,18 @@ export function PermissionRulesSettings({
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
               multiline
               label={
-                <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-permission-rule-badges': '' }}>
-                  <Badge size="compact" maxWidth={pct(100)} ariaHidden rootAttributes={{ 'data-rule-tool-badge': '' }}>
-                    {rule.tool}
-                  </Badge>
-                  <Badge
-                    size="compact"
-                    maxWidth={pct(100)}
-                    ariaHidden
-                    rootAttributes={{ 'data-rule-lifetime-badge': '' }}
-                  >
-                    {SCOPE_LABELS[rule.scope]}
-                  </Badge>
-                </Row>
+                <Text
+                  variant="span"
+                  font="monospace"
+                  border="none"
+                  wrap="anywhere"
+                  maxLines={expanded ? undefined : 2}
+                  data-exact-action
+                >
+                  <code class="permission-rules-settings__command">
+                    {rule.exact_action ?? 'Action unavailable — revoke and review again'}
+                  </code>
+                </Text>
               }
               description={allowed ? undefined : 'Denied'}
               title={label}
@@ -167,9 +169,38 @@ export function PermissionRulesSettings({
               accessibleLabel={`Select ${label}${allowed ? '; allowed' : ''}`}
             />
             <div class="permission-rules-settings__details">
-              <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>
-              <span>{rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}</span>
-              {matchLabel(rule) && <span>{matchLabel(rule)}</span>}
+              <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-permission-rule-badges': '' }}>
+                <Badge size="compact" maxWidth={pct(100)} ariaHidden rootAttributes={{ 'data-rule-tool-badge': '' }}>
+                  {rule.tool}
+                </Badge>
+                <Badge
+                  size="compact"
+                  maxWidth={pct(100)}
+                  ariaHidden
+                  rootAttributes={{ 'data-rule-lifetime-badge': '' }}
+                >
+                  {SCOPE_LABELS[rule.scope]}
+                </Badge>
+              </Row>
+
+              <span class="permission-rules-settings__context">
+                {rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}
+              </span>
+              {matchLabel(rule) && <span class="permission-rules-settings__context">{matchLabel(rule)}</span>}
+              {rule.exact_action && (
+                <Row gap="xs">
+                  <Button
+                    emphasis="plain"
+                    size="compact"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleAction.value}
+                    rootAttributes={{ 'data-rule-key': key }}
+                    pressed={expanded}
+                    disabled={busy || revoking.includes(key)}
+                  >
+                    {expanded ? 'Collapse action' : 'Expand action'}
+                  </Button>
+                </Row>
+              )}
               {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
               {rule.exact_action && (
                 <details data-permission-pattern-editor={key}>

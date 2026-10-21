@@ -70,6 +70,7 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly searchPermissionRules: (projectId: string, query: string) => void;
   readonly filterPermissionRules: (projectId: string, filters: Partial<PermissionRuleFilters>) => void;
   readonly loadMorePermissionRules: (projectId: string) => void;
+  readonly togglePermissionRuleAction: (projectId: string, key: string, surface?: 'preview' | 'dialog') => void;
   readonly selectPermissionRuleRow: (
     projectId: string,
     key: string,
@@ -126,6 +127,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     filterPermissionRules,
     loadMorePermissionRules,
     selectPermissionRuleRow,
+    togglePermissionRuleAction,
     selectVisiblePermissionRules,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,
@@ -438,6 +440,17 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const decision = (target as HTMLElement).dataset.segmentValue;
         if (decision === 'allow' || decision === 'deny') filterPermissionRules(selectedProjectId.value, { decision });
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionRuleAction.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (key) togglePermissionRuleAction(selectedProjectId.value, key, permissionSelectionSurface(target));
       },
     ),
   );
