@@ -743,6 +743,7 @@ fn codex_live_turn_against_the_daemon() {
 /// `initialize`/`thread/start`/`turn/start` JSON-RPC as text frames — so the real
 /// [`UdsWsTransport`] and [`CodexAppServer`] are exercised end to end over a WebSocket with
 /// no codex. It signals `ready` only after the listener binds so the client can't race it.
+#[cfg(unix)]
 fn spawn_scripted_ws_daemon(sock: std::path::PathBuf) -> std::sync::mpsc::Receiver<()> {
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
     std::thread::spawn(move || {
@@ -822,6 +823,7 @@ fn spawn_scripted_ws_daemon(sock: std::path::PathBuf) -> std::sync::mpsc::Receiv
 /// daemon over a temp UDS, and the unchanged [`CodexAppServer`] engine handshakes, opens a
 /// thread, and completes a turn — the same protocol as [`ScriptedDaemon`], just WS-framed.
 #[test]
+#[cfg(unix)]
 fn codex_client_drives_a_turn_over_a_websocket_uds() {
     use crate::codex::UdsWsTransport;
 
@@ -845,6 +847,7 @@ fn codex_client_drives_a_turn_over_a_websocket_uds() {
 /// Connecting to a socket path that no daemon is serving fails at connect time (a clean
 /// error), not as a later `initialize` timeout.
 #[test]
+#[cfg(unix)]
 fn uds_ws_transport_reports_a_missing_socket() {
     use crate::codex::UdsWsTransport;
     let dir = tempfile::tempdir().unwrap();
@@ -859,6 +862,7 @@ fn uds_ws_transport_reports_a_missing_socket() {
 /// socket ([`UdsWsTransport`]). Off by default; set `HOTSHEET_CODEX_LIVE=1`. Proves the
 /// shared-daemon path (multiple host connections can reuse one codex instance) end to end.
 #[test]
+#[cfg(unix)]
 #[ignore = "live: needs a real codex daemon + creds; set HOTSHEET_CODEX_LIVE=1"]
 fn codex_live_turn_over_the_shared_daemon() {
     use crate::codex::{UdsWsTransport, codex_control_socket_path, ensure_codex_daemon};
