@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use hotsheet_model::Timestamp;
-use hotsheet_ticketing::{FsStore, ops};
+use hotsheet_ticketing::{FsStore, metrics, ops};
 use time::{Duration, OffsetDateTime};
 
 use crate::{Cmd, now_ts, resolve};
@@ -111,6 +111,11 @@ pub(crate) fn cmd_release(path: &PathBuf, id: &str, worker: &str, force: bool) -
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
     let released = ops::release(&store, &ticket.id, now_ts(), worker, force)?;
+    if !force && ticket.claimed_by.as_deref() == Some(worker) {
+        if let Err(error) = metrics::codex_work::capture_current_session(&store, worker) {
+            eprintln!("Codex Work usage capture failed: {error}");
+        }
+    }
     println!("Released {}", released.slug);
     Ok(())
 }
@@ -118,6 +123,11 @@ pub(crate) fn cmd_release(path: &PathBuf, id: &str, worker: &str, force: bool) -
 pub(crate) fn cmd_release_worker(path: &PathBuf, worker: &str) -> Result<()> {
     let store = FsStore::open(path)?;
     let released = ops::release_worker(&store, now_ts(), worker)?;
+    if !released.is_empty() {
+        if let Err(error) = metrics::codex_work::capture_current_session(&store, worker) {
+            eprintln!("Codex Work usage capture failed: {error}");
+        }
+    }
     if released.is_empty() {
         println!("{worker} holds no claims");
     }

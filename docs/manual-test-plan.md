@@ -32,6 +32,21 @@ the scroll offsets; this visual review checks the rendered transition.
 2. Release the claim, run another turn, and confirm that turn stays in project metrics without increasing the ticket total. Repeat with two simultaneous claims; neither ticket should receive the ambiguous turn.
 3. Repeat with `--no-daemon` to confirm the timeline makes no unsupported usage claim. The protocol cassette covers the watcher, but CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
 
+### Codex Work claim-release usage (HS2-2K2D7E)
+
+1. In a local Codex Work session outside Hot Sheet's Drive and terminal, claim one
+   disposable ticket with the session's `HOTSHEET_WORKER_ID`. Run a turn that reports
+   nonzero usage, release the claim, then select the ticket in Hot Sheet. Confirm its
+   Timeline shows the model and input/output total recorded during the claim.
+2. Run another turn after release and confirm it is not added to that ticket. Repeat
+   with two overlapping claims; ambiguous turns must not appear on either ticket.
+3. Release the same ticket again and reload the timeline. Counts must not double.
+   Inspect `metrics/raw/<day>.jsonl` and logs for prompt or tool content; only numeric
+   counts, model, timestamp, session/response identity, and ticket ID may be stored.
+4. If Codex changes its local rollout format, confirm capture skips unrecognized
+   records without assigning usage to another ticket. Existing unattributed raw
+   metrics must remain unattributed.
+
 ### Full-history grid tile resource profile (HS2-QV814W)
 
 On a representative desktop and physical phone, create more running terminals than the

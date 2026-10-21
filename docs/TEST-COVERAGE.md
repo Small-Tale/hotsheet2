@@ -1112,3 +1112,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-aitools/src/permission_suggestions.rs` checks multiple, quoted, URL, path, Unicode, malformed, and capped cases; `clients/web/src/components/permission-components.test.ts` checks exact default, selection, and removal.
 - End to end: `crates/hotsheet-server/tests/http.rs` checks authenticated suggestion delivery and no rule creation before explicit approval; `clients/web/tests/providers.spec.ts` checks the popup controls, submitted pattern, and wide/phone layout.
 - Manual: Try a disposable token in a simple command and the skipped examples in `docs/manual-test-plan.md`; inspect the generated expression before confirming.
+
+### Codex Work ticket usage capture (HS2-2K2D7E)
+
+- Behavior: CLI and MCP claim release capture numeric usage from the exact local Codex session and worker binding. Each response belongs to one unexpired claim interval or stays unassigned; repeated capture does not double count. A server-managed terminal session is skipped.
+- Unit: `crates/hotsheet-ticketing/src/metrics/codex_work.rs` covers claim switches, ambiguous overlap, duplicate capture, unknown session metadata, model propagation, and omission of unrelated transcript content.
+- End to end: `crates/hotsheet-cli/tests/cli.rs` releases a real claim against a sanitized local rollout and checks stored numeric events; `crates/hotsheet-server/tests/http.rs` covers the ticket usage API that the Timeline reads, and `clients/web/tests/ticket-timeline-usage.spec.ts` covers the rendered breakdown.
+- Manual: `docs/manual-test-plan.md` exercises a live Codex Work session, unclaimed and overlapping turns, repeated release, and the local privacy boundary.

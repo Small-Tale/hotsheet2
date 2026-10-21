@@ -4506,6 +4506,63 @@ fn claim_next_release_and_renew() {
 }
 
 #[test]
+fn releasing_a_codex_work_claim_records_only_numeric_session_usage() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    hs(root).arg("init").assert().success();
+    let slug = new_ticket(root, "Codex Work usage");
+    let worker = "codex-fixture-worker";
+    hs(root)
+        .args(["claim", &slug, "--worker", worker])
+        .assert()
+        .success();
+
+    let session = "00000000-0000-7000-8000-000000000099";
+    let home = root.join("codex-home");
+    let rollout = home
+        .join("sessions/2026/10/21")
+        .join(format!("rollout-2026-10-21T00-00-00-{session}.jsonl"));
+    std::fs::create_dir_all(rollout.parent().unwrap()).unwrap();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let rows = [
+        serde_json::json!({"type":"session_meta","timestamp":now,"payload":{"id":session}}),
+        serde_json::json!({"type":"turn_context","timestamp":now,"payload":{"root_turn_id":"turn-1","model":"gpt-6-sol"}}),
+        serde_json::json!({"type":"response_item","timestamp":now,"payload":{"secret":"do-not-store-this"}}),
+        serde_json::json!({"type":"token_usage_record","timestamp":now,"payload":{"response_id":"response-1","root_turn_id":"turn-1","usage":{"input_tokens":123,"output_tokens":12}}}),
+    ];
+    std::fs::write(
+        &rollout,
+        rows.iter()
+            .map(serde_json::Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
+    hs(root)
+        .args(["release", &slug, "--worker", worker])
+        .env("HOTSHEET_PROJECT", root)
+        .env("HOTSHEET_WORKER_ID", worker)
+        .env("CODEX_SESSION_ID", session)
+        .env("CODEX_HOME", home)
+        .assert()
+        .success();
+    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+    let events = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].tokens_in, 123);
+    assert_eq!(events[0].tokens_out, 12);
+    assert_eq!(events[0].model.as_deref(), Some("gpt-6-sol"));
+    assert!(events[0].ticket.is_some());
+    assert!(
+        !std::fs::read_to_string(root.join(format!("metrics/raw/{}.jsonl", &now[..10])))
+            .unwrap()
+            .contains("do-not-store-this")
+    );
+}
+
+#[test]
 fn final_testing_phase_keeps_remote_ci_wait_out_of_claim_next() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

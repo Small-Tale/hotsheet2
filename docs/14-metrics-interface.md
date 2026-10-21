@@ -159,8 +159,20 @@ Metrics can be shared across a team **through git** — no server sync needed:
   cannot be attributed by this path. Raw events already recorded without a ticket are not
   retroactively assigned because their work cannot be identified reliably.
   Interactive Claude terminals do not yet report per-turn usage (`HS2-W2GNTT`), and
-  Codex Work sessions outside Hot Sheet drives/terminals need a separate capture path
-  (`HS2-2K2D7E`).
+  Codex Work sessions outside Hot Sheet drives/terminals have a local claim-release
+  capture path (`HS2-2K2D7E`). On CLI or MCP release, it binds this process's exact
+  `CODEX_SESSION_ID`, `HOTSHEET_WORKER_ID`, and project store, verifies the matching
+  rollout metadata, and reads only numeric `token_usage_record` and model-bearing
+  `turn_context` fields. A response is attributed only when its timestamp falls in
+  exactly one unexpired claim interval for that worker; overlapping or unclaimed
+  work remains unassigned. Response IDs deduplicate repeated captures, and an
+  already watched terminal session is skipped. A machine-local, gitignored response-ID
+  checkpoint keeps repeated captures idempotent after raw metrics are pruned. The
+  raw rollout's prompts and tool content are neither copied into metrics nor logged.
+  This local format is observed from installed Codex sessions rather than a stable
+  public export contract, so
+  unrecognized records fail closed. Usage becomes visible after a claim release;
+  historical unattributed raw metrics are never reassigned.
 - **Live-verified + hardened (HS2-CQ6B96):** Codex 0.148 emits per-turn camelCase counts
   under `thread/tokenUsage/updated.params.tokenUsage.last`; `inputTokens` already includes
   its `cachedInputTokens` subset (`totalTokens == inputTokens + outputTokens`), so cached

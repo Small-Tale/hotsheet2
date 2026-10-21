@@ -2217,6 +2217,16 @@ mod core_backend {
                     let force = body.get("force").and_then(Value::as_bool).unwrap_or(false);
                     let released = ops::release(&self.store, &t.id, (self.now)(), &worker, force)
                         .map_err(op_err)?;
+                    if !force && t.claimed_by.as_deref() == Some(worker.as_str()) {
+                        if let Err(error) =
+                            hotsheet_ticketing::metrics::codex_work::capture_current_session(
+                                &self.store,
+                                &worker,
+                            )
+                        {
+                            eprintln!("Codex Work usage capture failed: {error}");
+                        }
+                    }
                     self.api(&released)
                 }
                 "POST" if renew_id(path).is_some() => {

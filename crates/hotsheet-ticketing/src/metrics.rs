@@ -24,6 +24,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::store::{FsStore, StoreError};
 
+pub mod codex_work;
+
 /// Attribute a turn only when these session identities hold exactly one unexpired claim.
 /// Incomplete listings are ambiguous too: a corrupt ticket could hide another claim.
 pub fn active_ticket_for_workers(
