@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_claude_writes_all_three_artifacts() {
+    fn setup_claude_writes_canonical_guidance_native_import_and_integrations() {
         let d = project();
         let reports = setup(d.path(), d.path(), Some("claude"), false).unwrap();
         assert_eq!(reports.len(), 1);
@@ -139,17 +139,20 @@ mod tests {
         let claude_md = read(d.path(), "CLAUDE.md");
         assert!(claude_md.contains("<!-- BEGIN hotsheet:claude -->"));
         assert!(claude_md.contains("<!-- END hotsheet:claude -->"));
-        assert!(claude_md.contains("hotsheet-cli ls --up-next"));
-        assert!(claude_md.contains("Create every follow-up immediately, without asking"));
-        assert!(claude_md.contains("Write portable durable references"));
-        assert!(claude_md.contains("`FEEDBACK NEEDED` is only"));
+        assert!(claude_md.contains("@AGENTS.md"));
+        assert!(!claude_md.contains("hotsheet-cli ls --up-next"));
+        let agents_md = read(d.path(), "AGENTS.md");
+        assert!(agents_md.contains("hotsheet-cli ls --up-next"));
+        assert!(agents_md.contains("Create every follow-up immediately, without asking"));
+        assert!(agents_md.contains("Write portable durable references"));
+        assert!(agents_md.contains("`FEEDBACK NEEDED` is only"));
         // The default guidance must ticket direct-terminal work and carry testing, docs, and
         // commit-hygiene sections while leaving the push decision to each repo (HS2-3JMMAZ).
-        assert!(claude_md.contains("Create tickets by default for real work"));
-        assert!(claude_md.contains("Double coverage"));
-        assert!(claude_md.contains("update them **in the same change as the code**"));
-        assert!(claude_md.contains("commit per ticket"));
-        assert!(claude_md.contains("Pushing is up to this repository"));
+        assert!(agents_md.contains("Create tickets by default for real work"));
+        assert!(agents_md.contains("Double coverage"));
+        assert!(agents_md.contains("update them **in the same change as the code**"));
+        assert!(agents_md.contains("commit per ticket"));
+        assert!(agents_md.contains("Pushing is up to this repository"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
         assert!(skill.contains("name: hotsheet"));
