@@ -314,7 +314,7 @@ pub fn capture_session(
     let watched = format!("codex-work-managed:{session}");
     if existing
         .iter()
-        .any(|event| event.tool == "codex" && event.session.as_deref() == Some(session))
+        .any(|event| event.session.as_deref() == Some(session))
     {
         seen.insert(watched.clone());
     }
