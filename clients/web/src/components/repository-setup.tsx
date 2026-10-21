@@ -11,8 +11,9 @@ import { TextField } from '@kerfjs/ui/text-field';
 import { CircleCheck } from 'lucide';
 
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
+import type { RepositorySetupStep } from '../repository-state';
 
-export type RepositorySetupStep = 'initialize' | 'remote';
+export type { RepositorySetupStep } from '../repository-state';
 
 export function RepositorySetup({
   step = 'initialize',

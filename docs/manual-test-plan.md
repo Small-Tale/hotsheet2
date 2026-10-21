@@ -5,6 +5,11 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Repository setup and paging (HS2-J4WR11)
+
+- In a project folder without Git, open Repository Status at wide and narrow widths. Initialize, enter an unavailable remote, retry with a valid remote, and confirm existing files remain untracked.
+- In a repository with more than one page of changed files or commits, scroll to load the next page. Switch projects while a page loads and check that the old result does not appear. Reset after an empty page and confirm new files appear.
+
 ### WebKit list scroll after ticket mutation (HS2-KTXBK2)
 
 At wide and phone widths, scroll a long ticket list deep into its rows, change a

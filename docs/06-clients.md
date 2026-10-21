@@ -4443,6 +4443,13 @@ untracked, and never stages, commits, or pushes. A second step can add an `origi
 or be skipped; it is idempotent for the same URL and refuses to replace an existing
 origin. Both mutations require the server secret, resolve only a registered checkout,
 and start repository monitoring after initialization succeeds.
+The browser's API-consumer workflow keeps initialization, remote entry validation,
+refresh results, and paged detail state independent of form elements and rendering.
+It discards late responses from an earlier project, permits a new project's request
+while the old one is pending, and resets pagination when the selected project
+changes. The browser adapter reads the remote field, observes the detail scroll
+sentinel, checks popover visibility, and renders the current workflow state
+(HS2-J4WR11). Git rules and the authoritative status remain server-owned.
 The master column uses value cells for branch, upstream, ahead, and behind, followed by
 counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail column
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename

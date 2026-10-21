@@ -112,11 +112,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/popup-menu-state.ts  #   Kerf PopupMenu open state (opener `aria-expanded`) and closing-panel `toggle` detection, replacing Web Awesome dropdown `open`/`wa-hide` (beta.106)
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
+    src/repository-state.ts   #   Pure repository setup/view/detail state contracts shared by workflow and UI
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
-      repository.tsx          # Status/detail paging, stale-response guards, observer, review, and evidence projection
+      repository.tsx          # Repository form/visibility/observer adapter, review, and evidence projection
+      repository-workflow.ts  # API-consumer setup, status, and paging transitions without DOM dependencies
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
       halted-sessions.tsx     # Halt/question prompt acknowledgment, direct Claude question answers and terminal fallback, cross-window persistence, and Open/Dismiss wiring (HS2-E6KAWY/HS2-SWY32A)
       gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces

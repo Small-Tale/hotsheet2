@@ -2,9 +2,8 @@ import { deviceClass } from '@kerfjs/ui/device-class';
 import type { Signal } from 'kerfjs';
 import { computed, signal } from 'kerfjs';
 
-import { Api, type CodeReview, type FullTicket, type RepositoryFile, type RepositoryStatus } from '../api';
+import { Api, type CodeReview, type FullTicket } from '../api';
 import { ChangeEvidenceSurface, RepositoryStatusSurface } from '../components/reader-overlay-surfaces';
-import type { RepositorySetupStep } from '../components/repository-setup';
 import {
   type ChangeEvidenceView,
   DETAIL_SCROLL_OWNER,
@@ -12,7 +11,8 @@ import {
   type RepositoryStatusView,
 } from '../components/repository-status-popover';
 import { type CodeReviewComparison } from '../components/ticket-code-review';
-import type { Project, RepositoryDetailState } from '../interactions/types';
+import type { Project } from '../interactions/types';
+import { createRepositoryWorkflow } from './repository-workflow';
 
 export interface RepositoryDependencies {
   project: () => Project | undefined;
@@ -22,9 +22,18 @@ export interface RepositoryDependencies {
 
 export function createRepositoryController(dependencies: RepositoryDependencies) {
   const { project, selectedTicket, showToast } = dependencies;
-  const repository = signal<RepositoryStatus | null>(null),
-    repositoryError = signal(''),
-    repositoryRefreshing = signal(false);
+  const workflow = createRepositoryWorkflow({ project });
+  const {
+    repository,
+    repositoryError,
+    repositoryRefreshing,
+    repositorySetupStep,
+    repositorySetupBusy,
+    repositorySetupError,
+    repositoryDetail,
+    initializeRepository,
+    loadRepositoryDetail,
+  } = workflow;
   // Compact devices drill from the repository list into the selected view's detail (HS2-3B8345).
   // Read only the compact flag: deviceClass() emits on every viewport resize, and an unchanged
   // class must not re-render the shell (startup stays atomic).
@@ -34,9 +43,6 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
   const repositoryView = signal<RepositoryStatusView>('unstaged'),
     repositoryFileMenu = signal<RepositoryFileMenu | undefined>(undefined),
     repositorySelectedFiles = signal<string[]>([]);
-  const repositorySetupStep = signal<RepositorySetupStep | undefined>(undefined),
-    repositorySetupBusy = signal(false),
-    repositorySetupError = signal('');
   let repositoryFileSelectionAnchor: string | undefined;
   const changeEvidenceView = signal<ChangeEvidenceView>('docs');
   // Which surface owns the change-evidence popover: a ticket-reader frame id when launched from inside
@@ -46,139 +52,28 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
   const repositoryComparison = signal<CodeReviewComparison>({ active: false, side: 'a' }),
     expandedCodeReviewCommits = signal<string[]>([]);
 
-  const repositoryDetail = signal<RepositoryDetailState>({
-    view: 'unstaged',
-    files: [],
-    commits: [],
-    loading: false,
-    loaded: false,
-    error: '',
-  });
-  let repositoryDetailGeneration = 0,
-    repositoryPaginationObserver: IntersectionObserver | undefined;
+  let repositoryPaginationObserver: IntersectionObserver | undefined;
   const codeReview = signal<CodeReview | undefined>(undefined),
     codeReviewLoading = signal(false),
     codeReviewMessage = signal('');
 
   async function refreshRepositoryStatus() {
-    const current = project();
-    if (!current || repositoryRefreshing.value) return;
-    repositoryRefreshing.value = true;
-    try {
-      const status = await new Api(current.apiPath).repositoryStatus(current.id);
-      if (project()?.id === current.id) {
-        repository.value = status;
-        repositoryError.value = '';
-        repositorySetupError.value = '';
-        if (status.initialized === false) repositorySetupStep.value = 'initialize';
-        else if (repositorySetupStep.value !== 'remote') repositorySetupStep.value = undefined;
-        if (status.initialized !== false && document.querySelector('#repository-status-popover:popover-open'))
-          void loadRepositoryDetail(repositoryView.value, true);
-      }
-    } catch (reason) {
-      if (project()?.id === current.id) {
-        repository.value = null;
-        repositoryError.value = reason instanceof Error ? reason.message : String(reason);
-      }
-    } finally {
-      if (project()?.id === current.id) repositoryRefreshing.value = false;
-    }
-  }
-
-  async function initializeRepository() {
-    const current = project();
-    if (!current || repositorySetupBusy.value) return;
-    repositorySetupBusy.value = true;
-    repositorySetupError.value = '';
-    try {
-      const status = await new Api(current.apiPath).initializeRepository(current.id);
-      if (project()?.id !== current.id) return;
-      repository.value = status;
-      repositoryError.value = '';
-      repositorySetupStep.value = 'remote';
-    } catch (reason) {
-      if (project()?.id === current.id)
-        repositorySetupError.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      if (project()?.id === current.id) repositorySetupBusy.value = false;
-    }
+    if ((await workflow.refreshRepositoryStatus()) && document.querySelector('#repository-status-popover:popover-open'))
+      void loadRepositoryDetail(repositoryView.value, true);
   }
 
   async function connectRepositoryRemote(form: HTMLFormElement) {
-    const current = project();
-    if (!current || repositorySetupBusy.value) return;
     const remote = (form.elements.namedItem('repository-remote') as HTMLInputElement | null)?.value.trim() ?? '';
-    if (!remote) {
-      repositorySetupError.value = 'Enter a remote URL.';
-      return;
-    }
-    repositorySetupBusy.value = true;
-    repositorySetupError.value = '';
-    try {
-      const status = await new Api(current.apiPath).configureRepositoryRemote(current.id, remote);
-      if (project()?.id !== current.id) return;
-      repository.value = status;
-      repositoryError.value = '';
-      repositorySetupStep.value = undefined;
+    if (await workflow.connectRepositoryRemote(remote)) {
       showToast('Origin remote added.');
       void loadRepositoryDetail(repositoryView.value, true);
-    } catch (reason) {
-      if (project()?.id === current.id)
-        repositorySetupError.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      if (project()?.id === current.id) repositorySetupBusy.value = false;
     }
   }
 
   function skipRepositoryRemote() {
-    repositorySetupStep.value = undefined;
-    repositorySetupError.value = '';
+    workflow.skipRepositoryRemote();
     showToast('Git initialized without a remote.');
     void loadRepositoryDetail(repositoryView.value, true);
-  }
-
-  async function loadRepositoryDetail(view: RepositoryStatusView, reset = false) {
-    const current = project(),
-      previous = repositoryDetail.value;
-    if (!current) return;
-    if (
-      !reset &&
-      previous.view === view &&
-      (previous.loading || (previous.loaded && previous.nextCursor === undefined))
-    )
-      return;
-    const generation = ++repositoryDetailGeneration,
-      cursor = !reset && previous.view === view ? (previous.nextCursor ?? 0) : 0,
-      base =
-        !reset && previous.view === view
-          ? previous
-          : { view, files: [], commits: [], loading: false, loaded: false, error: '' };
-    repositoryDetail.value = { ...base, view, loading: true, error: '' };
-    try {
-      const page =
-        view === 'commits'
-          ? await new Api(current.apiPath).repositoryCommits(current.id, cursor)
-          : await new Api(current.apiPath).repositoryFiles(current.id, view, cursor);
-      if (generation !== repositoryDetailGeneration || project()?.id !== current.id) return;
-      repositoryDetail.value = {
-        view,
-        files: view === 'commits' ? base.files : [...base.files, ...(page.items as RepositoryFile[])],
-        commits: view === 'commits' ? [...base.commits, ...(page.items as CodeReview['commits'])] : base.commits,
-        nextCursor: page.next_cursor ?? undefined,
-        loading: false,
-        loaded: true,
-        error: '',
-      };
-    } catch (reason) {
-      if (generation !== repositoryDetailGeneration || project()?.id !== current.id) return;
-      repositoryDetail.value = {
-        ...base,
-        view,
-        loading: false,
-        loaded: true,
-        error: reason instanceof Error ? reason.message : String(reason),
-      };
-    }
   }
 
   function syncRepositoryPaginationObserver() {

@@ -11,7 +11,9 @@ const project = {
 test('recovers a project folder without Git and optionally connects origin', async ({ page }) => {
   let initialized = false,
     initBody: string | null | undefined,
-    remoteBody: unknown;
+    remoteBody: unknown,
+    remoteAttempts = 0;
+  const fileCursors: number[] = [];
   await page.route('**/*', (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -43,6 +45,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
     }
     if (path.endsWith('/repository/remote') && request.method() === 'POST') {
       remoteBody = request.postDataJSON();
+      if (++remoteAttempts === 1) return route.fulfill({ status: 503, json: { error: 'Remote unavailable' } });
       return route.fulfill({
         json: {
           initialized: true,
@@ -103,13 +106,23 @@ test('recovers a project folder without Git and optionally connects origin', asy
               truncated: false,
             },
       });
-    if (path.endsWith('/repository/files'))
+    if (path.endsWith('/repository/files')) {
+      const cursor = Number(url.searchParams.get('cursor') ?? 0);
+      fileCursors.push(cursor);
       return route.fulfill({
         json: {
-          items: [{ path: 'existing.txt', unstaged: 'untracked', untracked: true, conflicted: false }],
-          next_cursor: null,
+          items: [
+            {
+              path: cursor === 0 ? 'existing.txt' : 'next-page.txt',
+              unstaged: 'untracked',
+              untracked: true,
+              conflicted: false,
+            },
+          ],
+          next_cursor: cursor === 0 ? 1 : null,
         },
       });
+    }
     if (path.endsWith('/repository/commits')) return route.fulfill({ json: { items: [], next_cursor: null } });
     if (path.endsWith('/tickets'))
       return route.fulfill({
@@ -199,8 +212,14 @@ test('recovers a project folder without Git and optionally connects origin', asy
   expect(initBody).toBeNull();
   await dialog.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/project.git');
   await dialog.getByRole('button', { name: 'Add origin' }).click();
+  await expect(dialog.getByText('Remote unavailable')).toBeVisible();
+  await expect(dialog.locator('[data-step="remote"]')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Add origin' }).click();
   await expect(dialog.locator('[data-step="remote"]')).toHaveCount(0);
   await dialog.getByRole('button', { name: /Untracked 1/ }).click();
   await expect(dialog.getByText('existing.txt')).toBeVisible();
+  await expect(dialog.getByText('next-page.txt')).toBeVisible();
+  expect(fileCursors).toContain(1);
   expect(remoteBody).toEqual({ remote: 'git@example.com:team/project.git' });
+  expect(remoteAttempts).toBe(2);
 });

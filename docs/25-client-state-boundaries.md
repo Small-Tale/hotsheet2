@@ -22,8 +22,14 @@ This is a code inventory as of 2026-10-20, not a proposal to share the server's 
 
 1. Finish `HS2-E9AWV8` first: describe actual HTTP response and change-event envelopes, authority, and version skew. The boundaries above must consume those contracts instead of inventing a second schema.
 2. `HS2-GGJ57M` and `HS2-8SD6XQ` are the highest-risk extractions: optimistic rollback, timer cancellation, partial bulk failure, pending gallery reset, revision conflict, and stacked-reader ownership need multi-step tests. Keep I/O injectable and the existing pure helpers in place.
-3. `HS2-J4WR11` can separate repository setup and page-state transitions while leaving the observer and form in the browser. `HS2-1M05KF` can then extract per-project command draft/save state; test edit during save, switch project, page hide, and a failed save followed by a new edit.
+3. `HS2-J4WR11` separated repository setup and page-state transitions while leaving the observer and form in the browser. `HS2-1M05KF` can then extract per-project command draft/save state; test edit during save, switch project, page hide, and a failed save followed by a new edit.
 4. `HS2-H6RRZN` should consume the stable API/event contracts and use small input/output fixtures for these pure transitions, including reset and stale-response sequences. `HS2-EJ7NWH` should only compare a separate shared reducer after the same fixtures run in web and native prototypes.
+
+`HS2-J4WR11` extracted repository setup, refresh, and paging transitions to
+`clients/web/src/features/repository-workflow.ts`. `repository.tsx` now supplies
+form values, popover visibility, observer callbacks, device state, and rendering.
+The workflow stays an API consumer; the server still decides Git initialization
+and remote configuration outcomes.
 
 ### Shared Rust reducer evaluation (HS2-EJ7NWH, 2026-10-21)
 

@@ -1069,3 +1069,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: Every new feedback request stays open until a regular reply or `No response needed` note names it in `response_to`; unrelated notes and later requests leave it open. Legacy notes keep the prior sequential interpretation. `feedback_for` remains AI thumbs metadata.
 - Unit: Model transition permutations and file round trip; merge of a request and reply from separate branches; provider comment metadata round trip; web state and note action tests.
 - End to end: Server HTTP checkout flow covers two requests, newest answer first, and Needs Review until the older request closes. Browser provider flow covers two pending actions, response and acknowledgement, wide and phone presentation.
+
+### Repository client workflow (HS2-J4WR11)
+
+- Behavior: Repository setup, remote validation/retry, status refresh, and detail paging keep project-owned responses; stale responses cannot replace a new project's state, and empty pages can reset and refill.
+- Unit: `clients/web/src/features/repository-workflow.test.ts` checks setup failure/retry, remote trimming, project-switch request races, and paged empty/refill transitions; `controllers.test.ts` checks the composed browser owner.
+- End to end: `clients/web/tests/repository-setup.spec.ts` exercises initialization, a failed remote request and retry, observer-driven second-page loading, and wide/narrow rendered setup states.
+- Manual: Inspect the wide/narrow setup captures and verify observer-driven paging in a real repository with more than one page.

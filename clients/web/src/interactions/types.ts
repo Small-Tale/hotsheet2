@@ -1,7 +1,8 @@
-import { type CodeReview, type FullTicket, type RepositoryFile } from '../api';
+import { type FullTicket } from '../api';
 import { type CompatibilityAssessment } from '../compatibility';
 import { type AttachmentContextMenuKind } from '../components/attachment-context-menu';
-import { type RepositoryStatusView } from '../components/repository-status-popover';
+
+export type { RepositoryDetailState } from '../repository-state';
 
 export interface UnhealthyServerRecovery {
   store: string;
@@ -38,16 +39,6 @@ export interface Project {
 }
 
 export type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };
-
-export interface RepositoryDetailState {
-  view: RepositoryStatusView;
-  files: RepositoryFile[];
-  commits: CodeReview['commits'];
-  nextCursor?: number;
-  loading: boolean;
-  loaded: boolean;
-  error: string;
-}
 
 export interface NotWorkingTarget {
   projectId: string;

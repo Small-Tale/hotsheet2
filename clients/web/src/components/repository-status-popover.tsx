@@ -52,12 +52,13 @@ import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus
 import { contextMenuAnchor } from '../context-menu-position';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
+import type { RepositoryStatusView } from '../repository-state';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, DiffToolMissingNotice, TicketCodeReview } from './ticket-code-review';
 
 export type RepositoryStatusState =
   'clean' | 'dirty' | 'ahead' | 'behind' | 'diverged' | 'conflicted' | 'uninitialized' | 'error';
-export type RepositoryStatusView = 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'commits';
+export type { RepositoryStatusView } from '../repository-state';
 export type ChangeEvidenceView = 'docs' | 'tests' | 'source' | 'other';
 export interface RepositoryFileMenu {
   path: string;
