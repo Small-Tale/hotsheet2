@@ -1,7 +1,8 @@
 import './permission-rules-settings.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
-import { remify } from '@kerfjs/ui/css-values';
+import { pct, remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -143,7 +144,22 @@ export function PermissionRulesSettings({
               rootAttributes={{ 'data-rule-key': key }}
               density="compact"
               icon={<LucideIcon icon={allowed ? ShieldCheck : ShieldX} name={allowed ? 'shield-check' : 'shield-x'} />}
-              label={rule.tool}
+              multiline
+              label={
+                <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-permission-rule-badges': '' }}>
+                  <Badge size="compact" maxWidth={pct(100)} ariaHidden rootAttributes={{ 'data-rule-tool-badge': '' }}>
+                    {rule.tool}
+                  </Badge>
+                  <Badge
+                    size="compact"
+                    maxWidth={pct(100)}
+                    ariaHidden
+                    rootAttributes={{ 'data-rule-lifetime-badge': '' }}
+                  >
+                    {SCOPE_LABELS[rule.scope]}
+                  </Badge>
+                </Row>
+              }
               description={allowed ? undefined : 'Denied'}
               title={label}
               pressed={selected}
@@ -153,10 +169,7 @@ export function PermissionRulesSettings({
             <div class="permission-rules-settings__details">
               <code data-exact-action>{rule.exact_action ?? 'Action unavailable — revoke and review again'}</code>
               <span>{rule.scope === 'chat' ? `This chat in ${rule.project}` : `All chats in ${rule.project}`}</span>
-              <span>
-                {SCOPE_LABELS[rule.scope]}
-                {matchLabel(rule) && ` · ${matchLabel(rule)}`}
-              </span>
+              {matchLabel(rule) && <span>{matchLabel(rule)}</span>}
               {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
               {rule.exact_action && (
                 <details data-permission-pattern-editor={key}>

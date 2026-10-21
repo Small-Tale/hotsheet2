@@ -15433,7 +15433,7 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
-  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72)`, async ({
+  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE)`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -15469,11 +15469,13 @@ for (const width of [1280, 390]) {
     await expect(row.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
     await expect(row.locator('[data-lucide="shield-check"]')).toBeVisible();
     await expect(row.getByText('Allowed', { exact: true })).toHaveCount(0);
-    await expect(row.getByText('Persistent', { exact: true })).toBeVisible();
+    await expect(row.locator('[data-rule-tool-badge]')).toHaveText('Bash');
+    await expect(row.locator('[data-rule-lifetime-badge]')).toHaveText('Persistent');
+    await expect(row.locator('[data-permission-rule-badges]')).toHaveCSS('flex-wrap', 'wrap');
     await expect(row).not.toContainText('Exact match');
     await expect(row.locator('.kui-list-item__description')).toHaveCount(0);
     await preview.screenshot({
-      path: `target/visual-captures/hs2-2tny72-preview-${width}.png`,
+      path: `target/visual-captures/hs2-r3r7je-preview-${width}.png`,
       animations: 'disabled',
     });
     await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
@@ -15482,7 +15484,72 @@ for (const width of [1280, 390]) {
     await expect(dialog.locator('[data-lucide="shield-check"]')).toBeVisible();
     await expect(dialog.getByText('Allowed', { exact: true })).toHaveCount(0);
     await expect(dialog.locator('[data-permission-rule]')).not.toContainText('Exact match');
-    await dialog.screenshot({ path: `target/visual-captures/hs2-2tny72-dialog-${width}.png`, animations: 'disabled' });
+    await expect(dialog.locator('[data-rule-tool-badge]')).toHaveText('Bash');
+    await expect(dialog.locator('[data-rule-lifetime-badge]')).toHaveText('Persistent');
+    await expect(dialog.locator('[data-permission-rule-badges]')).toHaveCSS('flex-wrap', 'wrap');
+    await dialog.screenshot({ path: `target/visual-captures/hs2-r3r7je-dialog-${width}.png`, animations: 'disabled' });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`wraps remembered tool and lifetime badges without overflowing at ${width}px (HS2-R3R7JE)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await mockProject(page);
+    const tool = 'mcp__very_long_provider_connection__review_the_requested_operation';
+    await page.route('**/permissions/rules', (route) =>
+      route.fulfill({
+        json: (['always', 'session', 'chat'] as const).map((scope, index) => ({
+          project: '/work/demo.hs2',
+          tool,
+          action: rememberedActionKey(`action-${index}`),
+          exact_action: `action-${index}`,
+          decision: 'allow',
+          scope,
+          ...(scope === 'chat' ? { connection: 'chat-a' } : {}),
+        })),
+      }),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSidebar.isVisible()) await showSidebar.click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (await hideSidebar.isVisible()) await hideSidebar.click();
+    const preview = page.locator('[data-component="permission-rules-settings"]');
+    await expect(preview.locator('[data-rule-lifetime-badge]')).toHaveText([
+      'This chat only, until it closes',
+      'Session (until restart)',
+      'Persistent',
+    ]);
+    const checkBounds = async (surface: typeof preview) => {
+      for (const group of await surface.locator('[data-permission-rule-badges]').all()) {
+        await expect(group).toHaveCSS('flex-wrap', 'wrap');
+        expect(await group.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+        await expect(group.locator('[data-rule-tool-badge]')).toHaveAttribute('title', tool);
+      }
+    };
+    await checkBounds(preview);
+    await preview.screenshot({
+      path: `target/visual-captures/hs2-r3r7je-lifetimes-${width}.png`,
+      animations: 'disabled',
+    });
+    await preview.getByRole('button', { name: 'Show all 3 answers', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+    await expect(dialog.locator('[data-rule-lifetime-badge]')).toHaveText(['Persistent']);
+    await checkBounds(dialog);
+    await dialog.locator('[data-action="filter-permission-rule-lifetime"][data-segment-value="session"]').click();
+    await expect(dialog.locator('[data-rule-lifetime-badge]')).toHaveText([
+      'This chat only, until it closes',
+      'Session (until restart)',
+    ]);
+    await checkBounds(dialog);
+    await dialog.screenshot({
+      path: `target/visual-captures/hs2-r3r7je-session-badges-${width}.png`,
+      animations: 'disabled',
+    });
   });
 }
 

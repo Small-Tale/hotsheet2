@@ -317,8 +317,27 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
         expect(markup).not.toContain('Exact match');
         expect(markup).not.toContain('Persistent · </span>');
         expect(markup).toContain('Exact action</option>');
-        if (match_type === 'template') expect(markup).toContain('Persistent · Placeholder match');
-        if (match_type === 'regex') expect(markup).toContain('Persistent · Regex match');
+        if (match_type === 'template') expect(markup).toContain('>Placeholder match<');
+        if (match_type === 'regex') expect(markup).toContain('>Regex match<');
+      }
+    }
+  });
+
+  it('renders tool and every lifetime as flowing noninteractive badges in both surfaces (HS2-R3R7JE)', () => {
+    for (const scope of ['chat', 'session', 'always'] as const) {
+      for (const dialog of [
+        undefined,
+        { query: '', visibleCount: 100, lifetime: scope === 'always' ? ('permanent' as const) : ('session' as const) },
+      ]) {
+        const tool = 'VeryLongToolName'.repeat(10);
+        const markup = String(PermissionRulesSettings({ rules: [{ ...rules[0], tool, scope }], dialog }));
+        expect(markup).toContain('data-permission-rule-badges');
+        expect(markup).toContain('data-wrap="true"');
+        expect(markup).toContain('data-rule-tool-badge');
+        expect(markup).toContain('data-rule-lifetime-badge');
+        expect(markup).toContain(`title="${tool}"`);
+        expect(markup).toContain(`Select ${tool}`);
+        expect(markup).toContain('data-size="compact"');
       }
     }
   });
