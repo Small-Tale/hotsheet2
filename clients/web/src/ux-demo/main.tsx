@@ -27,11 +27,13 @@ import './style.css';
 
 import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
+import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { delegate, mount } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { TERMINAL_VISIBILITY_SCROLL_TARGET } from '../components/terminal-visibility-dialog';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
@@ -66,6 +68,7 @@ const demoListeners = createScope();
 applyDisplayPreferences();
 mount(root, withControlledOpen(root, DemoApp));
 demoListeners.add(wireToolbarVisibility(root));
+demoListeners.add(wireScrollDividers(root, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] }));
 demoListeners.add(wireChoiceChips(root));
 demoListeners.add(wireTextFields(root));
 demoListeners.add(wireWorkspaceToolbarVisibility(root));

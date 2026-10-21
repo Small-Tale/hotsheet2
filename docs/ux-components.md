@@ -2124,12 +2124,13 @@ second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dial
 ListHeader, and ListItem vocabulary. Adding prompts for the name before creation; pill tabs
 select groups and named-tab context menus rename or delete them, while Default has no context
 menu. Rows include both terminals and AI chats with their existing stable visibility keys.
-Three inline Kerf toggle buttons—Terminals, AI Shells, and AI Chats—set the active
-workspace group's persisted type visibility (HS2-1HAFAE). Each off type disappears from
-both the dialog list and dashboard; the item-type controls flow into the workspace rows
-without a separating rule (HS2-KJ7FAX). Hide listed / Show listed change only listed
-rows, with disabled bulk actions when every type is off. Switching groups restores each
-group's type choices, and reopening keeps them. Web Browsers has no control pending
+Three equal-width Kerf toggle buttons—Terminals, AI Shells, and AI Chats—set the active
+workspace group's persisted type visibility (HS2-1HAFAE). The group tabs and type controls
+stay above the list's divider while only the workspace rows scroll (HS2-AEM9P5, HS2-220DT0).
+Each off type disappears from both the dialog list and dashboard. Hide listed / Show listed change only listed
+rows, with disabled bulk actions when every type is off. The footer shows a scroll-state
+divider while more workspace rows remain below the viewport (HS2-ZKD0FZ). Switching groups
+restores each group's type choices, and reopening keeps them. Web Browsers has no control pending
 HS2-7VS6SF. Creation kind is immutable server/broker metadata, with shell
 fallback for legacy payloads (HS2-SE3RVM). An
 adjacent compact label Select switches immediately, while an eye badge reports the active

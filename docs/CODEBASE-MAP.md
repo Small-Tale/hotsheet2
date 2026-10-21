@@ -111,7 +111,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open` (Kerf beta.51) and opens/closes marked Kerf DialogSurface `<dialog>`s with openDialog/closeDialog (beta.106)
     src/popup-menu-state.ts  #   Kerf PopupMenu open state (opener `aria-expanded`) and closing-panel `toggle` detection, replacing Web Awesome dropdown `open`/`wa-hide` (beta.106)
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
-    src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
+    src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration, runtime start, and workspace visibility scroll-divider target (HS2-ZKD0FZ)
     src/repository-state.ts   #   Pure repository setup/view/detail state contracts shared by workflow and UI
     src/gallery-annotation-workflow.ts # Pure gallery annotation session and save transitions (HS2-8SD6XQ)
     src/permission-decision-workflow.ts # Injectable permission inbox, optimistic decision, and reconciliation workflow (HS2-GGJ57M)
@@ -187,6 +187,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/project-tab-bar.tsx + project-strip-actions.tsx + project-summary.tsx # Project-specific Stats keeps its project tab and sidebar summary selected; the global Stats switch is separate. app/runtime.tsx retains Stats across project switches and returns to the last ticket view on repeat selection (HS2-JK3DXP)
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/components/terminal-drawer.tsx # Drawer create action menu uses Kerf PopupMenu placement and keyboard behavior
+    src/components/terminal-visibility-dialog.tsx + terminal-visibility-dialog.css # Workspace visibility group tabs and equal-width type controls stay above one scrolling item list (HS2-AEM9P5, HS2-220DT0)
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
     src/terminal-grid-layout.ts # Pure workspace tile geometry: desktop 1–10-across/1–3-high, independent phone 1–3-across defaulting to one 80×24 card per row, plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root

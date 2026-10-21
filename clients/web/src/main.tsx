@@ -18,6 +18,7 @@ import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 
 import { startHotSheetWebClient } from './app/runtime';
+import { TERMINAL_VISIBILITY_SCROLL_TARGET } from './components/terminal-visibility-dialog';
 import { installDocumentScrollRestore } from './document-scroll-restore';
 
 const { appRoot } = await startHotSheetWebClient();
@@ -25,7 +26,7 @@ const { appRoot } = await startHotSheetWebClient();
 installDocumentScrollRestore(window);
 // Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
 // scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
-void wireScrollDividers(appRoot);
+void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });
 // Opens the corner loading status in the top layer whenever it renders (KF-PZCPHQ, HS2-5C4Y5Q).
 void wireCornerStatus(appRoot);
 // SplitView's documented wiring contract (Repository Status list-detail, HS2-3B8345). Its split is not

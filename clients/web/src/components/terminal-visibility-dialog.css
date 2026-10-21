@@ -1,0 +1,9 @@
+.terminal-visibility-dialog {
+  min-inline-size: 0;
+}
+
+.terminal-visibility-dialog__type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--kui-space-xs);
+}

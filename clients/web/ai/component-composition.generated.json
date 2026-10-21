@@ -5663,14 +5663,15 @@
       "id": "terminal-visibility-dialog",
       "name": "TerminalVisibilityDialog",
       "kind": "component",
-      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
+      "purpose": "Named visibility groups, fixed equal-width type controls, and a scrolling workspace item list.",
       "publicExports": [
         {
           "name": "TerminalVisibilityDialog"
         }
       ],
       "sourceLinks": [
-        "src/components/terminal-visibility-dialog.tsx"
+        "src/components/terminal-visibility-dialog.tsx",
+        "src/components/terminal-visibility-dialog.css"
       ],
       "source": "src/components/terminal-visibility-dialog.tsx",
       "parents": {

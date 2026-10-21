@@ -4854,6 +4854,55 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   await expect(lastTile.locator('.xterm')).toBeVisible();
 });
 
+test('keeps workspace visibility controls fixed with equal type widths and a scroll-state footer (HS2-AEM9P5, HS2-220DT0, HS2-ZKD0FZ)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 730, height: 788 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.route('**/terminals', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: Array.from({ length: 12 }, (_, index) => ({
+            id: `codex-${index}`,
+            kind: 'ai',
+            alive: true,
+            busy: false,
+            cwd: '/work/demo',
+          })),
+        })
+      : route.fallback(),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
+  const dialog = page.locator('[data-terminal-visibility-dialog]');
+  const scroller = dialog.locator('[data-scrollable="true"]');
+  const footer = dialog.locator('#terminal-visibility-footer');
+  const tabs = dialog.getByRole('tablist', { name: 'Terminal Visibility Groups' });
+  const types = dialog.getByRole('group', { name: 'Item Types' }).getByRole('button');
+  await expect(types).toHaveCount(3);
+  const widths = await types.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().width));
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+  const topBefore = (await tabs.boundingBox())!.y;
+  const typesBefore = (await types.first().boundingBox())!.y;
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeGreaterThan(0);
+  await expect(footer).toHaveAttribute('data-scroll-divider', /t/);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkd0fz-visibility-top.png' });
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect((await tabs.boundingBox())!.y).toBeCloseTo(topBefore, 0);
+  expect((await types.first().boundingBox())!.y).toBeCloseTo(typesBefore, 0);
+  await expect(footer).not.toHaveAttribute('data-scroll-divider', /t/);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkd0fz-visibility-scrolled.png' });
+});
+
 for (const theme of ['light', 'dark'] as const) {
   test(`projects Kerf workspace segments through mode transitions in ${theme} (HS2-F29QAT)`, async ({ page }) => {
     await page.setViewportSize({ width: 1728, height: 971 });

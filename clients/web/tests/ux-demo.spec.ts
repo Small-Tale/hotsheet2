@@ -2086,6 +2086,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   // One Kerf ListItem per fixture item (Codex chat, AI, Development server); the dialog no longer
   // composes a ValueTable whose header row made the old count 4.
   await expect(dialog.locator('.terminal-visibility-dialog__rows .kui-list-item')).toHaveCount(3);
+  await expect(dialog.locator('#terminal-visibility-footer')).not.toHaveAttribute('data-scroll-divider', /t/);
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',

@@ -4706,14 +4706,14 @@
       "id": "terminal-visibility-dialog",
       "name": "TerminalVisibilityDialog",
       "kind": "component",
-      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
+      "purpose": "Named visibility groups, fixed equal-width type controls, and a scrolling workspace item list.",
       "source": "src/components/terminal-visibility-dialog.tsx",
       "publicExports": [
         {
           "name": "TerminalVisibilityDialog"
         }
       ],
-      "sourceLinks": ["src/components/terminal-visibility-dialog.tsx"],
+      "sourceLinks": ["src/components/terminal-visibility-dialog.tsx", "src/components/terminal-visibility-dialog.css"],
       "composition": {
         "parents": {
           "mode": "any",
@@ -4761,7 +4761,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter."
+          "Hot Sheet needs named visibility groups, fixed shell/AI/chat type controls, and a scrolling workspace item list."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalVisibilityDialog behavior."],
         "documentation": "../../docs/ux-components.md"

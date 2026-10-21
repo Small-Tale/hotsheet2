@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -47,12 +47,16 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('data-component="list-header"');
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');
   });
-  it('composes Kerf TabBar, List and DialogSurface with no stylesheet (HS2-W68SWJ, HS2-N940N4)', () => {
-    // Kerf's context PopupMenu renders the group menu's anchor (HS2-H4JZDQ), so the dialog owns no CSS at all.
-    expect(existsSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'))).toBe(false);
+  it('keeps type controls above the divider and rows in the filling scroller (HS2-AEM9P5, HS2-220DT0)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8');
+    expect(css).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(css).not.toMatch(/\.kui-/);
     const markup = String(
       TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
     );
+    expect(markup).toContain('terminal-visibility-dialog__type-grid');
+    expect(markup).toMatch(/data-body-layout="fill-last"/);
+    expect(markup).toMatch(/data-visibility-type="chat"[^]*?data-scrollable="true"/);
     expect(markup).toContain('terminal-visibility-dialog__toolbar');
     expect(markup).toContain('data-component="tab-bar"');
     // The Add icon is sized by its LucideIcon prop inside a Kerf ToolbarControlGroup (HS2-YNW0B3).
