@@ -1,7 +1,7 @@
 ---
 name: kerf-app
 description: Build UIs in the kerf reactive framework and its @kerfjs/ui component package (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs` or `@kerfjs/ui`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
-kerf-skill-version: 1.27.0
+kerf-skill-version: 1.28.0
 ---
 
 # Building apps with kerf
@@ -21,8 +21,9 @@ kerf is a ~15 KB reactive UI framework (still ~15 KB with `arraySignal`): signal
   installs the matching AI skill, Kerf ESLint preset, TypeScript settings,
   and `kerf:check`; UI projects also get catalog and doctor checks. Run
   `npm run kerf:check` in the selected package after UI changes, alongside
-  the project's own lint and tests. If setup is intentionally not used,
-  install and configure these checks explicitly before coding; a generic
+  the project's own lint and tests. For package upgrades, follow the
+  `node_modules/@kerfjs/ui/docs/upgrading.md` lockstep checklist. If setup is
+  intentionally not used, install and configure these checks explicitly before coding; a generic
   ESLint preset does not check Kerf contracts.
 - Install: `npm install kerfjs`
 - `tsconfig.json`: `"jsx": "react-jsx"`, `"jsxImportSource": "kerfjs"`
