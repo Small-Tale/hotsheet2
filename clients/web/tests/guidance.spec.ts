@@ -3,7 +3,12 @@ import { expect, test } from '@playwright/test';
 import { openDemoProject } from './mobile-project-fixture';
 
 test('Project guidance reviews a changed source revision before refreshing its pin', async ({ page }) => {
-  await openDemoProject(page);
+  let buildRevision = 'build-a';
+  let hostRevision = 'host-a';
+  await openDemoProject(page, false, 1, undefined, undefined, {
+    buildRevision: () => buildRevision,
+    hostRevision: () => hostRevision,
+  });
   const pinned = '1111111111111111111111111111111111111111';
   const observed = '2222222222222222222222222222222222222222';
   const actions: Array<Record<string, unknown>> = [];
@@ -159,14 +164,36 @@ test('Project guidance reviews a changed source revision before refreshing its p
   if (await hideAgain.isVisible()) await hideAgain.click();
   await expect(picker).toContainText('ai-playbook: source is current');
   expect(updateChecks).toBe(checksBeforeReload);
+  hostRevision = 'host-b';
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showAfterUpgrade = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showAfterUpgrade.isVisible()) await showAfterUpgrade.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const hideAfterUpgrade = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideAfterUpgrade.isVisible()) await hideAfterUpgrade.click();
+  await expect.poll(() => updateChecks).toBe(checksBeforeReload + 1);
+  await expect(picker).toContainText('ai-playbook: source is current');
+  failNextCheck = true;
+  buildRevision = 'build-b';
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showAfterFailedUpgrade = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showAfterFailedUpgrade.isVisible()) await showAfterFailedUpgrade.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const hideAfterFailedUpgrade = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideAfterFailedUpgrade.isVisible()) await hideAfterFailedUpgrade.click();
+  await expect(picker).toContainText('Source Check Failed');
+  await expect(picker).toContainText('Previous results may be stale');
+  await expect(picker).toContainText('ai-playbook: source is current');
+  expect(updateChecks).toBe(checksBeforeReload + 2);
   await picker.getByRole('button', { name: 'Review Pinned Source' }).click();
   await expect(picker.locator('[data-guidance-review]')).toContainText('The source is current.');
-  failNextCheck = true;
   await picker.getByRole('button', { name: 'Check Now' }).click();
   await expect(picker).toContainText('Source Check Failed');
   await expect(picker).toContainText('Previous results may be stale');
   await expect(picker).toContainText('ai-playbook: source is current');
-  expect(updateChecks).toBe(checksBeforeReload + 1);
+  expect(updateChecks).toBe(checksBeforeReload + 3);
   await picker
     .locator('[data-guidance-updates]')
     .screenshot({ path: 'target/visual-captures/guidance-update-stale-phone.png' });

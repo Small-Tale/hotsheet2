@@ -30,6 +30,13 @@ export const project = (id: string, root: string) => ({
   name: root.split('/').at(-1),
   stores: [`${root}.hs2`],
   apiPath: `/__hotsheet/project-api/${id}`,
+  compatibility: {
+    kind: 'compatible',
+    revisionMismatch: false,
+    sourceStale: false,
+    canRestartServer: false,
+    server: { generation: 'hs2', build_revision: 'fixture-build' },
+  },
 });
 export const ticket = (slug: string, status: string, title = slug) => ({
   connection_id: 'git-local',
@@ -75,6 +82,10 @@ export async function openDemoProject(
     /** Start in a folder without a repository, so the setup and remote steps render (HS2-ME1XBC). */
     uninitializedRepository?: boolean;
     bundledGuidanceBlocked?: Array<{ path: string; section: string; installedVersion: number; bundledVersion: number }>;
+    /** Simulates the running server build across app reopen and upgrade. */
+    buildRevision?: () => string;
+    /** Simulates the selected client host build. */
+    hostRevision?: () => string;
   } = {},
 ) {
   let repositoryInitialized = false;
@@ -87,6 +98,18 @@ export async function openDemoProject(
         status: 201,
         json: {
           ...project('demo-checkout', request.postDataJSON().root as string),
+          ...(populated.buildRevision || populated.hostRevision
+            ? {
+                compatibility: {
+                  kind: 'compatible',
+                  revisionMismatch: false,
+                  sourceStale: false,
+                  canRestartServer: false,
+                  ...(populated.hostRevision ? { clientRevision: populated.hostRevision() } : {}),
+                  server: { generation: 'hs2', build_revision: populated.buildRevision?.() ?? 'fixture-build' },
+                },
+              }
+            : {}),
           ...(populated.bundledGuidanceBlocked ? { bundledGuidanceBlocked: populated.bundledGuidanceBlocked } : {}),
         },
       });

@@ -131,6 +131,11 @@ import { createWorkspaceSearchController, type SidebarSearchCounts } from '../fe
 import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
+import {
+  guidanceUpdateBuildIdentity,
+  type GuidanceUpdateCacheEntry,
+  guidanceUpdateCacheIsFresh,
+} from '../guidance-update-cache';
 import { projectHaltedSessions } from '../halted-sessions';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
@@ -1371,12 +1376,10 @@ export async function startHotSheetWebClient() {
     if (!current) return;
     const generation = ++guidanceUpdateGeneration;
     const key = `hotsheet:guidance-updates:${current.id}`;
+    const buildIdentity = guidanceUpdateBuildIdentity(current.compatibility);
     if (!force) {
       try {
-        const cached = JSON.parse(localStorage.getItem(key) ?? 'null') as {
-          checkedAt?: number;
-          updates?: unknown;
-        } | null;
+        const cached = JSON.parse(localStorage.getItem(key) ?? 'null') as GuidanceUpdateCacheEntry | null;
         if (
           typeof cached?.checkedAt === 'number' &&
           Number.isFinite(cached.checkedAt) &&
@@ -1385,7 +1388,7 @@ export async function startHotSheetWebClient() {
         ) {
           guidanceUpdates.value = parseGuidanceSourceUpdates(cached.updates);
           guidanceUpdatesCheckedAt.value = cached.checkedAt;
-          if (Date.now() - cached.checkedAt < 86_400_000) {
+          if (guidanceUpdateCacheIsFresh(cached, buildIdentity, Date.now())) {
             guidanceUpdatesLoading.value = false;
             guidanceUpdatesError.value = '';
             return;
@@ -1404,7 +1407,7 @@ export async function startHotSheetWebClient() {
       guidanceUpdates.value = updates;
       guidanceUpdatesCheckedAt.value = checkedAt;
       try {
-        localStorage.setItem(key, JSON.stringify({ checkedAt, updates }));
+        localStorage.setItem(key, JSON.stringify({ checkedAt, buildIdentity, updates }));
       } catch {
         /* optional cache */
       }
