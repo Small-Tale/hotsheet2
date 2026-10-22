@@ -240,6 +240,60 @@ selected source skills. The five bundled Hot Sheet rules remain the offline defa
 until an explicit source selection; installed tool workflow instructions remain
 managed by tool setup.
 
+**Project guidance recommendations (HS2-EECHKV design).** A project may ask Hot Sheet
+to suggest which available rules and skills fit its codebase, both during first
+setup and later as the project changes. This is a review layer over the existing
+pin → select → apply workflow, not another instruction writer. The first version
+uses the bundled guidance and the exact snapshots of sources already registered
+for the project. A recommendation may suggest registering another source, but
+must not fetch, trust, or install it without the existing source-review step.
+
+The headless recommendation scan and the Settings review use the same project
+service. The scan records bounded, explainable signals such as recognized manifest
+names, declared languages and frameworks, configured AI tools, guidance owner,
+selected and installed rule versions, and the pinned source commits. It never
+executes project code or follows a link outside the checkout. It does not send
+file contents, environment values, credentials, or untracked private files to an
+AI service. An optional AI interview can ask a small number of specific questions
+when those signals cannot settle a recommendation (for example, whether a
+framework is actively used or only present as a transitive dependency). Show the
+exact context that would leave the machine and obtain an explicit choice before
+sending it. With that choice, AI may rank and explain available candidates and
+ask those questions; it cannot introduce an unverified rule body. The local scan
+remains usable without AI or network access.
+
+Each recommendation identifies the source and pinned version, evidence, expected
+benefit, possible conflict with current guidance, and whether it is already
+selected or installed. The user can accept or dismiss individual suggestions,
+including only part of a set. Accepting changes selection; applying still uses
+the current explicit `guidance apply` operation and its local-edit protection.
+Neither an AI answer nor a re-evaluation may replace a pin, change the guidance
+owner, rewrite instructions, or undo a deliberate selection. A project with no
+registered source retains its bundled default guidance and can review a separate
+source-registration proposal; no empty-source state should imply that external
+guidance was trusted or that a bundled rule is individually selectable.
+
+Re-evaluation is read-only on Project guidance entry or an explicit headless/UI
+check, with a bounded cache and no timer-based network polling. Compare a stable
+fingerprint of relevant project signals, source pins and versions, and prior
+decisions. Show a “New guidance recommendations are available” notice only when
+the candidate set or a candidate's evidence materially changes since the last
+review. Record accepted and dismissed decisions by stable source/rule identity,
+version, and evidence fingerprint so reopening the tab does not repeat a rejected
+pitch; a changed version or changed evidence can be offered again with a clear
+reason. The notice opens a diff of new, changed, and withdrawn suggestions and
+allows partial acceptance or dismissal. Withdrawal never removes installed
+guidance automatically. Keep the review record separate from the source lock and
+avoid storing raw project-file content in it.
+
+The headless path needs JSON output for the evidence, questions, decision state,
+and review diff, plus explicit commands to record decisions and apply selected
+guidance. The Settings path must expose the same states and reasons, including
+offline/unknown results, without making the AI interview a setup requirement.
+Cover first setup, no source, multiple pinned sources, conflicting rules, manual
+selection overrides, accepted/rejected/partially accepted sets, evidence changes,
+version changes, stale scans, and restart before shipping recommendations.
+
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only
