@@ -47,6 +47,14 @@ test('real git source produces an offline bundle, detects drift, and restores it
         fs.mkdirSync(path.dirname(path.join(bundle, destination)), { recursive: true });
       return { name, path: `rules/${name}.md`, version: 1, sha256: createHash('sha256').update(body).digest('hex') };
     });
+    const extraBody = '<!-- hotsheet:begin section=project-bootstrap v=1 -->\n\nAn optional rule.\n';
+    fs.writeFileSync(path.join(source, 'rules/project-bootstrap.md'), `---\nroot: true\n---\n\n${extraBody}`);
+    rules.push({
+      name: 'project-bootstrap',
+      path: 'rules/project-bootstrap.md',
+      version: 1,
+      sha256: createHash('sha256').update(extraBody).digest('hex'),
+    });
     fs.writeFileSync(path.join(source, 'rules-manifest.json'), JSON.stringify({ schema_version: 1, rules }));
     const git = (...args) =>
       execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -58,6 +66,7 @@ test('real git source produces an offline bundle, detects drift, and restores it
     main(args, bundle);
     const lock = JSON.parse(fs.readFileSync(path.join(bundle, 'guidance/ai-playbook.lock.json')));
     assert.equal(lock.repository, repository);
+    assert.deepEqual(lock.rules.map(({ name }) => name), Object.keys(destinations));
     main(['--check'], bundle);
     main(['--check', '--source', source], bundle);
     // An uncommitted source edit cannot change what the pinned revision supplies.

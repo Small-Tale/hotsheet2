@@ -1,32 +1,32 @@
 {
   "schema_version": 1,
   "repository": "https://github.com/Small-Tale/ai-playbook.git",
-  "commit": "fcb8556bef14a9dfdaf8cc53f8b36dfb13d9a36a",
-  "release": "v1.1.0",
+  "commit": "7cb9499a655a15213666d684a6659db43f840acf",
+  "release": "v1.2.0",
   "rules": [
     {
       "name": "hotsheet-ticket-driven-work",
       "path": "rules/hotsheet-ticket-driven-work.md",
-      "version": 5,
-      "sha256": "9f0e1f2e77d2bfaaa259b099c065a115b4368e57e6a2a27821eb99e8f8c3194b"
+      "version": 6,
+      "sha256": "603b3f5622d10a6f73ae36114ecfd46948a977e0619c418d133e93085bde11bc"
     },
     {
       "name": "hotsheet-testing-philosophy",
       "path": "rules/hotsheet-testing-philosophy.md",
-      "version": 5,
-      "sha256": "b3a4ff6eb51a03f9ce7c99917ea7d270b3978747393964969c96cc50ddd92014"
+      "version": 6,
+      "sha256": "c8058266c2a7412c6b3039fd8b107903911f99e06b25af8a41bc2f277c16ef17"
     },
     {
       "name": "hotsheet-requirements-documentation",
       "path": "rules/hotsheet-requirements-documentation.md",
-      "version": 3,
-      "sha256": "298c143a24b54aae73e7d77a0e3439574cedf50f5d126524cac565e90ed4bdc0"
+      "version": 4,
+      "sha256": "8c23cfcd093e51e194e73ef2a6e2c808b55a60766ab08e4946e84d6867120daf"
     },
     {
       "name": "hotsheet-visual-qa",
       "path": "rules/hotsheet-visual-qa.md",
-      "version": 1,
-      "sha256": "4ba873dcb396b6ef07232a3cb23a10d7d85a6cd0c25c7e9a0a534a745e646762"
+      "version": 2,
+      "sha256": "cd6422466ecbe6b99bcca1aa1c86a11797d7411e97632c323ed39041075ec9d6"
     },
     {
       "name": "hotsheet-workflow",

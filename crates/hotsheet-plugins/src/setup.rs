@@ -1537,6 +1537,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
         legacy: &[
             include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v4.md"),
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v5.md"),
         ],
     },
     GuidanceSection {
@@ -1546,6 +1547,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v3.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v4.md"),
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v5.md"),
         ],
     },
     GuidanceSection {
@@ -1554,12 +1556,15 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
         legacy: &[
             include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
             include_str!("../../../plugins/shared/legacy-requirements-documentation-v2.md"),
+            include_str!("../../../plugins/shared/legacy-requirements-documentation-v3.md"),
         ],
     },
     GuidanceSection {
         name: "visual-qa",
         current: include_str!("../../../plugins/shared/visual-qa.md"),
-        legacy: &[],
+        legacy: &[include_str!(
+            "../../../plugins/shared/legacy-visual-qa-v1.md"
+        )],
     },
 ];
 
@@ -3478,6 +3483,42 @@ args = ["--path", "{{store}}"]
             with_specifics
         );
         assert!(!codex_project.path().join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn latest_bundled_guidance_snapshots_upgrade_without_losing_local_edits() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("codex"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let path = project.path().join("AGENTS.md");
+        let mut contents = std::fs::read_to_string(&path).unwrap();
+        for section in GUIDANCE_SECTIONS {
+            let previous = section.legacy.last().expect("new snapshot has prior body");
+            contents = contents.replace(section.current.trim(), previous.trim());
+        }
+        contents.push_str("\nLocal policy remains.\n");
+        std::fs::write(&path, contents).unwrap();
+
+        let enabled = HashSet::from(["codex".to_string()]);
+        refresh_setup_in(store.path(), project.path(), Some(&enabled), &[]).unwrap();
+        let refreshed = std::fs::read_to_string(&path).unwrap();
+        for section in GUIDANCE_SECTIONS {
+            assert!(
+                refreshed.contains(section.current.trim()),
+                "{} did not upgrade",
+                section.name
+            );
+            assert!(!refreshed.contains(section.legacy.last().unwrap().trim()));
+        }
+        assert!(refreshed.contains("Local policy remains."));
     }
 
     #[test]

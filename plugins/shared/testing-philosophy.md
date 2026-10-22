@@ -1,4 +1,4 @@
-<!-- hotsheet:begin section=testing-philosophy v=5 -->
+<!-- hotsheet:begin section=testing-philosophy v=6 -->
 
 ## Testing Philosophy
 
@@ -9,5 +9,7 @@
 - Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
 - Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
 - Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
+- When a reviewer corrects a convention, pin it in the same change as a source-level policy test or lint rule named with the ticket slug; prose alone does not hold.
+- Verify on the rebuilt instance and reproduce the user's actual steps or command before claiming a fix; never test against the user's running host or a stale build. Isolation, build-once, and flake policy live in the `test-operations` rule when a project installs it.
 
 <!-- hotsheet:end section=testing-philosophy -->

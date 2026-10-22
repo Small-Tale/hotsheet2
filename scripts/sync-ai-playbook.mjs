@@ -58,12 +58,14 @@ export function readSource(source, commit, release) {
   if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('Use a full immutable source commit SHA');
   const manifest = JSON.parse(git(source, 'show', `${commit}:rules-manifest.json`));
   if (manifest.schema_version !== 1) throw new Error('Unsupported upstream rule manifest');
-  const rules = manifest.rules.map(({ name, path: rulePath, version, sha256 }) => ({
-    name,
-    path: rulePath,
-    version,
-    sha256,
-  }));
+  const rules = manifest.rules
+    .filter(({ name }) => Object.hasOwn(destinations, name))
+    .map(({ name, path: rulePath, version, sha256 }) => ({
+      name,
+      path: rulePath,
+      version,
+      sha256,
+    }));
   const lock = { schema_version: 1, repository, commit, release, rules };
   validateLock(lock);
   const bodies = new Map();
