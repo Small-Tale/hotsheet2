@@ -411,6 +411,31 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.dispose();
   });
 
+  it('copies selected exact actions in newest-first order across preview and dialog (HS2-PMZG5Y)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    const rules = ['first', 'second', 'third'].map((action) => ({
+      project: '/work/a',
+      tool: 'Bash',
+      action,
+      exact_action: action,
+      decision: 'allow',
+      scope: 'always',
+    }));
+    fetchMock.mockResolvedValue(json(rules));
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const keys = rules.map(permissionRuleKey);
+    owner.selectPermissionRuleRow('a', keys[0], { toggle: false, range: false }, 'preview');
+    owner.selectPermissionRuleRow('a', keys[2], { toggle: true, range: false }, 'preview');
+    expect(owner.permissionRuleActionsToCopy('a', 'preview')).toBe('third\nfirst');
+    expect(owner.permissionRuleActionsToCopy('a', 'preview', keys[1])).toBe('second');
+    owner.openPermissionRules('a');
+    expect(owner.permissionRuleActionsToCopy('a', 'dialog')).toBe('third\nfirst');
+    owner.clearPermissionRuleSelection('a');
+    expect(owner.permissionRuleActionsToCopy('a', 'dialog')).toBe('');
+    owner.dispose();
+  });
+
   it('keeps action expansion independent of selection and resets it across surfaces/projects (HS2-Y8FYVY)', async () => {
     const owner = createPermissionsController({
       projects: signal([project('a'), project('b')]),

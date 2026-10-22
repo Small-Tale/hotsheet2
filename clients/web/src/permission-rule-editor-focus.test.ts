@@ -66,6 +66,18 @@ it('restores the logical opener after rendering replaces its node, in the correc
   expect(dialog.focus).not.toHaveBeenCalled();
 });
 
+it('restores focus to the row after editing from its transient context-menu item', () => {
+  const f = fixture(),
+    row = f.opener('same'),
+    menuItem = f.opener('same');
+  f.nodes([row]);
+  f.remember(menuItem);
+  menuItem.isConnected = false;
+  f.focus.restore();
+  f.flush();
+  expect(row.focus).toHaveBeenCalledWith({ preventScroll: true });
+});
+
 it('returns to the current row position after a saved matcher changes identity and skips disabled targets', () => {
   const f = fixture(),
     first = f.opener('first'),

@@ -910,8 +910,8 @@ test('wires the dedicated reviewed-match editor in both demo parents (HS2-400WZZ
   const opener = example
     .locator('[data-permission-rule-scope="always"]')
     .first()
-    .getByRole('button', { name: 'Edit Match', exact: true });
-  await opener.click();
+    .locator('[data-action="select-permission-rule-row"]');
+  await opener.dblclick();
   const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
   const exact = await editor.getByRole('textbox', { name: 'Exact Action', exact: true }).inputValue();
   await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
@@ -923,14 +923,14 @@ test('wires the dedicated reviewed-match editor in both demo parents (HS2-400WZZ
   await expect(opener).toBeFocused();
   await example.getByRole('button', { name: 'Show all 6 answers' }).click();
   const list = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
-  await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+  await list.locator('[data-action="select-permission-rule-row"]').first().dblclick();
   await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
   const expression = exact.replace('npm run lint', 'npm run {{token}}');
   await editor.getByLabel('Pattern for Bash').fill(expression);
   await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(list).toContainText(expression);
-  await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+  await list.locator('[data-action="select-permission-rule-row"]').first().dblclick();
   await expect(editor.getByRole('button', { name: 'Placeholders', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -939,6 +939,65 @@ test('wires the dedicated reviewed-match editor in both demo parents (HS2-400WZZ
   await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(list.locator('[data-permission-pattern]')).toHaveCount(0);
+});
+
+test('offers remembered-answer row and selected actions in preview and dialog (HS2-PMZG5Y)', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  const preview = example.getByRole('list', { name: 'Recent Remembered Answers' });
+  const rows = preview.locator('[data-permission-rule]');
+  const firstAction = await rows.nth(0).locator('[data-exact-action]').innerText();
+  const secondAction = await rows.nth(1).locator('[data-exact-action]').innerText();
+  await rows.nth(0).click({ button: 'right' });
+  await expect(rows.nth(0)).toHaveAttribute('data-rule-selected', 'true');
+  await page.screenshot({ path: 'target/visual-captures/hs2-pmzg5y-preview-wide.png', animations: 'disabled' });
+  await page.getByRole('menuitem', { name: 'Copy Exact Action' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(firstAction);
+  await rows.nth(0).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit Match' }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+  await expect(editor).toBeVisible();
+  await editor.getByRole('button', { name: 'Cancel' }).click();
+  await rows.nth(0).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  const previewConfirmation = example.getByRole('group', { name: 'Confirm preview deletion' });
+  await expect(previewConfirmation.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
+  await previewConfirmation.getByRole('button', { name: 'Cancel' }).click();
+  await rows
+    .nth(1)
+    .locator('[data-action="select-permission-rule-row"]')
+    .click({
+      modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'],
+    });
+  const previewMenu = example.locator('[data-permission-bulk-menu][data-permission-selection-surface="preview"]');
+  await previewMenu.getByRole('button', { name: 'Selected Answer Actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Edit Match' })).toBeDisabled();
+  await page.getByRole('menuitem', { name: 'Copy Selected Actions' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${firstAction}\n${secondAction}`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await rows.nth(0).evaluate((element) => element.scrollIntoView({ block: 'start' }));
+  await rows.nth(0).click({ button: 'right' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pmzg5y-preview-narrow.png', animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+  const dialogRow = dialog.locator('[data-permission-rule]').first();
+  await dialogRow.click({ button: 'right' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pmzg5y-dialog-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialogRow.click({ button: 'right' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pmzg5y-dialog-narrow.png', animations: 'disabled' });
+  await page.getByRole('menuitem', { name: 'Edit Match' }).click();
+  await expect(editor).toBeVisible();
+  await editor.getByRole('button', { name: 'Cancel' }).click();
+  await dialogRow.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete Selected' }).click();
+  const dialogConfirmation = dialog.getByRole('group', { name: 'Confirm bulk deletion' });
+  await expect(dialogConfirmation.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
+  await dialogConfirmation.getByRole('button', { name: 'Cancel' }).click();
 });
 
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {

@@ -84,6 +84,7 @@ export interface NotificationAndLinkInteractionsDependencies {
     surface?: 'preview' | 'dialog',
   ) => void;
   readonly selectVisiblePermissionRules: (projectId: string, surface?: 'preview' | 'dialog') => void;
+  readonly permissionRuleActionsToCopy: (projectId: string, surface: 'preview' | 'dialog', key?: string) => string;
   readonly clearPermissionRuleSelection: (projectId: string, surface?: 'preview' | 'dialog') => void;
   readonly requestDeleteSelectedPermissionRules: (
     projectId: string,
@@ -139,6 +140,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     selectPermissionRuleRow,
     togglePermissionRuleAction,
     selectVisiblePermissionRules,
+    permissionRuleActionsToCopy,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,
     applySelectedPermissionRules,
@@ -385,7 +387,11 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       'click',
       NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.selector,
       (_event, target) => {
-        const action = target.closest('[data-permission-rule]')?.querySelector('[data-exact-action]')?.textContent;
+        const action = permissionRuleActionsToCopy(
+          selectedProjectId.value,
+          permissionSelectionSurface(target),
+          data(target).ruleKey,
+        );
         if (action)
           void navigator.clipboard.writeText(action).catch(() => {
             error.value = 'Could not copy the action.';
@@ -394,12 +400,43 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ),
   );
   lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.copySelectedPermissionRuleActions.selector,
+      (_event, target) => {
+        const actions = permissionRuleActionsToCopy(selectedProjectId.value, permissionSelectionSurface(target));
+        if (actions)
+          void navigator.clipboard.writeText(actions).catch(() => {
+            error.value = 'Could not copy the selected actions.';
+          });
+      },
+    ),
+  );
+  lifetime.add(
     delegate(document.body, 'contextmenu', '[data-permission-rule]', (event, target) => {
-      const menu = target.querySelector<HTMLElement>('[data-permission-rule-menu]');
-      if (!menu || target.getAttribute('data-rule-disabled') === 'true') return;
+      if (target.getAttribute('data-rule-disabled') === 'true') return;
+      const key = target.getAttribute('data-permission-rule');
+      if (!key) return;
       event.preventDefault();
       const pointer = event as MouseEvent;
-      openPopupMenuAt(menu, pointer.clientX, pointer.clientY);
+      if (target.getAttribute('data-rule-selected') !== 'true')
+        selectPermissionRuleRow(
+          selectedProjectId.value,
+          key,
+          { toggle: false, range: false },
+          permissionSelectionSurface(target),
+        );
+      const { clientX, clientY } = pointer;
+      queueMicrotask(() => {
+        const row = [...document.querySelectorAll<HTMLElement>('[data-permission-rule]')].find(
+          (item) =>
+            item.getAttribute('data-permission-rule') === key &&
+            permissionSelectionSurface(item) === permissionSelectionSurface(target),
+        );
+        const menu = row?.querySelector<HTMLElement>('[data-permission-rule-menu]');
+        if (menu) openPopupMenuAt(menu, clientX, clientY);
+      });
     }),
   );
   lifetime.add(
@@ -415,8 +452,37 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
           ?.querySelector<HTMLElement>('[data-permission-rule-menu]');
         if (!menu) return;
         event.preventDefault();
+        const row = target.closest<HTMLElement>('[data-permission-rule]');
+        const key = row?.getAttribute('data-permission-rule');
+        if (key && row && row.getAttribute('data-rule-selected') !== 'true')
+          selectPermissionRuleRow(
+            selectedProjectId.value,
+            key,
+            { toggle: false, range: false },
+            permissionSelectionSurface(row),
+          );
         const rect = target.getBoundingClientRect();
-        openPopupMenuAt(menu, rect.left + 20, rect.top + 20);
+        const surface = permissionSelectionSurface(row ?? target);
+        queueMicrotask(() => {
+          const current = [...document.querySelectorAll<HTMLElement>('[data-permission-rule]')].find(
+            (item) => item.getAttribute('data-permission-rule') === key && permissionSelectionSurface(item) === surface,
+          );
+          const currentMenu = current?.querySelector<HTMLElement>('[data-permission-rule-menu]');
+          if (currentMenu) openPopupMenuAt(currentMenu, rect.left + 20, rect.top + 20);
+        });
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'dblclick',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (!key) return;
+        permissionRuleEditorFocus.remember(target as HTMLElement);
+        openPermissionRuleEditor(selectedProjectId.value, key);
       },
     ),
   );

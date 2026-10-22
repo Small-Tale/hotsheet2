@@ -2284,10 +2284,13 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   AI-session wording (HS2-AT46VG). The decision shield and accessible row name retain Allow status
   without redundant visible copy (HS2-R3R7JE, HS2-0HKES8).
   A Kerf dialog searches displayed action/context and loads the complete list in 100-row
-  batches, with lifetime/decision filters. Users can select across batches, edit decisions
-  or project-rule lifetimes, review match patterns in a dedicated controlled dialog with
-  server validation, retained failed drafts, and busy-close protection (HS2-400WZZ), copy
-  exact actions, or confirm deletion;
+  batches, with lifetime/decision filters. Users can select across batches; the row context
+  menu and selected-actions toolbar menu expose Copy, Edit Match, and confirmed Delete in
+  both preview and dialog. Copy joins selected exact actions in newest-first order. Edit Match
+  is available for one selected answer; double-clicking a row opens the same dedicated
+  controlled dialog with server validation, retained failed drafts, and busy-close
+  protection (HS2-400WZZ, HS2-PMZG5Y). Selected actions also edit decisions or project-rule
+  lifetimes;
   failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5).
   Keyed fingerprints remain internal edit/revoke identities. The displayed rules aggregate
   matching checkout and linked-store namespaces; that does not make each approval

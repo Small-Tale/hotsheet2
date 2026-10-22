@@ -2754,7 +2754,8 @@ decision, lifetime, and exact match label so each rule is independently reviewab
 duplicate result-count line is absent (HS2-CA5MSD).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
 its leading icon slot. Each row shows its exact action, tool, project/chat reach, decision,
-lifetime, and match type, with a Copy button and inline match editor. A patterned row shows
+lifetime, and match type. Copy, Edit Match, and Delete live in the row context menu; double-click
+opens the editor. A patterned row shows
 its reviewed expression; a person can replace it or restore exact matching. An action that cannot be decrypted shows
 an unavailable state so it can be revoked and reviewed on its next request. The permission
 prompt keeps the real command readable; choosing a remembered scope opens a separate review
@@ -2767,10 +2768,13 @@ Command/Ctrl-click toggles a row, Shift-click extends from the last visible anch
 Command/Ctrl-A while focused in a list adds its visible rows. Search and filter changes keep
 selected keys but reset the range anchor; Load more extends the rows eligible for select-all.
 Show all opens the dialog at any nonzero answer count and carries preview selection into it.
-Each surface has one bordered toolbar ellipsis menu for the selected rows, with Allow,
-Disallow, Delete, and project-wide duration changes; chat-only answers have no duration
-change. Per-row overflow, trash, and duration buttons are absent (HS2-1Q8EF7,
-HS2-ZVP9CB, HS2-X4ES6Z, HS2-QFWSEF).
+Each surface has one bordered toolbar ellipsis menu for the selected rows, with Copy,
+Edit Match for one selected row, Allow, Disallow, Delete, and project-wide duration changes.
+Copy joins selected exact actions in newest-first order; Delete confirms the whole selection.
+Right-clicking an unselected row selects it first, while right-clicking an already selected row
+keeps the multi-selection. Chat-only answers have no duration change. Inline overflow, trash,
+and duration buttons are absent (HS2-1Q8EF7, HS2-ZVP9CB, HS2-X4ES6Z, HS2-QFWSEF,
+HS2-PMZG5Y).
 Denied answers have a distinct background in both views; selection and keyboard focus remain
 visible over that background (HS2-7Q3K4P). Its search field has
 an accessible name and a Filter placeholder without a separate visible label

@@ -9,17 +9,19 @@ export function createPermissionRuleEditorFocus(root: ParentNode, context: () =>
   const surfaceFor = (node: Element) =>
     node.closest('[data-permission-selection-surface]')?.getAttribute('data-permission-selection-surface') ?? 'preview';
   const openers = (surface: string) =>
-    [...root.querySelectorAll<HTMLElement>(NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.selector)].filter(
+    [...root.querySelectorAll<HTMLElement>(NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector)].filter(
       (node) => surfaceFor(node) === surface,
     );
   return {
     remember(node: HTMLElement) {
       const surface = surfaceFor(node);
+      const key = node.getAttribute('data-rule-key') ?? '';
+      const row = openers(surface).find((candidate) => candidate.getAttribute('data-rule-key') === key) ?? node;
       origin = {
-        node,
-        key: node.getAttribute('data-rule-key') ?? '',
+        node: row,
+        key,
         surface,
-        index: Math.max(0, openers(surface).indexOf(node)),
+        index: Math.max(0, openers(surface).indexOf(row)),
         context: context(),
       };
     },

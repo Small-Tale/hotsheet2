@@ -534,6 +534,17 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
   }
 
+  function permissionRuleActionsToCopy(projectId: string, surface: 'preview' | 'dialog', key?: string) {
+    const state = surface === 'preview' ? permissionRulesPreview.value : permissionRulesDialog.value;
+    if (state?.projectId !== projectId && !key) return '';
+    const selected = new Set(key ? [key] : (state?.selected ?? []));
+    return permissionRulesList(permissionRulesByProject.value[projectId] ?? [], '', PERMISSION_RULE_BATCH_SIZE)
+      .matches.filter((rule) => selected.has(permissionRuleKey(rule)))
+      .map((rule) => rule.exact_action)
+      .filter((action): action is string => Boolean(action))
+      .join('\n');
+  }
+
   function clearPermissionRuleSelection(projectId: string, surface: 'preview' | 'dialog' = 'dialog') {
     if (surface === 'preview') {
       const current = permissionRulesPreview.value;
@@ -882,6 +893,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     selectPermissionRuleRow,
     togglePermissionRuleAction,
     selectVisiblePermissionRules,
+    permissionRuleActionsToCopy,
     clearPermissionRuleSelection,
     requestDeleteSelectedPermissionRules,
     applySelectedPermissionRules,

@@ -15,6 +15,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   resolvePermission: action('resolve-permission'),
   cancelRememberedPermission: action('cancel-remembered-permission'),
   copyPermissionRuleAction: action('copy-permission-rule-action'),
+  copySelectedPermissionRuleActions: action('copy-selected-permission-rule-actions'),
   revokePermissionRule: action('revoke-permission-rule'),
   changePermissionRuleDecision: action('change-permission-rule-decision'),
   changePermissionRuleScope: action('change-permission-rule-scope'),

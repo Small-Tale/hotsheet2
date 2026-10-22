@@ -15,7 +15,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Copy, Ellipsis, ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { Clock3, Copy, Ellipsis, Pencil, Pin, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -138,6 +138,33 @@ export function PermissionRulesSettings({
     previewSelected = new Set(preview?.selected ?? []),
     selectedCount = rules.filter((rule) => dialogSelected.has(permissionRuleKey(rule))).length,
     previewSelectedCount = rules.filter((rule) => previewSelected.has(permissionRuleKey(rule))).length;
+  function rowActions(rule: PermissionRule, key: string, surface: 'preview' | 'dialog'): PopupMenuEntry[] {
+    const attributes = { 'data-rule-key': key, 'data-permission-selection-surface': surface };
+    return [
+      {
+        label: 'Copy Exact Action',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.value,
+        icon: <LucideIcon icon={Copy} name="copy" />,
+        disabled: !rule.exact_action,
+        attributes,
+      },
+      {
+        label: 'Edit Match',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.value,
+        icon: <LucideIcon icon={Pencil} name="pencil" />,
+        disabled: !rule.exact_action,
+        attributes,
+      },
+      { kind: 'divider' },
+      {
+        label: 'Delete Selected',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value,
+        icon: <LucideIcon icon={Trash2} name="trash-2" />,
+        tone: 'danger',
+        attributes,
+      },
+    ];
+  }
   function ruleRows(items: readonly PermissionRule[], surface: 'preview' | 'dialog') {
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
@@ -216,59 +243,65 @@ export function PermissionRulesSettings({
                 </Row>
               )}
               {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
-              {rule.exact_action && (
-                <Row gap="xs">
-                  <Button
-                    emphasis="plain"
-                    size="compact"
-                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.value}
-                    rootAttributes={{ 'data-rule-key': key }}
-                    disabled={busy || revoking.includes(key)}
-                  >
-                    Edit Match
-                  </Button>
-                </Row>
-              )}
             </div>
           </div>
-          {rule.exact_action && (
-            <Button
-              emphasis="plain"
-              size="compact"
-              action={NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.value}
-              rootAttributes={{ 'data-rule-key': key }}
-              icon={<LucideIcon icon={Copy} name="copy" />}
-              ariaLabel={`Copy Exact Action for ${rule.tool}`}
-            >
-              Copy
-            </Button>
-          )}
+          <PopupMenu
+            context
+            label={`Actions for ${rule.tool}`}
+            rootAttributes={{ 'data-permission-rule-menu': '', 'data-permission-selection-surface': surface }}
+            items={rowActions(rule, key, surface)}
+          />
         </div>
       );
     });
   }
   function selectedActions(surface: 'preview' | 'dialog', count: number, busy = false) {
+    const selected = surface === 'preview' ? previewSelected : dialogSelected;
+    const selectedRules = ordered.filter((rule) => selected.has(permissionRuleKey(rule)));
+    const copyable = selectedRules.some((rule) => rule.exact_action);
+    const singleKey =
+      selectedRules.length === 1 && selectedRules[0].exact_action ? permissionRuleKey(selectedRules[0]) : undefined;
+    const attributes = { 'data-permission-selection-surface': surface };
     const items: PopupMenuEntry[] = [
+      {
+        label: 'Copy Selected Actions',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.copySelectedPermissionRuleActions.value,
+        icon: <LucideIcon icon={Copy} name="copy" />,
+        disabled: !copyable,
+        attributes,
+      },
+      {
+        label: 'Edit Match',
+        action: NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.value,
+        icon: <LucideIcon icon={Pencil} name="pencil" />,
+        disabled: !singleKey,
+        attributes: { ...attributes, 'data-rule-key': singleKey ?? '' },
+      },
+      { kind: 'divider' },
       {
         label: 'Allow Selected',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
-        attributes: { 'data-decision': 'allow' },
+        icon: <LucideIcon icon={ShieldCheck} name="shield-check" />,
+        attributes: { ...attributes, 'data-decision': 'allow' },
       },
       {
         label: 'Deny Selected',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
-        attributes: { 'data-decision': 'deny' },
+        icon: <LucideIcon icon={ShieldX} name="shield-x" />,
+        attributes: { ...attributes, 'data-decision': 'deny' },
       },
       { kind: 'divider' },
       {
         label: 'Remember Until Hot Sheet Restarts',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
-        attributes: { 'data-scope': 'session' },
+        icon: <LucideIcon icon={Clock3} name="clock-3" />,
+        attributes: { ...attributes, 'data-scope': 'session' },
       },
       {
         label: 'Set Selected to Persistent',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
-        attributes: { 'data-scope': 'always' },
+        icon: <LucideIcon icon={Pin} name="pin" />,
+        attributes: { ...attributes, 'data-scope': 'always' },
       },
       { kind: 'divider' },
       {
@@ -276,6 +309,7 @@ export function PermissionRulesSettings({
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value,
         tone: 'danger',
         icon: <LucideIcon icon={Trash2} name="trash-2" />,
+        attributes,
       },
     ];
     return (

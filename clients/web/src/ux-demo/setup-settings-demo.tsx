@@ -1,6 +1,7 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
+import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { attr, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -621,6 +622,105 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
             busy: false,
           };
         }
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'dblclick',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).getAttribute('data-rule-key');
+        const rule = permissionRulesDemoRules.value.find((item) => permissionRuleKey(item) === key);
+        if (!rule?.exact_action || !key) return;
+        editorFocus.remember(target as HTMLElement);
+        permissionRulesDemoEditor.value = {
+          ruleKey: key,
+          kind: rule.pattern?.kind ?? 'exact',
+          expression: rule.pattern?.expression ?? rule.exact_action,
+          busy: false,
+        };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'contextmenu', '[data-demo-permission-rules] [data-permission-rule]', (event, target) => {
+      if (target.getAttribute('data-rule-disabled') === 'true') return;
+      const key = target.getAttribute('data-permission-rule');
+      if (!key) return;
+      event.preventDefault();
+      if (target.getAttribute('data-rule-selected') !== 'true')
+        updateDemoSelection(target, (state) => ({ ...state, selected: [key], selectionAnchor: key }));
+      const { clientX, clientY } = event as MouseEvent;
+      queueMicrotask(() => {
+        const row = [...root.querySelectorAll<HTMLElement>('[data-demo-permission-rules] [data-permission-rule]')].find(
+          (item) =>
+            item.getAttribute('data-permission-rule') === key &&
+            demoSelectionIsPreview(item) === demoSelectionIsPreview(target),
+        );
+        const menu = row?.querySelector<HTMLElement>('[data-permission-rule-menu]');
+        if (menu) openPopupMenuAt(menu, clientX, clientY);
+      });
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'keydown',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRuleRow.selector}`,
+      (event, target) => {
+        const keyboard = event as KeyboardEvent;
+        if (keyboard.key !== 'ContextMenu' && !(keyboard.shiftKey && keyboard.key === 'F10')) return;
+        const row = target.closest<HTMLElement>('[data-permission-rule]');
+        const key = row?.getAttribute('data-permission-rule');
+        if (!row || !key) return;
+        event.preventDefault();
+        if (row.getAttribute('data-rule-selected') !== 'true')
+          updateDemoSelection(row, (state) => ({ ...state, selected: [key], selectionAnchor: key }));
+        const rect = target.getBoundingClientRect();
+        queueMicrotask(() => {
+          const current = [
+            ...root.querySelectorAll<HTMLElement>('[data-demo-permission-rules] [data-permission-rule]'),
+          ].find(
+            (item) =>
+              item.getAttribute('data-permission-rule') === key &&
+              demoSelectionIsPreview(item) === demoSelectionIsPreview(row),
+          );
+          const menu = current?.querySelector<HTMLElement>('[data-permission-rule-menu]');
+          if (menu) openPopupMenuAt(menu, rect.left + 20, rect.top + 20);
+        });
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.copyPermissionRuleAction.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).getAttribute('data-rule-key');
+        const action = permissionRulesDemoRules.value.find((item) => permissionRuleKey(item) === key)?.exact_action;
+        if (action) void navigator.clipboard.writeText(action);
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.copySelectedPermissionRuleActions.selector}`,
+      (_event, target) => {
+        const state = demoSelectionIsPreview(target)
+          ? permissionRulesDemoPreview.value
+          : permissionRulesDemoDialog.value;
+        const selected = new Set(state?.selected ?? []);
+        const actions = permissionRulesList(permissionRulesDemoRules.value, '', PERMISSION_RULE_BATCH_SIZE)
+          .matches.filter((item) => selected.has(permissionRuleKey(item)))
+          .map((item) => item.exact_action)
+          .filter((action): action is string => Boolean(action))
+          .join('\n');
+        if (actions) void navigator.clipboard.writeText(actions);
       },
     ),
   );

@@ -15404,7 +15404,8 @@ test('answers identical permission requests for this chat and revokes the rememb
   await expect(row.getByText('Exact match', { exact: true })).toHaveCount(0);
   await expect(row).not.toContainText('Details hidden');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  await row.getByRole('button', { name: 'Copy Exact Action for Bash' }).click();
+  await row.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy Exact Action' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(secretAction);
   await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
@@ -15509,7 +15510,9 @@ for (const width of [1280, 390]) {
     await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
     await expect(dialog.locator('[data-action="select-permission-rule-row"]')).toHaveAccessibleName(/; allowed$/);
-    await expect(dialog.locator('[data-lucide="shield-check"]')).toBeVisible();
+    await expect(
+      dialog.locator('[data-action="select-permission-rule-row"] [data-lucide="shield-check"]'),
+    ).toBeVisible();
     await expect(dialog.getByText('Allowed', { exact: true })).toHaveCount(0);
     await expect(dialog.locator('[data-permission-rule]')).not.toContainText('Exact match');
     await expect(dialog.locator('[data-rule-tool-badge]')).toHaveText('Bash');
@@ -15532,7 +15535,7 @@ for (const width of [1280, 390]) {
     await dialog.getByRole('button', { name: 'Collapse action', exact: true }).click();
     await expect(dialogTitle).toHaveAttribute('data-max-lines', '2');
     if (width === 1280) await page.setViewportSize({ width: 1401, height: 1630 });
-    await dialog.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await dialog.locator('[data-action="select-permission-rule-row"]').first().dblclick();
     const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
     await expect(editor.getByRole('textbox', { name: 'Exact Action', exact: true })).toHaveValue(action);
     await editor.screenshot({
@@ -15799,9 +15802,9 @@ for (const width of [1280, 390]) {
     const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
     if (await hideSidebar.isVisible()) await hideSidebar.click();
     const preview = page.locator('[data-component="permission-rules-settings"]');
-    const edit = preview.getByRole('button', { name: 'Edit Match', exact: true });
+    const edit = preview.locator('[data-action="select-permission-rule-row"]').first();
     const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
-    await edit.click();
+    await edit.dblclick();
     await expect(editor.getByRole('textbox', { name: 'Exact Action', exact: true })).toHaveValue(action);
     await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
     await editor.getByLabel('Pattern for Bash').fill('npm test --token={{token}}');
@@ -15813,7 +15816,7 @@ for (const width of [1280, 390]) {
     await expect(editor).toHaveCount(0);
     await expect(edit).toBeFocused();
     expect(edits).toHaveLength(0);
-    await edit.click();
+    await edit.dblclick();
     await expect(editor.getByRole('button', { name: 'Exact Action', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -15847,7 +15850,7 @@ for (const width of [1280, 390]) {
     await expect(preview).toContainText('^npm test --token=[A-Za-z]{1,64}$');
     await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
     const list = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
-    await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await list.locator('[data-action="select-permission-rule-row"]').first().dblclick();
     await expect(editor.getByLabel('Pattern for Bash')).toHaveValue('^npm test --token=[A-Za-z]{1,64}$');
     await editor.screenshot({
       path: `target/visual-captures/hs2-400wzz-full-list-${width}.png`,
@@ -15861,7 +15864,7 @@ for (const width of [1280, 390]) {
     expect(edits[2].pattern).toBe('exact');
     expect(rule.decision).toBe('allow');
     expect(rule.scope).toBe('always');
-    await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await list.locator('[data-action="select-permission-rule-row"]').first().dblclick();
     await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
     await editor.getByLabel('Pattern for Bash').fill('npm test --token={{token}}');
     await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
@@ -15905,7 +15908,7 @@ test('validates and applies the dedicated match editor through a real permission
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Permissions', exact: true }).click();
     const preview = page.locator('[data-component="permission-rules-settings"]');
-    await preview.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await preview.locator('[data-action="select-permission-rule-row"]').first().dblclick();
     const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
     await editor.getByRole('button', { name: 'Regex', exact: true }).click();
     await editor.getByLabel('Pattern for Bash').fill('.*');
@@ -15929,7 +15932,7 @@ test('validates and applies the dedicated match editor through a real permission
       action: "curl -H 'Bearer second word' https://site.test",
     });
     expect(repeat).toEqual({ decision: 'allow' });
-    await preview.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await preview.locator('[data-action="select-permission-rule-row"]').first().dblclick();
     await editor.getByRole('button', { name: 'Exact Action', exact: true }).click();
     await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
     await expect(editor).toHaveCount(0);
@@ -16010,7 +16013,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   await expect(remembered).toContainText("curl -H 'Bearer {{token}}' https://site.test");
-  await remembered.getByRole('button', { name: 'Edit Match', exact: true }).first().click();
+  await remembered.locator('[data-action="select-permission-rule-row"]').first().dblclick();
   const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
   await editor.screenshot({ path: 'target/visual-captures/hs2-400wzz-existing-flow-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -16019,7 +16022,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await page.waitForTimeout(350);
-  await remembered.getByRole('button', { name: 'Edit Match', exact: true }).first().click();
+  await remembered.locator('[data-action="select-permission-rule-row"]').first().dblclick();
   await editor.screenshot({ path: 'target/visual-captures/hs2-400wzz-existing-flow-phone.png' });
   await editor.getByRole('button', { name: 'Regex', exact: true }).click();
   await editor.getByLabel('Pattern for Bash').fill("^curl -H 'Bearer [A-Za-z]{1,64}' https://site\\.test$");
@@ -16477,7 +16480,7 @@ test('uses selected-answer toolbar menus for decisions, duration, and deletion (
     previewMenu = page
       .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
       .getByRole('button', { name: 'Selected Answer Actions' });
-  await expect(row.locator('[data-permission-rule-menu]')).toHaveCount(0);
+  await expect(row.locator('[data-permission-rule-menu]')).toHaveCount(1);
   await expect(previewMenu).toBeDisabled();
   await row.locator('[data-action="select-permission-rule-row"]').click();
   await previewMenu.click();
@@ -16567,7 +16570,7 @@ test('applies the one selected-answer menu to multiple preview and dialog rows (
     preview = settings.getByRole('list', { name: 'Recent Remembered Answers' }),
     previewRows = preview.locator('[data-action="select-permission-rule-row"]'),
     previewMenu = settings.locator('[data-permission-bulk-menu][data-permission-selection-surface="preview"]');
-  await expect(preview.locator('[data-permission-rule-menu]')).toHaveCount(0);
+  await expect(preview.locator('[data-permission-rule-menu]')).toHaveCount(3);
   await expect(previewMenu.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
   await previewRows.nth(0).click();
   await previewRows.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });

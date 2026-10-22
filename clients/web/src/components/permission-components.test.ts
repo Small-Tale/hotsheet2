@@ -278,7 +278,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     expect(markup).toMatch(/data-component="list-header"[^]*<h3[^>]*>[^]*Remembered Answers/u);
     expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
     expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(3);
-    expect(markup).not.toContain('data-permission-rule-menu=');
+    expect(markup.match(/data-permission-rule-menu=/g)).toHaveLength(3);
     expect(markup).toContain('data-permission-selection-surface="preview"');
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).not.toContain('aria-label="Revoke');
@@ -647,7 +647,7 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(remembered).not.toContain('Allow This AI Session');
     expect(remembered).not.toContain('Review the rule to remember');
   });
-  it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
+  it('lists remembered rules with their scope and row actions, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));
     expect(empty).toContain('No Remembered Answers');
     const first = `hmac-sha256:v2:${'a'.repeat(16)}:${'a'.repeat(56)}12345678`,
@@ -684,7 +684,10 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).not.toContain('This project, always');
     expect(markup).toContain('rm -rf build');
     expect(markup.match(/data-action="select-permission-rule-row"/g)).toHaveLength(2);
-    expect(markup).not.toContain('data-permission-rule-menu=');
+    expect(markup.match(/data-permission-rule-menu=/g)).toHaveLength(2);
+    expect(markup).toContain('Copy Exact Action');
+    expect(markup).toContain('Edit Match');
+    expect(markup).toContain('Copy Selected Actions');
     expect(markup).toContain('Remember Until Hot Sheet Restarts');
     expect(markup).toContain('Delete Selected');
     expect(markup).toContain('Selected Answer Actions');
