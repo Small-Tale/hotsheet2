@@ -468,6 +468,7 @@ pub struct PermissionBridge {
     queue: VecDeque<Request>,
     rules: Vec<Rule>,
     action_key: ActionKey,
+    project_action_keys: HashMap<String, ActionKey>,
 }
 
 impl Default for PermissionBridge {
@@ -477,6 +478,7 @@ impl Default for PermissionBridge {
             queue: VecDeque::new(),
             rules: Vec::new(),
             action_key: fresh_action_key().expect("secure randomness for permission rules"),
+            project_action_keys: HashMap::new(),
         }
     }
 }
@@ -499,8 +501,20 @@ impl PermissionBridge {
     /// pending; old in-memory rules were created under another key and are cleared.
     pub fn set_action_key_and_rules(&mut self, key: ActionKey, rules: Vec<Rule>) {
         self.action_key = key;
+        self.project_action_keys.clear();
         self.rules.clear();
         self.set_rules(rules);
+    }
+
+    /// A checkout vault uses its own key, independently of legacy store vaults.
+    pub fn set_project_action_key(&mut self, project: impl Into<String>, key: ActionKey) {
+        self.project_action_keys.insert(project.into(), key);
+    }
+
+    fn action_key_for_project(&self, project: &str) -> &ActionKey {
+        self.project_action_keys
+            .get(project)
+            .unwrap_or(&self.action_key)
     }
 
     /// Replace only durable rules after a vault recovers. Session and chat answers
@@ -562,7 +576,7 @@ impl PermissionBridge {
             &connection,
             &tool,
             &action,
-            &self.action_key,
+            self.action_key_for_project(&project),
         ) {
             return Outcome::Auto(rule.decision);
         }
@@ -605,14 +619,13 @@ impl PermissionBridge {
         self.rules = rules
             .into_iter()
             .filter_map(|mut rule| {
-                if rule.exact_action.is_none()
-                    && !is_action_fingerprint(&rule.action, &self.action_key)
-                {
+                let key = self.action_key_for_project(&rule.project);
+                if rule.exact_action.is_none() && !is_action_fingerprint(&rule.action, key) {
                     rule.exact_action = Some(rule.action.clone());
                 }
                 // A fingerprint without its authenticated plaintext cannot be reviewed.
                 rule.exact_action.as_ref()?;
-                rule.action = stored_action_key(&rule.action, &self.action_key)?;
+                rule.action = stored_action_key(&rule.action, key)?;
                 rule.description = rule
                     .description
                     .filter(|value| valid_rule_description(&rule.tool, value));
@@ -631,10 +644,11 @@ impl PermissionBridge {
         tool: &str,
         action: &str,
     ) -> Option<Rule> {
+        let key = *self.action_key_for_project(project);
         let position = self.rules.iter().position(|rule| {
             rule.project == project
                 && rule.tool == tool
-                && (rule.matches(project, tool, action, &self.action_key) || rule.action == action)
+                && (rule.matches(project, tool, action, &key) || rule.action == action)
                 && rule.connection.as_deref() == connection
         })?;
         Some(self.rules.remove(position))
@@ -742,7 +756,7 @@ impl PermissionBridge {
             project: request.project.clone(),
             tool: request.tool.clone(),
             action: action_fingerprint(
-                &self.action_key,
+                self.action_key_for_project(&request.project),
                 &pattern
                     .as_ref()
                     .map_or_else(|| request.action.clone(), PatternSpec::identity),
@@ -765,6 +779,8 @@ impl PermissionBridge {
         self.rules.retain(|existing| !existing.same_key(&rule));
         self.rules.push(rule);
         let rules = &self.rules;
+        let action_key = self.action_key;
+        let project_action_keys = &self.project_action_keys;
         let (answered, waiting): (Vec<Request>, Vec<Request>) =
             self.queue.drain(..).partition(|queued| {
                 effective_rule(
@@ -773,7 +789,9 @@ impl PermissionBridge {
                     &queued.connection,
                     &queued.tool,
                     &queued.action,
-                    &self.action_key,
+                    project_action_keys
+                        .get(&queued.project)
+                        .unwrap_or(&action_key),
                 )
                 .is_some()
             });
@@ -787,7 +805,7 @@ impl PermissionBridge {
                     &queued.connection,
                     &queued.tool,
                     &queued.action,
-                    &self.action_key,
+                    self.action_key_for_project(&queued.project),
                 )
                 .expect("partitioned by a matching rule")
                 .decision;
@@ -938,8 +956,28 @@ impl SharedPermissionBridge {
             if rule.exact_action.is_none() {
                 continue;
             }
-            if let Some(action) = stored_action_key(&rule.action, &bridge.action_key) {
+            if let Some(action) =
+                stored_action_key(&rule.action, bridge.action_key_for_project(&rule.project))
+            {
                 rule.action = action;
+                bridge.rules.push(rule);
+            }
+        }
+    }
+
+    /// Register a separately encrypted checkout vault before loading its rules.
+    pub fn add_project_rules(&self, project: impl Into<String>, key: ActionKey, rules: Vec<Rule>) {
+        let project = project.into();
+        let mut bridge = self.inner.lock_or_recover();
+        bridge.set_project_action_key(project.clone(), key);
+        bridge
+            .rules
+            .retain(|rule| rule.project != project || !rule.persist);
+        for rule in rules {
+            if rule.project != project || rule.exact_action.is_none() {
+                continue;
+            }
+            if is_action_fingerprint(&rule.action, &key) {
                 bridge.rules.push(rule);
             }
         }
@@ -1345,12 +1383,12 @@ impl SharedPermissionBridge {
         durable_path: Option<&Path>,
     ) -> io::Result<Option<Rule>> {
         let mut bridge = self.inner.lock_or_recover();
+        let key = *bridge.action_key_for_project(project);
         let Some(current) = bridge.rules.iter().find(|rule| {
             rule.project == project
                 && rule.connection.as_deref() == connection
                 && rule.tool == tool
-                && (rule.action == action
-                    || rule.matches(project, tool, action, &bridge.action_key))
+                && (rule.action == action || rule.matches(project, tool, action, &key))
         }) else {
             return Ok(None);
         };
@@ -1434,7 +1472,8 @@ impl SharedPermissionBridge {
         let key_material = pattern
             .as_ref()
             .map_or_else(|| original.to_owned(), PatternSpec::identity);
-        let next_action = action_fingerprint(&bridge.action_key, &key_material);
+        let key = *bridge.action_key_for_project(project);
+        let next_action = action_fingerprint(&key, &key_material);
         if bridge.rules.iter().enumerate().any(|(position, rule)| {
             position != index
                 && rule.project == project
@@ -1456,8 +1495,7 @@ impl SharedPermissionBridge {
                     .find(|rule| {
                         rule.project == project
                             && rule.tool == tool
-                            && action_fingerprint(&bridge.action_key, &rule.key_material())
-                                == action
+                            && action_fingerprint(&key, &rule.key_material()) == action
                     })
                     .ok_or_else(|| {
                         io::Error::new(io::ErrorKind::NotFound, "durable permission rule missing")
@@ -1704,6 +1742,15 @@ pub fn rules_health(path: &Path) -> io::Result<()> {
     crate::permission_vault::load(path).map(|_| ())
 }
 
+/// Materialize an authenticated empty vault before allowing a checkout's durable rules.
+/// A missing file after registration must fail closed instead of looking like no rules.
+pub fn ensure_rules_file(path: &Path) -> io::Result<()> {
+    if path.is_file() {
+        return rules_health(path);
+    }
+    crate::permission_vault::mutate(path, |_| Ok(()))
+}
+
 /// Remove a durable rule for `(project, tool, action)` from `path` (HS2-JNHAYB revoke).
 /// Returns whether one was removed; a missing file removes nothing.
 pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std::io::Result<bool> {
@@ -1787,6 +1834,57 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn checkout_vaults_keep_shared_store_permissions_isolated_after_reload() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy_path = dir.path().join("store.json");
+        let first_path = dir.path().join("checkout-one.json");
+        let second_path = dir.path().join("checkout-two.json");
+        let rule = |project: &str, action: &str| Rule {
+            project: project.into(),
+            tool: "Bash".into(),
+            action: action.into(),
+            exact_action: Some(action.into()),
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist: true,
+            connection: None,
+        };
+        ensure_rules_file(&legacy_path).unwrap();
+        ensure_rules_file(&first_path).unwrap();
+        ensure_rules_file(&second_path).unwrap();
+        append_rule(&legacy_path, &rule("/shared/store", "legacy")).unwrap();
+        append_rule(&first_path, &rule("checkout:one", "one-only")).unwrap();
+        append_rule(&second_path, &rule("checkout:two", "two-only")).unwrap();
+
+        let (legacy_key, legacy) = load_rules_with_key(&legacy_path).unwrap();
+        let (first_key, first) = load_rules_with_key(&first_path).unwrap();
+        let (second_key, second) = load_rules_with_key(&second_path).unwrap();
+        assert_ne!(first_key, second_key);
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        bridge.reseed_rules_with_key(legacy_key, legacy);
+        bridge.add_project_rules("checkout:one", first_key, first);
+        bridge.add_project_rules("checkout:two", second_key, second);
+        let mut rules = bridge.inner.lock_or_recover();
+        assert!(matches!(
+            rules.request_for_project("checkout:one", "c", "Bash", "one-only"),
+            Outcome::Auto(Decision::Allow)
+        ));
+        assert!(matches!(
+            rules.request_for_project("checkout:two", "c", "Bash", "two-only"),
+            Outcome::Auto(Decision::Allow)
+        ));
+        assert!(matches!(
+            rules.request_for_project("checkout:two", "c", "Bash", "one-only"),
+            Outcome::Pending(_)
+        ));
+        assert!(matches!(
+            rules.request_for_project("checkout:one", "c", "Bash", "legacy"),
+            Outcome::Pending(_)
+        ));
+    }
 
     #[test]
     fn reviewed_pattern_is_scoped_and_exact_rule_takes_precedence() {

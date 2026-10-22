@@ -267,6 +267,10 @@ fn drive_one_ticket(
             format!("HOTSHEET_SERVER={url}"),
             format!("HOTSHEET_SECRET={secret}"),
             format!("HOTSHEET_PROJECT={}", store.root().display()),
+            format!(
+                "HOTSHEET_PERMISSION_PROJECT=unregistered:{}",
+                store.root().display()
+            ),
         ],
         None => Vec::new(),
     };

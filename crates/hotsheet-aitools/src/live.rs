@@ -178,9 +178,16 @@ pub fn run_trigger_controlled(
             // workspace-write whatever the policy.
             app.set_approval_policy(t.permission_mode.as_deref());
             if let Some(bridge) = &t.permission_bridge {
+                let permission_project = t
+                    .env
+                    .iter()
+                    .find_map(|(name, value)| {
+                        (name == "HOTSHEET_PERMISSION_PROJECT").then_some(value.as_str())
+                    })
+                    .unwrap_or_else(|| t.cwd.to_str().unwrap_or_default());
                 app.set_permission_policy(crate::codex::PermissionPolicy {
                     bridge: bridge.clone(),
-                    project: t.cwd.display().to_string(),
+                    project: permission_project.to_string(),
                     connection: t.conn_id.clone(),
                     default: crate::permission::Decision::Deny,
                     timeout: crate::permission::DEFAULT_PERMISSION_TIMEOUT,

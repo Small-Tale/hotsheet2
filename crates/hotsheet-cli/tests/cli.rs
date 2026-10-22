@@ -3408,7 +3408,7 @@ fn launch_discovers_the_linked_store_and_injects_the_running_server() {
     let agent = root.path().join("fake-agent");
     std::fs::write(
         &agent,
-        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\"\n",
+        "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\" \"$HOTSHEET_PERMISSION_PROJECT\"\n",
     )
     .unwrap();
     std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -3458,13 +3458,25 @@ command = "hotsheet-cli permission-hook"
     .unwrap();
 
     let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
-    command
+    let output = command
         .current_dir(&nested)
         .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "hello"])
         .assert()
         .success()
-        .stdout("http://127.0.0.1:4567|route-back|hello\n");
+        .get_output()
+        .stdout
+        .clone();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let identity = registry
+        .resolve(project.to_str().unwrap())
+        .unwrap()
+        .permission_identity();
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        format!("http://127.0.0.1:4567|route-back|hello|{identity}\n")
+    );
     assert!(project.join(".fake/settings.json").is_file());
     assert!(
         !nested.join(".fake/settings.json").is_file(),
@@ -3491,15 +3503,23 @@ command = "hotsheet-cli permission-hook"
     )
     .unwrap();
     let mut adjacent = Command::cargo_bin("hotsheet-cli").unwrap();
-    adjacent
+    let output = adjacent
         .current_dir(&adjacent_project)
         .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "adjacent"])
         .assert()
         .success()
-        .stdout("http://127.0.0.1:4567|route-back|adjacent\n");
-    let registry =
-        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+        .get_output()
+        .stdout
+        .clone();
+    let adjacent_identity = registry
+        .resolve(adjacent_project.to_str().unwrap())
+        .unwrap()
+        .permission_identity();
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        format!("http://127.0.0.1:4567|route-back|adjacent|{adjacent_identity}\n")
+    );
     assert_eq!(
         registry
             .resolve(adjacent_project.to_str().unwrap())
@@ -3539,13 +3559,23 @@ command = "hotsheet-cli permission-hook"
     )
     .unwrap();
     let mut registered = Command::cargo_bin("hotsheet-cli").unwrap();
-    registered
+    let output = registered
         .current_dir(&registered_project)
         .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "registered"])
         .assert()
         .success()
-        .stdout("http://127.0.0.1:4567|route-back|registered\n");
+        .get_output()
+        .stdout
+        .clone();
+    let registered_identity = registry
+        .resolve(registered_project.to_str().unwrap())
+        .unwrap()
+        .permission_identity();
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        format!("http://127.0.0.1:4567|route-back|registered|{registered_identity}\n")
+    );
 
     let created_project = root.path().join("created");
     let created_store = root
@@ -3565,7 +3595,7 @@ command = "hotsheet-cli permission-hook"
     )
     .unwrap();
     let mut created = Command::cargo_bin("hotsheet-cli").unwrap();
-    created
+    let output = created
         .current_dir(&created_project)
         .env("HOTSHEET_HOME", &home)
         .args([
@@ -3578,7 +3608,17 @@ command = "hotsheet-cli permission-hook"
         ])
         .assert()
         .success()
-        .stdout("http://127.0.0.1:4567|route-back|created\n");
+        .get_output()
+        .stdout
+        .clone();
+    let created_identity = registry
+        .resolve(created_project.to_str().unwrap())
+        .unwrap()
+        .permission_identity();
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        format!("http://127.0.0.1:4567|route-back|created|{created_identity}\n")
+    );
     assert!(created_store.join("hotsheet-store.json").is_file());
 }
 

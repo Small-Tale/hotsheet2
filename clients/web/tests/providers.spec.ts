@@ -15449,7 +15449,7 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
-  test(`omits redundant Allowed text in remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY)`, async ({
+  test(`omits redundant Allowed text in checkout-owned remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY, HS2-G1SG1P)`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -15459,7 +15459,7 @@ for (const width of [1280, 390]) {
       route.fulfill({
         json: [
           {
-            project: '/work/demo.hs2',
+            project: `checkout:${project.id}`,
             tool: 'Bash',
             action: rememberedActionKey(action),
             exact_action: action,

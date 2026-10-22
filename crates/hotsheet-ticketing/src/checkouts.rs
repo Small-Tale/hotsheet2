@@ -88,6 +88,12 @@ impl TicketSource {
 }
 
 impl Checkout {
+    /// Authorization namespace for this registered code project. The prefix prevents a
+    /// legacy ticket-store path from ever matching a checkout rule by coincidence.
+    pub fn permission_identity(&self) -> String {
+        format!("checkout:{}", self.id)
+    }
+
     pub fn source(&self, connection_id: &str) -> Option<&TicketSource> {
         self.sources
             .iter()

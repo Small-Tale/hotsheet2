@@ -1141,3 +1141,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-ticketing/src/metrics/codex_work.rs` covers claim switches, ambiguous overlap, duplicate capture, unknown session metadata, model propagation, and omission of unrelated transcript content.
 - End to end: `crates/hotsheet-cli/tests/cli.rs` releases a real claim against a sanitized local rollout and checks stored numeric events; `crates/hotsheet-server/tests/http.rs` covers the ticket usage API that the Timeline reads, and `clients/web/tests/ticket-timeline-usage.spec.ts` covers the rendered breakdown.
 - Manual: `docs/manual-test-plan.md` exercises a live Codex Work session, unclaimed and overlapping turns, repeated release, and the local privacy boundary.
+
+### Checkout identity for remembered permissions (HS2-G1SG1P)
+
+- Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.
+- Unit: `crates/hotsheet-aitools/src/permission.rs` checks two vault keys, shared-store isolation, and reload; `crates/hotsheet-server/src/lib.rs` checks terminal launch identity; `clients/web/src/permission-notifications.test.ts` checks checkout rule filtering.
+- End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy migration have separate tickets (`HS2-TSXSH6`, `HS2-ZQ6TV2`).

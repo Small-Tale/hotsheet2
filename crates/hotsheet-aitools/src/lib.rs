@@ -61,9 +61,9 @@ pub use permission::{
     Rule as PermissionRule, RuleInfo as PermissionRuleInfo, Scope as PermissionScope,
     SharedPermissionBridge, StoredRule as StoredPermissionRule,
     action_key_for as permission_action_key_for, append_rule as append_permission_rule,
-    load_rules as load_permission_rules, load_rules_with_key as load_permission_rules_with_key,
-    remove_rule as remove_permission_rule, rules_health as permission_rules_health,
-    valid_user_bash_description,
+    ensure_rules_file as ensure_permission_rules_file, load_rules as load_permission_rules,
+    load_rules_with_key as load_permission_rules_with_key, remove_rule as remove_permission_rule,
+    rules_health as permission_rules_health, valid_user_bash_description,
 };
 pub use permission_pattern::{
     PatternKind as PermissionPatternKind, PatternSpec as PermissionPattern,

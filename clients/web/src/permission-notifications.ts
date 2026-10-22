@@ -71,13 +71,17 @@ export interface PermissionPattern {
   expression: string;
 }
 
-/** The remembered rules that belong to `project` (its checkout root or one of its stores). */
+/** The remembered rules that belong to a checkout, including visible legacy store rules. */
 export function projectPermissionRules(
   rules: readonly PermissionRule[],
   project: Pick<PermissionProject, 'id' | 'root' | 'stores'>,
 ): PermissionRule[] {
   return rules.filter(
-    (rule) => rule.project === project.id || rule.project === project.root || project.stores?.includes(rule.project),
+    (rule) =>
+      rule.project === `checkout:${project.id}` ||
+      rule.project === project.id ||
+      rule.project === project.root ||
+      project.stores?.includes(rule.project),
   );
 }
 

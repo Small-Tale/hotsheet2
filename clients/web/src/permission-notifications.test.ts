@@ -232,14 +232,15 @@ describe('chat-scoped answers and identical-request groups (HS2-JNHAYB)', () => 
     expect(parsePermissionResolution('allow:chat')).toEqual({ decision: 'allow', scope: 'chat' });
     expect(parsePermissionResolution('deny:session')).toEqual({ decision: 'deny', scope: 'once' });
     const rules = [
+      { project: `checkout:${project.id}`, tool: 'Bash', action: 'project', decision: 'allow', scope: 'always' },
       { project: '/p', tool: 'Bash', action: 'ls', decision: 'allow', scope: 'always' },
       { project: '/p/.hs2', connection: 'c', tool: 'Bash', action: 'ls', decision: 'deny', scope: 'chat' },
       { project: '/elsewhere', tool: 'Bash', action: 'ls', decision: 'allow', scope: 'session' },
     ] as const;
     const current = { ...project, stores: ['/p/.hs2'] };
-    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 2));
-    expect(projectPermissionRules(rules, { id: 'other', root: '/elsewhere', stores: [] })).toEqual([rules[2]]);
-    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 2));
+    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 3));
+    expect(projectPermissionRules(rules, { id: 'other', root: '/elsewhere', stores: [] })).toEqual([rules[3]]);
+    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 3));
     expect(permissionRuleKey(rules[0])).not.toBe(permissionRuleKey(rules[1]));
   });
 });

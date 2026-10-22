@@ -1028,7 +1028,7 @@ Checkout-driven sessions can instead use the checkout root. The difference betwe
 launch identities, external-only checkouts, and registered persistence keys needs explicit
 acceptance coverage before claiming provider-neutral checkout ownership (`HS2-G8ZSPQ`).
 
-**Decided target contract (HS2-G8ZSPQ; not yet shipped).** The registered code project
+**Decided target contract (HS2-G8ZSPQ).** The registered code project
 owns a project-scoped remembered permission. Its authorization namespace must be a
 single canonical checkout identity resolved from the checkout registry, independent of
 the selected ticket, provider, source locator, or mutable default source. A project
@@ -1037,6 +1037,16 @@ hooks, CLI launches, MCP, driven turns, matching, listing, and encrypted persist
 Two registered code projects that share one ticket store retain separate permission
 namespaces; all sources of one registered project share its namespace. Checkout identity
 and source identity remain separate even when a project has only one source.
+
+`HS2-G1SG1P` implements the checkout identity used by the current launch paths:
+`checkout:<checkout-id>` selects its own machine-local encrypted vault. Terminal,
+CLI, and client-driven launches carry `HOTSHEET_PERMISSION_PROJECT` to permission
+hooks and the native driven bridge; `HOTSHEET_PROJECT` remains a filesystem path for
+usage attribution. A launch without a registered checkout uses an `unregistered:`
+identity with no durable-rule location. Existing store-keyed grants remain in their
+original namespace. Legacy hook installations that have not received the new launch
+environment also retain their old namespace; `HS2-ZQ6TV2` handles explicit migration.
+Source-independent project launch remains tracked by `HS2-TSXSH6`.
 
 The server must register one machine-local encrypted durable-rule location per checkout
 identity before offering Always Allow. It must report unavailable durable storage as an

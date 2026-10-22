@@ -445,9 +445,14 @@ pub(crate) fn terminal_permission_route_env(
     terminal_id: &str,
 ) -> Vec<(String, String)> {
     let project = terminal_permission_project(state, req);
+    let permission_identity = terminal_permission_identity(state, req.cwd.as_deref());
     let mut env = vec![
         ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
         ("HOTSHEET_PROJECT".to_string(), project),
+        (
+            "HOTSHEET_PERMISSION_PROJECT".to_string(),
+            permission_identity,
+        ),
         (
             "HOTSHEET_HOME".to_string(),
             state.machine_home().display().to_string(),
@@ -465,6 +470,28 @@ pub(crate) fn terminal_permission_project(state: &AppState, req: &OpenTerminalRe
     terminal_project_for_cwd(state, req.cwd.as_deref())
 }
 
+fn terminal_permission_identity(state: &AppState, cwd: Option<&str>) -> String {
+    let cwd = cwd.unwrap_or_else(|| state.store.root().to_str().unwrap_or_default());
+    let cwd = FsPath::new(cwd)
+        .canonicalize()
+        .unwrap_or_else(|_| cwd.into());
+    let checkout = state
+        .checkout_registry
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|checkout| cwd.starts_with(FsPath::new(&checkout.root)))
+        .max_by_key(|checkout| checkout.root.len());
+    checkout.map_or_else(
+        || format!("unregistered:{}", cwd.display()),
+        |checkout| {
+            let identity = checkout.permission_identity();
+            state.register_checkout_permission_rules(&identity);
+            identity
+        },
+    )
+}
+
 fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
     let Some(cwd) = cwd else {
         return state.store.root().display().to_string();
@@ -477,7 +504,7 @@ fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
         .list()
         .unwrap_or_default()
         .into_iter()
-        .filter(|checkout| cwd.starts_with(&checkout.root))
+        .filter(|checkout| cwd.starts_with(FsPath::new(&checkout.root)))
         .max_by_key(|checkout| checkout.root.len());
     if let Some(checkout) = checkout {
         let git_source = checkout

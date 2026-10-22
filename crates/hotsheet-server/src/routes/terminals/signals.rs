@@ -1211,6 +1211,9 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
 pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
+    for checkout in state.checkout_registry.list().unwrap_or_default() {
+        state.register_checkout_permission_rules(&checkout.permission_identity());
+    }
     if state.permissions.durable_rules_locked() {
         let path = state
             .permission_rule_paths

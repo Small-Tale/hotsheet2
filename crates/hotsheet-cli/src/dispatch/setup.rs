@@ -300,7 +300,9 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let project = std::env::var("HOTSHEET_PERMISSION_PROJECT")
+        .or_else(|_| std::env::var("HOTSHEET_PROJECT"))
+        .unwrap_or_default();
     let route = hook_server_route();
     let terminal_env = std::env::var("HOTSHEET_TERMINAL_ID").ok();
     let terminal = permission_terminal_id(event, terminal_env.as_deref());
@@ -424,9 +426,9 @@ pub(crate) fn cmd_launch(
         &hotsheet_plugins::hotsheet_home(),
     )?;
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)?;
-    let permission_project = FsStore::open(&selected)
-        .map(|store| store.root().display().to_string())
-        .unwrap_or_else(|_| selected.display().to_string());
+    let permission_project = registry
+        .resolve(project.to_string_lossy().as_ref())?
+        .permission_identity();
     // The session's worker id: the instructions tell the AI to claim with it, and its claims
     // are released when the tool exits (HS2-1VAW1C).
     let worker = hotsheet_cli::launch_worker_id(tool, &Ulid::new());
@@ -436,7 +438,8 @@ pub(crate) fn cmd_launch(
         .current_dir(&launch_dir)
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
-        .env("HOTSHEET_PROJECT", permission_project)
+        .env("HOTSHEET_PROJECT", project.display().to_string())
+        .env("HOTSHEET_PERMISSION_PROJECT", permission_project)
         .env("HOTSHEET_WORKER_ID", &worker)
         // The launched tool is an AI session: its mutations act as `ai` (HS2-RD4M29).
         .envs(hotsheet_aitools::ai_session_actor_env(&worker));

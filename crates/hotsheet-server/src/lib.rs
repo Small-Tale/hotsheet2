@@ -876,10 +876,15 @@ impl AppState {
             paths.insert(String::new(), path.clone());
             paths.insert(project.clone(), path.clone());
         }
-        let validation_path = path.clone();
+        let validation_paths = self.permission_rule_paths.clone();
         self.permissions.set_durable_validator(move || {
-            validation_path.is_file()
-                && hotsheet_aitools::permission_rules_health(&validation_path).is_ok()
+            validation_paths
+                .lock_or_recover()
+                .iter()
+                .filter(|(project, _)| project.is_empty() || project.starts_with("checkout:"))
+                .all(|(_, path)| {
+                    path.is_file() && hotsheet_aitools::permission_rules_health(path).is_ok()
+                })
         });
         let key = match hotsheet_aitools::permission_action_key_for(&path) {
             Ok(key) => key,
@@ -1753,10 +1758,16 @@ mod terminal_permission_route_tests {
             .display()
             .to_string();
         assert_eq!(terminal_permission_project(&state, &req), expected);
-        assert!(
-            terminal_permission_route_env(&state, &req, "term-1")
-                .contains(&("HOTSHEET_PROJECT".into(), expected))
-        );
+        let env = terminal_permission_route_env(&state, &req, "term-1");
+        assert!(env.contains(&("HOTSHEET_PROJECT".into(), expected)));
+        let checkout = state
+            .checkout_registry
+            .resolve(project.to_str().unwrap())
+            .unwrap();
+        assert!(env.contains(&(
+            "HOTSHEET_PERMISSION_PROJECT".into(),
+            checkout.permission_identity()
+        )));
     }
 }
 

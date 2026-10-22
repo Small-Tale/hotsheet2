@@ -16940,6 +16940,203 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
 }
 
 #[tokio::test]
+async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store() {
+    let root = tempfile::tempdir().unwrap();
+    let store_path = root.path().join("shared.hs2");
+    let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
+    let first_root = root.path().join("first");
+    let second_root = root.path().join("second");
+    std::fs::create_dir_all(&first_root).unwrap();
+    std::fs::create_dir_all(&second_root).unwrap();
+    let registry_path = root.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    let first = registry
+        .register(&first_root, None, None, vec![store_path.clone()])
+        .unwrap();
+    let second = registry
+        .register(&second_root, None, None, vec![store_path])
+        .unwrap();
+    let first_id = first.permission_identity();
+    let second_id = second.permission_identity();
+    let rules_path = root.path().join("permission-rules").join("store.json");
+    let state = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let router = app(state);
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    let first_for_waiter = first_id.clone();
+    let waiter = std::thread::spawn(move || {
+        bridge.request_blocking_for_project(first_for_waiter, "first-chat", "Bash", "npm test")
+    });
+    let id = loop {
+        let pending = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(request) = pending.as_array().unwrap().first() {
+            assert_eq!(request["project"], first_id);
+            assert_eq!(request["always_allow_supported"], true);
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await["persisted"], true);
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert!(
+        rules_path
+            .with_file_name(format!("checkout-{}.json", first.id))
+            .is_file()
+    );
+    assert!(
+        rules_path
+            .with_file_name(format!("checkout-{}.json", second.id))
+            .is_file()
+    );
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == first_id)
+    );
+    assert!(
+        !listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == second_id)
+    );
+
+    let restarted = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path);
+    let restarted_bridge = restarted.permission_bridge();
+    let restarted_app = app(restarted);
+    assert_eq!(
+        restarted_app
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &first_id,
+            "new-chat",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "new-chat",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+}
+
+#[tokio::test]
+async fn unknown_checkout_cannot_receive_a_durable_permission() {
+    let root = tempfile::tempdir().unwrap();
+    let store = FsStore::init(root.path().join("store.hs2"), &StoreMetadata::new("SH")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(root.path().join("permissions").join("store.json"));
+    let router = app(state);
+    let waiting_router = router.clone();
+    let waiting = tokio::spawn(async move {
+        waiting_router.oneshot(authed("POST", "/permissions/ask", Some(r#"{"project":"checkout:missing","connection":"c","tool":"Bash","action":"npm test"}"#))).await.unwrap()
+    });
+    let id = loop {
+        let pending = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(request) = pending.as_array().unwrap().first() {
+            assert_eq!(request["project"], "checkout:missing");
+            assert_eq!(request["always_allow_supported"], false);
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/permissions/{id}"),
+                Some(r#"{"decision":"allow","scope":"always"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        router
+            .oneshot(authed(
+                "POST",
+                &format!("/permissions/{id}"),
+                Some(r#"{"decision":"allow","scope":"once"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(body_json(waiting.await.unwrap()).await["decision"], "allow");
+}
+
+#[tokio::test]
 async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
     let (_d, st) = state();
     let app = app(st);

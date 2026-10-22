@@ -129,12 +129,15 @@ pub(crate) async fn ask_permission(
         )
         .await;
     }
-    let bridge = state.permissions.clone();
     let project = if body.project.is_empty() {
         state.store.root().display().to_string()
     } else {
         body.project
     };
+    if project.starts_with("checkout:") {
+        state.register_checkout_permission_rules(&project);
+    }
+    let bridge = state.permissions.clone();
     // The wait is async (HS2-43YT58): a pending ask parks no thread, so hundreds of open
     // hooks cannot exhaust the blocking pool shared with offloaded API requests. A hook that
     // disconnects drops this future, which withdraws its pending prompt as a one-time deny
@@ -611,6 +614,7 @@ pub(crate) async fn create_drive_connection(
         }
     }
     let mut project_settings = None;
+    let mut permission_identity = format!("unregistered:{}", state.store.root().display());
     let (project_path, source_id, drive_store) =
         if let Some(reference) = request.checkout.as_deref() {
             let checkout = state
@@ -629,6 +633,8 @@ pub(crate) async fn create_drive_connection(
                     ApiError::new(status, error.to_string())
                 })?;
             let project_path = std::path::PathBuf::from(&checkout.root);
+            permission_identity = checkout.permission_identity();
+            state.register_checkout_permission_rules(&permission_identity);
             project_settings = Some(checkout.settings());
             let source = checkout_source_for_create(&state, reference, request.source.as_deref())?;
             if source.provider != "git" {
@@ -672,7 +678,10 @@ pub(crate) async fn create_drive_connection(
         project_settings.as_ref(),
     )
     .await?;
-    let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
+    let mut env = vec![
+        format!("HOTSHEET_PROJECT={}", project_path.display()),
+        format!("HOTSHEET_PERMISSION_PROJECT={permission_identity}"),
+    ];
     if let Some(url) = state.terminal_server_url.with_lock(|value| value.clone()) {
         env.push(format!("HOTSHEET_SERVER={url}"));
         env.push(format!("HOTSHEET_SECRET={}", state.secret));

@@ -18,6 +18,61 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 impl AppState {
+    /// Attach an authenticated rule vault only to a registered checkout identity.
+    /// A ticket store may be shared by several checkouts, so store paths must never
+    /// select this vault or inherit its grants.
+    pub(crate) fn register_checkout_permission_rules(&self, identity: &str) -> bool {
+        let Some(id) = identity.strip_prefix("checkout:") else {
+            return false;
+        };
+        let Ok(checkout) = self.checkout_registry.describe(id) else {
+            return false;
+        };
+        if checkout.permission_identity() != identity {
+            return false;
+        }
+        let legacy = self
+            .permission_rule_paths
+            .lock_or_recover()
+            .get("")
+            .cloned();
+        let Some(legacy) = legacy else {
+            return false;
+        };
+        if hotsheet_aitools::ensure_permission_rules_file(&legacy).is_err() {
+            self.permissions.drop_durable_rules();
+            return false;
+        }
+        let path = legacy.with_file_name(format!("checkout-{id}.json"));
+        if self
+            .permission_rule_paths
+            .lock_or_recover()
+            .contains_key(identity)
+            && !path.is_file()
+        {
+            self.permissions.drop_durable_rules();
+            return false;
+        }
+        if hotsheet_aitools::ensure_permission_rules_file(&path).is_err() {
+            self.permissions.drop_durable_rules();
+            return false;
+        }
+        let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) else {
+            tracing::warn!(checkout = %id, "checkout permission vault unavailable");
+            self.permissions.drop_durable_rules();
+            return false;
+        };
+        let rules = rules
+            .into_iter()
+            .filter(|rule| rule.project == identity)
+            .collect();
+        self.permissions.add_project_rules(identity, key, rules);
+        self.permission_rule_paths
+            .lock_or_recover()
+            .insert(identity.to_owned(), path);
+        true
+    }
+
     /// Host a store: build its index (file-backed when persisting, else in-memory),
     /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
     /// was newly added. Shared by `POST /stores` and startup discovery.
@@ -57,22 +112,33 @@ impl AppState {
         self.host.register(entry.clone());
         prewarm_corrupt_tickets(entry.clone());
         let project = store.root().display().to_string();
-        let mut paths = self.permission_rule_paths.lock_or_recover();
-        if !paths.is_empty()
-            && !paths.contains_key(&project)
-            && let Some(directory) = paths.values().next().and_then(|path| path.parent())
-        {
-            let path = directory.join(format!("{id}.json"));
-            let rules = hotsheet_aitools::load_permission_rules(&path)
-                .into_iter()
-                .map(|mut rule| {
-                    rule.project = project.clone();
-                    rule
-                });
-            self.permissions.add_rules(rules);
-            paths.insert(project, path);
+        let rule_path = {
+            let paths = self.permission_rule_paths.lock_or_recover();
+            (!paths.is_empty() && !paths.contains_key(&project))
+                .then(|| {
+                    paths
+                        .values()
+                        .next()
+                        .and_then(|path| path.parent().map(FsPath::to_path_buf))
+                })
+                .flatten()
+                .map(|directory| directory.join(format!("{id}.json")))
+        };
+        if let Some(path) = rule_path {
+            if let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) {
+                let rules = rules
+                    .into_iter()
+                    .map(|mut rule| {
+                        rule.project = project.clone();
+                        rule
+                    })
+                    .collect();
+                self.permissions.add_project_rules(&project, key, rules);
+            }
+            self.permission_rule_paths
+                .lock_or_recover()
+                .insert(project, path);
         }
-        drop(paths);
         let store_root = store.root().to_path_buf();
         let watched_id = id.clone();
         match spawn_watcher_for(
