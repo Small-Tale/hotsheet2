@@ -977,7 +977,9 @@ test('offers remembered-answer row and selected actions in preview and dialog (H
   await page.getByRole('menuitem', { name: 'Copy Selected Actions' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${firstAction}\n${secondAction}`);
   await page.setViewportSize({ width: 390, height: 844 });
-  await rows.nth(0).evaluate((element) => element.scrollIntoView({ block: 'start' }));
+  await rows.nth(0).evaluate((element) => {
+    element.scrollIntoView({ block: 'start' });
+  });
   await rows.nth(0).click({ button: 'right' });
   await page.screenshot({ path: 'target/visual-captures/hs2-pmzg5y-preview-narrow.png', animations: 'disabled' });
   await page.keyboard.press('Escape');
