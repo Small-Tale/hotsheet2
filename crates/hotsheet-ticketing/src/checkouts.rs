@@ -60,6 +60,10 @@ pub struct Checkout {
     /// Distinguishes a user-cleared default from an older registry with no recorded choice.
     #[serde(default, skip_serializing_if = "is_false")]
     pub default_source_cleared: bool,
+    /// Durable evidence that this checkout had a permission vault. A missing file must
+    /// not be mistaken for a first registration after a server restart.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub permission_vault_registered: bool,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -714,6 +718,10 @@ impl CheckoutRegistry {
             source_colors,
             default_source,
             default_source_cleared,
+            permission_vault_registered: file
+                .checkouts
+                .iter()
+                .any(|checkout| checkout.id == id && checkout.permission_vault_registered),
         };
         if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
             *existing = entry.clone();
@@ -733,6 +741,23 @@ impl CheckoutRegistry {
     /// Read checkout configuration for recovery UI without opening linked ticket stores.
     pub fn describe(&self, reference: &str) -> Result<Checkout, CheckoutError> {
         resolve_checkout(self.list()?, reference)
+    }
+
+    /// Record vault registration before creating the file, so a crash between these
+    /// operations leaves the checkout locked rather than allowing an empty replacement.
+    pub fn mark_permission_vault_registered(&self, reference: &str) -> Result<(), CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let checkout = file
+            .checkouts
+            .iter_mut()
+            .find(|checkout| checkout.id == reference)
+            .ok_or_else(|| CheckoutError::NotFound(reference.to_owned()))?;
+        if !checkout.permission_vault_registered {
+            checkout.permission_vault_registered = true;
+            self.write_locked(&file)?;
+        }
+        Ok(())
     }
 
     /// Move a registered checkout to a new working-tree path while preserving the id used
@@ -1687,6 +1712,42 @@ mod tests {
         assert_eq!(registry.resolve("frontend").unwrap(), saved);
         assert_eq!(registry.resolve(&saved.id[..8]).unwrap(), saved);
         assert_eq!(registry.resolve(checkout.to_str().unwrap()).unwrap(), saved);
+    }
+
+    #[test]
+    fn permission_vault_registration_survives_registry_reopen_and_checkout_refresh() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        std::fs::create_dir(&checkout).unwrap();
+        let path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&path);
+        let saved = registry
+            .register(&checkout, None, None, Vec::new())
+            .unwrap();
+        assert!(!saved.permission_vault_registered);
+        registry
+            .mark_permission_vault_registered(&saved.id)
+            .unwrap();
+
+        let reopened = CheckoutRegistry::new(&path);
+        assert!(
+            reopened
+                .describe(&saved.id)
+                .unwrap()
+                .permission_vault_registered
+        );
+        assert!(
+            reopened
+                .register(&checkout, Some("renamed"), None, Vec::new())
+                .unwrap()
+                .permission_vault_registered
+        );
+        assert!(
+            reopened
+                .describe(&saved.id)
+                .unwrap()
+                .permission_vault_registered
+        );
     }
 
     #[test]

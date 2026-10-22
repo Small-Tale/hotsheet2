@@ -43,20 +43,30 @@ impl AppState {
             self.permissions.drop_legacy_durable_rules();
         }
         let path = legacy.with_file_name(format!("checkout-{id}.json"));
+        let existing = checkout.permission_vault_registered || path.is_file();
+        if checkout.permission_vault_registered && !path.is_file() {
+            tracing::warn!(checkout = %id, "registered checkout permission vault missing; restore its original file to recover permissions");
+            self.permissions.drop_durable_rules_for_project(identity);
+            return false;
+        }
         if self
-            .permission_rule_paths
-            .lock_or_recover()
-            .contains_key(identity)
-            && !path.is_file()
+            .checkout_registry
+            .mark_permission_vault_registered(id)
+            .is_err()
         {
             self.permissions.drop_durable_rules_for_project(identity);
             return false;
         }
-        if hotsheet_aitools::ensure_permission_rules_file(&path).is_err() {
+        if !existing && hotsheet_aitools::ensure_permission_rules_file(&path).is_err() {
             self.permissions.drop_durable_rules_for_project(identity);
             return false;
         }
-        let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) else {
+        let loaded = if existing {
+            hotsheet_aitools::load_existing_permission_rules_with_key(&path)
+        } else {
+            hotsheet_aitools::load_permission_rules_with_key(&path)
+        };
+        let Ok((key, rules)) = loaded else {
             tracing::warn!(checkout = %id, "checkout permission vault unavailable");
             self.permissions.drop_durable_rules_for_project(identity);
             return false;

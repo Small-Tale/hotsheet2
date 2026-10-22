@@ -616,6 +616,7 @@ mod tests {
             source_colors: Default::default(),
             default_source: None,
             default_source_cleared: false,
+            permission_vault_registered: false,
         };
 
         assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);

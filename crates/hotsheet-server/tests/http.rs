@@ -17498,7 +17498,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
         waiter.join().unwrap(),
         hotsheet_aitools::PermissionDecision::Deny
     );
-    std::fs::write(&second_vault, healthy_second).unwrap();
+    std::fs::write(&second_vault, &healthy_second).unwrap();
     assert_eq!(
         restarted_app
             .clone()
@@ -17704,6 +17704,66 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             hotsheet_aitools::PermissionDecision::Deny
         ),
         hotsheet_aitools::PermissionDecision::Deny
+    );
+
+    // Registration evidence must survive a server restart. A missing known vault
+    // stays unavailable until the original authenticated file is restored.
+    let cold_state = AppState::new(FsStore::open(&store_path).unwrap(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path);
+    let cold_bridge = cold_state.permission_bridge();
+    let cold_app = app(cold_state);
+    assert_eq!(
+        cold_app
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert!(
+        !second_vault.exists(),
+        "restart must not recreate a missing vault"
+    );
+    assert_eq!(
+        cold_bridge.request_blocking_timeout_for_project(
+            &first_id,
+            "restart-healthy",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        cold_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "restart-missing",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    std::fs::write(&second_vault, healthy_second).unwrap();
+    cold_app
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        cold_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "restart-restored",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
     );
 }
 

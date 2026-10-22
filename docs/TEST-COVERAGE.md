@@ -1185,9 +1185,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 ### Isolated checkout vault health (HS2-KJA1V4)
 
-- Behavior: Damage or loss of one checkout vault withdraws only its persistent answers and disables Always for its pending requests. A healthy neighbor still matches, and restoration of the authenticated file reloads its answers without silently recreating a known missing vault.
+- Behavior: Damage or loss of one checkout vault withdraws only its persistent answers and disables Always for its pending requests. A healthy neighbor still matches, and restoration of the authenticated file reloads its answers without silently recreating a known missing vault, even after a server restart.
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks project-specific health validation and neighboring grants.
-- End to end: `crates/hotsheet-server/tests/http.rs` covers corrupted, restored, and removed checkout vaults across authenticated rule and pending-request routes, including concurrent asks; `clients/web/tests/providers.spec.ts` checks the no-Always popup at 1280 and 390 pixels.
+- End to end: `crates/hotsheet-server/tests/http.rs` covers corrupted, restored, and removed checkout vaults across authenticated rule and pending-request routes, including concurrent asks and a missing-vault restart followed by restoration; `clients/web/tests/providers.spec.ts` checks the no-Always popup at 1280 and 390 pixels.
+- Unit: `crates/hotsheet-ticketing/src/checkouts.rs` verifies that vault-registration evidence survives registry reopen and checkout refresh; `crates/hotsheet-aitools/src/permission.rs` verifies that loading a known vault never recreates a missing file (`HS2-D6Y877`).
 
 ### Damaged legacy vault with healthy checkouts (HS2-G1K4SA)
 

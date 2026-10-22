@@ -1143,7 +1143,10 @@ If one checkout vault is corrupt or disappears, its in-memory durable answers ar
 withdrawn and its pending requests cannot offer Always Allow. Other checkout
 vaults and their grants remain available. Restoring the original authenticated
 file reloads that checkout's answers; a missing known file is never recreated
-silently during the same server run (`HS2-KJA1V4`).
+silently, including after a server restart. The checkout registry records vault
+registration before the file is created, so a missing file remains an unavailable
+capability until its original authenticated file is restored (`HS2-KJA1V4`,
+`HS2-D6Y877`).
 Legacy vault damage also stays within its namespace: the server withdraws its
 durable answers and disables Always Allow for legacy requests, while healthy
 checkout vaults still register, match, and appear in `GET /permissions/rules`.

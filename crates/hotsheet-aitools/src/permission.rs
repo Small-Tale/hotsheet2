@@ -1876,7 +1876,19 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
 /// recovering a locked bridge must see failures instead of treating them as an empty vault.
 pub fn load_rules_with_key(path: &Path) -> io::Result<(ActionKey, Vec<Rule>)> {
     let (key, stored) = crate::permission_vault::load_with_key(path)?;
-    let rules = stored
+    let rules = decoded_rules(&key, stored);
+    Ok((key, rules))
+}
+
+/// Load a previously registered vault without treating a missing file as empty.
+pub fn load_existing_rules_with_key(path: &Path) -> io::Result<(ActionKey, Vec<Rule>)> {
+    let (key, stored) = crate::permission_vault::load_existing_with_key(path)?;
+    let rules = decoded_rules(&key, stored);
+    Ok((key, rules))
+}
+
+fn decoded_rules(key: &ActionKey, stored: Vec<StoredRule>) -> Vec<Rule> {
+    stored
         .into_iter()
         .filter_map(|mut rule| {
             rule.description = rule
@@ -1889,10 +1901,9 @@ pub fn load_rules_with_key(path: &Path) -> io::Result<(ActionKey, Vec<Rule>)> {
             {
                 return None;
             }
-            Some(rule.into_rule(&key))
+            Some(rule.into_rule(key))
         })
-        .collect();
-    Ok((key, rules))
+        .collect()
 }
 
 /// Check key availability and authenticate the on-disk envelope for a local server.
@@ -1991,6 +2002,25 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn existing_vault_loader_never_recreates_a_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("checkout.json");
+        assert_eq!(
+            load_existing_rules_with_key(&path).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!path.exists());
+        ensure_rules_file(&path).unwrap();
+        assert!(load_existing_rules_with_key(&path).is_ok());
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            load_existing_rules_with_key(&path).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!path.exists());
+    }
 
     #[test]
     fn migration_requires_review_preserves_source_and_is_idempotent_across_destinations() {
