@@ -92,12 +92,16 @@ new scope or a delayed gate changes the expected finish time.
 
 ## Client UI stack
 
-Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns
-application state, routing, lists, API resources, rendering/morphing, and delegated
-event handling. Web Awesome owns reusable accessible UI primitives such as form
-controls, dialogs, drawers, and menus. Build custom components only for Hot
-Sheet-specific interactions that those primitives do not cover; Web Awesome Pro is
-optional and requires a separate decision/license.
+Use **Kerf (`kerfjs`)** for the Tauri web UI's application state, routing, lists,
+API resources, rendering/morphing, delegated event handling, and reusable UI
+components. Prefer Kerf components, then native HTML. Use Web Awesome Core only
+for a specific integration feature that Kerf does not replace; never render a
+Web Awesome element marked `Discouraged` in Kerf's catalog. Kerf's installed
+guidance at `clients/web/node_modules/@kerfjs/ui/llms.txt` and
+`clients/web/node_modules/@kerfjs/ui/ai/skill.md` names the replacements and
+component-gap workflow. Build custom components only for Hot Sheet-specific
+interactions those components do not cover. Web Awesome Pro is optional and
+requires a separate decision/license.
 
 Never use fixed-interval, timer-based, or immediate-repeat network polling for
 application state. Live updates must use WebSockets or genuine long polling: an idle
