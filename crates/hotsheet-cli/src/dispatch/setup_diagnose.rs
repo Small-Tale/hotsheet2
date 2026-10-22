@@ -157,6 +157,9 @@ pub(super) fn run(
         "registry": registry,
         "live": live,
         "tools": tools,
+        "guidance_notices": plan.report.set_up.iter().flat_map(|tool| &tool.notices)
+            .filter(|notice| matches!(notice, hotsheet_plugins::setup::SetupNotice::BundledGuidanceBlocked { .. }))
+            .collect::<Vec<_>>(),
         "would_change": would_change,
     });
     if as_json {
@@ -427,6 +430,17 @@ fn print_human(result: &Value) {
         "Live server: {}",
         result["live"]["server"].as_str().unwrap_or("unknown")
     );
+    if let Some(notices) = result["guidance_notices"].as_array() {
+        for notice in notices {
+            println!(
+                "Bundled guidance review: {} section {} (installed v{}, bundled v{}). Compare the local section with the bundled guidance before editing it; refresh preserves the local body.",
+                notice["path"].as_str().unwrap_or("?"),
+                notice["section"].as_str().unwrap_or("?"),
+                notice["installed_version"].as_u64().unwrap_or(0),
+                notice["bundled_version"].as_u64().unwrap_or(0),
+            );
+        }
+    }
     if let Some(tools) = result["tools"].as_array() {
         for tool in tools {
             println!(

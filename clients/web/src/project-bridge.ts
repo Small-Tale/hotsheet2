@@ -55,6 +55,8 @@ export interface ProjectSession {
    * its AI-tool setup may be unchanged or only partially updated.
    */
   setupWarning?: string;
+  /** New bundled sections preserved because their local bodies differ. */
+  bundledGuidanceBlocked?: { path: string; section: string; installedVersion: number; bundledVersion: number }[];
   /** Codex hook bytes changed; the user must review them in this checkout (HS2-4AR09Z). */
   codexHooksChanged?: string;
   /**
@@ -398,11 +400,13 @@ function sessionForRoot(root: string): SessionTarget | undefined {
 export interface ProjectSetupRefreshResult {
   warning?: string;
   codexHooksChanged?: string;
+  bundledGuidanceBlocked?: { path: string; section: string; installedVersion: number; bundledVersion: number }[];
 }
 
 export function setupRefreshNotices(report: unknown): ProjectSetupRefreshResult {
   if (!report || typeof report !== 'object' || !('set_up' in report) || !Array.isArray(report.set_up))
     throw new Error('The Hot Sheet CLI returned an invalid setup report.');
+  const result: ProjectSetupRefreshResult = {};
   for (const tool of report.set_up as unknown[]) {
     if (!tool || typeof tool !== 'object' || !('notices' in tool) || !Array.isArray(tool.notices)) continue;
     for (const notice of tool.notices as unknown[]) {
@@ -415,10 +419,32 @@ export function setupRefreshNotices(report: unknown): ProjectSetupRefreshResult 
         typeof notice.path === 'string' &&
         notice.path.trim()
       )
-        return { codexHooksChanged: notice.path };
+        result.codexHooksChanged = notice.path;
+      if (
+        notice &&
+        typeof notice === 'object' &&
+        'kind' in notice &&
+        notice.kind === 'bundled_guidance_blocked' &&
+        'path' in notice &&
+        typeof notice.path === 'string' &&
+        'section' in notice &&
+        typeof notice.section === 'string' &&
+        'installed_version' in notice &&
+        typeof notice.installed_version === 'number' &&
+        Number.isSafeInteger(notice.installed_version) &&
+        'bundled_version' in notice &&
+        typeof notice.bundled_version === 'number' &&
+        Number.isSafeInteger(notice.bundled_version)
+      )
+        (result.bundledGuidanceBlocked ??= []).push({
+          path: notice.path,
+          section: notice.section,
+          installedVersion: notice.installed_version,
+          bundledVersion: notice.bundled_version,
+        });
     }
   }
-  return {};
+  return result;
 }
 
 /** Retain an undelivered notice when the server/open step fails after setup already wrote hooks. */
@@ -429,7 +455,8 @@ export async function deliverProjectSetupNotice<T>(
   pending: Map<string, ProjectSetupRefreshResult> = ((process as ProjectBridgeProcess).__hotsheetPendingHookNotices ??=
     new Map<string, ProjectSetupRefreshResult>()),
 ): Promise<T> {
-  if (result.codexHooksChanged || result.warning) pending.set(root, { ...pending.get(root), ...result });
+  if (result.codexHooksChanged || result.warning || result.bundledGuidanceBlocked?.length)
+    pending.set(root, { ...pending.get(root), ...result });
   const notice = pending.get(root);
   const opened = await open({ ...notice, ...result });
   if (pending.get(root) === notice) pending.delete(root);
@@ -1549,6 +1576,9 @@ async function openPreparedLocalProject(
     changeMuxPath: CHANGE_MUX_PATH,
     compatibility,
     ...(setupResult.warning ? { setupWarning: setupResult.warning } : {}),
+    ...(setupResult.bundledGuidanceBlocked?.length
+      ? { bundledGuidanceBlocked: setupResult.bundledGuidanceBlocked }
+      : {}),
     ...(setupResult.codexHooksChanged ? { codexHooksChanged: setupResult.codexHooksChanged } : {}),
     ...(serverBuildNotice ? { serverBuildNotice } : {}),
     needsTicketSetup: opened.checkout.sources.length === 0,

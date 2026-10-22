@@ -3626,6 +3626,7 @@ export async function startHotSheetWebClient() {
     aiSettingsMessage,
     guidance: () => ({
       overview: guidanceOverview.value,
+      bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
       message: guidanceMessage.value,
       query: guidanceQuery.value,

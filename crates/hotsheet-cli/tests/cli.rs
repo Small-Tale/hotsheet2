@@ -555,6 +555,61 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
 }
 
 #[test]
+fn setup_diagnose_and_refresh_report_blocked_bundled_guidance_without_replacing_it() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let run = |args: &[&str]| {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["setup", "--project", project.to_str().unwrap()])
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone()
+    };
+    run(&["codex"]);
+    let agents_path = project.join("AGENTS.md");
+    let current = include_str!("../../../plugins/shared/ticket-driven-work.md").trim();
+    let local = "<!-- hotsheet:begin section=ticket-driven-work v=1 -->\n\nLocal wording\n\n<!-- hotsheet:end section=ticket-driven-work -->";
+    let agents = std::fs::read_to_string(&agents_path)
+        .unwrap()
+        .replace(current, local);
+    std::fs::write(&agents_path, &agents).unwrap();
+    let diagnosis: serde_json::Value =
+        serde_json::from_slice(&run(&["--diagnose", "--json"])).unwrap();
+    assert_eq!(
+        diagnosis["guidance_notices"][0]["kind"],
+        "bundled_guidance_blocked"
+    );
+    assert_eq!(
+        diagnosis["guidance_notices"][0]["section"],
+        "ticket-driven-work"
+    );
+    assert_eq!(std::fs::read_to_string(&agents_path).unwrap(), agents);
+    let refresh: serde_json::Value =
+        serde_json::from_slice(&run(&["--refresh", "--json"])).unwrap();
+    assert!(refresh["set_up"].as_array().unwrap().iter().any(|tool| {
+        tool["notices"].as_array().is_some_and(|notices| {
+            notices
+                .iter()
+                .any(|notice| notice["kind"] == "bundled_guidance_blocked")
+        })
+    }));
+    assert!(
+        std::fs::read_to_string(&agents_path)
+            .unwrap()
+            .contains(local)
+    );
+}
+
+#[test]
 fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;

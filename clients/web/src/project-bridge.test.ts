@@ -262,6 +262,36 @@ describe('project setup compatibility', () => {
       removed: [],
     };
     expect(setupRefreshNotices(changed)).toEqual({ codexHooksChanged: '.codex/hooks.json' });
+    expect(
+      setupRefreshNotices({
+        set_up: [
+          {
+            notices: [
+              { kind: 'codex_hooks_changed', path: '.codex/hooks.json' },
+              {
+                kind: 'bundled_guidance_blocked',
+                path: 'AGENTS.md',
+                section: 'ticket-driven-work',
+                installed_version: 1,
+                bundled_version: 6,
+              },
+              {
+                kind: 'bundled_guidance_blocked',
+                path: 'AGENTS.md',
+                section: 'invalid',
+                installed_version: '1',
+                bundled_version: 6,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      codexHooksChanged: '.codex/hooks.json',
+      bundledGuidanceBlocked: [
+        { path: 'AGENTS.md', section: 'ticket-driven-work', installedVersion: 1, bundledVersion: 6 },
+      ],
+    });
     expect(setupRefreshNotices({ set_up: [{ tool: 'Codex', wrote: ['.codex/hooks.json'] }] })).toEqual({});
     expect(
       setupRefreshNotices({

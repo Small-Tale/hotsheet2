@@ -175,6 +175,18 @@ is explicit; normal setup and apply continue to use the offline pinned snapshot.
 Automatic event-driven checks and the review banner are tracked by
 `HS2-S75AJ8`.
 
+Bundled Hot Sheet shared guidance is a separate offline channel. On setup refresh,
+an exact known predecessor upgrades automatically. If a locally changed older section
+cannot be safely replaced, the setup report emits `bundled_guidance_blocked` with
+its project-relative path, section, and installed/bundled versions; Project guidance
+shows a review notice. `hotsheet-cli -C <ticket-store> setup --diagnose --project
+<code-project> --json` exposes the same case in `guidance_notices` without writing.
+Compare the named section with `plugins/shared/<section>.md`, reconcile local
+changes deliberately, then run `hotsheet-cli -C <ticket-store> setup --refresh
+--project <code-project>`. An unchanged section, a known legacy body that refresh
+can upgrade, an equal-version local edit, or Rulesync-owned instructions do not
+claim a newer blocked bundled update (HS2-29BHX8).
+
 `guidance list` lists source, version, owner, tags, selection, and installed version
 as JSON; `guidance register --id <id> --repository <url-or-local-repo> --ref <tag-or-sha>`
 pins a source; `guidance select --source <id> --rule <name> [--skill <name>]` replaces

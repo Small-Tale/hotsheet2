@@ -674,7 +674,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy.",
+      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy. A separate review notice identifies newer bundled shared guidance that local customization blocked.",
       "useWhen": [
         "A project chooses a pinned rule source and selects guidance for its AI tools."
       ],

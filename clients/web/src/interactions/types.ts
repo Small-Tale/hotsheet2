@@ -28,6 +28,8 @@ export interface Project {
   hs1PostgresVersion?: string;
   /** Why opening skipped the project's setup refresh; shown as a dismissible warning (HS2-0TXM8S). */
   setupWarning?: string;
+  /** Locally customized shared sections that block newer bundled guidance (HS2-29BHX8). */
+  bundledGuidanceBlocked?: { path: string; section: string; installedVersion: number; bundledVersion: number }[];
   /** Changed Codex hooks require a new trust review (HS2-4AR09Z). */
   codexHooksChanged?: string;
   /** The shared machine server differs from this host's selected build; dismissible info (HS2-46BKH7). */

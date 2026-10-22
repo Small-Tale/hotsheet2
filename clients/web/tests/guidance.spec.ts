@@ -161,3 +161,42 @@ test('Project guidance has its own Settings tab with an empty source state at wi
   expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'target/visual-captures/guidance-empty-tab-phone.png' });
 });
+
+test('Project guidance reports a blocked bundled section at wide and phone sizes', async ({ page }) => {
+  await openDemoProject(page, false, 1, undefined, undefined, {
+    bundledGuidanceBlocked: [
+      { path: 'AGENTS.md', section: 'ticket-driven-work', installedVersion: 1, bundledVersion: 6 },
+    ],
+  });
+  await page.route('**/checkouts/demo-checkout/guidance', (route) =>
+    route.fulfill({ json: { owner: 'builtin', explicit_selection: false, default_repository: '', sources: [] } }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    if (width === 390) await page.reload();
+    await page.getByLabel('Settings View').click();
+    const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSettings.isVisible()) await showSettings.click();
+    await page.getByRole('button', { name: 'Project guidance' }).click();
+    const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (width === 390) await page.waitForTimeout(250);
+    if (await hideSettings.isVisible()) await hideSettings.click();
+    if (width === 390) await page.waitForTimeout(500);
+    const picker = page.locator('[data-component="guidance-settings"]');
+    await expect(picker.getByText('Bundled Guidance Needs Review')).toBeVisible();
+    await expect(picker).toContainText('AGENTS.md: ticket-driven-work (local v1, bundled v6)');
+    if (width === 390) {
+      await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+      });
+      const box = await picker.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+      await picker.screenshot({ path: 'target/visual-captures/bundled-guidance-blocked-content-390.png' });
+    }
+    expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `target/visual-captures/bundled-guidance-blocked-${width}.png` });
+  }
+});

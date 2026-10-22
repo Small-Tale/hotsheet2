@@ -414,6 +414,21 @@ export function GuidanceSettingsDemo() {
           tagFilter=""
         />
       </CatalogExample>
+      <CatalogExample label="Bundled Guidance Needs Review">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="ai-playbook"
+          ownerFilter=""
+          tagFilter=""
+          bundledGuidanceBlocked={[
+            { path: 'AGENTS.md', section: 'ticket-driven-work', installedVersion: 1, bundledVersion: 6 },
+          ]}
+        />
+      </CatalogExample>
     </>
   );
 }

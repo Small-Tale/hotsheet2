@@ -4,6 +4,7 @@ import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
@@ -20,6 +21,12 @@ export interface GuidanceSettingsProps {
   sourceId: string;
   ownerFilter: string;
   tagFilter: string;
+  bundledGuidanceBlocked?: readonly {
+    path: string;
+    section: string;
+    installedVersion: number;
+    bundledVersion: number;
+  }[];
 }
 
 /** Project Settings → AI tools: discover and apply pinned guidance (HS2-2RD1M1). */
@@ -37,6 +44,15 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           <Text variant="h2">Project guidance</Text>
           <Text tone="quiet">Choose a pinned rule source and the guidance this project receives.</Text>
         </List>
+        {!!props.bundledGuidanceBlocked?.length && (
+          <StateBanner
+            title="Bundled Guidance Needs Review"
+            detail={`${props.bundledGuidanceBlocked.map((block) => `${block.path}: ${block.section} (local v${block.installedVersion}, bundled v${block.bundledVersion}); compare with plugins/shared/${block.section}.md`).join('; ')}. Hot Sheet preserved the local text. Run hotsheet-cli -C <ticket-store> setup --diagnose --project <code-project> --json, reconcile the named sections, then run setup --refresh.`}
+            tone="warning"
+            urgency="status"
+            copyLayout="stacked"
+          />
+        )}
         <Select
           name="guidance-owner"
           label="Instruction Writer"

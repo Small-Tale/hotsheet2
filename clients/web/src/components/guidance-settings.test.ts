@@ -3,6 +3,30 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('shows only blocked newer bundled sections as a review notice', () => {
+    const props = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    expect(String(GuidanceSettings(props))).not.toContain('Bundled Guidance Needs Review');
+    const markup = String(
+      GuidanceSettings({
+        ...props,
+        bundledGuidanceBlocked: [
+          { path: 'AGENTS.md', section: 'ticket-driven-work', installedVersion: 1, bundledVersion: 6 },
+        ],
+      }),
+    );
+    expect(markup).toContain('Bundled Guidance Needs Review');
+    expect(markup).toContain('AGENTS.md: ticket-driven-work (local v1, bundled v6)');
+    expect(markup).toContain('Hot Sheet preserved the local text');
+  });
   it('leads with the human description and keeps the slug with the available version', () => {
     const markup = String(
       GuidanceSettings({

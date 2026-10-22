@@ -3771,6 +3771,19 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
   }
 });
 
+test('shows the blocked bundled guidance demo variant at wide and phone widths', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=guidance-settings');
+    const blocked = page
+      .locator('[data-component="guidance-settings"]')
+      .filter({ hasText: 'Bundled Guidance Needs Review' });
+    await expect(blocked.getByText('Bundled Guidance Needs Review')).toBeVisible();
+    await blocked.getByText('Bundled Guidance Needs Review').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `target/visual-captures/bundled-guidance-demo-${width}.png` });
+  }
+});
+
 test('opens the TicketReader dialog when its entry is chosen from the catalog sidebar (HS2-G2XKEH)', async ({
   page,
 }) => {

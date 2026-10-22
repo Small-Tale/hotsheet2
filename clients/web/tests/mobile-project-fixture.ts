@@ -74,6 +74,7 @@ export async function openDemoProject(
     aiSettings?: unknown;
     /** Start in a folder without a repository, so the setup and remote steps render (HS2-ME1XBC). */
     uninitializedRepository?: boolean;
+    bundledGuidanceBlocked?: Array<{ path: string; section: string; installedVersion: number; bundledVersion: number }>;
   } = {},
 ) {
   let repositoryInitialized = false;
@@ -82,7 +83,13 @@ export async function openDemoProject(
       url = new URL(request.url()),
       path = url.pathname;
     if (path === '/__hotsheet/projects/open')
-      return route.fulfill({ status: 201, json: project('demo-checkout', request.postDataJSON().root as string) });
+      return route.fulfill({
+        status: 201,
+        json: {
+          ...project('demo-checkout', request.postDataJSON().root as string),
+          ...(populated.bundledGuidanceBlocked ? { bundledGuidanceBlocked: populated.bundledGuidanceBlocked } : {}),
+        },
+      });
     if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
     if (path.endsWith('/providers'))
       return route.fulfill({

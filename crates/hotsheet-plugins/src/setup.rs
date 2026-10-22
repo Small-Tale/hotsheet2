@@ -27,7 +27,15 @@ pub struct SetupReport {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SetupNotice {
-    CodexHooksChanged { path: String },
+    CodexHooksChanged {
+        path: String,
+    },
+    BundledGuidanceBlocked {
+        path: String,
+        section: String,
+        installed_version: u64,
+        bundled_version: u64,
+    },
 }
 
 impl SetupNotice {
@@ -35,6 +43,14 @@ impl SetupNotice {
         match self {
             Self::CodexHooksChanged { path } => format!(
                 "Codex hooks changed in {path}. Run /hooks in Codex for this checkout to review and trust the updated hooks."
+            ),
+            Self::BundledGuidanceBlocked {
+                path,
+                section,
+                installed_version,
+                bundled_version,
+            } => format!(
+                "Bundled guidance section {section} v{bundled_version} was preserved in {path} because its local v{installed_version} body differs. Review the section and setup diagnosis before editing it."
             ),
         }
     }
@@ -1364,6 +1380,21 @@ fn setup_plugins_with_fs(
             }
         })
         .collect();
+    let mut blocked_guidance = BTreeMap::<String, Vec<SetupNotice>>::new();
+    if !external_guidance {
+        for plugin in &plugins {
+            if !plugin.manifest.instructions.shared_guidance {
+                continue;
+            }
+            let target = &plugin.manifest.instructions.target;
+            blocked_guidance.entry(target.clone()).or_insert_with(|| {
+                fs.read_to_string(&project_dir.join(target))
+                    .ok()
+                    .map(|contents| blocked_bundled_guidance(&contents, target))
+                    .unwrap_or_default()
+            });
+        }
+    }
     let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
     let membership = refresh_targets.map(|_| &run_ids);
 
@@ -1433,6 +1464,9 @@ fn setup_plugins_with_fs(
             }
             wrote.push(write_mcp(fs, project_dir, &store_abs, p)?);
             let mut notices = Vec::new();
+            if let Some(blocked) = blocked_guidance.remove(&p.manifest.instructions.target) {
+                notices.extend(blocked);
+            }
             if let Some((hook, changed)) = write_hooks(fs, project_dir, p)? {
                 if changed
                     && matches!(
@@ -1600,6 +1634,50 @@ fn guidance_with_specifics(template: &str, name: &str, specifics: Option<&str>) 
         template.trim().strip_suffix(&end).unwrap().trim_end(),
         specifics.trim()
     )
+}
+
+/// Only a newer bundled section that the normal exact-predecessor migration will
+/// preserve is a blocked update. Equal-version edits and newer local sections are
+/// local choices, while known legacy bodies are upgraded automatically.
+fn blocked_bundled_guidance(existing: &str, path: &str) -> Vec<SetupNotice> {
+    GUIDANCE_SECTIONS
+        .iter()
+        .filter_map(|section| {
+            let (start, finish) = guidance_bounds(existing, section.name)?;
+            let installed = &existing[start..finish];
+            let bundled = section.current.trim();
+            let installed_version = guidance_section_version(installed, section.name)?;
+            let bundled_version = guidance_section_version(bundled, section.name)?;
+            if installed_version >= bundled_version {
+                return None;
+            }
+            let generic = guidance_parts(installed, section.name).map(|(generic, _)| generic);
+            if generic.as_deref() == Some(bundled)
+                || generic.as_ref().is_some_and(|generic| {
+                    section.legacy.iter().any(|legacy| generic == legacy.trim())
+                })
+            {
+                return None;
+            }
+            Some(SetupNotice::BundledGuidanceBlocked {
+                path: path.to_owned(),
+                section: section.name.to_owned(),
+                installed_version,
+                bundled_version,
+            })
+        })
+        .collect()
+}
+
+fn guidance_section_version(block: &str, name: &str) -> Option<u64> {
+    block
+        .lines()
+        .next()?
+        .trim()
+        .strip_prefix(&format!("<!-- hotsheet:begin section={name} v="))?
+        .strip_suffix(" -->")?
+        .parse()
+        .ok()
 }
 
 /// Install fresh sections and upgrade only an exact known predecessor. A newer version,
@@ -2753,6 +2831,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bundled_guidance_notice_only_reports_preserved_older_custom_sections() {
+        let section = &GUIDANCE_SECTIONS[0];
+        let current = section.current.trim();
+        let old = format!(
+            "<!-- hotsheet:begin section={} v=1 -->\n\nLocal wording\n\n<!-- hotsheet:end section={} -->",
+            section.name, section.name
+        );
+        let notices = blocked_bundled_guidance(&old, "AGENTS.md");
+        assert_eq!(notices.len(), 1);
+        assert!(matches!(
+            &notices[0],
+            SetupNotice::BundledGuidanceBlocked {
+                path,
+                section,
+                installed_version: 1,
+                bundled_version: 6,
+            } if path == "AGENTS.md" && section == "ticket-driven-work"
+        ));
+        assert!(render_guidance_sections(&old, true).contains(&old));
+        assert!(blocked_bundled_guidance(current, "AGENTS.md").is_empty());
+        assert!(blocked_bundled_guidance(section.legacy[0], "AGENTS.md").is_empty());
+        let equal_version_edit = current.replace("Ticket-Driven Work", "Local title");
+        assert!(blocked_bundled_guidance(&equal_version_edit, "AGENTS.md").is_empty());
+        let newer = current.replace(
+            "section=ticket-driven-work v=6",
+            "section=ticket-driven-work v=7",
+        );
+        assert!(blocked_bundled_guidance(&newer, "AGENTS.md").is_empty());
+    }
+
+    #[test]
     fn codex_hook_command_uses_cli_that_outlives_a_host_snapshot() {
         let root = tempfile::tempdir().unwrap();
         let stable = root.path().join("stable/hotsheet-cli");
@@ -3029,6 +3138,44 @@ args = ["--path", "{{store}}"]
                 render_guidance_sections(&format!("Before.\n\n{current}\n\nAfter.\n"), false);
             assert_eq!(retired, "Before.\n\nAfter.\n");
         }
+    }
+
+    #[test]
+    fn refresh_reports_only_a_blocked_newer_bundled_guidance_section() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        run_setup_in(store.path(), root, Some("codex"), false, None, &[]).unwrap();
+        let agents_path = root.join("AGENTS.md");
+        let agents = std::fs::read_to_string(&agents_path).unwrap();
+        let section = &GUIDANCE_SECTIONS[0];
+        let old = format!(
+            "<!-- hotsheet:begin section={} v=1 -->\n\nLocal wording\n\n<!-- hotsheet:end section={} -->",
+            section.name, section.name
+        );
+        std::fs::write(&agents_path, agents.replace(section.current.trim(), &old)).unwrap();
+        let enabled = HashSet::from(["codex".to_string()]);
+        let report = refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+        assert!(report.set_up.iter().flat_map(|tool| &tool.notices).any(|notice| {
+            matches!(notice, SetupNotice::BundledGuidanceBlocked { section, .. } if section == "ticket-driven-work")
+        }));
+        assert!(
+            std::fs::read_to_string(&agents_path)
+                .unwrap()
+                .contains(&old)
+        );
+        let restored = std::fs::read_to_string(&agents_path)
+            .unwrap()
+            .replace(&old, section.current.trim());
+        std::fs::write(&agents_path, restored).unwrap();
+        let report = refresh_setup_in(store.path(), root, Some(&enabled), &[]).unwrap();
+        assert!(
+            !report
+                .set_up
+                .iter()
+                .flat_map(|tool| &tool.notices)
+                .any(|notice| { matches!(notice, SetupNotice::BundledGuidanceBlocked { .. }) })
+        );
     }
 
     #[test]
