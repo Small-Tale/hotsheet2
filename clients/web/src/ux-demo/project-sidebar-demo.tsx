@@ -356,7 +356,7 @@ export function AiToolSettingsDemo() {
 export function GuidanceSettingsDemo() {
   return (
     <>
-      <CatalogExample label="Description-First Rules with Available and Installed Versions">
+      <CatalogExample label="Description-First Rules with Installation Status">
         <GuidanceSettings
           loading={false}
           message=""

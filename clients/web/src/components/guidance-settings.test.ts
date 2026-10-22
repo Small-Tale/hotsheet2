@@ -34,6 +34,15 @@ describe('GuidanceSettings rule summaries', () => {
                   tags: ['rust'],
                   selected: true,
                 },
+                {
+                  name: 'hotsheet-visual-qa',
+                  description: 'Visual review of rendered changes',
+                  version: 2,
+                  installed_version: null,
+                  owner: 'hotsheet',
+                  tags: ['testing'],
+                  selected: false,
+                },
               ],
               skills: [],
             },
@@ -42,6 +51,7 @@ describe('GuidanceSettings rule summaries', () => {
       }),
     );
     expect(markup).toMatch(/class="kui-checkbox__label"[^>]*>Rust lint and formatting defaults/);
-    expect(markup).toContain('rust-lint-and-format · available v4 · installed v3');
+    expect(markup).toContain('rust-lint-and-format · available v4 · v3 installed');
+    expect(markup).toContain('hotsheet-visual-qa · available v2 · not installed');
   });
 });

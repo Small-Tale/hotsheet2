@@ -67,7 +67,8 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await expect(visualRule.locator('label')).toContainText('Visual review of rendered changes');
   await expect(visualRule.locator('label')).not.toContainText('hotsheet-visual-qa');
   await expect(visualRule).toContainText('hotsheet-visual-qa · available v2');
-  await expect(picker).toContainText('installed v1');
+  await expect(picker).toContainText('v1 installed');
+  await expect(picker).toContainText('not installed');
   await expect(picker).toContainText('available v2');
   await visualRule.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-rules-wide.png' });
