@@ -17042,6 +17042,23 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             .any(|rule| rule["project"] == second_id)
     );
 
+    let second_vault = rules_path.with_file_name(format!("checkout-{}.json", second.id));
+    hotsheet_aitools::append_permission_rule(
+        &second_vault,
+        &hotsheet_aitools::PermissionRule {
+            project: second_id.clone(),
+            tool: "Bash".into(),
+            action: "cargo test".into(),
+            exact_action: Some("cargo test".into()),
+            pattern: None,
+            description: None,
+            decision: hotsheet_aitools::PermissionDecision::Allow,
+            persist: true,
+            connection: None,
+        },
+    )
+    .unwrap();
+
     let restarted = AppState::new(store, SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
@@ -17050,6 +17067,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let restarted_app = app(restarted);
     assert_eq!(
         restarted_app
+            .clone()
             .oneshot(authed("GET", "/permissions/rules", None))
             .await
             .unwrap()
@@ -17072,7 +17090,147 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             &second_id,
             "new-chat",
             "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+
+    // A damaged neighboring vault must not withdraw the first checkout's grant.
+    let healthy_second = std::fs::read(&second_vault).unwrap();
+    std::fs::write(&second_vault, b"corrupt envelope").unwrap();
+    let listed = body_json(
+        restarted_app
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == first_id)
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &first_id,
+            "healthy-chat",
+            "Bash",
             "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "damaged-chat",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    let damaged_bridge = restarted_bridge.clone();
+    let damaged_project = second_id.clone();
+    let waiter = std::thread::spawn(move || {
+        damaged_bridge.request_blocking_for_project(
+            damaged_project,
+            "pending-chat",
+            "Bash",
+            "cargo test",
+        )
+    });
+    let id = loop {
+        let pending = body_json(
+            restarted_app
+                .clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(request) = pending.as_array().unwrap().first() {
+            assert_eq!(request["project"], second_id);
+            assert_eq!(request["always_allow_supported"], false);
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    assert_eq!(
+        restarted_app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/permissions/{id}"),
+                Some(r#"{"decision":"deny","scope":"once"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    std::fs::write(&second_vault, healthy_second).unwrap();
+    assert_eq!(
+        restarted_app
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "recovered-chat",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    std::fs::remove_file(&second_vault).unwrap();
+    assert_eq!(
+        restarted_app
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert!(
+        !second_vault.exists(),
+        "a known missing vault is not silently recreated"
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &first_id,
+            "still-healthy",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "missing-chat",
+            "Bash",
+            "cargo test",
             std::time::Duration::from_millis(1),
             hotsheet_aitools::PermissionDecision::Deny
         ),

@@ -1147,3 +1147,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks two vault keys, shared-store isolation, and reload; `crates/hotsheet-server/src/lib.rs` checks terminal launch identity; `clients/web/src/permission-notifications.test.ts` checks checkout rule filtering.
 - End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy migration have separate tickets (`HS2-TSXSH6`, `HS2-ZQ6TV2`).
+
+### Isolated checkout vault health (HS2-KJA1V4)
+
+- Behavior: Damage or loss of one checkout vault withdraws only its persistent answers and disables Always for its pending requests. A healthy neighbor still matches, and restoration of the authenticated file reloads its answers without silently recreating a known missing vault.
+- Unit: `crates/hotsheet-aitools/src/permission.rs` checks project-specific health validation and neighboring grants.
+- End to end: `crates/hotsheet-server/tests/http.rs` covers corrupted, restored, and removed checkout vaults across authenticated rule and pending-request routes, including concurrent asks; `clients/web/tests/providers.spec.ts` checks the no-Always popup at 1280 and 390 pixels.

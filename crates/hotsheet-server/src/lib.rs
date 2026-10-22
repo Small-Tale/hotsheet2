@@ -877,12 +877,11 @@ impl AppState {
             paths.insert(project.clone(), path.clone());
         }
         let validation_paths = self.permission_rule_paths.clone();
-        self.permissions.set_durable_validator(move || {
+        self.permissions.set_durable_validator(move |project| {
             validation_paths
                 .lock_or_recover()
-                .iter()
-                .filter(|(project, _)| project.is_empty() || project.starts_with("checkout:"))
-                .all(|(_, path)| {
+                .get(project)
+                .is_some_and(|path| {
                     path.is_file() && hotsheet_aitools::permission_rules_health(path).is_ok()
                 })
         });

@@ -15449,6 +15449,41 @@ test('answers identical permission requests for this chat and revokes the rememb
 });
 
 for (const width of [1280, 390]) {
+  test(`keeps a checkout with unavailable durable permissions on the narrower consent path at ${width}px (HS2-KJA1V4)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    await page.route('**/permissions', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 908,
+            project: `checkout:${project.id}`,
+            connection: 'damaged-checkout-chat',
+            tool: 'Bash',
+            action: 'npm test',
+            agent: 'claude',
+            always_allow_supported: false,
+          },
+        ],
+      }),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toBeVisible();
+    await expect(popup.getByRole('button', { name: 'Allow', exact: true })).toBeVisible();
+    await expect(popup).not.toContainText('Always Allow');
+    await popup.screenshot({
+      path: `target/visual-captures/hs2-kja1v4-narrow-consent-${width}.png`,
+      animations: 'disabled',
+    });
+  });
+}
+
+for (const width of [1280, 390]) {
   test(`omits redundant Allowed text in checkout-owned remembered-answer preview and dialog at ${width}px (HS2-0HKES8, HS2-9QK0V7, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY, HS2-G1SG1P)`, async ({
     page,
   }) => {

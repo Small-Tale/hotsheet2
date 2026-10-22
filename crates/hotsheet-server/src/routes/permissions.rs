@@ -41,7 +41,13 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
                     tool: request.tool,
                     action: request.action,
                     agent: request.agent,
-                    always_allow_supported: rule_projects.contains_key(&request.project),
+                    always_allow_supported: rule_projects.get(&request.project).is_some_and(
+                        |path| {
+                            !request.project.starts_with("checkout:")
+                                || (path.is_file()
+                                    && hotsheet_aitools::permission_rules_health(path).is_ok())
+                        },
+                    ),
                     suggestions,
                 }
             })

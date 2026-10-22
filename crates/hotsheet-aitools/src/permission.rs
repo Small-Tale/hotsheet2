@@ -844,6 +844,7 @@ impl PermissionBridge {
 
 /// An observer of a permission request entering or leaving the queue.
 type RequestCallback = Box<dyn Fn(&Request) + Send + Sync>;
+type DurableValidator = Box<dyn Fn(&str) -> bool + Send + Sync>;
 
 /// A thread-safe [`PermissionBridge`] that supports the **live human round-trip**
 /// (`docs/05` §5.7, HS2-9R9YZW): a tool thread calls [`request_blocking`] and **blocks**
@@ -867,7 +868,7 @@ pub struct SharedPermissionBridge {
     /// (HS2-9R9YZW). `None` = headless / no observer.
     on_pending: Mutex<Option<RequestCallback>>,
     on_removed: Mutex<Option<RequestCallback>>,
-    durable_validator: Mutex<Option<Box<dyn Fn() -> bool + Send + Sync>>>,
+    durable_validator: Mutex<Option<DurableValidator>>,
     durable_locked: AtomicBool,
 }
 
@@ -897,23 +898,43 @@ impl SharedPermissionBridge {
 
     /// Recheck the host key and encrypted rule data before any durable auto-answer.
     /// On failure, old in-memory approvals are withdrawn and the request asks again.
-    pub fn set_durable_validator(&self, f: impl Fn() -> bool + Send + Sync + 'static) {
+    pub fn set_durable_validator(&self, f: impl Fn(&str) -> bool + Send + Sync + 'static) {
         *self.durable_validator.lock_or_recover() = Some(Box::new(f));
     }
 
-    fn enforce_durable_health(&self, bridge: &mut PermissionBridge) {
-        if !bridge.rules.iter().any(|rule| rule.persist) {
+    fn enforce_durable_health(&self, bridge: &mut PermissionBridge, project: &str) {
+        if !bridge
+            .rules
+            .iter()
+            .any(|rule| rule.persist && rule.project == project)
+        {
             return;
         }
         if self
             .durable_validator
             .lock_or_recover()
             .as_ref()
-            .is_some_and(|check| !check())
+            .is_some_and(|check| !check(project))
         {
-            self.durable_locked.store(true, Ordering::Release);
-            bridge.rules.retain(|rule| !rule.persist);
+            if project.starts_with("checkout:") {
+                bridge
+                    .rules
+                    .retain(|rule| !rule.persist || rule.project != project);
+            } else {
+                bridge
+                    .rules
+                    .retain(|rule| !rule.persist || rule.project.starts_with("checkout:"));
+                self.durable_locked.store(true, Ordering::Release);
+            }
         }
+    }
+
+    /// Withdraw only one checkout's persistent answers after its vault is lost.
+    pub fn drop_durable_rules_for_project(&self, project: &str) {
+        self.inner
+            .lock_or_recover()
+            .rules
+            .retain(|rule| !rule.persist || rule.project != project);
     }
 
     pub fn drop_durable_rules(&self) {
@@ -1011,7 +1032,7 @@ impl SharedPermissionBridge {
         );
         let outcome = {
             let mut bridge = self.inner.lock_or_recover();
-            self.enforce_durable_health(&mut bridge);
+            self.enforce_durable_health(&mut bridge, &project);
             bridge.request_for_project(
                 project.clone(),
                 connection.clone(),
@@ -1170,7 +1191,7 @@ impl SharedPermissionBridge {
         } = ask;
         let outcome = {
             let mut bridge = self.inner.lock_or_recover();
-            self.enforce_durable_health(&mut bridge);
+            self.enforce_durable_health(&mut bridge, &project);
             bridge.request_for_project_as(
                 project.clone(),
                 connection.clone(),
@@ -1884,6 +1905,30 @@ mod tests {
             rules.request_for_project("checkout:one", "c", "Bash", "legacy"),
             Outcome::Pending(_)
         ));
+        drop(rules);
+        bridge.set_durable_validator(|project| project != "checkout:one");
+        assert_eq!(
+            bridge.request_blocking_timeout_for_project(
+                "checkout:one",
+                "fresh",
+                "Bash",
+                "one-only",
+                Duration::from_millis(1),
+                Decision::Deny,
+            ),
+            Decision::Deny,
+        );
+        assert_eq!(
+            bridge.request_blocking_timeout_for_project(
+                "checkout:two",
+                "fresh",
+                "Bash",
+                "two-only",
+                Duration::from_millis(1),
+                Decision::Deny,
+            ),
+            Decision::Allow,
+        );
     }
 
     #[test]

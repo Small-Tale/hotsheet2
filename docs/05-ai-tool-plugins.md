@@ -1047,6 +1047,12 @@ identity with no durable-rule location. Existing store-keyed grants remain in th
 original namespace. Legacy hook installations that have not received the new launch
 environment also retain their old namespace; `HS2-ZQ6TV2` handles explicit migration.
 Source-independent project launch remains tracked by `HS2-TSXSH6`.
+Permission vault health is checked per checkout before applying a durable rule.
+If one checkout vault is corrupt or disappears, its in-memory durable answers are
+withdrawn and its pending requests cannot offer Always Allow. Other checkout
+vaults and their grants remain available. Restoring the original authenticated
+file reloads that checkout's answers; a missing known file is never recreated
+silently during the same server run (`HS2-KJA1V4`).
 
 The server must register one machine-local encrypted durable-rule location per checkout
 identity before offering Always Allow. It must report unavailable durable storage as an

@@ -50,16 +50,16 @@ impl AppState {
             .contains_key(identity)
             && !path.is_file()
         {
-            self.permissions.drop_durable_rules();
+            self.permissions.drop_durable_rules_for_project(identity);
             return false;
         }
         if hotsheet_aitools::ensure_permission_rules_file(&path).is_err() {
-            self.permissions.drop_durable_rules();
+            self.permissions.drop_durable_rules_for_project(identity);
             return false;
         }
         let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) else {
             tracing::warn!(checkout = %id, "checkout permission vault unavailable");
-            self.permissions.drop_durable_rules();
+            self.permissions.drop_durable_rules_for_project(identity);
             return false;
         };
         let rules = rules
