@@ -4,9 +4,10 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { RepositorySizeEntry, RepositorySizeReport } from '../api';
-import { RepositorySize, type RepositorySizeState } from '../components/repository-size';
+import type { CompactionPlan, RepositorySizeEntry, RepositorySizeReport } from '../api';
+import { type CompactionPreviewState, RepositorySize, type RepositorySizeState } from '../components/repository-size';
 import { RepositorySizeBanner } from '../components/repository-size-banner';
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
@@ -87,7 +88,52 @@ const STATE_CHOICES: SelectChoice[] = [
   { value: 'error', label: 'Error' },
 ];
 
-export const repositorySizeSettings = { state: signal<string>('ok') };
+const SAMPLE_PLAN: CompactionPlan = {
+  head: 'a'.repeat(40),
+  branch: 'main',
+  min_age_days: 90,
+  oversized_bytes: 10_000_000,
+  candidates: [
+    {
+      ticket_id: 'ticket-one',
+      ticket_slug: 'HS2-DONE',
+      attachment_id: 'attachment-one',
+      filename: 'old-capture.png',
+      path: 'attachments/ticket-one/attachment-one/old-capture.png',
+      bytes: 18_400_000,
+      sha256: 'b'.repeat(64),
+      reason: 'oversized',
+    },
+    {
+      ticket_id: 'ticket-two',
+      ticket_slug: 'HS2-OLDER',
+      attachment_id: 'attachment-two',
+      filename: 'duplicate-capture.png',
+      path: 'attachments/ticket-two/attachment-two/duplicate-capture.png',
+      bytes: 4_200_000,
+      sha256: 'c'.repeat(64),
+      reason: 'duplicate',
+    },
+  ],
+  reclaimable_payload_bytes: 22_600_000,
+  fingerprint: 'd'.repeat(64),
+};
+
+function demoCompaction(name: string): CompactionPreviewState {
+  const source = STORE.connection_id ?? 'git-store';
+  if (name === 'loading') return { status: 'loading', source };
+  if (name === 'error')
+    return {
+      status: 'error',
+      source,
+      message: 'The ticket store has local changes. Commit or remove them before planning.',
+    };
+  if (name === 'ready') return { status: 'ready', source, plan: SAMPLE_PLAN };
+  return { status: 'idle' };
+}
+
+type CompactionDemoState = 'idle' | 'loading' | 'ready' | 'error';
+export const repositorySizeSettings = { state: signal<string>('ok'), compaction: signal<CompactionDemoState>('idle') };
 
 /** Deterministic fixtures for every state the stats page shows (HS2-QF44T7). */
 export function repositorySizeDemoState(name: string): RepositorySizeState {
@@ -142,9 +188,10 @@ export function repositorySizeDemoState(name: string): RepositorySizeState {
 
 export function resetRepositorySizeDemo(root?: ParentNode): void {
   repositorySizeSettings.state.value = 'ok';
+  repositorySizeSettings.compaction.value = 'idle';
   if (root)
     syncSettingsControls(root, 'repository-size', {
-      values: { state: repositorySizeSettings.state.value },
+      values: { state: repositorySizeSettings.state.value, compaction: repositorySizeSettings.compaction.value },
     });
 }
 
@@ -155,7 +202,10 @@ export function RepositorySizeDemo() {
       note="Shown in a project's statistics view beside confidence calibration. The server computes each level against GitHub's 5 GB soft and 10 GB hard limits; the component only presents it."
       viewport={{ width: 'full' }}
     >
-      {RepositorySize({ state: repositorySizeDemoState(repositorySizeSettings.state.value) })}
+      {RepositorySize({
+        state: repositorySizeDemoState(repositorySizeSettings.state.value),
+        compaction: demoCompaction(repositorySizeSettings.compaction.value),
+      })}
     </CatalogExample>
   );
 }
@@ -164,6 +214,17 @@ export function RepositorySizeSettings() {
   return (
     <DemoSettingsForm settings="repository-size">
       <Select name="state" label="State" value={repositorySizeSettings.state.value} choices={STATE_CHOICES} />
+      <Select
+        name="compaction"
+        label="Compaction Preview"
+        value={repositorySizeSettings.compaction.value}
+        choices={[
+          { value: 'idle', label: 'Closed' },
+          { value: 'loading', label: 'Loading' },
+          { value: 'ready', label: 'Candidates Ready' },
+          { value: 'error', label: 'Unavailable' },
+        ]}
+      />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -205,6 +266,16 @@ function wireRepositorySizeDemo(root: HTMLElement): () => void {
     delegate(root, 'change', '[data-settings="repository-size"] [name]', (_event, target) => {
       const control = target as FormControl;
       if (control.getAttribute('name') === 'state') repositorySizeSettings.state.value = control.value;
+      if (
+        control.getAttribute('name') === 'compaction' &&
+        ['idle', 'loading', 'ready', 'error'].includes(control.value)
+      )
+        repositorySizeSettings.compaction.value = control.value as CompactionDemoState;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', PROJECT_LIFECYCLE_ACTIONS.previewRepositoryCompaction.selector, () => {
+      repositorySizeSettings.compaction.value = 'ready';
     }),
   );
   return () => {

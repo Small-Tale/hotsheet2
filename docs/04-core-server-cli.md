@@ -253,6 +253,44 @@ server endpoint (HS2-R0131R).
   10 GB or more (its hard limit). The thresholds are named constants (`WARNING_BYTES`,
   `CRITICAL_BYTES`) echoed in the response. Each entry carries its own level, and the
   report carries the highest one. Clients display levels; they never recompute them.
+
+**Attachment compaction (HS2-T2Q7KM).** Project statistics offers a read-only preview for
+each dedicated Git ticket store. `GET /checkouts/{id}/repository/compaction?source=<connection-id>`
+returns the same bounded plan as the headless CLI:
+
+```sh
+hotsheet checkout compact <connection-id> <project> --min-age-days 90 --oversized-bytes 10000000 --json
+```
+
+The plan lists duplicate and oversized payloads only on completed, verified, or archived
+tickets older than the chosen age. It shows each filename, ticket, size, SHA-256, Git path,
+and reason. Its fingerprint binds those choices to the current branch head. The default
+threshold is 10 MB. The UI shows a short preview; use CLI JSON to review the full list.
+
+Execution is deliberately an explicit headless operation. Install `git-filter-repo`, choose
+a new backup path outside the store, and copy the exact confirmation printed by the CLI:
+
+```sh
+hotsheet checkout compact <connection-id> <project> --min-age-days 90 --oversized-bytes 10000000 --execute --backup <new-backup.git> --confirm 'rewrite <branch> <fingerprint>'
+```
+
+The engine rejects shared code/ticket repositories, dirty stores, stale previews, multiple
+branches or tags, an unpushed or changed `origin` head, an existing backup destination, and
+missing `git-filter-repo`. It makes a bare mirror backup, writes an audit note with each
+removed attachment's filename, size, digest, and reason in a disposable clone, filters the
+selected payload paths from history, then pushes with an exact remote-head lease. The audit
+note also retains each attachment's original purpose, provenance, and annotation metadata.
+The original checkout is deliberately left untouched and stale. Preserve its local work, then
+re-clone or reset it to the rewritten branch; every collaborator must do the same before
+another ticket write or push. Keep the backup until recovery is confirmed. A working-tree
+attachment deletion alone cannot reclaim old Git objects.
+
+For future images and other large media, install Git LFS in every collaborator's ticket
+store environment, run `git lfs install`, then `git lfs track '*.png' '*.jpg' '*.webp' '*.mp4'`
+inside the dedicated ticket repository and commit `.gitattributes` before new attachments.
+Coordinate LFS availability with the hosting provider and every automated writer; tracking
+new files does not migrate old objects, so use the compaction plan for existing history.
+
 - **Explicit non-measurement:** a store kept inside the code repository is flagged
   `shared_with_code`, since its git size is the code repository's. A non-repository directory
   reports `not_repository`, a missing path `unavailable`, and a non-git provider source

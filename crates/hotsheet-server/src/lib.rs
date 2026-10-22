@@ -89,14 +89,14 @@ use routes::checkout_tickets::{
     update_ticket_attachment_annotations,
 };
 use routes::checkouts::{
-    add_checkout_source, checkout_repository_commits, checkout_repository_file_action,
-    checkout_repository_files, checkout_repository_size, checkout_repository_status,
-    configure_checkout_repository_remote, create_corrupt_ticket_repair, get_checkout_code_review,
-    get_checkout_ticket_usage, initialize_checkout_repository, list_checkout_corrupt_tickets,
-    list_checkout_tickets, list_checkouts, open_checkout_code_review,
-    open_checkout_repository_review, open_project, prewarm_corrupt_tickets, register_checkout,
-    relink_checkout_git_source, remove_checkout_source, resolve_checkout,
-    set_checkout_default_source, set_checkout_source_color,
+    add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
+    checkout_repository_file_action, checkout_repository_files, checkout_repository_size,
+    checkout_repository_status, configure_checkout_repository_remote, create_corrupt_ticket_repair,
+    get_checkout_code_review, get_checkout_ticket_usage, initialize_checkout_repository,
+    list_checkout_corrupt_tickets, list_checkout_tickets, list_checkouts,
+    open_checkout_code_review, open_checkout_repository_review, open_project,
+    prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_source,
+    resolve_checkout, set_checkout_default_source, set_checkout_source_color,
 };
 use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
 use routes::guidance::{
@@ -1263,6 +1263,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/repository/size",
             get(checkout_repository_size),
+        )
+        .route(
+            "/checkouts/{reference}/repository/compaction",
+            get(checkout_repository_compaction),
         )
         .route(
             "/checkouts/{reference}/repository/init",

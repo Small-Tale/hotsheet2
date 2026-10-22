@@ -547,6 +547,68 @@ pub(crate) async fn checkout_repository_size(
         })
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct CompactionQuery {
+    source: String,
+    #[serde(default = "default_compaction_age")]
+    min_age_days: u64,
+    #[serde(default = "default_compaction_threshold")]
+    oversized_bytes: u64,
+}
+
+fn default_compaction_age() -> u64 {
+    90
+}
+
+fn default_compaction_threshold() -> u64 {
+    10_000_000
+}
+
+/// Read-only compaction preview. The irreversible rewrite is deliberately a CLI action
+/// with exact confirmation and a caller-selected backup destination.
+pub(crate) async fn checkout_repository_compaction(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<CompactionQuery>,
+) -> Result<Json<hotsheet_ticketing::repository_compaction::CompactionPlan>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let source = checkout
+        .source(&query.source)
+        .filter(|source| source.provider == "git")
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "source is not a linked Git ticket store",
+            )
+        })?;
+    let root = std::path::PathBuf::from(&source.locator);
+    if root.canonicalize().ok() == std::path::PathBuf::from(&checkout.root).canonicalize().ok() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "ticket store shares the code repository",
+        ));
+    }
+    let age = query.min_age_days;
+    let threshold = query.oversized_bytes;
+    tokio::task::spawn_blocking(move || {
+        let store = FsStore::open_without_maintenance(&root).map_err(|error| error.to_string())?;
+        hotsheet_ticketing::repository_compaction::plan_store(
+            &store,
+            time::OffsetDateTime::now_utc(),
+            age,
+            threshold,
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
+}
+
 pub(crate) async fn initialize_checkout_repository(
     State(state): State<AppState>,
     Path(reference): Path<String>,

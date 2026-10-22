@@ -2093,6 +2093,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     statsProjectId: signal<string | undefined>('b'),
     confidenceReportByProject: signal({}),
     repositorySizeByProject: signal({}),
+    compactionByProject: signal({}),
     canGiveFeedback: () => false,
     ai: state.ai,
     permissions,

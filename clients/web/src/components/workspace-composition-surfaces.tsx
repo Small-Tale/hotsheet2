@@ -11,7 +11,7 @@ import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confid
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
 import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
-import { RepositorySize, type RepositorySizeState } from './repository-size';
+import { type CompactionPreviewState, RepositorySize, type RepositorySizeState } from './repository-size';
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
 import { inspectorToggle, type NavigationPanelParts, type SidebarPanelParts } from './sidebar-panel';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
@@ -96,6 +96,7 @@ export type GlobalWorkspaceSurfaceProps =
       calibration?: ConfidenceCalibrationState;
       /** Git object and attachment sizes against GitHub's limits (HS2-QF44T7). */
       repositorySize?: RepositorySizeState;
+      compaction?: CompactionPreviewState;
     };
 
 export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
@@ -110,7 +111,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
             {props.projectName} project statistics
           </Text>
           <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
-          <RepositorySize state={props.repositorySize ?? { status: 'loading' }} />
+          <RepositorySize state={props.repositorySize ?? { status: 'loading' }} compaction={props.compaction} />
         </div>
       </Pane>
     );

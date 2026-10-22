@@ -10,6 +10,7 @@ import type {
   CodeReviewCommit,
   CommandDefinition,
   CommandRun,
+  CompactionPlan,
   CorruptTicket,
   CustomView,
   DuplicateBacklinkResponse,
@@ -565,6 +566,26 @@ export const parseRepositorySizeReport = shape<RepositorySizeReport>('repository
   thresholds: shape('size thresholds', { warning_bytes: isNumber, critical_bytes: isNumber }).check,
   level: isSizeLevel,
   entries: listOf(repositorySizeEntry.check),
+});
+
+const compactionCandidate = shape<CompactionPlan['candidates'][number]>('compaction candidate', {
+  ticket_id: isString,
+  ticket_slug: isString,
+  attachment_id: isString,
+  filename: isString,
+  path: isString,
+  bytes: isNumber,
+  sha256: isString,
+  reason: (value) => value === 'duplicate' || value === 'oversized',
+});
+export const parseCompactionPlan = shape<CompactionPlan>('compaction plan', {
+  head: isString,
+  branch: isString,
+  min_age_days: isNumber,
+  oversized_bytes: isNumber,
+  candidates: listOf(compactionCandidate.check),
+  reclaimable_payload_bytes: isNumber,
+  fingerprint: isString,
 });
 
 export const parseCorruptTicket = shape<CorruptTicket>(

@@ -2373,6 +2373,39 @@ test('round-trips RepositorySize states through reset and a post-reset edit at w
   await capture('unsupported-narrow');
 });
 
+test('RepositorySize demo exposes compaction preview, loading, and unavailable states (HS2-T2Q7KM)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1200 });
+  await page.goto('/ux-demo?component=repository-size');
+  const panel = page.locator('[data-catalog-example] [data-component="repository-size"]');
+  await panel.getByRole('button', { name: 'Preview Attachment Compaction' }).click();
+  await expect(panel).toContainText('HS2-DONE: old-capture.png');
+  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-demo-preview-wide.png' });
+  await page.locator('[data-action="toggle-settings"]').first().click();
+  const select = page
+    .getByRole('complementary', { name: 'RepositorySize Settings' })
+    .locator('kui-select[name="compaction"]');
+  const set = (value: string) =>
+    select.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  await set('loading');
+  await expect(panel).toContainText('Checking');
+  await set('error');
+  await expect(panel).toContainText('Compaction preview unavailable.');
+  await set('ready');
+  await setDemoSettingsOpen(page, false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel).toContainText('HS2-OLDER: duplicate-capture.png');
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-demo-preview-narrow.png', fullPage: true });
+});
+
 test('round-trips ConfidenceBadge appearance and band controls through reset and a post-reset edit (HS2-A0Q6G6)', async ({
   page,
 }) => {

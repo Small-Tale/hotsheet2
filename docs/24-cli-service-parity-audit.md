@@ -28,6 +28,13 @@ project and applies the same validation as the dedicated service route.
 | Server quiescence report and safe restart                                                          | Yes: `lifecycle status`, `lifecycle restart`                                    | `GET /lifecycle/quiescence`, `POST /lifecycle/restart` | No                                    | Added by `HS2-10T048`; the server keeps its quiescence gate, so a busy server refuses and the command is safe to repeat.                                                                      |
 | Repository size vs. GitHub limits                                                                  | Yes: `checkout repo-size [--json]`                                              | `GET /checkouts/{id}/repository/size`                  | `hotsheet_repository_size`            | One `repository_size::report` behind all three; the MCP tool returns the same JSON (`HS2-R0131R`).                                                                                            |
 
+Attachment compaction (HS2-T2Q7KM) has one engine in `repository_compaction::plan_store`:
+`checkout compact <connection-id> [reference]` prints the complete headless plan and
+executes an explicitly confirmed rewrite; the authenticated
+`GET /checkouts/{id}/repository/compaction?source=<connection-id>` and project-statistics UI
+show its read-only preview. The irreversible backup and force-push operation remains a
+CLI administration action, with no graphical-only setup or mutation path.
+
 The audit found concrete gaps in eight follow-up tickets above, including the
 pre-existing media-annotation and GitLab/Jira setup tickets. It did not treat
 transport-only endpoints (health, compatibility, polling, streaming, media byte

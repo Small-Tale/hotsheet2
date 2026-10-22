@@ -10257,6 +10257,114 @@ async fn repository_size_reports_code_repo_and_linked_store_with_attachments() {
 }
 
 #[tokio::test]
+async fn repository_compaction_previews_only_old_closed_git_attachments() {
+    let (store_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let remote = tempfile::tempdir().unwrap();
+    let git = |root: &std::path::Path, args: &[&str]| {
+        let output = hotsheet_ticketing::git::command_in(root)
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    git(store_dir.path(), &["init", "-q", "-b", "main"]);
+    git(store_dir.path(), &["config", "user.name", "Test"]);
+    git(
+        store_dir.path(),
+        &["config", "user.email", "test@example.com"],
+    );
+    git(store_dir.path(), &["add", "-A"]);
+    git(store_dir.path(), &["commit", "-qm", "store"]);
+    let store = hotsheet_ticketing::FsStore::open_without_maintenance(store_dir.path())
+        .unwrap()
+        .with_deferred_push();
+    let old = hotsheet_model::Timestamp::new("2025-01-01T00:00:00Z");
+    let id = hotsheet_model::Ulid::new();
+    let mut ticket =
+        hotsheet_model::Ticket::new(id, "HS-OLD", "Old", "task", old.clone(), old.clone());
+    ticket.status = hotsheet_model::Status::Completed;
+    ticket.completed_at = Some(old.clone());
+    store.write_ticket_committing(&ticket).unwrap();
+    store
+        .write_attachment(
+            &id,
+            hotsheet_model::Ulid::new(),
+            old,
+            "large.png",
+            b"large attachment payload",
+        )
+        .unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(
+        store_dir.path(),
+        &["remote", "add", "origin", &remote.path().to_string_lossy()],
+    );
+    git(store_dir.path(), &["push", "-q", "origin", "main"]);
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(
+                &serde_json::json!({
+                    "root": checkout.path(), "alias": "compact", "stores": [store_dir.path()]
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    let source = created["sources"][0]["connection_id"].as_str().unwrap();
+    let uri = format!(
+        "/checkouts/compact/repository/compaction?source={source}&min_age_days=30&oversized_bytes=10"
+    );
+    let response = app
+        .clone()
+        .oneshot(authed("GET", &uri, None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let preview = body_json(response).await;
+    assert_eq!(preview["candidates"][0]["ticket_slug"], "HS-OLD");
+    assert_eq!(preview["candidates"][0]["reason"], "oversized");
+    assert!(preview.get("remote").is_none());
+    assert_eq!(store.list_tickets().unwrap()[0].attachments.len(), 1);
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                "/checkouts/compact/repository/compaction?source=nope",
+                None
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let denied = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_origin() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();

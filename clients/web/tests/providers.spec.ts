@@ -32401,6 +32401,78 @@ test('warns in the project shell while a repository is over a GitHub size limit 
   await expect(panel).toHaveAttribute('data-level', 'critical');
 });
 
+test('project statistics previews ticket-store compaction without rewriting attachments (HS2-T2Q7KM)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const report = {
+    checkout_id: 'demo-checkout',
+    thresholds: { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 },
+    level: 'ok',
+    entries: [
+      {
+        kind: 'ticket_store',
+        connection_id: 'abc123',
+        provider: 'git',
+        label: 'demo.hs2',
+        locator: '/work/demo.hs2',
+        status: 'measured',
+        git: { loose_objects: 2, loose_bytes: 2048, packed_objects: 0, packs: 0, packed_bytes: 0, total_bytes: 2048 },
+        attachments: { bytes: 22_600_000, files: 2, truncated: false },
+        shared_with_code: false,
+        level: 'ok',
+      },
+    ],
+  };
+  let requests = 0;
+  await page.route('**/checkouts/demo-checkout/repository/size', (route) => route.fulfill({ json: report }));
+  await page.route('**/checkouts/demo-checkout/repository/compaction?*', (route) => {
+    requests += 1;
+    expect(new URL(route.request().url()).searchParams.get('source')).toBe('abc123');
+    return route.fulfill({
+      json: {
+        head: 'a'.repeat(40),
+        branch: 'main',
+        min_age_days: 90,
+        oversized_bytes: 10_000_000,
+        candidates: [
+          {
+            ticket_id: 'one',
+            ticket_slug: 'HS-OLD',
+            attachment_id: 'att-one',
+            filename: 'old-capture.png',
+            path: 'attachments/one/att-one/old-capture.png',
+            bytes: 18_400_000,
+            sha256: 'b'.repeat(64),
+            reason: 'oversized',
+          },
+        ],
+        reclaimable_payload_bytes: 18_400_000,
+        fingerprint: 'c'.repeat(64),
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-component="project-summary"]').first().click();
+  const panel = page.locator('[data-component="repository-size"]');
+  await expect(panel.getByRole('button', { name: 'Preview Attachment Compaction' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Preview Attachment Compaction' }).click();
+  await expect(panel).toContainText('HS-OLD: old-capture.png (18.4 MB, oversized)');
+  await expect(panel).toContainText('requires a new mirror backup path');
+  expect(requests).toBe(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-preview-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel.getByText('HS-OLD: old-capture.png (18.4 MB, oversized)')).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-preview-narrow.png', fullPage: true });
+});
+
 test('a server size-limit crossing event brings up the repository size banner without polling (HS2-KKFEY5)', async ({
   page,
 }) => {

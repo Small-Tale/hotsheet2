@@ -1,6 +1,7 @@
 import './repository-size.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -10,11 +11,18 @@ import { Text } from '@kerfjs/ui/text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { CircleAlert, HardDrive, OctagonAlert, TriangleAlert } from 'lucide';
 
-import type { RepositorySizeEntry, RepositorySizeLevel, RepositorySizeReport } from '../api';
+import type { CompactionPlan, RepositorySizeEntry, RepositorySizeLevel, RepositorySizeReport } from '../api';
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 
 /** What the repository size section shows (HS2-QF44T7). */
 export type RepositorySizeState =
   { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; report: RepositorySizeReport };
+
+export type CompactionPreviewState =
+  | { status: 'idle' }
+  | { status: 'loading'; source: string }
+  | { status: 'error'; source: string; message: string }
+  | { status: 'ready'; source: string; plan: CompactionPlan };
 
 const SIZE_UNITS = ['B', 'kB', 'MB', 'GB', 'TB'] as const;
 
@@ -144,6 +152,59 @@ function RepositoryEntry({ entry }: { entry: RepositorySizeEntry }) {
             }
           />
         </ValueTable>
+        {entry.kind === 'ticket_store' &&
+          entry.provider === 'git' &&
+          entry.status === 'measured' &&
+          !entry.shared_with_code &&
+          entry.connection_id !== undefined && (
+            <Button
+              tone="brand"
+              emphasis="secondary"
+              size="compact"
+              action={PROJECT_LIFECYCLE_ACTIONS.previewRepositoryCompaction.value}
+              rootAttributes={{ 'data-source': entry.connection_id }}
+            >
+              Preview Attachment Compaction
+            </Button>
+          )}
+      </List>
+    </section>
+  );
+}
+
+function CompactionPreview({ state, checkout }: { state: CompactionPreviewState; checkout: string }) {
+  if (state.status === 'idle') return null;
+  if (state.status === 'loading') return <EmptyState busy title={`Checking ${state.source} Attachments`} />;
+  if (state.status === 'error')
+    return <StateBanner tone="warning" title="Compaction preview unavailable." detail={state.message} />;
+  const { plan, source } = state;
+  const command = `hotsheet-cli checkout compact '${source.replaceAll("'", "'\\''")}' '${checkout.replaceAll("'", "'\\''")}'`;
+  return (
+    <section class="repository-size__compaction" aria-label={`${source} Compaction Preview`} data-state="ready">
+      <List gap="xs">
+        <Text variant="h3" size="large" flush>
+          Attachment compaction: {source}
+        </Text>
+        <Text variant="p" tone="quiet" flush>
+          {plan.candidates.length} candidates, {formatBytes(plan.reclaimable_payload_bytes)} of current payloads.
+          Eligible tickets are at least {plan.min_age_days} days old; oversized means at least{' '}
+          {formatBytes(plan.oversized_bytes)}.
+        </Text>
+        {plan.candidates.slice(0, 20).map((item) => (
+          <Text variant="p" flush data-key={`compaction:${item.attachment_id}`}>
+            {item.ticket_slug}: {item.filename} ({formatBytes(item.bytes)}, {item.reason})
+          </Text>
+        ))}
+        {plan.candidates.length > 20 && (
+          <Text variant="p" tone="quiet" flush>
+            Showing 20 candidates. Review the full plan in the CLI before execution.
+          </Text>
+        )}
+        <Text variant="p" tone="quiet" flush>
+          Preview and execute in the CLI: <code>{command}</code>. The opt-in rewrite requires a new mirror backup path
+          and the exact confirmation printed by that command. Every collaborator must re-clone or reset the ticket store
+          afterward.
+        </Text>
       </List>
     </section>
   );
@@ -196,7 +257,13 @@ function limitBanner(report: RepositorySizeReport) {
  * attachment payload. The server computes each entry's level against GitHub's limits; this
  * component only presents it.
  */
-export function RepositorySize({ state }: { state: RepositorySizeState }) {
+export function RepositorySize({
+  state,
+  compaction = { status: 'idle' },
+}: {
+  state: RepositorySizeState;
+  compaction?: CompactionPreviewState;
+}) {
   if (state.status === 'loading')
     return (
       <div class="repository-size" data-component="repository-size" data-state="loading">
@@ -246,6 +313,7 @@ export function RepositorySize({ state }: { state: RepositorySizeState }) {
         ) : (
           report.entries.map((entry) => <RepositoryEntry entry={entry} />)
         )}
+        <CompactionPreview state={compaction} checkout={report.checkout_id} />
       </List>
     </section>
   );

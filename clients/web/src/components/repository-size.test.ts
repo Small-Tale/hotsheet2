@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { RepositorySizeEntry, RepositorySizeReport } from '../api';
-import { parseRepositorySizeReport, ServerResponseShapeError } from '../server-response-parsers';
+import type { CompactionPlan, RepositorySizeEntry, RepositorySizeReport } from '../api';
+import { parseCompactionPlan, parseRepositorySizeReport, ServerResponseShapeError } from '../server-response-parsers';
 import { formatBytes, RepositorySize, repositorySizeEntryTitle } from './repository-size';
 
 const THRESHOLDS = { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 };
@@ -138,6 +138,46 @@ describe('RepositorySize (HS2-QF44T7)', () => {
   it('titles entries by kind', () => {
     expect(repositorySizeEntryTitle(code)).toBe('Code repository: hotsheet2');
     expect(repositorySizeEntryTitle(store)).toBe('Ticket store: hotsheet2.hs2');
+  });
+
+  it('offers only dedicated Git stores and displays the advisory preview', () => {
+    const plan: CompactionPlan = {
+      head: 'a'.repeat(40),
+      branch: 'main',
+      min_age_days: 90,
+      oversized_bytes: 10_000_000,
+      candidates: [
+        {
+          ticket_id: 'one',
+          ticket_slug: 'HS-ONE',
+          attachment_id: 'att',
+          filename: 'old.png',
+          path: 'attachments/one/att/old.png',
+          bytes: 12_000_000,
+          sha256: 'b'.repeat(64),
+          reason: 'oversized',
+        },
+      ],
+      reclaimable_payload_bytes: 12_000_000,
+      fingerprint: 'c'.repeat(64),
+    };
+    const markup = String(
+      RepositorySize({
+        state: {
+          status: 'ready',
+          report: report([code, store, { ...store, connection_id: 'embedded', shared_with_code: true }]),
+        },
+        compaction: { status: 'ready', source: 'abc123', plan },
+      }),
+    );
+    expect(markup.match(/Preview Attachment Compaction/gu)).toHaveLength(1);
+    expect(markup).toContain('HS-ONE: old.png (12 MB, oversized)');
+    expect(markup).toContain('12 MB of current payloads');
+    expect(markup).toContain('requires a new mirror backup path');
+    expect(parseCompactionPlan(plan)).toBe(plan);
+    expect(() => parseCompactionPlan({ ...plan, candidates: [{ ...plan.candidates[0], reason: 'unknown' }] })).toThrow(
+      ServerResponseShapeError,
+    );
   });
 });
 

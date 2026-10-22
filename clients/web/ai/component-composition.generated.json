@@ -4175,7 +4175,7 @@
       "id": "repository-size",
       "name": "RepositorySize",
       "kind": "component",
-      "purpose": "A project's repository size: git object and ticket-attachment sizes for the code repository and each ticket store against GitHub's size limits.",
+      "purpose": "A project's repository size and a read-only preview of old duplicate or oversized attachments in a dedicated Git ticket store.",
       "publicExports": [
         {
           "name": "RepositorySize"
@@ -4198,11 +4198,19 @@
         "concepts": [],
         "requiredConcepts": []
       },
-      "state": [],
+      "state": [
+        {
+          "id": "compaction preview",
+          "owner": "application",
+          "required": false
+        }
+      ],
       "wiring": {
         "required": false,
         "helpers": [],
-        "obligations": []
+        "obligations": [
+          "Handle preview-repository-compaction for each eligible Git source and display the server's bounded preview or error."
+        ]
       },
       "responsive": {
         "owner": "not-applicable",

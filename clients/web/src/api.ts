@@ -18,6 +18,7 @@ import {
   parseCodeReview,
   parseCommandDefinition,
   parseCommandRun,
+  parseCompactionPlan,
   parseCorruptTicket,
   parseCustomView,
   parseDuplicateBacklinks,
@@ -391,6 +392,25 @@ export interface RepositorySizeReport {
   thresholds: { warning_bytes: number; critical_bytes: number };
   level: RepositorySizeLevel;
   entries: RepositorySizeEntry[];
+}
+/** Read-only preview of old, duplicate or oversized Git-store attachments. */
+export interface CompactionPlan {
+  head: string;
+  branch: string;
+  min_age_days: number;
+  oversized_bytes: number;
+  candidates: Array<{
+    ticket_id: string;
+    ticket_slug: string;
+    attachment_id: string;
+    filename: string;
+    path: string;
+    bytes: number;
+    sha256: string;
+    reason: 'duplicate' | 'oversized';
+  }>;
+  reclaimable_payload_bytes: number;
+  fingerprint: string;
 }
 /** A note's recorded author: the acting role and an optional stable id (HS2-32QDZ3). */
 export interface NoteActor {
@@ -1383,6 +1403,12 @@ export class Api {
   /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
   checkoutRepositorySize = (checkout: string) =>
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
+
+  checkoutRepositoryCompaction = (checkout: string, source: string, minAgeDays = 90, oversizedBytes = 10_000_000) =>
+    this.parsed(
+      parseCompactionPlan,
+      `/checkouts/${encodeURIComponent(checkout)}/repository/compaction?${new URLSearchParams({ source, min_age_days: String(minAgeDays), oversized_bytes: String(oversizedBytes) })}`,
+    );
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
   checkoutGuidanceRecommendations = (checkout: string) =>

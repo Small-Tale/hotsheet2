@@ -3591,6 +3591,134 @@ fn checkout_repo_size_reports_code_store_attachments_and_unsupported_sources() {
 }
 
 #[test]
+fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store_root = root.path().join("tickets");
+    let remote = root.path().join("remote.git");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&store_root).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let git = |dir: &Path, args: &[&str]| {
+        let output = hotsheet_ticketing::git::command_in(dir)
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    git(&store_root, &["init", "-q", "-b", "main"]);
+    git(&store_root, &["config", "user.name", "Test"]);
+    git(&store_root, &["config", "user.email", "test@example.com"]);
+    let store = hotsheet_ticketing::FsStore::init(
+        &store_root,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap()
+    .with_deferred_push();
+    git(&store_root, &["add", "-A"]);
+    git(&store_root, &["commit", "-qm", "store"]);
+    let old = hotsheet_model::Timestamp::new("2025-01-01T00:00:00Z");
+    let id = hotsheet_model::Ulid::new();
+    let mut ticket =
+        hotsheet_model::Ticket::new(id, "HS-OLD", "Old", "task", old.clone(), old.clone());
+    ticket.status = hotsheet_model::Status::Completed;
+    ticket.completed_at = Some(old.clone());
+    store.write_ticket_committing(&ticket).unwrap();
+    store
+        .write_attachment(
+            &id,
+            hotsheet_model::Ulid::new(),
+            old,
+            "large.png",
+            b"large attachment payload",
+        )
+        .unwrap();
+    git(
+        root.path(),
+        &["init", "-q", "--bare", &remote.to_string_lossy()],
+    );
+    git(
+        &store_root,
+        &["remote", "add", "origin", &remote.to_string_lossy()],
+    );
+    git(&store_root, &["push", "-q", "origin", "main"]);
+    let mut register = Command::cargo_bin("hotsheet-cli").unwrap();
+    register
+        .env("HOTSHEET_HOME", &home)
+        .args(["checkout", "register"])
+        .arg(&project)
+        .args(["--alias", "compact", "--store"])
+        .arg(&store_root)
+        .assert()
+        .success();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(&store_root).connection_id;
+    let cli = || {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.env("HOTSHEET_HOME", &home);
+        cmd
+    };
+    let output = cli()
+        .args([
+            "checkout",
+            "compact",
+            &source,
+            "compact",
+            "--min-age-days",
+            "30",
+            "--oversized-bytes",
+            "10",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(plan["candidates"][0]["ticket_slug"], "HS-OLD");
+    assert!(plan.get("remote").is_none());
+    let backup = root.path().join("backup.git");
+    cli()
+        .args([
+            "checkout",
+            "compact",
+            &source,
+            "compact",
+            "--min-age-days",
+            "30",
+            "--oversized-bytes",
+            "10",
+            "--execute",
+            "--backup",
+        ])
+        .arg(&backup)
+        .args(["--confirm", "wrong"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("confirmation must exactly match"));
+    assert!(!backup.exists());
+    cli()
+        .args([
+            "checkout",
+            "compact",
+            &source,
+            "compact",
+            "--min-age-days",
+            "30",
+            "--oversized-bytes",
+            "10",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Git LFS"))
+        .stdout(predicate::str::contains("--execute --backup"));
+}
+
+#[test]
 fn checkout_register_list_and_resolve_are_store_independent() {
     let checkout = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();

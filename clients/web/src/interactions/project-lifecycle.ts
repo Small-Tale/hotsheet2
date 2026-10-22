@@ -44,6 +44,7 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly createProjectGitSource: (custom?: boolean) => Promise<void>;
   readonly chooseProjectPath: (button: Element) => Promise<void>;
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
+  readonly previewRepositoryCompaction: (source: string) => Promise<void>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -81,6 +82,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     createProjectGitSource,
     chooseProjectPath,
     recoverUnhealthyProjectServer,
+    previewRepositoryCompaction,
   } = dependencies;
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.addProject.selector, () => {
@@ -238,6 +240,17 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
         item.id === current.id ? { ...item, serverBuildNoticeDismissed: true } : item,
       );
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      PROJECT_LIFECYCLE_ACTIONS.previewRepositoryCompaction.selector,
+      (_event, target) => {
+        const source = data(target).source;
+        if (source) void previewRepositoryCompaction(source);
+      },
+    ),
   );
   lifetime.add(
     // Dismissed for this open at the shown level; a higher level shows it again (HS2-P1GYWH).

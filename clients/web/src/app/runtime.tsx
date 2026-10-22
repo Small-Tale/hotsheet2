@@ -60,7 +60,7 @@ import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
-import type { RepositorySizeState } from '../components/repository-size';
+import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory } from '../components/settings-navigation';
 import type { TicketStatus } from '../components/status-badge';
@@ -348,7 +348,28 @@ export async function startHotSheetWebClient() {
     // Per-project completion-confidence calibration shown in the stats view (HS2-Q1WCCY).
     confidenceReportByProject = signal<Record<string, ConfidenceCalibrationState>>({}),
     // Per-project repository size shown in the stats view, measured when it opens (HS2-QF44T7).
-    repositorySizeByProject = signal<Record<string, RepositorySizeState>>({});
+    repositorySizeByProject = signal<Record<string, RepositorySizeState>>({}),
+    compactionByProject = signal<Record<string, CompactionPreviewState>>({});
+  const compactionRequests = new Map<string, number>();
+  async function previewRepositoryCompaction(source: string) {
+    const target = projects.peek().find((item) => item.id === statsProjectId.peek());
+    if (!target) return;
+    const generation = (compactionRequests.get(target.id) ?? 0) + 1;
+    compactionRequests.set(target.id, generation);
+    compactionByProject.value = {
+      ...compactionByProject.peek(),
+      [target.id]: { status: 'loading', source },
+    };
+    let next: CompactionPreviewState;
+    try {
+      const plan = await new Api(target.apiPath).checkoutRepositoryCompaction(target.id, source);
+      next = { status: 'ready', source, plan };
+    } catch (error) {
+      next = { status: 'error', source, message: error instanceof Error ? error.message : String(error) };
+    }
+    if (compactionRequests.get(target.id) === generation)
+      compactionByProject.value = { ...compactionByProject.peek(), [target.id]: next };
+  }
   /** Load a project's calibration report, keeping the last report visible while refreshing. */
   async function loadConfidenceReport(target: Project) {
     const previous = confidenceReportByProject.peek()[target.id] as ConfidenceCalibrationState | undefined;
@@ -3951,6 +3972,7 @@ export async function startHotSheetWebClient() {
       statsProjectId,
       confidenceReportByProject,
       repositorySizeByProject,
+      compactionByProject,
       canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),
       terminals: {
         terminalGroups,
@@ -4632,6 +4654,7 @@ export async function startHotSheetWebClient() {
     createProjectGitSource,
     chooseProjectPath,
     recoverUnhealthyProjectServer,
+    previewRepositoryCompaction,
     repository,
     repositoryView,
     repositoryDetailActive: repositoryController.repositoryDetailActive,

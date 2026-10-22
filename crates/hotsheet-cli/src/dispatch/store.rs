@@ -904,6 +904,87 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 );
             }
         }
+        CheckoutCmd::Compact {
+            reference,
+            connection_id,
+            min_age_days,
+            oversized_bytes,
+            json,
+            execute,
+            backup,
+            confirm,
+        } => {
+            let checkout = registry.describe(&reference)?;
+            let source = checkout
+                .source(&connection_id)
+                .filter(|source| source.provider == "git")
+                .ok_or_else(|| {
+                    anyhow::anyhow!("{connection_id} is not a linked Git ticket source")
+                })?;
+            let root = PathBuf::from(&source.locator);
+            if root.canonicalize()? == Path::new(&checkout.root).canonicalize()? {
+                bail!("cannot rewrite a ticket store that is also the code repository");
+            }
+            let store = FsStore::open_without_maintenance(&root)?;
+            let now = time::OffsetDateTime::now_utc();
+            let plan = hotsheet_ticketing::repository_compaction::plan_store(
+                &store,
+                now,
+                min_age_days,
+                oversized_bytes,
+            )?;
+            if execute {
+                let backup =
+                    backup.ok_or_else(|| anyhow::anyhow!("--execute requires --backup"))?;
+                let confirm =
+                    confirm.ok_or_else(|| anyhow::anyhow!("--execute requires --confirm"))?;
+                let result = hotsheet_ticketing::repository_compaction::execute_store(
+                    &store, now, &plan, &backup, &confirm,
+                )?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    println!(
+                        "Rewrote {} attachment payloads on {}.",
+                        result.candidates_removed, connection_id
+                    );
+                    println!("Backup: {}", result.backup);
+                    println!(
+                        "Git objects: {} before, {} after.",
+                        result.git_bytes_before, result.git_bytes_after
+                    );
+                    for line in &result.recovery {
+                        println!("- {line}");
+                    }
+                }
+            } else if json {
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+            } else {
+                println!("Source: {connection_id} ({})", source.locator);
+                println!("Branch/head: {} {}", plan.branch, plan.head);
+                println!(
+                    "Candidates: {} ({} current payload bytes)",
+                    plan.candidates.len(),
+                    plan.reclaimable_payload_bytes
+                );
+                for item in &plan.candidates {
+                    println!(
+                        "- {}: {} ({} bytes, {:?})",
+                        item.ticket_slug, item.path, item.bytes, item.reason
+                    );
+                }
+                println!(
+                    "History rewrite changes commit IDs for collaborators. The original checkout remains stale after execution; every collaborator must re-clone or reset it after preserving local work."
+                );
+                println!(
+                    "Use Git LFS for future large image and media attachments: install git-lfs, run `git lfs install`, and configure `git lfs track` in a dedicated ticket repository before adding new files."
+                );
+                println!(
+                    "To execute after reviewing this plan, rerun with --execute --backup <new-path> --confirm 'rewrite {} {}'",
+                    plan.branch, plan.fingerprint
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -1071,6 +1152,29 @@ pub(crate) enum CheckoutCmd {
         /// Print the report as JSON (the same shape as the server endpoint).
         #[arg(long)]
         json: bool,
+    },
+    /// Preview duplicate and oversized old attachments in a dedicated Git ticket store.
+    /// Execution makes a mirror backup, rewrites a disposable clone, and force-pushes the
+    /// reviewed branch only after an exact confirmation and remote-head lease.
+    Compact {
+        /// Qualified linked Git ticket source to compact.
+        connection_id: String,
+        #[arg(default_value = ".")]
+        reference: String,
+        #[arg(long, default_value_t = 90)]
+        min_age_days: u64,
+        #[arg(long, default_value_t = 10_000_000)]
+        oversized_bytes: u64,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        execute: bool,
+        /// New path for a complete bare mirror backup.
+        #[arg(long)]
+        backup: Option<PathBuf>,
+        /// Exact string printed by the preview (`rewrite <branch> <fingerprint>`).
+        #[arg(long)]
+        confirm: Option<String>,
     },
 }
 
