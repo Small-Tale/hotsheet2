@@ -297,6 +297,12 @@ jobs:
           sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
           sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libsecret-tools gnome-keyring dbus-user-session
 
+      - name: Install git-filter-repo for compaction tests
+        run: |
+          python3 -m venv "$RUNNER_TEMP/git-filter-repo"
+          "$RUNNER_TEMP/git-filter-repo/bin/pip" install git-filter-repo==2.47.0
+          echo "$RUNNER_TEMP/git-filter-repo/bin" >> "$GITHUB_PATH"
+
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
         # runs the tests + collects profiles once; the report/gate steps reuse them.
