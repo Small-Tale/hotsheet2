@@ -336,9 +336,9 @@ fn codex_declares_its_project_local_skill() {
     );
     assert_eq!(cd.default_effort.as_deref(), Some("medium"));
     assert_eq!(cd.session_options, ["model", "effort", "permission_mode"]);
-    // HS2-NHRDMW: Claude's selectable `--permission-mode` values, acceptEdits by default,
+    // HS2-NHRDMW, HS2-YAS0FR: Claude's selectable `--permission-mode` values, auto by default,
     // and only bypassPermissions carries a warning.
-    assert_eq!(cd.default_permission_mode.as_deref(), Some("acceptEdits"));
+    assert_eq!(cd.default_permission_mode.as_deref(), Some("auto"));
     assert_eq!(
         cd.permission_modes
             .iter()
@@ -833,7 +833,7 @@ fn permission_modes_validate_per_tool_and_fall_back_to_the_plugin_default() {
     assert!(validate_permission_mode(&opencode, "auto").is_err());
     assert_eq!(
         effective_permission_mode(&claude, None).as_deref(),
-        Some("acceptEdits")
+        Some("auto")
     );
     assert_eq!(
         effective_permission_mode(&claude, Some("plan")).as_deref(),

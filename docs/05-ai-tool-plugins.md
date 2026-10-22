@@ -1198,10 +1198,10 @@ description, optional `warning`) with a `default_permission_mode`, and lists
 the `change_permission_mode` action). `GET /ai-tools` serves the declarations; clients never
 hard-code mode names.
 
-| Tool   | Modes (provider value → meaning)                                                                                                                                                                                                          | Default       |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| Claude | `--permission-mode`: `acceptEdits` (edits run, other tools ask), `auto` (Claude's own classifier asks only for risky actions), `manual` (every tool call asks), `plan` (read-only), `bypassPermissions` (nothing asks; carries a warning) | `acceptEdits` |
-| Codex  | `approvalPolicy`: `never`, `on-request`, `on-failure`, `untrusted`; the sandbox stays `workspace-write` for every policy                                                                                                                  | `never`       |
+| Tool   | Modes (provider value → meaning)                                                                                                                                                                                                          | Default |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Claude | `--permission-mode`: `acceptEdits` (edits run, other tools ask), `auto` (Claude's own classifier asks only for risky actions), `manual` (every tool call asks), `plan` (read-only), `bypassPermissions` (nothing asks; carries a warning) | `auto`  |
+| Codex  | `approvalPolicy`: `never`, `on-request`, `on-failure`, `untrusted`; the sandbox stays `workspace-write` for every policy                                                                                                                  | `never` |
 
 - **Project scope:** `ai.defaults` stores a per-provider `permission_mode` beside model and
   effort (the default provider's value mirrors at the top level), in the checkout's

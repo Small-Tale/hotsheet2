@@ -411,9 +411,12 @@ mod tests {
     fn launch_mode_prefers_the_request_then_the_plugin_default() {
         let claude = hotsheet_plugins::find_in("claude", &[]).unwrap();
         let codex = hotsheet_plugins::find_in("codex", &[]).unwrap();
-        assert_eq!(launch_permission_mode(&claude, None), "acceptEdits");
+        assert_eq!(launch_permission_mode(&claude, None), "auto");
         assert_eq!(launch_permission_mode(&codex, None), "never");
-        assert_eq!(launch_permission_mode(&claude, Some("auto".into())), "auto");
+        assert_eq!(
+            launch_permission_mode(&claude, Some("acceptEdits".into())),
+            "acceptEdits"
+        );
         assert_eq!(
             launch_permission_mode(&codex, Some("on-request".into())),
             "on-request"

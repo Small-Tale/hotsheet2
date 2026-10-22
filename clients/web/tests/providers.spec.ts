@@ -6055,7 +6055,7 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
       ],
     },
     claude: {
-      default_permission_mode: 'acceptEdits',
+      default_permission_mode: 'auto',
       permission_modes: [
         { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
         { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
@@ -6096,8 +6096,11 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   await page.getByRole('button', { name: /AI tools/ }).click();
   const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]'),
     codexMode = page.locator('kui-select[name="ai-provider-permission-mode-codex"]');
-  await expect(claudeMode).toHaveJSProperty('value', 'acceptEdits');
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
   await expect(codexMode).toHaveJSProperty('value', 'never');
+  await claudeMode.locator('.kui-select__trigger').click();
+  await claudeMode.locator('.kui-select__option[data-value="acceptEdits"]').click();
+  await expect.poll(() => settingsPuts.at(-1)?.providers).toMatchObject({ claude: { permission_mode: 'acceptEdits' } });
   await claudeMode.locator('.kui-select__trigger').click();
   await claudeMode.locator('.kui-select__option[data-value="auto"]').click();
   await expect.poll(() => settingsPuts.at(-1)?.providers).toMatchObject({ claude: { permission_mode: 'auto' } });
@@ -6167,9 +6170,10 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
         actions: [...tool.actions, 'change_permission_mode'],
         ...(tool.id === 'claude'
           ? {
-              default_permission_mode: 'acceptEdits',
+              default_permission_mode: 'auto',
               permission_modes: [
                 { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
+                { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
                 {
                   id: 'bypassPermissions',
                   label: 'Bypass permissions',
@@ -6195,7 +6199,12 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  await expect(page.getByRole('button', { name: /AI tools/ })).toBeHidden();
+  await page.waitForTimeout(300); // Let the phone sidebar's exit transition finish before visual capture.
   const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]');
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
+  await claudeMode.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-yas0fr-auto-default-390.png' });
   page.once('dialog', (dialog) => void dialog.accept());
   await claudeMode.locator('.kui-select__trigger').click();
   await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();

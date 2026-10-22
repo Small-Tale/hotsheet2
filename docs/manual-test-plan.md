@@ -411,8 +411,17 @@ and server routes.
 
 ### Driven chat permission modes with real tools (HS2-NHRDMW)
 
-The mode plumbing is automated against fake drives and a scripted Codex daemon; how the real
-tools behave under each mode is not. In the app, open an AI chat from the terminal drawer:
+The mode plumbing is automated against fake drives and a scripted Codex daemon. The live
+probes below cover selected Claude operations; the remaining in-app checks use an AI chat
+from the terminal drawer:
+
+Live headless validation (HS2-YAS0FR, 2026-10-22): Claude Code 2.1.307 in `stream-json`
+mode ran an `auto` Read without a Hot Sheet hook bridge request. An `auto` Bash `pwd` with
+an explicit native `permissions.ask` rule emitted one `PermissionRequest` and completed
+after an allow response from an isolated local bridge. A `manual` Write likewise emitted
+one request and completed on allow. An `auto` POST to a disposable local server ran without
+an ask; Claude classified it as allowed. The actual in-app popup and an action naturally
+classified as risky remain manual checks below (`HS2-KMNQ21`).
 
 1. Claude under `Accept edits`: ask for a file edit (no popup) and a shell command (popup).
 2. Switch the chat to `Auto` from the model menu's Permissions submenu: a harmless read-only
