@@ -2382,6 +2382,19 @@ paths:
       responses:
         default:
           description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/guidance/updates:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_guidance_updates
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
 components:
   securitySchemes:
     HotsheetSecret:
