@@ -9891,6 +9891,47 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await page.screenshot({ path: 'target/visual-captures/hs2-terminal-drawer-restored.png', fullPage: true });
 });
 
+for (const width of [1440, 390])
+  test(`restores a manually dragged maximum-height drawer to its default at ${width}px (HS2-S751KR)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      region = page.locator('#app-bottom-drawer'),
+      handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+      rail = drawer.locator('.terminal-drawer__rail');
+    await expect(drawer).toBeVisible();
+    const start = (await handle.boundingBox())!;
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(start.x + start.width / 2, 0, { steps: 8 });
+    await page.mouse.up();
+    const maximum = await handle.getAttribute('aria-valuemax');
+    await expect(handle).toHaveAttribute('aria-valuenow', maximum!);
+    await expect(drawer).toHaveAttribute('data-maximized', 'false');
+    const maxHeight = (await region.boundingBox())!.height;
+    await page.screenshot({
+      path: `target/visual-captures/hs2-s751kr-manual-max-${width}.png`,
+      fullPage: width === 390,
+    });
+
+    await rail.dispatchEvent('dblclick');
+    await expect(drawer).toHaveAttribute('data-maximized', 'false');
+    await expect(handle).toHaveAttribute('aria-valuenow', '320');
+    await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
+      '320',
+    );
+    await expect.poll(async () => (await region.boundingBox())!.height).toBeLessThan(maxHeight - 100);
+    await page.screenshot({ path: `target/visual-captures/hs2-s751kr-restored-${width}.png`, fullPage: width === 390 });
+    await page.reload();
+    await expect(handle).toHaveAttribute('aria-valuenow', '320');
+  });
+
 test('snaps the drawer track while compositing visibility motion and suppressing motion during resize', async ({
   page,
 }) => {

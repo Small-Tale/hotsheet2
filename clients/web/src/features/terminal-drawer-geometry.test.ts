@@ -41,6 +41,7 @@ function owner(mobile = true) {
   const state = {
     terminalDrawerMin: signal(120),
     terminalDrawerMax: signal(520),
+    terminalDrawerSize: signal(320),
     terminalDrawerMaximized: signal(false),
     mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
     mobileTerminalColumns: signal(80),
@@ -50,14 +51,18 @@ function owner(mobile = true) {
   };
   const isMobile = signal(mobile),
     showToast = vi.fn(),
-    updateTerminalDrawerBounds = vi.fn();
+    updateTerminalDrawerBounds = vi.fn(),
+    setDrawerSize = vi.fn((size: number) => {
+      state.terminalDrawerSize.value = size;
+    });
   const controller = createTerminalDrawerGeometryController({
     ...state,
     viewportMobile: () => isMobile.value,
     updateTerminalDrawerBounds,
+    setDrawerSize,
     showToast,
   });
-  return { ...state, isMobile, showToast, updateTerminalDrawerBounds, controller };
+  return { ...state, isMobile, showToast, updateTerminalDrawerBounds, setDrawerSize, controller };
 }
 
 describe('terminal drawer geometry owner (HS2-T1DX2V)', () => {
@@ -118,5 +123,20 @@ describe('terminal drawer geometry owner (HS2-T1DX2V)', () => {
     expect(terminalDrawerMaximized.value).toBe(false);
     // Without a mounted shell the maximum stays put.
     controller.syncTerminalDrawerMaximum();
+  });
+
+  it('restores a manually max-height drawer to its default before the next maximize', () => {
+    const { controller, terminalDrawerSize, terminalDrawerMaximized, setDrawerSize } = owner(false);
+    terminalDrawerSize.value = 520;
+    controller.toggleTerminalDrawerMaximized();
+    expect(setDrawerSize).toHaveBeenCalledWith(320);
+    expect(terminalDrawerSize.value).toBe(320);
+    expect(terminalDrawerMaximized.value).toBe(false);
+    controller.toggleTerminalDrawerMaximized();
+    expect(terminalDrawerMaximized.value).toBe(true);
+    controller.toggleTerminalDrawerMaximized();
+    expect(terminalDrawerMaximized.value).toBe(false);
+    expect(terminalDrawerSize.value).toBe(320);
+    expect(events).toEqual(Array(3).fill(TERMINAL_DRAWER_RESIZE_END_EVENT));
   });
 });

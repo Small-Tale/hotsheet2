@@ -1,6 +1,6 @@
 import type { Signal } from 'kerfjs';
 
-import { terminalDrawerMaximum, terminalDrawerMinimum } from '../app-region-resize';
+import { APP_REGION_BOUNDS, terminalDrawerMaximum, terminalDrawerMinimum } from '../app-region-resize';
 import {
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
   nextMobileTerminalColumns,
@@ -34,7 +34,9 @@ export function currentMobileViewportGeometry(): MobileViewportGeometry {
 export interface TerminalDrawerGeometryDependencies {
   terminalDrawerMin: Signal<number>;
   terminalDrawerMax: Signal<number>;
+  terminalDrawerSize: Signal<number>;
   terminalDrawerMaximized: Signal<boolean>;
+  setDrawerSize: (size: number) => void;
   mobileTerminalFocus: Signal<MobileTerminalFocusState>;
   mobileTerminalColumns: Signal<number>;
   mobileViewportGeometry: Signal<MobileViewportGeometry>;
@@ -56,7 +58,9 @@ export function createTerminalDrawerGeometryController(dependencies: TerminalDra
   const {
     terminalDrawerMin,
     terminalDrawerMax,
+    terminalDrawerSize,
     terminalDrawerMaximized,
+    setDrawerSize,
     mobileTerminalFocus,
     mobileTerminalColumns,
     mobileViewportGeometry,
@@ -97,7 +101,9 @@ export function createTerminalDrawerGeometryController(dependencies: TerminalDra
     });
   }
   function toggleTerminalDrawerMaximized() {
-    terminalDrawerMaximized.value = !terminalDrawerMaximized.value;
+    if (!terminalDrawerMaximized.value && terminalDrawerSize.value >= terminalDrawerMax.value)
+      setDrawerSize(APP_REGION_BOUNDS['app-bottom-drawer'].fallback);
+    else terminalDrawerMaximized.value = !terminalDrawerMaximized.value;
     settleTerminalDrawerGeometry();
   }
   function currentMobileTerminalViewport() {

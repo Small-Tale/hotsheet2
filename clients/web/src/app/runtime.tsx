@@ -433,7 +433,11 @@ export async function startHotSheetWebClient() {
   } = createTerminalDrawerGeometryController({
     terminalDrawerMin,
     terminalDrawerMax,
+    terminalDrawerSize,
     terminalDrawerMaximized,
+    setDrawerSize: (size) => {
+      setAppRegionSize('app-bottom-drawer', size);
+    },
     mobileTerminalFocus,
     mobileTerminalColumns,
     mobileViewportGeometry,

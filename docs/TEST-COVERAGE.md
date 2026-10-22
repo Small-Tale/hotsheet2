@@ -1149,6 +1149,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `crates/hotsheet-cli/tests/cli.rs # active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage`; `clients/web/tests/ticket-timeline-usage.spec.ts # refreshes active usage when the timeline opens and retains it after reload`.
 - Manual: `docs/manual-test-plan.md # Active Codex Work usage`.
 
+### Manually maximized drawer restore (HS2-S751KR)
+
+- Behavior: a double-click on a manually dragged maximum-height drawer restores the shared default height and persists it; ordinary maximize still restores the prior manual height.
+- Unit: `clients/web/src/features/terminal-drawer-geometry.test.ts # restores a manually max-height drawer to its default before the next maximize`.
+- End to end and visual: `clients/web/tests/providers.spec.ts # restores a manually dragged maximum-height drawer to its default at 1440px and 390px`.
+
 ### Checkout identity for remembered permissions (HS2-G1SG1P)
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.

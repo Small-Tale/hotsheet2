@@ -3379,7 +3379,9 @@ strip keeps its Project grid tab pinned at the start of the shared horizontal sc
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
-preserving the last manual height. Closing the selected terminal follows HS1's
+preserving the last manual height. If the drawer was manually dragged to its maximum,
+the next double-click restores the default height so the gesture visibly changes it
+(HS2-S751KR). Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
 left, then the grid). The rail deliberately omits global visibility/group controls and collapses
 to one bottom-end Kerf floating toolbar containing the restore action. Its Kerf restore wrapper is
