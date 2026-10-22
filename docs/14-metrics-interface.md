@@ -158,7 +158,19 @@ Metrics can be shared across a team **through git** — no server sync needed:
   Codex sessions without the shared daemon, and telemetry from before this capture path,
   cannot be attributed by this path. Raw events already recorded without a ticket are not
   retroactively assigned because their work cannot be identified reliably.
-  Interactive Claude terminals do not yet report per-turn usage (`HS2-W2GNTT`), and
+  **Interactive Claude terminals (HS2-W2GNTT):** the documented `UserPromptSubmit`,
+  `Stop`, and `StopFailure` hooks provide a session id and transcript path, but no token
+  counters. The server snapshots the transcript byte offset and unique live claim of
+  the terminal's Claude or shell worker at prompt time. At turn end it reads only the
+  appended JSONL records, sums numeric assistant usage once per message id, and records
+  one priced event. Duplicate stops and historical records cannot add usage; an
+  ambiguous or later-acquired claim leaves the event project-only. The parser skips
+  subagent, malformed, and unknown records and bounds each scan to 64 MiB. The first
+  prompt can precede transcript creation, so its cursor starts at byte zero; `Stop`
+  waits up to one second for a late append. Turn hooks omit the matcher key so Claude
+  2.1.308 invokes them. Claude's transcript row shape is observed locally rather than
+  a published hook contract, so a changed format can omit usage until the parser is
+  updated. No prompt or response text is sent to the server or copied into metrics.
   Codex Work sessions outside Hot Sheet drives/terminals have a local claim-window
   capture path (`HS2-2K2D7E`, `HS2-NFQ1NK`). CLI and MCP renewal and release capture
   usage; `hotsheet-cli metrics --refresh-codex` explicitly reads new usage while a

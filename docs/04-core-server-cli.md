@@ -342,6 +342,10 @@ Checkout-scoped ticket usage is exposed at
 attributed AI usage events in time order plus the settled rollup's per-ticket cost and
 rolled-up-through day from the owning git store (`docs/14` §14.5). A ticket on another
 provider yields an empty history; an unknown ticket is `404`.
+Native Claude terminal hooks report prompt and turn-end boundaries to the authenticated
+`POST /terminals/{id}/claude-turn` route (HS2-W2GNTT). The route accepts only the
+currently connected Claude session, reads appended numeric transcript usage on turn
+end, and records the unique live ticket claim captured at prompt time (`docs/14` §14.5).
 
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the

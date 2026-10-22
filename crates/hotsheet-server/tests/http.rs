@@ -2467,6 +2467,159 @@ async fn a_codex_tuis_failed_turn_on_the_shared_daemon_halts_and_a_new_turn_resu
 }
 
 #[tokio::test]
+async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim() {
+    let (dir, state) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let router = app(state);
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let transcript = transcript_dir.join("native-session.jsonl");
+    let path = transcript.to_string_lossy().to_string();
+    let turn = |event: &str, session_id: &str| {
+        serde_json::json!({
+            "event": event, "session_id": session_id, "transcript_path": path
+        })
+        .to_string()
+    };
+    let send = |method: &'static str, path: &'static str, body: String| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, path, Some(&body)))
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals",
+            serde_json::json!({"command":"cat","id":"claude-use"}).to_string(),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/claude-use/ai-connection",
+            serde_json::json!({"agent":"claude","session_id":"native-session"}).to_string(),
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let endpoint = "/terminals/claude-use/claude-turn";
+    assert_eq!(
+        send("POST", endpoint, turn("start", "wrong-session"))
+            .await
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        send("POST", endpoint, turn("start", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    // A later claim cannot own a turn that began without one. A repeated prompt
+    // boundary at the same cursor must not change that start snapshot either.
+    let late_ticket = claimed_by(&store, "terminal-claude-use");
+    assert_eq!(
+        send("POST", endpoint, turn("start", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let old = serde_json::json!({
+        "type":"assistant", "timestamp":"2026-10-23T00:00:00Z",
+        "message":{"id":"message-1","model":"claude-opus-4-8", "usage":{
+            "input_tokens":2,"cache_read_input_tokens":3,"output_tokens":4
+        }}
+    });
+    std::fs::write(&transcript, format!("{old}\n{old}\n")).unwrap();
+    assert_eq!(
+        send("POST", endpoint, turn("stop", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    send("POST", endpoint, turn("stop", "native-session")).await;
+    let events = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!((events[0].tokens_in, events[0].tokens_out), (5, 4));
+    assert_eq!(events[0].ticket, None);
+
+    hotsheet_ticketing::ops::release(
+        &store,
+        &late_ticket,
+        hotsheet_model::Timestamp::new("2026-10-23T00:00:01Z"),
+        "terminal-claude-use",
+        false,
+    )
+    .unwrap();
+    let ticket = claimed_by(&store, "terminal-claude-use");
+    send("POST", endpoint, turn("start", "native-session")).await;
+    hotsheet_ticketing::ops::release(
+        &store,
+        &ticket,
+        hotsheet_model::Timestamp::new("2026-10-23T00:00:02Z"),
+        "terminal-claude-use",
+        false,
+    )
+    .unwrap();
+    let second = serde_json::json!({
+        "type":"assistant", "timestamp":"2026-10-23T00:00:01Z",
+        "message":{"id":"message-2","model":"claude-opus-4-8", "usage":{
+            "input_tokens":7,"output_tokens":2
+        }}
+    });
+    use std::io::Write as _;
+    writeln!(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript)
+            .unwrap(),
+        "{second}"
+    )
+    .unwrap();
+    send("POST", endpoint, turn("failure", "native-session")).await;
+    let events = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(
+        events[1].ticket.as_deref(),
+        Some(ticket.to_string().as_str())
+    );
+    assert_eq!((events[1].tokens_in, events[1].tokens_out), (7, 2));
+
+    // Stop may arrive before Claude flushes the final assistant row to JSONL.
+    send("POST", endpoint, turn("start", "native-session")).await;
+    let pending_stop = tokio::spawn(send("POST", endpoint, turn("stop", "native-session")));
+    tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+    let delayed = serde_json::json!({
+        "type":"assistant", "timestamp":"2026-10-23T00:00:03Z",
+        "message":{"id":"message-3","model":"claude-opus-4-8", "usage":{
+            "input_tokens":3,"output_tokens":1
+        }}
+    });
+    writeln!(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript)
+            .unwrap(),
+        "{delayed}"
+    )
+    .unwrap();
+    assert_eq!(pending_stop.await.unwrap().status(), StatusCode::NO_CONTENT);
+    let events = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[2].ticket, None);
+    assert_eq!((events[2].tokens_in, events[2].tokens_out), (3, 1));
+    send("DELETE", "/terminals/claude-use", String::new()).await;
+}
+
+#[tokio::test]
 async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
     // HS2-EV1XK3: a session whose Hot Sheet SessionStart hook ran marks its terminal connected
     // until SessionEnd (DELETE) or the terminal is killed.

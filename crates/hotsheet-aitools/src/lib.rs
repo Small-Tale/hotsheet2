@@ -12,6 +12,7 @@
 pub mod acp;
 pub mod appserver;
 pub mod claude;
+pub mod claude_transcript_usage;
 pub mod codex;
 pub mod codex_thread_watch;
 pub mod drive;

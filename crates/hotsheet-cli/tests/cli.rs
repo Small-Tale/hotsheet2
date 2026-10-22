@@ -1476,9 +1476,10 @@ fn capture_one_request(listener: std::net::TcpListener) -> (String, String, Stri
     reader.read_exact(&mut body).unwrap();
     write!(
         reader.get_mut(),
-        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     )
     .unwrap();
+    reader.get_mut().flush().unwrap();
     (
         request.trim_end().to_string(),
         secret,
@@ -1677,6 +1678,51 @@ fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
         quiet.accept().is_err(),
         "no request without HOTSHEET_TERMINAL_ID"
     );
+}
+
+#[test]
+fn permission_hook_reports_claude_turn_boundaries_without_prompt_content() {
+    let home = tempfile::tempdir().unwrap();
+    for (event, expected) in [("UserPromptSubmit", "start"), ("Stop", "stop")] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            (0..2)
+                .map(|_| capture_one_request(listener.try_clone().unwrap()))
+                .collect::<Vec<_>>()
+        });
+        let input = serde_json::json!({
+            "hook_event_name": event,
+            "session_id": "native-session",
+            "transcript_path": "/tmp/projects/fixture/native-session.jsonl",
+            "prompt": "private prompt text"
+        });
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_TERMINAL_ID", "claude-7")
+            .env("HOTSHEET_SERVER", &url)
+            .env("HOTSHEET_SECRET", "terminal-secret")
+            .args(["permission-hook", "--agent", "claude"])
+            .write_stdin(input.to_string())
+            .assert()
+            .success()
+            .stdout(predicate::str::is_empty());
+        let requests = server.join().unwrap();
+        assert_eq!(
+            requests[0].0,
+            "POST /terminals/claude-7/claude-turn HTTP/1.1"
+        );
+        assert_eq!(requests[1].0, "DELETE /terminals/claude-7/halt HTTP/1.1");
+        let body: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(body["event"], expected);
+        assert_eq!(body["session_id"], "native-session");
+        assert_eq!(
+            body["transcript_path"],
+            "/tmp/projects/fixture/native-session.jsonl"
+        );
+        assert!(!requests[0].2.contains("private prompt text"));
+    }
 }
 
 #[test]
@@ -2345,6 +2391,18 @@ fn setup_claude_scopes_question_resolution_hooks_without_narrowing_permissions()
     }
     for event in ["PostToolUse", "PostToolUseFailure"] {
         assert_eq!(settings["hooks"][event][0]["matcher"], "AskUserQuestion");
+    }
+    for event in [
+        "StopFailure",
+        "Stop",
+        "UserPromptSubmit",
+        "SessionStart",
+        "SessionEnd",
+    ] {
+        assert!(
+            settings["hooks"][event][0].get("matcher").is_none(),
+            "{event} must run without a matcher"
+        );
     }
 }
 

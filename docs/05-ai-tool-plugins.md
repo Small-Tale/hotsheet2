@@ -1580,6 +1580,17 @@ without a reachable server they do nothing. Older Claude versions ignore the unk
 names. Codex has no equivalent hook (`HS2-5ZQ7J8`): a failed Codex turn fires
 `UserPromptSubmit` but no `Stop`, and no hook carries the failure.
 
+The same Claude prompt and turn-end hooks send only `session_id`, `transcript_path`,
+and the boundary kind to `/terminals/{id}/claude-turn` (HS2-W2GNTT). The server accepts
+reports from the connected session and reads numeric usage from transcript bytes
+appended since that prompt. It snapshots a unique live terminal claim at the prompt,
+so a claim acquired later cannot retroactively own the turn. Duplicate turn-end hooks
+do not count twice; transcript and prompt text are never included in the hook request.
+Claude's turn and lifecycle hooks are installed without a `matcher`: Claude 2.1.308
+skips `UserPromptSubmit` and `Stop` when they carry `matcher: "*"`. A new session can
+report its transcript path before creating the file; the server starts that cursor at
+byte zero and waits briefly for the final append after `Stop`.
+
 Codex halts are therefore detected best-effort by rejoining the TUI's thread on the shared
 app-server daemon (HS2-MN865E):
 

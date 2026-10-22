@@ -2689,10 +2689,11 @@ fn write_hooks(
         {
             handler["timeout"] = serde_json::json!(timeout);
         }
-        let entry = serde_json::json!({
-            "matcher": spec.event_matchers.get(event_name).unwrap_or(&spec.matcher),
-            "hooks": [handler],
-        });
+        let matcher = spec.event_matchers.get(event_name).unwrap_or(&spec.matcher);
+        let mut entry = serde_json::json!({ "hooks": [handler] });
+        if !matcher.is_empty() {
+            entry["matcher"] = serde_json::json!(matcher);
+        }
         let event = hooks
             .entry(event_name.to_string())
             .or_insert_with(|| serde_json::json!([]));

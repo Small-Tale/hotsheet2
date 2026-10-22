@@ -760,6 +760,18 @@ fn claude_hook_reports_halted_and_resumed_sessions() {
             hooks.additional_events
         );
     }
+    for event in [
+        "StopFailure",
+        "Stop",
+        "UserPromptSubmit",
+        "SessionStart",
+        "SessionEnd",
+    ] {
+        assert_eq!(
+            hooks.event_matchers.get(event).map(String::as_str),
+            Some("")
+        );
+    }
     assert_eq!(hooks.command, "hotsheet-cli permission-hook --agent claude");
 }
 

@@ -1173,6 +1173,14 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `crates/hotsheet-cli/tests/cli.rs # active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage`; `clients/web/tests/ticket-timeline-usage.spec.ts # refreshes active usage when the timeline opens and retains it after reload`.
 - Manual: `docs/manual-test-plan.md # Active Codex Work usage`.
 
+### Native Claude terminal turn usage (HS2-W2GNTT)
+
+- Behavior: matcher-free Claude prompt and stop hooks run in a live terminal; a prompt snapshots the connected session, transcript offset (zero before file creation), and unique live ticket claim. Stop or failure waits briefly for a delayed append and counts numeric assistant usage once per message id. Duplicate stops, old transcript rows, changed sessions, ambiguous claims, and claims acquired after the prompt cannot misattribute a turn.
+- Unit: `crates/hotsheet-aitools/src/claude_transcript_usage.rs` covers repeated and out-of-order assistant rows, cache tokens, malformed and subagent rows, empty then refilled files, mixed models, and truncation; `crates/hotsheet-server/src/routes/terminals/claude_usage.rs` checks transcript path binding.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # permission_hook_reports_claude_turn_boundaries_without_prompt_content` checks hook payload privacy against a TCP server; `crates/hotsheet-server/tests/http.rs # native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim` checks the authenticated route, claims, raw events, and repeated boundaries through the real server router.
+- Live: Claude Code 2.1.308 in a disposable Hot Sheet PTY produced two claimed-turn events (51,430/6 and 51,473/5 input/output tokens). The real `GET /checkouts/{checkout}/tickets/{ticket}/usage` response returned both for the test ticket; `HS2-W2GNTT` carries the evidence. The model had no configured price (`HS2-TTYZGX`).
+- Manual: repeat with no claim and verify usage stays project-only. Treat an empty event as possible hook or transcript schema drift.
+
 ### Manually maximized drawer restore (HS2-S751KR)
 
 - Behavior: a double-click on a manually dragged maximum-height drawer restores the shared default height and persists it; ordinary maximize still restores the prior manual height.

@@ -673,6 +673,7 @@ fn forget_terminal_ai_connection_if(
     let removed = connections.remove(id).is_some();
     drop(connections);
     super::codex_watch::stop_codex_thread_watch(state, id);
+    super::claude_usage::forget_claude_turn(state, id);
     crate::routes::session_messages::unregister_reported(state, id);
     Some(removed)
 }

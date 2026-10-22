@@ -150,7 +150,7 @@ pub(crate) use routes::terminals::{
     kill_terminal, list_permission_rules, list_terminals, open_terminal,
     poll_terminal_question_answer, put_checkout_terminal_settings, put_checkout_trash_settings,
     put_terminal_limits, put_terminal_settings, read_terminal, reconcile_terminal_limits,
-    remember_permission_after_allow, rename_terminal, resolve_permission,
+    remember_permission_after_allow, rename_terminal, report_claude_turn, resolve_permission,
     resolve_terminal_question, revoke_permission_rule, update_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
@@ -318,6 +318,10 @@ pub struct AppState {
     terminal_questions: Arc<Mutex<std::collections::HashMap<String, TerminalQuestion>>>,
     /// AI sessions whose Hot Sheet hooks reported in from a terminal, by terminal id (HS2-EV1XK3).
     terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// One native Claude turn's transcript cursor and unique ticket claim snapshot.
+    claude_turn_starts: Arc<
+        Mutex<std::collections::HashMap<String, routes::terminals::claude_usage::ClaudeTurnStart>>,
+    >,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Per-terminal rejoins of a Codex TUI's thread on the shared daemon, for halt detection
@@ -551,6 +555,7 @@ impl AppState {
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            claude_turn_starts: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             codex_thread_watches: Arc::default(),
             default_codex_home: None,
@@ -1640,6 +1645,7 @@ pub fn app(state: AppState) -> Router {
             "/terminals/{id}/ai-connection",
             post(connect_terminal_ai).delete(disconnect_terminal_ai),
         )
+        .route("/terminals/{id}/claude-turn", post(report_claude_turn))
         // Live hotsheet-mcp presence leases (HS2-HNXE38).
         .route(
             "/mcp-presence",

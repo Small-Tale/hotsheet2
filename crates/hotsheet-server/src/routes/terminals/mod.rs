@@ -3,11 +3,13 @@
 //! (HS2-YMG48C).
 
 mod attach;
+pub(crate) mod claude_usage;
 pub(crate) mod codex_watch;
 pub(crate) mod launch;
 mod signals;
 
 pub(crate) use attach::attach_terminal;
+pub(crate) use claude_usage::report_claude_turn;
 pub(crate) use launch::{
     INHERIT_GLOBAL_SHELL_HISTORY_SETTING, open_terminal, release_session_claims,
     release_session_claims_blocking,

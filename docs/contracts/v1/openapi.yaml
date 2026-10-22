@@ -2275,6 +2275,19 @@ paths:
         required: true
         schema:
           type: string
+  /terminals/{id}/claude-turn:
+    post:
+      operationId: report_claude_turn
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /mcp-presence:
     get:
       operationId: list_mcp_presence

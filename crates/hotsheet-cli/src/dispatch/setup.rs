@@ -489,6 +489,9 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
             let session_id = input.get("session_id").and_then(serde_json::Value::as_str);
+            if agent == Some("claude") {
+                let _ = report_claude_turn_hook(&url, &secret, &terminal, &input);
+            }
             if report_terminal_session(&url, &secret, &terminal, &session, agent, session_id)
                 .is_ok()
             {
@@ -574,6 +577,50 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     if let Some(output) = output {
         println!("{output}");
     }
+    Ok(())
+}
+
+/// Report a native Claude turn boundary without sending prompt or transcript content.
+/// The server reads only numeric usage from the new transcript bytes after the start hook.
+fn report_claude_turn_hook(
+    url: &str,
+    secret: &str,
+    terminal: &str,
+    input: &serde_json::Value,
+) -> Result<()> {
+    let event = match input
+        .get("hook_event_name")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("UserPromptSubmit") => "start",
+        Some("Stop") => "stop",
+        Some("StopFailure") => "failure",
+        _ => return Ok(()),
+    };
+    let Some(session_id) = input.get("session_id").and_then(serde_json::Value::as_str) else {
+        return Ok(());
+    };
+    let Some(transcript_path) = input
+        .get("transcript_path")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Ok(());
+    };
+    let endpoint = format!(
+        "{}/terminals/{}/claude-turn",
+        url.trim_end_matches('/'),
+        urlencoding_component(terminal)
+    );
+    ureq::post(&endpoint)
+        .set("X-Hotsheet-Secret", secret)
+        .set("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(5))
+        .send_string(
+            &serde_json::json!({
+                "event": event, "session_id": session_id, "transcript_path": transcript_path
+            })
+            .to_string(),
+        )?;
     Ok(())
 }
 
