@@ -1,7 +1,7 @@
 ---
 name: kerf-app
 description: Build UIs in the kerf reactive framework and its @kerfjs/ui component package (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs` or `@kerfjs/ui`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
-kerf-skill-version: 1.26.0
+kerf-skill-version: 1.27.0
 ---
 
 # Building apps with kerf
@@ -14,13 +14,25 @@ kerf is a ~15 KB reactive UI framework (still ~15 KB with `arraySignal`): signal
 
 ## Setup
 
+- In a consuming project, run `npx kerfjs setup` before the first Kerf edit
+  (or after a package upgrade). Review its dry-run plan, resolve authored
+  conflicts deliberately, then apply with `npx kerfjs setup --write --yes`.
+  Select the affected workspace package with `--package` when needed. This
+  installs the matching AI skill, Kerf ESLint preset, TypeScript settings,
+  and `kerf:check`; UI projects also get catalog and doctor checks. Run
+  `npm run kerf:check` in the selected package after UI changes, alongside
+  the project's own lint and tests. If setup is intentionally not used,
+  install and configure these checks explicitly before coding; a generic
+  ESLint preset does not check Kerf contracts.
 - Install: `npm install kerfjs`
 - `tsconfig.json`: `"jsx": "react-jsx"`, `"jsxImportSource": "kerfjs"`
 - Vite / esbuild need no extra config.
 - **Dev diagnostics are opt-in by import, and only an APP installs them.** kerf does not infer dev mode. In the app entry add `if (import.meta.env.DEV) await import('kerfjs/dev');` (Vite) or `if (process.env.NODE_ENV !== 'production') await import('kerfjs/dev');` (webpack/Node). That enables the read-only store `get()` snapshot, the throwing dangerous-URL screen, and makes the `KERF_DEV_WARN_*` family available; omitting it is production shape and sheds ~4.7 KB min+gzip because the condition folds away and the chunk is never emitted. Put it (and any `enableWarnings()` call) FIRST if relying on the untracked-signal, delegate-in-effect, or rebuilt-listeners warnings — `signal()`, `effect()`, and `mount()` decide those at creation time, so anything created earlier stays uncovered.
   - **Switch individual warnings on with `enableWarnings()`**, which is the only switch that works in a browser (no `process` object there, and a bundler `define` cannot reach the read): `const dev = await import('kerfjs/dev'); dev.enableWarnings({ staleBinding: true, narrowSet: true, invariants: 'throw' });`. The `KERF_DEV_WARN_*` env vars do the same for Node/SSR/CI; an explicit call wins either way.
   - **A component package must NEVER import `kerfjs/dev`.** The hooks are process-global, so installing them is the consuming app's decision — a library that does it forces the diagnostics (and the chunk) on every consumer. Put the import in your demo page or test harness instead.
-- Recommended companion: `npm install --save-dev eslint-plugin-kerfjs` and add `kerfjs.configs.recommended` to the project's eslint config. Enforces five of the hard rules below (no inline JSX event handlers, require `data-key` in `each()`, capture `delegate()` disposers, no nested `mount()`, prefer module JSX augmentation) at edit time — useful as a self-correction signal when authoring kerf code.
+- For manual setup, install `eslint-plugin-kerfjs` and add
+  `kerfjs.configs.recommended` (or `recommended-ui` for `@kerfjs/ui`) to the
+  project's ESLint config. This catches Kerf misuse while code is authored.
 
 ## Optional first-party UI
 
@@ -32,6 +44,20 @@ and `@kerfjs/ui/unstyled` are CSS-free; pair the barrel with `styles.css` only
 when the complete layer is intentional. Prefer a component before inventing a
 parallel local primitive, but keep domain state, routing, commands, and tab/menu
 policy in the app.
+
+Before building or changing a UI region, read
+`node_modules/@kerfjs/ui/docs/component-selection.md` and the chosen
+component's page under `node_modules/@kerfjs/ui/ai/components/`; use
+`node_modules/@kerfjs/ui/ai/skill.md` for the full AI contract. Match the
+requested behavior, not just the screenshot. Put chrome in a layout
+component's public slots: for a `Workbench`, use `leftRail.toolbar`,
+`rightRail.toolbar`, `mainToolbar`, and the built-in panel `toggle` rather
+than putting a custom header and toggle inside `leftRail.content`.
+Use `Catalog` and `wireCatalog` for a component showcase, `SearchField` for
+structured token search, and `StateBanner` for applicable status messages.
+Keep product-specific data and actions in the app. When a public slot or prop
+cannot express the requested behavior, record a component gap before writing
+a parallel control or CSS skin.
 
 Use ListItem/ListActionRow/ListHeader/TabBarItem `rootAttributes` only for application
 `data-*` metadata. ListActionRow `trailingActionAttributes` and ListHeader
