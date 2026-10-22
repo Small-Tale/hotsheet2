@@ -686,9 +686,12 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
 - The web gate installs Playwright Chromium and its Linux dependencies after `npm ci`
-  with `npx playwright install --with-deps chromium`. CI runs that step with two bounded
-  six-minute attempts, so a stalled Linux package mirror fails clearly instead of holding
-  the whole job indefinitely (HS2-47BAAC). The Vitest suite includes real-browser
+  with `npx playwright install --with-deps chromium`. The smoke job bounds an
+  attempt at 10 minutes, and the full-suite shards bound one at 12 minutes;
+  ordinary failures retry, while a timeout stops the job before an orphan apt
+  child can lock subsequent attempts (HS2-47BAAC, HS2-EN9D1C). Ubuntu jobs prefer
+  Canonical's archive for these dependency downloads, with the runner's Azure
+  archive as fallback (HS2-M983JG). The Vitest suite includes real-browser
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
   as before the Playwright smoke group. The `binaries` Vitest project's `globalSetup`
   (`clients/web/scripts/vitest-build-binaries.mjs`) runs

@@ -28,6 +28,9 @@ jobs:
         working-directory: clients/web
         run: npm ci
 
+      - name: Prefer the Ubuntu archive for Playwright dependencies
+        run: bash .github/scripts/prefer-ubuntu-archive.sh
+
       - name: Install Playwright WebKit and Linux dependencies
         working-directory: clients/web
         run: |
@@ -180,6 +183,9 @@ jobs:
       - name: Install web client dependencies
         working-directory: clients/web
         run: npm ci
+
+      - name: Prefer the Ubuntu archive for Playwright dependencies
+        run: bash .github/scripts/prefer-ubuntu-archive.sh
 
       - name: Install Playwright Chromium and Linux dependencies
         working-directory: clients/web
@@ -389,6 +395,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}-chromium-webkit
+
+      - name: Prefer the Ubuntu archive for Playwright dependencies
+        run: bash .github/scripts/prefer-ubuntu-archive.sh
 
       - name: Install Playwright Chromium, WebKit, and Linux dependencies
         working-directory: clients/web
