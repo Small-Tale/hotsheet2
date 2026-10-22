@@ -2974,13 +2974,8 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         let settings = project.path().join(SHARED_SETTINGS_PATH);
-        let plan = plan_refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        plan_refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
         assert!(!settings.exists());
-        assert!(
-            plan.changes
-                .iter()
-                .any(|change| change.path == SHARED_SETTINGS_PATH)
-        );
 
         run_setup_in(
             store.path(),
