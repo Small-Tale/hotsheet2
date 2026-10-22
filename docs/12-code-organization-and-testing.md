@@ -726,6 +726,10 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   report (artifact `playwright-report-full`) and prints the slowest browser tests via
   `scripts/test-profile.mjs`. The shards install only Chromium and WebKit, cached under
   `~/.cache/ms-playwright` per Playwright version, with three bounded install attempts.
+  An attempt that times out ends the job because a privileged `apt-get` child can survive
+  `npx` and hold the dpkg lock; ordinary failures still retry. The full-shard timeout is
+  12 minutes to cover the slow Ubuntu mirror observed in CI run `39745789604`, and the
+  Chromium-only check uses a 10-minute bound (HS2-EN9D1C).
   An opt-in profiler that needs another browser (Firefox, `profile:pty:firefox`) skips at
   file level so the default suite never launches it. The shards share one Vite dev server per
   shard; its project WebSocket bridge owns every upgraded socket's errors, so a browser
