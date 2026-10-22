@@ -2344,6 +2344,44 @@ paths:
       responses:
         default:
           description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/permissions/migration:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: preview_checkout_permission_migration
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: migrate_checkout_permissions
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/guidance:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_guidance
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    post:
+      operationId: update_checkout_guidance
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
 components:
   securitySchemes:
     HotsheetSecret:

@@ -65,7 +65,10 @@ HS2-E9AWV8 covers the first versioned client transport contract. The route
 inventory check in `clients/web/tests/contracts.spec.ts` compares every server
 router path and method to OpenAPI, then validates compatibility, ticket, row,
 and replay responses from a real server against the core schemas. The event
-schema also encodes assignment, activity, and turn envelope fields. Detailed
+schema also encodes assignment, activity, and turn envelope fields. The route
+inventory includes the checkout permission-migration and guidance endpoints
+(HS2-N44D0P); `clients/web/scripts/sync-openapi-routes.mjs` regenerates
+route-level entries from the Axum router before contract verification. Detailed
 request and response schemas for operations marked `route-only` are tracked by
 HS2-11BVBS.
 
