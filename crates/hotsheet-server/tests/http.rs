@@ -13736,6 +13736,11 @@ fn hermetic_setup(state: AppState) -> AppState {
 async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     let (store_dir, state) = state();
     let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("Cargo.toml"),
+        "[package]\nname='demo'\n",
+    )
+    .unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
     let checkout = serde_json::json!({
@@ -13769,7 +13774,7 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
                     sha256: format!("{:x}", sha2::Sha256::digest(body.as_bytes())),
                     description: "Bootstrap".into(),
                     owner: None,
-                    tags: vec!["general".into()],
+                    tags: vec!["rust".into()],
                     body: body.into(),
                     known_bodies: vec![],
                 }],
@@ -13788,6 +13793,49 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     assert_eq!(
         overview["sources"][0]["rules"][0]["installed_version"],
         serde_json::Value::Null
+    );
+    let recommendation_path = "/checkouts/guidance/guidance/recommendations";
+    let recommendations = body_json(
+        app.clone()
+            .oneshot(authed("GET", recommendation_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        recommendations["candidates"][0]["name"],
+        "project-bootstrap"
+    );
+    assert_eq!(recommendations["candidates"][0]["state"], "new");
+    let fingerprint = recommendations["candidates"][0]["fingerprint"]
+        .as_str()
+        .unwrap();
+    let decision = serde_json::json!({
+        "source": "fixture", "kind": "rule", "name": "project-bootstrap",
+        "fingerprint": fingerprint, "decision": "accepted"
+    })
+    .to_string();
+    let accepted = body_json(
+        app.clone()
+            .oneshot(authed("POST", recommendation_path, Some(&decision)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(accepted["candidates"][0]["state"], "selected");
+    assert!(!project.path().join("AGENTS.md").exists());
+    let stale = serde_json::json!({
+        "source": "fixture", "kind": "rule", "name": "project-bootstrap",
+        "fingerprint": "stale", "decision": "accepted"
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", recommendation_path, Some(&stale)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
     );
     let selected = serde_json::json!({"action":"select","source":"fixture",
         "rules":["project-bootstrap"],"skills":[]})

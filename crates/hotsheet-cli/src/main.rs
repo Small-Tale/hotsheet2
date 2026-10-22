@@ -755,6 +755,21 @@ enum Cmd {
 
 #[derive(Subcommand, Debug)]
 enum GuidanceCmd {
+    /// Read local project evidence and pinned guidance recommendations as JSON.
+    Recommendations,
+    /// Accept or dismiss one exact recommendation; accepting selects but does not apply it.
+    RecommendDecide {
+        #[arg(long)]
+        source: String,
+        #[arg(long, value_parser = ["rule", "skill"])]
+        kind: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        fingerprint: String,
+        #[arg(long, value_parser = ["accept", "dismiss"])]
+        decision: String,
+    },
     /// List installed and available rules/skills from registered sources.
     List {
         #[arg(long)]

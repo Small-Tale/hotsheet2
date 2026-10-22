@@ -294,6 +294,22 @@ Cover first setup, no source, multiple pinned sources, conflicting rules, manual
 selection overrides, accepted/rejected/partially accepted sets, evidence changes,
 version changes, stale scans, and restart before shipping recommendations.
 
+The headless local service (`HS2-JZ8W32`) is available through
+`hotsheet-cli guidance --project <code-project> recommendations` and
+`guidance recommend-decide --source <id> --kind <rule|skill> --name <name>
+--fingerprint <reviewed-fingerprint> --decision <accept|dismiss>` under the same
+`--project` scope. The authenticated checkout route is
+`GET/POST /checkouts/{reference}/guidance/recommendations`. Both return JSON with
+bounded local signals, candidates, and new/changed/withdrawn review changes.
+Decisions use project Shared Settings; a stale fingerprint fails and an accepted
+item is selected without running `guidance apply`. The initial scanner recognizes
+common language manifests and selected `package.json` dependencies, and matches
+them to rule tags or skill names in registered pinned sources. It reports when a
+source needs registration, without doing a remote fetch. It also warns when the
+first explicit selection would replace the bundled default at the next apply.
+The optional AI interview
+and Settings review remain `HS2-YGV9RN` and `HS2-QBXRFY`.
+
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only

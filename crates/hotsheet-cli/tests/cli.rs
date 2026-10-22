@@ -188,6 +188,80 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     );
 }
 
+#[test]
+fn guidance_recommendations_cli_reviews_one_pinned_rule_without_applying_it() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
+    std::fs::write(project.join("Cargo.toml"), "[package]\nname='demo'\n").unwrap();
+    let body = "<!-- hotsheet:begin section=rust-check v=1 -->\nRust checks.\n<!-- hotsheet:end section=rust-check -->\n";
+    std::fs::write(
+        project.join(".hotsheet2/guidance-sources.json"),
+        serde_json::json!({
+            "schema_version": 1,
+            "explicit_selection": false,
+            "sources": [{
+                "id": "fixture", "repository": "local fixture", "requested_ref": "v1",
+                "commit": "a".repeat(40), "selected_rules": [], "selected_skills": [], "skills": [],
+                "rules": [{
+                    "name": "rust-check", "version": 1,
+                    "sha256": format!("{:x}", Sha256::digest(body.as_bytes())),
+                    "description": "Check Rust", "tags": ["rust"], "body": body,
+                }],
+            }],
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let run = |args: &[&str]| -> serde_json::Value {
+        let bytes = hs(&project)
+            .args(["guidance", "--project"])
+            .arg(&project)
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&bytes).unwrap()
+    };
+    let first = run(&["recommendations"]);
+    assert_eq!(first["signals"][0]["key"], "rust");
+    assert_eq!(first["candidates"][0]["state"], "new");
+    let fingerprint = first["candidates"][0]["fingerprint"].as_str().unwrap();
+    let dismissed = run(&[
+        "recommend-decide",
+        "--source",
+        "fixture",
+        "--kind",
+        "rule",
+        "--name",
+        "rust-check",
+        "--fingerprint",
+        fingerprint,
+        "--decision",
+        "dismiss",
+    ]);
+    assert_eq!(dismissed["candidates"][0]["state"], "dismissed");
+    let accepted = run(&[
+        "recommend-decide",
+        "--source",
+        "fixture",
+        "--kind",
+        "rule",
+        "--name",
+        "rust-check",
+        "--fingerprint",
+        fingerprint,
+        "--decision",
+        "accept",
+    ]);
+    assert_eq!(accepted["candidates"][0]["state"], "selected");
+    assert!(!project.join("AGENTS.md").exists());
+    let list = run(&["list"]);
+    assert_eq!(list["sources"][0]["rules"][0]["selected"], true);
+}
+
 #[cfg(unix)]
 #[test]
 fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {

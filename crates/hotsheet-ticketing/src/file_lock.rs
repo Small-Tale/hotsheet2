@@ -1,4 +1,4 @@
-//! Process-safe advisory file locks shared by the checkout registry and Git writes.
+//! Process-safe advisory file locks shared by registry, guidance, and Git writes.
 //! The lock file stays in place; dropping the handle releases the OS lock, including
 //! when a process exits without running Rust destructors.
 
@@ -6,12 +6,12 @@ use std::fs::File;
 use std::io;
 
 #[derive(Debug)]
-pub(crate) struct FileLock {
+pub struct FileLock {
     file: File,
 }
 
 impl FileLock {
-    pub(crate) fn acquire(file: File) -> io::Result<Self> {
+    pub fn acquire(file: File) -> io::Result<Self> {
         lock_file(&file)?;
         Ok(Self { file })
     }

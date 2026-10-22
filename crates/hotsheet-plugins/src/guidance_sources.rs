@@ -2,15 +2,28 @@
 //! operation; ordinary setup reads the authenticated manifest snapshot kept with the project.
 
 use base64::Engine;
+use hotsheet_ticketing::FileLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const CONFIG_PATH: &str = ".hotsheet2/guidance-sources.json";
 pub const DEFAULT_REPOSITORY: &str = "https://github.com/Small-Tale/ai-playbook.git";
+
+fn lock_config(project: &Path) -> Result<FileLock, GuidanceSourceError> {
+    let directory = project.join(".hotsheet2");
+    fs::create_dir_all(&directory)?;
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(directory.join("guidance-sources.lock"))?;
+    Ok(FileLock::acquire(file)?)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum GuidanceSourceError {
@@ -495,13 +508,14 @@ pub fn register_checked(
     requested_ref: &str,
     expected_commit: Option<&str>,
 ) -> Result<GuidanceConfig, GuidanceSourceError> {
-    let mut config = load(project)?;
     let mut source = inspect_source(id, repository, requested_ref)?;
     if expected_commit.is_some_and(|expected| expected != source.commit) {
         return Err(GuidanceSourceError::Invalid(
             "source changed since review; check and review it again".into(),
         ));
     }
+    let _lock = lock_config(project)?;
+    let mut config = load(project)?;
     if let Some(old) = config.sources.iter().find(|old| old.id == id) {
         source.selected_rules = old.selected_rules.clone();
         source.selected_skills = old.selected_skills.clone();
@@ -550,6 +564,7 @@ pub fn select(
     rules: &[String],
     skills: &[String],
 ) -> Result<GuidanceConfig, GuidanceSourceError> {
+    let _lock = lock_config(project)?;
     let mut config = load(project)?;
     let source = config
         .sources
@@ -560,6 +575,66 @@ pub fn select(
     source.selected_skills = skills.to_vec();
     config.explicit_selection = true;
     save(project, &config)?;
+    Ok(config)
+}
+
+pub fn skill_digest(skill: &SourceSkill) -> String {
+    let mut files = skill
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file.sha256.as_str()))
+        .collect::<Vec<_>>();
+    files.sort_unstable();
+    digest(&serde_json::to_vec(&(skill.name.as_str(), files)).expect("skill fields serialize"))
+}
+
+/// Add one reviewed item without replacing the project's other deliberate selections.
+pub fn select_item(
+    project: &Path,
+    source_id: &str,
+    kind: &str,
+    name: &str,
+    expected_version: u64,
+    expected_digest: &str,
+) -> Result<GuidanceConfig, GuidanceSourceError> {
+    let _lock = lock_config(project)?;
+    let mut config = load(project)?;
+    let source = config
+        .sources
+        .iter_mut()
+        .find(|source| source.id == source_id)
+        .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
+    let selected = match kind {
+        "rule"
+            if source.rules.iter().any(|rule| {
+                rule.name == name
+                    && rule.version == expected_version
+                    && rule.sha256 == expected_digest
+            }) =>
+        {
+            &mut source.selected_rules
+        }
+        "skill"
+            if source
+                .skills
+                .iter()
+                .any(|skill| skill.name == name && skill_digest(skill) == expected_digest) =>
+        {
+            &mut source.selected_skills
+        }
+        _ => {
+            return Err(GuidanceSourceError::Invalid(
+                "guidance recommendation changed since review".into(),
+            ));
+        }
+    };
+    if !selected.iter().any(|item| item == name) || !config.explicit_selection {
+        if !selected.iter().any(|item| item == name) {
+            selected.push(name.to_owned());
+        }
+        config.explicit_selection = true;
+        save(project, &config)?;
+    }
     Ok(config)
 }
 

@@ -53,6 +53,7 @@ pub use activity_distillation::{
 pub use auto_context::{AutoContextEntry, AutoContextSource, TicketAutoContext};
 pub use corrupt_cache::CorruptTicketCache;
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
+pub use file_lock::FileLock;
 pub use identity::{ME, current_user_email, current_user_name, resolve_me};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use metrics::{Rollup, UsageEvent};

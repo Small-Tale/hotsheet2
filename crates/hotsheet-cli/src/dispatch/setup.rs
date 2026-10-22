@@ -21,6 +21,32 @@ mod diagnose;
 fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
     use hotsheet_plugins::guidance_sources as sources;
     match cmd {
+        GuidanceCmd::Recommendations => {
+            let report = hotsheet_plugins::guidance_recommendations::scan(project)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        GuidanceCmd::RecommendDecide {
+            source,
+            kind,
+            name,
+            fingerprint,
+            decision,
+        } => {
+            let action = if decision == "accept" {
+                "accepted"
+            } else {
+                "dismissed"
+            };
+            let report = hotsheet_plugins::guidance_recommendations::decide(
+                project,
+                &source,
+                &kind,
+                &name,
+                &fingerprint,
+                action,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
         GuidanceCmd::List { query, owner, tag } => {
             let config = sources::load(project)?;
             let writer = hotsheet_plugins::setup::guidance_owner_in(project)?;

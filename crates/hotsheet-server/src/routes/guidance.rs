@@ -4,6 +4,7 @@ use crate::{ApiError, AppState};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use hotsheet_plugins::guidance_recommendations::{self, RecommendationReport};
 use hotsheet_plugins::guidance_sources as sources;
 use hotsheet_plugins::guidance_updates::{self, SourceReview, SourceUpdate};
 use hotsheet_plugins::rulesync_updates::{self, RulesyncUpdateReport};
@@ -130,6 +131,49 @@ pub(crate) async fn get_checkout_guidance(
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map(Json)
+}
+
+pub(crate) async fn get_checkout_guidance_recommendations(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<RecommendationReport>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || guidance_recommendations::scan(&project))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RecommendationDecision {
+    source: String,
+    kind: String,
+    name: String,
+    fingerprint: String,
+    decision: String,
+}
+
+pub(crate) async fn decide_checkout_guidance_recommendation(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(request): Json<RecommendationDecision>,
+) -> Result<Json<RecommendationReport>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        guidance_recommendations::decide(
+            &project,
+            &request.source,
+            &request.kind,
+            &request.name,
+            &request.fingerprint,
+            &request.decision,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+    .map(Json)
 }
 
 /// Read-only, bounded remote ref checks; unlike registration this never replaces a pin.
