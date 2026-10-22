@@ -594,7 +594,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['settings-workspace', 1],
     ['trash-settings', 3],
     ['terminal-memory-settings', 6],
-    ['permission-rules-settings', 3],
+    ['permission-rules-settings', 4],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
     ['ai-tool-settings', 1],
@@ -779,6 +779,24 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
   expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-dialog-remote-narrow.png' });
+});
+
+test('keeps the legacy-answer review closed until requested in the catalog (HS2-ZQ6TV2)', async ({ page }) => {
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.getByRole('region', { name: 'Review Legacy Answers Before Copying to a Project' });
+  const dialog = page.getByRole('dialog', { name: 'Copy legacy permission answers' });
+  await expect(example).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await example.getByRole('button', { name: 'Review Legacy Git' }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('checkbox').check();
+  await expect(dialog.getByRole('button', { name: 'Copy 1 to project' })).toBeEnabled();
+  await page.screenshot({ path: 'target/visual-captures/hs2-zq6tv2-migration-demo-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-zq6tv2-migration-demo-phone.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
 });
 
 test('lets the remembered-answer demo search and dismiss its scrollable dialog (HS2-16XPHH)', async ({ page }) => {

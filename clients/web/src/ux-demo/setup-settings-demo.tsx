@@ -316,6 +316,8 @@ const permissionRulesDemoDialog = signal<
   | undefined
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
+const permissionMigrationDemoReview = signal(false);
+const permissionMigrationDemoSelected = signal(false);
 const permissionRulesDemoEditor = signal<PermissionRuleEditorState | undefined>(undefined);
 const permissionRulesDemoPreview = signal<
   | {
@@ -376,24 +378,28 @@ export function PermissionRulesSettingsDemo() {
         />
       </CatalogExample>
       <CatalogExample label="Review Legacy Answers Before Copying to a Project">
-        <PermissionRulesSettings
-          rules={[]}
-          migration={{
-            sources: [{ id: 'git-legacy', name: 'Legacy Git', locator: '/work/demo.hs2' }],
-            review: {
-              projectId: 'demo',
-              sourceId: 'git-legacy',
-              selected: [],
-              busy: false,
-              preview: {
-                checkout: 'checkout:demo',
-                project_name: 'Demo',
-                source: 'git-legacy',
-                rules: [{ id: 'legacy-1', tool: 'Bash', action: 'npm test', decision: 'allow' }],
-              },
-            },
-          }}
-        />
+        <div data-demo-permission-migration>
+          <PermissionRulesSettings
+            rules={[]}
+            migration={{
+              sources: [{ id: 'git-legacy', name: 'Legacy Git', locator: '/work/demo.hs2' }],
+              review: permissionMigrationDemoReview.value
+                ? {
+                    projectId: 'demo',
+                    sourceId: 'git-legacy',
+                    selected: permissionMigrationDemoSelected.value ? ['legacy-1'] : [],
+                    busy: false,
+                    preview: {
+                      checkout: 'checkout:demo',
+                      project_name: 'Demo',
+                      source: 'git-legacy',
+                      rules: [{ id: 'legacy-1', tool: 'Bash', action: 'npm test', decision: 'allow' }],
+                    },
+                  }
+                : undefined,
+            }}
+          />
+        </div>
       </CatalogExample>
     </>
   );
@@ -551,6 +557,46 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
           expandedActions: permissionRulesDemoPreview.value?.expandedActions,
         };
         permissionRulesDemoPreview.value = undefined;
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionMigration.selector}`,
+      () => {
+        permissionMigrationDemoReview.value = true;
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionMigration.selector}`,
+      () => {
+        permissionMigrationDemoReview.value = false;
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionMigrationRule.selector}`,
+      (_event, target) => {
+        permissionMigrationDemoSelected.value = (target as HTMLInputElement).checked;
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.applyPermissionMigration.selector}`,
+      () => {
+        permissionMigrationDemoReview.value = false;
       },
     ),
   );
