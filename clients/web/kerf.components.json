@@ -3890,7 +3890,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer.",
+      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug and version details.",
       "source": "src/components/guidance-settings.tsx",
       "publicExports": [{ "name": "GuidanceSettings" }],
       "sourceLinks": ["src/components/guidance-settings.tsx"],

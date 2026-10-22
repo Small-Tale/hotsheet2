@@ -100,8 +100,8 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                         <Checkbox
                           action={COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.value}
                           checked={rule.selected}
-                          label={`${rule.name} · available v${rule.version}`}
-                          hint={`${rule.description} · installed ${rule.installed_version === null ? 'not yet' : `v${rule.installed_version}`}`}
+                          label={rule.description}
+                          hint={`${rule.name} · available v${rule.version} · installed ${rule.installed_version === null ? 'not yet' : `v${rule.installed_version}`}`}
                         />
                       </div>
                     ))}

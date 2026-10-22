@@ -63,8 +63,14 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const picker = page.locator('[data-component="guidance-settings"]');
+  const visualRule = picker.locator('[data-guidance-rule="hotsheet-visual-qa"]');
+  await expect(visualRule.locator('label')).toContainText('Visual review of rendered changes');
+  await expect(visualRule.locator('label')).not.toContainText('hotsheet-visual-qa');
+  await expect(visualRule).toContainText('hotsheet-visual-qa · available v2');
   await expect(picker).toContainText('installed v1');
   await expect(picker).toContainText('available v2');
+  await visualRule.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/guidance-rules-wide.png' });
   await picker.screenshot({ path: 'target/visual-captures/guidance-wide.png' });
   await page.screenshot({ path: 'target/visual-captures/guidance-wide-page.png', fullPage: true });
   await picker.locator('input[name="guidance-search"]').fill('rust');
@@ -112,4 +118,6 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-page.png', fullPage: true });
   await picker.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-top-settled.png', fullPage: true });
+  await visualRule.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/guidance-rules-phone.png' });
 });
