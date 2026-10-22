@@ -2571,8 +2571,11 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     .unwrap();
     let second = serde_json::json!({
         "type":"assistant", "timestamp":"2026-10-23T00:00:01Z",
-        "message":{"id":"message-2","model":"claude-opus-4-8", "usage":{
-            "input_tokens":7,"output_tokens":2
+        "message":{"id":"message-2","model":"claude-fable-5-1", "usage":{
+            "input_tokens":7,"cache_read_input_tokens":1000,
+            "cache_creation_input_tokens":30,
+            "cache_creation":{"ephemeral_5m_input_tokens":20,"ephemeral_1h_input_tokens":10},
+            "output_tokens":2
         }}
     });
     use std::io::Write as _;
@@ -2591,7 +2594,8 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
         events[1].ticket.as_deref(),
         Some(ticket.to_string().as_str())
     );
-    assert_eq!((events[1].tokens_in, events[1].tokens_out), (7, 2));
+    assert_eq!((events[1].tokens_in, events[1].tokens_out), (1037, 2));
+    assert_eq!(events[1].cost_usd, Some(0.00087));
 
     // Stop may arrive before Claude flushes the final assistant row to JSONL.
     send("POST", endpoint, turn("start", "native-session")).await;

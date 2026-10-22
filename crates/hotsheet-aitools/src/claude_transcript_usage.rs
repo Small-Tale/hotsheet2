@@ -5,6 +5,7 @@
 //! conversation content is retained. Repeated rows for one assistant message count once.
 
 use crate::drive::Usage;
+use hotsheet_ticketing::pricing::Prices;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -16,6 +17,20 @@ const MAX_TURN_BYTES: u64 = 64 * 1024 * 1024;
 /// Read only bytes appended after a `UserPromptSubmit` hook's file-size snapshot.
 /// A truncated/replaced transcript or an unbounded turn produces no guessed usage.
 pub fn usage_since(path: &Path, offset: u64) -> io::Result<Option<Usage>> {
+    usage_since_with_prices(path, offset, None)
+}
+
+/// Price the transcript's separate cache categories instead of treating every input
+/// token as an uncached input token.
+pub fn priced_usage_since(path: &Path, offset: u64, prices: &Prices) -> io::Result<Option<Usage>> {
+    usage_since_with_prices(path, offset, Some(prices))
+}
+
+fn usage_since_with_prices(
+    path: &Path,
+    offset: u64,
+    prices: Option<&Prices>,
+) -> io::Result<Option<Usage>> {
     let mut file = File::open(path)?;
     let len = file.metadata()?.len();
     if len < offset {
@@ -39,11 +54,11 @@ pub fn usage_since(path: &Path, offset: u64) -> io::Result<Option<Usage>> {
             "Claude turn transcript exceeds the bounded usage scan",
         ));
     }
-    Ok(usage_from_lines(&bytes))
+    Ok(usage_from_lines(&bytes, prices))
 }
 
-fn usage_from_lines(bytes: &[u8]) -> Option<Usage> {
-    let mut messages = BTreeMap::<String, (String, Usage)>::new();
+fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<Usage> {
+    let mut messages = BTreeMap::<String, (String, Usage, Option<f64>)>::new();
     for line in bytes.split(|byte| *byte == b'\n') {
         let Ok(value) = serde_json::from_slice::<Value>(line) else {
             continue;
@@ -65,6 +80,30 @@ fn usage_from_lines(bytes: &[u8]) -> Option<Usage> {
         let Some(usage) = crate::claude::claude_result_usage(message) else {
             continue;
         };
+        let cost = prices.and_then(|prices| {
+            let model = usage.model.as_ref()?;
+            let price = prices.get(model)?;
+            let counters = message.get("usage")?;
+            let count = |key| counters.get(key).and_then(Value::as_u64).unwrap_or(0);
+            let cache_creation = counters.get("cache_creation");
+            let cache_count = |key| {
+                cache_creation
+                    .and_then(|value| value.get(key))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+            };
+            let write_5m = cache_count("ephemeral_5m_input_tokens");
+            let write_1h = cache_count("ephemeral_1h_input_tokens");
+            price.claude_cost(
+                count("input_tokens"),
+                count("cache_read_input_tokens"),
+                write_5m,
+                write_1h,
+                count("cache_creation_input_tokens")
+                    .saturating_sub(write_5m.saturating_add(write_1h)),
+                count("output_tokens"),
+            )
+        });
         if usage.tokens_in == 0 && usage.tokens_out == 0 {
             continue;
         }
@@ -73,9 +112,9 @@ fn usage_from_lines(bytes: &[u8]) -> Option<Usage> {
         // its counters is authoritative; stale rows received out of order cannot lower it.
         if messages
             .get(id)
-            .is_none_or(|(previous, _)| timestamp >= previous.as_str())
+            .is_none_or(|(previous, _, _)| timestamp >= previous.as_str())
         {
-            messages.insert(id.to_owned(), (timestamp.to_owned(), usage));
+            messages.insert(id.to_owned(), (timestamp.to_owned(), usage, cost));
         }
     }
     if messages.is_empty() {
@@ -84,9 +123,11 @@ fn usage_from_lines(bytes: &[u8]) -> Option<Usage> {
     let mut total = Usage::default();
     let mut model = None::<String>;
     let mut mixed_models = false;
-    for (_, usage) in messages.values() {
+    let mut total_cost = prices.map(|_| 0.0);
+    for (_, usage, cost) in messages.values() {
         total.tokens_in = total.tokens_in.saturating_add(usage.tokens_in);
         total.tokens_out = total.tokens_out.saturating_add(usage.tokens_out);
+        total_cost = total_cost.zip(*cost).map(|(sum, amount)| sum + amount);
         if let Some(current) = &usage.model {
             if model.as_ref().is_some_and(|known| known != current) {
                 mixed_models = true;
@@ -96,6 +137,7 @@ fn usage_from_lines(bytes: &[u8]) -> Option<Usage> {
         }
     }
     total.model = if mixed_models { None } else { model };
+    total.cost_usd = total_cost;
     Some(total)
 }
 
@@ -189,5 +231,31 @@ mod tests {
         let usage = usage_since(file.path(), 0).unwrap().unwrap();
         assert_eq!(usage.model, None);
         assert!(usage_since(file.path(), file.as_file().metadata().unwrap().len() + 1).is_err());
+    }
+
+    #[test]
+    fn prices_deduplicated_cache_categories_without_charging_all_input_at_base_rate() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let row = serde_json::json!({
+            "type": "assistant", "timestamp": "2026-01-01T00:00:01Z",
+            "message": {"id": "priced", "model": "claude-fable-5-1", "usage": {
+                "input_tokens": 10, "cache_read_input_tokens": 1000,
+                "cache_creation_input_tokens": 30,
+                "cache_creation": {"ephemeral_5m_input_tokens": 20, "ephemeral_1h_input_tokens": 10},
+                "output_tokens": 5
+            }}
+        });
+        writeln!(file, "{row}").unwrap();
+        writeln!(file, "{row}").unwrap();
+        let usage = priced_usage_since(
+            file.path(),
+            0,
+            &hotsheet_ticketing::pricing::default_prices(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!((usage.tokens_in, usage.tokens_out), (1040, 5));
+        // 10 × $10 + 1000 × $0.25 + 20 × $12.50 + 10 × $20 + 5 × $50, per million.
+        assert_eq!(usage.cost_usd, Some(0.00105));
     }
 }

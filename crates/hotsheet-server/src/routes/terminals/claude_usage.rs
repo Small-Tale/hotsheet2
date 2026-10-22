@@ -170,13 +170,15 @@ pub(crate) async fn report_claude_turn(
             let store = state.store.clone();
             let session_id = body.session_id;
             tokio::task::spawn_blocking(move || {
+                let prices = hotsheet_ticketing::pricing::load_prices(&store);
                 // Claude can invoke Stop before its last transcript row is visible. Wait
                 // briefly for that local append; never poll the server or infer older rows.
                 let deadline = Instant::now() + TRANSCRIPT_FLUSH_WAIT;
                 let usage = loop {
-                    let usage = match hotsheet_aitools::claude_transcript_usage::usage_since(
+                    let usage = match hotsheet_aitools::claude_transcript_usage::priced_usage_since(
                         &start.transcript,
                         start.offset,
+                        &prices,
                     ) {
                         Ok(usage) => usage,
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -188,9 +190,9 @@ pub(crate) async fn report_claude_turn(
                     std::thread::sleep(TRANSCRIPT_FLUSH_RETRY);
                 };
                 if let Some(usage) = usage {
-                    metrics::record_priced(
+                    metrics::record(
                         &store,
-                        metrics::UsageEvent {
+                        &metrics::UsageEvent {
                             ts: now().as_str().to_owned(),
                             tool: "claude".to_owned(),
                             model: usage.model,

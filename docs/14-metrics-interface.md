@@ -43,7 +43,8 @@ tool's telemetry into one shape — a **usage event**:
   Codex's usage output, an ACP tool's counters) into these events. The host owns
   everything else. A tool with no telemetry omits the capability.
 - **Cost:** prefer the tool's own reported cost; where absent, compute from a
-  per-model **price table** (a small, updatable data file) so cost is always present.
+  per-model **price table** (a small, updatable data file) when the model and
+  relevant token categories have supported rates. Unknown costs remain absent.
 - **Per-ticket attribution** reuses HS1's proven trick: the _active ticket_ at emit
   time (the channel/worklist knows which ticket is being worked) tags the event; a
   session with no active ticket attributes to the project only.
@@ -171,6 +172,12 @@ Metrics can be shared across a team **through git** — no server sync needed:
   2.1.308 invokes them. Claude's transcript row shape is observed locally rather than
   a published hook contract, so a changed format can omit usage until the parser is
   updated. No prompt or response text is sent to the server or copied into metrics.
+  For `claude-fable-5-1`, the published model rate is $10/$50 per million ordinary
+  input/output tokens. The transcript path prices cache reads at $0.25, five-minute
+  writes at $12.50, and one-hour writes at $20 per million when its usage row names
+  the cache-write TTL. Unclassified cache writes are not guessed. A store's committed
+  `metrics/prices.json` can override these rates. Source:
+  [Claude Fable 5.1 model pricing](https://platform.claude.com/docs/en/models/fable-5-1/overview).
   Codex Work sessions outside Hot Sheet drives/terminals have a local claim-window
   capture path (`HS2-2K2D7E`, `HS2-NFQ1NK`). CLI and MCP renewal and release capture
   usage; `hotsheet-cli metrics --refresh-codex` explicitly reads new usage while a

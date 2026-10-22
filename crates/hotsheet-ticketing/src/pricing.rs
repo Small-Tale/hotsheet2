@@ -17,12 +17,57 @@ use crate::store::FsStore;
 pub struct Price {
     pub input_per_mtok: f64,
     pub output_per_mtok: f64,
+    #[serde(default)]
+    pub cache_read_per_mtok: Option<f64>,
+    #[serde(default)]
+    pub cache_write_5m_per_mtok: Option<f64>,
+    #[serde(default)]
+    pub cache_write_1h_per_mtok: Option<f64>,
 }
 
 impl Price {
     /// The cost of `tokens_in` input + `tokens_out` output tokens at this price.
     pub fn cost(&self, tokens_in: u64, tokens_out: u64) -> f64 {
         (tokens_in as f64 * self.input_per_mtok + tokens_out as f64 * self.output_per_mtok) / 1e6
+    }
+
+    /// Price Claude's separately reported input categories when all needed rates exist.
+    /// An unclassified cache write cannot be priced without guessing its TTL.
+    pub fn claude_cost(
+        &self,
+        uncached: u64,
+        cache_read: u64,
+        cache_write_5m: u64,
+        cache_write_1h: u64,
+        unclassified_cache_write: u64,
+        output: u64,
+    ) -> Option<f64> {
+        if unclassified_cache_write > 0 {
+            return None;
+        }
+        let read = if cache_read == 0 {
+            0.0
+        } else {
+            self.cache_read_per_mtok?
+        };
+        let write_5m = if cache_write_5m == 0 {
+            0.0
+        } else {
+            self.cache_write_5m_per_mtok?
+        };
+        let write_1h = if cache_write_1h == 0 {
+            0.0
+        } else {
+            self.cache_write_1h_per_mtok?
+        };
+        Some(
+            (uncached as f64 * self.input_per_mtok
+                + cache_read as f64 * read
+                + cache_write_5m as f64 * write_5m
+                + cache_write_1h as f64 * write_1h
+                + output as f64 * self.output_per_mtok)
+                / 1e6,
+        )
     }
 }
 
@@ -35,12 +80,26 @@ pub fn default_prices() -> Prices {
     let p = |i: f64, o: f64| Price {
         input_per_mtok: i,
         output_per_mtok: o,
+        cache_read_per_mtok: None,
+        cache_write_5m_per_mtok: None,
+        cache_write_1h_per_mtok: None,
     };
-    BTreeMap::from([
+    let mut prices = BTreeMap::from([
         ("claude-opus-4-8".into(), p(15.0, 75.0)),
         ("claude-sonnet-5".into(), p(3.0, 15.0)),
         ("claude-haiku-4-5".into(), p(0.80, 4.0)),
-    ])
+    ]);
+    prices.insert(
+        "claude-fable-5-1".into(),
+        Price {
+            input_per_mtok: 10.0,
+            output_per_mtok: 50.0,
+            cache_read_per_mtok: Some(0.25),
+            cache_write_5m_per_mtok: Some(12.50),
+            cache_write_1h_per_mtok: Some(20.0),
+        },
+    );
+    prices
 }
 
 /// The store's effective prices: the defaults, overlaid by a committed `metrics/prices.json`
@@ -59,7 +118,19 @@ pub fn load_prices(store: &FsStore) -> Prices {
 
 /// The cost of a usage at `model` per `prices`, or `None` when the model isn't priced.
 pub fn cost(prices: &Prices, model: &str, tokens_in: u64, tokens_out: u64) -> Option<f64> {
-    prices.get(model).map(|p| p.cost(tokens_in, tokens_out))
+    prices.get(model).and_then(|price| {
+        // An aggregate input count cannot distinguish cache reads and writes. Models
+        // with category-specific rates need those counters (as the Claude transcript
+        // path supplies) before assigning a cost.
+        if price.cache_read_per_mtok.is_some()
+            || price.cache_write_5m_per_mtok.is_some()
+            || price.cache_write_1h_per_mtok.is_some()
+        {
+            None
+        } else {
+            Some(price.cost(tokens_in, tokens_out))
+        }
+    })
 }
 
 #[cfg(test)]
@@ -72,6 +143,9 @@ mod tests {
         let price = Price {
             input_per_mtok: 15.0,
             output_per_mtok: 75.0,
+            cache_read_per_mtok: None,
+            cache_write_5m_per_mtok: None,
+            cache_write_1h_per_mtok: None,
         };
         // 1M in + 1M out = 15 + 75 = $90.
         assert!((price.cost(1_000_000, 1_000_000) - 90.0).abs() < 1e-9);
@@ -84,6 +158,20 @@ mod tests {
         let prices = default_prices();
         assert!(cost(&prices, "claude-opus-4-8", 1000, 100).is_some());
         assert!(cost(&prices, "some-unlisted-model", 1000, 100).is_none());
+    }
+
+    #[test]
+    fn fable_prices_cached_inputs_at_their_own_rates() {
+        let price = default_prices()["claude-fable-5-1"];
+        assert_eq!(
+            price.claude_cost(1_000_000, 1_000_000, 1_000_000, 1_000_000, 0, 1_000_000),
+            Some(92.75)
+        );
+        assert_eq!(price.claude_cost(0, 0, 0, 0, 1, 0), None);
+        assert_eq!(
+            cost(&default_prices(), "claude-fable-5-1", 1_000_000, 0),
+            None
+        );
     }
 
     #[test]

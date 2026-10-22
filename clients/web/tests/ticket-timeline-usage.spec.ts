@@ -233,6 +233,33 @@ for (const width of [1280, 768, 390]) {
   });
 }
 
+test('shows priced Fable terminal usage in the narrow ticket timeline (HS2-TTYZGX)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await mockProject(page, {
+    events: [
+      {
+        ts: '2026-10-01T11:20:00Z',
+        tool: 'claude',
+        model: 'claude-fable-5-1',
+        tokens_in: 1037,
+        tokens_out: 2,
+        cost_usd: 0.00087,
+      },
+    ],
+    settled_cost_usd: 0,
+    settled_through: '',
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByText('Measure the phases').click();
+  await page.getByRole('tab', { name: 'Timeline' }).click();
+  const breakdown = page.locator('[data-component="ticket-timeline"] [data-component="value-table"]');
+  await expect(breakdown).toContainText('claude-fable-5-1');
+  await expect(breakdown).toContainText('≈$0.0009');
+  await page.screenshot({ path: 'target/visual-captures/hs2-ttyzgx-fable-timeline-390.png', fullPage: true });
+});
+
 test('keeps the timeline unchanged when a ticket has no recorded usage', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page, { events: [], settled_cost_usd: 0, settled_through: '' });
