@@ -288,9 +288,14 @@ jobs:
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
         # runs the tests + collects profiles once; the report/gate steps reuse them.
+        # The target cache can restore raw profiles from a different build. A reused PID
+        # then merges incompatible data and leaks an LLVM error into CLI test stderr.
+        # Remove only raw profiles so compiled coverage artifacts stay cached.
         env:
           RUSTFLAGS: ''
-        run: dbus-run-session -- bash .github/scripts/with-secret-service.sh cargo llvm-cov nextest --all-features --no-report
+        run: |
+          cargo llvm-cov clean --profraw-only
+          dbus-run-session -- bash .github/scripts/with-secret-service.sh cargo llvm-cov nextest --all-features --no-report
 
       - name: Rust coverage lcov (artifact)
         env:
