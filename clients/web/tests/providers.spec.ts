@@ -29331,6 +29331,66 @@ test('shows and resolves cross-project permission notifications with badges and 
   await expect(page.getByText('allowed this kind of request')).toBeVisible();
 });
 
+test('shows equally timed permission decisions in newest recorded order', async ({ page }) => {
+  const resolvedAt = Date.now() - 1_000;
+  await page.addInitScript(
+    (items) => {
+      localStorage.setItem('hotsheet.permission-history', JSON.stringify(items));
+    },
+    [
+      {
+        key: 'demo-checkout:81',
+        id: 81,
+        projectId: 'demo-checkout',
+        projectName: 'demo',
+        connection: 'claude-session',
+        tool: 'Bash',
+        action: 'first history action',
+        agent: 'Claude',
+        role: 'main worker',
+        receivedAt: resolvedAt - 1_000,
+        ignored: false,
+        decision: 'allow',
+        scope: 'once',
+        resolvedAt,
+      },
+      {
+        key: 'demo-checkout:82',
+        id: 82,
+        projectId: 'demo-checkout',
+        projectName: 'demo',
+        connection: 'claude-session',
+        tool: 'Bash',
+        action: 'second history action',
+        agent: 'Claude',
+        role: 'main worker',
+        receivedAt: resolvedAt - 1_000,
+        ignored: false,
+        decision: 'allow',
+        scope: 'once',
+        resolvedAt,
+      },
+    ],
+  );
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
+  await page.getByRole('button', { name: /Last 24 Hours/ }).click();
+  const cards = page.locator('[data-component="notification-center"] [data-resolved="true"]');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toContainText('second history action');
+  await expect(cards.nth(1)).toContainText('first history action');
+  await page.waitForTimeout(600); // Let the workspace view transition finish before visual capture.
+  await expect(cards.nth(0)).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-erc966-history-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(600); // Wait for the responsive rail and workspace transition.
+  await expect(cards.nth(0)).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-erc966-history-phone.png' });
+});
+
 test('scopes the notification center, navigation counts, and header badge to the selected project', async ({
   page,
 }) => {

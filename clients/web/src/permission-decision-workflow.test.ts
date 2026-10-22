@@ -83,7 +83,7 @@ describe('permission decision workflow (HS2-GGJ57M)', () => {
     );
     expect(inbox.pending()).toEqual([]);
     expect(workflow.freshPermissionRules.value.size).toBe(0);
-    expect(inbox.history().map((item) => item.id)).toEqual([2, 1]);
+    expect(inbox.history().map((item) => item.id)).toEqual([1, 2]);
   });
 
   it('forwards the automatic Allow Once review continuation flag (HS2-WZK2QK)', async () => {

@@ -2858,7 +2858,8 @@ authoritative permission path. Ignoring its popup leaves an unresolved, answerab
 the sidecar until the request is decided (HS2-VBG6W5). Standalone conversation dialogs use native light-dismiss and Escape behavior and
 do not duplicate that dismissal with a header close button. The Notifications view, its
 Pending/24 Hours/7 Days counts, and newest-first machine-local client history are scoped to
-the selected project and switch immediately with its tab; a request that
+the selected project and switch immediately with its tab. When resolutions share a
+millisecond timestamp, the most recently recorded one appears first (HS2-ERC966). A request that
 disappears without this client resolving it is labeled “Decision made outside Hot
 Sheet.” Responded history cards name the tool even when their action is empty, so a
 response still identifies the permission it covered. They retain the full bottom inset

@@ -66,6 +66,14 @@ describe('permission notifications', () => {
     expect(inbox.pending()).toHaveLength(0);
     expect(inbox.history(20)[0]).toMatchObject({ decision: 'allow', scope: 'always', automatic: true });
   });
+  it('shows the latest recorded resolution first when timestamps tie or advance', () => {
+    const inbox = new PermissionInbox();
+    inbox.reconcile(project, [request, { ...request, id: 2 }, { ...request, id: 3 }], [], 10);
+    inbox.resolve('p:1', 'allow', 'once', false, 20);
+    inbox.resolve('p:2', 'allow', 'once', false, 20);
+    inbox.resolve('p:3', 'allow', 'once', false, 21);
+    expect(inbox.history(21).map((item) => item.id)).toEqual([3, 2, 1]);
+  });
   it('applies an authoritative resolution once while a local answer may still be in flight', () => {
     const inbox = new PermissionInbox();
     inbox.reconcile(project, [request], [], 10);

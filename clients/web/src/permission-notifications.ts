@@ -184,7 +184,11 @@ export class PermissionInbox {
   }
   history(now = Date.now()) {
     const cutoff = now - 7 * 24 * 60 * 60 * 1000;
-    return this.historyItems.filter((item) => item.resolvedAt >= cutoff).sort((a, b) => b.resolvedAt - a.resolvedAt);
+    return this.historyItems
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.resolvedAt >= cutoff)
+      .sort((a, b) => b.item.resolvedAt - a.item.resolvedAt || b.index - a.index)
+      .map(({ item }) => item);
   }
   visible() {
     return this.pending().find((item) => !item.ignored);
