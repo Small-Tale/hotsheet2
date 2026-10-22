@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 
 pub mod guidance_sources;
 pub mod guidance_updates;
+pub mod rulesync_updates;
 pub mod setup;
 pub use setup::{
     ArtifactFinding, ArtifactKind, ArtifactStatus, PlannedAction, PlannedChange, RefreshReport,

@@ -8,11 +8,12 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
-import type { GuidanceOverview } from '../api';
+import type { GuidanceOverview, RulesyncUpdateReport } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export interface GuidanceSettingsProps {
   overview?: GuidanceOverview;
+  rulesyncUpdateReport?: RulesyncUpdateReport | null;
   loading: boolean;
   message: string;
   query: string;
@@ -52,6 +53,37 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             urgency="status"
             copyLayout="stacked"
           />
+        )}
+        {props.rulesyncUpdateReport && (
+          <section data-rulesync-update-status="" aria-label="Standalone Rulesync Lock Status">
+            <List gap="xs">
+              <StateBanner
+                title={
+                  {
+                    current: 'Rulesync Lock Is Current',
+                    outdated: 'Rulesync Lock Has Updates',
+                    unlocked: 'Rulesync Sources Need A Lock',
+                    unknown: 'Rulesync Lock Status Is Unknown',
+                  }[props.rulesyncUpdateReport.state]
+                }
+                detail={
+                  props.rulesyncUpdateReport.state === 'current'
+                    ? `Rulesync ${props.rulesyncUpdateReport.executable_version} checked ${props.rulesyncUpdateReport.sources.length} standalone source(s) against rulesync.lock.`
+                    : `Rulesync ${props.rulesyncUpdateReport.executable_version ?? 'version unknown'}: ${props.rulesyncUpdateReport.reason ? `${props.rulesyncUpdateReport.reason}.` : `${props.rulesyncUpdateReport.state} source locks.`} Review rulesync.lock before running install --update. Then inspect the changed lock and rulesync generate --dry-run diff before generate. Headless check: hotsheet-cli guidance --project <code-project> check-rulesync-updates.`
+                }
+                tone={props.rulesyncUpdateReport.state === 'current' ? 'success' : 'warning'}
+                urgency="status"
+                copyLayout="stacked"
+              />
+              {props.rulesyncUpdateReport.sources.map((source) => (
+                <Text tone="quiet" size="compact">
+                  {source.source}: {source.state}
+                  {source.locked_ref && ` · locked ${source.locked_ref.slice(0, 12)}`}
+                  {source.latest_ref && ` · observed ${source.latest_ref.slice(0, 12)}`}
+                </Text>
+              ))}
+            </List>
+          </section>
         )}
         <Select
           name="guidance-owner"

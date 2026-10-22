@@ -200,3 +200,47 @@ test('Project guidance reports a blocked bundled section at wide and phone sizes
     await page.screenshot({ path: `target/visual-captures/bundled-guidance-blocked-${width}.png` });
   }
 });
+
+test('Project guidance keeps standalone Rulesync lock status separate from pinned sources', async ({ page }) => {
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/guidance', (route) =>
+    route.fulfill({ json: { owner: 'rulesync', explicit_selection: false, default_repository: '', sources: [] } }),
+  );
+  await page.route('**/checkouts/demo-checkout/guidance/rulesync-updates', (route) =>
+    route.fulfill({
+      json: {
+        state: 'outdated',
+        executable_version: '38.0.0',
+        sources: [
+          {
+            source: 'https://github.com/Small-Tale/ai-playbook.git',
+            state: 'outdated',
+            requested_ref: 'main',
+            locked_ref: 'fcb8556bef14a9dfdaf8cc53f8b36dfb13d9a36a',
+            latest_ref: '7cb9499a655a15213666d684a6659db43f840acf',
+          },
+        ],
+      },
+    }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    if (width === 390) await page.reload();
+    await page.getByLabel('Settings View').click();
+    const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSettings.isVisible()) await showSettings.click();
+    await page.getByRole('button', { name: 'Project guidance' }).click();
+    const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (width === 390) await page.waitForTimeout(250);
+    if (await hideSettings.isVisible()) await hideSettings.click();
+    if (width === 390) await page.waitForTimeout(500);
+    const picker = page.locator('[data-component="guidance-settings"]');
+    await expect(picker.getByText('Rulesync Lock Has Updates')).toBeVisible();
+    await expect(picker).toContainText('Rulesync 38.0.0: outdated source locks');
+    await expect(picker).toContainText('locked fcb8556bef14');
+    await expect(picker).toContainText('observed 7cb9499a655a');
+    await expect(picker).not.toContainText('Pinned to');
+    expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    await picker.screenshot({ path: `target/visual-captures/rulesync-outdated-${width}.png` });
+  }
+});

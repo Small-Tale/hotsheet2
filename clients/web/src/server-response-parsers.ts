@@ -31,6 +31,7 @@ import type {
   RepositorySizeEntry,
   RepositorySizeReport,
   RepositoryStatus,
+  RulesyncUpdateReport,
   SourceDetach,
   TerminalInfo,
   TerminalLimits,
@@ -137,6 +138,25 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
     return { ...source, rules, skills } as GuidanceOverview['sources'][number];
   });
   return { ...body, sources } as GuidanceOverview;
+};
+
+export const parseRulesyncUpdateReport: ResponseParser<RulesyncUpdateReport | null> = (value) => {
+  if (value === null) return null;
+  const what = 'Rulesync update status';
+  const body = record(value, what);
+  const states = ['current', 'outdated', 'unlocked', 'unknown'];
+  if (!states.includes(String(body.state))) invalid(what);
+  if (body.executable_version !== null && typeof body.executable_version !== 'string') invalid(what);
+  if (body.reason !== undefined && typeof body.reason !== 'string') invalid(what);
+  const sources = list(body.sources, what, (entry) => {
+    const source = record(entry, what);
+    requiredString(source, 'source', what);
+    if (!states.includes(String(source.state))) invalid(what);
+    for (const key of ['requested_ref', 'locked_ref', 'latest_ref'])
+      if (source[key] !== null && typeof source[key] !== 'string') invalid(what);
+    return source as unknown as RulesyncUpdateReport['sources'][number];
+  });
+  return { ...body, sources } as RulesyncUpdateReport;
 };
 
 function isRange(field: unknown): field is CompatibilityRange {

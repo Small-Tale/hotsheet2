@@ -766,6 +766,8 @@ enum GuidanceCmd {
     },
     /// Check registered source refs without changing their pinned commits.
     CheckUpdates,
+    /// Check standalone Rulesync lock freshness with an installed Rulesync 38 executable.
+    CheckRulesyncUpdates,
     /// Resolve a source tag or commit and cache its verified manifest for offline refresh.
     Register {
         #[arg(long, default_value = "ai-playbook")]

@@ -6,6 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_plugins::guidance_sources as sources;
 use hotsheet_plugins::guidance_updates::{self, SourceUpdate};
+use hotsheet_plugins::rulesync_updates::{self, RulesyncUpdateReport};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -144,6 +145,18 @@ pub(crate) async fn get_checkout_guidance_updates(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
     .map(Json)
+}
+
+/// Standalone Rulesync lock status; separate from Hot Sheet's pinned sources.
+pub(crate) async fn get_checkout_rulesync_updates(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Option<RulesyncUpdateReport>>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || rulesync_updates::check_project(&project))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+        .map(Json)
 }
 
 #[derive(Deserialize)]

@@ -3,6 +3,35 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('shows standalone Rulesync lock freshness and keeps the executable version separate', () => {
+    const base = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    for (const state of ['current', 'outdated', 'unlocked', 'unknown'] as const) {
+      const markup = String(
+        GuidanceSettings({
+          ...base,
+          rulesyncUpdateReport: {
+            state,
+            executable_version: '38.0.0',
+            sources: [{ source: 'fixture', state, requested_ref: 'main', locked_ref: 'first', latest_ref: 'second' }],
+          },
+        }),
+      );
+      expect(markup).toContain('data-rulesync-update-status');
+      expect(markup).toContain('Rulesync 38.0.0');
+      expect(markup).toContain(`fixture: ${state}`);
+      expect(markup).toContain('locked first');
+    }
+    expect(String(GuidanceSettings(base))).not.toContain('data-rulesync-update-status');
+  });
   it('shows only blocked newer bundled sections as a review notice', () => {
     const props = {
       loading: false,

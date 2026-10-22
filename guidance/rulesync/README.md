@@ -63,7 +63,7 @@ and add project guidance under `.rulesync/rules/project.md`:
 ```markdown
 ---
 root: true
-targets: ["*"]
+targets: ['*']
 ---
 
 ## Project specifics
@@ -121,6 +121,12 @@ npx --yes rulesync@38.0.0 generate
 Plain install reuses the locked revision; changing rule selection updates that
 selection at the same locked ref. `--frozen` rejects an uncovered selection.
 `--outdated` is read-only: it compares the lock with the declared `main` branch.
+Hot Sheet exposes that standalone lock state without changing it through
+`hotsheet-cli guidance --project . check-rulesync-updates` and the Project
+guidance Settings tab. The check requires an installed Rulesync 38.0.0 binary;
+missing or unsupported binaries and unresolved sources are `unknown`. Its
+binary version is shown separately from each source's current, outdated, or
+unlocked lock state. Hot Sheet-managed pins remain a separate update channel.
 Use outdated followed by update to advance the committed lock, then review the
 resolved commit, source changes, and generated diffs before committing them.
 The validated Rulesync 38 Git transport rejects a raw SHA as an initial ref and

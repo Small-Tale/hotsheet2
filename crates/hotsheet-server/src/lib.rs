@@ -100,7 +100,8 @@ use routes::checkouts::{
 };
 use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
 use routes::guidance::{
-    get_checkout_guidance, get_checkout_guidance_updates, update_checkout_guidance,
+    get_checkout_guidance, get_checkout_guidance_updates, get_checkout_rulesync_updates,
+    update_checkout_guidance,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -1304,6 +1305,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/guidance/updates",
             get(get_checkout_guidance_updates),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/rulesync-updates",
+            get(get_checkout_rulesync_updates),
         )
         .route(
             "/checkouts/{reference}/tickets",

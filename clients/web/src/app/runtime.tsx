@@ -28,6 +28,7 @@ import {
   type GuidanceOverview,
   type PollResponse,
   type ProviderOutboxOperation,
+  type RulesyncUpdateReport,
   type TicketRow as WireTicketRow,
   type TicketUsage,
   TurnStreamReplayGuard,
@@ -382,6 +383,7 @@ export async function startHotSheetWebClient() {
     terminalDashboardMessage = signal('');
   const showLoadingActivity = signal(localStorage.getItem('hotsheet.show-loading-activity') === 'true');
   const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
+  const rulesyncUpdateReport = signal<RulesyncUpdateReport | null>(null);
   const guidanceLoading = signal(false);
   const guidanceMessage = signal('');
   const guidanceQuery = signal('');
@@ -1359,6 +1361,7 @@ export async function startHotSheetWebClient() {
     if (guidanceProjectId !== current.id) {
       guidanceProjectId = current.id;
       guidanceOverview.value = undefined;
+      rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
       guidanceSourceId.value = 'ai-playbook';
@@ -1368,6 +1371,15 @@ export async function startHotSheetWebClient() {
     }
     guidanceLoading.value = true;
     guidanceMessage.value = '';
+    rulesyncUpdateReport.value = null;
+    void new Api(current.apiPath, '', { trackBusy: false })
+      .checkoutRulesyncUpdates(current.id)
+      .then((report) => {
+        if (generation === guidanceLoadGeneration && project()?.id === current.id) rulesyncUpdateReport.value = report;
+      })
+      .catch(() => {
+        // The guidance overview remains usable with an older or unavailable server.
+      });
     try {
       const next = await new Api(current.apiPath, '', { trackBusy: !quiet }).checkoutGuidance(current.id);
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
@@ -3626,6 +3638,7 @@ export async function startHotSheetWebClient() {
     aiSettingsMessage,
     guidance: () => ({
       overview: guidanceOverview.value,
+      rulesyncUpdateReport: rulesyncUpdateReport.value,
       bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
       message: guidanceMessage.value,

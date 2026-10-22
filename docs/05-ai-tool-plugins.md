@@ -187,6 +187,17 @@ changes deliberately, then run `hotsheet-cli -C <ticket-store> setup --refresh
 can upgrade, an equal-version local edit, or Rulesync-owned instructions do not
 claim a newer blocked bundled update (HS2-29BHX8).
 
+Standalone Rulesync projects with `rulesync.jsonc` and no
+`.hotsheet2/guidance-sources.json` have a separate read-only lock check:
+`hotsheet-cli guidance --project <code-repo> check-rulesync-updates`. Project
+guidance shows the same current, outdated, unlocked, or unknown source-lock
+state, with the installed Rulesync version reported separately. The checker
+requires an installed Rulesync 38.0.0 executable and runs
+`rulesync --json install --outdated`; it never invokes `npx`, writes the lock,
+or generates instructions. Review `rulesync.lock` and the generated diff before
+explicitly running `rulesync install --update` and `rulesync generate`. Hot
+Sheet-managed pins use `guidance check-updates` instead (HS2-SFMZVJ).
+
 `guidance list` lists source, version, owner, tags, selection, and installed version
 as JSON; `guidance register --id <id> --repository <url-or-local-repo> --ref <tag-or-sha>`
 pins a source; `guidance select --source <id> --rule <name> [--skill <name>]` replaces

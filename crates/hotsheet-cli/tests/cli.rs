@@ -109,6 +109,53 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let bin = root.path().join("bin");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&bin).unwrap();
+    std::fs::write(project.join("rulesync.jsonc"), "{\"sources\":[]}").unwrap();
+    std::fs::write(project.join("rulesync.lock"), "unchanged lock").unwrap();
+    let executable = bin.join("rulesync");
+    std::fs::write(
+        &executable,
+        "#!/bin/sh\nif [ \"$1\" = '--version' ]; then echo 38.0.0; exit 0; fi\nprintf '%s\\n' '{\"success\":false,\"command\":\"install\",\"version\":\"38.0.0\",\"error\":{\"details\":{\"sources\":[{\"source\":\"fixture\",\"status\":\"outdated\",\"requestedRef\":\"main\",\"lockedRef\":\"first\",\"latestRef\":\"second\"}]}}}' >&2\nexit 1\n",
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&executable, permissions).unwrap();
+    let path = std::env::join_paths(
+        std::iter::once(bin.clone())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let output = hs(&project)
+        .env("PATH", path)
+        .args(["guidance", "--project"])
+        .arg(&project)
+        .arg("check-rulesync-updates")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report["state"], "outdated");
+    assert_eq!(report["executable_version"], "38.0.0");
+    assert_eq!(report["sources"][0]["locked_ref"], "first");
+    assert_eq!(report["sources"][0]["latest_ref"], "second");
+    assert_eq!(
+        std::fs::read_to_string(project.join("rulesync.lock")).unwrap(),
+        "unchanged lock"
+    );
+}
+
 // A freshly built macOS CLI is a different unsigned Keychain client from this test
 // process. Reading the fixture credential can open an authorization prompt and hang
 // a headless test run. Linux CI exercises the complete cross-process migration flow;

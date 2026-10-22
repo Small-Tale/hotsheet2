@@ -25,6 +25,7 @@ import {
   parseRepositoryCommitPage,
   parseRepositoryFilePage,
   parseRepositoryStatus,
+  parseRulesyncUpdateReport,
   parseServerCompatibility,
   parseStoredTicket,
   parseStringList,
@@ -41,6 +42,20 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('keeps standalone Rulesync lock state separate from the executable version', () => {
+    expect(parseRulesyncUpdateReport(null)).toBeNull();
+    const report = {
+      state: 'outdated',
+      executable_version: '38.0.0',
+      sources: [
+        { source: 'fixture', state: 'outdated', requested_ref: 'main', locked_ref: 'first', latest_ref: 'second' },
+      ],
+    };
+    expect(parseRulesyncUpdateReport(report)).toEqual(report);
+    expect(() =>
+      parseRulesyncUpdateReport({ ...report, sources: [{ ...report.sources[0], state: 'updated' }] }),
+    ).toThrow(ServerResponseShapeError);
+  });
   it('accepts documented shapes and keeps extra fields', () => {
     const compatibility = {
       generation: 'hs2',

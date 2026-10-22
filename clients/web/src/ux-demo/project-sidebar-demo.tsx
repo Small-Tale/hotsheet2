@@ -429,6 +429,34 @@ export function GuidanceSettingsDemo() {
           ]}
         />
       </CatalogExample>
+      {(['current', 'outdated', 'unlocked', 'unknown'] as const).map((state) => (
+        <CatalogExample label={`Standalone Rulesync ${state}`}>
+          <GuidanceSettings
+            loading={false}
+            message=""
+            query=""
+            repository=""
+            sourceRef="main"
+            sourceId="ai-playbook"
+            ownerFilter=""
+            tagFilter=""
+            rulesyncUpdateReport={{
+              state,
+              executable_version: '38.0.0',
+              sources: [
+                {
+                  source: 'https://github.com/Small-Tale/ai-playbook.git',
+                  state,
+                  requested_ref: 'main',
+                  locked_ref: state === 'unlocked' ? null : 'fcb8556bef14a9dfdaf8cc53f8b36dfb13d9a36a',
+                  latest_ref: state === 'unknown' ? null : '7cb9499a655a15213666d684a6659db43f840acf',
+                },
+              ],
+              ...(state === 'unknown' ? { reason: 'Source ref could not be resolved' } : {}),
+            }}
+          />
+        </CatalogExample>
+      ))}
     </>
   );
 }

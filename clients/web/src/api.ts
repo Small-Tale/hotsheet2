@@ -43,6 +43,7 @@ import {
   parseRepositoryFilePage,
   parseRepositorySizeReport,
   parseRepositoryStatus,
+  parseRulesyncUpdateReport,
   parseServerCompatibility,
   parseSourceDetach,
   parseStoredTicket,
@@ -84,6 +85,18 @@ export interface GuidanceOverview {
       selected: boolean;
     }>;
     skills: Array<{ name: string; selected: boolean }>;
+  }>;
+}
+export interface RulesyncUpdateReport {
+  state: 'current' | 'outdated' | 'unlocked' | 'unknown';
+  executable_version: string | null;
+  reason?: string;
+  sources: Array<{
+    source: string;
+    state: RulesyncUpdateReport['state'];
+    requested_ref: string | null;
+    locked_ref: string | null;
+    latest_ref: string | null;
   }>;
 }
 export type GuidanceAction =
@@ -1298,6 +1311,8 @@ export class Api {
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  checkoutRulesyncUpdates = (checkout: string) =>
+    this.parsed(parseRulesyncUpdateReport, `/checkouts/${encodeURIComponent(checkout)}/guidance/rulesync-updates`);
   updateCheckoutGuidance = (checkout: string, action: GuidanceAction) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`, {
       method: 'POST',

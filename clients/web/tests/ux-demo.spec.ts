@@ -3784,6 +3784,27 @@ test('shows the blocked bundled guidance demo variant at wide and phone widths',
   }
 });
 
+test('shows standalone Rulesync current, outdated, unlocked, and unknown states', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=guidance-settings');
+    const titles = {
+      current: 'Rulesync Lock Is Current',
+      outdated: 'Rulesync Lock Has Updates',
+      unlocked: 'Rulesync Sources Need A Lock',
+      unknown: 'Rulesync Lock Status Is Unknown',
+    };
+    for (const [state, title] of Object.entries(titles)) {
+      const variant = page.locator('[data-component="guidance-settings"]').filter({ hasText: title });
+      await expect(variant.locator('[data-rulesync-update-status]')).toBeVisible();
+      await expect(variant).toContainText('Rulesync 38.0.0');
+      await variant
+        .locator('[data-rulesync-update-status]')
+        .screenshot({ path: `target/visual-captures/rulesync-${state}-demo-${width}.png` });
+    }
+  }
+});
+
 test('opens the TicketReader dialog when its entry is chosen from the catalog sidebar (HS2-G2XKEH)', async ({
   page,
 }) => {
