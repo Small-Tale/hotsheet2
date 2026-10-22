@@ -98,11 +98,20 @@ export function TicketTimeline({
                     .filter(Boolean)
                     .join('. ')}
                 >
-                  <Text variant="span" size="compact" tone="quiet" lineHeight="tight" wrap="nowrap">
-                    {index < entries.length - 1 && entry.durationToNext}
-                    {index < entries.length - 1 && entry.durationToNext && entry.usageToNext && ' · '}
-                    {entry.usageToNext && <span class="ticket-timeline__usage">{entry.usageToNext}</span>}
-                  </Text>
+                  {index < entries.length - 1 && entry.durationToNext && (
+                    <span class="ticket-timeline__elapsed">
+                      <Text variant="span" size="compact" tone="quiet" lineHeight="tight" wrap="nowrap">
+                        {entry.durationToNext}
+                      </Text>
+                    </span>
+                  )}
+                  {entry.usageToNext && (
+                    <span class="ticket-timeline__usage">
+                      <Text variant="span" size="compact" tone="quiet" lineHeight="tight" wrap="nowrap">
+                        {entry.usageToNext}
+                      </Text>
+                    </span>
+                  )}
                 </span>
               )}
             </li>

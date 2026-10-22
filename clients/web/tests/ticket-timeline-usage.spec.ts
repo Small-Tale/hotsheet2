@@ -158,7 +158,7 @@ async function mockProject(page: Page, usageResponse: unknown = usage) {
   });
 }
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 768, 390]) {
   test(`shows per-phase tokens and the ticket total on the timeline at ${width}px (HS2-ZA7W6E, HS2-J14225)`, async ({
     page,
   }) => {
@@ -184,15 +184,19 @@ for (const width of [1280, 390]) {
         node.querySelector('[data-component="value-table"]')!.getBoundingClientRect().top,
     );
     expect(order).toBe(true);
-    // Every rail label starts on the time column's edge (HS2-J14225).
+    // Elapsed time follows the time column; token/model text follows step names (HS2-XQTCBA).
     const edges = await timeline.evaluate((node) => {
       const left = (element: Element) => Math.round(element.getBoundingClientRect().left);
       return {
         times: [...node.querySelectorAll('.ticket-timeline__list time')].map(left),
-        labels: [...node.querySelectorAll('.ticket-timeline__duration')].map(left),
+        elapsed: [...node.querySelectorAll('.ticket-timeline__elapsed')].map(left),
+        titles: [...node.querySelectorAll('.ticket-timeline__list li > div strong')].map(left),
+        usage: [...node.querySelectorAll('.ticket-timeline__usage')].map(left),
       };
     });
-    expect(new Set([...edges.times, ...edges.labels]).size).toBe(1);
+    expect(new Set([...edges.times, ...edges.elapsed]).size).toBe(1);
+    expect(new Set([...edges.titles, ...edges.usage]).size).toBe(1);
+    expect(edges.usage[0]).toBeGreaterThan(edges.elapsed[0]);
     // The time reads in the event title's weight, unlike the quiet elapsed-time labels.
     const weights = await timeline.evaluate((node) => ({
       time: Number(getComputedStyle(node.querySelector('.ticket-timeline__list time')!).fontWeight),
@@ -204,10 +208,9 @@ for (const width of [1280, 390]) {
     // The creation gap (10:00 to 10:30) had no usage; Analyzing (10:30 to 11:00) used opus; the
     // open Working phase (since 11:00) used both Claude models and Codex.
     await expect(timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration')).toHaveText('30m');
-    await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__duration')).toHaveText(
-      '30m · 38K tokens · opus',
-    );
-    await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveText(
+    await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__elapsed')).toHaveText('30m');
+    await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__usage')).toHaveText('38K tokens · opus');
+    await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__usage')).toHaveText(
       '201K tokens · sonnet, gpt-5-codex +1',
     );
     await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveAttribute(
@@ -217,7 +220,7 @@ for (const width of [1280, 390]) {
     // The label stays inside its row rather than overflowing the panel.
     const overflow = await timeline.evaluate((node) => {
       const panel = node.getBoundingClientRect();
-      return [...node.querySelectorAll('.ticket-timeline__duration')].some((label) => {
+      return [...node.querySelectorAll('.ticket-timeline__usage')].some((label) => {
         const box = label.getBoundingClientRect();
         return box.right > panel.right + 1 || box.left < panel.left - 1;
       });

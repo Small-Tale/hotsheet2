@@ -123,7 +123,7 @@ export function TicketTimelineDemo() {
       </CatalogExample>
       <CatalogExample
         label="With AI Usage"
-        note="Tokens and models recorded in each phase gap, and the ticket's usage by model and in total under the rail (HS2-ZA7W6E, HS2-J14225)."
+        note="Elapsed time follows the time column; tokens and models align with each step name. Usage by model and in total sits under the rail (HS2-ZA7W6E, HS2-J14225, HS2-XQTCBA)."
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketTimeline

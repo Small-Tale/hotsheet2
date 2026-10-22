@@ -5722,15 +5722,20 @@ test('shows the unmerged worktree commit state in the TicketCodeReview demo (HS2
   }
 });
 
-test('keeps Kerf timeline duration labels on the rail at wide and phone widths (HS2-K3Y609)', async ({ page }) => {
+test('aligns timeline duration and usage labels through wide and phone widths (HS2-K3Y609, HS2-XQTCBA)', async ({
+  page,
+}) => {
   for (const [width, name] of [
     [1280, 'wide'],
+    [768, 'medium'],
     [390, 'narrow'],
+    [1280, 'wide-return'],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=ticket-timeline');
     const timeline = page.locator('[data-component="ticket-timeline"]').last(),
-      duration = timeline.locator('.ticket-timeline__duration').first();
+      duration = timeline.locator('.ticket-timeline__duration').first(),
+      usage = timeline.locator('.ticket-timeline__usage').first();
     await expect(duration.locator('[data-component="text"]')).toHaveAttribute('data-size', 'compact');
     await expect(duration).toContainText('48m');
     const fits = await duration.evaluate((node) => {
@@ -5739,6 +5744,14 @@ test('keeps Kerf timeline duration labels on the rail at wide and phone widths (
       return label.left >= rail.left && label.right <= rail.right + 1;
     });
     expect(fits).toBe(true);
+    const alignment = await usage.evaluate((node) => {
+      const left = (element: Element) => Math.round(element.getBoundingClientRect().left);
+      return {
+        usage: left(node),
+        title: left(node.closest('li')!.querySelector(':scope > div strong')!),
+      };
+    });
+    expect(alignment.usage).toBe(alignment.title);
     await timeline.screenshot({ path: `target/visual-captures/hs2-k3y609-timeline-${name}.png` });
   }
 });

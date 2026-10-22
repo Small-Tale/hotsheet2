@@ -2397,7 +2397,7 @@
       "id": "ticket-timeline",
       "name": "TicketTimeline",
       "kind": "component",
-      "purpose": "Chronological ticket activity inspector section.",
+      "purpose": "Chronological ticket activity inspector section with elapsed time by the rail and token/model usage aligned to step names.",
       "useWhen": [
         "Hot Sheet needs chronological ticket activity inspector section."
       ],

@@ -3,6 +3,8 @@
 
 /* The ordered list is the rail: no list markers or indent. */
 .ticket-timeline__list {
+  --ticket-timeline-time-column: remify(73.6px);
+
   display: grid;
   margin: 0;
   padding: 0;
@@ -14,7 +16,7 @@
   display: grid;
   min-height: remify(64px);
   padding: 0 0 var(--kui-space-m) var(--kui-space-m);
-  grid-template-columns: remify(73.6px) minmax(0, 1fr);
+  grid-template-columns: var(--ticket-timeline-time-column) minmax(0, 1fr);
   align-items: start;
   gap: var(--kui-space-xs);
 }
@@ -45,16 +47,25 @@
   background: var(--wa-color-neutral-border-normal);
   content: '';
 }
-/* The elapsed time to the next event, centered on its connector (13.6px from the top to 2.4px
-   from the bottom). It starts on the time column's edge so every label on the rail lines up
-   (HS2-J14225). */
+/* The gap label is centered on its connector (13.6px from the top to 2.4px from the bottom).
+   Elapsed time follows the time column; tokens and models follow the step-name column
+   (HS2-J14225, HS2-XQTCBA). */
 .ticket-timeline__duration {
   position: absolute;
   top: calc(50% + remify(5.6px));
   left: var(--kui-space-m);
+  right: 0;
+  display: grid;
+  grid-template-columns: var(--ticket-timeline-time-column) minmax(0, 1fr);
+  gap: var(--kui-space-xs);
   transform: translateY(-50%);
-  /* A gap's AI usage shares the label; keep long model lists inside the row (HS2-ZA7W6E). */
-  max-width: calc(100% - var(--kui-space-m));
+}
+.ticket-timeline__elapsed {
+  grid-column: 1;
+}
+.ticket-timeline__usage {
+  grid-column: 2;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
