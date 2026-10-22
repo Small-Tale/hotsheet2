@@ -26,6 +26,7 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseGuidanceInterviewReview,
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
   parseGuidanceSourceReview,
@@ -135,6 +136,30 @@ export interface GuidanceRecommendationDecision {
   name: string;
   fingerprint: string;
   decision: 'accepted' | 'dismissed';
+}
+export interface GuidanceInterviewReview {
+  state: 'not_started' | 'awaiting_answer' | 'answered';
+  preview: {
+    fingerprint: string;
+    context: {
+      signals: string[];
+      candidates: Array<{
+        id: string;
+        source: string;
+        kind: 'rule' | 'skill';
+        name: string;
+        version: number;
+        pinned_commit: string;
+        selected: boolean;
+        evidence: string[];
+      }>;
+    };
+    questions: Array<{ id: string; prompt: string; choices: string[] }>;
+    outbound_prompt: string | null;
+  };
+  answer: {
+    advice: Array<{ candidate_id: string; stance: 'consider' | 'avoid' | 'uncertain'; explanation: string }>;
+  } | null;
 }
 export interface RulesyncUpdateReport {
   state: 'current' | 'outdated' | 'unlocked' | 'unknown';
@@ -1364,6 +1389,33 @@ export class Api {
     this.parsed(
       parseGuidanceRecommendationReport,
       `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations`,
+    );
+  checkoutGuidanceInterview = (checkout: string) =>
+    this.parsed(
+      parseGuidanceInterviewReview,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations/interview`,
+    );
+  openCheckoutGuidanceInterview = (checkout: string, fingerprint: string) =>
+    this.parsed(
+      parseGuidanceInterviewReview,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations/interview/open`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ fingerprint, consent: true }),
+      },
+    );
+  submitCheckoutGuidanceInterview = (
+    checkout: string,
+    fingerprint: string,
+    answer: GuidanceInterviewReview['answer'],
+  ) =>
+    this.parsed(
+      parseGuidanceInterviewReview,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations/interview/answer`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ fingerprint, answer }),
+      },
     );
   decideCheckoutGuidanceRecommendation = (checkout: string, decision: GuidanceRecommendationDecision) =>
     this.parsed(

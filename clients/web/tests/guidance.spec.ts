@@ -2,6 +2,149 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('optional guidance interview previews context, requires consent, and records advice without applying', async ({
+  page,
+}) => {
+  await openDemoProject(page);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const interviewPath = '**/checkouts/demo-checkout/guidance/recommendations/interview';
+  let state: 'not_started' | 'awaiting_answer' | 'answered' = 'not_started';
+  let answer: unknown = null;
+  let opens = 0;
+  let submits = 0;
+  let guidanceWrites = 0;
+  let offline = false;
+  let changed = false;
+  const review = () => ({
+    state: changed ? 'not_started' : state,
+    preview: {
+      fingerprint: changed ? 'preview-2' : 'preview-1',
+      context: {
+        signals: ['react', 'vue'],
+        candidates: [
+          {
+            id: 'candidate-1',
+            source: 'playbook',
+            kind: 'rule',
+            name: 'react-review',
+            version: 1,
+            pinned_commit: 'a'.repeat(40),
+            selected: false,
+            evidence: ['package.json: react'],
+          },
+        ],
+      },
+      questions: [{ id: 'active-framework', prompt: 'Which UI framework is active?', choices: ['react', 'vue'] }],
+      outbound_prompt: 'Exact outbound context: react, vue, candidate-1.',
+    },
+    answer: changed ? null : answer,
+  });
+  await page.route('**/checkouts/demo-checkout/guidance', (route) => {
+    if (route.request().method() === 'POST') guidanceWrites += 1;
+    return route.fulfill({
+      json: { owner: 'builtin', explicit_selection: false, default_repository: '', sources: [] },
+    });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/recommendations', (route) =>
+    route.fulfill({
+      json: {
+        fingerprint: changed ? 'scan-2' : 'scan-1',
+        signals: [],
+        candidates: [],
+        changes: [],
+        source_registration_suggested: false,
+        first_accept_replaces_bundled_default: false,
+      },
+    }),
+  );
+  await page.route(interviewPath, (route) =>
+    offline
+      ? route.fulfill({ status: 503, json: { error: 'Local interview unavailable' } })
+      : route.fulfill({ json: review() }),
+  );
+  await page.route(`${interviewPath}/open`, (route) => {
+    opens += 1;
+    expect(route.request().postDataJSON()).toEqual({ fingerprint: 'preview-1', consent: true });
+    state = 'awaiting_answer';
+    return route.fulfill({ json: review() });
+  });
+  await page.route(`${interviewPath}/answer`, (route) => {
+    submits += 1;
+    const body = route.request().postDataJSON() as { fingerprint: string; answer: unknown };
+    expect(body.fingerprint).toBe('preview-1');
+    answer = body.answer;
+    state = 'answered';
+    return route.fulfill({ json: review() });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const settings = page.locator('[data-component="guidance-settings"]');
+  const interview = settings.locator('[data-guidance-interview]');
+  await expect(interview.getByText('Exact outbound context: react, vue, candidate-1.')).toBeVisible();
+  await expect(interview.getByRole('button', { name: 'Copy Prompt for AI' })).toHaveCount(0);
+  expect(opens).toBe(0);
+  await interview.screenshot({ path: 'target/visual-captures/hs2-ygv9rn-preview-wide.png' });
+  await interview.getByRole('button', { name: 'I Choose to Share This Context' }).click();
+  await expect(interview.getByRole('button', { name: 'Copy Prompt for AI' })).toBeVisible();
+  expect(opens).toBe(1);
+  await interview.getByRole('button', { name: 'Copy Prompt for AI' }).click();
+  await expect(settings.getByText('Interview prompt copied. Share it with an AI tool you choose.')).toBeVisible();
+  await interview.getByLabel('AI Advisory JSON').fill('not json');
+  await interview.getByRole('button', { name: 'Review Advisory Answer' }).click();
+  await expect(interview.getByText('Interview Status Unknown')).toBeVisible();
+  expect(submits).toBe(0);
+  await interview.getByLabel('AI Advisory JSON').fill(
+    JSON.stringify({
+      advice: [
+        { candidate_id: 'candidate-1', stance: 'uncertain', explanation: 'Ask which framework runs in production.' },
+      ],
+    }),
+  );
+  await interview.getByRole('button', { name: 'Review Advisory Answer' }).click();
+  await expect(interview.getByText('Ask which framework runs in production.')).toBeVisible();
+  expect(submits).toBe(1);
+  expect(guidanceWrites).toBe(0);
+  await page.setViewportSize({ width: 390, height: 1600 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await settings.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await interview.scrollIntoViewIfNeeded();
+  const settingsBox = await settings.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(390);
+  expect(await interview.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await interview.screenshot({ path: 'target/visual-captures/hs2-ygv9rn-advice-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  await expect(
+    page.locator('[data-guidance-interview]').getByText('Ask which framework runs in production.'),
+  ).toBeVisible();
+  changed = true;
+  await page.getByRole('button', { name: 'Recheck Recommendations' }).click();
+  await expect(
+    page.locator('[data-guidance-interview]').getByRole('button', { name: 'I Choose to Share This Context' }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-guidance-interview]').getByText('Ask which framework runs in production.'),
+  ).toHaveCount(0);
+  offline = true;
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  if (await showSettings.isVisible()) await showSettings.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const unknown = page.locator('[data-component="guidance-settings"]').getByText('Interview Status Unknown');
+  await expect(unknown).toBeVisible();
+  await unknown.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-ygv9rn-offline-wide.png' });
+  expect(guidanceWrites).toBe(0);
+});
+
 test('Project guidance reviews local recommendations and keeps accept separate from apply', async ({ page }) => {
   await openDemoProject(page);
   const commit = '1111111111111111111111111111111111111111';

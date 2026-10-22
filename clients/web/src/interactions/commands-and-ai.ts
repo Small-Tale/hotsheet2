@@ -85,6 +85,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly refreshReviewedGuidance: () => Promise<void>;
   readonly refreshGuidanceRecommendations: () => Promise<void>;
   readonly decideGuidanceRecommendation: (decision: GuidanceRecommendationDecision) => Promise<void>;
+  readonly openGuidanceInterview: () => Promise<void>;
+  readonly copyGuidanceInterviewPrompt: () => Promise<void>;
+  readonly submitGuidanceInterview: () => Promise<void>;
+  readonly guidanceInterviewAnswerDraft: Signal<string>;
   readonly driveOverridesByProject: Signal<Record<string, Partial<AiToolDefaults>>>;
   readonly normalizedAiSelection: (value?: Partial<AiToolDefaults>) => AiToolDefaults;
   readonly selectDriveModel: (model: string) => void;
@@ -243,6 +247,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,
     decideGuidanceRecommendation,
+    openGuidanceInterview,
+    copyGuidanceInterviewPrompt,
+    submitGuidanceInterview,
+    guidanceInterviewAnswerDraft,
     driveOverridesByProject,
     normalizedAiSelection,
     selectDriveModel,
@@ -1098,6 +1106,26 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         decideRecommendation(target, 'dismissed');
       },
     ),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'textarea[name="guidance-interview-answer"]', (_event, target) => {
+      guidanceInterviewAnswerDraft.value = (target as HTMLTextAreaElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openGuidanceInterview.selector, () => {
+      void openGuidanceInterview();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.copyGuidanceInterview.selector, () => {
+      void copyGuidanceInterviewPrompt();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.submitGuidanceInterview.selector, () => {
+      void submitGuidanceInterview();
+    }),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.selector, (_event, target) => {

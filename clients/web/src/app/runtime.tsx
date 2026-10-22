@@ -25,6 +25,7 @@ import {
   type DuplicateBacklink,
   type FullTicket,
   type GuidanceAction,
+  type GuidanceInterviewReview,
   type GuidanceOverview,
   type GuidanceRecommendationDecision,
   type GuidanceRecommendationReport,
@@ -85,6 +86,7 @@ import {
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
+import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
@@ -405,6 +407,12 @@ export async function startHotSheetWebClient() {
   const guidanceRecommendationsError = signal('');
   const recommendationDecisionBusy = signal('');
   let guidanceRecommendationsGeneration = 0;
+  const guidanceInterview = signal<GuidanceInterviewReview | undefined>(undefined);
+  const guidanceInterviewLoading = signal(false);
+  const guidanceInterviewError = signal('');
+  const guidanceInterviewBusy = signal(false);
+  const guidanceInterviewAnswerDraft = signal('');
+  let guidanceInterviewGeneration = 0;
   let guidanceUpdateGeneration = 0;
   const rulesyncUpdateReport = signal<RulesyncUpdateReport | null>(null);
   const guidanceLoading = signal(false);
@@ -1460,6 +1468,12 @@ export async function startHotSheetWebClient() {
       guidanceProjectId = current.id;
       ++guidanceRecommendationsGeneration;
       guidanceRecommendationsLoading.value = false;
+      ++guidanceInterviewGeneration;
+      guidanceInterviewLoading.value = false;
+      guidanceInterview.value = undefined;
+      guidanceInterviewError.value = '';
+      guidanceInterviewBusy.value = false;
+      guidanceInterviewAnswerDraft.value = '';
       guidanceOverview.value = undefined;
       guidanceUpdates.value = [];
       guidanceUpdatesCheckedAt.value = undefined;
@@ -1506,6 +1520,7 @@ export async function startHotSheetWebClient() {
   }
   async function refreshGuidanceRecommendations(current = project()) {
     if (!current) return;
+    void refreshGuidanceInterview(current);
     const generation = ++guidanceRecommendationsGeneration;
     guidanceRecommendationsLoading.value = true;
     guidanceRecommendationsError.value = '';
@@ -1520,6 +1535,82 @@ export async function startHotSheetWebClient() {
         guidanceRecommendationsError.value = error instanceof Error ? error.message : String(error);
     } finally {
       if (generation === guidanceRecommendationsGeneration) guidanceRecommendationsLoading.value = false;
+    }
+  }
+  async function refreshGuidanceInterview(current = project()) {
+    if (!current) return;
+    const generation = ++guidanceInterviewGeneration;
+    guidanceInterviewLoading.value = true;
+    guidanceInterviewError.value = '';
+    try {
+      const review = await new Api(current.apiPath, '', { trackBusy: false }).checkoutGuidanceInterview(current.id);
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id) guidanceInterview.value = review;
+    } catch (error) {
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id)
+        guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceInterviewGeneration) guidanceInterviewLoading.value = false;
+    }
+  }
+  async function openGuidanceInterview() {
+    const current = project();
+    const fingerprint = guidanceInterview.value?.preview.fingerprint;
+    if (!current || !fingerprint || guidanceInterviewBusy.value) return;
+    const generation = ++guidanceInterviewGeneration;
+    guidanceInterviewBusy.value = true;
+    guidanceInterviewError.value = '';
+    try {
+      const review = await new Api(current.apiPath).openCheckoutGuidanceInterview(current.id, fingerprint);
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id) guidanceInterview.value = review;
+    } catch (error) {
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id)
+        guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceInterviewGeneration) guidanceInterviewBusy.value = false;
+    }
+  }
+  async function copyGuidanceInterviewPrompt() {
+    const review = guidanceInterview.value;
+    if (review?.state === 'not_started' || !review?.preview.outbound_prompt) return;
+    try {
+      await copyText(review.preview.outbound_prompt);
+      guidanceMessage.value = 'Interview prompt copied. Share it with an AI tool you choose.';
+    } catch (error) {
+      guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
+    }
+  }
+  async function submitGuidanceInterview() {
+    const current = project();
+    const review = guidanceInterview.value;
+    if (!current || !review || guidanceInterviewBusy.value) return;
+    let answer: GuidanceInterviewReview['answer'];
+    try {
+      const parsed: unknown = JSON.parse(guidanceInterviewAnswerDraft.value);
+      if (!parsed || typeof parsed !== 'object' || !('advice' in parsed) || !Array.isArray(parsed.advice))
+        throw new Error('Paste the AI advisory JSON with an advice array.');
+      answer = parsed as GuidanceInterviewReview['answer'];
+    } catch (error) {
+      guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
+      return;
+    }
+    const generation = ++guidanceInterviewGeneration;
+    guidanceInterviewBusy.value = true;
+    guidanceInterviewError.value = '';
+    try {
+      const result = await new Api(current.apiPath).submitCheckoutGuidanceInterview(
+        current.id,
+        review.preview.fingerprint,
+        answer,
+      );
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id) {
+        guidanceInterview.value = result;
+        guidanceMessage.value = 'AI advice recorded for review. Guidance selection is unchanged.';
+      }
+    } catch (error) {
+      if (generation === guidanceInterviewGeneration && project()?.id === current.id)
+        guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceInterviewGeneration) guidanceInterviewBusy.value = false;
     }
   }
   async function decideGuidanceRecommendation(decision: GuidanceRecommendationDecision) {
@@ -1538,6 +1629,7 @@ export async function startHotSheetWebClient() {
       const overview = await client.checkoutGuidance(current.id);
       if (generation !== guidanceRecommendationsGeneration || project()?.id !== current.id) return;
       guidanceOverview.value = overview;
+      void refreshGuidanceInterview(current);
       guidanceMessage.value =
         decision.decision === 'accepted'
           ? 'Suggestion selected. Apply Selected Guidance when ready.'
@@ -3806,6 +3898,11 @@ export async function startHotSheetWebClient() {
       recommendationsLoading: guidanceRecommendationsLoading.value,
       recommendationsError: guidanceRecommendationsError.value,
       recommendationDecisionBusy: recommendationDecisionBusy.value,
+      interview: guidanceInterview.value,
+      interviewLoading: guidanceInterviewLoading.value,
+      interviewError: guidanceInterviewError.value,
+      interviewBusy: guidanceInterviewBusy.value,
+      interviewAnswerDraft: guidanceInterviewAnswerDraft.value,
       rulesyncUpdateReport: rulesyncUpdateReport.value,
       bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
@@ -4702,6 +4799,10 @@ export async function startHotSheetWebClient() {
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,
     decideGuidanceRecommendation,
+    openGuidanceInterview,
+    copyGuidanceInterviewPrompt,
+    submitGuidanceInterview,
+    guidanceInterviewAnswerDraft,
     toggleSidebarDrive,
     driveOptionsOpen,
     driveOptionsAnchor,

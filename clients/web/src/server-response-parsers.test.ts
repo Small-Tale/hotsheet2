@@ -14,6 +14,7 @@ import {
   parseCustomView,
   parseFullTicket,
   parseGitHubAuthStatus,
+  parseGuidanceInterviewReview,
   parseGuidanceRecommendationReport,
   parseOpenedCheckout,
   parsePermissionDecision,
@@ -43,6 +44,46 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('validates the optional guidance interview contract (HS2-YGV9RN)', () => {
+    const review = {
+      state: 'awaiting_answer',
+      preview: {
+        fingerprint: 'f',
+        context: {
+          signals: ['react'],
+          candidates: [
+            {
+              id: 'candidate-1',
+              source: 'source',
+              kind: 'rule',
+              name: 'react-review',
+              version: 1,
+              pinned_commit: 'a',
+              selected: false,
+              evidence: ['package.json: react'],
+            },
+          ],
+        },
+        questions: [{ id: 'active-framework', prompt: 'Which?', choices: ['react', 'vue'] }],
+        outbound_prompt: 'exact prompt',
+      },
+      answer: null,
+    };
+    expect(parseGuidanceInterviewReview(review)).toEqual(review);
+    expect(() => parseGuidanceInterviewReview({ ...review, state: 'sent' })).toThrow(ServerResponseShapeError);
+    expect(() =>
+      parseGuidanceInterviewReview({
+        ...review,
+        preview: {
+          ...review.preview,
+          context: {
+            ...review.preview.context,
+            candidates: [{ ...review.preview.context.candidates[0], kind: 'command' }],
+          },
+        },
+      }),
+    ).toThrow(ServerResponseShapeError);
+  });
   it('validates guidance recommendation decisions and review changes (HS2-QBXRFY)', () => {
     const report = {
       fingerprint: 'scan',

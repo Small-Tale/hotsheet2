@@ -13795,6 +13795,21 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
         serde_json::Value::Null
     );
     let recommendation_path = "/checkouts/guidance/guidance/recommendations";
+    let interview = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("{recommendation_path}/interview"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(interview["state"], "not_started");
+    assert_eq!(interview["preview"]["context"]["signals"][0], "rust");
+    assert_eq!(interview["preview"]["questions"], serde_json::json!([]));
+    assert!(interview["preview"]["outbound_prompt"].is_null());
     let recommendations = body_json(
         app.clone()
             .oneshot(authed("GET", recommendation_path, None))
@@ -13904,6 +13919,140 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     assert_eq!(
         std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap(),
         pinned,
+    );
+}
+
+#[tokio::test]
+async fn checkout_guidance_interview_requires_consent_and_keeps_answer_advisory() {
+    let (store_dir, state) = state();
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(
+        project.path().join("package.json"),
+        r#"{"dependencies":{"react":"1","vue":"1"}}"#,
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let checkout = serde_json::json!({
+        "root": project.path(), "alias": "interview", "stores": [store_dir.path()]
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&checkout)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let body = "Pinned React checks.";
+    hotsheet_plugins::guidance_sources::save(
+        project.path(),
+        &hotsheet_plugins::guidance_sources::GuidanceConfig {
+            schema_version: 1,
+            explicit_selection: false,
+            sources: vec![hotsheet_plugins::guidance_sources::GuidanceSource {
+                id: "fixture".into(),
+                repository: "fixture".into(),
+                requested_ref: "v1".into(),
+                commit: "a".repeat(40),
+                selected_rules: vec![],
+                selected_skills: vec![],
+                skills: vec![],
+                rules: vec![hotsheet_plugins::guidance_sources::SourceRule {
+                    name: "react-review".into(),
+                    version: 1,
+                    sha256: format!("{:x}", sha2::Sha256::digest(body.as_bytes())),
+                    description: "Review React".into(),
+                    owner: None,
+                    tags: vec!["react".into()],
+                    body: body.into(),
+                    known_bodies: vec![],
+                }],
+            }],
+        },
+    )
+    .unwrap();
+    let path = "/checkouts/interview/guidance/recommendations/interview";
+    let first = body_json(
+        app.clone()
+            .oneshot(authed("GET", path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first["state"], "not_started");
+    assert_eq!(first["preview"]["questions"][0]["id"], "active-framework");
+    let fingerprint = first["preview"]["fingerprint"].as_str().unwrap();
+    let no_consent = serde_json::json!({"fingerprint": fingerprint, "consent": false}).to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", &format!("{path}/open"), Some(&no_consent)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    let consent = serde_json::json!({"fingerprint": fingerprint, "consent": true}).to_string();
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed("POST", &format!("{path}/open"), Some(&consent)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(opened["state"], "awaiting_answer");
+    let answer = serde_json::json!({"fingerprint": fingerprint, "answer": {"advice": [{
+        "candidate_id": "candidate-1", "stance": "uncertain", "explanation": "Ask which framework is active."
+    }]}}).to_string();
+    let answered = body_json(
+        app.clone()
+            .oneshot(authed("POST", &format!("{path}/answer"), Some(&answer)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(answered["state"], "answered");
+    assert_eq!(
+        body_json(
+            app.clone()
+                .oneshot(authed("GET", path, None))
+                .await
+                .unwrap()
+        )
+        .await["state"],
+        "answered"
+    );
+    assert!(
+        hotsheet_plugins::guidance_sources::load(project.path())
+            .unwrap()
+            .sources[0]
+            .selected_rules
+            .is_empty()
+    );
+    assert!(!project.path().join("AGENTS.md").exists());
+    std::fs::write(
+        project.path().join("Cargo.toml"),
+        "[package]\nname='changed'\n",
+    )
+    .unwrap();
+    assert_eq!(
+        body_json(
+            app.clone()
+                .oneshot(authed("GET", path, None))
+                .await
+                .unwrap()
+        )
+        .await["state"],
+        "not_started"
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", &format!("{path}/answer"), Some(&answer)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
     );
 }
 

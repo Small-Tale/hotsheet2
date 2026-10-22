@@ -311,7 +311,20 @@ Project guidance Settings loads that local report on entry, exposes the evidence
 new/changed/withdrawn review diff, and lets people accept or dismiss individual
 suggestions. Accept changes selection only; applying remains an explicit action.
 The Settings view reports an unknown scan or decision error without changing a
-selection. The optional AI interview remains `HS2-YGV9RN`.
+selection. When local evidence has a concrete ambiguity, the optional interview
+preview (`hotsheet-cli guidance --project <code-project>
+recommend-interview-preview` or authenticated
+`GET /checkouts/{reference}/guidance/recommendations/interview`) shows the exact,
+bounded prompt. It contains allowlisted technology labels and pinned candidate
+identities, never manifest values, rule bodies, source URLs, or descriptions. The
+user explicitly chooses to share the preview, then copies it to an AI tool of
+their choice and pastes back final advisory JSON. The `recommend-interview-open`
+and `recommend-interview-submit --answer-file <json>` CLI commands provide the
+same headless path; the authenticated route has `/open` and `/answer` POST
+actions. The review state survives restart in project Shared Settings and resets
+when evidence or a pin changes. Hot Sheet does not send the prompt itself. AI
+advice is bounded to listed candidate IDs and cannot register, select, or apply
+guidance. The local scan remains available without a network or AI tool.
 
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.

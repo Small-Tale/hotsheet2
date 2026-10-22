@@ -6,7 +6,12 @@ import { Select } from '@kerfjs/ui/select';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { CommandDefinition, GuidanceOverview, GuidanceRecommendationReport } from '../api';
+import type {
+  CommandDefinition,
+  GuidanceInterviewReview,
+  GuidanceOverview,
+  GuidanceRecommendationReport,
+} from '../api';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
@@ -354,6 +359,37 @@ export function AiToolSettingsDemo() {
   );
 }
 export function GuidanceSettingsDemo() {
+  const interview: GuidanceInterviewReview = {
+    state: 'not_started',
+    preview: {
+      fingerprint: 'interview-demo-v1',
+      context: {
+        signals: ['react', 'vue'],
+        candidates: [
+          {
+            id: 'candidate-1',
+            source: 'playbook',
+            kind: 'rule',
+            name: 'react-review',
+            version: 1,
+            pinned_commit: '1111111111111111111111111111111111111111',
+            selected: false,
+            evidence: ['package.json: react'],
+          },
+        ],
+      },
+      questions: [
+        {
+          id: 'active-framework',
+          prompt: 'Which detected UI frameworks are actively used?',
+          choices: ['react', 'vue'],
+        },
+      ],
+      outbound_prompt:
+        'Use only this context: {"signals":["react","vue"],"candidates":["candidate-1"]}. Return advisory JSON only.',
+    },
+    answer: null,
+  };
   const recommendations: GuidanceRecommendationReport = {
     fingerprint: 'demo-signals-a',
     signals: [{ key: 'manifest', evidence: 'Cargo.toml' }],
@@ -426,6 +462,75 @@ export function GuidanceSettingsDemo() {
   };
   return (
     <>
+      <CatalogExample label="Guidance Interview: Preview and Consent">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          interview={interview}
+        />
+      </CatalogExample>
+      <CatalogExample label="Guidance Interview: Awaiting Answer">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          interview={{ ...interview, state: 'awaiting_answer' }}
+          interviewAnswerDraft='{"advice":[{"candidate_id":"candidate-1","stance":"uncertain","explanation":"Ask which framework runs in production."}]}'
+        />
+      </CatalogExample>
+      <CatalogExample label="Guidance Interview: Advisory Answer">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          interview={{
+            ...interview,
+            state: 'answered',
+            answer: {
+              advice: [
+                {
+                  candidate_id: 'candidate-1',
+                  stance: 'uncertain',
+                  explanation: 'Ask which framework runs in production.',
+                },
+              ],
+            },
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Guidance Interview: Offline or Unknown">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          interviewError="Local interview status is unavailable."
+        />
+      </CatalogExample>
       <CatalogExample label="Recommendations: Changed, Dismissed, and Withdrawn">
         <GuidanceSettings
           loading={false}

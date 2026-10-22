@@ -757,6 +757,22 @@ enum Cmd {
 enum GuidanceCmd {
     /// Read local project evidence and pinned guidance recommendations as JSON.
     Recommendations,
+    /// Preview the exact bounded context and questions for an optional AI interview.
+    RecommendInterviewPreview,
+    /// Record consent to share the previewed context with an AI tool of your choice.
+    RecommendInterviewOpen {
+        #[arg(long)]
+        fingerprint: String,
+        #[arg(long)]
+        consent: bool,
+    },
+    /// Record bounded advisory JSON returned by the chosen AI tool.
+    RecommendInterviewSubmit {
+        #[arg(long)]
+        fingerprint: String,
+        #[arg(long)]
+        answer_file: PathBuf,
+    },
     /// Accept or dismiss one exact recommendation; accepting selects but does not apply it.
     RecommendDecide {
         #[arg(long)]

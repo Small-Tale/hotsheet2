@@ -4,6 +4,7 @@ use crate::{ApiError, AppState};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use hotsheet_plugins::guidance_interview::{self, InterviewAnswer, InterviewReview};
 use hotsheet_plugins::guidance_recommendations::{self, RecommendationReport};
 use hotsheet_plugins::guidance_sources as sources;
 use hotsheet_plugins::guidance_updates::{self, SourceReview, SourceUpdate};
@@ -143,6 +144,60 @@ pub(crate) async fn get_checkout_guidance_recommendations(
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
         .map(Json)
+}
+
+pub(crate) async fn get_checkout_guidance_interview_preview(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<InterviewReview>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || guidance_interview::review(&project))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+pub(crate) struct InterviewOpenRequest {
+    fingerprint: String,
+    consent: bool,
+}
+
+pub(crate) async fn open_checkout_guidance_interview(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(request): Json<InterviewOpenRequest>,
+) -> Result<Json<InterviewReview>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        guidance_interview::open(&project, &request.fingerprint, request.consent)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+    .map(Json)
+}
+
+#[derive(Deserialize)]
+pub(crate) struct InterviewSubmitRequest {
+    fingerprint: String,
+    answer: InterviewAnswer,
+}
+
+pub(crate) async fn submit_checkout_guidance_interview(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(request): Json<InterviewSubmitRequest>,
+) -> Result<Json<InterviewReview>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        guidance_interview::submit(&project, &request.fingerprint, request.answer)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+    .map(Json)
 }
 
 #[derive(Deserialize)]

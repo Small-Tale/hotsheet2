@@ -9,6 +9,7 @@ import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
 import type {
+  GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
   GuidanceSourceReview,
@@ -30,6 +31,11 @@ export interface GuidanceSettingsProps {
   recommendationsLoading?: boolean;
   recommendationsError?: string;
   recommendationDecisionBusy?: string;
+  interview?: GuidanceInterviewReview;
+  interviewLoading?: boolean;
+  interviewError?: string;
+  interviewBusy?: boolean;
+  interviewAnswerDraft?: string;
   rulesyncUpdateReport?: RulesyncUpdateReport | null;
   loading: boolean;
   message: string;
@@ -190,6 +196,103 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
               )}
           </List>
         </section>
+        {!props.interview && props.interviewError ? (
+          <StateBanner
+            title="Interview Status Unknown"
+            detail={props.interviewError}
+            tone="warning"
+            urgency="status"
+            copyLayout="stacked"
+          />
+        ) : null}
+        {!props.interview && props.interviewLoading ? (
+          <Text tone="quiet" size="compact">
+            Checking optional interview status…
+          </Text>
+        ) : null}
+        {props.interview?.preview.questions.length ? (
+          <section aria-label="Optional Guidance Interview" data-guidance-interview="">
+            <List gap="xs">
+              <Text variant="h3">Optional AI interview</Text>
+              <Text tone="quiet" size="compact">
+                Local evidence leaves some choices open. Review the exact context below before choosing to share it with
+                an AI tool. Hot Sheet will not send it or change guidance for you.
+              </Text>
+              {props.interview.preview.questions.map((question) => (
+                <Text size="compact">
+                  {question.prompt} ({question.choices.join(', ')})
+                </Text>
+              ))}
+              <TextField
+                label="Exact Context and Prompt to Share"
+                multiline
+                rows={8}
+                readOnly
+                value={props.interview.preview.outbound_prompt ?? ''}
+              />
+              {props.interview.state === 'not_started' ? (
+                <Button
+                  action={COMMANDS_AND_AI_ACTIONS.openGuidanceInterview.value}
+                  disabled={props.interviewBusy || loading}
+                >
+                  I Choose to Share This Context
+                </Button>
+              ) : (
+                <>
+                  <Button action={COMMANDS_AND_AI_ACTIONS.copyGuidanceInterview.value} disabled={props.interviewBusy}>
+                    Copy Prompt for AI
+                  </Button>
+                  <Text tone="quiet" size="compact">
+                    Paste the prompt into an AI tool you choose. Continue that conversation there, then paste its final
+                    advisory JSON here. Advice cannot select or apply guidance.
+                  </Text>
+                  {props.interview.state === 'awaiting_answer' ? (
+                    <>
+                      <TextField
+                        name="guidance-interview-answer"
+                        label="AI Advisory JSON"
+                        multiline
+                        rows={6}
+                        value={props.interviewAnswerDraft ?? ''}
+                      />
+                      <Button
+                        action={COMMANDS_AND_AI_ACTIONS.submitGuidanceInterview.value}
+                        disabled={props.interviewBusy || !(props.interviewAnswerDraft ?? '').trim()}
+                      >
+                        Review Advisory Answer
+                      </Button>
+                    </>
+                  ) : null}
+                </>
+              )}
+              {props.interview.answer?.advice.map((advice) => {
+                const candidate = props.interview?.preview.context.candidates.find(
+                  (item) => item.id === advice.candidate_id,
+                );
+                return (
+                  <Text size="compact">
+                    {candidate ? `${candidate.source} · ${candidate.kind} ${candidate.name}` : advice.candidate_id}:{' '}
+                    {advice.stance} — {advice.explanation}
+                  </Text>
+                );
+              })}
+              {props.interviewError ? (
+                <StateBanner
+                  title="Interview Status Unknown"
+                  detail={props.interviewError}
+                  tone="warning"
+                  urgency="status"
+                  copyLayout="stacked"
+                />
+              ) : null}
+              {props.interviewLoading && (
+                <Text tone="quiet" size="compact">
+                  Checking interview status…
+                </Text>
+              )}
+            </List>
+          </section>
+        ) : null}
         {props.rulesyncUpdateReport && (
           <section data-rulesync-update-status="" aria-label="Standalone Rulesync Lock Status">
             <List gap="xs">

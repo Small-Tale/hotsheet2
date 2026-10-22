@@ -1,5 +1,6 @@
 //! AI tool setup, settings, plugins, permission hooks, launch, and driven turns.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -24,6 +25,34 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
         GuidanceCmd::Recommendations => {
             let report = hotsheet_plugins::guidance_recommendations::scan(project)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        GuidanceCmd::RecommendInterviewPreview => {
+            let review = hotsheet_plugins::guidance_interview::review(project)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
+        }
+        GuidanceCmd::RecommendInterviewOpen {
+            fingerprint,
+            consent,
+        } => {
+            let review =
+                hotsheet_plugins::guidance_interview::open(project, &fingerprint, consent)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
+        }
+        GuidanceCmd::RecommendInterviewSubmit {
+            fingerprint,
+            answer_file,
+        } => {
+            let mut bytes = Vec::new();
+            std::fs::File::open(answer_file)?
+                .take(32 * 1024 + 1)
+                .read_to_end(&mut bytes)?;
+            if bytes.len() > 32 * 1024 {
+                bail!("interview answer exceeds 32 KiB");
+            }
+            let answer = serde_json::from_slice(&bytes)?;
+            let review =
+                hotsheet_plugins::guidance_interview::submit(project, &fingerprint, answer)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
         }
         GuidanceCmd::RecommendDecide {
             source,

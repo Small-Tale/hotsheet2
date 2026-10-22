@@ -3808,6 +3808,29 @@ test('shows guidance recommendation review, accepted, no-source, and unknown var
   }
 });
 
+test('shows optional guidance interview consent and advice variants', async ({ page }) => {
+  for (const width of [1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 1600 });
+    await page.goto('/ux-demo?component=guidance-settings');
+    const states = [
+      ['preview', 'I Choose to Share This Context'],
+      ['awaiting', 'AI Advisory JSON'],
+      ['answered', 'Ask which framework runs in production.'],
+    ] as const;
+    for (const [state, text] of states) {
+      const interview = page.locator('[data-guidance-interview]').filter({
+        hasText: text,
+        ...(state === 'answered' ? { hasNot: page.locator('textarea[name="guidance-interview-answer"]') } : {}),
+      });
+      await expect(interview).toHaveCount(1);
+      await interview.scrollIntoViewIfNeeded();
+      expect(await interview.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+      await interview.screenshot({ path: `target/visual-captures/hs2-ygv9rn-demo-${state}-${width}.png` });
+    }
+    await expect(page.getByText('Local interview status is unavailable.')).toBeVisible();
+  }
+});
+
 test('shows reviewed, current, and stale pinned source variants at wide and phone widths', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });

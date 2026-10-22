@@ -3890,7 +3890,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Review local project guidance recommendations with bounded evidence, changed and withdrawn suggestion notices, individual accept or dismiss actions, and unknown status. Discover pinned sources, compare a changed revision, and choose rules and skills for the selected instruction writer. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
+      "purpose": "Review local project guidance recommendations and a consent-gated optional AI interview with exact outbound context and advisory answers. Show bounded evidence, changed and withdrawn suggestion notices, individual accept or dismiss actions, and unknown status. Discover pinned sources, compare a changed revision, and choose rules and skills for the selected instruction writer. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
       "source": "src/components/guidance-settings.tsx",
       "publicExports": [{ "name": "GuidanceSettings" }],
       "sourceLinks": ["src/components/guidance-settings.tsx"],
@@ -3909,6 +3909,11 @@
           { "id": "current source and stale or failed check", "owner": "application", "required": false },
           {
             "id": "recommendation loading, unknown, changed, dismissed, selected, and withdrawn",
+            "owner": "application",
+            "required": false
+          },
+          {
+            "id": "interview preview, awaiting answer, advisory answer, and unknown",
             "owner": "application",
             "required": false
           },

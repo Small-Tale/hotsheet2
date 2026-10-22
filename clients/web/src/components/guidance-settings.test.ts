@@ -3,6 +3,62 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('shows exact interview preview, consent, advisory answer, and unknown status (HS2-YGV9RN)', () => {
+    const base = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    const interview = {
+      state: 'not_started' as const,
+      preview: {
+        fingerprint: 'review-1',
+        context: {
+          signals: ['react', 'vue'],
+          candidates: [
+            {
+              id: 'candidate-1',
+              source: 'source',
+              kind: 'rule' as const,
+              name: 'react-review',
+              version: 1,
+              pinned_commit: 'a'.repeat(40),
+              selected: false,
+              evidence: ['package.json: react'],
+            },
+          ],
+        },
+        questions: [{ id: 'active-framework', prompt: 'Which framework is active?', choices: ['react', 'vue'] }],
+        outbound_prompt: 'Exact outbound JSON',
+      },
+      answer: null,
+    };
+    const preview = String(GuidanceSettings({ ...base, interview }));
+    expect(preview).toContain('Exact outbound JSON');
+    expect(preview).toContain('I Choose to Share This Context');
+    expect(preview).not.toContain('Copy Prompt for AI');
+    const awaiting = String(GuidanceSettings({ ...base, interview: { ...interview, state: 'awaiting_answer' } }));
+    expect(awaiting).toContain('Copy Prompt for AI');
+    expect(awaiting).toContain('AI Advisory JSON');
+    const answered = String(
+      GuidanceSettings({
+        ...base,
+        interview: {
+          ...interview,
+          state: 'answered',
+          answer: { advice: [{ candidate_id: 'candidate-1', stance: 'uncertain', explanation: 'Ask a follow-up.' }] },
+        },
+      }),
+    );
+    expect(answered).toContain('Ask a follow-up.');
+    expect(answered).not.toContain('Review Advisory Answer');
+    expect(String(GuidanceSettings({ ...base, interviewError: 'Offline.' }))).toContain('Interview Status Unknown');
+  });
   it('shows local recommendation changes and individual decision controls (HS2-QBXRFY)', () => {
     const base = {
       loading: false,

@@ -227,6 +227,11 @@ fn guidance_recommendations_cli_reviews_one_pinned_rule_without_applying_it() {
     };
     let first = run(&["recommendations"]);
     assert_eq!(first["signals"][0]["key"], "rust");
+    let interview = run(&["recommend-interview-preview"]);
+    assert_eq!(interview["state"], "not_started");
+    assert_eq!(interview["preview"]["context"]["signals"][0], "rust");
+    assert_eq!(interview["preview"]["questions"], serde_json::json!([]));
+    assert!(interview["preview"]["outbound_prompt"].is_null());
     assert_eq!(first["candidates"][0]["state"], "new");
     let fingerprint = first["candidates"][0]["fingerprint"].as_str().unwrap();
     let dismissed = run(&[
@@ -260,6 +265,90 @@ fn guidance_recommendations_cli_reviews_one_pinned_rule_without_applying_it() {
     assert!(!project.join("AGENTS.md").exists());
     let list = run(&["list"]);
     assert_eq!(list["sources"][0]["rules"][0]["selected"], true);
+}
+
+#[test]
+fn guidance_interview_cli_requires_consent_and_keeps_advice_separate_from_selection() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
+    std::fs::write(
+        project.join("package.json"),
+        r#"{"dependencies":{"react":"1","vue":"1"}}"#,
+    )
+    .unwrap();
+    let rules = ["react-review", "vue-review"].map(|name| {
+        let body = format!("{name} body");
+        serde_json::json!({
+            "name": name, "version": 1, "sha256": format!("{:x}", Sha256::digest(body.as_bytes())),
+            "description": name, "tags": [name.split('-').next().unwrap()], "body": body,
+        })
+    });
+    std::fs::write(
+        project.join(".hotsheet2/guidance-sources.json"),
+        serde_json::json!({
+            "schema_version": 1, "explicit_selection": false,
+            "sources": [{ "id": "fixture", "repository": "local fixture", "requested_ref": "v1",
+                "commit": "a".repeat(40), "selected_rules": [], "selected_skills": [], "skills": [],
+                "rules": rules }],
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let run = |args: &[&str]| -> serde_json::Value {
+        let bytes = hs(&project)
+            .args(["guidance", "--project"])
+            .arg(&project)
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&bytes).unwrap()
+    };
+    let first = run(&["recommend-interview-preview"]);
+    assert_eq!(first["state"], "not_started");
+    assert_eq!(first["preview"]["questions"][0]["id"], "active-framework");
+    let fingerprint = first["preview"]["fingerprint"].as_str().unwrap();
+    hs(&project)
+        .args(["guidance", "--project"])
+        .arg(&project)
+        .args(["recommend-interview-open", "--fingerprint", fingerprint])
+        .assert()
+        .failure();
+    let opened = run(&[
+        "recommend-interview-open",
+        "--fingerprint",
+        fingerprint,
+        "--consent",
+    ]);
+    assert_eq!(opened["state"], "awaiting_answer");
+    assert_eq!(
+        run(&["recommend-interview-preview"])["state"],
+        "awaiting_answer"
+    );
+    let answer = root.path().join("answer.json");
+    std::fs::write(&answer, serde_json::json!({ "advice": [{
+        "candidate_id": "candidate-1", "stance": "uncertain", "explanation": "Ask which framework runs."
+    }] }).to_string()).unwrap();
+    let answered = run(&[
+        "recommend-interview-submit",
+        "--fingerprint",
+        fingerprint,
+        "--answer-file",
+        answer.to_str().unwrap(),
+    ]);
+    assert_eq!(answered["state"], "answered");
+    assert_eq!(run(&["recommend-interview-preview"])["state"], "answered");
+    assert!(
+        run(&["list"])["sources"][0]["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|rule| rule["selected"] == false)
+    );
+    assert!(!project.join("AGENTS.md").exists());
 }
 
 #[cfg(unix)]

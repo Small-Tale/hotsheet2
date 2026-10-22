@@ -17,6 +17,7 @@ import type {
   GitHubAuthStart,
   GitHubAuthStatus,
   GitHubRepositoryAccess,
+  GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
   GuidanceSourceReview,
@@ -184,6 +185,47 @@ export const parseGuidanceRecommendationReport: ResponseParser<GuidanceRecommend
     return item as unknown as GuidanceRecommendationReport['changes'][number];
   });
   return { ...body, signals, candidates, changes } as GuidanceRecommendationReport;
+};
+
+export const parseGuidanceInterviewReview: ResponseParser<GuidanceInterviewReview> = (value) => {
+  const what = 'guidance interview';
+  const body = record(value, what);
+  if (!['not_started', 'awaiting_answer', 'answered'].includes(String(body.state))) invalid(what);
+  const preview = record(body.preview, what);
+  requiredString(preview, 'fingerprint', what);
+  if (preview.outbound_prompt !== null && typeof preview.outbound_prompt !== 'string') invalid(what);
+  const context = record(preview.context, what);
+  if (!isStringArray(context.signals)) invalid(what);
+  list(context.candidates, what, (entry) => {
+    const candidate = record(entry, what);
+    for (const key of ['id', 'source', 'name', 'pinned_commit']) requiredString(candidate, key, what);
+    if (
+      !['rule', 'skill'].includes(String(candidate.kind)) ||
+      typeof candidate.version !== 'number' ||
+      typeof candidate.selected !== 'boolean' ||
+      !isStringArray(candidate.evidence)
+    )
+      invalid(what);
+    return candidate;
+  });
+  list(preview.questions, what, (entry) => {
+    const question = record(entry, what);
+    requiredString(question, 'id', what);
+    requiredString(question, 'prompt', what);
+    if (!isStringArray(question.choices)) invalid(what);
+    return question;
+  });
+  if (body.answer !== null) {
+    const answer = record(body.answer, what);
+    list(answer.advice, what, (entry) => {
+      const advice = record(entry, what);
+      requiredString(advice, 'candidate_id', what);
+      requiredString(advice, 'explanation', what);
+      if (!['consider', 'avoid', 'uncertain'].includes(String(advice.stance))) invalid(what);
+      return advice;
+    });
+  }
+  return body as unknown as GuidanceInterviewReview;
 };
 
 const parseGuidanceSourceUpdate: ResponseParser<GuidanceSourceUpdate> = (value) => {

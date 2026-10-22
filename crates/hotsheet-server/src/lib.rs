@@ -101,8 +101,9 @@ use routes::checkouts::{
 use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
 use routes::guidance::{
     decide_checkout_guidance_recommendation, get_checkout_guidance,
-    get_checkout_guidance_recommendations, get_checkout_guidance_review,
-    get_checkout_guidance_updates, get_checkout_rulesync_updates, update_checkout_guidance,
+    get_checkout_guidance_interview_preview, get_checkout_guidance_recommendations,
+    get_checkout_guidance_review, get_checkout_guidance_updates, get_checkout_rulesync_updates,
+    open_checkout_guidance_interview, submit_checkout_guidance_interview, update_checkout_guidance,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -1311,6 +1312,18 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/guidance/recommendations",
             get(get_checkout_guidance_recommendations)
                 .post(decide_checkout_guidance_recommendation),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/recommendations/interview",
+            get(get_checkout_guidance_interview_preview),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/recommendations/interview/open",
+            post(open_checkout_guidance_interview),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/recommendations/interview/answer",
+            post(submit_checkout_guidance_interview).layer(DefaultBodyLimit::max(32 * 1024)),
         )
         .route(
             "/checkouts/{reference}/guidance/updates/{source}/review",
