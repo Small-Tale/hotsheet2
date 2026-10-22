@@ -1028,11 +1028,52 @@ Checkout-driven sessions can instead use the checkout root. The difference betwe
 launch identities, external-only checkouts, and registered persistence keys needs explicit
 acceptance coverage before claiming provider-neutral checkout ownership (`HS2-G8ZSPQ`).
 
-Recommendation: preserve existing matching, identify the actual ticket source or checkout
-when that context disambiguates reach, and omit an identity line only when the parent
-already establishes the same matching namespace. Never rename a store-scoped approval as
-checkout-wide. `HS2-7T5GPN` tracks this presentation; `HS2-G8ZSPQ` tracks a checkout-owned
-design and explicit migration/consent before any authorization reach changes.
+**Decided target contract (HS2-G8ZSPQ; not yet shipped).** The registered code project
+owns a project-scoped remembered permission. Its authorization namespace must be a
+single canonical checkout identity resolved from the checkout registry, independent of
+the selected ticket, provider, source locator, or mutable default source. A project
+with Git, GitHub, Jira, GitLab, or several sources uses that same identity in terminal
+hooks, CLI launches, MCP, driven turns, matching, listing, and encrypted persistence.
+Two registered code projects that share one ticket store retain separate permission
+namespaces; all sources of one registered project share its namespace. Checkout identity
+and source identity remain separate even when a project has only one source.
+
+The server must register one machine-local encrypted durable-rule location per checkout
+identity before offering Always Allow. It must report unavailable durable storage as an
+explicit capability failure; it must not silently save a project grant under the primary
+git store, a legacy empty namespace, or another registered project's file. A launch with
+no unambiguous registered checkout cannot inherit an existing project-wide grant. It may
+ask for one-time or connection-scoped consent while guiding the user through project
+registration. Changing a checkout path or identity needs an explicit remap; matching a
+path string by coincidence is not authorization.
+
+Existing store/source-scoped approvals remain valid only in their original namespace
+until the user explicitly consents to migration, or reapproves the action in the new
+project scope (HS2-ZQ6TV2). A legacy store linked to two code projects is ambiguous:
+never duplicate its grants into both. A checkout linked to multiple stores may offer a
+review of candidate grants, but may not merge or broaden them silently. Migration must
+be idempotent across retry/restart, preserve the original grant until a verified new
+write succeeds, and fail closed when identity, source provenance, or encryption material
+is unavailable. Machine-local encrypted files remain outside ticket stores and provider
+systems. The user-facing owner in the remembered-answer list is the code project after
+this contract ships (HS2-7T5GPN), not its default source.
+
+Acceptance cases for HS2-G1SG1P, HS2-ZQ6TV2, and HS2-TSXSH6:
+
+| Situation                                                                    | Required result                                                                                                       |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| One checkout, Git plus external providers; switch default source or ticket   | Same project rule and durable capability across terminal, CLI, MCP, and driven paths.                                 |
+| Two checkouts share one git store                                            | A grant in one checkout never answers the other's request or appears as its rule.                                     |
+| External-only registered checkout                                            | Project rules persist and are listed without a git store; project launch loads its configured sources.                |
+| Missing or ambiguous checkout registration                                   | No project grant matches or persists; the request remains answerable with a narrower scope.                           |
+| Legacy store rule maps to one or multiple projects                           | No reach expansion before explicit consent; ambiguous candidates require separate decisions or reapproval.            |
+| Migration retries, restart, failed vault access, or failed destination write | One destination grant at most; no half-migrated authorization, loss of the source grant, or fallback to another file. |
+| Project move/remap                                                           | Old identity cannot authorize the new identity until the user confirms the remap.                                     |
+
+Regression coverage must exercise those transitions through the matcher, encrypted
+persistence, real server routes, and the headless launch path; browser tests must cover
+capability and consent presentation. `HS2-G1SG1P` owns identity propagation,
+`HS2-ZQ6TV2` owns migration, and `HS2-TSXSH6` owns source-independent project launch.
 
 Implementation references: `crates/hotsheet-server/src/routes/terminals/launch.rs`
 (`terminal_project_for_cwd`), `crates/hotsheet-cli/src/dispatch/setup.rs`
