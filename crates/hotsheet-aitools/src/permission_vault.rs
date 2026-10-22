@@ -314,11 +314,52 @@ pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRul
     })
 }
 
+pub(super) fn load_existing_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRule>)> {
+    let _lock = Lock::acquire(path)?;
+    if !path.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "permission-rule vault missing",
+        ));
+    }
+    with_secrets(|store| {
+        let key = key_with(path, store)?;
+        let mut rules = read_locked(path, &key, VERSION)?;
+        if dedupe(&mut rules) {
+            write_locked(path, &key, &rules)?;
+        }
+        Ok((key, rules))
+    })
+}
+
 pub(super) fn mutate<T>(
     path: &Path,
     change: impl FnOnce(&mut Vec<StoredRule>) -> io::Result<T>,
 ) -> io::Result<T> {
     let _lock = Lock::acquire(path)?;
+    with_secrets(|store| {
+        let key = key_with(path, store)?;
+        let mut rules = read_locked(path, &key, VERSION)?;
+        dedupe(&mut rules);
+        let value = change(&mut rules)?;
+        write_locked(path, &key, &rules)?;
+        Ok(value)
+    })
+}
+
+/// Change a registered vault only when its authenticated file still exists. Migration must
+/// never recreate a missing destination and mistake that for an empty checkout vault.
+pub(super) fn mutate_existing<T>(
+    path: &Path,
+    change: impl FnOnce(&mut Vec<StoredRule>) -> io::Result<T>,
+) -> io::Result<T> {
+    let _lock = Lock::acquire(path)?;
+    if !path.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "permission-rule vault missing",
+        ));
+    }
     with_secrets(|store| {
         let key = key_with(path, store)?;
         let mut rules = read_locked(path, &key, VERSION)?;

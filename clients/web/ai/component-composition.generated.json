@@ -3171,7 +3171,7 @@
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
-      "purpose": "Three newest remembered permission answers for the current project under a Kerf ListHeader, with two-line expandable monospace command titles, decision shields and accessible Allowed status, origin-neutral AI-session reach, wrapping compact tool and lifetime badges, and reviewed-pattern labels without a redundant exact-match summary, distinct private action fingerprints, a searchable paged full-list dialog, row context and selected-actions menus for Copy, Edit Match, and confirmed Delete, double-click editing, a controlled dedicated exact/template/regex editor with validation and retry, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV, HS2-KHKM0W, HS2-0HKES8, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY, HS2-AT46VG, HS2-400WZZ, HS2-PMZG5Y).",
+      "purpose": "Three newest remembered permission answers for the current project under a Kerf ListHeader, with two-line expandable monospace command titles, decision shields and accessible Allowed status, origin-neutral AI-session reach, wrapping compact tool and lifetime badges, reviewed-pattern labels, distinct private action fingerprints, searchable full-list and reviewed-match dialogs, and confirmed bulk edit/delete. A separate legacy-source review dialog copies individually selected old answers into the project only after explicit consent (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5, HS2-BH6GCG, HS2-Q40BBV, HS2-KHKM0W, HS2-0HKES8, HS2-2TNY72, HS2-R3R7JE, HS2-Y8FYVY, HS2-AT46VG, HS2-400WZZ, HS2-PMZG5Y, HS2-ZQ6TV2).",
       "publicExports": [
         {
           "name": "PermissionRulesSettings"

@@ -46,7 +46,7 @@ import type {
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
-import type { PermissionRule, PermissionSecretSuggestion } from './permission-notifications';
+import type { PermissionPattern, PermissionRule, PermissionSecretSuggestion } from './permission-notifications';
 
 /**
  * Response parsers for successful Hot Sheet server bodies (HS2-34P6XY). `Api` and the
@@ -515,6 +515,48 @@ export const parsePermissionRule = shape<PermissionRule>(
       ((field as Record<string, unknown>).kind === 'template' || (field as Record<string, unknown>).kind === 'regex') &&
       typeof (field as Record<string, unknown>).expression === 'string',
   },
+);
+
+export interface PermissionMigrationCandidate {
+  id: string;
+  tool: string;
+  action: string;
+  pattern?: PermissionPattern;
+  description?: string;
+  decision: 'allow' | 'deny';
+}
+
+export interface PermissionMigrationPreview {
+  checkout: string;
+  project_name: string;
+  source: string;
+  rules: PermissionMigrationCandidate[];
+}
+
+const parsePermissionMigrationCandidate = shape<PermissionMigrationCandidate>(
+  'permission migration candidate',
+  { id: isString, tool: isString, action: isString, decision: (field) => field === 'allow' || field === 'deny' },
+  {
+    description: isString,
+    pattern: (field) =>
+      typeof field === 'object' &&
+      field !== null &&
+      !Array.isArray(field) &&
+      (field as Record<string, unknown>).version === 1 &&
+      ((field as Record<string, unknown>).kind === 'template' || (field as Record<string, unknown>).kind === 'regex') &&
+      typeof (field as Record<string, unknown>).expression === 'string',
+  },
+);
+
+export const parsePermissionMigrationPreview = shape<PermissionMigrationPreview>('permission migration preview', {
+  checkout: isString,
+  project_name: isString,
+  source: isString,
+  rules: listOf(parsePermissionMigrationCandidate.check),
+});
+export const parsePermissionMigrationOutcome = shape<{ added: number; existing: number }>(
+  'permission migration outcome',
+  { added: isNumber, existing: isNumber },
 );
 
 export const parseToolConnection = shape<ToolConnection>(

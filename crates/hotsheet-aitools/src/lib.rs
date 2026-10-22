@@ -56,13 +56,17 @@ pub use model_catalog::{
     RuntimeModelSpec, discover_ai_tool_descriptors,
 };
 pub use permission::{
-    DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
-    PermissionAsk, PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
+    DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision,
+    MigrationCandidate as PermissionMigrationCandidate,
+    MigrationOutcome as PermissionMigrationOutcome, Outcome as PermissionOutcome, PermissionAsk,
+    PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
     Rule as PermissionRule, RuleInfo as PermissionRuleInfo, Scope as PermissionScope,
     SharedPermissionBridge, StoredRule as StoredPermissionRule,
     action_key_for as permission_action_key_for, append_rule as append_permission_rule,
     ensure_rules_file as ensure_permission_rules_file, load_rules as load_permission_rules,
-    load_rules_with_key as load_permission_rules_with_key, remove_rule as remove_permission_rule,
+    load_rules_with_key as load_permission_rules_with_key,
+    migrate_legacy_rules as migrate_legacy_permission_rules,
+    preview_legacy_rules as preview_legacy_permission_rules, remove_rule as remove_permission_rule,
     rules_health as permission_rules_health, valid_user_bash_description,
 };
 pub use permission_pattern::{

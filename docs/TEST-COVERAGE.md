@@ -1166,3 +1166,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: Damage or loss of one checkout vault withdraws only its persistent answers and disables Always for its pending requests. A healthy neighbor still matches, and restoration of the authenticated file reloads its answers without silently recreating a known missing vault.
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks project-specific health validation and neighboring grants.
 - End to end: `crates/hotsheet-server/tests/http.rs` covers corrupted, restored, and removed checkout vaults across authenticated rule and pending-request routes, including concurrent asks; `clients/web/tests/providers.spec.ts` checks the no-Always popup at 1280 and 390 pixels.
+
+### Explicit legacy permission migration (HS2-ZQ6TV2)
+
+- Behavior: a linked Git source exposes local decrypted candidates for review, and only selected answers with explicit consent copy to one checkout vault. The original vault remains intact, existing destination answers win, retries are idempotent, and unavailable vaults or stale candidates fail closed.
+- Unit: `crates/hotsheet-aitools/src/permission.rs # migration_requires_review_preserves_source_and_is_idempotent_across_destinations`.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # permission_migrate_requires_review_and_explicit_selected_consent`; `crates/hotsheet-server/tests/http.rs # permission_migration_requires_explicit_checkout_and_preserves_shared_legacy_vault`; `clients/web/tests/providers.spec.ts # reviews legacy permission answers before copying them` at wide and phone widths.
+- Manual: `docs/manual-test-plan.md # Legacy permission migration`.

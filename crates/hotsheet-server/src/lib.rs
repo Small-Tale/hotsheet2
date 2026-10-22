@@ -103,7 +103,8 @@ use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
     discovered_ai_tools_off_runtime, get_ai_settings, get_checkout_ai_settings,
     interrupt_drive_turn, list_ai_tools, list_connections, list_drive_sessions, list_permissions,
-    now_ms, probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
+    migrate_checkout_permissions, now_ms, preview_checkout_permission_migration,
+    probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
 };
 use routes::project_tools::{
     acknowledge_notification, cancel_checkout_command_run, cancel_command_run,
@@ -1288,6 +1289,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}/usage",
             get(get_checkout_ticket_usage),
+        )
+        .route(
+            "/checkouts/{reference}/permissions/migration",
+            get(preview_checkout_permission_migration).post(migrate_checkout_permissions),
         )
         .route(
             "/checkouts/{reference}/tickets",

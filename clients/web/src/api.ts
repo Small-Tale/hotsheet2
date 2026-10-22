@@ -28,6 +28,8 @@ import {
   parseGitHubRepositoryAccess,
   parseMessageConnectionReceipt,
   parsePermissionDecision,
+  parsePermissionMigrationOutcome,
+  parsePermissionMigrationPreview,
   parsePermissionRequest,
   parsePermissionRule,
   parsePollResponse,
@@ -1284,6 +1286,16 @@ export class Api {
     );
   checkoutTicketUsage = (checkout: string, id: string) =>
     this.parsed(parseTicketUsage, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/usage`);
+  checkoutPermissionMigrationPreview = (checkout: string, source: string) =>
+    this.parsed(
+      parsePermissionMigrationPreview,
+      `/checkouts/${encodeURIComponent(checkout)}/permissions/migration?source=${encodeURIComponent(source)}`,
+    );
+  migrateCheckoutPermissions = (checkout: string, source: string, selectedIds: readonly string[]) =>
+    this.parsed(parsePermissionMigrationOutcome, `/checkouts/${encodeURIComponent(checkout)}/permissions/migration`, {
+      method: 'POST',
+      body: JSON.stringify({ source, selected_ids: selectedIds, consent: true }),
+    });
   createCheckoutTicket = (
     checkout: string,
     value: {

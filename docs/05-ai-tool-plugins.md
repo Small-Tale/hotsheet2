@@ -1074,6 +1074,18 @@ is unavailable. Machine-local encrypted files remain outside ticket stores and p
 systems. The user-facing owner in the remembered-answer list is the code project after
 this contract ships (HS2-7T5GPN), not its default source.
 
+`HS2-ZQ6TV2` provides an explicit copy path. Settings → Permissions → Legacy answers
+lists linked Git sources for the selected project. Review decrypts and displays that
+source's candidate actions locally; the person selects individual answers and confirms
+their wider project reach. The server verifies that the source still belongs to the
+registered checkout and that both vaults are available, then copies selected rules into
+the checkout vault. The source vault remains intact. Existing destination answers take
+precedence, and retrying a selection does not add another copy. The headless equivalent
+is `hotsheet-cli permission-migrate --project <checkout-id> --source <connection-id>`
+for JSON preview, followed by `--approve --id <candidate-id>` for each chosen answer.
+The destination vault must already be initialized by a project launch. A missing or
+unreadable vault, stale candidate, or unlinked source fails without broadening a grant.
+
 Acceptance cases for HS2-G1SG1P, HS2-ZQ6TV2, and HS2-TSXSH6:
 
 | Situation                                                                    | Required result                                                                                                       |

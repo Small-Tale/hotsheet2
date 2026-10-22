@@ -118,6 +118,12 @@ the default-on path is checked by hand.
    pending request remain. Repeat with a different authenticated vault file and confirm
    only its persistent answers return (HS2-8DAA0P).
 
+### Legacy permission migration (HS2-ZQ6TV2)
+
+1. With two registered projects sharing a Git ticket store, remember a disposable approval in the old store namespace. Open one project's Settings → Permissions → Legacy answers, review the source, and confirm that the exact action and decision are legible only in the review dialog.
+2. Cancel once, then select the answer and copy it. Confirm it appears only in the chosen project's remembered answers, while the other project still has no project-scoped copy. Retry the same selection and confirm there is one copy.
+3. Repeat from a terminal with `hotsheet-cli permission-migrate --project <checkout-id> --source <connection-id>` and then `--approve --id <candidate-id>`. Confirm the legacy vault remains readable. Remove or lock either vault and confirm the copy fails without granting the action.
+
 ### Permission secret suggestions (HS2-5ZRSJW)
 
 1. Ask for approval of a disposable command such as `API_TOKEN=abc123 npm test --password=def456`.

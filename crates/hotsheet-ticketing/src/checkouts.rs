@@ -100,6 +100,22 @@ impl Checkout {
             .find(|source| source.connection_id == connection_id)
     }
 
+    /// Open a linked Git source only after its recorded store identity is verified.
+    /// Permission migration uses this boundary so a moved or replaced source cannot
+    /// select an unrelated legacy vault by its current path.
+    pub fn verified_git_source(&self, connection_id: &str) -> Result<FsStore, CheckoutError> {
+        let source = self.source(connection_id).ok_or_else(|| {
+            CheckoutError::Invalid("ticket source is not linked to this project".into())
+        })?;
+        if source.provider != "git" {
+            return Err(CheckoutError::Invalid(
+                "ticket source is not a Git store".into(),
+            ));
+        }
+        validate_linked_store_identity(self, source)?;
+        FsStore::open_without_maintenance(&source.locator).map_err(CheckoutError::from)
+    }
+
     /// Project-owned settings with deterministic read-through compatibility for files
     /// written beside this checkout's old git ticket stores. The default source wins a
     /// legacy key conflict; remaining sources retain registry order. Provider-only and

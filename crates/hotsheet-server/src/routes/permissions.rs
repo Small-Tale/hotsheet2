@@ -20,6 +20,173 @@ use std::path::Path as FsPath;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[derive(Deserialize)]
+pub(crate) struct PermissionMigrationQuery {
+    source: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PermissionMigrationPreview {
+    checkout: String,
+    project_name: String,
+    source: String,
+    rules: Vec<hotsheet_aitools::PermissionMigrationCandidate>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PermissionMigrationRequest {
+    source: String,
+    selected_ids: Vec<String>,
+    consent: bool,
+}
+
+fn permission_migration_paths(
+    state: &AppState,
+    reference: &str,
+    source_id: &str,
+) -> Result<
+    (
+        hotsheet_ticketing::checkouts::Checkout,
+        std::path::PathBuf,
+        std::path::PathBuf,
+    ),
+    ApiError,
+> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let store = checkout
+        .verified_git_source(source_id)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    let identity = checkout.permission_identity();
+    if !state.register_checkout_permission_rules(&identity) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "checkout permission vault unavailable",
+        ));
+    }
+    let paths = state.permission_rule_paths.lock_or_recover();
+    let destination = paths.get(&identity).cloned().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "checkout permission vault unavailable",
+        )
+    })?;
+    let source = crate::watcher::same_path(store.root(), state.store.root())
+        .then(|| paths.get("").cloned())
+        .flatten()
+        .or_else(|| {
+            paths
+                .iter()
+                .find(|(project, path)| {
+                    !project.is_empty()
+                        && !project.starts_with("checkout:")
+                        && crate::watcher::same_path(FsPath::new(project), store.root())
+                        && path.is_file()
+                })
+                .map(|(_, path)| path.clone())
+        })
+        .or_else(|| {
+            paths
+                .get("")
+                .and_then(|path| path.parent())
+                .map(|directory| {
+                    directory.join(format!(
+                        "{}.json",
+                        hotsheet_ticketing::git_connection_id(&store)
+                    ))
+                })
+        })
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy permission vault unavailable",
+            )
+        })?;
+    if !source.is_file() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "legacy permission vault missing",
+        ));
+    }
+    Ok((checkout, source, destination))
+}
+
+/// Review exactly one linked Git source before a project-wide consent decision.
+pub(crate) async fn preview_checkout_permission_migration(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<PermissionMigrationQuery>,
+) -> Result<Json<PermissionMigrationPreview>, ApiError> {
+    let (checkout, source, _) = permission_migration_paths(&state, &reference, &query.source)?;
+    let legacy_project = checkout.source(&query.source).unwrap().locator.clone();
+    let rules = tokio::task::spawn_blocking(move || {
+        hotsheet_aitools::preview_legacy_permission_rules(&source, &legacy_project)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "legacy permission vault unavailable",
+        )
+    })?;
+    Ok(Json(PermissionMigrationPreview {
+        checkout: checkout.permission_identity(),
+        project_name: checkout.alias,
+        source: query.source,
+        rules,
+    }))
+}
+
+/// Copy only reviewed rules after explicit consent; the source vault is retained.
+pub(crate) async fn migrate_checkout_permissions(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<PermissionMigrationRequest>,
+) -> Result<Json<hotsheet_aitools::PermissionMigrationOutcome>, ApiError> {
+    if !body.consent {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "explicit migration consent required",
+        ));
+    }
+    let (checkout, source, destination) =
+        permission_migration_paths(&state, &reference, &body.source)?;
+    let legacy_project = checkout.source(&body.source).unwrap().locator.clone();
+    let identity = checkout.permission_identity();
+    let selected = body.selected_ids;
+    let target = identity.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        hotsheet_aitools::migrate_legacy_permission_rules(
+            &source,
+            &destination,
+            &legacy_project,
+            &target,
+            &selected,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| {
+        let status = if error.kind() == std::io::ErrorKind::InvalidInput {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        };
+        ApiError::new(status, "permission migration failed or review is stale")
+    })?;
+    if !state.register_checkout_permission_rules(&identity) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "checkout permission vault unavailable after migration",
+        ));
+    }
+    emit_permission_rules_changed(&state, &identity);
+    Ok(Json(outcome))
+}
+
 // ---- permission round-trip (HS2-9R9YZW) ------------------------------------------
 
 /// `GET /permissions` — the requests a driven tool is currently blocked on, for a client

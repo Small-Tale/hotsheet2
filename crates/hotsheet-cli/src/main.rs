@@ -584,6 +584,21 @@ enum Cmd {
         #[arg(long)]
         team: bool,
     },
+    /// Review or explicitly copy legacy Git-store permission rules into one registered project.
+    PermissionMigrate {
+        /// Registered checkout id, alias, or root path.
+        #[arg(long)]
+        project: String,
+        /// Linked Git ticket-source connection id to review.
+        #[arg(long)]
+        source: String,
+        /// Candidate id from the preview; repeat to select several rules.
+        #[arg(long = "id")]
+        ids: Vec<String>,
+        /// Confirm the selected rules' broader project scope.
+        #[arg(long)]
+        approve: bool,
+    },
     /// Native lifecycle **permission hook** (docs/05 §5.7): reads PermissionRequest JSON
     /// from Claude or Codex, finds the current project server (falling back to
     /// $HOTSHEET_SERVER/$HOTSHEET_SECRET), and writes the provider-native decision. With no

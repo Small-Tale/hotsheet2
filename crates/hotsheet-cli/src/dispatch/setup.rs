@@ -18,6 +18,70 @@ use super::{Ctx, misrouted};
 #[path = "setup_diagnose.rs"]
 mod diagnose;
 
+fn cmd_permission_migrate(
+    project: &str,
+    source_id: &str,
+    ids: &[String],
+    approve: bool,
+) -> Result<()> {
+    let home = hotsheet_plugins::hotsheet_home();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let checkout = registry
+        .resolve(project)
+        .context("registered project required for permission migration")?;
+    let store = checkout
+        .verified_git_source(source_id)
+        .context("verified linked Git source required")?;
+    let source = home.join("permissions").join(format!(
+        "{}.json",
+        hotsheet_ticketing::git_connection_id(&store)
+    ));
+    let destination = home
+        .join("permissions")
+        .join(format!("checkout-{}.json", checkout.id));
+    if !source.is_file() {
+        bail!("legacy permission vault is missing; reapprove actions in the project scope");
+    }
+    let legacy_project = store.root().display().to_string();
+    if !approve {
+        if !ids.is_empty() {
+            bail!("--id requires --approve; review the candidates first");
+        }
+        let rules = hotsheet_aitools::preview_legacy_permission_rules(&source, &legacy_project)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "project": checkout.alias,
+                "checkout": checkout.permission_identity(),
+                "source": source_id,
+                "rules": rules,
+            }))?
+        );
+        return Ok(());
+    }
+    if ids.is_empty() {
+        bail!("select at least one previewed --id before --approve");
+    }
+    if !destination.is_file() {
+        bail!(
+            "checkout permission vault is not initialized; launch the registered project once, then retry"
+        );
+    }
+    let outcome = hotsheet_aitools::migrate_legacy_permission_rules(
+        &source,
+        &destination,
+        &legacy_project,
+        &checkout.permission_identity(),
+        ids,
+    )?;
+    println!(
+        "Copied {} rule(s); {} already present",
+        outcome.added, outcome.existing
+    );
+    Ok(())
+}
+
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     let cwd = &ctx.cwd;
@@ -48,6 +112,12 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
+        Cmd::PermissionMigrate {
+            project,
+            source,
+            ids,
+            approve,
+        } => cmd_permission_migrate(&project, &source, &ids, approve),
         Cmd::HookDiagnose { json } => cmd_hook_diagnose(json),
         Cmd::Launch {
             tool,

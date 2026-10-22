@@ -16940,6 +16940,166 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
 }
 
 #[tokio::test]
+async fn permission_migration_requires_explicit_checkout_and_preserves_shared_legacy_vault() {
+    let root = tempfile::tempdir().unwrap();
+    let store_path = root.path().join("shared.hs2");
+    let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
+    let other_store_path = root.path().join("other.hs2");
+    FsStore::init(&other_store_path, &StoreMetadata::new("OT")).unwrap();
+    let first_root = root.path().join("first");
+    let second_root = root.path().join("second");
+    let external_root = root.path().join("external-only");
+    std::fs::create_dir_all(&first_root).unwrap();
+    std::fs::create_dir_all(&second_root).unwrap();
+    std::fs::create_dir_all(&external_root).unwrap();
+    let registry_path = root.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    let first = registry
+        .register(
+            &first_root,
+            None,
+            None,
+            vec![store_path.clone(), other_store_path],
+        )
+        .unwrap();
+    let second = registry
+        .register(&second_root, None, None, vec![store_path])
+        .unwrap();
+    let source_id = first.sources[0].connection_id.clone();
+    registry
+        .set_default_source(&first.id, Some(&first.sources[1].connection_id))
+        .unwrap();
+    let external = registry
+        .register(&external_root, None, None, vec![])
+        .unwrap();
+    let rules_path = root.path().join("permission-rules").join("store.json");
+    let legacy_project = store.root().display().to_string();
+    hotsheet_aitools::append_permission_rule(
+        &rules_path,
+        &hotsheet_aitools::PermissionRule {
+            project: legacy_project.clone(),
+            tool: "Bash".into(),
+            action: "npm test".into(),
+            exact_action: Some("npm test".into()),
+            pattern: None,
+            description: Some("Run command".into()),
+            decision: hotsheet_aitools::PermissionDecision::Allow,
+            persist: true,
+            connection: None,
+        },
+    )
+    .unwrap();
+    let state = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path);
+    let router = app(state);
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{}/permissions/migration?source={source_id}",
+                    external.id
+                ),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT,
+    );
+    let preview_path = format!(
+        "/checkouts/{}/permissions/migration?source={source_id}",
+        first.id
+    );
+    let preview = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", &preview_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        preview["checkout"],
+        first.permission_identity(),
+        "{preview}"
+    );
+    assert_eq!(preview["rules"][0]["action"], "npm test");
+    let id = preview["rules"][0]["id"].as_str().unwrap();
+    let apply_path = format!("/checkouts/{}/permissions/migration", first.id);
+    let denied =
+        serde_json::json!({"source":source_id,"selected_ids":[id],"consent":false}).to_string();
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("POST", &apply_path, Some(&denied)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let body =
+        serde_json::json!({"source":source_id,"selected_ids":[id],"consent":true}).to_string();
+    let copied = body_json(
+        router
+            .clone()
+            .oneshot(authed("POST", &apply_path, Some(&body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(copied["added"], 1);
+    let retry = body_json(
+        router
+            .clone()
+            .oneshot(authed("POST", &apply_path, Some(&body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(retry["existing"], 1);
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path).len(),
+        1
+    );
+    let first_rules = rules_path.with_file_name(format!("checkout-{}.json", first.id));
+    let second_rules = rules_path.with_file_name(format!("checkout-{}.json", second.id));
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&first_rules).len(),
+        1
+    );
+    assert!(hotsheet_aitools::load_permission_rules(&second_rules).is_empty());
+    let restarted = app(AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path));
+    let listed = body_json(
+        restarted
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == first.permission_identity())
+    );
+    assert!(
+        !listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == second.permission_identity())
+    );
+}
+
+#[tokio::test]
 async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store() {
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");

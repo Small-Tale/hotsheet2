@@ -1677,6 +1677,134 @@ pub struct StoredRule {
     pub decision: Decision,
 }
 
+/// A legacy grant offered for explicit, per-checkout migration review. The action is
+/// shown only through authenticated local surfaces and never written to a ticket store.
+#[derive(Clone, Serialize)]
+pub struct MigrationCandidate {
+    pub id: String,
+    pub tool: String,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<PatternSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub decision: Decision,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+pub struct MigrationOutcome {
+    pub added: usize,
+    pub existing: usize,
+}
+
+fn migration_candidates(
+    path: &Path,
+    legacy_project: &str,
+) -> io::Result<Vec<(MigrationCandidate, StoredRule)>> {
+    let (key, stored) = crate::permission_vault::load_existing_with_key(path)?;
+    Ok(stored
+        .into_iter()
+        .filter(|rule| {
+            !rule.project.is_empty()
+                && (rule.project == legacy_project
+                    || Path::new(&rule.project)
+                        .canonicalize()
+                        .ok()
+                        .zip(Path::new(legacy_project).canonicalize().ok())
+                        .is_some_and(|(left, right)| left == right))
+        })
+        .filter(|rule| {
+            rule.pattern
+                .as_ref()
+                .is_none_or(|pattern| pattern.validate(&rule.action).is_ok())
+        })
+        .map(|rule| {
+            let candidate = MigrationCandidate {
+                id: action_fingerprint(
+                    &key,
+                    &serde_json::to_string(&rule).expect("permission rule serializes"),
+                ),
+                tool: rule.tool.clone(),
+                action: rule.action.clone(),
+                pattern: rule.pattern.clone(),
+                description: rule.description.clone(),
+                decision: rule.decision,
+            };
+            (candidate, rule)
+        })
+        .collect())
+}
+
+/// Preview the old store's authenticated rules without changing either vault.
+pub fn preview_legacy_rules(
+    path: &Path,
+    legacy_project: &str,
+) -> io::Result<Vec<MigrationCandidate>> {
+    Ok(migration_candidates(path, legacy_project)?
+        .into_iter()
+        .map(|(candidate, _)| candidate)
+        .collect())
+}
+
+/// Copy individually approved legacy grants into one already registered checkout vault.
+/// The source remains intact; existing destination answers win on retry or conflict.
+pub fn migrate_legacy_rules(
+    source: &Path,
+    destination: &Path,
+    legacy_project: &str,
+    checkout_project: &str,
+    selected_ids: &[String],
+) -> io::Result<MigrationOutcome> {
+    if source == destination
+        || !checkout_project.starts_with("checkout:")
+        || selected_ids.is_empty()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid permission migration",
+        ));
+    }
+    let candidates = migration_candidates(source, legacy_project)?;
+    let selected: std::collections::HashSet<_> = selected_ids.iter().collect();
+    if selected.len() != selected_ids.len()
+        || !selected
+            .iter()
+            .all(|id| candidates.iter().any(|(candidate, _)| &candidate.id == *id))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "stale permission migration review",
+        ));
+    }
+    let selected_rules: Vec<_> = candidates
+        .into_iter()
+        .filter(|(candidate, _)| selected.contains(&candidate.id))
+        .map(|(_, mut rule)| {
+            rule.project = checkout_project.to_owned();
+            rule
+        })
+        .collect();
+    crate::permission_vault::mutate_existing(destination, |rules| {
+        let mut outcome = MigrationOutcome {
+            added: 0,
+            existing: 0,
+        };
+        for candidate in selected_rules {
+            if rules.iter().any(|existing| {
+                existing.project == candidate.project
+                    && existing.tool == candidate.tool
+                    && existing.key_material() == candidate.key_material()
+            }) {
+                outcome.existing += 1;
+            } else {
+                rules.push(candidate);
+                outcome.added += 1;
+            }
+        }
+        Ok(outcome)
+    })
+}
+
 impl std::fmt::Debug for StoredRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StoredRule")
@@ -1854,6 +1982,85 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migration_requires_review_preserves_source_and_is_idempotent_across_destinations() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("legacy.json");
+        let first = dir.path().join("checkout-one.json");
+        let second = dir.path().join("checkout-two.json");
+        let legacy_project = "/store/shared";
+        let secret = "curl https://private.example?token=secret";
+        let source_key = action_key_for(&source).unwrap();
+        append_rule(
+            &source,
+            &Rule {
+                project: legacy_project.into(),
+                tool: "Bash".into(),
+                action: action_fingerprint(&source_key, secret),
+                exact_action: Some(secret.into()),
+                pattern: None,
+                description: Some("Run command".into()),
+                decision: Decision::Allow,
+                persist: true,
+                connection: None,
+            },
+        )
+        .unwrap();
+        ensure_rules_file(&first).unwrap();
+        ensure_rules_file(&second).unwrap();
+        let preview = preview_legacy_rules(&source, legacy_project).unwrap();
+        assert_eq!(preview.len(), 1);
+        assert_eq!(preview[0].action, secret);
+        assert_eq!(
+            migrate_legacy_rules(
+                &source,
+                &first,
+                legacy_project,
+                "checkout:one",
+                &["stale".into()]
+            )
+            .unwrap_err()
+            .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert!(load_rules(&first).is_empty());
+        let ids = [preview[0].id.clone()];
+        assert_eq!(
+            migrate_legacy_rules(&source, &first, legacy_project, "checkout:one", &ids).unwrap(),
+            MigrationOutcome {
+                added: 1,
+                existing: 0
+            }
+        );
+        assert_eq!(
+            migrate_legacy_rules(&source, &first, legacy_project, "checkout:one", &ids).unwrap(),
+            MigrationOutcome {
+                added: 0,
+                existing: 1
+            }
+        );
+        assert_eq!(load_rules(&source).len(), 1);
+        assert_eq!(load_rules(&first)[0].project, "checkout:one");
+        assert_eq!(load_rules(&second).len(), 0);
+        assert_eq!(
+            migrate_legacy_rules(&source, &second, legacy_project, "checkout:two", &ids).unwrap(),
+            MigrationOutcome {
+                added: 1,
+                existing: 0
+            }
+        );
+        assert_eq!(load_rules(&second)[0].project, "checkout:two");
+        std::fs::remove_file(&first).unwrap();
+        assert_eq!(
+            migrate_legacy_rules(&source, &first, legacy_project, "checkout:one", &ids)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!first.exists());
+        assert!(!std::fs::read_to_string(&source).unwrap().contains(secret));
+    }
     use std::fs;
 
     #[test]

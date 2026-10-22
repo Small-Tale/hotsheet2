@@ -8,6 +8,75 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn permission_migrate_requires_review_and_explicit_selected_consent() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let project = root.path().join("project");
+    let store_path = root.path().join("tickets.hs2");
+    std::fs::create_dir_all(&project).unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let checkout = registry
+        .register(&project, None, None, vec![store_path])
+        .unwrap();
+    let source_id = checkout.sources[0].connection_id.clone();
+    let permissions = home.join("permissions");
+    let source = permissions.join(format!(
+        "{}.json",
+        hotsheet_ticketing::git_connection_id(&store)
+    ));
+    let destination = permissions.join(format!("checkout-{}.json", checkout.id));
+    hotsheet_aitools::append_permission_rule(
+        &source,
+        &hotsheet_aitools::PermissionRule {
+            project: store.root().display().to_string(),
+            tool: "Bash".into(),
+            action: "npm test".into(),
+            exact_action: Some("npm test".into()),
+            pattern: None,
+            description: None,
+            decision: hotsheet_aitools::PermissionDecision::Allow,
+            persist: true,
+            connection: None,
+        },
+    )
+    .unwrap();
+    hotsheet_aitools::ensure_permission_rules_file(&destination).unwrap();
+    let run = |extra: &[&str]| {
+        let mut cmd = hs(&project);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args([
+                "permission-migrate",
+                "--project",
+                &checkout.id,
+                "--source",
+                &source_id,
+            ])
+            .args(extra);
+        cmd
+    };
+    let preview = run(&[]).assert().success().get_output().stdout.clone();
+    let preview: serde_json::Value = serde_json::from_slice(&preview).unwrap();
+    assert_eq!(preview["rules"][0]["action"], "npm test");
+    let id = preview["rules"][0]["id"].as_str().unwrap();
+    run(&["--approve"]).assert().failure();
+    run(&["--id", id]).assert().failure();
+    assert!(hotsheet_aitools::load_permission_rules(&destination).is_empty());
+    run(&["--approve", "--id", id]).assert().success();
+    run(&["--approve", "--id", id]).assert().success();
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&destination).len(),
+        1
+    );
+    assert_eq!(hotsheet_aitools::load_permission_rules(&source).len(), 1);
+}
+
+#[test]
 fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

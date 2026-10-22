@@ -22,6 +22,7 @@ import {
   NOTIFICATIONS_AND_LINKS_TARGETS,
 } from '../interaction-attrs/notifications-and-links';
 import { type PermissionRule, permissionRuleKey } from '../permission-notifications';
+import type { PermissionMigrationPreview } from '../server-response-parsers';
 
 export type PermissionRuleMatchKind = 'exact' | 'template' | 'regex';
 export interface PermissionRuleEditorState {
@@ -55,6 +56,17 @@ export interface PermissionRulesSettingsProps {
   revoking?: readonly string[];
   message?: string;
   locked?: boolean;
+  migration?: {
+    sources: readonly { id: string; name: string; locator: string }[];
+    review?: {
+      projectId: string;
+      sourceId: string;
+      preview?: PermissionMigrationPreview;
+      selected: readonly string[];
+      busy: boolean;
+      error?: string;
+    };
+  };
 }
 
 export const PERMISSION_RULE_BATCH_SIZE = 100;
@@ -126,6 +138,7 @@ export function PermissionRulesSettings({
   revoking = [],
   message = '',
   locked = false,
+  migration,
 }: PermissionRulesSettingsProps) {
   const editingRule = editor && rules.find((rule) => permissionRuleKey(rule) === editor.ruleKey);
   const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
@@ -415,6 +428,84 @@ export function PermissionRulesSettings({
           {message}
         </Text>
       </List>
+      {migration && migration.sources.length > 0 && (
+        <section class="permission-rules-settings__migration" aria-label="Legacy Permission Answers">
+          <ListHeader label="Legacy Answers" headingLevel={3} density="compact" />
+          <div class="permission-rules-settings__migration-content">
+            <Text tone="quiet" size="compact">
+              Old ticket-source answers stay limited to their original source. Review individual answers before copying
+              them to this project; you can also approve them again when the AI asks.
+            </Text>
+            <Row gap="xs" wrap>
+              {migration.sources.map((source) => (
+                <Button
+                  emphasis="secondary"
+                  size="compact"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionMigration.value}
+                  rootAttributes={{ 'data-source-id': source.id }}
+                  title={source.locator}
+                >
+                  {`Review ${source.name}`}
+                </Button>
+              ))}
+            </Row>
+          </div>
+        </section>
+      )}
+      {migration?.review && (
+        <DialogSurface
+          label="Copy legacy permission answers"
+          preferredWidth={remify(640)}
+          viewportGutter={remify(16)}
+          rootAttributes={{
+            ...NOTIFICATIONS_AND_LINKS_TARGETS.permissionMigrationDialog.attrs,
+            'data-controlled-open': 'true',
+          }}
+          footer={
+            <Row gap="xs" hAlign="right" wrap>
+              <Button
+                emphasis="plain"
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionMigration.value}
+                disabled={migration.review.busy}
+              >
+                Cancel
+              </Button>
+              <Button
+                emphasis="primary"
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.applyPermissionMigration.value}
+                disabled={migration.review.busy || migration.review.selected.length === 0}
+              >
+                {`Copy ${migration.review.selected.length} to project`}
+              </Button>
+            </Row>
+          }
+        >
+          <div class="permission-rules-settings__migration-review">
+            <Text>
+              {`From ${migration.sources.find((source) => source.id === migration.review?.sourceId)?.name ?? 'Git source'} to ${migration.review.preview?.project_name ?? 'this project'}. Copied answers apply across this project's ticket sources. Original answers remain in the source vault.`}
+            </Text>
+            {migration.review.busy && <Text role="status">Working…</Text>}
+            {migration.review.error && <Text role="alert">{migration.review.error}</Text>}
+            {migration.review.preview?.rules.length === 0 && <Text>No legacy answers to copy from this source.</Text>}
+            {migration.review.preview?.rules.map((rule) => (
+              <label class="permission-rules-settings__migration-rule">
+                <input
+                  type="checkbox"
+                  checked={migration.review?.selected.includes(rule.id)}
+                  disabled={migration.review?.busy}
+                  {...NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionMigrationRule.attrs}
+                  data-migration-id={rule.id}
+                />
+                <span>
+                  <strong>{`${rule.tool} · ${rule.decision === 'allow' ? 'Allow' : 'Deny'}`}</strong>
+                  <code>{rule.action}</code>
+                  {rule.pattern && <small>{`${rule.pattern.kind} match: ${rule.pattern.expression}`}</small>}
+                </span>
+              </label>
+            ))}
+          </div>
+        </DialogSurface>
+      )}
       {list && (
         <div data-key="permission-rules-dialog">
           <DialogSurface

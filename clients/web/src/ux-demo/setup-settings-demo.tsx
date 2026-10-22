@@ -375,6 +375,26 @@ export function PermissionRulesSettingsDemo() {
           message="Could not revoke the rule. The server is unavailable."
         />
       </CatalogExample>
+      <CatalogExample label="Review Legacy Answers Before Copying to a Project">
+        <PermissionRulesSettings
+          rules={[]}
+          migration={{
+            sources: [{ id: 'git-legacy', name: 'Legacy Git', locator: '/work/demo.hs2' }],
+            review: {
+              projectId: 'demo',
+              sourceId: 'git-legacy',
+              selected: [],
+              busy: false,
+              preview: {
+                checkout: 'checkout:demo',
+                project_name: 'Demo',
+                source: 'git-legacy',
+                rules: [{ id: 'legacy-1', tool: 'Bash', action: 'npm test', decision: 'allow' }],
+              },
+            },
+          }}
+        />
+      </CatalogExample>
     </>
   );
 }

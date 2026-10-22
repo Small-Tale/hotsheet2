@@ -15357,6 +15357,61 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await expect(selected).toHaveAttribute('data-selected', 'true');
 });
 
+for (const width of [1280, 390])
+  test(`reviews legacy permission answers before project-wide copying at ${width}px (HS2-ZQ6TV2)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    const applied: unknown[] = [];
+    await page.route('**/permissions/migration*', async (route) => {
+      const request = route.request(),
+        url = new URL(request.url());
+      if (request.method() === 'GET')
+        return route.fulfill({
+          json: {
+            checkout: 'checkout:demo-checkout',
+            project_name: 'demo',
+            source: url.searchParams.get('source'),
+            rules: [{ id: 'legacy-rule', tool: 'Bash', action: 'npm test', decision: 'allow' }],
+          },
+        });
+      applied.push(request.postDataJSON());
+      return route.fulfill({ json: { added: 1, existing: 0 } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    if (width === 390) await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+    await page.getByRole('button', { name: 'Permissions' }).click();
+    if (width === 390) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+    const settings = page.locator('[data-component="permission-rules-settings"]');
+    await settings
+      .getByRole('button', { name: /Review / })
+      .first()
+      .click();
+    const dialog = page.getByRole('dialog', { name: 'Copy legacy permission answers' });
+    await expect(dialog).toContainText('npm test');
+    await expect(dialog.getByRole('button', { name: 'Copy 0 to project' })).toBeDisabled();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(applied).toEqual([]);
+    await settings.screenshot({ path: `target/visual-captures/hs2-zq6tv2-migration-settings-${width}.png` });
+    await settings
+      .getByRole('button', { name: /Review / })
+      .first()
+      .click();
+    await dialog.getByRole('checkbox').check();
+    await expect(dialog.getByRole('button', { name: 'Copy 1 to project' })).toBeEnabled();
+    await dialog.screenshot({ path: `target/visual-captures/hs2-zq6tv2-migration-review-${width}.png` });
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+    await dialog.getByRole('button', { name: 'Copy 1 to project' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(applied).toEqual([expect.objectContaining({ consent: true, selected_ids: ['legacy-rule'] })]);
+  });
+
 test('answers identical permission requests for this chat and revokes the remembered rule in Settings (HS2-JNHAYB)', async ({
   page,
 }) => {
