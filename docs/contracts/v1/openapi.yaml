@@ -2414,6 +2414,45 @@ paths:
       responses:
         default:
           description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/guidance/recommendations/interview:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_checkout_guidance_interview_preview
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/guidance/recommendations/interview/open:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: open_checkout_guidance_interview
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /checkouts/{reference}/guidance/recommendations/interview/answer:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: submit_checkout_guidance_interview
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
   /checkouts/{reference}/guidance/rulesync-updates:
     parameters:
       - name: reference
