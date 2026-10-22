@@ -86,6 +86,11 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     assert_eq!(overview["sources"][0]["rules"][0]["installed_version"], 1);
 }
 
+// A freshly built macOS CLI is a different unsigned Keychain client from this test
+// process. Reading the fixture credential can open an authorization prompt and hang
+// a headless test run. Linux CI exercises the complete cross-process migration flow;
+// the permission vault's macOS behavior is covered in-process separately.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn permission_migrate_requires_review_and_explicit_selected_consent() {
     let root = tempfile::tempdir().unwrap();
