@@ -13814,6 +13814,21 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
             .unwrap()
             .contains("Fixture.")
     );
+    let pinned = std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap();
+    let updates = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/guidance/guidance/updates", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(updates[0]["id"], "fixture");
+    assert_eq!(updates[0]["state"], "check_failed");
+    assert_eq!(updates[0]["reason"], "Source ref could not be checked");
+    assert_eq!(
+        std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap(),
+        pinned,
+    );
 }
 
 #[tokio::test]

@@ -4,7 +4,7 @@ Hot Sheet's built-in writer is the default. It ships pinned offline snapshots an
 requires no Rulesync installation. Choose Rulesync when this project should select
 and update reusable rules independently. The validated CLI version is **38.0.0**.
 
-For Hot Sheet-managed selection from a pinned source, use Settings → AI tools or
+For Hot Sheet-managed selection from a pinned source, use Settings → Project guidance or
 the headless path below. `register` resolves a full commit and caches the selected
 source's rule bodies, so later apply and setup do not fetch the source again:
 

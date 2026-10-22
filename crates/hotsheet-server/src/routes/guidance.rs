@@ -5,6 +5,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_plugins::guidance_sources as sources;
+use hotsheet_plugins::guidance_updates::{self, SourceUpdate};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -128,6 +129,21 @@ pub(crate) async fn get_checkout_guidance(
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map(Json)
+}
+
+/// Read-only, bounded remote ref checks; unlike registration this never replaces a pin.
+pub(crate) async fn get_checkout_guidance_updates(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<SourceUpdate>>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        guidance_updates::check_project(&project)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
 }
 
 #[derive(Deserialize)]

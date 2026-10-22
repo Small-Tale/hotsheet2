@@ -162,6 +162,19 @@ upgraded while local edits remain protected. Rule IDs may be unprefixed or owned
 Hot Sheet, Kerf UI, or another project; owner and tag metadata power the picker.
 The picker reports the installed and offered section versions.
 
+`hotsheet-cli guidance --project <code-repo> check-updates` and authenticated
+`GET /checkouts/{reference}/guidance/updates` query source refs without changing
+the pinned commit, cached rule bytes, or installed guidance (HS2-RDBVTG).
+The JSON results distinguish `current` (a branch still at its pin),
+`revision_changed` (a branch moved, including a possible force push), `pinned`
+(an immutable SHA or unchanged tag), `tag_moved` (review the tag before trusting
+it), and `check_failed` (missing/ambiguous ref or transport failure). A changed
+branch is a review candidate, not proof that its history advanced. Each remote
+check is bounded to 20 seconds and transport errors are redacted. The command
+is explicit; normal setup and apply continue to use the offline pinned snapshot.
+Automatic event-driven checks and the review banner are tracked by
+`HS2-S75AJ8`.
+
 `guidance list` lists source, version, owner, tags, selection, and installed version
 as JSON; `guidance register --id <id> --repository <url-or-local-repo> --ref <tag-or-sha>`
 pins a source; `guidance select --source <id> --rule <name> [--skill <name>]` replaces

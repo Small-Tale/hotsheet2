@@ -84,6 +84,29 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     );
     let overview: serde_json::Value = serde_json::from_slice(&run(&["list"])).unwrap();
     assert_eq!(overview["sources"][0]["rules"][0]["installed_version"], 1);
+
+    let branch = git(&["symbolic-ref", "--short", "HEAD"]);
+    run(&[
+        "register",
+        "--repository",
+        source.to_str().unwrap(),
+        "--ref",
+        &branch,
+    ]);
+    let pin_before = std::fs::read(project.join(".hotsheet2/guidance-sources.json")).unwrap();
+    let updates: serde_json::Value = serde_json::from_slice(&run(&["check-updates"])).unwrap();
+    assert_eq!(updates[0]["state"], "current");
+    std::fs::write(source.join("marker.txt"), "new revision").unwrap();
+    git(&["add", "marker.txt"]);
+    git(&["commit", "-qm", "new revision"]);
+    let updates: serde_json::Value = serde_json::from_slice(&run(&["check-updates"])).unwrap();
+    assert_eq!(updates[0]["state"], "revision_changed");
+    assert_eq!(updates[0]["pinned_commit"], commit);
+    assert_eq!(
+        std::fs::read(project.join(".hotsheet2/guidance-sources.json")).unwrap(),
+        pin_before,
+        "checking must not modify the pinned source"
+    );
 }
 
 // A freshly built macOS CLI is a different unsigned Keychain client from this test

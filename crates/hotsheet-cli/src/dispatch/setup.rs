@@ -52,6 +52,10 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
                 }))?
             );
         }
+        GuidanceCmd::CheckUpdates => {
+            let updates = hotsheet_plugins::guidance_updates::check_project(project)?;
+            println!("{}", serde_json::to_string_pretty(&updates)?);
+        }
         GuidanceCmd::Register {
             id,
             repository,

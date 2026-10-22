@@ -764,6 +764,8 @@ enum GuidanceCmd {
         #[arg(long)]
         tag: Option<String>,
     },
+    /// Check registered source refs without changing their pinned commits.
+    CheckUpdates,
     /// Resolve a source tag or commit and cache its verified manifest for offline refresh.
     Register {
         #[arg(long, default_value = "ai-playbook")]
