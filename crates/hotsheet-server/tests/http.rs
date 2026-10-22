@@ -17245,6 +17245,7 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
 async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store() {
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
+    let legacy_project = store_path.display().to_string();
     let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
     let first_root = root.path().join("first");
     let second_root = root.path().join("second");
@@ -17256,7 +17257,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
         .register(&first_root, None, None, vec![store_path.clone()])
         .unwrap();
     let second = registry
-        .register(&second_root, None, None, vec![store_path])
+        .register(&second_root, None, None, vec![store_path.clone()])
         .unwrap();
     let first_id = first.permission_identity();
     let second_id = second.permission_identity();
@@ -17352,6 +17353,21 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             tool: "Bash".into(),
             action: "cargo test".into(),
             exact_action: Some("cargo test".into()),
+            pattern: None,
+            description: None,
+            decision: hotsheet_aitools::PermissionDecision::Allow,
+            persist: true,
+            connection: None,
+        },
+    )
+    .unwrap();
+    hotsheet_aitools::append_permission_rule(
+        &rules_path,
+        &hotsheet_aitools::PermissionRule {
+            project: legacy_project.clone(),
+            tool: "Bash".into(),
+            action: "pwd".into(),
+            exact_action: Some("pwd".into()),
             pattern: None,
             description: None,
             decision: hotsheet_aitools::PermissionDecision::Allow,
@@ -17498,6 +17514,157 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             "recovered-chat",
             "Bash",
             "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    // A damaged legacy vault must not hide either healthy checkout in Settings.
+    let healthy_legacy = std::fs::read(&rules_path).unwrap();
+    std::fs::write(&rules_path, b"corrupt legacy envelope").unwrap();
+    let cold_state = AppState::new(FsStore::open(&store_path).unwrap(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path)
+        .with_permission_rules(&rules_path);
+    let cold_bridge = cold_state.permission_bridge();
+    let cold_list = body_json(
+        app(cold_state)
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        cold_list
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == first_id)
+    );
+    assert_eq!(
+        cold_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "cold-legacy-damaged",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    let listed = body_json(
+        restarted_app
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == first_id)
+    );
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["project"] == second_id)
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &first_id,
+            "legacy-damaged",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    let legacy_bridge = restarted_bridge.clone();
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &legacy_project,
+            "damaged-legacy",
+            "Bash",
+            "pwd",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    let pending_legacy_project = legacy_project.clone();
+    let waiter = std::thread::spawn(move || {
+        legacy_bridge.request_blocking_for_project(
+            pending_legacy_project,
+            "legacy-chat",
+            "Bash",
+            "pwd",
+        )
+    });
+    let id = loop {
+        let pending = body_json(
+            restarted_app
+                .clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(request) = pending.as_array().unwrap().first() {
+            assert_eq!(request["always_allow_supported"], false);
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    assert_eq!(
+        restarted_app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/permissions/{id}"),
+                Some(r#"{"decision":"deny","scope":"once"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    std::fs::write(&rules_path, healthy_legacy).unwrap();
+    assert_eq!(
+        restarted_app
+            .clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &second_id,
+            "legacy-recovered",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny
+        ),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert_eq!(
+        restarted_bridge.request_blocking_timeout_for_project(
+            &legacy_project,
+            "legacy-recovered",
+            "Bash",
+            "pwd",
             std::time::Duration::from_millis(1),
             hotsheet_aitools::PermissionDecision::Deny
         ),

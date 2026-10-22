@@ -40,8 +40,7 @@ impl AppState {
             return false;
         };
         if hotsheet_aitools::ensure_permission_rules_file(&legacy).is_err() {
-            self.permissions.drop_durable_rules();
-            return false;
+            self.permissions.drop_legacy_durable_rules();
         }
         let path = legacy.with_file_name(format!("checkout-{id}.json"));
         if self

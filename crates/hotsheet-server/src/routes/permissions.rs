@@ -210,9 +210,17 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
                     agent: request.agent,
                     always_allow_supported: rule_projects.get(&request.project).is_some_and(
                         |path| {
-                            !request.project.starts_with("checkout:")
-                                || (path.is_file()
-                                    && hotsheet_aitools::permission_rules_health(path).is_ok())
+                            if path.is_file() {
+                                hotsheet_aitools::permission_rules_health(path).is_ok()
+                            } else {
+                                !path.exists()
+                                    && !request.project.starts_with("checkout:")
+                                    && !state.permissions.durable_rules_locked()
+                                    && !state.permissions.rules().iter().any(|rule| {
+                                        rule.scope == hotsheet_aitools::PermissionScope::Always
+                                            && rule.project == request.project
+                                    })
+                            }
                         },
                     ),
                     suggestions,

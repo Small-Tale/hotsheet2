@@ -517,13 +517,13 @@ impl PermissionBridge {
             .unwrap_or(&self.action_key)
     }
 
-    /// Replace only durable rules after a vault recovers. Session and chat answers
-    /// remain in effect, and their opaque action ids are derived from the restored key.
+    /// Replace legacy durable rules after its vault recovers. Checkout grants use
+    /// independent keys and survive alongside session and chat answers.
     pub fn restore_durable_rules(&mut self, key: ActionKey, mut rules: Vec<Rule>) {
         let live_rules = self
             .rules
             .drain(..)
-            .filter(|rule| !rule.persist)
+            .filter(|rule| !rule.persist || rule.project.starts_with("checkout:"))
             .map(|mut rule| {
                 if let Some(exact_action) = &rule.exact_action {
                     rule.action = exact_action.clone();
@@ -935,6 +935,15 @@ impl SharedPermissionBridge {
             .lock_or_recover()
             .rules
             .retain(|rule| !rule.persist || rule.project != project);
+    }
+
+    /// Lock the legacy vault without withdrawing independently encrypted checkout rules.
+    pub fn drop_legacy_durable_rules(&self) {
+        self.durable_locked.store(true, Ordering::Release);
+        self.inner
+            .lock_or_recover()
+            .rules
+            .retain(|rule| !rule.persist || rule.project.starts_with("checkout:"));
     }
 
     pub fn drop_durable_rules(&self) {
@@ -2129,6 +2138,33 @@ mod tests {
             bridge.request_blocking_timeout_for_project(
                 "checkout:two",
                 "fresh",
+                "Bash",
+                "two-only",
+                Duration::from_millis(1),
+                Decision::Deny,
+            ),
+            Decision::Allow,
+        );
+        bridge.drop_legacy_durable_rules();
+        assert!(bridge.durable_rules_locked());
+        assert_eq!(
+            bridge.request_blocking_timeout_for_project(
+                "checkout:two",
+                "legacy-locked",
+                "Bash",
+                "two-only",
+                Duration::from_millis(1),
+                Decision::Deny,
+            ),
+            Decision::Allow,
+        );
+        let (key, legacy) = load_rules_with_key(&legacy_path).unwrap();
+        bridge.restore_durable_rules_with_key(key, legacy);
+        assert!(!bridge.durable_rules_locked());
+        assert_eq!(
+            bridge.request_blocking_timeout_for_project(
+                "checkout:two",
+                "legacy-recovered",
                 "Bash",
                 "two-only",
                 Duration::from_millis(1),

@@ -1144,6 +1144,12 @@ withdrawn and its pending requests cannot offer Always Allow. Other checkout
 vaults and their grants remain available. Restoring the original authenticated
 file reloads that checkout's answers; a missing known file is never recreated
 silently during the same server run (`HS2-KJA1V4`).
+Legacy vault damage also stays within its namespace: the server withdraws its
+durable answers and disables Always Allow for legacy requests, while healthy
+checkout vaults still register, match, and appear in `GET /permissions/rules`.
+When no healthy checkout vault is available, the list retains its 503 unavailable
+response. Restoring the legacy vault does not replace checkout grants
+(`HS2-G1K4SA`).
 
 The server must register one machine-local encrypted durable-rule location per checkout
 identity before offering Always Allow. It must report unavailable durable storage as an
