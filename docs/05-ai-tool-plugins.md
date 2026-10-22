@@ -1041,8 +1041,8 @@ and source identity remain separate even when a project has only one source.
 `HS2-G1SG1P` implements the checkout identity used by the current launch paths:
 `checkout:<checkout-id>` selects its own machine-local encrypted vault. Terminal,
 CLI, and client-driven launches carry `HOTSHEET_PERMISSION_PROJECT` to permission
-hooks and the native driven bridge; `HOTSHEET_PROJECT` remains a filesystem path for
-usage attribution. A launch without a registered checkout uses an `unregistered:`
+hooks and the native driven bridge; `HOTSHEET_PROJECT` remains the selected ticket
+store path for existing Codex Work usage attribution. A launch without a registered checkout uses an `unregistered:`
 identity with no durable-rule location. Existing store-keyed grants remain in their
 original namespace. Legacy hook installations that have not received the new launch
 environment also retain their old namespace; `HS2-ZQ6TV2` handles explicit migration.

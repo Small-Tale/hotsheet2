@@ -3408,7 +3408,7 @@ fn launch_discovers_the_linked_store_and_injects_the_running_server() {
     let agent = root.path().join("fake-agent");
     std::fs::write(
         &agent,
-        "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\" \"$HOTSHEET_PERMISSION_PROJECT\"\n",
+        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\" \"$HOTSHEET_PROJECT\" \"$HOTSHEET_PERMISSION_PROJECT\"\n",
     )
     .unwrap();
     std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -3475,7 +3475,10 @@ command = "hotsheet-cli permission-hook"
         .permission_identity();
     assert_eq!(
         String::from_utf8(output).unwrap(),
-        format!("http://127.0.0.1:4567|route-back|hello|{identity}\n")
+        format!(
+            "http://127.0.0.1:4567|route-back|hello|{}|{identity}\n",
+            store.canonicalize().unwrap().display()
+        )
     );
     assert!(project.join(".fake/settings.json").is_file());
     assert!(
@@ -3518,7 +3521,10 @@ command = "hotsheet-cli permission-hook"
         .permission_identity();
     assert_eq!(
         String::from_utf8(output).unwrap(),
-        format!("http://127.0.0.1:4567|route-back|adjacent|{adjacent_identity}\n")
+        format!(
+            "http://127.0.0.1:4567|route-back|adjacent|{}|{adjacent_identity}\n",
+            adjacent_store.canonicalize().unwrap().display()
+        )
     );
     assert_eq!(
         registry
@@ -3574,7 +3580,10 @@ command = "hotsheet-cli permission-hook"
         .permission_identity();
     assert_eq!(
         String::from_utf8(output).unwrap(),
-        format!("http://127.0.0.1:4567|route-back|registered|{registered_identity}\n")
+        format!(
+            "http://127.0.0.1:4567|route-back|registered|{}|{registered_identity}\n",
+            registered_store.canonicalize().unwrap().display()
+        )
     );
 
     let created_project = root.path().join("created");
@@ -3617,7 +3626,10 @@ command = "hotsheet-cli permission-hook"
         .permission_identity();
     assert_eq!(
         String::from_utf8(output).unwrap(),
-        format!("http://127.0.0.1:4567|route-back|created|{created_identity}\n")
+        format!(
+            "http://127.0.0.1:4567|route-back|created|{}|{created_identity}\n",
+            created_store.canonicalize().unwrap().display()
+        )
     );
     assert!(created_store.join("hotsheet-store.json").is_file());
 }

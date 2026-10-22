@@ -429,6 +429,9 @@ pub(crate) fn cmd_launch(
     let permission_project = registry
         .resolve(project.to_string_lossy().as_ref())?
         .permission_identity();
+    let usage_project = FsStore::open(&selected)
+        .map(|store| store.root().display().to_string())
+        .unwrap_or_else(|_| selected.display().to_string());
     // The session's worker id: the instructions tell the AI to claim with it, and its claims
     // are released when the tool exits (HS2-1VAW1C).
     let worker = hotsheet_cli::launch_worker_id(tool, &Ulid::new());
@@ -438,7 +441,7 @@ pub(crate) fn cmd_launch(
         .current_dir(&launch_dir)
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
-        .env("HOTSHEET_PROJECT", project.display().to_string())
+        .env("HOTSHEET_PROJECT", usage_project)
         .env("HOTSHEET_PERMISSION_PROJECT", permission_project)
         .env("HOTSHEET_WORKER_ID", &worker)
         // The launched tool is an AI session: its mutations act as `ai` (HS2-RD4M29).
