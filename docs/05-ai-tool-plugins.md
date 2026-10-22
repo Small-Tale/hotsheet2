@@ -74,24 +74,36 @@ MCP handshake or Codex hook trust; after changed hooks, use the tool's trust rev
 and restart its session. A malformed registry is reported without invoking its
 repairing read path.
 
+**Declared push policy (HS2-H0X9NC).** Shared project setting
+`.hotsheet2/settings.json` uses `push_policy: "push-per-ticket"` or
+`"push-per-batch"`. Setup writes the per-ticket default when the declaration is
+missing; `setup --diagnose` stays read-only, reports the omission, and shows the
+exact refresh that will add it. The worklist skill and shared workflow render
+the same project policy and standing authorization. Per-ticket setup pushes each
+verified commit before the next ticket. Per-batch setup keeps verified commits
+until the queue drain or an earlier CI need, then pushes before the session ends.
+Projects choosing per-batch record their measured gate or CI cost beside the
+declaration as `push_policy_reason`. Changing the setting rewrites only Hot
+Sheet's managed policy span, preserving surrounding project instructions.
+
 Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
 `.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized
 with their canonical shared workflows; refresh replaces a stale Hot Sheet adapter while
 preserving unrelated user-authored skills and instruction content. The worklist skill and the
-instruction block share one commit/push policy (HS2-N3FEJS): every ticket gets at least one
-commit, ideally unique to it, whose message names its slug, while pushing follows each
-repository's own push/PR/review conventions. Neither artifact requires or forbids pushing
-on its own, so a repository that batches pushes is never told to push after every ticket. Instruction blocks and
+instruction block share one declared commit/push policy: every ticket gets at least one
+commit, ideally unique to it, whose message names its slug; the push cadence follows
+the project's shared `push_policy` setting. Instruction blocks and
 skills carry numeric workflow-version markers. Before refreshing either artifact, setup
 re-reads both installed targets and compares each marker with its bundled counterpart. If
 either installed half is newer, setup preserves both as one workflow bundle while
 continuing merge-safe MCP and hook maintenance. An equal-version installed half is also
-preserved when its bytes differ from the bundled representation: equal versions identify
+preserved when its bytes differ outside the managed push-policy span: equal versions identify
 one semantic generation, but do not prove that a project-specific adapter or formatting
-variant is owned by the current writer. Semantic bundled changes therefore require a
+variant is owned by the current writer. Policy changes update that marked span only.
+Semantic bundled changes therefore require a
 version bump. This prevents a stale or same-generation long-running server or CLI from
 producing a mixed, downgraded, or de-customized workflow. Unversioned and older managed
-artifacts still upgrade normally. Bundled skill versions are checked against
+artifacts still upgrade normally when uncustomized. Bundled skill versions are checked against
 the current shared adapters, and Windows detection honors command wrappers from `PATHEXT`,
 so freshness does not silently skip npm-installed tools or replace a newer workflow with an
 older bundle.

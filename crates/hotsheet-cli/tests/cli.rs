@@ -8,6 +8,24 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+fn rendered_instruction(raw: &str) -> String {
+    raw.replace(
+        "<!-- hotsheet-instructions-version: 64 -->",
+        "<!-- hotsheet-instructions-version: 65 -->",
+    )
+    .replace(
+        "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.",
+        "<!-- hotsheet:push-policy:begin -->\nPush policy: `push-per-ticket`. The maintainer authorizes routine fast-forward\npushes of verified ticket commits to the shipping branch. Push each ticket\ncommit immediately, confirm it succeeded, then begin the next ticket.\n<!-- hotsheet:push-policy:end -->",
+    )
+}
+
+fn rendered_skill(raw: &str) -> String {
+    raw.replace(
+        "{{HOTSHEET_PUSH_POLICY}}",
+        "Push policy: `push-per-ticket`. The maintainer authorizes routine fast-forward\n   pushes of verified ticket commits to the shipping branch. Push each ticket\n   commit immediately, confirm it succeeded, then begin the next ticket.",
+    )
+}
+
 #[test]
 fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     let root = tempfile::tempdir().unwrap();
@@ -383,7 +401,7 @@ fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
     run(&["setup", "claude"]);
     let canonical = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
     let native = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
-    assert!(canonical.contains(body));
+    assert!(canonical.contains(&rendered_instruction(body)));
     assert_eq!(
         canonical.matches("section=testing-philosophy v=").count(),
         1
@@ -481,6 +499,14 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
     assert_eq!(diagnosis["tools"].as_array().unwrap().len(), 1);
     assert_eq!(diagnosis["tools"][0]["tool"], "codex");
     assert_eq!(diagnosis["registry"]["status"], "missing");
+    assert_eq!(diagnosis["push_policy"]["status"], "missing");
+    assert_eq!(diagnosis["push_policy"]["effective"], "push-per-ticket");
+    assert!(
+        diagnosis["push_policy"]["fix"]
+            .as_str()
+            .unwrap()
+            .contains("setup --refresh")
+    );
     assert_eq!(diagnosis["tools"][0]["verdict"], "setup_incomplete");
     assert_eq!(
         files(root.path()),
@@ -528,6 +554,8 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
     )
     .unwrap();
     assert!(current["would_change"].as_array().unwrap().is_empty());
+    assert_eq!(current["push_policy"]["status"], "declared");
+    assert_eq!(current["push_policy"]["value"], "push-per-ticket");
     assert_eq!(files(root.path()), after_refresh);
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1996,11 +2024,13 @@ fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     assert_eq!(timeout(&migrated, "SessionStart"), Some(30));
     assert_eq!(timeout(&migrated, "SessionEnd"), Some(3));
     assert!(!String::from_utf8(setup(false)).unwrap().contains("Notice:"));
-    std::fs::write(
-        store.join("hotsheet-settings.json"),
-        r#"{"enabled_plugins":["codex"]}"#,
-    )
-    .unwrap();
+    hotsheet_ticketing::Settings::for_project(&project)
+        .set(
+            "enabled_plugins",
+            serde_json::json!(["codex"]),
+            hotsheet_ticketing::Scope::Shared,
+        )
+        .unwrap();
     let refresh = || {
         let output = hs(&store)
             .env("HOTSHEET_HOME", &home)
@@ -2018,8 +2048,8 @@ fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     std::fs::write(&path, serde_json::to_vec(&old_lifecycle).unwrap()).unwrap();
     let changed = refresh();
     assert_eq!(
-        changed["set_up"][0]["notices"][0]["kind"],
-        "codex_hooks_changed"
+        changed["set_up"][0]["notices"][0]["kind"], "codex_hooks_changed",
+        "{changed}"
     );
     let refreshed: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
@@ -2088,7 +2118,10 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     assert!(String::from_utf8_lossy(&instructions).contains(
         "**Integrate worktree and background-agent work before you complete its ticket.**"
     ));
-    assert_eq!(skill, include_bytes!("../../../plugins/codex/SKILL.md"));
+    assert_eq!(
+        skill,
+        rendered_skill(include_str!("../../../plugins/codex/SKILL.md")).as_bytes()
+    );
     assert_eq!(
         std::fs::read_to_string(&custom_skill).unwrap(),
         "user-authored custom skill\n"
@@ -2202,7 +2235,8 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
             .assert()
             .success();
     };
-    let body = include_str!("../../../plugins/codex/instructions.md").trim_end();
+    let body =
+        rendered_instruction(include_str!("../../../plugins/codex/instructions.md").trim_end());
     let expected = |tools: &str| {
         format!(
             "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n\n{}\n",
@@ -2578,11 +2612,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 64 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 66 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 65 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 66 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -2622,11 +2656,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 63 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 65 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 64 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 65 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)

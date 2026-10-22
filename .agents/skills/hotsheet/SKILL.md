@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 64 -->
+<!-- hotsheet-skill-version: 65 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -66,10 +66,13 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    so strongly that separation would be unsafe or misleading, or when they are
    duplicates; a combined commit message must reference every ticket slug it addresses.
    Integrate parallel tickets separately, and commit the finished ticket before
-   beginning, resuming, or integrating another. Pushing is up to this repository: follow
-   its own push, PR, and review conventions (for example per ticket, in coherent
-   batches, or through review) as its instructions state. This skill neither requires
-   nor forbids pushing on its own.
+   beginning, resuming, or integrating another.
+
+   <!-- hotsheet:push-policy:begin -->
+   Push policy: `push-per-ticket`. The maintainer authorizes routine fast-forward
+   pushes of verified ticket commits to the shipping branch. Push each ticket
+   commit immediately, confirm it succeeded, then begin the next ticket.
+   <!-- hotsheet:push-policy:end -->
    A final remote CI run may continue after a locally green, integrated commit has been
    pushed. Set the Started phase to `final_testing`, note the commit and CI run, release
    the claim, and take another ready ticket. Claim-next skips such waiting tickets; reclaim

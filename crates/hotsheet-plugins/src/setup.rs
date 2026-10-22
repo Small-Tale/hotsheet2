@@ -6,13 +6,110 @@
 //! no drift (`docs/04` §4.5).
 //!
 //! The `enabled` set (which plugins a project has opted into — `docs/05` settings) is passed
-//! **in** by the caller, so this crate needs no ticketing/settings dependency and stays the
-//! lean, mostly-declarative plugin core.
+//! **in** by the caller. This crate reads only the shared `push_policy` setting itself so the
+//! CLI and server render the same policy-specific managed workflow.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::{Plugin, all_plugins, default_dirs};
+
+pub const PUSH_POLICY_SETTING: &str = "push_policy";
+const SHARED_SETTINGS_PATH: &str = ".hotsheet2/settings.json";
+const POLICY_BEGIN: &str = "<!-- hotsheet:push-policy:begin -->";
+const POLICY_END: &str = "<!-- hotsheet:push-policy:end -->";
+const LEGACY_POLICY: &str = "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PushPolicy {
+    PerTicket,
+    PerBatch,
+}
+
+impl PushPolicy {
+    fn parse(value: &serde_json::Value) -> Option<Self> {
+        match value.as_str()? {
+            "push-per-ticket" => Some(Self::PerTicket),
+            "push-per-batch" => Some(Self::PerBatch),
+            _ => None,
+        }
+    }
+
+    fn value(self) -> &'static str {
+        match self {
+            Self::PerTicket => "push-per-ticket",
+            Self::PerBatch => "push-per-batch",
+        }
+    }
+
+    fn wording(self) -> &'static str {
+        match self {
+            Self::PerTicket => {
+                "Push policy: `push-per-ticket`. The maintainer authorizes routine fast-forward\npushes of verified ticket commits to the shipping branch. Push each ticket\ncommit immediately, confirm it succeeded, then begin the next ticket."
+            }
+            Self::PerBatch => {
+                "Push policy: `push-per-batch`. The maintainer authorizes routine fast-forward\npushes of verified ticket commits to the shipping branch. Hold verified commits\nlocally until the queue drain or an earlier CI need, then push and confirm before\nending the session. Record the measured reason beside the project declaration."
+            }
+        }
+    }
+
+    fn skill_wording(self) -> String {
+        self.wording().replace('\n', "\n   ")
+    }
+}
+
+fn shared_settings(
+    fs: &PlanFs,
+    project: &Path,
+) -> Result<serde_json::Map<String, serde_json::Value>, SetupError> {
+    let path = project.join(SHARED_SETTINGS_PATH);
+    let contents = match fs.read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(serde_json::Map::from_iter([(
+                "$hotsheetSchema".into(),
+                serde_json::json!(1),
+            )]));
+        }
+        Err(source) => {
+            return Err(SetupError::Io {
+                path: path.display().to_string(),
+                source,
+            });
+        }
+    };
+    serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&contents)
+        .map_err(|_| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()))
+}
+
+/// Missing declarations are written by setup and reported by read-only diagnosis.
+fn ensure_push_policy(fs: &mut PlanFs, project: &Path) -> Result<PushPolicy, SetupError> {
+    let mut settings = shared_settings(fs, project)?;
+    if let Some(value) = settings.get(PUSH_POLICY_SETTING) {
+        return PushPolicy::parse(value)
+            .ok_or_else(|| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()));
+    }
+    let policy = PushPolicy::PerTicket;
+    settings.insert(
+        PUSH_POLICY_SETTING.into(),
+        serde_json::json!(policy.value()),
+    );
+    let rendered =
+        serde_json::to_string_pretty(&settings).expect("settings object serializes") + "\n";
+    fs.write(&project.join(SHARED_SETTINGS_PATH), rendered.as_bytes());
+    Ok(policy)
+}
+
+fn read_push_policy(fs: &PlanFs, project: &Path) -> Result<PushPolicy, SetupError> {
+    let settings = shared_settings(fs, project)?;
+    settings
+        .get(PUSH_POLICY_SETTING)
+        .map(|value| {
+            PushPolicy::parse(value)
+                .ok_or_else(|| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()))
+        })
+        .unwrap_or(Ok(PushPolicy::PerTicket))
+}
 
 /// What one tool's setup wrote (project-relative paths), for reporting.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -290,6 +387,8 @@ pub enum SetupError {
         "invalid guidance ownership in {0}: expected schema_version 1 and owner builtin or rulesync"
     )]
     InvalidGuidanceOwner(String),
+    #[error("invalid push_policy in {0}: expected push-per-ticket or push-per-batch")]
+    InvalidPushPolicy(String),
     #[error("unknown MCP config format '{format}' for plugin '{id}'")]
     UnknownMcpFormat { id: String, format: String },
     #[error("unknown hook config format '{format}' for plugin '{id}'")]
@@ -514,8 +613,12 @@ pub fn plan_refresh_setup_in(
     plugin_dirs: &[PathBuf],
 ) -> Result<SetupPlan, SetupError> {
     let mut fs = PlanFs::default();
+    let policy = read_push_policy(&fs, project_dir)?;
     let external_guidance = rulesync_owns_guidance(&fs, project_dir)?;
-    let all = all_plugins(plugin_dirs);
+    let all = all_plugins(plugin_dirs)
+        .into_iter()
+        .map(|plugin| plugin.with_push_policy(&policy.skill_wording(), policy.wording()))
+        .collect::<Vec<_>>();
     let mut reconcile_targets: Vec<String> = Vec::new();
     for plugin in &all {
         for target in std::iter::once(&plugin.manifest.instructions.target).chain(
@@ -603,7 +706,7 @@ pub fn plan_refresh_setup_in(
     }
     let report = RefreshReport { set_up, removed };
     let changes = fs.changes(project_dir);
-    let tools = collect_findings(store_path, project_dir, enabled, plugin_dirs, &fs);
+    let tools = collect_findings(store_path, project_dir, enabled, plugin_dirs, &fs, policy);
     let operations = fs.final_operations(project_dir);
     Ok(SetupPlan {
         report,
@@ -658,10 +761,12 @@ fn collect_findings(
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[PathBuf],
     fs: &PlanFs,
+    policy: PushPolicy,
 ) -> Vec<ToolSetupFindings> {
     let original = PlanFs::default();
     let external_guidance = rulesync_owns_guidance(&original, project).is_ok_and(|owner| owner);
     all_plugins(plugin_dirs).into_iter().map(|plugin| {
+        let plugin = plugin.with_push_policy(&policy.skill_wording(), policy.wording());
         let enabled_tool = enabled.is_none_or(|set| set.contains(plugin.id()));
         let previously_managed = has_managed_setup(&original, project, &plugin);
         let detected = is_detected(&plugin);
@@ -1358,6 +1463,12 @@ fn setup_plugins_with_fs(
         }
     }
 
+    let policy = ensure_push_policy(fs, project_dir)?;
+    let plugins = plugins
+        .into_iter()
+        .map(|plugin| plugin.with_push_policy(&policy.skill_wording(), policy.wording()))
+        .collect::<Vec<_>>();
+
     let declared_plugins = plugins;
     let external_guidance = rulesync_owns_guidance(fs, project_dir)?;
     let plugins = declared_plugins
@@ -2013,9 +2124,37 @@ fn marked_artifact_requires_preservation(
     version_prefix: &str,
 ) -> bool {
     marked_version(installed, version_prefix).is_some_and(|installed_version| {
-        installed_version > bundled_version
-            || (installed_version == bundled_version && installed != bundled)
+        (version_prefix == INSTRUCTIONS_VERSION_PREFIX
+            && bundled_version == 65
+            && installed_version.checked_add(1) == Some(bundled_version)
+            && !push_policy_only_diff(installed, bundled))
+            || installed_version > bundled_version
+            || (installed_version == bundled_version
+                && installed != bundled
+                && !push_policy_only_diff(installed, bundled))
     })
+}
+
+/// A changed declared policy owns only this generated span. An edit anywhere else
+/// at the same artifact version is still a customization and must be preserved.
+fn push_policy_only_diff(installed: &str, bundled: &str) -> bool {
+    fn without_policy(contents: &str) -> Option<String> {
+        let mut normalized = contents.to_string();
+        if let Some(begin) = normalized.find(POLICY_BEGIN) {
+            let end = normalized[begin..].find(POLICY_END)? + begin + POLICY_END.len();
+            normalized.replace_range(begin..end, "{{HOTSHEET_PUSH_POLICY}}");
+        } else {
+            normalized = normalized.replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
+        }
+        normalized = normalized.replace(
+            "<!-- hotsheet-instructions-version: 64 -->",
+            "<!-- hotsheet-instructions-version: 65 -->",
+        );
+        Some(normalized)
+    }
+    without_policy(installed)
+        .zip(without_policy(bundled))
+        .is_some_and(|(a, b)| a == b)
 }
 
 /// The `hotsheet-mcp` command string to record in a tool's MCP config. An absolute, existing
@@ -2829,6 +2968,130 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn push_policy_setup_defaults_and_diagnosis_plan_stays_read_only() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let settings = project.path().join(SHARED_SETTINGS_PATH);
+        let plan = plan_refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        assert!(!settings.exists());
+        assert!(
+            plan.changes
+                .iter()
+                .any(|change| change.path == SHARED_SETTINGS_PATH)
+        );
+
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("codex"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(settings).unwrap()).unwrap();
+        assert_eq!(saved[PUSH_POLICY_SETTING], "push-per-ticket");
+        let skill =
+            std::fs::read_to_string(project.path().join(".agents/skills/hotsheet/SKILL.md"))
+                .unwrap();
+        assert!(skill.contains("Push policy: `push-per-ticket`"));
+        assert!(!skill.contains("{{HOTSHEET_PUSH_POLICY}}"));
+        let instructions = std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
+        assert!(instructions.contains("Push policy: `push-per-ticket`"));
+    }
+
+    #[test]
+    fn push_policy_changes_update_only_the_managed_policy_span() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let path = project.path().join(SHARED_SETTINGS_PATH);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{\"$hotsheetSchema\":1,\"push_policy\":\"push-per-batch\",\"push_policy_reason\":\"Measured seven-minute pre-push gate\"}\n").unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("codex"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let skill_path = project.path().join(".agents/skills/hotsheet/SKILL.md");
+        let agents_path = project.path().join("AGENTS.md");
+        assert!(
+            std::fs::read_to_string(&skill_path)
+                .unwrap()
+                .contains("Push policy: `push-per-batch`")
+        );
+        let agents = std::fs::read_to_string(&agents_path).unwrap();
+        std::fs::write(&agents_path, format!("{agents}\nProject-specific note.\n")).unwrap();
+
+        std::fs::write(
+            &path,
+            "{\"$hotsheetSchema\":1,\"push_policy\":\"push-per-ticket\"}\n",
+        )
+        .unwrap();
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("codex"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let skill = std::fs::read_to_string(skill_path).unwrap();
+        let agents = std::fs::read_to_string(agents_path).unwrap();
+        assert!(skill.contains("Push policy: `push-per-ticket`"));
+        assert!(!skill.contains("Push policy: `push-per-batch`"));
+        assert!(agents.contains("Push policy: `push-per-ticket`"));
+        assert!(agents.contains("Project-specific note."));
+    }
+
+    #[test]
+    fn push_policy_transition_updates_a_shared_instruction_section_and_both_skills() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let settings = project.path().join(SHARED_SETTINGS_PATH);
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(&settings, "{\"push_policy\":\"push-per-batch\"}\n").unwrap();
+        for tool in ["claude", "codex"] {
+            run_setup_in(store.path(), project.path(), Some(tool), false, None, &[]).unwrap();
+        }
+        refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        let agents = std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
+        assert!(agents.contains("hotsheet-shared-section"));
+        assert!(agents.contains("Push policy: `push-per-batch`"));
+
+        std::fs::write(&settings, "{\"push_policy\":\"push-per-ticket\"}\n").unwrap();
+        refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        let agents = std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
+        assert_eq!(agents.matches("Push policy: `push-per-ticket`").count(), 1);
+        assert!(!agents.contains("Push policy: `push-per-batch`"));
+        for path in [
+            ".claude/skills/hotsheet/SKILL.md",
+            ".agents/skills/hotsheet/SKILL.md",
+        ] {
+            let skill = std::fs::read_to_string(project.path().join(path)).unwrap();
+            assert!(skill.contains("Push policy: `push-per-ticket`"));
+        }
+    }
+
+    #[test]
+    fn invalid_push_policy_fails_setup_explicitly() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let path = project.path().join(SHARED_SETTINGS_PATH);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "{\"push_policy\":\"auto\"}\n").unwrap();
+        assert!(matches!(
+            plan_refresh_setup_in(store.path(), project.path(), None, &[]),
+            Err(SetupError::InvalidPushPolicy(_))
+        ));
+    }
 
     #[test]
     fn bundled_guidance_notice_only_reports_preserved_older_custom_sections() {
@@ -5583,11 +5846,17 @@ args = []
         let canonical_claude = include_str!("../../../.claude/skills/hotsheet/SKILL.md");
         let canonical_codex = include_str!("../../../.agents/skills/hotsheet/SKILL.md");
 
-        assert_eq!(bundled_claude, canonical_claude);
-        assert_eq!(bundled_codex, canonical_codex);
+        let rendered = |template: &str| {
+            template.replace(
+                "{{HOTSHEET_PUSH_POLICY}}",
+                &PushPolicy::PerTicket.skill_wording(),
+            )
+        };
+        assert_eq!(rendered(bundled_claude), canonical_claude);
+        assert_eq!(rendered(bundled_codex), canonical_codex);
         assert_eq!(
             without_claude_tool_metadata(bundled_claude),
-            without_claude_tool_metadata(canonical_codex)
+            without_claude_tool_metadata(bundled_codex)
         );
         assert_eq!(version(bundled_claude), version(bundled_codex));
     }

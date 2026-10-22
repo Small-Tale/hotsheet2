@@ -515,6 +515,45 @@ impl Plugin {
         Some((&skills.target, self.file(&skills.source).unwrap_or("")))
     }
 
+    /// Instantiate project-owned policy wording in bundled workflow templates.
+    /// Third-party plugin files are passed through unchanged.
+    pub(crate) fn with_push_policy(
+        mut self,
+        skill_wording: &str,
+        instruction_wording: &str,
+    ) -> Self {
+        if self.is_builtin() {
+            if let Some(contents) = self.files.get_mut("SKILL.md") {
+                *contents = contents.replace("{{HOTSHEET_PUSH_POLICY}}", skill_wording);
+            }
+            if let Some(contents) = self.files.get_mut("instructions.md") {
+                if contents.contains("<!-- hotsheet:push-policy:begin -->") {
+                    return self;
+                }
+                // The pinned ai-playbook source stays byte-for-byte intact. Only the
+                // per-project rendered copy receives this managed policy span.
+                const OLD: &str = "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.";
+                let first = contents.lines().next().expect("bundled workflow version");
+                let version: u64 = first
+                    .strip_prefix("<!-- hotsheet-instructions-version: ")
+                    .and_then(|value| value.strip_suffix(" -->"))
+                    .and_then(|value| value.parse().ok())
+                    .expect("bundled workflow version marker");
+                let next = format!("<!-- hotsheet-instructions-version: {} -->", version + 1);
+                assert!(
+                    contents.contains(OLD),
+                    "bundled workflow push policy source changed"
+                );
+                *contents = contents.replacen(first, &next, 1).replacen(
+                    OLD,
+                    &format!("<!-- hotsheet:push-policy:begin -->\n{instruction_wording}\n<!-- hotsheet:push-policy:end -->"),
+                    1,
+                );
+            }
+        }
+        self
+    }
+
     /// Interactive launch arguments with optional selections expanded by the plugin.
     pub fn launch_args(&self, model: Option<&str>, effort: Option<&str>) -> Option<Vec<String>> {
         let launch = self.manifest.launch.as_ref()?;

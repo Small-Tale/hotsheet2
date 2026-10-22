@@ -1,5 +1,6 @@
 {
   "$hotsheetSchema": 1,
+  "push_policy": "push-per-ticket",
   "appName": "Hot Sheet 2",
   "commands": [
     {

@@ -229,6 +229,9 @@ and other non-action structure are the only ordinary exception.
 
 ## Commit / push hygiene
 
+**Push policy: `push-per-ticket`.** Each verified ticket commit is pushed before
+starting the next ticket. This repository uses the per-ticket policy.
+
 **Standing user authorization:** push verified ticket commits to this repository's
 `origin/main` as you go. The maintainer has explicitly authorized these routine
 fast-forward pushes; this authorization persists across sessions. Do not ask again
@@ -308,7 +311,7 @@ predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, claude, codex, opencode -->
-<!-- hotsheet-instructions-version: 64 -->
+<!-- hotsheet-instructions-version: 65 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -512,8 +515,11 @@ compare the commits since the last green run and the failing checks, then repair
 responsible ticket or file an independent bug. Do not add a local last-green marker
 or repeat the full suite for every ticket; keep each ticket's affected local gates.
 
-**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
-already uses; this default guidance does not require or forbid pushing on its own.
+<!-- hotsheet:push-policy:begin -->
+Push policy: `push-per-ticket`. The maintainer authorizes routine fast-forward
+pushes of verified ticket commits to the shipping branch. Push each ticket
+commit immediately, confirm it succeeded, then begin the next ticket.
+<!-- hotsheet:push-policy:end -->
 <!-- END hotsheet:agents-md -->
 
 <!-- hotsheet:begin section=ticket-driven-work v=5 -->

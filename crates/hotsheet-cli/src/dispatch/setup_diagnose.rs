@@ -29,6 +29,19 @@ pub(super) fn run(
         shell_quote(&store.to_string_lossy()),
         shell_quote(&project.to_string_lossy())
     );
+    let push_policy = match Settings::for_project(project).get("push_policy", Scope::Shared)? {
+        Some(value) => json!({
+            "status": "declared",
+            "value": value,
+            "path": ".hotsheet2/settings.json",
+        }),
+        None => json!({
+            "status": "missing",
+            "effective": "push-per-ticket",
+            "path": ".hotsheet2/settings.json",
+            "fix": format!("Run `{refresh_command}` to add the default push-per-ticket declaration, then review it against this project's measured push/CI cost."),
+        }),
+    };
     let mut would_change = serde_json::to_value(&plan.changes)?;
     if registry["status"] != "registered" {
         if let Some(changes) = would_change.as_array_mut() {
@@ -160,6 +173,7 @@ pub(super) fn run(
         "guidance_notices": plan.report.set_up.iter().flat_map(|tool| &tool.notices)
             .filter(|notice| matches!(notice, hotsheet_plugins::setup::SetupNotice::BundledGuidanceBlocked { .. }))
             .collect::<Vec<_>>(),
+        "push_policy": push_policy,
         "would_change": would_change,
     });
     if as_json {
@@ -430,6 +444,15 @@ fn print_human(result: &Value) {
         "Live server: {}",
         result["live"]["server"].as_str().unwrap_or("unknown")
     );
+    println!(
+        "Push policy: {}",
+        result["push_policy"]["value"]
+            .as_str()
+            .unwrap_or("missing (defaults to push-per-ticket)")
+    );
+    if let Some(fix) = result["push_policy"]["fix"].as_str() {
+        println!("  Fix: {fix}");
+    }
     if let Some(notices) = result["guidance_notices"].as_array() {
         for notice in notices {
             println!(

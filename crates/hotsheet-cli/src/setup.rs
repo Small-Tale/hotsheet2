@@ -52,6 +52,8 @@ pub fn run_setup_in(
     detect: bool,
     plugin_dirs: &[PathBuf],
 ) -> Result<Vec<SetupReport>> {
+    hotsheet_ticketing::Settings::with_legacy_stores(project_dir, [store_path])
+        .migrate_existing()?;
     let enabled = enabled_plugin_ids(project_dir);
     Ok(hotsheet_plugins::run_setup_in(
         store_path,
@@ -152,7 +154,7 @@ mod tests {
         assert!(agents_md.contains("Double coverage"));
         assert!(agents_md.contains("update them **in the same change as the code**"));
         assert!(agents_md.contains("commit per ticket"));
-        assert!(agents_md.contains("Pushing is up to this repository"));
+        assert!(agents_md.contains("Push policy: `push-per-ticket`"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
         assert!(skill.contains("name: hotsheet"));
@@ -310,7 +312,7 @@ mod tests {
         // Same expanded default guidance reaches Codex's AGENTS.md block (HS2-3JMMAZ).
         assert!(agents.contains("Create tickets by default for real work"));
         assert!(agents.contains("Double coverage"));
-        assert!(agents.contains("Pushing is up to this repository"));
+        assert!(agents.contains("Push policy: `push-per-ticket`"));
         assert!(!d.path().join(".claude").exists());
         assert!(
             reports[0]
@@ -320,7 +322,8 @@ mod tests {
         );
 
         let skill = read(d.path(), ".agents/skills/hotsheet/SKILL.md");
-        assert_eq!(skill, include_str!("../../../plugins/codex/SKILL.md"));
+        assert!(skill.contains("Push policy: `push-per-ticket`"));
+        assert!(!skill.contains("{{HOTSHEET_PUSH_POLICY}}"));
         assert!(skill.contains("name: hotsheet"));
         assert!(skill.contains("not a stopping condition"));
         assert_eq!(
