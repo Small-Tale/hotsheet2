@@ -158,12 +158,16 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
     page,
   }) => {
     await page.goto('/ux-demo?component=permission-rules-settings');
-    const example = page.locator('[data-demo-permission-rules]');
+    const example = page
+      .getByRole('region', { name: 'Command Titles, Flowing Badges, and a Dedicated Reviewed-Match Dialog' })
+      .locator('[data-demo-permission-rules]');
     await example
       .locator('[data-permission-rule-scope="always"]')
       .first()
-      .getByRole('button', { name: 'Edit Match', exact: true })
+      .locator('[data-action="select-permission-rule-row"]')
       .tap();
+    await example.getByRole('button', { name: 'Selected Answer Actions' }).tap();
+    await page.getByRole('menuitem', { name: 'Edit Match', exact: true }).tap();
     const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
     await editor.getByRole('button', { name: 'Placeholders', exact: true }).tap();
     const pattern = editor.getByLabel('Pattern for Bash');
