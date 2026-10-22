@@ -45,6 +45,7 @@ export interface SettingsSurfaceDependencies {
   terminalLimitDeviceDefaults?: () => NonNullable<Props['terminalMemory']>['deviceDefaults'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
+  permissionRuleEditorFor: (projectId: string, visible: boolean) => Props['permissions']['editor'];
   permissionRulesDialogFor: (projectId: string, visible: boolean) => Props['permissions']['dialog'];
   permissionRulesPreviewFor: (projectId: string, visible: boolean) => Props['permissions']['preview'];
   permissionRulesMessage: Readable<string>;
@@ -96,6 +97,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
+    permissionRuleEditorFor,
     permissionRulesPreviewFor,
     permissionRulesMessage,
     lockedPermissionRules,
@@ -179,6 +181,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           delays: PERMISSION_DELAYS,
           // Loaded only while the Permissions category shows (HS2-JNHAYB).
           rules: settingsCategory() === 'permissions' ? permissionRules(current.id) : [],
+          editor: permissionRuleEditorFor(current.id, settingsCategory() === 'permissions'),
           dialog: permissionRulesDialogFor(current.id, settingsCategory() === 'permissions'),
           preview: permissionRulesPreviewFor(current.id, settingsCategory() === 'permissions'),
           revoking: revokingPermissionRules.value,

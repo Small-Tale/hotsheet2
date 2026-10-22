@@ -15531,6 +15531,16 @@ for (const width of [1280, 390]) {
     });
     await dialog.getByRole('button', { name: 'Collapse action', exact: true }).click();
     await expect(dialogTitle).toHaveAttribute('data-max-lines', '2');
+    if (width === 1280) await page.setViewportSize({ width: 1401, height: 1630 });
+    await dialog.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+    await expect(editor.getByRole('textbox', { name: 'Exact Action', exact: true })).toHaveValue(action);
+    await editor.screenshot({
+      path: `target/visual-captures/hs2-400wzz-reference-${width === 1280 ? 'wide' : 'phone'}.png`,
+      animations: 'disabled',
+    });
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeVisible();
   });
 }
 
@@ -15742,6 +15752,194 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-remembered-phone.png', fullPage: true });
 });
 
+for (const width of [1280, 390]) {
+  test(`edits reviewed matches in a dedicated dialog from both settings surfaces at ${width}px (HS2-400WZZ)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await mockProject(page);
+    const action = 'npm test --token=abc';
+    let rule = {
+      project: '/work/demo.hs2',
+      tool: 'Bash',
+      action: rememberedActionKey(action),
+      exact_action: action,
+      decision: 'allow',
+      scope: 'always',
+      match_type: 'exact',
+      pattern: undefined as Record<string, unknown> | undefined,
+    };
+    const edits: Array<Record<string, unknown>> = [];
+    let releaseSave: (() => void) | undefined;
+    await page.route('**/permissions/rules', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.fulfill({ json: [rule] });
+      const body = route.request().postDataJSON();
+      edits.push(body);
+      if (body.pattern?.expression === '.*')
+        return route.fulfill({ status: 400, json: { error: 'invalid permission rule change' } });
+      if (edits.length === 2)
+        await new Promise<void>((resolve) => {
+          releaseSave = resolve;
+        });
+      rule = {
+        ...rule,
+        action: rememberedActionKey(JSON.stringify(body.pattern)),
+        match_type: body.pattern === 'exact' ? 'exact' : body.pattern.kind,
+        pattern: body.pattern === 'exact' ? undefined : body.pattern,
+      };
+      return route.fulfill({ status: 204, body: '' });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSidebar.isVisible()) await showSidebar.click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (await hideSidebar.isVisible()) await hideSidebar.click();
+    const preview = page.locator('[data-component="permission-rules-settings"]');
+    const edit = preview.getByRole('button', { name: 'Edit Match', exact: true });
+    const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+    await edit.click();
+    await expect(editor.getByRole('textbox', { name: 'Exact Action', exact: true })).toHaveValue(action);
+    await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
+    await editor.getByLabel('Pattern for Bash').fill('npm test --token={{token}}');
+    await editor.screenshot({
+      path: `target/visual-captures/hs2-400wzz-template-${width}.png`,
+      animations: 'disabled',
+    });
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(edit).toBeFocused();
+    expect(edits).toHaveLength(0);
+    await edit.click();
+    await expect(editor.getByRole('button', { name: 'Exact Action', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await editor.getByRole('button', { name: 'Regex', exact: true }).click();
+    const pattern = editor.getByLabel('Pattern for Bash');
+    await pattern.fill('');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toContainText('Enter a reviewed pattern before saving.');
+    expect(edits).toHaveLength(0);
+    await pattern.fill('.*');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toContainText('invalid permission rule change');
+    await expect(pattern).toHaveValue('.*');
+    await expect(pattern).toHaveAttribute('aria-invalid', 'true');
+    await editor.screenshot({
+      path: `target/visual-captures/hs2-400wzz-validation-${width}.png`,
+      animations: 'disabled',
+    });
+    await pattern.fill('^npm test --token=[A-Za-z]{1,64}$');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect.poll(() => Boolean(releaseSave)).toBe(true);
+    await expect(editor.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+    await expect(pattern).toBeDisabled();
+    await editor.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(editor).toBeVisible();
+    expect(edits).toHaveLength(2);
+    releaseSave!();
+    await expect(editor).toHaveCount(0);
+    await expect(preview).toContainText('^npm test --token=[A-Za-z]{1,64}$');
+    await preview.getByRole('button', { name: 'Show all 1 answer', exact: true }).click();
+    const list = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+    await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await expect(editor.getByLabel('Pattern for Bash')).toHaveValue('^npm test --token=[A-Za-z]{1,64}$');
+    await editor.screenshot({
+      path: `target/visual-captures/hs2-400wzz-full-list-${width}.png`,
+      animations: 'disabled',
+    });
+    await editor.getByRole('button', { name: 'Exact Action', exact: true }).click();
+    await expect(editor.getByLabel('Pattern for Bash')).toHaveCount(0);
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(list).toBeVisible();
+    expect(edits[2].pattern).toBe('exact');
+    expect(rule.decision).toBe('allow');
+    expect(rule.scope).toBe('always');
+    await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
+    await editor.getByLabel('Pattern for Bash').fill('npm test --token={{token}}');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    expect(edits[3].pattern).toEqual({ version: 1, kind: 'template', expression: 'npm test --token={{token}}' });
+  });
+}
+
+test('validates and applies the dedicated match editor through a real permission server (HS2-400WZZ)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  const action = "curl -H 'Bearer first' https://site.test";
+  try {
+    const ask = fetch(`${server.url}/permissions/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+      body: JSON.stringify({ project: '/work/demo.hs2', connection: 'real-editor', tool: 'Bash', action }),
+    }).then((response) => response.json());
+    let pendingId = 0;
+    await expect
+      .poll(async () => {
+        pendingId = (await server.request<Array<{ id: number }>>('/permissions'))[0]?.id ?? 0;
+        return pendingId;
+      })
+      .toBeGreaterThan(0);
+    await server.request(`/permissions/${pendingId}`, 'POST', { decision: 'allow', scope: 'chat' });
+    expect(await ask).toEqual({ decision: 'allow' });
+    await mockProject(page);
+    await page.route('**/permissions/rules', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/permissions/rules`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const preview = page.locator('[data-component="permission-rules-settings"]');
+    await preview.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+    await editor.getByRole('button', { name: 'Regex', exact: true }).click();
+    await editor.getByLabel('Pattern for Bash').fill('.*');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toContainText('invalid permission rule change');
+    await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
+    const expression = "curl -H 'Bearer {{quoted}}' https://site.test";
+    await editor.getByLabel('Pattern for Bash').fill(expression);
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    const rules =
+      await server.request<Array<{ pattern?: { kind: string; expression: string }; decision: string; scope: string }>>(
+        '/permissions/rules',
+      );
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({ pattern: { kind: 'template', expression }, decision: 'allow', scope: 'chat' });
+    const repeat = await server.request<{ decision: string }>('/permissions/ask', 'POST', {
+      project: '/work/demo.hs2',
+      connection: 'real-editor',
+      tool: 'Bash',
+      action: "curl -H 'Bearer second word' https://site.test",
+    });
+    expect(repeat).toEqual({ decision: 'allow' });
+    await preview.getByRole('button', { name: 'Edit Match', exact: true }).click();
+    await editor.getByRole('button', { name: 'Exact Action', exact: true }).click();
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    expect((await server.request<Array<{ match_type: string }>>('/permissions/rules'))[0].match_type).toBe('exact');
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
+});
+
 test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCSNZ0)', async ({ page }) => {
   await mockProject(page);
   const action = "curl -H 'Bearer private' https://site.test";
@@ -15812,26 +16010,27 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   await expect(remembered).toContainText("curl -H 'Bearer {{token}}' https://site.test");
-  await remembered.getByText('Edit match').first().click();
-  await remembered.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-settings-wide.png' });
+  await remembered.getByRole('button', { name: 'Edit Match', exact: true }).first().click();
+  const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+  await editor.screenshot({ path: 'target/visual-captures/hs2-400wzz-existing-flow-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await page.waitForTimeout(350);
-  await remembered.getByText('Edit match').first().click();
-  await remembered.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-settings-phone.png' });
-  await remembered.getByLabel('Rule type for Bash').first().selectOption('regex');
-  await remembered.getByLabel('Pattern for Bash').first().fill("^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$");
-  await remembered.getByRole('button', { name: 'Save Reviewed Match' }).first().click();
+  await remembered.getByRole('button', { name: 'Edit Match', exact: true }).first().click();
+  await editor.screenshot({ path: 'target/visual-captures/hs2-400wzz-existing-flow-phone.png' });
+  await editor.getByRole('button', { name: 'Regex', exact: true }).click();
+  await editor.getByLabel('Pattern for Bash').fill("^curl -H 'Bearer [A-Za-z]{1,64}' https://site\\.test$");
+  await editor.getByRole('button', { name: 'Save Reviewed Match' }).click();
   await expect.poll(() => edits.length).toBe(1);
   expect(edits[0].pattern).toEqual({
     version: 1,
     kind: 'regex',
-    expression: "^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$",
+    expression: "^curl -H 'Bearer [A-Za-z]{1,64}' https://site\\.test$",
   });
-  await expect(remembered).toContainText("^curl -H 'Bearer [A-Za-z]{1,64}' https://site.test$");
+  await expect(remembered).toContainText("^curl -H 'Bearer [A-Za-z]{1,64}' https://site\\.test$");
 });
 
 test('offers secret spans without changing the exact default and lets each be removed (HS2-5ZRSJW)', async ({

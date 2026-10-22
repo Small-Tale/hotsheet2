@@ -25,6 +25,7 @@ import {
   type PermissionScope,
   type VisiblePermissionTimer,
 } from '../permission-notifications';
+import { createPermissionRuleEditorFocus } from '../permission-rule-editor-focus';
 import { type TicketLinkMatch, ticketLinkMatchKey, type TicketLinkReference } from '../ticket-link-resolution';
 import { data } from './dom';
 import { type Control, type Project } from './types';
@@ -65,6 +66,11 @@ export interface NotificationAndLinkInteractionsDependencies {
     key: string,
     pattern: PermissionPattern | 'exact',
   ) => Promise<void>;
+  readonly openPermissionRuleEditor: (projectId: string, key: string) => void;
+  readonly closePermissionRuleEditor: (projectId: string) => boolean;
+  readonly changePermissionRuleEditorKind: (projectId: string, kind: 'exact' | 'template' | 'regex') => void;
+  readonly changePermissionRuleEditorExpression: (projectId: string, expression: string) => void;
+  readonly savePermissionRuleEditor: (projectId: string) => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
@@ -120,7 +126,11 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     revokePermissionRule,
     changePermissionRuleDecision,
     changePermissionRuleScope,
-    changePermissionRulePattern,
+    openPermissionRuleEditor,
+    closePermissionRuleEditor,
+    changePermissionRuleEditorKind,
+    changePermissionRuleEditorExpression,
+    savePermissionRuleEditor,
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
@@ -140,6 +150,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
   } = dependencies;
+  const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
+  lifetime.add(permissionRuleEditorFocus.dispose);
   const heldReviewItem = (key: string | undefined) => {
     const item = reviewAfterAuto.value?.item;
     return item?.key === key ? item : undefined;
@@ -293,21 +305,65 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-permission-rule-pattern-save]', (_event, target) => {
-      const key = (target as HTMLElement).dataset.permissionRulePatternSave;
-      const editor = target.closest<HTMLElement>('[data-permission-pattern-editor]');
-      const kind = editor?.querySelector<HTMLSelectElement>('[data-permission-rule-pattern-kind]')?.value;
-      const expression =
-        editor?.querySelector<HTMLTextAreaElement>('[data-permission-rule-pattern-expression]')?.value ?? '';
-      if (!key || !editor || !kind) return;
-      const pattern: PermissionPattern | 'exact' | undefined =
-        kind === 'exact'
-          ? 'exact'
-          : kind === 'template' || kind === 'regex'
-            ? { version: 1 as const, kind, expression }
-            : undefined;
-      if (pattern) void changePermissionRulePattern(selectedProjectId.value, key, pattern);
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (key) {
+          permissionRuleEditorFocus.remember(target as HTMLElement);
+          openPermissionRuleEditor(selectedProjectId.value, key);
+        }
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleEditorKind.selector,
+      (_event, target) => {
+        const kind = (target as HTMLElement).dataset.segmentValue;
+        if (kind === 'exact' || kind === 'template' || kind === 'regex')
+          changePermissionRuleEditorKind(selectedProjectId.value, kind);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'input',
+      NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditorPattern.selector,
+      (_event, target) => {
+        changePermissionRuleEditorExpression(selectedProjectId.value, (target as HTMLTextAreaElement).value);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.savePermissionRuleEditor.selector, () => {
+      const projectId = selectedProjectId.value,
+        opener = permissionRuleEditorFocus.snapshot();
+      void savePermissionRuleEditor(projectId).then(() => {
+        if (selectedProjectId.value === projectId) permissionRuleEditorFocus.restore(opener);
+      });
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionRuleEditor.selector, () => {
+      if (closePermissionRuleEditor(selectedProjectId.value)) permissionRuleEditorFocus.restore();
+    }),
+  );
+  lifetime.add(
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditor.selector,
+      (event) => {
+        if (!closePermissionRuleEditor(selectedProjectId.value)) event.preventDefault();
+        else permissionRuleEditorFocus.restore();
+      },
+    ),
   );
   lifetime.add(
     delegate(

@@ -10,7 +10,9 @@ import {
 } from '../components/permission-request-card';
 import {
   PERMISSION_RULE_BATCH_SIZE,
+  type PermissionRuleEditorState,
   type PermissionRuleFilters,
+  type PermissionRuleMatchKind,
   permissionRulesList,
 } from '../components/permission-rules-settings';
 import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
@@ -75,6 +77,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesMessage = signal(''),
     lockedPermissionRules = signal<ReadonlySet<string>>(new Set()),
     revokingPermissionRules = signal<readonly string[]>([]),
+    permissionRuleEditor = signal<(PermissionRuleEditorState & { projectId: string }) | undefined>(undefined),
     permissionRulesDialog = signal<
       | {
           projectId: string;
@@ -305,6 +308,66 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     if (project && !freshPermissionRules.value.has(projectId) && !loadingPermissionRules.has(projectId))
       queueMicrotask(() => void loadPermissionRules(project));
     return permissionRulesByProject.value[projectId] ?? [];
+  }
+
+  function permissionRuleEditorFor(projectId: string, visible: boolean) {
+    const current = permissionRuleEditor.value;
+    if (
+      current &&
+      (!visible ||
+        current.projectId !== projectId ||
+        !(permissionRulesByProject.value[projectId] ?? []).some((rule) => permissionRuleKey(rule) === current.ruleKey))
+    ) {
+      permissionRuleEditor.value = undefined;
+      return undefined;
+    }
+    return visible && current?.projectId === projectId ? current : undefined;
+  }
+
+  function openPermissionRuleEditor(projectId: string, key: string) {
+    if (permissionRuleEditor.value?.busy || revokingPermissionRules.value.includes(key)) return;
+    const rule = (permissionRulesByProject.value[projectId] ?? []).find((rule) => permissionRuleKey(rule) === key);
+    if (!rule?.exact_action) return;
+    permissionRuleEditor.value = {
+      projectId,
+      ruleKey: key,
+      kind: rule.pattern?.kind ?? 'exact',
+      expression: rule.pattern?.expression ?? rule.exact_action,
+      busy: false,
+    };
+  }
+
+  function closePermissionRuleEditor(projectId: string) {
+    const current = permissionRuleEditor.value;
+    if (current && (current.projectId !== projectId || current.busy)) return false;
+    permissionRuleEditor.value = undefined;
+    return true;
+  }
+
+  function changePermissionRuleEditorKind(projectId: string, kind: PermissionRuleMatchKind) {
+    const current = permissionRuleEditor.value;
+    if (current?.projectId !== projectId || current.busy || !['exact', 'template', 'regex'].includes(kind)) return;
+    permissionRuleEditor.value = { ...current, kind, error: undefined };
+  }
+
+  function changePermissionRuleEditorExpression(projectId: string, expression: string) {
+    const current = permissionRuleEditor.value;
+    if (current?.projectId !== projectId || current.busy) return;
+    permissionRuleEditor.value = { ...current, expression, error: undefined };
+  }
+
+  async function savePermissionRuleEditor(projectId: string) {
+    const current = permissionRuleEditor.value;
+    if (current?.projectId !== projectId || current.busy) return;
+    if (current.kind !== 'exact' && !current.expression.trim()) {
+      permissionRuleEditor.value = { ...current, error: 'Enter a reviewed pattern before saving.' };
+      return;
+    }
+    await changePermissionRulePattern(
+      projectId,
+      current.ruleKey,
+      current.kind === 'exact' ? 'exact' : { version: 1, kind: current.kind, expression: current.expression },
+    );
   }
 
   function permissionRulesDialogFor(projectId: string, visible: boolean) {
@@ -625,16 +688,18 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       permissionRulesByProject.value = { ...permissionRulesByProject.value, [project.id]: [] };
       if (reason instanceof ApiHttpError && reason.status === 503) {
         lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
-        permissionRulesMessage.value =
-          'Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry.';
+        if (selectedProjectId.value === project.id)
+          permissionRulesMessage.value =
+            'Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry.';
       } else {
-        permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+        if (selectedProjectId.value === project.id)
+          permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
       }
       return;
     }
     loadingPermissionRules.delete(project.id);
     lockedPermissionRules.value = new Set([...lockedPermissionRules.value].filter((id) => id !== project.id));
-    permissionRulesMessage.value = '';
+    if (selectedProjectId.value === project.id) permissionRulesMessage.value = '';
     permissionRulesByProject.value = {
       ...permissionRulesByProject.value,
       [project.id]: projectPermissionRules(rules, project),
@@ -723,15 +788,27 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     if (!project || !rule || revokingPermissionRules.value.includes(key)) return;
     revokingPermissionRules.value = [...revokingPermissionRules.value, key];
     permissionRulesMessage.value = '';
+    const currentEditor = permissionRuleEditor.value;
+    if (currentEditor?.projectId === projectId && currentEditor.ruleKey === key)
+      permissionRuleEditor.value = { ...currentEditor, busy: true, error: undefined };
     try {
       await new Api(project.apiPath).updatePermissionRulePattern(rule, pattern);
       markPermissionRulesStale(projectId);
       await loadPermissionRules(project);
-      permissionRulesMessage.value = 'Reviewed match updated.';
+      if (selectedProjectId.value === projectId) permissionRulesMessage.value = 'Reviewed match updated.';
+      const editor = permissionRuleEditor.value;
+      if (editor?.projectId === projectId && editor.ruleKey === key) permissionRuleEditor.value = undefined;
     } catch (reason) {
-      permissionRulesMessage.value = `Could not update the match. ${reason instanceof Error ? reason.message : String(reason)}`;
+      const message = `Could not update the match. ${reason instanceof Error ? reason.message : String(reason)}`;
+      if (selectedProjectId.value === projectId) permissionRulesMessage.value = message;
+      const editor = permissionRuleEditor.value;
+      if (editor?.projectId === projectId && editor.ruleKey === key)
+        permissionRuleEditor.value = { ...editor, busy: false, error: message };
     } finally {
       revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
+      const editor = permissionRuleEditor.value;
+      if (editor?.projectId === projectId && editor.ruleKey === key && editor.busy)
+        permissionRuleEditor.value = { ...editor, busy: false };
     }
   }
 
@@ -774,6 +851,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
 
   /** Stop the countdown interval and storage listener; a later start re-registers them. */
   function dispose() {
+    permissionRuleEditor.value = undefined;
     lifetime.dispose();
     lifetime = createScope();
   }
@@ -789,6 +867,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     changePermissionRuleScope,
     changePermissionRulePattern,
     permissionRulesDialogFor,
+    permissionRuleEditorFor,
+    openPermissionRuleEditor,
+    closePermissionRuleEditor,
+    changePermissionRuleEditorKind,
+    changePermissionRuleEditorExpression,
+    savePermissionRuleEditor,
     permissionRulesPreviewFor,
     openPermissionRules,
     closePermissionRules,

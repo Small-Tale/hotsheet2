@@ -311,12 +311,16 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
       for (const match_type of [undefined, 'exact', 'template', 'regex'] as const) {
         const pattern =
           match_type === 'template' || match_type === 'regex'
-            ? { version: 1 as const, kind: match_type, expression: 'npm {{token}}' }
+            ? {
+                version: 1 as const,
+                kind: match_type,
+                expression: match_type === 'template' ? 'command-{{token}}' : '^command-[0-9]{8,8}$',
+              }
             : undefined;
         const markup = String(PermissionRulesSettings({ rules: [{ ...rules[0], match_type, pattern }], dialog }));
         expect(markup).not.toContain('Exact match');
         expect(markup).not.toContain('Persistent · </span>');
-        expect(markup).toContain('Exact action</option>');
+        expect(markup).toContain('data-action="open-permission-rule-editor"');
         if (match_type === 'template') expect(markup).toContain('>Placeholder match<');
         if (match_type === 'regex') expect(markup).toContain('>Regex match<');
       }
@@ -392,6 +396,39 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
         permissionRulesList([rule], scope === 'chat' ? 'This AI session only' : 'All AI sessions', 100).matches,
       ).toEqual([rule]);
     }
+  });
+
+  it('renders one dedicated controlled match editor with every mode, busy state, and validation (HS2-400WZZ)', () => {
+    const rule = rules[0],
+      ruleKey = permissionRuleKey(rule);
+    for (const kind of ['exact', 'template', 'regex'] as const) {
+      for (const busy of [false, true]) {
+        const rendered = String(
+          PermissionRulesSettings({
+            rules: [rule],
+            editor: { ruleKey, kind, expression: 'command-{{token}}', busy, error: 'Review this invalid pattern.' },
+          }),
+        );
+        const dialog = rendered.slice(rendered.indexOf('data-dialog-component="permission-rule-editor"'));
+        expect(dialog).toContain('Edit Remembered Answer');
+        expect(dialog).toContain('Save Reviewed Match');
+        expect(dialog).toContain('data-action="close-permission-rule-editor"');
+        expect(dialog).toContain('Review this invalid pattern.');
+        expect(dialog).toContain(`data-segment-value="${kind}"`);
+        if (kind === 'exact') expect(dialog).not.toContain('name="permission-rule-editor-pattern"');
+        else expect(dialog).toContain('name="permission-rule-editor-pattern"');
+        if (busy) expect(dialog).toContain('aria-busy="true"');
+        expect(rendered).not.toContain('data-permission-pattern-editor');
+      }
+    }
+    expect(
+      String(
+        PermissionRulesSettings({
+          rules: [rule],
+          editor: { ruleKey: 'missing', kind: 'exact', expression: '', busy: false },
+        }),
+      ),
+    ).not.toContain('data-dialog-component="permission-rule-editor"');
   });
 
   it('uses singular and plural answer counts in the disclosure (HS2-9QK0V7)', () => {

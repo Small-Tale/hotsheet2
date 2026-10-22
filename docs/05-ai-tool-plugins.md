@@ -1074,7 +1074,14 @@ monospace title without a shaded code background, limited to two lines until Exp
 is selected. Collapse action restores the limit. Expansion is independent of selection,
 transfers from preview into the full dialog, and resets when that dialog closes or the
 project/settings context changes (HS2-Y8FYVY). Users can edit the
-pattern, copy an action, or revoke its rule. The opaque keyed `action` field remains the edit/revoke identity and is not
+pattern, copy an action, or revoke its rule. Edit match opens a dedicated dialog from either
+the preview or full list, with exact-action, placeholder, and constrained-regex modes
+(HS2-400WZZ). Its draft persists across mode changes and failed validation; Cancel/reopen
+restores the saved rule. Save is explicit because it changes reviewed automatic matching.
+The server validates the complete pattern against the original action before changing the
+rule. Save prevents repeated submissions or dismissal while pending, closes only on success,
+and retains the draft/error on failure. Closing returns focus to its opener. Project/settings
+changes discard the local draft; late responses cannot replace another editor. The opaque keyed `action` field remains the edit/revoke identity and is not
 shown as a label. The exact action is returned only by the authenticated local rules API, not
 events or logs. If the credential key or encrypted file is unavailable, the list shows a locked
 state and durable in-memory rules are withdrawn before any automatic answer. Revocation writes

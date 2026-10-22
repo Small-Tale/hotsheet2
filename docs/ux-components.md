@@ -2285,7 +2285,9 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   without redundant visible copy (HS2-R3R7JE, HS2-0HKES8).
   A Kerf dialog searches displayed action/context and loads the complete list in 100-row
   batches, with lifetime/decision filters. Users can select across batches, edit decisions
-  or project-rule lifetimes, review match patterns, copy exact actions, or confirm deletion;
+  or project-rule lifetimes, review match patterns in a dedicated controlled dialog with
+  server validation, retained failed drafts, and busy-close protection (HS2-400WZZ), copy
+  exact actions, or confirm deletion;
   failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5).
   Keyed fingerprints remain internal edit/revoke identities. The displayed rules aggregate
   matching checkout and linked-store namespaces; that does not make each approval

@@ -460,6 +460,175 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.dispose();
   });
 
+  it('keeps a reviewed-match draft across modes and resets cancel/context/removal (HS2-400WZZ)', async () => {
+    const owner = createPermissionsController({
+      projects: signal([project('a'), project('b')]),
+      selectedProjectId: signal('a'),
+    });
+    const rule: PermissionRule = {
+      project: '/work/a',
+      tool: 'Bash',
+      action: 'opaque-slot',
+      exact_action: 'npm test',
+      decision: 'allow',
+      scope: 'always',
+    };
+    let rules = [rule];
+    fetchMock.mockImplementation(async () => json(rules));
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const key = permissionRuleKey(rule);
+    owner.openPermissionRuleEditor('a', 'missing');
+    expect(owner.permissionRuleEditorFor('a', true)).toBeUndefined();
+    owner.openPermissionRuleEditor('a', key);
+    expect(owner.permissionRuleEditorFor('a', true)).toMatchObject({
+      kind: 'exact',
+      expression: 'npm test',
+      busy: false,
+    });
+    owner.changePermissionRuleEditorKind('a', 'template');
+    owner.changePermissionRuleEditorExpression('a', 'npm {{token}}');
+    owner.changePermissionRuleEditorKind('a', 'exact');
+    owner.changePermissionRuleEditorKind('a', 'regex');
+    expect(owner.permissionRuleEditorFor('a', true)?.expression).toBe('npm {{token}}');
+    owner.changePermissionRuleEditorExpression('a', ' ');
+    const calls = fetchMock.mock.calls.length;
+    await owner.savePermissionRuleEditor('a');
+    expect(fetchMock).toHaveBeenCalledTimes(calls);
+    expect(owner.permissionRuleEditorFor('a', true)?.error).toContain('Enter a reviewed pattern');
+    owner.changePermissionRuleEditorExpression('a', '^npm test$');
+    expect(owner.permissionRuleEditorFor('a', true)?.error).toBeUndefined();
+    expect(owner.closePermissionRuleEditor('a')).toBe(true);
+    owner.openPermissionRuleEditor('a', key);
+    expect(owner.permissionRuleEditorFor('a', true)?.expression).toBe('npm test');
+    expect(owner.permissionRuleEditorFor('b', true)).toBeUndefined();
+    owner.openPermissionRuleEditor('a', key);
+    expect(owner.permissionRuleEditorFor('a', false)).toBeUndefined();
+    owner.openPermissionRuleEditor('a', key);
+    rules = [];
+    owner.permissionRulesChanged('a');
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    expect(owner.permissionRuleEditorFor('a', true)).toBeUndefined();
+    rules = [rule];
+    owner.permissionRulesChanged('a');
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRuleEditor('a', key);
+    expect(owner.permissionRuleEditorFor('a', true)?.kind).toBe('exact');
+    owner.dispose();
+  });
+
+  it('holds a saving match editor, retains rejected drafts, retries, and restores exact matching (HS2-400WZZ)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    let rules: PermissionRule[] = [
+      {
+        project: '/work/a',
+        tool: 'Bash',
+        action: 'opaque-slot',
+        exact_action: 'npm test --token=abc',
+        decision: 'allow',
+        scope: 'always',
+      },
+    ];
+    const pending = deferred<Response>(),
+      edits: Array<Record<string, unknown>> = [];
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === 'PATCH') {
+        if (typeof options.body !== 'string') throw new Error('Expected a JSON request body');
+        const body = JSON.parse(options.body);
+        edits.push(body);
+        if (edits.length === 1) return pending.promise;
+        rules = [
+          {
+            ...rules[0],
+            action: `hmac-sha256:v2:${'a'.repeat(16)}:${String(edits.length).repeat(64)}`,
+            match_type: body.pattern === 'exact' ? 'exact' : body.pattern.kind,
+            pattern: body.pattern === 'exact' ? undefined : body.pattern,
+          },
+        ];
+        return new Response(null, { status: 204 });
+      }
+      return json(rules);
+    });
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const key = permissionRuleKey(rules[0]);
+    owner.openPermissionRuleEditor('a', key);
+    owner.changePermissionRuleEditorKind('a', 'regex');
+    owner.changePermissionRuleEditorExpression('a', '.*');
+    const saving = owner.savePermissionRuleEditor('a');
+    expect(owner.permissionRuleEditorFor('a', true)?.busy).toBe(true);
+    expect(owner.closePermissionRuleEditor('a')).toBe(false);
+    owner.changePermissionRuleEditorKind('a', 'template');
+    owner.changePermissionRuleEditorExpression('a', 'ignored');
+    owner.openPermissionRuleEditor('a', 'another-slot');
+    await owner.savePermissionRuleEditor('a');
+    expect(edits).toHaveLength(1);
+    expect(owner.permissionRuleEditorFor('a', true)).toMatchObject({ ruleKey: key, kind: 'regex', expression: '.*' });
+    pending.resolve(Response.json({ error: 'invalid permission rule change' }, { status: 400 }));
+    await saving;
+    expect(owner.permissionRuleEditorFor('a', true)).toMatchObject({ expression: '.*', busy: false });
+    expect(owner.permissionRuleEditorFor('a', true)?.error).toContain('invalid permission rule change');
+    owner.changePermissionRuleEditorExpression('a', '^npm test --token=[A-Za-z]{1,64}$');
+    await owner.savePermissionRuleEditor('a');
+    expect(owner.permissionRuleEditorFor('a', true)).toBeUndefined();
+    expect(edits[1].pattern).toEqual({ version: 1, kind: 'regex', expression: '^npm test --token=[A-Za-z]{1,64}$' });
+    owner.openPermissionRuleEditor('a', permissionRuleKey(rules[0]));
+    expect(owner.permissionRuleEditorFor('a', true)?.kind).toBe('regex');
+    owner.changePermissionRuleEditorKind('a', 'exact');
+    await owner.savePermissionRuleEditor('a');
+    expect(edits[2].pattern).toBe('exact');
+    expect(owner.permissionRuleEditorFor('a', true)).toBeUndefined();
+    owner.dispose();
+  });
+
+  it('does not let a late save close another project editor or replace its status (HS2-400WZZ)', async () => {
+    const selected = signal('a'),
+      owner = createPermissionsController({
+        projects: signal([project('a'), project('b')]),
+        selectedProjectId: selected,
+      });
+    const rule = (id: string): PermissionRule => ({
+      project: `/work/${id}`,
+      tool: 'Bash',
+      action: `slot-${id}`,
+      exact_action: 'npm test',
+      decision: 'allow',
+      scope: 'always',
+    });
+    const pending = deferred<Response>();
+    fetchMock.mockImplementation(async (url, options) =>
+      options?.method === 'PATCH'
+        ? pending.promise
+        : json([
+            rule(
+              (typeof url === 'string' ? url : url instanceof URL ? url.href : url.url).includes('/api/b/') ? 'b' : 'a',
+            ),
+          ]),
+    );
+    owner.permissionRules('a');
+    owner.permissionRules('b');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRuleEditor('a', permissionRuleKey(rule('a')));
+    const saving = owner.savePermissionRuleEditor('a');
+    selected.value = 'b';
+    owner.permissionRuleEditorFor('b', true);
+    owner.openPermissionRuleEditor('b', permissionRuleKey(rule('b')));
+    owner.changePermissionRuleEditorKind('b', 'template');
+    owner.changePermissionRuleEditorExpression('b', 'npm {{token}}');
+    owner.permissionRulesMessage.value = 'B status';
+    pending.resolve(new Response(null, { status: 204 }));
+    await saving;
+    expect(owner.permissionRuleEditorFor('b', true)).toMatchObject({
+      kind: 'template',
+      expression: 'npm {{token}}',
+      busy: false,
+    });
+    expect(owner.permissionRulesMessage.value).toBe('B status');
+    owner.dispose();
+  });
+
   it('bulk edits mixed remembered answers, retains failures for retry, and confirms deletion (HS2-C057G5)', async () => {
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
     let rules = [

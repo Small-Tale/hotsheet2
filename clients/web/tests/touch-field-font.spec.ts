@@ -153,6 +153,28 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
     expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     await page.screenshot({ path: test.info().outputPath('hs2-jdxsnd-not-working-390.png') });
   });
+
+  test('the dedicated reviewed-match editor keeps its active pattern touch-safe (HS2-400WZZ, HS2-Y8FYVY)', async ({
+    page,
+  }) => {
+    await page.goto('/ux-demo?component=permission-rules-settings');
+    const example = page.locator('[data-demo-permission-rules]');
+    await example
+      .locator('[data-permission-rule-scope="always"]')
+      .first()
+      .getByRole('button', { name: 'Edit Match', exact: true })
+      .tap();
+    const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+    await editor.getByRole('button', { name: 'Placeholders', exact: true }).tap();
+    const pattern = editor.getByLabel('Pattern for Bash');
+    await pattern.tap();
+    await expect(pattern).toBeFocused();
+    expect(await pattern.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(
+      16,
+    );
+    expect(await smallEditableFields(page)).toEqual([]);
+    await editor.screenshot({ path: 'target/visual-captures/hs2-400wzz-touch-390.png', animations: 'disabled' });
+  });
 });
 
 /**

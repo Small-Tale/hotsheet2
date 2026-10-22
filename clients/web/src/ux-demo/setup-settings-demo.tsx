@@ -8,6 +8,7 @@ import { createScope } from 'kerfjs/scope';
 import { KeyboardSettings } from '../components/keyboard-settings';
 import {
   PERMISSION_RULE_BATCH_SIZE,
+  type PermissionRuleEditorState,
   type PermissionRuleFilters,
   permissionRulesList,
   PermissionRulesSettings,
@@ -20,8 +21,12 @@ import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialo
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft, TrashSettings } from '../components/trash-settings';
 import { wireTrashSettings } from '../components/trash-settings-interactions';
-import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
+import {
+  NOTIFICATIONS_AND_LINKS_ACTIONS,
+  NOTIFICATIONS_AND_LINKS_TARGETS,
+} from '../interaction-attrs/notifications-and-links';
 import { type PermissionAutomationAction, type PermissionRule, permissionRuleKey } from '../permission-notifications';
+import { createPermissionRuleEditorFocus } from '../permission-rule-editor-focus';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
@@ -310,6 +315,7 @@ const permissionRulesDemoDialog = signal<
   | undefined
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
+const permissionRulesDemoEditor = signal<PermissionRuleEditorState | undefined>(undefined);
 const permissionRulesDemoPreview = signal<
   | {
       selected: readonly string[];
@@ -351,10 +357,11 @@ export function PermissionRulesSettingsDemo() {
       <CatalogExample label="No Remembered Answers">
         <PermissionRulesSettings rules={[]} />
       </CatalogExample>
-      <CatalogExample label="Command Titles, Flowing Badges, AI-Session Reach, and Explicit Lifetimes">
+      <CatalogExample label="Command Titles, Flowing Badges, and a Dedicated Reviewed-Match Dialog">
         <div data-demo-permission-rules>
           <PermissionRulesSettings
             rules={permissionRulesDemoRules.value}
+            editor={permissionRulesDemoEditor.value}
             preview={permissionRulesDemoPreview.value}
             dialog={permissionRulesDemoDialog.value}
           />
@@ -440,7 +447,14 @@ export function TrashSettingsDemo() {
 
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireSetupSettingsDemo(root: HTMLElement): () => void {
+  const editorFocus = createPermissionRuleEditorFocus(root);
   const demoListeners = createScope();
+  let pendingEditorSave: ReturnType<typeof setTimeout> | undefined;
+  demoListeners.add(editorFocus.dispose);
+  demoListeners.add(() => {
+    clearTimeout(pendingEditorSave);
+    permissionRulesDemoEditor.value = undefined;
+  });
   demoListeners.add(
     wireTrashSettings(root, {
       input: (value, field) => {
@@ -587,6 +601,117 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
               state,
             ).visibleCount,
           };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.selector}`,
+      (_event, target) => {
+        const key = (target as HTMLElement).getAttribute('data-rule-key');
+        const rule = permissionRulesDemoRules.value.find((rule) => permissionRuleKey(rule) === key);
+        if (rule?.exact_action) {
+          editorFocus.remember(target as HTMLElement);
+          permissionRulesDemoEditor.value = {
+            ruleKey: key!,
+            kind: rule.pattern?.kind ?? 'exact',
+            expression: rule.pattern?.expression ?? rule.exact_action,
+            busy: false,
+          };
+        }
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleEditorKind.selector}`,
+      (_event, target) => {
+        const kind = (target as HTMLElement).dataset.segmentValue,
+          current = permissionRulesDemoEditor.value;
+        if (current && !current.busy && (kind === 'exact' || kind === 'template' || kind === 'regex'))
+          permissionRulesDemoEditor.value = { ...current, kind, error: undefined };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'input',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditorPattern.selector}`,
+      (_event, target) => {
+        const current = permissionRulesDemoEditor.value;
+        if (current && !current.busy)
+          permissionRulesDemoEditor.value = {
+            ...current,
+            expression: (target as HTMLTextAreaElement).value,
+            error: undefined,
+          };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.savePermissionRuleEditor.selector}`,
+      () => {
+        const current = permissionRulesDemoEditor.value;
+        if (!current || current.busy) return;
+        if (current.kind !== 'exact' && !current.expression.trim()) {
+          permissionRulesDemoEditor.value = { ...current, error: 'Enter a reviewed pattern before saving.' };
+          return;
+        }
+        const saving = { ...current, busy: true, error: undefined };
+        permissionRulesDemoEditor.value = saving;
+        pendingEditorSave = setTimeout(() => {
+          pendingEditorSave = undefined;
+          if (permissionRulesDemoEditor.value !== saving) return;
+          permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
+            permissionRuleKey(rule) === current.ruleKey
+              ? {
+                  ...rule,
+                  pattern:
+                    current.kind === 'exact'
+                      ? undefined
+                      : { version: 1, kind: current.kind, expression: current.expression },
+                  match_type: current.kind,
+                }
+              : rule,
+          );
+          permissionRulesDemoEditor.value = undefined;
+          editorFocus.restore();
+        }, 500);
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionRuleEditor.selector}`,
+      () => {
+        if (permissionRulesDemoEditor.value?.busy) return;
+        permissionRulesDemoEditor.value = undefined;
+        editorFocus.restore();
+      },
+    ),
+  );
+  demoListeners.add(
+    delegateCapture(
+      root,
+      'kui-request-close',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditor.selector}`,
+      (event) => {
+        if (permissionRulesDemoEditor.value?.busy) {
+          event.preventDefault();
+          return;
+        }
+        permissionRulesDemoEditor.value = undefined;
+        editorFocus.restore();
       },
     ),
   );

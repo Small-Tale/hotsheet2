@@ -904,6 +904,43 @@ test('lets the remembered-answer demo edit and confirm deletion of shown answers
   ).toHaveCount(1);
 });
 
+test('wires the dedicated reviewed-match editor in both demo parents (HS2-400WZZ)', async ({ page }) => {
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  const opener = example
+    .locator('[data-permission-rule-scope="always"]')
+    .first()
+    .getByRole('button', { name: 'Edit Match', exact: true });
+  await opener.click();
+  const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+  const exact = await editor.getByRole('textbox', { name: 'Exact Action', exact: true }).inputValue();
+  await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
+  await editor.getByLabel('Pattern for Bash').fill('');
+  await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+  await expect(editor).toContainText('Enter a reviewed pattern before saving.');
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const list = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+  await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+  await editor.getByRole('button', { name: 'Placeholders', exact: true }).click();
+  const expression = exact.replace('npm run lint', 'npm run {{token}}');
+  await editor.getByLabel('Pattern for Bash').fill(expression);
+  await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(list).toContainText(expression);
+  await list.getByRole('button', { name: 'Edit Match', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'Placeholders', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await editor.getByRole('button', { name: 'Exact Action', exact: true }).click();
+  await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(list.locator('[data-permission-pattern]')).toHaveCount(0);
+});
+
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
 

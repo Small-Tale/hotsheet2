@@ -23,8 +23,18 @@ import {
 } from '../interaction-attrs/notifications-and-links';
 import { type PermissionRule, permissionRuleKey } from '../permission-notifications';
 
+export type PermissionRuleMatchKind = 'exact' | 'template' | 'regex';
+export interface PermissionRuleEditorState {
+  ruleKey: string;
+  kind: PermissionRuleMatchKind;
+  expression: string;
+  busy: boolean;
+  error?: string;
+}
+
 export interface PermissionRulesSettingsProps {
   rules: readonly PermissionRule[];
+  editor?: PermissionRuleEditorState;
   dialog?: {
     query: string;
     visibleCount: number;
@@ -110,12 +120,14 @@ function matchLabel(rule: PermissionRule) {
  */
 export function PermissionRulesSettings({
   rules,
+  editor,
   dialog,
   preview,
   revoking = [],
   message = '',
   locked = false,
 }: PermissionRulesSettingsProps) {
+  const editingRule = editor && rules.find((rule) => permissionRuleKey(rule) === editor.ruleKey);
   const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
     filters: PermissionRuleFilters = {
       lifetime: dialog?.lifetime ?? 'permanent',
@@ -205,40 +217,17 @@ export function PermissionRulesSettings({
               )}
               {rule.pattern && <code data-permission-pattern>{rule.pattern.expression}</code>}
               {rule.exact_action && (
-                <details data-permission-pattern-editor={key}>
-                  <summary>Edit match</summary>
-                  <label>
-                    Rule type
-                    <select data-permission-rule-pattern-kind={key} aria-label={`Rule type for ${rule.tool}`}>
-                      <option value="exact" selected={!rule.pattern}>
-                        Exact action
-                      </option>
-                      <option value="template" selected={rule.pattern?.kind === 'template'}>
-                        Placeholders
-                      </option>
-                      <option value="regex" selected={rule.pattern?.kind === 'regex'}>
-                        Constrained regex
-                      </option>
-                    </select>
-                  </label>
-                  <label>
-                    Pattern
-                    <textarea
-                      data-permission-rule-pattern-expression={key}
-                      aria-label={`Pattern for ${rule.tool}`}
-                      rows={3}
-                    >
-                      {rule.pattern?.expression ?? rule.exact_action}
-                    </textarea>
-                  </label>
-                  <small>
-                    The complete action must match. Template placeholders: {'{{token}}'} or {'{{quoted}}'}. This can
-                    change which future requests are answered automatically.
-                  </small>
-                  <button type="button" data-permission-rule-pattern-save={key}>
-                    Save Reviewed Match
-                  </button>
-                </details>
+                <Row gap="xs">
+                  <Button
+                    emphasis="plain"
+                    size="compact"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.value}
+                    rootAttributes={{ 'data-rule-key': key }}
+                    disabled={busy || revoking.includes(key)}
+                  >
+                    Edit Match
+                  </Button>
+                </Row>
               )}
             </div>
           </div>
@@ -509,6 +498,86 @@ export function PermissionRulesSettings({
                   title="No Matching Answers"
                   detail="Try a tool or visible fingerprint, or change the filters."
                 />
+              )}
+            </List>
+          </DialogSurface>
+        </div>
+      )}
+      {editor && editingRule && (
+        <div data-key="permission-rule-editor">
+          <DialogSurface
+            label="Edit Remembered Answer"
+            preferredWidth={remify(640)}
+            viewportGutter={remify(16)}
+            rootAttributes={{
+              'data-key': 'permission-rule-editor',
+              ...NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditor.attrs,
+              'data-controlled-open': 'true',
+            }}
+            footer={
+              <Row hAlign="right" gap="xs">
+                <Button
+                  emphasis="plain"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionRuleEditor.value}
+                  disabled={editor.busy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  emphasis="primary"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.savePermissionRuleEditor.value}
+                  loading={editor.busy}
+                  disabled={editor.busy}
+                >
+                  Save Reviewed Match
+                </Button>
+              </Row>
+            }
+          >
+            <List gap="m">
+              <Text
+                size="compact"
+                flush
+              >{`${editingRule.tool} · ${reachLabel(editingRule)} in ${editingRule.project}`}</Text>
+              <TextField label="Exact Action" value={editingRule.exact_action ?? ''} multiline rows={3} readOnly />
+              <SegmentedControl<PermissionRuleMatchKind>
+                id="permission-rule-editor-kind"
+                label="Rule type"
+                layout="equal"
+                value={editor.kind}
+                choices={[
+                  { value: 'exact', label: 'Exact Action' },
+                  { value: 'template', label: 'Placeholders' },
+                  { value: 'regex', label: 'Regex' },
+                ]}
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleEditorKind.value}
+                disabled={editor.busy}
+              />
+              {editor.kind !== 'exact' && (
+                <TextField
+                  name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRuleEditorPattern.value}
+                  label={`Pattern for ${editingRule.tool}`}
+                  value={editor.expression}
+                  multiline
+                  rows={5}
+                  disabled={editor.busy}
+                  error={editor.error}
+                  hint={
+                    editor.kind === 'template'
+                      ? 'Use {{token}} for one unquoted token or {{quoted}} for text inside existing quotes.'
+                      : 'Anchor the complete action with ^ and $. Use a literal prefix and at least one bounded character class; wildcards and alternation are rejected.'
+                  }
+                />
+              )}
+              <Text size="compact" tone="quiet" flush>
+                {editor.kind === 'exact'
+                  ? 'Only the original exact action will match.'
+                  : 'The complete action must match. This can change which future requests are answered automatically.'}
+              </Text>
+              {Boolean(editor.error) && editor.kind === 'exact' && (
+                <Text tone="danger" role="alert" flush>
+                  {editor.error}
+                </Text>
               )}
             </List>
           </DialogSurface>

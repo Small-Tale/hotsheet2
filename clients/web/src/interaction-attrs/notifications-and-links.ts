@@ -25,6 +25,10 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   filterPermissionRuleDecision: action('filter-permission-rule-decision'),
   selectPermissionRuleRow: action('select-permission-rule-row'),
   togglePermissionRuleAction: action('toggle-permission-rule-action'),
+  openPermissionRuleEditor: action('open-permission-rule-editor'),
+  closePermissionRuleEditor: action('close-permission-rule-editor'),
+  changePermissionRuleEditorKind: action('change-permission-rule-editor-kind'),
+  savePermissionRuleEditor: action('save-permission-rule-editor'),
   clearPermissionRuleSelection: action('clear-permission-rule-selection'),
   editSelectedPermissionRules: action('edit-selected-permission-rules'),
   requestDeleteSelectedPermissionRules: action('request-delete-selected-permission-rules'),
@@ -49,5 +53,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
 export const NOTIFICATIONS_AND_LINKS_TARGETS = {
   ticketLinkChoiceDialog: attr('data-dialog-component', 'ticket-link-choice-dialog'),
   permissionRulesDialog: attr('data-dialog-component', 'permission-rules-dialog'),
+  permissionRuleEditor: attr('data-dialog-component', 'permission-rule-editor'),
+  permissionRuleEditorPattern: attr('name', 'permission-rule-editor-pattern'),
   permissionRulesSearch: attr('name', 'permission-rule-search'),
 } as const;
