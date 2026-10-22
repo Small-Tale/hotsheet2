@@ -139,6 +139,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly readerTab: Signal<InspectorTab>;
   readonly codeReviewLoading: Signal<boolean>;
   readonly refreshCodeReview: () => Promise<void>;
+  readonly refreshTicketUsage: () => Promise<void>;
   readonly readerDialog: (id: string) => TicketReaderDialogElement | null;
   readonly approveTicketReaderClose: (dialog: TicketReaderDialogElement) => void;
   readonly finishTicketReaderClose: (dialog: TicketReaderDialogElement) => void;
@@ -212,6 +213,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     readerTab,
     codeReviewLoading,
     refreshCodeReview,
+    refreshTicketUsage,
     readerDialog,
     approveTicketReaderClose,
     finishTicketReaderClose,
@@ -1383,6 +1385,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       else if (isReaderSurface(target)) readerTab.value = tab;
       else inspectorTab.value = tab;
       scheduleProjectSessionPersistence();
+      if (tab === 'timeline' && !frameId && !isReaderSurface(target)) void refreshTicketUsage();
       if (tab !== 'code-review') return;
       if (frameId && frameId !== 'workspace-reader') void refreshLinkedCodeReview(frameId);
       else if (!codeReviewLoading.value) void refreshCodeReview();

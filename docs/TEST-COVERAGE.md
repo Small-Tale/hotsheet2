@@ -1142,6 +1142,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `crates/hotsheet-cli/tests/cli.rs` releases a real claim against a sanitized local rollout and checks stored numeric events; `crates/hotsheet-server/tests/http.rs` covers the ticket usage API that the Timeline reads, and `clients/web/tests/ticket-timeline-usage.spec.ts` covers the rendered breakdown.
 - Manual: `docs/manual-test-plan.md` exercises a live Codex Work session, unclaimed and overlapping turns, repeated release, and the local privacy boundary.
 
+### Active Codex Work usage (HS2-NFQ1NK)
+
+- Behavior: exact-session CLI refresh and CLI/MCP renewal capture numeric usage before release; opening the Timeline refetches it. Response checkpoints preserve idempotence across refresh, release, and restart, while ambiguous or expired claim windows fail closed.
+- Unit: `crates/hotsheet-ticketing/src/metrics/codex_work.rs` covers active windows, renewal, overlap, repeated capture, and response identity.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage`; `clients/web/tests/ticket-timeline-usage.spec.ts # refreshes active usage when the timeline opens and retains it after reload`.
+- Manual: `docs/manual-test-plan.md # Active Codex Work usage`.
+
 ### Checkout identity for remembered permissions (HS2-G1SG1P)
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.

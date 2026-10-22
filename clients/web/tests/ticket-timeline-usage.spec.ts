@@ -113,7 +113,8 @@ async function mockProject(page: Page, usageResponse: unknown = usage) {
           },
         ],
       });
-    if (path.endsWith('/tickets/01/usage')) return route.fulfill({ json: usageResponse });
+    if (path.endsWith('/tickets/01/usage'))
+      return route.fulfill({ json: typeof usageResponse === 'function' ? usageResponse() : usageResponse });
     if (path.endsWith('/tickets/01')) return route.fulfill({ json: full });
     if (path.endsWith('/tickets')) {
       if (!url.searchParams.has('page_size')) return route.fulfill({ json: [row] });
@@ -243,3 +244,37 @@ test('keeps the timeline unchanged when a ticket has no recorded usage', async (
   await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__duration')).toHaveText('30m');
   await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveCount(0);
 });
+
+for (const width of [1280, 390])
+  test(`refreshes active usage when the timeline opens and retains it after reload at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let currentUsage = { events: [] as typeof usage.events, settled_cost_usd: 0, settled_through: '' };
+    await mockProject(page, () => currentUsage);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByText('Measure the phases').click();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    const timeline = page.locator('[data-component="ticket-timeline"]');
+    await expect(timeline.locator('[data-component="value-table"]')).toHaveCount(0);
+
+    currentUsage = { ...currentUsage, events: [usage.events[3]] };
+    await page.getByRole('tab', { name: 'Info' }).click();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    await expect(timeline.locator('[data-component="value-table"]')).toContainText('25K tokens');
+    await page.screenshot({
+      path: `target/visual-captures/hs2-nfq1nk-active-usage-${width}.png`,
+      fullPage: width === 390,
+    });
+
+    currentUsage = { ...currentUsage, events: [usage.events[3], usage.events[0]] };
+    await page.getByRole('tab', { name: 'Info' }).click();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    await expect(timeline.locator('[data-component="value-table"]')).toContainText('63K tokens');
+    await page.screenshot({
+      path: `target/visual-captures/hs2-nfq1nk-refreshed-usage-${width}.png`,
+      fullPage: width === 390,
+    });
+    await page.reload();
+    await expect(timeline.locator('[data-component="value-table"]')).toContainText('63K tokens');
+  });

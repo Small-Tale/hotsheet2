@@ -2238,6 +2238,14 @@ mod core_backend {
                     let renewed =
                         ops::renew_with_eta(&self.store, &t.id, now.clone(), lease, &worker, eta)
                             .map_err(op_err)?;
+                    if let Err(error) =
+                        hotsheet_ticketing::metrics::codex_work::capture_current_session(
+                            &self.store,
+                            &worker,
+                        )
+                    {
+                        eprintln!("Codex Work usage capture failed: {error}");
+                    }
                     let mut result = self.api(&renewed)?;
                     if let Some(object) = result.as_object_mut() {
                         object.insert(

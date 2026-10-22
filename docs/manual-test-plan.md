@@ -47,6 +47,11 @@ the scroll offsets; this visual review checks the rendered transition.
    records without assigning usage to another ticket. Existing unattributed raw
    metrics must remain unattributed.
 
+### Active Codex Work usage (HS2-NFQ1NK)
+
+1. In a local Codex Work session bound to a ticket store and worker, claim a ticket and run a turn. Run `hotsheet-cli metrics --refresh-codex`, open the ticket's Timeline, and confirm numeric usage appears before releasing the claim. Run another turn, renew the claim, then reopen Timeline and confirm only the new response was added.
+2. Release the claim, run another turn, and refresh metrics. Confirm the post-release response is not added. Restart Hot Sheet, reopen the Timeline, and confirm the count is unchanged. Repeat with overlapping live claims and confirm ambiguous responses remain unassigned.
+
 ### Full-history grid tile resource profile (HS2-QV814W)
 
 On a representative desktop and physical phone, create more running terminals than the

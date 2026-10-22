@@ -83,10 +83,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             cmd_phase_report(path, since.as_deref(), until.as_deref(), json)
         }
         Cmd::Metrics {
+            refresh_codex,
             roll_up,
             prune_before,
             team,
-        } => cmd_metrics(path, roll_up, prune_before, team),
+        } => cmd_metrics(path, refresh_codex, roll_up, prune_before, team),
         _ => misrouted("tickets"),
     }
 }
@@ -428,12 +429,19 @@ pub(crate) fn cmd_read(path: &PathBuf, id: &str) -> Result<()> {
 /// Show the usage/cost rollup for the store (`hotsheet-cli metrics`, docs/14).
 pub(crate) fn cmd_metrics(
     path: &Path,
+    refresh_codex: bool,
     roll_up: Option<String>,
     prune_before: Option<String>,
     team: bool,
 ) -> Result<()> {
     use hotsheet_ticketing::metrics;
     let store = FsStore::open(path)?;
+
+    if refresh_codex {
+        let worker = std::env::var("HOTSHEET_WORKER_ID").unwrap_or_default();
+        let added = metrics::codex_work::capture_current_session(&store, &worker)?;
+        eprintln!("Captured {added} Codex Work usage event(s) from this session");
+    }
 
     if let Some(day) = roll_up.as_deref() {
         metrics::roll_up_through(&store, day)?;

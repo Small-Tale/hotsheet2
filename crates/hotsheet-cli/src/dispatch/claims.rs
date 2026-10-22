@@ -151,6 +151,9 @@ pub(crate) fn cmd_renew(
     let lease = lease_until(now_dt, lease_minutes);
     let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
     let renewed = ops::renew_with_eta(&store, &ticket.id, now.clone(), lease, worker, eta)?;
+    if let Err(error) = metrics::codex_work::capture_current_session(&store, worker) {
+        eprintln!("Codex Work usage capture failed: {error}");
+    }
     println!(
         "Renewed {} (lease {lease_minutes}m{})",
         renewed.slug,

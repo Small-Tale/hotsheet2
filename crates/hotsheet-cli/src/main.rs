@@ -568,6 +568,9 @@ enum Cmd {
     /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
     /// by model, and by day. DB-free: settled rollup files + a live scan of the raw tail.
     Metrics {
+        /// Capture new numeric usage from this exact Codex Work session and worker.
+        #[arg(long)]
+        refresh_codex: bool,
         /// Settle history through this day (YYYY-MM-DD) into the per-contributor rollup
         /// file, advancing `last_rolled_up_through`, before reporting (docs/14 §14.3).
         #[arg(long, value_name = "YYYY-MM-DD")]

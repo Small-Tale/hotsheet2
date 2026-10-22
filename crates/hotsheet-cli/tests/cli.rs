@@ -4711,7 +4711,7 @@ fn claim_next_release_and_renew() {
 }
 
 #[test]
-fn releasing_a_codex_work_claim_records_only_numeric_session_usage() {
+fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     hs(root).arg("init").assert().success();
@@ -4745,20 +4745,90 @@ fn releasing_a_codex_work_claim_records_only_numeric_session_usage() {
             .join("\n"),
     )
     .unwrap();
+    let bound = |command: &mut assert_cmd::Command| {
+        command
+            .env("HOTSHEET_PROJECT", root)
+            .env("HOTSHEET_WORKER_ID", worker)
+            .env("CODEX_SESSION_ID", session)
+            .env("CODEX_HOME", &home);
+    };
+    let mut refresh = hs(root);
+    refresh.args(["metrics", "--refresh-codex"]);
+    bound(&mut refresh);
+    refresh
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Captured 1 Codex Work"));
+    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        1
+    );
+
+    let next = serde_json::json!({"type":"token_usage_record","timestamp":now,"payload":{"response_id":"response-2","root_turn_id":"turn-1","usage":{"input_tokens":50,"output_tokens":5}}});
+    std::fs::write(
+        &rollout,
+        format!(
+            "{}\n{next}\n",
+            rows.iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    )
+    .unwrap();
+    let mut renew = hs(root);
+    renew.args(["renew", &slug, "--worker", worker]);
+    bound(&mut renew);
+    renew.assert().success();
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        2
+    );
+
+    let mut wrong_worker = hs(root);
+    wrong_worker.args(["metrics", "--refresh-codex"]);
+    bound(&mut wrong_worker);
+    wrong_worker.env("HOTSHEET_WORKER_ID", "another-worker");
+    wrong_worker
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Captured 0 Codex Work"));
     hs(root)
         .args(["release", &slug, "--worker", worker])
         .env("HOTSHEET_PROJECT", root)
         .env("HOTSHEET_WORKER_ID", worker)
         .env("CODEX_SESSION_ID", session)
-        .env("CODEX_HOME", home)
+        .env("CODEX_HOME", &home)
         .assert()
         .success();
-    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
-    let events = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
-    assert_eq!(events.len(), 1);
+    let after = serde_json::json!({"type":"token_usage_record","timestamp":time::OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339).unwrap(),"payload":{"response_id":"after-release","root_turn_id":"turn-1","usage":{"input_tokens":99,"output_tokens":9}}});
+    std::fs::write(
+        &rollout,
+        format!(
+            "{}\n{next}\n{after}\n",
+            rows.iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    )
+    .unwrap();
+    let mut refresh = hs(root);
+    refresh.args(["metrics", "--refresh-codex"]);
+    bound(&mut refresh);
+    refresh
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Captured 0 Codex Work"));
+    let reopened = hotsheet_ticketing::FsStore::open(root).unwrap();
+    let events = hotsheet_ticketing::metrics::read_raw(&reopened).unwrap();
+    assert_eq!(events.len(), 2);
     assert_eq!(events[0].tokens_in, 123);
     assert_eq!(events[0].tokens_out, 12);
     assert_eq!(events[0].model.as_deref(), Some("gpt-6-sol"));
+    assert_eq!(events[1].tokens_in, 50);
+    assert_eq!(events[1].tokens_out, 5);
     assert!(events[0].ticket.is_some());
     assert!(
         !std::fs::read_to_string(root.join(format!("metrics/raw/{}.jsonl", &now[..10])))
