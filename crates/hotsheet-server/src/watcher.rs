@@ -1058,6 +1058,7 @@ mod watcher_tests {
         use hotsheet_model::Ulid;
         use hotsheet_ticketing::{FsStore, StoreMetadata};
         use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         let state = super::AppState::new(store.clone(), "secret".into()).unwrap();
@@ -1070,9 +1071,13 @@ mod watcher_tests {
         // SAFETY: a valid NUL-terminated path; mkfifo only creates the special file.
         assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
         let index = target.entry.index.clone();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
         let walk = std::thread::spawn({
             let tickets = tickets.clone();
-            move || super::stale_ticket_files(&target, &tickets).len()
+            move || {
+                let stale = super::stale_ticket_files(&target, &tickets).len();
+                let _ = result_tx.send(stale);
+            }
         });
         // The walk is now blocked opening the FIFO. The index must be free meanwhile.
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -1085,14 +1090,35 @@ mod watcher_tests {
             checks += 1;
             std::thread::sleep(Duration::from_millis(10));
         }
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&fifo)
-            .unwrap()
-            .write_all(b"not a ticket")
-            .unwrap();
+        // O_NONBLOCK turns a missing FIFO reader into ENXIO. Without this bound, the
+        // writer can hang forever if the walk finished before opening this path.
+        let writer_deadline = Instant::now() + Duration::from_secs(10);
+        let mut writer = loop {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&fifo)
+            {
+                Ok(writer) => break writer,
+                Err(error)
+                    if error.raw_os_error() == Some(libc::ENXIO)
+                        && Instant::now() < writer_deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("resync never opened the FIFO for reading: {error}"),
+            }
+        };
+        writer.write_all(b"not a ticket").unwrap();
+        drop(writer); // The reader needs EOF before it can finish parsing this file.
         // The unindexed "file" is reported stale once the walk finishes.
-        assert_eq!(walk.join().unwrap(), 1);
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("resync did not finish after the FIFO write"),
+            1
+        );
+        walk.join().unwrap();
     }
 
     #[test]
