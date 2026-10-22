@@ -56,6 +56,11 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
             let updates = hotsheet_plugins::guidance_updates::check_project(project)?;
             println!("{}", serde_json::to_string_pretty(&updates)?);
         }
+        GuidanceCmd::Review { source } => {
+            let review =
+                hotsheet_plugins::guidance_updates::review_project_source(project, &source)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
+        }
         GuidanceCmd::CheckRulesyncUpdates => {
             let report = hotsheet_plugins::rulesync_updates::check_project(project);
             println!("{}", serde_json::to_string_pretty(&report)?);
@@ -64,8 +69,15 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
             id,
             repository,
             requested_ref,
+            expected_commit,
         } => {
-            let config = sources::register(project, &id, &repository, &requested_ref)?;
+            let config = sources::register_checked(
+                project,
+                &id,
+                &repository,
+                &requested_ref,
+                expected_commit.as_deref(),
+            )?;
             let source = config
                 .sources
                 .iter()

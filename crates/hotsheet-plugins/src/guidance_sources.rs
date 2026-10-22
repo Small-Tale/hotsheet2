@@ -483,8 +483,25 @@ pub fn register(
     repository: &str,
     requested_ref: &str,
 ) -> Result<GuidanceConfig, GuidanceSourceError> {
+    register_checked(project, id, repository, requested_ref, None)
+}
+
+/// Register only the exact revision the user reviewed, while retaining the mutable
+/// requested ref so future checks can still observe movement.
+pub fn register_checked(
+    project: &Path,
+    id: &str,
+    repository: &str,
+    requested_ref: &str,
+    expected_commit: Option<&str>,
+) -> Result<GuidanceConfig, GuidanceSourceError> {
     let mut config = load(project)?;
     let mut source = inspect_source(id, repository, requested_ref)?;
+    if expected_commit.is_some_and(|expected| expected != source.commit) {
+        return Err(GuidanceSourceError::Invalid(
+            "source changed since review; check and review it again".into(),
+        ));
+    }
     if let Some(old) = config.sources.iter().find(|old| old.id == id) {
         source.selected_rules = old.selected_rules.clone();
         source.selected_skills = old.selected_skills.clone();

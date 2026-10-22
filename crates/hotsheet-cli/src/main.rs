@@ -766,6 +766,11 @@ enum GuidanceCmd {
     },
     /// Check registered source refs without changing their pinned commits.
     CheckUpdates,
+    /// Review selected rule and skill changes at a source's observed revision without writing.
+    Review {
+        #[arg(long)]
+        source: String,
+    },
     /// Check standalone Rulesync lock freshness with an installed Rulesync 38 executable.
     CheckRulesyncUpdates,
     /// Resolve a source tag or commit and cache its verified manifest for offline refresh.
@@ -776,6 +781,9 @@ enum GuidanceCmd {
         repository: String,
         #[arg(long = "ref", default_value = "main")]
         requested_ref: String,
+        /// Only register if the ref still resolves to this reviewed full commit.
+        #[arg(long)]
+        expected_commit: Option<String>,
     },
     /// Replace this source's selected rules and skills; repeat each flag as needed.
     Select {

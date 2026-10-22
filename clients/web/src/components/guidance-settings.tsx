@@ -8,11 +8,18 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
-import type { GuidanceOverview, RulesyncUpdateReport } from '../api';
+import type { GuidanceOverview, GuidanceSourceReview, GuidanceSourceUpdate, RulesyncUpdateReport } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export interface GuidanceSettingsProps {
   overview?: GuidanceOverview;
+  updates?: readonly GuidanceSourceUpdate[];
+  updatesCheckedAt?: number;
+  updatesLoading?: boolean;
+  updatesError?: string;
+  review?: GuidanceSourceReview;
+  reviewLoading?: boolean;
+  reviewError?: string;
   rulesyncUpdateReport?: RulesyncUpdateReport | null;
   loading: boolean;
   message: string;
@@ -38,6 +45,9 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
     ...new Set(rules.map((rule) => rule.owner).filter((owner): owner is string => Boolean(owner))),
   ].sort();
   const tags = [...new Set(rules.flatMap((rule) => rule.tags))].sort();
+  const registeredSource = overview?.sources.find((source) => source.id === sourceId);
+  const removedSelected =
+    props.review?.changes.some((change) => change.change === 'removed' && change.selected) ?? false;
   return (
     <section data-component="guidance-settings" aria-label="Project Guidance" aria-busy={String(loading)}>
       <List gap="l">
@@ -85,6 +95,157 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             </List>
           </section>
         )}
+        {!!overview?.sources.length && (
+          <section aria-label="Pinned Source Updates" data-guidance-updates="">
+            <List gap="xs">
+              <Text variant="h3">Pinned source updates</Text>
+              <Text tone="quiet" size="compact">
+                {props.updatesCheckedAt
+                  ? `Last checked ${new Date(props.updatesCheckedAt).toLocaleString()}. Pins stay unchanged until you refresh a reviewed source.`
+                  : 'Check registered source refs when you are online. Pins stay unchanged.'}
+              </Text>
+              <Button
+                action={COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.value}
+                disabled={props.updatesLoading || loading}
+              >
+                {props.updatesLoading ? 'Checking sources…' : 'Check Now'}
+              </Button>
+              {props.updatesError ? (
+                <StateBanner
+                  title="Source Check Failed"
+                  detail={`${props.updatesError} Previous results may be stale.`}
+                  tone="warning"
+                  urgency="status"
+                />
+              ) : null}
+              {overview.sources.map((source) => {
+                const update = props.updates?.find((item) => item.id === source.id);
+                const pendingRules = source.rules.filter(
+                  (rule) => rule.selected && rule.installed_version !== rule.version,
+                );
+                return (
+                  <div data-guidance-update-source={source.id}>
+                    <List gap="xs">
+                      {update?.state === 'revision_changed' && (
+                        <StateBanner
+                          title={`${source.id} Has A Different Source Revision`}
+                          detail={`Pinned ${source.commit.slice(0, 12)}; observed ${update.observed_commit?.slice(0, 12)}. Review selected guidance before refreshing.`}
+                          tone="info"
+                          urgency="status"
+                          copyLayout="stacked"
+                        />
+                      )}
+                      {update?.state === 'tag_moved' && (
+                        <StateBanner
+                          title={`${source.id} Tag Moved`}
+                          detail="This tag now points to a different commit. Verify the source manually before choosing a new pin."
+                          tone="warning"
+                          urgency="status"
+                        />
+                      )}
+                      <Text>
+                        {source.id}:{' '}
+                        {update
+                          ? {
+                              current: 'source is current',
+                              revision_changed: 'source revision changed',
+                              pinned: 'source is pinned',
+                              tag_moved: 'tag moved; review manually',
+                              check_failed: 'source status is unknown',
+                            }[update.state]
+                          : 'not checked'}
+                      </Text>
+                      {update?.observed_commit ? (
+                        <Text tone="quiet" size="compact">
+                          Observed {update.observed_commit.slice(0, 12)} · pinned {source.commit.slice(0, 12)}
+                        </Text>
+                      ) : null}
+                      {update?.reason ? (
+                        <Text tone="quiet" size="compact">
+                          {update.reason}
+                        </Text>
+                      ) : null}
+                      {!!pendingRules.length && (
+                        <Text tone="quiet" size="compact">
+                          {pendingRules.length} selected rule(s) still need Apply Selected Guidance at the pinned
+                          version.
+                        </Text>
+                      )}
+                      {update?.state === 'revision_changed' && (
+                        <Button
+                          action={COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.value}
+                          disabled={props.reviewLoading || loading}
+                        >
+                          Review Changes
+                        </Button>
+                      )}
+                    </List>
+                  </div>
+                );
+              })}
+              {props.reviewError ? (
+                <StateBanner title="Review Failed" detail={props.reviewError} tone="warning" urgency="status" />
+              ) : null}
+              {props.review && (
+                <section aria-label={`${props.review.update.id} Update Review`} data-guidance-review="">
+                  <List gap="xs">
+                    <Text variant="h3">Review {props.review.update.id}</Text>
+                    {props.review.update.state !== 'revision_changed' && (
+                      <Text tone="quiet">
+                        {
+                          {
+                            current: 'The source is current.',
+                            pinned: 'This ref is pinned.',
+                            tag_moved: 'The tag moved. Verify it manually before choosing a new pin.',
+                            check_failed: 'The source could not be checked.',
+                          }[props.review.update.state]
+                        }
+                      </Text>
+                    )}
+                    {props.review.update.state === 'revision_changed' && (
+                      <Text tone="quiet" size="compact">
+                        Pinned {props.review.update.pinned_commit} · candidate {props.review.update.observed_commit}
+                      </Text>
+                    )}
+                    {props.review.update.state === 'revision_changed' &&
+                      (props.review.changes.length ? (
+                        props.review.changes.map((change) => (
+                          <Text>
+                            {change.kind} {change.name}: {change.change}
+                            {change.before_version !== null && ` v${change.before_version}`}
+                            {change.after_version !== null && ` → v${change.after_version}`}
+                            {change.selected ? ' · selected' : ' · not selected'}
+                          </Text>
+                        ))
+                      ) : (
+                        <Text tone="quiet">No rule or skill content changed at this revision.</Text>
+                      ))}
+                    {props.review.update.state === 'revision_changed' && (
+                      <Text tone="quiet" size="compact">
+                        Refreshing replaces the pin after checking this exact commit again. Apply selected guidance
+                        separately to install it; local edits remain protected.
+                      </Text>
+                    )}
+                    {props.review.update.state === 'revision_changed' && removedSelected && (
+                      <Text tone="quiet" size="compact">
+                        This candidate removes selected guidance. Deselect and apply those entries at the old pin, then
+                        review the source again.
+                      </Text>
+                    )}
+                    {props.review.update.state === 'revision_changed' && (
+                      <Button
+                        action={COMMANDS_AND_AI_ACTIONS.refreshReviewedGuidance.value}
+                        disabled={loading || props.reviewLoading || removedSelected}
+                      >
+                        Refresh Reviewed Pin
+                      </Button>
+                    )}
+                  </List>
+                </section>
+              )}
+            </List>
+          </section>
+        )}
         <Select
           name="guidance-owner"
           label="Instruction Writer"
@@ -109,8 +270,16 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           />
           <TextField name="guidance-ref" label="Tag or Commit" value={sourceRef} />
         </Grid>
-        <Button action={COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.value} disabled={loading}>
-          {overview?.sources.some((source) => source.id === sourceId) ? 'Refresh pinned source' : 'Register source'}
+        <Button
+          action={
+            registeredSource
+              ? COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.value
+              : COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.value
+          }
+          rootAttributes={registeredSource ? { 'data-guidance-update-source': sourceId } : undefined}
+          disabled={loading}
+        >
+          {registeredSource ? 'Review Pinned Source' : 'Register source'}
         </Button>
         {overview?.sources.length ? (
           <List gap="l">

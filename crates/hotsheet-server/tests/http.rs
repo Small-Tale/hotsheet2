@@ -13825,6 +13825,19 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     assert_eq!(updates[0]["id"], "fixture");
     assert_eq!(updates[0]["state"], "check_failed");
     assert_eq!(updates[0]["reason"], "Source ref could not be checked");
+    let review = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                "/checkouts/guidance/guidance/updates/fixture/review",
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(review["update"]["state"], "check_failed");
+    assert_eq!(review["changes"].as_array().unwrap().len(), 0);
     let standalone = body_json(
         app.clone()
             .oneshot(authed(

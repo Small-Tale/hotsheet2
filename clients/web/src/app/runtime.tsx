@@ -26,6 +26,8 @@ import {
   type FullTicket,
   type GuidanceAction,
   type GuidanceOverview,
+  type GuidanceSourceReview,
+  type GuidanceSourceUpdate,
   type PollResponse,
   type ProviderOutboxOperation,
   type RulesyncUpdateReport,
@@ -158,6 +160,7 @@ import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
+import { parseGuidanceSourceUpdates } from '../server-response-parsers';
 import { interleaveByRank } from '../tab-order';
 import {
   TERMINAL_GRID_DEFAULT_ACROSS,
@@ -383,6 +386,14 @@ export async function startHotSheetWebClient() {
     terminalDashboardMessage = signal('');
   const showLoadingActivity = signal(localStorage.getItem('hotsheet.show-loading-activity') === 'true');
   const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
+  const guidanceUpdates = signal<GuidanceSourceUpdate[]>([]);
+  const guidanceUpdatesCheckedAt = signal<number | undefined>(undefined);
+  const guidanceUpdatesLoading = signal(false);
+  const guidanceUpdatesError = signal('');
+  const guidanceReview = signal<GuidanceSourceReview | undefined>(undefined);
+  const guidanceReviewLoading = signal(false);
+  const guidanceReviewError = signal('');
+  let guidanceUpdateGeneration = 0;
   const rulesyncUpdateReport = signal<RulesyncUpdateReport | null>(null);
   const guidanceLoading = signal(false);
   const guidanceMessage = signal('');
@@ -1355,12 +1366,92 @@ export async function startHotSheetWebClient() {
   };
   const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
   const api = () => new Api(project()?.apiPath ?? '');
+  async function checkGuidanceUpdates(force = false) {
+    const current = project();
+    if (!current) return;
+    const generation = ++guidanceUpdateGeneration;
+    const key = `hotsheet:guidance-updates:${current.id}`;
+    if (!force) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(key) ?? 'null') as {
+          checkedAt?: number;
+          updates?: unknown;
+        } | null;
+        if (
+          typeof cached?.checkedAt === 'number' &&
+          Number.isFinite(cached.checkedAt) &&
+          cached.checkedAt >= 0 &&
+          cached.checkedAt <= Date.now()
+        ) {
+          guidanceUpdates.value = parseGuidanceSourceUpdates(cached.updates);
+          guidanceUpdatesCheckedAt.value = cached.checkedAt;
+          if (Date.now() - cached.checkedAt < 86_400_000) {
+            guidanceUpdatesLoading.value = false;
+            guidanceUpdatesError.value = '';
+            return;
+          }
+        }
+      } catch {
+        // Storage can be unavailable; the explicit check still works.
+      }
+    }
+    guidanceUpdatesLoading.value = true;
+    guidanceUpdatesError.value = '';
+    try {
+      const updates = await new Api(current.apiPath, '', { trackBusy: false }).checkoutGuidanceUpdates(current.id);
+      if (generation !== guidanceUpdateGeneration || project()?.id !== current.id) return;
+      const checkedAt = Date.now();
+      guidanceUpdates.value = updates;
+      guidanceUpdatesCheckedAt.value = checkedAt;
+      try {
+        localStorage.setItem(key, JSON.stringify({ checkedAt, updates }));
+      } catch {
+        /* optional cache */
+      }
+    } catch (error) {
+      if (generation === guidanceUpdateGeneration && project()?.id === current.id)
+        guidanceUpdatesError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceUpdateGeneration) guidanceUpdatesLoading.value = false;
+    }
+  }
+  async function reviewGuidanceSource(sourceId: string) {
+    const current = project();
+    if (!current || guidanceReviewLoading.value) return;
+    guidanceReviewLoading.value = true;
+    guidanceReviewError.value = '';
+    guidanceReview.value = undefined;
+    try {
+      const review = await new Api(current.apiPath).checkoutGuidanceReview(current.id, sourceId);
+      if (project()?.id === current.id) guidanceReview.value = review;
+    } catch (error) {
+      if (project()?.id === current.id)
+        guidanceReviewError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      guidanceReviewLoading.value = false;
+    }
+  }
+  async function refreshReviewedGuidance() {
+    const review = guidanceReview.value;
+    const source = guidanceOverview.value?.sources.find((item) => item.id === review?.update.id);
+    if (!source || review?.update.state !== 'revision_changed' || !review.update.observed_commit) return;
+    await updateGuidance({
+      action: 'register',
+      id: source.id,
+      repository: source.repository,
+      ref: source.requested_ref,
+      expected_commit: review.update.observed_commit,
+    });
+  }
   async function refreshGuidance(current = project(), quiet = false) {
     if (!current) return;
     const generation = ++guidanceLoadGeneration;
     if (guidanceProjectId !== current.id) {
       guidanceProjectId = current.id;
       guidanceOverview.value = undefined;
+      guidanceUpdates.value = [];
+      guidanceUpdatesCheckedAt.value = undefined;
+      guidanceReview.value = undefined;
       rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
@@ -1372,6 +1463,7 @@ export async function startHotSheetWebClient() {
     guidanceLoading.value = true;
     guidanceMessage.value = '';
     rulesyncUpdateReport.value = null;
+    void checkGuidanceUpdates();
     void new Api(current.apiPath, '', { trackBusy: false })
       .checkoutRulesyncUpdates(current.id)
       .then((report) => {
@@ -1384,6 +1476,7 @@ export async function startHotSheetWebClient() {
       const next = await new Api(current.apiPath, '', { trackBusy: !quiet }).checkoutGuidance(current.id);
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
+        guidanceReview.value = undefined;
         const chosen = next.sources.find((source) => source.id === guidanceSourceId.value);
         guidanceRepository.value = chosen?.repository ?? next.default_repository;
         guidanceRef.value = chosen?.requested_ref ?? 'main';
@@ -1405,6 +1498,8 @@ export async function startHotSheetWebClient() {
       const next = await new Api(current.apiPath).updateCheckoutGuidance(current.id, action);
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
+        guidanceReview.value = undefined;
+        if (action.action === 'register') void checkGuidanceUpdates(true);
         guidanceMessage.value = {
           register: 'Source pinned. Review the selection, then apply.',
           select: 'Selection updated. Apply to install it.',
@@ -3638,6 +3733,13 @@ export async function startHotSheetWebClient() {
     aiSettingsMessage,
     guidance: () => ({
       overview: guidanceOverview.value,
+      updates: guidanceUpdates.value,
+      updatesCheckedAt: guidanceUpdatesCheckedAt.value,
+      updatesLoading: guidanceUpdatesLoading.value,
+      updatesError: guidanceUpdatesError.value,
+      review: guidanceReview.value,
+      reviewLoading: guidanceReviewLoading.value,
+      reviewError: guidanceReviewError.value,
       rulesyncUpdateReport: rulesyncUpdateReport.value,
       bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
@@ -4529,6 +4631,9 @@ export async function startHotSheetWebClient() {
     guidanceSourceId,
     guidanceRef,
     updateGuidance,
+    checkGuidanceUpdates,
+    reviewGuidanceSource,
+    refreshReviewedGuidance,
     toggleSidebarDrive,
     driveOptionsOpen,
     driveOptionsAnchor,

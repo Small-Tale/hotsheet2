@@ -27,6 +27,8 @@ import {
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
   parseGuidanceOverview,
+  parseGuidanceSourceReview,
+  parseGuidanceSourceUpdates,
   parseMessageConnectionReceipt,
   parsePermissionDecision,
   parsePermissionMigrationOutcome,
@@ -87,6 +89,25 @@ export interface GuidanceOverview {
     skills: Array<{ name: string; selected: boolean }>;
   }>;
 }
+export interface GuidanceSourceUpdate {
+  id: string;
+  requested_ref: string;
+  pinned_commit: string;
+  observed_commit: string | null;
+  state: 'current' | 'revision_changed' | 'pinned' | 'tag_moved' | 'check_failed';
+  reason?: string;
+}
+export interface GuidanceSourceReview {
+  update: GuidanceSourceUpdate;
+  changes: Array<{
+    name: string;
+    kind: 'rule' | 'skill';
+    change: 'added' | 'removed' | 'updated';
+    selected: boolean;
+    before_version: number | null;
+    after_version: number | null;
+  }>;
+}
 export interface RulesyncUpdateReport {
   state: 'current' | 'outdated' | 'unlocked' | 'unknown';
   executable_version: string | null;
@@ -100,7 +121,7 @@ export interface RulesyncUpdateReport {
   }>;
 }
 export type GuidanceAction =
-  | { action: 'register'; id: string; repository: string; ref: string }
+  | { action: 'register'; id: string; repository: string; ref: string; expected_commit?: string }
   | { action: 'select'; source: string; rules: string[]; skills: string[] }
   | { action: 'owner'; owner: 'builtin' | 'rulesync' }
   | { action: 'apply' };
@@ -1311,6 +1332,13 @@ export class Api {
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  checkoutGuidanceUpdates = (checkout: string) =>
+    this.parsed(parseGuidanceSourceUpdates, `/checkouts/${encodeURIComponent(checkout)}/guidance/updates`);
+  checkoutGuidanceReview = (checkout: string, source: string) =>
+    this.parsed(
+      parseGuidanceSourceReview,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/updates/${encodeURIComponent(source)}/review`,
+    );
   checkoutRulesyncUpdates = (checkout: string) =>
     this.parsed(parseRulesyncUpdateReport, `/checkouts/${encodeURIComponent(checkout)}/guidance/rulesync-updates`);
   updateCheckoutGuidance = (checkout: string, action: GuidanceAction) =>

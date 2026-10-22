@@ -2004,7 +2004,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
+      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab, compare a changed source revision before an explicit pin refresh, and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
       "publicExports": [
         {
           "name": "GuidanceSettings"
@@ -2032,6 +2032,16 @@
           "id": "source registration and selection",
           "owner": "application",
           "required": true
+        },
+        {
+          "id": "source check, available revision, review, and pending install",
+          "owner": "application",
+          "required": false
+        },
+        {
+          "id": "current source and stale or failed check",
+          "owner": "application",
+          "required": false
         },
         {
           "id": "blocked bundled guidance notice",

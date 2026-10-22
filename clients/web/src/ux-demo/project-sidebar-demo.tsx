@@ -6,7 +6,7 @@ import { Select } from '@kerfjs/ui/select';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { CommandDefinition } from '../api';
+import type { CommandDefinition, GuidanceOverview } from '../api';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
@@ -354,6 +354,38 @@ export function AiToolSettingsDemo() {
   );
 }
 export function GuidanceSettingsDemo() {
+  const updateOverview: GuidanceOverview = {
+    owner: 'builtin',
+    explicit_selection: true,
+    default_repository: '',
+    sources: [
+      {
+        id: 'playbook',
+        repository: 'https://example.test/playbook.git',
+        requested_ref: 'main',
+        commit: '1111111111111111111111111111111111111111',
+        rules: [
+          {
+            name: 'example',
+            description: 'Example rule',
+            version: 1,
+            installed_version: 1,
+            owner: null,
+            tags: [],
+            selected: true,
+          },
+        ],
+        skills: [{ name: 'example-skill', selected: true }],
+      },
+    ],
+  };
+  const update = {
+    id: 'playbook',
+    requested_ref: 'main',
+    pinned_commit: updateOverview.sources[0].commit,
+    observed_commit: '2222222222222222222222222222222222222222',
+    state: 'revision_changed' as const,
+  };
   return (
     <>
       <CatalogExample label="Description-First Rules with Installation Status">
@@ -400,6 +432,72 @@ export function GuidanceSettingsDemo() {
               },
             ],
           }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Source Revision Available and Reviewed">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          updates={[update]}
+          review={{
+            update,
+            changes: [
+              { name: 'example', kind: 'rule', change: 'updated', selected: true, before_version: 1, after_version: 2 },
+              {
+                name: 'new-rule',
+                kind: 'rule',
+                change: 'added',
+                selected: false,
+                before_version: null,
+                after_version: 1,
+              },
+              {
+                name: 'example-skill',
+                kind: 'skill',
+                change: 'updated',
+                selected: true,
+                before_version: null,
+                after_version: null,
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Current Source">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          updates={[{ ...update, observed_commit: update.pinned_commit, state: 'current' }]}
+        />
+      </CatalogExample>
+      <CatalogExample label="Stale Source Check">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          updates={[update]}
+          updatesCheckedAt={Date.UTC(2026, 9, 21, 12)}
+          updatesError="Source could not be checked."
         />
       </CatalogExample>
       <CatalogExample label="Unregistered">

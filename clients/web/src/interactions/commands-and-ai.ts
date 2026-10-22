@@ -79,6 +79,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly guidanceSourceId: Signal<string>;
   readonly guidanceRef: Signal<string>;
   readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
+  readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
+  readonly reviewGuidanceSource: (sourceId: string) => Promise<void>;
+  readonly refreshReviewedGuidance: () => Promise<void>;
   readonly driveOverridesByProject: Signal<Record<string, Partial<AiToolDefaults>>>;
   readonly normalizedAiSelection: (value?: Partial<AiToolDefaults>) => AiToolDefaults;
   readonly selectDriveModel: (model: string) => void;
@@ -232,6 +235,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     guidanceSourceId,
     guidanceRef,
     updateGuidance,
+    checkGuidanceUpdates,
+    reviewGuidanceSource,
+    refreshReviewedGuidance,
     driveOverridesByProject,
     normalizedAiSelection,
     selectDriveModel,
@@ -1037,13 +1043,32 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.selector, () => {
-      if (!guidanceLoading.value)
+      if (
+        !guidanceLoading.value &&
+        !guidanceOverview.value?.sources.some((source) => source.id === guidanceSourceId.value)
+      )
         void updateGuidance({
           action: 'register',
           id: guidanceSourceId.value,
           repository: guidanceRepository.value,
           ref: guidanceRef.value,
         });
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.selector, () => {
+      void checkGuidanceUpdates(true);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.selector, (_event, target) => {
+      const sourceId = target.closest<HTMLElement>('[data-guidance-update-source]')?.dataset.guidanceUpdateSource;
+      if (sourceId) void reviewGuidanceSource(sourceId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.refreshReviewedGuidance.selector, () => {
+      void refreshReviewedGuidance();
     }),
   );
   const toggleGuidance = (target: Element, field: 'rules' | 'skills') => {

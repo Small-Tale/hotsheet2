@@ -2,6 +2,176 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('Project guidance reviews a changed source revision before refreshing its pin', async ({ page }) => {
+  await openDemoProject(page);
+  const pinned = '1111111111111111111111111111111111111111';
+  const observed = '2222222222222222222222222222222222222222';
+  const actions: Array<Record<string, unknown>> = [];
+  let updateChecks = 0;
+  let failNextCheck = false;
+  const overview = {
+    owner: 'builtin',
+    explicit_selection: true,
+    default_repository: '',
+    sources: [
+      {
+        id: 'ai-playbook',
+        repository: 'https://example.test/playbook.git',
+        requested_ref: 'main',
+        commit: pinned,
+        rules: [
+          {
+            name: 'example',
+            version: 1,
+            installed_version: 1,
+            description: 'Example rule',
+            owner: null,
+            tags: [],
+            selected: true,
+          },
+        ],
+        skills: [{ name: 'example-skill', selected: true }],
+      },
+    ],
+  };
+  await page.route('**/checkouts/demo-checkout/guidance', (route) => {
+    if (route.request().method() === 'POST') {
+      const action = route.request().postDataJSON() as Record<string, unknown>;
+      actions.push(action);
+      if (action.action === 'register') {
+        overview.sources[0].commit = observed;
+        overview.sources[0].rules[0].version = 2;
+      }
+      if (action.action === 'apply') overview.sources[0].rules[0].installed_version = 2;
+    }
+    return route.fulfill({ json: overview });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/updates', (route) => {
+    updateChecks += 1;
+    if (failNextCheck) return route.fulfill({ status: 503, json: { error: 'Source check unavailable' } });
+    return route.fulfill({
+      json: [
+        {
+          id: 'ai-playbook',
+          requested_ref: 'main',
+          pinned_commit: overview.sources[0].commit,
+          observed_commit: observed,
+          state: overview.sources[0].commit === pinned ? 'revision_changed' : 'current',
+        },
+      ],
+    });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/updates/ai-playbook/review', (route) =>
+    route.fulfill({
+      json: {
+        update: {
+          id: 'ai-playbook',
+          requested_ref: 'main',
+          pinned_commit: overview.sources[0].commit,
+          observed_commit: observed,
+          state: overview.sources[0].commit === pinned ? 'revision_changed' : 'current',
+        },
+        changes:
+          overview.sources[0].commit === pinned
+            ? [
+                {
+                  name: 'example',
+                  kind: 'rule',
+                  change: 'updated',
+                  selected: true,
+                  before_version: 1,
+                  after_version: 2,
+                },
+                {
+                  name: 'new-rule',
+                  kind: 'rule',
+                  change: 'added',
+                  selected: false,
+                  before_version: null,
+                  after_version: 1,
+                },
+                {
+                  name: 'example-skill',
+                  kind: 'skill',
+                  change: 'updated',
+                  selected: true,
+                  before_version: null,
+                  after_version: null,
+                },
+              ]
+            : [],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const picker = page.locator('[data-component="guidance-settings"]');
+  await expect(picker.getByText('ai-playbook Has A Different Source Revision')).toBeVisible();
+  await expect(picker).not.toContainText('still need Apply Selected Guidance');
+  await picker
+    .locator('[data-guidance-updates]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-available-wide.png' });
+  await picker.getByRole('button', { name: 'Review Changes' }).click();
+  await expect(picker.locator('[data-guidance-review]')).toContainText('rule example: updated v1 → v2');
+  await expect(picker.locator('[data-guidance-review]')).toContainText('rule new-rule: added → v1 · not selected');
+  await expect(picker.locator('[data-guidance-review]')).toContainText('skill example-skill: updated');
+  await picker
+    .locator('[data-guidance-review]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-review-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await picker.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await expect(picker).toBeVisible();
+  const pickerBox = await picker.boundingBox();
+  expect(pickerBox).not.toBeNull();
+  expect(pickerBox!.x).toBeGreaterThanOrEqual(0);
+  expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(390);
+  expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await picker
+    .locator('[data-guidance-updates]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-review-phone.png' });
+  await picker
+    .locator('[data-guidance-review]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-review-detail-phone.png' });
+  await picker.getByRole('button', { name: 'Refresh Reviewed Pin' }).click();
+  await expect.poll(() => actions.find((action) => action.action === 'register')?.expected_commit).toBe(observed);
+  await expect(picker).toContainText('1 selected rule(s) still need Apply Selected Guidance');
+  expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await picker
+    .locator('[data-guidance-updates]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-pending-phone.png' });
+  await picker.getByRole('button', { name: 'Apply Selected Guidance' }).click();
+  await expect.poll(() => actions.some((action) => action.action === 'apply')).toBe(true);
+  await expect(picker).not.toContainText('still need Apply Selected Guidance');
+  await picker
+    .locator('[data-guidance-updates]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-applied-phone.png' });
+  await expect(picker).toContainText('ai-playbook: source is current');
+  const checksBeforeReload = updateChecks;
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const hideAgain = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideAgain.isVisible()) await hideAgain.click();
+  await expect(picker).toContainText('ai-playbook: source is current');
+  expect(updateChecks).toBe(checksBeforeReload);
+  await picker.getByRole('button', { name: 'Review Pinned Source' }).click();
+  await expect(picker.locator('[data-guidance-review]')).toContainText('The source is current.');
+  failNextCheck = true;
+  await picker.getByRole('button', { name: 'Check Now' }).click();
+  await expect(picker).toContainText('Source Check Failed');
+  await expect(picker).toContainText('Previous results may be stale');
+  await expect(picker).toContainText('ai-playbook: source is current');
+  expect(updateChecks).toBe(checksBeforeReload + 1);
+  await picker
+    .locator('[data-guidance-updates]')
+    .screenshot({ path: 'target/visual-captures/guidance-update-stale-phone.png' });
+});
+
 test('project guidance picker searches, selects, applies, and reports versions at wide and narrow sizes', async ({
   page,
 }) => {

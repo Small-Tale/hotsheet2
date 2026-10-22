@@ -3,6 +3,7 @@
 
 use crate::guidance_sources::{self, GuidanceSource, GuidanceSourceError};
 use serde::Serialize;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -29,6 +30,155 @@ pub struct SourceUpdate {
     /// A bounded, credential-free explanation when a check cannot establish freshness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<&'static str>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidanceChangeKind {
+    Added,
+    Removed,
+    Updated,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct GuidanceChange {
+    pub name: String,
+    pub kind: &'static str,
+    pub change: GuidanceChangeKind,
+    pub selected: bool,
+    pub before_version: Option<u64>,
+    pub after_version: Option<u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SourceReview {
+    pub update: SourceUpdate,
+    pub changes: Vec<GuidanceChange>,
+}
+
+/// Inspect a candidate at its observed commit without replacing the source's pin.
+/// Compare all offerings and mark which ones the project currently selects.
+pub fn review_project_source(
+    project: &Path,
+    id: &str,
+) -> Result<SourceReview, GuidanceSourceError> {
+    let config = guidance_sources::load(project)?;
+    let source = config
+        .sources
+        .iter()
+        .find(|source| source.id == id)
+        .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
+    let update = check_source(source);
+    let mut changes = Vec::new();
+    if update.state == UpdateState::RevisionChanged {
+        let commit = update
+            .observed_commit
+            .as_deref()
+            .expect("changed ref has commit");
+        let candidate =
+            guidance_sources::inspect_source(id, &source.repository, commit).map_err(|_| {
+                GuidanceSourceError::Invalid("candidate guidance could not be verified".into())
+            })?;
+        if candidate.commit != commit {
+            return Err(GuidanceSourceError::Invalid(
+                "source changed while reviewing guidance".into(),
+            ));
+        }
+        let rule_names: BTreeSet<_> = source
+            .rules
+            .iter()
+            .chain(candidate.rules.iter())
+            .map(|rule| &rule.name)
+            .collect();
+        for name in rule_names {
+            let before = source.rules.iter().find(|rule| &rule.name == name);
+            let after = candidate.rules.iter().find(|rule| &rule.name == name);
+            let selected = source.selected_rules.contains(name);
+            match (before, after) {
+                (Some(before), Some(after))
+                    if before.version != after.version || before.sha256 != after.sha256 =>
+                {
+                    changes.push(GuidanceChange {
+                        name: name.clone(),
+                        kind: "rule",
+                        change: GuidanceChangeKind::Updated,
+                        selected,
+                        before_version: Some(before.version),
+                        after_version: Some(after.version),
+                    });
+                }
+                (None, Some(after)) => changes.push(GuidanceChange {
+                    name: name.clone(),
+                    kind: "rule",
+                    change: GuidanceChangeKind::Added,
+                    selected,
+                    before_version: None,
+                    after_version: Some(after.version),
+                }),
+                (Some(before), None) => changes.push(GuidanceChange {
+                    name: name.clone(),
+                    kind: "rule",
+                    change: GuidanceChangeKind::Removed,
+                    selected,
+                    before_version: Some(before.version),
+                    after_version: None,
+                }),
+                _ => {}
+            }
+        }
+        let skill_names: BTreeSet<_> = source
+            .skills
+            .iter()
+            .chain(candidate.skills.iter())
+            .map(|skill| &skill.name)
+            .collect();
+        for name in skill_names {
+            let before = source.skills.iter().find(|skill| &skill.name == name);
+            let after = candidate.skills.iter().find(|skill| &skill.name == name);
+            let selected = source.selected_skills.contains(name);
+            match (before, after) {
+                (Some(before), Some(after))
+                    if before
+                        .files
+                        .iter()
+                        .map(|file| (&file.path, &file.sha256))
+                        .collect::<Vec<_>>()
+                        != after
+                            .files
+                            .iter()
+                            .map(|file| (&file.path, &file.sha256))
+                            .collect::<Vec<_>>() =>
+                {
+                    changes.push(GuidanceChange {
+                        name: name.clone(),
+                        kind: "skill",
+                        change: GuidanceChangeKind::Updated,
+                        selected,
+                        before_version: None,
+                        after_version: None,
+                    })
+                }
+                (None, Some(_)) => changes.push(GuidanceChange {
+                    name: name.clone(),
+                    kind: "skill",
+                    change: GuidanceChangeKind::Added,
+                    selected,
+                    before_version: None,
+                    after_version: None,
+                }),
+                (Some(_), None) => changes.push(GuidanceChange {
+                    name: name.clone(),
+                    kind: "skill",
+                    change: GuidanceChangeKind::Removed,
+                    selected,
+                    before_version: None,
+                    after_version: None,
+                }),
+                _ => {}
+            }
+        }
+    }
+    Ok(SourceReview { update, changes })
 }
 
 impl SourceUpdate {
@@ -170,6 +320,7 @@ pub fn check_source(source: &GuidanceSource) -> SourceUpdate {
 mod tests {
     use super::*;
     use crate::guidance_sources::GuidanceConfig;
+    use sha2::{Digest, Sha256};
     use std::fs;
     use std::path::Path;
 
@@ -205,6 +356,165 @@ mod tests {
             selected_rules: vec![],
             selected_skills: vec![],
         }
+    }
+
+    fn write_guidance_rule(repo: &Path, version: u64) {
+        fs::create_dir_all(repo.join("rules")).unwrap();
+        let body = format!(
+            "<!-- hotsheet:begin section=example v={version} -->\n\nRule {version}.\n\n<!-- hotsheet:end section=example -->\n"
+        );
+        fs::write(
+            repo.join("rules/example.md"),
+            format!("---\ndescription: \"Example rule\"\n---\n\n{body}"),
+        )
+        .unwrap();
+        fs::write(
+            repo.join("rules-manifest.json"),
+            serde_json::json!({
+                "schema_version": 1,
+                "rules": [{"name":"example", "path":"rules/example.md", "version":version,
+                    "sha256":format!("{:x}", Sha256::digest(body.as_bytes()))}]
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn review_tracks_selected_revision_changes_without_writing_and_checked_refresh_rejects_a_race()
+    {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path().join("source");
+        let project = root.path().join("project");
+        fs::create_dir_all(&repo).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        git(&repo, &["init", "-q"]);
+        write_guidance_rule(&repo, 1);
+        fs::create_dir_all(repo.join("skills/example")).unwrap();
+        fs::write(repo.join("skills/example/SKILL.md"), "# First skill\n").unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "first"]);
+        let first = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["branch", "-M", "main"]);
+        let repository = repo.to_str().unwrap();
+        guidance_sources::register(&project, "fixture", repository, "main").unwrap();
+        guidance_sources::select(
+            &project,
+            "fixture",
+            &["example".into()],
+            &["example".into()],
+        )
+        .unwrap();
+        assert_eq!(
+            review_project_source(&project, "fixture")
+                .unwrap()
+                .changes
+                .len(),
+            0
+        );
+        let pin = fs::read(project.join(guidance_sources::CONFIG_PATH)).unwrap();
+        write_guidance_rule(&repo, 2);
+        fs::write(repo.join("skills/example/SKILL.md"), "# Second skill\n").unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "second"]);
+        let second = git(&repo, &["rev-parse", "HEAD"]);
+        let review = review_project_source(&project, "fixture").unwrap();
+        assert_eq!(
+            review.update.observed_commit.as_deref(),
+            Some(second.as_str())
+        );
+        assert_eq!(review.changes[0].change, GuidanceChangeKind::Updated);
+        assert_eq!(review.changes[0].before_version, Some(1));
+        assert_eq!(review.changes[0].after_version, Some(2));
+        assert_eq!(review.changes[1].kind, "skill");
+        assert_eq!(review.changes[1].change, GuidanceChangeKind::Updated);
+        assert_eq!(
+            fs::read(project.join(guidance_sources::CONFIG_PATH)).unwrap(),
+            pin
+        );
+        assert!(
+            guidance_sources::register_checked(
+                &project,
+                "fixture",
+                repository,
+                "main",
+                Some(&first)
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read(project.join(guidance_sources::CONFIG_PATH)).unwrap(),
+            pin
+        );
+        let refreshed = guidance_sources::register_checked(
+            &project,
+            "fixture",
+            repository,
+            "main",
+            Some(&second),
+        )
+        .unwrap();
+        assert_eq!(refreshed.sources[0].commit, second);
+        assert_eq!(
+            review_project_source(&project, "fixture")
+                .unwrap()
+                .changes
+                .len(),
+            0
+        );
+        let new_body = "<!-- hotsheet:begin section=new-rule v=1 -->\n\nNew rule.\n\n<!-- hotsheet:end section=new-rule -->\n";
+        fs::write(
+            repo.join("rules/new-rule.md"),
+            format!("---\ndescription: \"New rule\"\n---\n\n{new_body}"),
+        )
+        .unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(repo.join("rules-manifest.json")).unwrap()).unwrap();
+        manifest["rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name":"new-rule", "path":"rules/new-rule.md", "version":1,
+                "sha256":format!("{:x}", Sha256::digest(new_body.as_bytes()))
+            }));
+        fs::write(repo.join("rules-manifest.json"), manifest.to_string()).unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "third"]);
+        let review = review_project_source(&project, "fixture").unwrap();
+        assert_eq!(review.update.state, UpdateState::RevisionChanged);
+        assert_eq!(
+            review.changes.len(),
+            1,
+            "history alone is not a skill update"
+        );
+        assert_eq!(review.changes[0].name, "new-rule");
+        assert_eq!(review.changes[0].change, GuidanceChangeKind::Added);
+        assert!(!review.changes[0].selected);
+        fs::write(
+            repo.join("rules-manifest.json"),
+            r#"{"schema_version":1,"rules":[]}"#,
+        )
+        .unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "fourth"]);
+        let fourth = git(&repo, &["rev-parse", "HEAD"]);
+        let review = review_project_source(&project, "fixture").unwrap();
+        assert_eq!(review.changes[0].change, GuidanceChangeKind::Removed);
+        assert!(review.changes[0].selected);
+        assert!(
+            guidance_sources::register_checked(
+                &project,
+                "fixture",
+                repository,
+                "main",
+                Some(&fourth)
+            )
+            .is_err()
+        );
+        assert_eq!(
+            guidance_sources::load(&project).unwrap().sources[0].commit,
+            second
+        );
     }
 
     #[test]

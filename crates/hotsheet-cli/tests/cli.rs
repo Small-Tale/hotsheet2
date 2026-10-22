@@ -102,10 +102,71 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
     let updates: serde_json::Value = serde_json::from_slice(&run(&["check-updates"])).unwrap();
     assert_eq!(updates[0]["state"], "revision_changed");
     assert_eq!(updates[0]["pinned_commit"], commit);
+    let review: serde_json::Value =
+        serde_json::from_slice(&run(&["review", "--source", "ai-playbook"])).unwrap();
+    assert_eq!(review["update"]["state"], "revision_changed");
+    assert_eq!(review["changes"].as_array().unwrap().len(), 0);
     assert_eq!(
         std::fs::read(project.join(".hotsheet2/guidance-sources.json")).unwrap(),
         pin_before,
         "checking must not modify the pinned source"
+    );
+    let second = git(&["rev-parse", "HEAD"]);
+    let changed_body = body
+        .replace("v=1", "v=2")
+        .replace("Fixture.", "Updated fixture.");
+    std::fs::write(source.join("rules/project-bootstrap.md"), format!(
+        "---\nroot: true\ntargets: [\"*\"]\ndescription: \"Project bootstrap\"\n---\n\n{changed_body}"
+    )).unwrap();
+    std::fs::write(source.join("rules-manifest.json"), serde_json::json!({
+        "schema_version": 1, "rules": [{"name": "project-bootstrap", "path": "rules/project-bootstrap.md",
+            "version": 2, "sha256": format!("{:x}", Sha256::digest(changed_body.as_bytes())), "tags": ["general"]}]
+    }).to_string()).unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "new rule version"]);
+    let third = git(&["rev-parse", "HEAD"]);
+    let review: serde_json::Value =
+        serde_json::from_slice(&run(&["review", "--source", "ai-playbook"])).unwrap();
+    assert_eq!(review["update"]["observed_commit"], third);
+    assert_eq!(review["changes"][0]["change"], "updated");
+    assert_eq!(review["changes"][0]["before_version"], 1);
+    assert_eq!(review["changes"][0]["after_version"], 2);
+    assert_eq!(
+        std::fs::read(project.join(".hotsheet2/guidance-sources.json")).unwrap(),
+        pin_before
+    );
+    hs(&project)
+        .args(["guidance", "--project"])
+        .arg(&project)
+        .args([
+            "register",
+            "--repository",
+            source.to_str().unwrap(),
+            "--ref",
+            &branch,
+            "--expected-commit",
+            &second,
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        std::fs::read(project.join(".hotsheet2/guidance-sources.json")).unwrap(),
+        pin_before
+    );
+    run(&[
+        "register",
+        "--repository",
+        source.to_str().unwrap(),
+        "--ref",
+        &branch,
+        "--expected-commit",
+        &third,
+    ]);
+    run(&["apply"]);
+    assert!(
+        std::fs::read_to_string(project.join("AGENTS.md"))
+            .unwrap()
+            .contains("Updated fixture.")
     );
 }
 

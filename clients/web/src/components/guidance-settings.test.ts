@@ -3,6 +3,101 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('separates changed upstream revisions, pending pinned installation, and failed checks', () => {
+    const base = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: 'main',
+      sourceId: 'fixture',
+      ownerFilter: '',
+      tagFilter: '',
+      overview: {
+        owner: 'builtin' as const,
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'fixture',
+            repository: 'https://example.test/source.git',
+            requested_ref: 'main',
+            commit: '1111111111111111111111111111111111111111',
+            rules: [
+              {
+                name: 'example',
+                description: 'Example rule',
+                version: 2,
+                installed_version: 1,
+                owner: null,
+                tags: [],
+                selected: true,
+              },
+            ],
+            skills: [],
+          },
+        ],
+      },
+    };
+    const update = {
+      id: 'fixture',
+      requested_ref: 'main',
+      pinned_commit: base.overview.sources[0].commit,
+      observed_commit: '2222222222222222222222222222222222222222',
+      state: 'revision_changed' as const,
+    };
+    const changed = String(
+      GuidanceSettings({
+        ...base,
+        updates: [update],
+        review: {
+          update,
+          changes: [
+            { name: 'example', kind: 'rule', change: 'updated', selected: true, before_version: 2, after_version: 3 },
+          ],
+        },
+      }),
+    );
+    expect(changed).toContain('fixture Has A Different Source Revision');
+    expect(changed).toContain('Review fixture');
+    expect(changed).toContain('rule example: updated v2 → v3');
+    expect(changed).toContain('1 selected rule(s) still need Apply Selected Guidance');
+    const failed = String(
+      GuidanceSettings({
+        ...base,
+        updates: [{ ...update, state: 'check_failed' }],
+        updatesError: 'Remote check failed.',
+      }),
+    );
+    expect(failed).toContain('Source Check Failed');
+    expect(failed).toContain('Previous results may be stale');
+    expect(failed).not.toContain('Refresh Reviewed Pin');
+    const current = String(GuidanceSettings({ ...base, updates: [{ ...update, state: 'current' }] }));
+    expect(current).toContain('source is current');
+    expect(current).toContain('selected rule(s) still need Apply Selected Guidance');
+    const removed = String(
+      GuidanceSettings({
+        ...base,
+        review: {
+          update,
+          changes: [
+            {
+              name: 'example',
+              kind: 'rule',
+              change: 'removed',
+              selected: true,
+              before_version: 2,
+              after_version: null,
+            },
+          ],
+        },
+      }),
+    );
+    expect(removed).toContain('Deselect and apply those entries at the old pin');
+    expect(removed).toMatch(
+      /data-action="refresh-reviewed-guidance"[^>]*disabled|disabled[^>]*data-action="refresh-reviewed-guidance"/,
+    );
+  });
   it('shows standalone Rulesync lock freshness and keeps the executable version separate', () => {
     const base = {
       loading: false,

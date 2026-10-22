@@ -18,6 +18,8 @@ import type {
   GitHubAuthStatus,
   GitHubRepositoryAccess,
   GuidanceOverview,
+  GuidanceSourceReview,
+  GuidanceSourceUpdate,
   MessageConnectionReceipt,
   PermissionRequest,
   PollResponse,
@@ -138,6 +140,40 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
     return { ...source, rules, skills } as GuidanceOverview['sources'][number];
   });
   return { ...body, sources } as GuidanceOverview;
+};
+
+const parseGuidanceSourceUpdate: ResponseParser<GuidanceSourceUpdate> = (value) => {
+  const what = 'guidance source update';
+  const body = record(value, what);
+  for (const key of ['id', 'requested_ref', 'pinned_commit']) requiredString(body, key, what);
+  if (body.observed_commit !== null && typeof body.observed_commit !== 'string') invalid(what);
+  if (!['current', 'revision_changed', 'pinned', 'tag_moved', 'check_failed'].includes(String(body.state)))
+    invalid(what);
+  if (body.reason !== undefined && typeof body.reason !== 'string') invalid(what);
+  return body as unknown as GuidanceSourceUpdate;
+};
+
+export const parseGuidanceSourceUpdates: ResponseParser<GuidanceSourceUpdate[]> = (value) =>
+  list(value, 'guidance source updates', parseGuidanceSourceUpdate);
+
+export const parseGuidanceSourceReview: ResponseParser<GuidanceSourceReview> = (value) => {
+  const what = 'guidance source review';
+  const body = record(value, what);
+  const update = parseGuidanceSourceUpdate(body.update);
+  const changes = list(body.changes, what, (entry) => {
+    const change = record(entry, what);
+    requiredString(change, 'name', what);
+    if (
+      !['rule', 'skill'].includes(String(change.kind)) ||
+      !['added', 'removed', 'updated'].includes(String(change.change))
+    )
+      invalid(what);
+    if (typeof change.selected !== 'boolean') invalid(what);
+    for (const key of ['before_version', 'after_version'])
+      if (change[key] !== null && typeof change[key] !== 'number') invalid(what);
+    return change as unknown as GuidanceSourceReview['changes'][number];
+  });
+  return { update, changes };
 };
 
 export const parseRulesyncUpdateReport: ResponseParser<RulesyncUpdateReport | null> = (value) => {

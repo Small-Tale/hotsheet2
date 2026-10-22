@@ -3784,6 +3784,30 @@ test('shows the blocked bundled guidance demo variant at wide and phone widths',
   }
 });
 
+test('shows reviewed, current, and stale pinned source variants at wide and phone widths', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=guidance-settings');
+    const variants = [
+      [
+        'reviewed',
+        page.locator('[data-component="guidance-settings"]').filter({ has: page.locator('[data-guidance-review]') }),
+      ],
+      [
+        'current',
+        page.locator('[data-component="guidance-settings"]').filter({ hasText: 'playbook: source is current' }),
+      ],
+      ['stale', page.locator('[data-component="guidance-settings"]').filter({ hasText: 'Source Check Failed' })],
+    ] as const;
+    for (const [state, variant] of variants) {
+      await expect(variant.locator('[data-guidance-updates]')).toBeVisible();
+      await variant
+        .locator('[data-guidance-updates]')
+        .screenshot({ path: `target/visual-captures/guidance-${state}-demo-${width}.png` });
+    }
+  }
+});
+
 test('shows standalone Rulesync current, outdated, unlocked, and unknown states', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });

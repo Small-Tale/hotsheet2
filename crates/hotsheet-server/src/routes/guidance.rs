@@ -5,7 +5,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_plugins::guidance_sources as sources;
-use hotsheet_plugins::guidance_updates::{self, SourceUpdate};
+use hotsheet_plugins::guidance_updates::{self, SourceReview, SourceUpdate};
 use hotsheet_plugins::rulesync_updates::{self, RulesyncUpdateReport};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -147,6 +147,21 @@ pub(crate) async fn get_checkout_guidance_updates(
     .map(Json)
 }
 
+/// Resolve and compare one selected source candidate without changing the project.
+pub(crate) async fn get_checkout_guidance_review(
+    State(state): State<AppState>,
+    Path((reference, source)): Path<(String, String)>,
+) -> Result<Json<SourceReview>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        guidance_updates::review_project_source(&project, &source)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
+}
+
 /// Standalone Rulesync lock status; separate from Hot Sheet's pinned sources.
 pub(crate) async fn get_checkout_rulesync_updates(
     State(state): State<AppState>,
@@ -167,6 +182,7 @@ pub(crate) enum GuidanceAction {
         repository: String,
         #[serde(rename = "ref")]
         requested_ref: String,
+        expected_commit: Option<String>,
     },
     Select {
         source: String,
@@ -191,9 +207,16 @@ pub(crate) async fn update_checkout_guidance(
                 id,
                 repository,
                 requested_ref,
+                expected_commit,
             } => {
-                sources::register(&project, &id, &repository, &requested_ref)
-                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+                sources::register_checked(
+                    &project,
+                    &id,
+                    &repository,
+                    &requested_ref,
+                    expected_commit.as_deref(),
+                )
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
             }
             GuidanceAction::Select {
                 source,

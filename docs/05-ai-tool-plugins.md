@@ -172,8 +172,22 @@ it), and `check_failed` (missing/ambiguous ref or transport failure). A changed
 branch is a review candidate, not proof that its history advanced. Each remote
 check is bounded to 20 seconds and transport errors are redacted. The command
 is explicit; normal setup and apply continue to use the offline pinned snapshot.
-Automatic event-driven checks and the review banner are tracked by
-`HS2-S75AJ8`.
+Project guidance checks registered refs when the tab opens and caches the result
+for 24 hours per checkout; **Check Now** makes a fresh request. A failed check
+keeps any previous result visibly stale. A changed branch has a review action
+that fetches and verifies the observed commit without changing the pin, then
+lists rule and skill additions, removals, and changes with each item's
+selection status. **Refresh
+reviewed pin** rechecks the requested ref against that exact commit before
+registration; if it moved again, repeat the review. **Apply Selected Guidance**
+remains a separate explicit operation, and locally changed installed guidance
+keeps its existing protection. A selected rule whose installed version differs
+from the pin is labeled as pending installation even when the source itself is
+current. When a candidate removes selected guidance, deselect and apply those
+entries while the old pin is still available, then review the source again.
+The headless equivalents are `guidance review --source <id>` and
+`guidance register --id <id> --repository <url> --ref <ref>
+--expected-commit <reviewed-sha>`, followed by `guidance apply`.
 
 Bundled Hot Sheet shared guidance is a separate offline channel. On setup refresh,
 an exact known predecessor upgrades automatically. If a locally changed older section
