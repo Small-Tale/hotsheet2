@@ -17047,17 +17047,31 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
         )
         .unwrap();
     let second = registry
-        .register(&second_root, None, None, vec![store_path])
+        .register(&second_root, None, None, vec![store_path.clone()])
         .unwrap();
-    let source_id = first.sources[0].connection_id.clone();
+    let legacy_project = store.root().display().to_string();
+    let shared_locator = store_path.canonicalize().unwrap().display().to_string();
+    let source_id = first
+        .sources
+        .iter()
+        .find(|source| source.locator == shared_locator)
+        .unwrap()
+        .connection_id
+        .clone();
+    let other_source_id = first
+        .sources
+        .iter()
+        .find(|source| source.locator != shared_locator)
+        .unwrap()
+        .connection_id
+        .clone();
     registry
-        .set_default_source(&first.id, Some(&first.sources[1].connection_id))
+        .set_default_source(&first.id, Some(&other_source_id))
         .unwrap();
     let external = registry
         .register(&external_root, None, None, vec![])
         .unwrap();
     let rules_path = root.path().join("permission-rules").join("store.json");
-    let legacy_project = store.root().display().to_string();
     hotsheet_aitools::append_permission_rule(
         &rules_path,
         &hotsheet_aitools::PermissionRule {
