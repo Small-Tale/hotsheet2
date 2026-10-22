@@ -103,6 +103,11 @@ component-gap workflow. Build custom components only for Hot Sheet-specific
 interactions those components do not cover. Web Awesome Pro is optional and
 requires a separate decision/license.
 
+For shared interface and interaction conventions, read Kerf's installed
+`clients/web/node_modules/@kerfjs/ui/docs/interaction-conventions.md` and its
+linked design philosophy. Keep Hot Sheet decisions in
+`docs/ui-design-philosophy.md` and `docs/design-guidelines.md`.
+
 Never use fixed-interval, timer-based, or immediate-repeat network polling for
 application state. Live updates must use WebSockets or genuine long polling: an idle
 long-poll request remains pending until an event or bounded server timeout, then the
