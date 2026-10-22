@@ -592,10 +592,15 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/claude-2.1.302-inbo
 - **Version check.** A report from a known Claude older than 2.1.224 registers no adapter. An
   unknown version is accepted, because exporting a socket implies support.
 - **Command.** Not supported (`422 session_push_unsupported`).
-- **Bypass mode.** A session that bypasses permissions holds every inbound message for an
-  approval dialog. A Hot Sheet `-p` stream child launched in `bypassPermissions` therefore also
-  gets `--settings {"crossSessionInbound":"accept"}`. This bypass path is doc-sourced, not yet
-  live-verified (HS2-FBR3NB). Native Windows (a named pipe) is not supported.
+- **Bypass mode.** Hot Sheet gives a `-p` stream child launched in `bypassPermissions`
+  `--settings {"crossSessionInbound":"accept"}` so a release that holds inbound messages for
+  approval cannot strand them in a headless process. Live probes on Claude Code 2.1.307
+  delivered a message to an interactive bypass session without an approval dialog and to
+  headless bypass sessions both with and without this setting. The headless probes sent the
+  message during a Bash tool call and observed its marker in the final reply (HS2-FBR3NB).
+  These observations describe 2.1.307; they do not establish behavior for other releases.
+  Hot Sheet does not add the setting to interactive terminals. Native Windows (a named pipe)
+  is not supported.
 - **Channels.** Claude Code [channels](https://code.claude.com/docs/en/channels) remain out of
   scope. They are a research preview with hidden flags, an allowlist, and an interactive
   dialog, and they are ignored under `-p`.

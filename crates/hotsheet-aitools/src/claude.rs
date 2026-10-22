@@ -930,9 +930,9 @@ pub(crate) fn stream_args(options: &ClaudeStreamSpawnOptions<'_>) -> Vec<String>
             args.push("--effort".into());
             args.push(effort.to_string());
         }
-        // A bypass-mode session holds every cross-session message for an approval dialog a
-        // headless child cannot show; accept them so a Hot Sheet inbox message is not parked
-        // (HS2-M15CHN, code.claude.com/docs/en/cross-session-messaging).
+        // Explicitly accept cross-session messages in a headless bypass-mode child: if a
+        // Claude release holds them for approval, -p cannot show that dialog. Claude 2.1.307
+        // delivered live probes even without this setting (HS2-FBR3NB).
         if options.permission_mode == Some("bypassPermissions") {
             args.push("--settings".into());
             args.push(r#"{"crossSessionInbound":"accept"}"#.into());
@@ -1256,7 +1256,7 @@ mod usage_tests {
 
     #[test]
     fn only_a_bypass_mode_child_accepts_cross_session_messages() {
-        // HS2-M15CHN: a bypass-mode session holds inbox messages for a dialog -p cannot show.
+        // HS2-M15CHN/HS2-FBR3NB: keep the explicit headless bypass setting as a safeguard.
         let settings = |mode: Option<&str>| {
             let args = stream_args(&ClaudeStreamSpawnOptions {
                 permission_mode: mode,
