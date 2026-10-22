@@ -181,7 +181,9 @@ pub(crate) fn bind(socket: &Path) -> io::Result<(UnixListener, SocketOwnership)>
                     "refusing to remove an unowned or non-socket broker path",
                 ));
             }
-            match std::os::unix::net::UnixStream::connect(socket) {
+            match probe_existing_socket(|| {
+                std::os::unix::net::UnixStream::connect(socket).map(|_| ())
+            }) {
                 Ok(_) => {
                     return Err(io::Error::new(
                         io::ErrorKind::AddrInUse,
@@ -212,6 +214,24 @@ pub(crate) fn bind(socket: &Path) -> io::Result<(UnixListener, SocketOwnership)>
             _lock: lock,
         },
     ))
+}
+
+/// An overloaded Unix socket can briefly report WouldBlock after its listener
+/// closes. Keep the inode intact while the probe is uncertain; only a later
+/// connection refusal or disappearance proves that stale-socket cleanup is safe.
+fn probe_existing_socket(mut probe: impl FnMut() -> io::Result<()>) -> io::Result<()> {
+    const MAX_ATTEMPTS: usize = 10;
+    for attempt in 0..MAX_ATTEMPTS {
+        match probe() {
+            Err(error)
+                if error.kind() == io::ErrorKind::WouldBlock && attempt + 1 < MAX_ATTEMPTS =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
+    unreachable!("the final probe attempt returns its result")
 }
 
 fn valid_lock(metadata: &fs::Metadata) -> bool {
@@ -245,6 +265,37 @@ fn open_lock(socket: &Path) -> io::Result<File> {
 mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
+
+    #[test]
+    fn socket_probe_retries_only_transient_would_block() {
+        let mut attempts = 0;
+        let result = probe_existing_socket(|| {
+            attempts += 1;
+            if attempts < 3 {
+                Err(io::Error::from(io::ErrorKind::WouldBlock))
+            } else {
+                Err(io::Error::from(io::ErrorKind::ConnectionRefused))
+            }
+        });
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::ConnectionRefused);
+        assert_eq!(attempts, 3);
+
+        let mut attempts = 0;
+        let result = probe_existing_socket(|| {
+            attempts += 1;
+            Err(io::Error::from(io::ErrorKind::WouldBlock))
+        });
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(attempts, 10);
+
+        let mut attempts = 0;
+        let result = probe_existing_socket(|| {
+            attempts += 1;
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        });
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(attempts, 1);
+    }
 
     fn fixture() -> tempfile::TempDir {
         let directory = tempfile::Builder::new()

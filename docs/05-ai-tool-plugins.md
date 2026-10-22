@@ -705,6 +705,8 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
     second namespace. This preserves terminals across upgrades. Symlink/shared directories and
     non-socket stale paths are rejected with a diagnostic; exclusive no-follow locks
     serialize detached ownership, and shutdown removes only the socket inode it bound.
+    A transient `WouldBlock` while probing an old socket is retried briefly; cleanup
+    still requires a connection refusal or disappearance and never removes a socket whose liveness is uncertain.
     Lock files remain in place to avoid unlink/recreate races; they hold no durable
     application data and the operating system releases their lock on process exit.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
