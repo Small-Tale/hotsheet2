@@ -6,7 +6,7 @@ import { Select } from '@kerfjs/ui/select';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { CommandDefinition, GuidanceOverview } from '../api';
+import type { CommandDefinition, GuidanceOverview, GuidanceRecommendationReport } from '../api';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
@@ -354,6 +354,44 @@ export function AiToolSettingsDemo() {
   );
 }
 export function GuidanceSettingsDemo() {
+  const recommendations: GuidanceRecommendationReport = {
+    fingerprint: 'demo-signals-a',
+    signals: [{ key: 'manifest', evidence: 'Cargo.toml' }],
+    candidates: [
+      {
+        source: 'playbook',
+        kind: 'rule',
+        name: 'rust-lint',
+        version: 2,
+        description: 'Use the Rust lint and formatting defaults.',
+        pinned_commit: '1111111111111111111111111111111111111111',
+        evidence: ['Cargo.toml', 'Rust rule tags'],
+        fingerprint: 'rust-lint-v2',
+        selected: false,
+        installed_version: 1,
+        state: 'new',
+      },
+      {
+        source: 'playbook',
+        kind: 'skill',
+        name: 'rust-review',
+        version: 1,
+        description: 'Review Rust changes with the pinned project skill.',
+        pinned_commit: '1111111111111111111111111111111111111111',
+        evidence: ['Cargo.toml', 'Rust skill name'],
+        fingerprint: 'rust-review-v1',
+        selected: false,
+        installed_version: null,
+        state: 'dismissed',
+      },
+    ],
+    changes: [
+      { source: 'playbook', kind: 'rule', name: 'rust-lint', change: 'changed' },
+      { source: 'playbook', kind: 'rule', name: 'old-rust-rule', change: 'withdrawn' },
+    ],
+    source_registration_suggested: false,
+    first_accept_replaces_bundled_default: false,
+  };
   const updateOverview: GuidanceOverview = {
     owner: 'builtin',
     explicit_selection: true,
@@ -388,6 +426,73 @@ export function GuidanceSettingsDemo() {
   };
   return (
     <>
+      <CatalogExample label="Recommendations: Changed, Dismissed, and Withdrawn">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          recommendations={recommendations}
+        />
+      </CatalogExample>
+      <CatalogExample label="Recommendations: Selected and Reviewed">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          recommendations={{
+            ...recommendations,
+            changes: [],
+            candidates: [{ ...recommendations.candidates[0], selected: true, state: 'accepted' }],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Recommendations: No Source and First Selection">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          recommendations={{
+            ...recommendations,
+            candidates: [],
+            changes: [],
+            source_registration_suggested: true,
+            first_accept_replaces_bundled_default: true,
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Recommendations: Checking and Unknown">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={updateOverview}
+          recommendations={recommendations}
+          recommendationsLoading
+          recommendationsError="Local project evidence is unavailable."
+        />
+      </CatalogExample>
       <CatalogExample label="Description-First Rules with Installation Status">
         <GuidanceSettings
           loading={false}

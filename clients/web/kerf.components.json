@@ -3890,7 +3890,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab, compare a changed source revision before an explicit pin refresh, and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
+      "purpose": "Review local project guidance recommendations with bounded evidence, changed and withdrawn suggestion notices, individual accept or dismiss actions, and unknown status. Discover pinned sources, compare a changed revision, and choose rules and skills for the selected instruction writer. Separate notices identify blocked bundled shared guidance and standalone Rulesync lock freshness.",
       "source": "src/components/guidance-settings.tsx",
       "publicExports": [{ "name": "GuidanceSettings" }],
       "sourceLinks": ["src/components/guidance-settings.tsx"],
@@ -3907,6 +3907,11 @@
             "required": false
           },
           { "id": "current source and stale or failed check", "owner": "application", "required": false },
+          {
+            "id": "recommendation loading, unknown, changed, dismissed, selected, and withdrawn",
+            "owner": "application",
+            "required": false
+          },
           { "id": "blocked bundled guidance notice", "owner": "application", "required": false },
           {
             "id": "standalone Rulesync current, outdated, unlocked, and unknown",

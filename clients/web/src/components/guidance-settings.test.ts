@@ -3,6 +3,63 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('shows local recommendation changes and individual decision controls (HS2-QBXRFY)', () => {
+    const base = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    const recommendations = {
+      fingerprint: 'scan',
+      signals: [{ key: 'rust', evidence: 'Cargo.toml' }],
+      candidates: [
+        {
+          source: 'rules',
+          kind: 'rule' as const,
+          name: 'rust-lint',
+          version: 2,
+          description: 'Rust lint and formatting',
+          pinned_commit: 'abcdef1234567890',
+          evidence: ['Cargo.toml'],
+          fingerprint: 'candidate',
+          selected: false,
+          installed_version: null,
+          state: 'new' as const,
+        },
+      ],
+      changes: [{ source: 'rules', kind: 'rule' as const, name: 'rust-lint', change: 'new' as const }],
+      source_registration_suggested: false,
+      first_accept_replaces_bundled_default: true,
+    };
+    const markup = String(GuidanceSettings({ ...base, recommendations }));
+    expect(markup).toContain('New Guidance Recommendations Are Available');
+    expect(markup).toContain('Rust lint and formatting');
+    expect(markup).toContain('Evidence: Cargo.toml');
+    expect(markup).toContain('data-recommendation-fingerprint="candidate"');
+    expect(markup).toContain('Accept Selection');
+    expect(markup).toContain('Dismiss');
+    expect(markup).toContain('first accepted selection replaces the bundled default');
+    const dismissed = String(
+      GuidanceSettings({
+        ...base,
+        recommendations: {
+          ...recommendations,
+          changes: [],
+          candidates: [{ ...recommendations.candidates[0], state: 'dismissed' as const }],
+        },
+      }),
+    );
+    expect(dismissed).not.toContain('New Guidance Recommendations Are Available');
+    expect(dismissed).toContain('dismissed');
+    const offline = String(GuidanceSettings({ ...base, recommendationsError: 'Local scan unavailable.' }));
+    expect(offline).toContain('Recommendation Status Unknown');
+    expect(offline).not.toContain('No guidance suggestions match');
+  });
   it('separates changed upstream revisions, pending pinned installation, and failed checks', () => {
     const base = {
       loading: false,

@@ -11,6 +11,7 @@ import {
   type FullTicket,
   type GuidanceAction,
   type GuidanceOverview,
+  type GuidanceRecommendationDecision,
   type ProviderConnection,
 } from '../api';
 import { type CommandDropTarget } from '../command-order';
@@ -82,6 +83,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
   readonly reviewGuidanceSource: (sourceId: string) => Promise<void>;
   readonly refreshReviewedGuidance: () => Promise<void>;
+  readonly refreshGuidanceRecommendations: () => Promise<void>;
+  readonly decideGuidanceRecommendation: (decision: GuidanceRecommendationDecision) => Promise<void>;
   readonly driveOverridesByProject: Signal<Record<string, Partial<AiToolDefaults>>>;
   readonly normalizedAiSelection: (value?: Partial<AiToolDefaults>) => AiToolDefaults;
   readonly selectDriveModel: (model: string) => void;
@@ -238,6 +241,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     checkGuidanceUpdates,
     reviewGuidanceSource,
     refreshReviewedGuidance,
+    refreshGuidanceRecommendations,
+    decideGuidanceRecommendation,
     driveOverridesByProject,
     normalizedAiSelection,
     selectDriveModel,
@@ -1059,6 +1064,40 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.selector, () => {
       void checkGuidanceUpdates(true);
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.recheckGuidanceRecommendations.selector, () => {
+      void refreshGuidanceRecommendations();
+    }),
+  );
+  const decideRecommendation = (target: Element, decision: GuidanceRecommendationDecision['decision']) => {
+    const button = target.closest<HTMLElement>('[data-recommendation-fingerprint]');
+    const source = button?.dataset.recommendationSource;
+    const kind = button?.dataset.recommendationKind;
+    const name = button?.dataset.recommendationName;
+    const fingerprint = button?.dataset.recommendationFingerprint;
+    if (source && (kind === 'rule' || kind === 'skill') && name && fingerprint)
+      void decideGuidanceRecommendation({ source, kind, name, fingerprint, decision });
+  };
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      COMMANDS_AND_AI_ACTIONS.acceptGuidanceRecommendation.selector,
+      (_event, target) => {
+        decideRecommendation(target, 'accepted');
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      COMMANDS_AND_AI_ACTIONS.dismissGuidanceRecommendation.selector,
+      (_event, target) => {
+        decideRecommendation(target, 'dismissed');
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.selector, (_event, target) => {

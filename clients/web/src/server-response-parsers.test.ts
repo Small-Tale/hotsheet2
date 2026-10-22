@@ -14,6 +14,7 @@ import {
   parseCustomView,
   parseFullTicket,
   parseGitHubAuthStatus,
+  parseGuidanceRecommendationReport,
   parseOpenedCheckout,
   parsePermissionDecision,
   parsePermissionRequest,
@@ -42,6 +43,37 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('validates guidance recommendation decisions and review changes (HS2-QBXRFY)', () => {
+    const report = {
+      fingerprint: 'scan',
+      signals: [{ key: 'rust', evidence: 'Cargo.toml' }],
+      candidates: [
+        {
+          source: 'rules',
+          kind: 'rule',
+          name: 'rust-lint',
+          version: 2,
+          description: 'Rust checks',
+          pinned_commit: 'abc',
+          evidence: ['Cargo.toml'],
+          fingerprint: 'candidate',
+          selected: false,
+          installed_version: null,
+          state: 'new',
+        },
+      ],
+      changes: [{ source: 'rules', kind: 'rule', name: 'rust-lint', change: 'new' }],
+      source_registration_suggested: false,
+      first_accept_replaces_bundled_default: true,
+    };
+    expect(parseGuidanceRecommendationReport(report)).toEqual(report);
+    expect(() =>
+      parseGuidanceRecommendationReport({ ...report, candidates: [{ ...report.candidates[0], state: 'unknown' }] }),
+    ).toThrow(ServerResponseShapeError);
+    expect(() =>
+      parseGuidanceRecommendationReport({ ...report, changes: [{ ...report.changes[0], change: 'removed' }] }),
+    ).toThrow(ServerResponseShapeError);
+  });
   it('keeps standalone Rulesync lock state separate from the executable version', () => {
     expect(parseRulesyncUpdateReport(null)).toBeNull();
     const report = {

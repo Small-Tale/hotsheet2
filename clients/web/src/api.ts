@@ -27,6 +27,7 @@ import {
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
   parseGuidanceOverview,
+  parseGuidanceRecommendationReport,
   parseGuidanceSourceReview,
   parseGuidanceSourceUpdates,
   parseMessageConnectionReceipt,
@@ -107,6 +108,33 @@ export interface GuidanceSourceReview {
     before_version: number | null;
     after_version: number | null;
   }>;
+}
+export interface GuidanceRecommendationReport {
+  fingerprint: string;
+  signals: Array<{ key: string; evidence: string }>;
+  candidates: Array<{
+    source: string;
+    kind: 'rule' | 'skill';
+    name: string;
+    version: number;
+    description: string;
+    pinned_commit: string;
+    evidence: string[];
+    fingerprint: string;
+    selected: boolean;
+    installed_version: number | null;
+    state: 'new' | 'accepted' | 'dismissed' | 'selected';
+  }>;
+  changes: Array<{ source: string; kind: 'rule' | 'skill'; name: string; change: 'new' | 'changed' | 'withdrawn' }>;
+  source_registration_suggested: boolean;
+  first_accept_replaces_bundled_default: boolean;
+}
+export interface GuidanceRecommendationDecision {
+  source: string;
+  kind: 'rule' | 'skill';
+  name: string;
+  fingerprint: string;
+  decision: 'accepted' | 'dismissed';
 }
 export interface RulesyncUpdateReport {
   state: 'current' | 'outdated' | 'unlocked' | 'unknown';
@@ -1332,6 +1360,20 @@ export class Api {
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  checkoutGuidanceRecommendations = (checkout: string) =>
+    this.parsed(
+      parseGuidanceRecommendationReport,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations`,
+    );
+  decideCheckoutGuidanceRecommendation = (checkout: string, decision: GuidanceRecommendationDecision) =>
+    this.parsed(
+      parseGuidanceRecommendationReport,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/recommendations`,
+      {
+        method: 'POST',
+        body: JSON.stringify(decision),
+      },
+    );
   checkoutGuidanceUpdates = (checkout: string) =>
     this.parsed(parseGuidanceSourceUpdates, `/checkouts/${encodeURIComponent(checkout)}/guidance/updates`);
   checkoutGuidanceReview = (checkout: string, source: string) =>

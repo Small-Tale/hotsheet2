@@ -26,6 +26,8 @@ import {
   type FullTicket,
   type GuidanceAction,
   type GuidanceOverview,
+  type GuidanceRecommendationDecision,
+  type GuidanceRecommendationReport,
   type GuidanceSourceReview,
   type GuidanceSourceUpdate,
   type PollResponse,
@@ -398,6 +400,11 @@ export async function startHotSheetWebClient() {
   const guidanceReview = signal<GuidanceSourceReview | undefined>(undefined);
   const guidanceReviewLoading = signal(false);
   const guidanceReviewError = signal('');
+  const guidanceRecommendations = signal<GuidanceRecommendationReport | undefined>(undefined);
+  const guidanceRecommendationsLoading = signal(false);
+  const guidanceRecommendationsError = signal('');
+  const recommendationDecisionBusy = signal('');
+  let guidanceRecommendationsGeneration = 0;
   let guidanceUpdateGeneration = 0;
   const rulesyncUpdateReport = signal<RulesyncUpdateReport | null>(null);
   const guidanceLoading = signal(false);
@@ -1451,10 +1458,15 @@ export async function startHotSheetWebClient() {
     const generation = ++guidanceLoadGeneration;
     if (guidanceProjectId !== current.id) {
       guidanceProjectId = current.id;
+      ++guidanceRecommendationsGeneration;
+      guidanceRecommendationsLoading.value = false;
       guidanceOverview.value = undefined;
       guidanceUpdates.value = [];
       guidanceUpdatesCheckedAt.value = undefined;
       guidanceReview.value = undefined;
+      guidanceRecommendations.value = undefined;
+      guidanceRecommendationsError.value = '';
+      recommendationDecisionBusy.value = '';
       rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
@@ -1467,6 +1479,7 @@ export async function startHotSheetWebClient() {
     guidanceMessage.value = '';
     rulesyncUpdateReport.value = null;
     void checkGuidanceUpdates();
+    void refreshGuidanceRecommendations(current);
     void new Api(current.apiPath, '', { trackBusy: false })
       .checkoutRulesyncUpdates(current.id)
       .then((report) => {
@@ -1491,6 +1504,51 @@ export async function startHotSheetWebClient() {
       if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
     }
   }
+  async function refreshGuidanceRecommendations(current = project()) {
+    if (!current) return;
+    const generation = ++guidanceRecommendationsGeneration;
+    guidanceRecommendationsLoading.value = true;
+    guidanceRecommendationsError.value = '';
+    try {
+      const report = await new Api(current.apiPath, '', { trackBusy: false }).checkoutGuidanceRecommendations(
+        current.id,
+      );
+      if (generation === guidanceRecommendationsGeneration && project()?.id === current.id)
+        guidanceRecommendations.value = report;
+    } catch (error) {
+      if (generation === guidanceRecommendationsGeneration && project()?.id === current.id)
+        guidanceRecommendationsError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceRecommendationsGeneration) guidanceRecommendationsLoading.value = false;
+    }
+  }
+  async function decideGuidanceRecommendation(decision: GuidanceRecommendationDecision) {
+    const current = project();
+    if (!current || recommendationDecisionBusy.value) return;
+    const generation = ++guidanceRecommendationsGeneration;
+    guidanceRecommendationsLoading.value = false;
+    const decisionKey = `${decision.source}:${decision.kind}:${decision.name}`;
+    recommendationDecisionBusy.value = decisionKey;
+    guidanceRecommendationsError.value = '';
+    try {
+      const client = new Api(current.apiPath);
+      const report = await client.decideCheckoutGuidanceRecommendation(current.id, decision);
+      if (generation !== guidanceRecommendationsGeneration || project()?.id !== current.id) return;
+      guidanceRecommendations.value = report;
+      const overview = await client.checkoutGuidance(current.id);
+      if (generation !== guidanceRecommendationsGeneration || project()?.id !== current.id) return;
+      guidanceOverview.value = overview;
+      guidanceMessage.value =
+        decision.decision === 'accepted'
+          ? 'Suggestion selected. Apply Selected Guidance when ready.'
+          : 'Suggestion dismissed for this evidence.';
+    } catch (error) {
+      if (generation === guidanceRecommendationsGeneration && project()?.id === current.id)
+        guidanceRecommendationsError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceRecommendationsGeneration) recommendationDecisionBusy.value = '';
+    }
+  }
   async function updateGuidance(action: GuidanceAction) {
     const current = project();
     if (!current || guidanceLoading.value) return;
@@ -1502,6 +1560,7 @@ export async function startHotSheetWebClient() {
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
         guidanceReview.value = undefined;
+        void refreshGuidanceRecommendations(current);
         if (action.action === 'register') void checkGuidanceUpdates(true);
         guidanceMessage.value = {
           register: 'Source pinned. Review the selection, then apply.',
@@ -3743,6 +3802,10 @@ export async function startHotSheetWebClient() {
       review: guidanceReview.value,
       reviewLoading: guidanceReviewLoading.value,
       reviewError: guidanceReviewError.value,
+      recommendations: guidanceRecommendations.value,
+      recommendationsLoading: guidanceRecommendationsLoading.value,
+      recommendationsError: guidanceRecommendationsError.value,
+      recommendationDecisionBusy: recommendationDecisionBusy.value,
       rulesyncUpdateReport: rulesyncUpdateReport.value,
       bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
@@ -4637,6 +4700,8 @@ export async function startHotSheetWebClient() {
     checkGuidanceUpdates,
     reviewGuidanceSource,
     refreshReviewedGuidance,
+    refreshGuidanceRecommendations,
+    decideGuidanceRecommendation,
     toggleSidebarDrive,
     driveOptionsOpen,
     driveOptionsAnchor,

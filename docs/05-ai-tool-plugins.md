@@ -307,8 +307,11 @@ common language manifests and selected `package.json` dependencies, and matches
 them to rule tags or skill names in registered pinned sources. It reports when a
 source needs registration, without doing a remote fetch. It also warns when the
 first explicit selection would replace the bundled default at the next apply.
-The optional AI interview
-and Settings review remain `HS2-YGV9RN` and `HS2-QBXRFY`.
+Project guidance Settings loads that local report on entry, exposes the evidence and
+new/changed/withdrawn review diff, and lets people accept or dismiss individual
+suggestions. Accept changes selection only; applying remains an explicit action.
+The Settings view reports an unknown scan or decision error without changing a
+selection. The optional AI interview remains `HS2-YGV9RN`.
 
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.

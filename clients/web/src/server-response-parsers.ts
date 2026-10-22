@@ -18,6 +18,7 @@ import type {
   GitHubAuthStatus,
   GitHubRepositoryAccess,
   GuidanceOverview,
+  GuidanceRecommendationReport,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
   MessageConnectionReceipt,
@@ -140,6 +141,49 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
     return { ...source, rules, skills } as GuidanceOverview['sources'][number];
   });
   return { ...body, sources } as GuidanceOverview;
+};
+
+export const parseGuidanceRecommendationReport: ResponseParser<GuidanceRecommendationReport> = (value) => {
+  const what = 'guidance recommendations';
+  const body = record(value, what);
+  requiredString(body, 'fingerprint', what);
+  if (
+    typeof body.source_registration_suggested !== 'boolean' ||
+    typeof body.first_accept_replaces_bundled_default !== 'boolean'
+  )
+    invalid(what);
+  const signals = list(body.signals, what, (entry) => {
+    const item = record(entry, what);
+    requiredString(item, 'key', what);
+    requiredString(item, 'evidence', what);
+    return item as GuidanceRecommendationReport['signals'][number];
+  });
+  const candidates = list(body.candidates, what, (entry) => {
+    const item = record(entry, what);
+    for (const key of ['source', 'name', 'description', 'pinned_commit', 'fingerprint'])
+      requiredString(item, key, what);
+    if (
+      !['rule', 'skill'].includes(String(item.kind)) ||
+      !['new', 'accepted', 'dismissed', 'selected'].includes(String(item.state)) ||
+      typeof item.version !== 'number' ||
+      typeof item.selected !== 'boolean' ||
+      (item.installed_version !== null && typeof item.installed_version !== 'number') ||
+      !isStringArray(item.evidence)
+    )
+      invalid(what);
+    return item as unknown as GuidanceRecommendationReport['candidates'][number];
+  });
+  const changes = list(body.changes, what, (entry) => {
+    const item = record(entry, what);
+    for (const key of ['source', 'name']) requiredString(item, key, what);
+    if (
+      !['rule', 'skill'].includes(String(item.kind)) ||
+      !['new', 'changed', 'withdrawn'].includes(String(item.change))
+    )
+      invalid(what);
+    return item as unknown as GuidanceRecommendationReport['changes'][number];
+  });
+  return { ...body, signals, candidates, changes } as GuidanceRecommendationReport;
 };
 
 const parseGuidanceSourceUpdate: ResponseParser<GuidanceSourceUpdate> = (value) => {

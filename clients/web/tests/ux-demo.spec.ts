@@ -3784,6 +3784,30 @@ test('shows the blocked bundled guidance demo variant at wide and phone widths',
   }
 });
 
+test('shows guidance recommendation review, accepted, no-source, and unknown variants', async ({ page }) => {
+  for (const width of [1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 1600 });
+    await page.goto('/ux-demo?component=guidance-settings');
+    const variants = [
+      ['changed', 'Withdrawn: playbook'],
+      ['accepted', 'pinned 111111111111 · accepted'],
+      ['no-source', 'Register a pinned source'],
+      ['unknown', 'Recommendation Status Unknown'],
+    ] as const;
+    for (const [state, text] of variants) {
+      const review = page.locator('[data-guidance-recommendations]').filter({
+        hasText: text,
+        ...(state === 'changed' ? { hasNotText: 'Recommendation Status Unknown' } : {}),
+      });
+      await expect(review).toHaveCount(1);
+      await expect(review).toBeVisible();
+      await review.scrollIntoViewIfNeeded();
+      expect(await review.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+      await review.screenshot({ path: `target/visual-captures/hs2-qbxrfy-demo-${state}-${width}.png` });
+    }
+  }
+});
+
 test('shows reviewed, current, and stale pinned source variants at wide and phone widths', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });

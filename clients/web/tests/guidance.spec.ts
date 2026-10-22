@@ -2,6 +2,131 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('Project guidance reviews local recommendations and keeps accept separate from apply', async ({ page }) => {
+  await openDemoProject(page);
+  const commit = '1111111111111111111111111111111111111111';
+  const selected = new Set<string>();
+  const dismissed = new Set<string>();
+  const decisions: unknown[] = [];
+  let failScan = false;
+  let applyCount = 0;
+  const overview = () => ({
+    owner: 'builtin',
+    explicit_selection: selected.size > 0,
+    default_repository: '',
+    sources: [
+      {
+        id: 'playbook',
+        repository: 'https://example.test/playbook.git',
+        requested_ref: 'main',
+        commit,
+        rules: ['rust-lint', 'rust-test'].map((name) => ({
+          name,
+          version: 1,
+          installed_version: null,
+          description: `${name} guidance`,
+          owner: 'rust',
+          tags: ['rust'],
+          selected: selected.has(name),
+        })),
+        skills: [],
+      },
+    ],
+  });
+  const report = () => ({
+    fingerprint: 'manifest-rust-v1',
+    signals: [{ key: 'manifest', evidence: 'Cargo.toml' }],
+    candidates: ['rust-lint', 'rust-test'].map((name) => ({
+      source: 'playbook',
+      kind: 'rule',
+      name,
+      version: 1,
+      description: `${name} guidance`,
+      pinned_commit: commit,
+      evidence: ['Cargo.toml', 'Rust rule tags'],
+      fingerprint: `${name}-v1`,
+      selected: selected.has(name),
+      installed_version: null,
+      state: selected.has(name) ? 'accepted' : dismissed.has(name) ? 'dismissed' : 'new',
+    })),
+    changes:
+      selected.size || dismissed.size
+        ? []
+        : ['rust-lint', 'rust-test'].map((name) => ({
+            source: 'playbook',
+            kind: 'rule',
+            name,
+            change: 'new',
+          })),
+    source_registration_suggested: false,
+    first_accept_replaces_bundled_default: selected.size === 0,
+  });
+  await page.route('**/checkouts/demo-checkout/guidance', (route) => {
+    if (route.request().method() === 'POST') applyCount += 1;
+    return route.fulfill({ json: overview() });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/recommendations', (route) => {
+    if (failScan) return route.fulfill({ status: 503, json: { error: 'Local scan unavailable' } });
+    if (route.request().method() === 'POST') {
+      const decision = route.request().postDataJSON() as { name: string; decision: string; fingerprint: string };
+      decisions.push(decision);
+      if (decision.fingerprint !== `${decision.name}-v1`)
+        return route.fulfill({ status: 409, json: { error: 'Stale recommendation' } });
+      if (decision.decision === 'accepted') selected.add(decision.name);
+      else dismissed.add(decision.name);
+    }
+    return route.fulfill({ json: report() });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const settings = page.locator('[data-component="guidance-settings"]');
+  await expect(settings.getByText('New Guidance Recommendations Are Available')).toBeVisible();
+  await expect(settings.getByText('Evidence: Cargo.toml, Rust rule tags')).toHaveCount(2);
+  await settings.locator('[data-guidance-recommendations]').screenshot({
+    path: 'target/visual-captures/hs2-qbxrfy-recommendations-wide.png',
+  });
+  await settings
+    .locator('[data-recommendation="playbook:rule:rust-lint"]')
+    .getByRole('button', { name: 'Accept Selection' })
+    .click();
+  await expect(settings.getByText('Suggestion selected. Apply Selected Guidance when ready.')).toBeVisible();
+  expect(applyCount).toBe(0);
+  await expect(settings.getByText('New Guidance Recommendations Are Available')).toHaveCount(0);
+  await expect(settings.getByText('The first accepted selection replaces the bundled default')).toHaveCount(0);
+  await settings
+    .locator('[data-recommendation="playbook:rule:rust-test"]')
+    .getByRole('button', { name: 'Dismiss' })
+    .click();
+  await expect(settings.getByText('Suggestion dismissed for this evidence.')).toBeVisible();
+  expect(decisions).toMatchObject([
+    { name: 'rust-lint', decision: 'accepted', fingerprint: 'rust-lint-v1' },
+    { name: 'rust-test', decision: 'dismissed', fingerprint: 'rust-test-v1' },
+  ]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await settings.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  const settingsBox = await settings.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(390);
+  expect(await settings.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await expect(
+    settings.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
+  ).toBeVisible();
+  await settings.locator('[data-guidance-recommendations]').screenshot({
+    path: 'target/visual-captures/hs2-qbxrfy-recommendations-narrow.png',
+  });
+  failScan = true;
+  await settings.getByRole('button', { name: 'Recheck Recommendations' }).click();
+  await expect(settings.getByText('Recommendation Status Unknown')).toBeVisible();
+  await expect(
+    settings.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
+  ).toBeVisible();
+  expect(applyCount).toBe(0);
+});
+
 test('Project guidance reviews a changed source revision before refreshing its pin', async ({ page }) => {
   let buildRevision = 'build-a';
   let hostRevision = 'host-a';
