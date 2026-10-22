@@ -110,6 +110,7 @@ impl Cmd {
             | Serve { .. }
             | Cert { .. } => Group::Server,
             Setup { .. }
+            | Guidance { .. }
             | Plugin { .. }
             | AiTools { .. }
             | AiSettings { .. }
@@ -135,6 +136,7 @@ impl Cmd {
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionMigrate { .. }
+                | Cmd::Guidance { .. }
                 | Cmd::Serve { list: true, .. }
         )
     }
@@ -156,6 +158,7 @@ impl Cmd {
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionMigrate { .. }
+                | Cmd::Guidance { .. }
                 | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
                 | Cmd::Ls { .. }

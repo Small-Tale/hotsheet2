@@ -380,6 +380,14 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Register pinned rule/skill sources and choose project guidance, headlessly.
+    Guidance {
+        /// Code project root; independent of its ticket providers.
+        #[arg(long)]
+        project: PathBuf,
+        #[command(subcommand)]
+        cmd: GuidanceCmd,
+    },
     /// Manage AI-tool plugins (list built-in + installed; install/remove external ones).
     Plugin {
         #[command(subcommand)]
@@ -743,6 +751,44 @@ enum Cmd {
     /// Work the Up Next queue headlessly: drive the tool one turn at a time until Up Next
     /// is drained (or `--max` turns / a thrash stall). Applies HS2-103 launch safety.
     Work(WorkArgs),
+}
+
+#[derive(Subcommand, Debug)]
+enum GuidanceCmd {
+    /// List installed and available rules/skills from registered sources.
+    List {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        owner: Option<String>,
+        #[arg(long)]
+        tag: Option<String>,
+    },
+    /// Resolve a source tag or commit and cache its verified manifest for offline refresh.
+    Register {
+        #[arg(long, default_value = "ai-playbook")]
+        id: String,
+        #[arg(long, default_value = hotsheet_plugins::guidance_sources::DEFAULT_REPOSITORY)]
+        repository: String,
+        #[arg(long = "ref", default_value = "main")]
+        requested_ref: String,
+    },
+    /// Replace this source's selected rules and skills; repeat each flag as needed.
+    Select {
+        #[arg(long)]
+        source: String,
+        #[arg(long = "rule")]
+        rules: Vec<String>,
+        #[arg(long = "skill")]
+        skills: Vec<String>,
+    },
+    /// Apply selected guidance through the project's chosen writer.
+    Apply,
+    /// Select the built-in or Rulesync instruction writer for this project.
+    Owner {
+        #[arg(value_parser = ["builtin", "rulesync"])]
+        owner: String,
+    },
 }
 
 fn main() -> Result<()> {

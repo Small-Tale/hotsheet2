@@ -9,6 +9,8 @@ import {
   type CommandDefinition,
   type CommandRun,
   type FullTicket,
+  type GuidanceAction,
+  type GuidanceOverview,
   type ProviderConnection,
 } from '../api';
 import { type CommandDropTarget } from '../command-order';
@@ -68,6 +70,15 @@ export interface CommandAndAiInteractionsDependencies {
   readonly aiTools: Signal<AiToolDescriptor[]>;
   readonly aiSettingsLoading: Signal<boolean>;
   readonly refreshAiConfiguration: (current?: Project, refresh?: boolean) => Promise<void>;
+  readonly guidanceOverview: Signal<GuidanceOverview | undefined>;
+  readonly guidanceLoading: Signal<boolean>;
+  readonly guidanceQuery: Signal<string>;
+  readonly guidanceOwnerFilter: Signal<string>;
+  readonly guidanceTagFilter: Signal<string>;
+  readonly guidanceRepository: Signal<string>;
+  readonly guidanceSourceId: Signal<string>;
+  readonly guidanceRef: Signal<string>;
+  readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
   readonly driveOverridesByProject: Signal<Record<string, Partial<AiToolDefaults>>>;
   readonly normalizedAiSelection: (value?: Partial<AiToolDefaults>) => AiToolDefaults;
   readonly selectDriveModel: (model: string) => void;
@@ -212,6 +223,15 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     aiTools,
     aiSettingsLoading,
     refreshAiConfiguration,
+    guidanceOverview,
+    guidanceLoading,
+    guidanceQuery,
+    guidanceOwnerFilter,
+    guidanceTagFilter,
+    guidanceRepository,
+    guidanceSourceId,
+    guidanceRef,
+    updateGuidance,
     driveOverridesByProject,
     normalizedAiSelection,
     selectDriveModel,
@@ -972,6 +992,88 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name="guidance-search"]', (_event, target) => {
+      guidanceQuery.value = (target as HTMLInputElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name="guidance-source-id"]', (_event, target) => {
+      guidanceSourceId.value = (target as HTMLInputElement).value;
+      const registered = guidanceOverview.value?.sources.find((source) => source.id === guidanceSourceId.value);
+      if (registered) {
+        guidanceRepository.value = registered.repository;
+        guidanceRef.value = registered.requested_ref;
+      }
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name="guidance-repository"]', (_event, target) => {
+      guidanceRepository.value = (target as HTMLInputElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name="guidance-ref"]', (_event, target) => {
+      guidanceRef.value = (target as HTMLInputElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'kui-select[name="guidance-owner-filter"]', (_event, target) => {
+      guidanceOwnerFilter.value = (target as HTMLSelectElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'kui-select[name="guidance-tag-filter"]', (_event, target) => {
+      guidanceTagFilter.value = (target as HTMLSelectElement).value;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'kui-select[name="guidance-owner"]', (_event, target) => {
+      const owner = (target as HTMLSelectElement).value;
+      if (owner === 'builtin' || owner === 'rulesync') void updateGuidance({ action: 'owner', owner });
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.selector, () => {
+      if (!guidanceLoading.value)
+        void updateGuidance({
+          action: 'register',
+          id: guidanceSourceId.value,
+          repository: guidanceRepository.value,
+          ref: guidanceRef.value,
+        });
+    }),
+  );
+  const toggleGuidance = (target: Element, field: 'rules' | 'skills') => {
+    const item = target.closest<HTMLElement>(
+      '[data-guidance-source][data-guidance-rule], [data-guidance-source][data-guidance-skill]',
+    );
+    const sourceId = item?.dataset.guidanceSource,
+      name = item?.dataset.guidanceRule ?? item?.dataset.guidanceSkill,
+      source = guidanceOverview.value?.sources.find((item) => item.id === sourceId);
+    if (!source || !name || guidanceLoading.value) return;
+    const rules = source.rules.filter((rule) => rule.selected).map((rule) => rule.name),
+      skills = source.skills.filter((skill) => skill.selected).map((skill) => skill.name),
+      chosen = field === 'rules' ? rules : skills;
+    if ((target as HTMLInputElement).checked && !chosen.includes(name)) chosen.push(name);
+    if (!(target as HTMLInputElement).checked && chosen.includes(name)) chosen.splice(chosen.indexOf(name), 1);
+    void updateGuidance({ action: 'select', source: source.id, rules, skills });
+  };
+  lifetime.add(
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.selector, (_event, target) => {
+      toggleGuidance(target, 'rules');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleGuidanceSkill.selector, (_event, target) => {
+      toggleGuidance(target, 'skills');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.applyGuidance.selector, () => {
+      if (!guidanceLoading.value) void updateGuidance({ action: 'apply' });
     }),
   );
   function setCapturingShortcut(id: string | undefined) {

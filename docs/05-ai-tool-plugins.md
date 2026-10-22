@@ -151,6 +151,30 @@ updates, local customization, migration review, and returning to built-in owners
 are documented in the [validated Rulesync guide](../guidance/rulesync/README.md).
 Rulesync remains an optional external tool and is not invoked by normal setup.
 
+**Project-selected rule and skill sources (HS2-2RD1M1).** Settings → AI tools and
+`hotsheet-cli guidance --project <code-repo>` share `.hotsheet2/guidance-sources.json`.
+Register `Small-Tale/ai-playbook` (the default URL) or another Git repository at a
+tag or commit; registration resolves a full commit, validates the versioned rule
+manifest and SHA-256 body hashes, and caches the exact rule and skill files. Later
+setup, refresh, and apply use that snapshot offline. Re-registering at another ref
+retains selections and known prior bodies, so an exact older managed rule can be
+upgraded while local edits remain protected. Rule IDs may be unprefixed or owned by
+Hot Sheet, Kerf UI, or another project; owner and tag metadata power the picker.
+The picker reports the installed and offered section versions.
+
+`guidance list` lists source, version, owner, tags, selection, and installed version
+as JSON; `guidance register --id <id> --repository <url-or-local-repo> --ref <tag-or-sha>`
+pins a source; `guidance select --source <id> --rule <name> [--skill <name>]` replaces
+that source's selection; `guidance owner builtin|rulesync` chooses the instruction
+writer; and `guidance apply` reconciles the selected files. With the built-in writer,
+selected rule sections are merged into `AGENTS.md` and exact deselected bodies are
+removed. With Rulesync ownership, `apply` materializes the selected pinned rules in
+`.rulesync/rules/.curated`, writes `.hotsheet2/rulesync.generated.jsonc`, and invokes
+Rulesync to generate `AGENTS.md`. Detected tools with a skill directory receive
+selected source skills. The five bundled Hot Sheet rules remain the offline default
+until an explicit source selection; installed tool workflow instructions remain
+managed by tool setup.
+
 The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
 narrow sizes and a matching attached after image when the ticket contains visual evidence.
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only

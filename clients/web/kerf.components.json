@@ -3887,6 +3887,42 @@
       }
     },
     {
+      "id": "guidance-settings",
+      "name": "GuidanceSettings",
+      "kind": "component",
+      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer.",
+      "source": "src/components/guidance-settings.tsx",
+      "publicExports": [{ "name": "GuidanceSettings" }],
+      "sourceLinks": ["src/components/guidance-settings.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "child", "padding": "child" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["guidance-settings"],
+        "publicTokens": [],
+        "placeableClasses": ["guidance-settings"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/guidance-settings.tsx",
+        "composition": "src/components/guidance-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["A project chooses a pinned rule source and selects guidance for its AI tools."],
+        "avoidWhen": ["The interaction does not need project guidance selection."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "manual-model-dialog",
       "name": "ManualModelDialog",
       "kind": "component",

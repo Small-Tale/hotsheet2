@@ -122,6 +122,7 @@ describe('UX demo catalog', () => {
       'ai-content-label',
       'ai-feedback-dialog',
       'ai-tool-settings',
+      'guidance-settings',
       'manual-model-dialog',
       'notification-card',
       'halted-session-popup',
@@ -265,6 +266,7 @@ describe('UX demo catalog', () => {
             ![
               'badge',
               'button',
+              'checkbox',
               'list',
               'list-action-row',
               'loading-spinner',
@@ -272,6 +274,7 @@ describe('UX demo catalog', () => {
               'state-banner',
               'surface-scaffold',
               'text',
+              'text-field',
             ].includes(id),
         ),
     ).toEqual([]);

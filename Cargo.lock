@@ -1159,6 +1159,7 @@ dependencies = [
 name = "hotsheet-plugins"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "hotsheet-ticketing",
  "include_dir",
  "serde",

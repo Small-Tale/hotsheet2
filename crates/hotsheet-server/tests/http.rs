@@ -13733,6 +13733,90 @@ fn hermetic_setup(state: AppState) -> AppState {
 }
 
 #[tokio::test]
+async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
+    let (store_dir, state) = state();
+    let project = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let checkout = serde_json::json!({
+        "root": project.path(), "alias": "guidance", "stores": [store_dir.path()]
+    })
+    .to_string();
+    let created = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&checkout)))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let body = "<!-- hotsheet:begin section=project-bootstrap v=1 -->\n\nFixture.\n\n<!-- hotsheet:end section=project-bootstrap -->\n";
+    hotsheet_plugins::guidance_sources::save(
+        project.path(),
+        &hotsheet_plugins::guidance_sources::GuidanceConfig {
+            schema_version: 1,
+            explicit_selection: false,
+            sources: vec![hotsheet_plugins::guidance_sources::GuidanceSource {
+                id: "fixture".into(),
+                repository: "fixture".into(),
+                requested_ref: "v1".into(),
+                commit: "a".repeat(40),
+                selected_rules: vec![],
+                selected_skills: vec![],
+                skills: vec![],
+                rules: vec![hotsheet_plugins::guidance_sources::SourceRule {
+                    name: "project-bootstrap".into(),
+                    version: 1,
+                    sha256: format!("{:x}", sha2::Sha256::digest(body.as_bytes())),
+                    description: "Bootstrap".into(),
+                    owner: None,
+                    tags: vec!["general".into()],
+                    body: body.into(),
+                    known_bodies: vec![],
+                }],
+            }],
+        },
+    )
+    .unwrap();
+    let path = "/checkouts/guidance/guidance";
+    let overview = body_json(
+        app.clone()
+            .oneshot(authed("GET", path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        overview["sources"][0]["rules"][0]["installed_version"],
+        serde_json::Value::Null
+    );
+    let selected = serde_json::json!({"action":"select","source":"fixture",
+        "rules":["project-bootstrap"],"skills":[]})
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", path, Some(&selected)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let applied = r#"{"action":"apply"}"#;
+    let overview = body_json(
+        app.clone()
+            .oneshot(authed("POST", path, Some(applied)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(overview["sources"][0]["rules"][0]["installed_version"], 1);
+    assert!(
+        std::fs::read_to_string(project.path().join("AGENTS.md"))
+            .unwrap()
+            .contains("Fixture.")
+    );
+}
+
+#[tokio::test]
 async fn setup_endpoint_preserves_rulesync_owned_instructions() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

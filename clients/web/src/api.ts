@@ -26,6 +26,7 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseGuidanceOverview,
   parseMessageConnectionReceipt,
   parsePermissionDecision,
   parsePermissionMigrationOutcome,
@@ -63,6 +64,33 @@ import {
 } from './server-response-parsers';
 import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
+
+export interface GuidanceOverview {
+  owner: 'builtin' | 'rulesync';
+  explicit_selection: boolean;
+  default_repository: string;
+  sources: Array<{
+    id: string;
+    repository: string;
+    requested_ref: string;
+    commit: string;
+    rules: Array<{
+      name: string;
+      version: number;
+      installed_version: number | null;
+      description: string;
+      owner: string | null;
+      tags: string[];
+      selected: boolean;
+    }>;
+    skills: Array<{ name: string; selected: boolean }>;
+  }>;
+}
+export type GuidanceAction =
+  | { action: 'register'; id: string; repository: string; ref: string }
+  | { action: 'select'; source: string; rules: string[]; skills: string[] }
+  | { action: 'owner'; owner: 'builtin' | 'rulesync' }
+  | { action: 'apply' };
 
 export type Capabilities = Record<
   | 'create'
@@ -1268,6 +1296,13 @@ export class Api {
   /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
   checkoutRepositorySize = (checkout: string) =>
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
+  checkoutGuidance = (checkout: string) =>
+    this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  updateCheckoutGuidance = (checkout: string, action: GuidanceAction) =>
+    this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`, {
+      method: 'POST',
+      body: JSON.stringify(action),
+    });
   checkoutCorruptTickets = (checkout: string) =>
     this.parsed(parseCorruptTicket.list, `/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   createCorruptTicketRepair = (checkout: string, path: string) =>

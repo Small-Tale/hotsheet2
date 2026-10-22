@@ -99,6 +99,7 @@ use routes::checkouts::{
     set_checkout_default_source, set_checkout_source_color,
 };
 use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
+use routes::guidance::{get_checkout_guidance, update_checkout_guidance};
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
     discovered_ai_tools_off_runtime, get_ai_settings, get_checkout_ai_settings,
@@ -1293,6 +1294,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/permissions/migration",
             get(preview_checkout_permission_migration).post(migrate_checkout_permissions),
+        )
+        .route(
+            "/checkouts/{reference}/guidance",
+            get(get_checkout_guidance).post(update_checkout_guidance),
         )
         .route(
             "/checkouts/{reference}/tickets",

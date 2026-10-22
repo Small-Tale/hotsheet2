@@ -1081,6 +1081,11 @@ hotsheet setup --refresh --json --project <code-repo> # structured paths/notices
 hotsheet setup --diagnose --tool codex --project <code-repo> --json # read-only plan and connection findings [HS2-9N8KVR]
 hotsheet setup --guidance-owner rulesync --project <code-repo> # delegate instruction files; preserve their content [HS2-QS38E1]
 hotsheet setup --guidance-owner builtin --project <code-repo> # restore the default writer after reviewing local guidance
+hotsheet guidance --project <code-repo> register --repository <git-url-or-path> --ref <tag-or-sha> # pin and validate a source [HS2-2RD1M1]
+hotsheet guidance --project <code-repo> list [--query <text>] [--owner <owner>] [--tag <tag>] # browse available/installed versions
+hotsheet guidance --project <code-repo> select --source <id> --rule <name> [--skill <name>] # replace this source's selection
+hotsheet guidance --project <code-repo> owner builtin|rulesync # select instruction writer
+hotsheet guidance --project <code-repo> apply # reconcile selected rules and skills offline
 hotsheet plugin list           # installed + detected AI-tool plugins            [HS2-92]
 hotsheet plugin install <path|url>   # add an external plugin (trust-gated)      [HS2-93]
 hotsheet plugin verify <id>    # run the conformance suite against a plugin      [HS2-93]

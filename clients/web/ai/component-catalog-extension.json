@@ -671,6 +671,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "guidance-settings",
+      "name": "GuidanceSettings",
+      "kind": "component",
+      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer.",
+      "useWhen": [
+        "A project chooses a pinned rule source and selects guidance for its AI tools."
+      ],
+      "avoidWhen": [
+        "The interaction does not need project guidance selection."
+      ],
+      "publicClasses": [
+        "guidance-settings"
+      ],
+      "publicTokens": [],
+      "source": "src/components/guidance-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "halted-session-popup",
       "name": "HaltedSessionPopup",
       "kind": "component",

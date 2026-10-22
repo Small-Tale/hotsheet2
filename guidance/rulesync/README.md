@@ -4,6 +4,24 @@ Hot Sheet's built-in writer is the default. It ships pinned offline snapshots an
 requires no Rulesync installation. Choose Rulesync when this project should select
 and update reusable rules independently. The validated CLI version is **38.0.0**.
 
+For Hot Sheet-managed selection from a pinned source, use Settings → AI tools or
+the headless path below. `register` resolves a full commit and caches the selected
+source's rule bodies, so later apply and setup do not fetch the source again:
+
+```sh
+hotsheet-cli guidance --project . register --ref <tag-or-commit>
+hotsheet-cli guidance --project . list
+hotsheet-cli guidance --project . select --source ai-playbook --rule <rule-name>
+hotsheet-cli guidance --project . owner rulesync
+hotsheet-cli guidance --project . apply
+```
+
+Repeat `--rule` or add `--skill` to select more entries. This path materializes
+`.rulesync/rules/.curated` and `.hotsheet2/rulesync.generated.jsonc`, then invokes
+Rulesync. Review the generated `AGENTS.md` before committing because Rulesync owns
+the whole file. The example configuration and migration steps below remain useful
+when a project manages Rulesync inputs directly rather than through the picker.
+
 The committed [example configuration](rulesync.jsonc) selects all five rules from
 ai-playbook's `main` branch. Its committed [lockfile](rulesync.lock) pins the exact
 reviewed v1.1.0 commit and artifact hashes. Frozen installs do not advance that pin.

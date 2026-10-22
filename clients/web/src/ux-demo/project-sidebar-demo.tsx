@@ -14,6 +14,7 @@ import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/c
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor, DriveOptionsMenu } from '../components/drive-options-menu';
+import { GuidanceSettings } from '../components/guidance-settings';
 import { NotificationNavigation } from '../components/notification-navigation';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectSummary } from '../components/project-summary';
@@ -352,6 +353,70 @@ export function AiToolSettingsDemo() {
     </CatalogExample>
   );
 }
+export function GuidanceSettingsDemo() {
+  return (
+    <>
+      <CatalogExample label="Pinned Source with Available and Installed Rules">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository="https://github.com/Small-Tale/ai-playbook.git"
+          sourceRef="v1.2.0"
+          sourceId="ai-playbook"
+          ownerFilter=""
+          tagFilter=""
+          overview={{
+            owner: 'builtin',
+            explicit_selection: true,
+            default_repository: 'https://github.com/Small-Tale/ai-playbook.git',
+            sources: [
+              {
+                id: 'ai-playbook',
+                repository: 'https://github.com/Small-Tale/ai-playbook.git',
+                requested_ref: 'v1.2.0',
+                commit: '7cb9499a655a15213666d684a6659db43f840acf',
+                rules: [
+                  {
+                    name: 'rust-lint-and-format',
+                    version: 1,
+                    installed_version: null,
+                    description: 'Rust lint and formatting defaults',
+                    owner: 'rust',
+                    tags: ['rust', 'lint'],
+                    selected: false,
+                  },
+                  {
+                    name: 'hotsheet-visual-qa',
+                    version: 2,
+                    installed_version: 1,
+                    description: 'Visual review of rendered changes',
+                    owner: 'hotsheet',
+                    tags: ['ui', 'testing'],
+                    selected: true,
+                  },
+                ],
+                skills: [{ name: 'example-skill', selected: false }],
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Unregistered">
+        <GuidanceSettings
+          loading={false}
+          message=""
+          query=""
+          repository=""
+          sourceRef="main"
+          sourceId="ai-playbook"
+          ownerFilter=""
+          tagFilter=""
+        />
+      </CatalogExample>
+    </>
+  );
+}
 export function ProjectSidebarDemo() {
   // Kerf ResizableRegion owns the grip, pointer, and separator keyboard resizing (HS2-TH52Y3); the
   // shared catalog wireResizableRegions commit mirrors the settled height into projectSidebarHeight.
@@ -574,6 +639,7 @@ export const demoModule: DemoModule = {
     'drive-control': { catalogExamples: true, Demo: DriveControlDemo },
     'drive-options-menu': { catalogExamples: true, Demo: DriveOptionsMenuDemo },
     'ai-tool-settings': { catalogExamples: true, Demo: AiToolSettingsDemo },
+    'guidance-settings': { catalogExamples: true, Demo: GuidanceSettingsDemo },
     'terminal-operations-sidebar': { catalogExamples: true, Demo: TerminalOperationsSidebarDemo },
   },
   wire: wireProjectSidebarDemo,

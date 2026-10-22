@@ -17,6 +17,7 @@ import type {
   GitHubAuthStart,
   GitHubAuthStatus,
   GitHubRepositoryAccess,
+  GuidanceOverview,
   MessageConnectionReceipt,
   PermissionRequest,
   PollResponse,
@@ -104,6 +105,39 @@ export const ignoreBody: ResponseParser<undefined> = () => undefined;
 
 export const parseStringList: ResponseParser<string[]> = (value) =>
   isStringArray(value) ? value : invalid('string list');
+
+export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) => {
+  const what = 'guidance',
+    body = record(value, what);
+  if (body.owner !== 'builtin' && body.owner !== 'rulesync') invalid(what);
+  if (typeof body.explicit_selection !== 'boolean') invalid(what);
+  requiredString(body, 'default_repository', what);
+  const sources = list(body.sources, what, (entry) => {
+    const source = record(entry, what);
+    for (const key of ['id', 'repository', 'requested_ref', 'commit']) requiredString(source, key, what);
+    const rules = list(source.rules, what, (entry) => {
+      const rule = record(entry, what);
+      for (const key of ['name', 'description']) requiredString(rule, key, what);
+      if (
+        typeof rule.version !== 'number' ||
+        (rule.installed_version !== null && typeof rule.installed_version !== 'number') ||
+        (rule.owner !== null && typeof rule.owner !== 'string') ||
+        !isStringArray(rule.tags) ||
+        typeof rule.selected !== 'boolean'
+      )
+        invalid(what);
+      return rule as unknown as GuidanceOverview['sources'][number]['rules'][number];
+    });
+    const skills = list(source.skills, what, (entry) => {
+      const skill = record(entry, what);
+      requiredString(skill, 'name', what);
+      if (typeof skill.selected !== 'boolean') invalid(what);
+      return skill as unknown as GuidanceOverview['sources'][number]['skills'][number];
+    });
+    return { ...source, rules, skills } as GuidanceOverview['sources'][number];
+  });
+  return { ...body, sources } as GuidanceOverview;
+};
 
 function isRange(field: unknown): field is CompatibilityRange {
   return isRecord(field) && typeof field.min === 'number' && typeof field.max === 'number';

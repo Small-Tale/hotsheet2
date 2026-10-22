@@ -1999,6 +1999,74 @@
       }
     },
     {
+      "key": "hotsheet-web:guidance-settings",
+      "package": "hotsheet-web",
+      "id": "guidance-settings",
+      "name": "GuidanceSettings",
+      "kind": "component",
+      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer.",
+      "publicExports": [
+        {
+          "name": "GuidanceSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/guidance-settings.tsx"
+      ],
+      "source": "src/components/guidance-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "guidance-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "guidance-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/guidance-settings.tsx",
+        "composition": "src/components/guidance-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:halted-session-popup",
       "package": "hotsheet-web",
       "id": "halted-session-popup",

@@ -24,6 +24,8 @@ import {
   type CustomView,
   type DuplicateBacklink,
   type FullTicket,
+  type GuidanceAction,
+  type GuidanceOverview,
   type PollResponse,
   type ProviderOutboxOperation,
   type TicketRow as WireTicketRow,
@@ -379,6 +381,17 @@ export async function startHotSheetWebClient() {
     terminalDashboardLoading = signal(false),
     terminalDashboardMessage = signal('');
   const showLoadingActivity = signal(localStorage.getItem('hotsheet.show-loading-activity') === 'true');
+  const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
+  const guidanceLoading = signal(false);
+  const guidanceMessage = signal('');
+  const guidanceQuery = signal('');
+  const guidanceOwnerFilter = signal('');
+  const guidanceTagFilter = signal('');
+  const guidanceRepository = signal('');
+  const guidanceSourceId = signal('ai-playbook');
+  const guidanceRef = signal('main');
+  let guidanceProjectId = '';
+  let guidanceLoadGeneration = 0;
   const inheritGlobalShellHistory = signal(false),
     terminalSettingsMessage = signal(''),
     trashCleanupDaysByProject = signal<Record<string, number>>({}),
@@ -1281,6 +1294,7 @@ export async function startHotSheetWebClient() {
   const settingsCategory = () => selectedSettingsCategory.value;
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
     selectedSettingsCategory.value = category;
+    if (category === 'ai') void refreshGuidance();
   }
   const hideVerifiedColumn = () => hideVerifiedByProject.value[selectedProjectId.value] ?? false;
   const canUpdateSelected = () =>
@@ -1339,6 +1353,60 @@ export async function startHotSheetWebClient() {
   };
   const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
   const api = () => new Api(project()?.apiPath ?? '');
+  async function refreshGuidance(current = project(), quiet = false) {
+    if (!current) return;
+    const generation = ++guidanceLoadGeneration;
+    if (guidanceProjectId !== current.id) {
+      guidanceProjectId = current.id;
+      guidanceOverview.value = undefined;
+      guidanceRepository.value = '';
+      guidanceRef.value = 'main';
+      guidanceSourceId.value = 'ai-playbook';
+      guidanceQuery.value = '';
+      guidanceOwnerFilter.value = '';
+      guidanceTagFilter.value = '';
+    }
+    guidanceLoading.value = true;
+    guidanceMessage.value = '';
+    try {
+      const next = await new Api(current.apiPath, '', { trackBusy: !quiet }).checkoutGuidance(current.id);
+      if (generation === guidanceLoadGeneration && project()?.id === current.id) {
+        guidanceOverview.value = next;
+        const chosen = next.sources.find((source) => source.id === guidanceSourceId.value);
+        guidanceRepository.value = chosen?.repository ?? next.default_repository;
+        guidanceRef.value = chosen?.requested_ref ?? 'main';
+      }
+    } catch (error) {
+      if (generation === guidanceLoadGeneration)
+        guidanceMessage.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
+    }
+  }
+  async function updateGuidance(action: GuidanceAction) {
+    const current = project();
+    if (!current || guidanceLoading.value) return;
+    const generation = guidanceLoadGeneration;
+    guidanceLoading.value = true;
+    guidanceMessage.value = '';
+    try {
+      const next = await new Api(current.apiPath).updateCheckoutGuidance(current.id, action);
+      if (generation === guidanceLoadGeneration && project()?.id === current.id) {
+        guidanceOverview.value = next;
+        guidanceMessage.value = {
+          register: 'Source pinned. Review the selection, then apply.',
+          select: 'Selection updated. Apply to install it.',
+          owner: 'Instruction writer selected. Apply when ready.',
+          apply: 'Selected guidance applied.',
+        }[action.action];
+      }
+    } catch (error) {
+      if (generation === guidanceLoadGeneration)
+        guidanceMessage.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
+    }
+  }
   const customViewsFor = (projectId = selectedProjectId.value) => customViewsByProject.value[projectId] ?? [];
   function customViewFor(view: TicketView, projectId = selectedProjectId.value) {
     const id = customTicketViewKey(view);
@@ -1926,13 +1994,15 @@ export async function startHotSheetWebClient() {
     const category = settingsCategory(),
       settingsQuiet = cached && viewMode.value !== 'settings',
       settingsRefresh =
-        category === 'sources'
-          ? refreshProviderConnections(current, settingsQuiet)
-          : category === 'terminals'
-            ? refreshTerminalSettings(current, settingsQuiet)
-            : category === 'lifecycle'
-              ? refreshTrashSettings(current, settingsQuiet)
-              : Promise.resolve(),
+        category === 'ai'
+          ? refreshGuidance(current, settingsQuiet)
+          : category === 'sources'
+            ? refreshProviderConnections(current, settingsQuiet)
+            : category === 'terminals'
+              ? refreshTerminalSettings(current, settingsQuiet)
+              : category === 'lifecycle'
+                ? refreshTrashSettings(current, settingsQuiet)
+                : Promise.resolve(),
       // A warm project restores its cached AI tool inventory at activation; only a cold project (or the
       // open AI settings page, which wants an authoritative answer) loads it here (HS2-AZZ9TF).
       aiRefresh =
@@ -3554,6 +3624,17 @@ export async function startHotSheetWebClient() {
     aiDefaults,
     aiSettingsLoading,
     aiSettingsMessage,
+    guidance: () => ({
+      overview: guidanceOverview.value,
+      loading: guidanceLoading.value,
+      message: guidanceMessage.value,
+      query: guidanceQuery.value,
+      repository: guidanceRepository.value,
+      sourceRef: guidanceRef.value,
+      sourceId: guidanceSourceId.value,
+      ownerFilter: guidanceOwnerFilter.value,
+      tagFilter: guidanceTagFilter.value,
+    }),
     commandSettingsDefinitions,
     commandSettingsExtraGroups,
     commandSettingsEditingId,
@@ -4425,6 +4506,15 @@ export async function startHotSheetWebClient() {
     commandGroupExpanded,
     persistWorkspacePreferences,
     commandGroupsCollapsed,
+    guidanceOverview,
+    guidanceLoading,
+    guidanceQuery,
+    guidanceOwnerFilter,
+    guidanceTagFilter,
+    guidanceRepository,
+    guidanceSourceId,
+    guidanceRef,
+    updateGuidance,
     toggleSidebarDrive,
     driveOptionsOpen,
     driveOptionsAnchor,

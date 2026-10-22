@@ -213,6 +213,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('ai-content-label'),
       cataloged('ai-feedback-dialog'),
       cataloged('ai-tool-settings', ['select']),
+      cataloged('guidance-settings', ['select', 'checkbox', 'text-field']),
       cataloged('manual-model-dialog'),
       cataloged('notification-card', ['badge']),
       cataloged('halted-session-popup', ['notification-card', 'list', 'row', 'text']),

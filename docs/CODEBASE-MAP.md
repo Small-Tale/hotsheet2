@@ -33,6 +33,11 @@ The same planner honors `.hotsheet2/guidance-owner.json` (`builtin` or `rulesync
 schema 1); the CLI `setup --guidance-owner` command selects ownership without changing
 instruction content. `guidance/rulesync/` holds the tested config, lock, and migration
 guide; `scripts/validate-rulesync.mjs` runs optional real-tool acceptance flows.
+`crates/hotsheet-plugins/src/guidance_sources.rs` validates and caches project-pinned
+rule/skill repositories in `.hotsheet2/guidance-sources.json`. The CLI `guidance`
+subcommands and authenticated checkout guidance route share its selection and apply
+paths; Settings → AI tools exposes the same pinned source picker. A built-in apply
+merges selected sections, while Rulesync apply generates from cached curated inputs.
 
 ## Requirements docs
 

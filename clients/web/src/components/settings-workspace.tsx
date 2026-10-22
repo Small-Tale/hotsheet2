@@ -17,6 +17,7 @@ import {
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
+import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
@@ -34,6 +35,7 @@ export interface SettingsWorkspaceProps {
   sources: TicketSourcesSettingsProps;
   accounts: AccountsSettingsProps;
   ai: { tools: readonly AiToolDescriptor[]; selection: AiToolDefaults; loading: boolean; message: string };
+  guidance?: GuidanceSettingsProps;
   commands: CommandSettingsEditorProps;
   lifecycle: { days: number; message: string; draft?: TrashRetentionDraft };
   terminals: { inheritGlobalShellHistory: boolean; message: string };
@@ -62,6 +64,7 @@ export function SettingsWorkspace({
   sources,
   accounts,
   ai,
+  guidance,
   commands,
   lifecycle,
   terminals,
@@ -83,7 +86,10 @@ export function SettingsWorkspace({
         {category === 'accounts' && <AccountsSettings {...accounts} />}
         {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
         {category === 'ai' && (
-          <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
+          <List gap="l">
+            <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
+            {guidance && <GuidanceSettings {...guidance} />}
+          </List>
         )}
         {category === 'commands' && <CommandSettingsEditor {...commands} />}
         {category === 'lifecycle' && (

@@ -28,6 +28,7 @@ export interface SettingsSurfaceDependencies {
   aiDefaults: Readable<Props['ai']['selection']>;
   aiSettingsLoading: Readable<boolean>;
   aiSettingsMessage: Readable<string>;
+  guidance: () => Props['guidance'];
   commandSettingsDefinitions: (projectId: string) => Props['commands']['commands'];
   commandSettingsExtraGroups: (projectId: string) => Props['commands']['extraGroups'];
   commandSettingsEditingId: Readable<Props['commands']['editingId']>;
@@ -81,6 +82,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     aiDefaults,
     aiSettingsLoading,
     aiSettingsMessage,
+    guidance,
     commandSettingsDefinitions,
     commandSettingsExtraGroups,
     commandSettingsEditingId,
@@ -154,6 +156,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           loading: aiSettingsLoading.value,
           message: aiSettingsMessage.value,
         }}
+        guidance={guidance()}
         commands={{
           commands: commandSettingsDefinitions(current.id),
           extraGroups: commandSettingsExtraGroups(current.id),

@@ -4,8 +4,87 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
+
+#[test]
+fn guidance_cli_pins_lists_selects_and_applies_a_source() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source");
+    let project = root.path().join("project");
+    std::fs::create_dir_all(source.join("rules")).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    let git = |args: &[&str]| {
+        let output = hotsheet_ticketing::git::command_in(&source)
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "-q"]);
+    let body = "<!-- hotsheet:begin section=project-bootstrap v=1 -->\n\nFixture.\n\n<!-- hotsheet:end section=project-bootstrap -->\n";
+    std::fs::write(
+        source.join("rules/project-bootstrap.md"),
+        format!(
+            "---\nroot: true\ntargets: [\"*\"]\ndescription: \"Project bootstrap\"\n---\n\n{body}"
+        ),
+    )
+    .unwrap();
+    std::fs::write(source.join("rules-manifest.json"), serde_json::json!({
+        "schema_version": 1, "rules": [{"name": "project-bootstrap", "path": "rules/project-bootstrap.md",
+            "version": 1, "sha256": format!("{:x}", Sha256::digest(body.as_bytes())), "tags": ["general"]}]
+    }).to_string()).unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "fixture"]);
+    let commit = git(&["rev-parse", "HEAD"]);
+    let run = |args: &[&str]| {
+        hs(&project)
+            .args(["guidance", "--project"])
+            .arg(&project)
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone()
+    };
+    run(&[
+        "register",
+        "--repository",
+        source.to_str().unwrap(),
+        "--ref",
+        &commit,
+    ]);
+    let overview: serde_json::Value =
+        serde_json::from_slice(&run(&["list", "--tag", "general"])).unwrap();
+    assert_eq!(
+        overview["sources"][0]["rules"][0]["name"],
+        "project-bootstrap"
+    );
+    assert_eq!(overview["sources"][0]["commit"], commit);
+    run(&[
+        "select",
+        "--source",
+        "ai-playbook",
+        "--rule",
+        "project-bootstrap",
+    ]);
+    run(&["apply"]);
+    assert!(
+        std::fs::read_to_string(project.join("AGENTS.md"))
+            .unwrap()
+            .contains("Fixture.")
+    );
+    let overview: serde_json::Value = serde_json::from_slice(&run(&["list"])).unwrap();
+    assert_eq!(overview["sources"][0]["rules"][0]["installed_version"], 1);
+}
 
 #[test]
 fn permission_migrate_requires_review_and_explicit_selected_consent() {

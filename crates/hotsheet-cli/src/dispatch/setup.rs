@@ -9,14 +9,97 @@ use hotsheet_model::Ulid;
 use hotsheet_ticketing::{FsStore, SortKey, StoreMetadata, TicketQuery, ops};
 
 use crate::{
-    Cmd, ai_settings_target, binary_on_path, confirm, discovered_ai_tools, effective_ai_defaults,
-    now_ts, settings_for_cli, stored_ai_defaults, urlencoding_component,
+    Cmd, GuidanceCmd, ai_settings_target, binary_on_path, confirm, discovered_ai_tools,
+    effective_ai_defaults, now_ts, settings_for_cli, stored_ai_defaults, urlencoding_component,
 };
 
 use super::{Ctx, misrouted};
 
 #[path = "setup_diagnose.rs"]
 mod diagnose;
+
+fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
+    use hotsheet_plugins::guidance_sources as sources;
+    match cmd {
+        GuidanceCmd::List { query, owner, tag } => {
+            let config = sources::load(project)?;
+            let writer = hotsheet_plugins::setup::guidance_owner_in(project)?;
+            let query = query.as_deref().unwrap_or("").to_lowercase();
+            let items = config.sources.iter().map(|source| serde_json::json!({
+                "id": source.id,
+                "repository": source.repository,
+                "requested_ref": source.requested_ref,
+                "commit": source.commit,
+                "rules": source.rules.iter().filter(|rule| {
+                    (query.is_empty() || rule.name.to_lowercase().contains(&query) || rule.description.to_lowercase().contains(&query))
+                        && owner.as_deref().is_none_or(|wanted| rule.owner.as_deref() == Some(wanted))
+                        && tag.as_deref().is_none_or(|wanted| rule.tags.iter().any(|value| value == wanted))
+                }).map(|rule| serde_json::json!({
+                    "name": rule.name, "version": rule.version, "description": rule.description,
+                    "owner": rule.owner, "tags": rule.tags,
+                    "selected": source.selected_rules.contains(&rule.name),
+                    "installed_version": sources::installed_version(project, &rule.name),
+                })).collect::<Vec<_>>(),
+                "skills": source.skills.iter().map(|skill| serde_json::json!({
+                    "name": skill.name, "selected": source.selected_skills.contains(&skill.name),
+                })).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "owner": writer, "explicit_selection": config.explicit_selection,
+                    "default_repository": sources::DEFAULT_REPOSITORY, "sources": items,
+                }))?
+            );
+        }
+        GuidanceCmd::Register {
+            id,
+            repository,
+            requested_ref,
+        } => {
+            let config = sources::register(project, &id, &repository, &requested_ref)?;
+            let source = config
+                .sources
+                .iter()
+                .find(|source| source.id == id)
+                .unwrap();
+            println!(
+                "Registered {} at {} ({} rules, {} skills)",
+                id,
+                source.commit,
+                source.rules.len(),
+                source.skills.len()
+            );
+        }
+        GuidanceCmd::Select {
+            source,
+            rules,
+            skills,
+        } => {
+            sources::select(project, &source, &rules, &skills)?;
+            println!(
+                "Selected {} rule(s) and {} skill(s) from {source}; run `hotsheet-cli guidance --project <project> apply` to install them",
+                rules.len(),
+                skills.len()
+            );
+        }
+        GuidanceCmd::Apply => {
+            if hotsheet_plugins::setup::guidance_owner_in(project)? == "rulesync" {
+                sources::apply_rulesync(project)?;
+            } else {
+                hotsheet_plugins::setup::apply_selected_guidance_in(project)?;
+            }
+            println!("Applied selected guidance to {}", project.display());
+        }
+        GuidanceCmd::Owner { owner } => {
+            hotsheet_plugins::setup::set_guidance_owner_in(project, &owner)?;
+            println!(
+                "Instruction guidance owner: {owner}. Existing instruction content was preserved."
+            );
+        }
+    }
+    Ok(())
+}
 
 fn cmd_permission_migrate(
     project: &str,
@@ -112,6 +195,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
+        Cmd::Guidance { project, cmd } => cmd_guidance(&project, cmd),
         Cmd::PermissionMigrate {
             project,
             source,

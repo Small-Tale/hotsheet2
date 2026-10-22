@@ -278,6 +278,8 @@ pub enum SetupError {
     UnknownMcpFormat { id: String, format: String },
     #[error("unknown hook config format '{format}' for plugin '{id}'")]
     UnknownHookFormat { id: String, format: String },
+    #[error("guidance sources: {0}")]
+    GuidanceSource(#[from] crate::guidance_sources::GuidanceSourceError),
     #[error("writing {path}: {source}")]
     Io {
         path: String,
@@ -329,6 +331,46 @@ fn rulesync_owns_guidance(fs: &PlanFs, project: &Path) -> Result<bool, SetupErro
         Some("rulesync") => Ok(true),
         _ => Err(invalid()),
     }
+}
+
+/// The selected project writer, shared by CLI and authenticated Settings routes.
+pub fn guidance_owner_in(project: &Path) -> Result<&'static str, SetupError> {
+    Ok(if rulesync_owns_guidance(&PlanFs::default(), project)? {
+        "rulesync"
+    } else {
+        "builtin"
+    })
+}
+
+/// Reconcile selected rules and skills without requiring a Git ticket store or an AI tool
+/// launch. The normal setup planner calls these same writers on project open.
+pub fn apply_selected_guidance_in(project: &Path) -> Result<(), SetupError> {
+    let mut fs = PlanFs::default();
+    if rulesync_owns_guidance(&fs, project)? {
+        return Err(SetupError::GuidanceSource(
+            crate::guidance_sources::GuidanceSourceError::Invalid(
+                "Rulesync owns this project's instructions; use the Rulesync apply path".into(),
+            ),
+        ));
+    }
+    write_guidance_target(&mut fs, project, "AGENTS.md", true)?;
+    let skill_plugins = all_plugins(&default_dirs())
+        .into_iter()
+        .filter(is_detected)
+        .collect::<Vec<_>>();
+    write_selected_source_skills(&mut fs, project, &skill_plugins)?;
+    apply_operations(fs.final_operations(project))
+}
+
+/// Install selected project skills for detected tools without touching instruction ownership.
+pub fn apply_selected_skills_in(project: &Path) -> Result<(), SetupError> {
+    let mut fs = PlanFs::default();
+    let skill_plugins = all_plugins(&default_dirs())
+        .into_iter()
+        .filter(is_detected)
+        .collect::<Vec<_>>();
+    write_selected_source_skills(&mut fs, project, &skill_plugins)?;
+    apply_operations(fs.final_operations(project))
 }
 
 /// Select the instruction writer without changing any instruction content.
@@ -1411,10 +1453,72 @@ fn setup_plugins_with_fs(
                 notices,
             });
         }
+        write_selected_source_skills(fs, project_dir, &plugins)?;
         Ok(())
     })();
     result.map_err(|error| error.with_notices(&reports))?;
     Ok(reports)
+}
+
+fn write_selected_source_skills(
+    fs: &mut PlanFs,
+    project: &Path,
+    plugins: &[Plugin],
+) -> Result<(), SetupError> {
+    use base64::Engine;
+    let config = crate::guidance_sources::load(project)?;
+    if !config.explicit_selection {
+        return Ok(());
+    }
+    for plugin in plugins {
+        let Some((target, _)) = plugin.skill() else {
+            continue;
+        };
+        let Some(parent) = Path::new(target).parent().and_then(Path::parent) else {
+            continue;
+        };
+        for source in &config.sources {
+            for skill in &source.skills {
+                let selected = source.selected_skills.contains(&skill.name);
+                for file in &skill.files {
+                    let path = project.join(parent).join(&skill.name).join(&file.path);
+                    let body = base64::engine::general_purpose::STANDARD
+                        .decode(&file.base64)
+                        .map_err(|_| {
+                            SetupError::GuidanceSource(
+                                crate::guidance_sources::GuidanceSourceError::Invalid(
+                                    "invalid cached skill".into(),
+                                ),
+                            )
+                        })?;
+                    let prior = file
+                        .known_base64
+                        .iter()
+                        .filter_map(|encoded| {
+                            base64::engine::general_purpose::STANDARD
+                                .decode(encoded)
+                                .ok()
+                        })
+                        .collect::<Vec<_>>();
+                    match fs.read(&path) {
+                        Ok(existing)
+                            if !selected && (existing == body || prior.contains(&existing)) =>
+                        {
+                            fs.remove(project, &path);
+                        }
+                        Ok(existing) if selected && prior.contains(&existing) => {
+                            fs.write(&path, &body)
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound && selected => {
+                            fs.write(&path, &body);
+                        }
+                        _ => {} // A local edit or same-name skill belongs to the project.
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 const INSTRUCTIONS_VERSION_PREFIX: &str = "<!-- hotsheet-instructions-version: ";
@@ -1529,6 +1633,176 @@ fn render_guidance_sections(existing: &str, active: bool) -> String {
     rendered
 }
 
+fn render_selected_guidance(
+    existing: &str,
+    config: &crate::guidance_sources::GuidanceConfig,
+    active: bool,
+) -> String {
+    if !config.explicit_selection {
+        return existing.to_owned();
+    }
+    let mut rendered = existing.to_owned();
+    if active {
+        if let Some(workflow) = config
+            .sources
+            .iter()
+            .flat_map(|source| {
+                source.rules.iter().filter(move |rule| {
+                    rule.name == "hotsheet-workflow" && source.selected_rules.contains(&rule.name)
+                })
+            })
+            .next()
+        {
+            let plugins = all_plugins(&default_dirs());
+            if let Some(shared) = parse_shared_section(&rendered, "agents-md") {
+                let bundled = plugins.iter().any(|plugin| {
+                    (plugin.manifest.instructions.target == "AGENTS.md"
+                        || plugin
+                            .manifest
+                            .instructions
+                            .canonical
+                            .as_ref()
+                            .is_some_and(|canonical| canonical.target == "AGENTS.md"))
+                        && shared.body.trim() == plugin.instructions_body().trim()
+                });
+                let known = bundled
+                    || shared.body.trim() == workflow.body.trim()
+                    || workflow
+                        .known_bodies
+                        .iter()
+                        .any(|body| shared.body.trim() == body.trim());
+                let installed =
+                    marked_version(&shared.body, INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+                if known
+                    && installed <= workflow.version
+                    && shared.body.trim() != workflow.body.trim()
+                {
+                    let members = shared.tools.into_iter().collect();
+                    rendered.replace_range(
+                        shared.start..shared.end,
+                        &shared_block("agents-md", &members, &workflow.body),
+                    );
+                }
+            } else {
+                let mut served = false;
+                for plugin in &plugins {
+                    if plugin.manifest.instructions.target != "AGENTS.md"
+                        && !plugin
+                            .manifest
+                            .instructions
+                            .canonical
+                            .as_ref()
+                            .is_some_and(|canonical| canonical.target == "AGENTS.md")
+                    {
+                        continue;
+                    }
+                    let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
+                    let Some((start, finish)) = find_block(&rendered, &begin, &end) else {
+                        continue;
+                    };
+                    served = true;
+                    let body = rendered[start + begin.len()..finish - end.len()].trim();
+                    let known = body == plugin.instructions_body().trim()
+                        || body == workflow.body.trim()
+                        || workflow.known_bodies.iter().any(|old| body == old.trim());
+                    let installed = marked_version(body, INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
+                    if known && installed <= workflow.version && body != workflow.body.trim() {
+                        rendered.replace_range(
+                            start..finish,
+                            &format!("{begin}\n{}\n{end}", workflow.body.trim_end()),
+                        );
+                    }
+                }
+                if !served {
+                    rendered = append_block(
+                        &rendered,
+                        &shared_block(
+                            "agents-md",
+                            &std::collections::BTreeSet::new(),
+                            &workflow.body,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    let selected = config
+        .sources
+        .iter()
+        .flat_map(|source| {
+            source
+                .rules
+                .iter()
+                .filter(move |rule| source.selected_rules.contains(&rule.name))
+        })
+        .filter(|rule| rule.name != "hotsheet-workflow")
+        .map(|rule| (rule.name.as_str(), rule))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut candidates: std::collections::BTreeMap<
+        &str,
+        Vec<&crate::guidance_sources::SourceRule>,
+    > = std::collections::BTreeMap::new();
+    for rule in config.sources.iter().flat_map(|source| &source.rules) {
+        if rule.name != "hotsheet-workflow" {
+            let section = rule.name.strip_prefix("hotsheet-").unwrap_or(&rule.name);
+            candidates.entry(section).or_default().push(rule);
+        }
+    }
+    for (name, offered) in candidates {
+        let chosen = active
+            .then(|| {
+                offered
+                    .iter()
+                    .find_map(|rule| selected.get(rule.name.as_str()).copied())
+            })
+            .flatten();
+        let desired = chosen.map(|rule| rule.body.trim());
+        let Some((start, finish)) = guidance_bounds(&rendered, name) else {
+            if let Some(body) = desired {
+                let marker = format!("<!-- hotsheet:begin section={name} v=");
+                if !rendered.contains(&marker) {
+                    rendered = append_block(&rendered, body);
+                }
+            }
+            continue;
+        };
+        let installed = &rendered[start..finish];
+        let Some((generic, specifics)) = guidance_parts(installed, name) else {
+            continue;
+        };
+        let known = offered.iter().any(|rule| {
+            generic == rule.body.trim()
+                || rule.known_bodies.iter().any(|body| generic == body.trim())
+        }) || GUIDANCE_SECTIONS.iter().any(|section| {
+            section.name == name
+                && (generic == section.current.trim()
+                    || section.legacy.iter().any(|old| generic == old.trim()))
+        });
+        if !known {
+            continue;
+        }
+        match desired {
+            Some(body) if generic != body => {
+                let selected_version = chosen.unwrap().version;
+                if marked_version(installed, &format!("<!-- hotsheet:begin section={name} v="))
+                    .is_some_and(|version| version > selected_version)
+                {
+                    continue;
+                }
+                rendered.replace_range(
+                    start..finish,
+                    &guidance_with_specifics(body, name, specifics),
+                );
+            }
+            None if specifics.is_none() => rendered = remove_range(&rendered, (start, finish)),
+            _ => {}
+        }
+    }
+    // Once a project opts into explicit selection, historical bundled sections not offered
+    // by any currently registered source remain protected rather than guessed away.
+    rendered
+}
+
 fn write_guidance_target(
     fs: &mut PlanFs,
     project: &Path,
@@ -1537,10 +1811,11 @@ fn write_guidance_target(
 ) -> Result<(), SetupError> {
     let path = project.join(rel);
     let existing = fs.read_to_string(&path).unwrap_or_default();
-    if !active && existing.is_empty() {
-        return Ok(());
+    let mut rendered = render_guidance_sections(&existing, active);
+    if rel == "AGENTS.md" {
+        let config = crate::guidance_sources::load(project)?;
+        rendered = render_selected_guidance(&rendered, &config, true);
     }
-    let rendered = render_guidance_sections(&existing, active);
     if rendered == existing {
         return Ok(());
     }
