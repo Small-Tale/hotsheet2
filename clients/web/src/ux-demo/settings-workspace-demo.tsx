@@ -12,6 +12,7 @@ import { syncSettingsControls } from './settings-controls';
 export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
   'sources',
   'ai',
+  'guidance',
   'commands',
   'lifecycle',
   'terminals',
@@ -26,13 +27,19 @@ export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
 export const settingsWorkspaceSettings = {
   category: signal<SettingsCategory>('sources'),
   permissionAction: signal<PermissionAutomationAction>('off'),
+  guidanceSource: signal<'empty' | 'registered'>('empty'),
 };
 
 export function resetSettingsWorkspaceDemo(root: ParentNode): void {
   settingsWorkspaceSettings.category.value = 'sources';
   settingsWorkspaceSettings.permissionAction.value = 'off';
+  settingsWorkspaceSettings.guidanceSource.value = 'empty';
   syncSettingsControls(root, 'settings-workspace', {
-    values: { 'workspace-category': 'sources', 'workspace-permission-action': 'off' },
+    values: {
+      'workspace-category': 'sources',
+      'workspace-permission-action': 'off',
+      'workspace-guidance-source': 'empty',
+    },
   });
 }
 
@@ -44,6 +51,16 @@ export function SettingsWorkspaceSettings() {
         label="Category"
         value={settingsWorkspaceSettings.category.value}
         choices={SETTINGS_WORKSPACE_DEMO_CATEGORIES.map((value) => ({ value, label: settingsCategoryTitle(value) }))}
+      />
+      <Select
+        name="workspace-guidance-source"
+        label="Guidance Source"
+        hint="Applies to the Project guidance category."
+        value={settingsWorkspaceSettings.guidanceSource.value}
+        choices={[
+          { value: 'empty', label: 'No Registered Source' },
+          { value: 'registered', label: 'Registered Source' },
+        ]}
       />
       <Select
         name="workspace-permission-action"

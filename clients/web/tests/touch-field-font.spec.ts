@@ -345,6 +345,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   for (const category of [
     'Ticket sources',
     'AI tools',
+    'Project guidance',
     'Commands',
     'Lifecycle',
     'Terminals',

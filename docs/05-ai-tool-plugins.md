@@ -151,7 +151,7 @@ updates, local customization, migration review, and returning to built-in owners
 are documented in the [validated Rulesync guide](../guidance/rulesync/README.md).
 Rulesync remains an optional external tool and is not invoked by normal setup.
 
-**Project-selected rule and skill sources (HS2-2RD1M1).** Settings → AI tools and
+**Project-selected rule and skill sources (HS2-2RD1M1, HS2-HBR6ZG).** Settings → Project guidance and
 `hotsheet-cli guidance --project <code-repo>` share `.hotsheet2/guidance-sources.json`.
 Register `Small-Tale/ai-playbook` (the default URL) or another Git repository at a
 tag or commit; registration resolves a full commit, validates the versioned rule

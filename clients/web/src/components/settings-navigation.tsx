@@ -7,6 +7,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   ArchiveRestore,
+  BookOpen,
   Bot,
   CircleUserRound,
   Columns3,
@@ -23,6 +24,7 @@ import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 export type SettingsCategory =
   | 'sources'
   | 'ai'
+  | 'guidance'
   | 'commands'
   | 'lifecycle'
   | 'terminals'
@@ -37,6 +39,7 @@ export type SettingsCategory =
 const projectCategories = [
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
   { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
+  { id: 'guidance', label: 'Project guidance', icon: BookOpen, iconName: 'book-open' },
   { id: 'commands', label: 'Commands', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'lifecycle', label: 'Lifecycle', icon: ArchiveRestore, iconName: 'archive-restore' },
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
@@ -78,6 +81,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
     { control: 'Default source', server: '/checkouts/{project}/default-source' },
   ],
   ai: [{ control: 'Default tool, model, and effort', server: '/ai-settings' }],
+  guidance: [{ control: 'Pinned rule sources and selected guidance', server: '/checkouts/{project}/guidance' }],
   commands: [
     { control: 'Command definitions', server: '/commands' },
     { control: 'Command groups', server: '/command-groups' },

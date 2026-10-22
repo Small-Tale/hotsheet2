@@ -1294,7 +1294,7 @@ export async function startHotSheetWebClient() {
   const settingsCategory = () => selectedSettingsCategory.value;
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
     selectedSettingsCategory.value = category;
-    if (category === 'ai') void refreshGuidance();
+    if (category === 'guidance') void refreshGuidance();
   }
   const hideVerifiedColumn = () => hideVerifiedByProject.value[selectedProjectId.value] ?? false;
   const canUpdateSelected = () =>
@@ -1994,7 +1994,7 @@ export async function startHotSheetWebClient() {
     const category = settingsCategory(),
       settingsQuiet = cached && viewMode.value !== 'settings',
       settingsRefresh =
-        category === 'ai'
+        category === 'guidance'
           ? refreshGuidance(current, settingsQuiet)
           : category === 'sources'
             ? refreshProviderConnections(current, settingsQuiet)

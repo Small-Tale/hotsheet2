@@ -62,6 +62,8 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
+  await expect(page.locator('[data-component="guidance-settings"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Project guidance' }).click();
   const picker = page.locator('[data-component="guidance-settings"]');
   const visualRule = picker.locator('[data-guidance-rule="hotsheet-visual-qa"]');
   await expect(visualRule.locator('label')).toContainText('Visual review of rendered changes');
@@ -121,4 +123,41 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-top-settled.png', fullPage: true });
   await visualRule.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-rules-phone.png' });
+});
+
+test('Project guidance has its own Settings tab with an empty source state at wide and phone sizes', async ({
+  page,
+}) => {
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/guidance', async (route) => {
+    await route.fulfill({
+      json: {
+        owner: 'builtin',
+        explicit_selection: false,
+        default_repository: 'https://github.com/Small-Tale/ai-playbook.git',
+        sources: [],
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const picker = page.locator('[data-component="guidance-settings"]');
+  await expect(picker.getByText('Register a source to browse its rules and skills.')).toBeVisible();
+  await expect(page.locator('[data-component="ai-tool-settings"]')).toHaveCount(0);
+  await picker.getByText('Register a source to browse its rules and skills.').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/guidance-empty-tab-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await picker.getByText('Register a source to browse its rules and skills.').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
+  await expect(picker).toBeVisible();
+  expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'target/visual-captures/guidance-empty-tab-phone.png' });
 });

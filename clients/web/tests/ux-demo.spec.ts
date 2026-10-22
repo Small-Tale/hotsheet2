@@ -288,7 +288,7 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 1200 : 844 });
     for (const [component, label, count] of [
-      ['settings-navigation', 'Project Settings', 7],
+      ['settings-navigation', 'Project Settings', 8],
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
       await page.goto(`/ux-demo?component=${component}`);
@@ -3685,6 +3685,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
   const categories = [
     ['sources', 'Ticket sources'],
     ['ai', 'AI tools'],
+    ['guidance', 'Project guidance'],
     ['commands', 'Commands'],
     ['lifecycle', 'Lifecycle'],
     ['terminals', 'Terminals'],
@@ -3712,7 +3713,11 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
         // The phone-width settings inspector takes the whole viewport, so check and capture the workspace
         // with the inspector closed, then reopen it.
         await setDemoSettingsOpen(page, false);
-        for (const locator of visible) await expect(locator).toBeVisible();
+        await page.waitForTimeout(400);
+        for (const locator of visible) {
+          await expect(locator).toBeVisible();
+          await locator.scrollIntoViewIfNeeded();
+        }
         await workspace.screenshot({ path: `target/visual-captures/claude/hs2-ps9bqv-workspace-${name}-${width}.png` });
         await page.locator('[data-action="toggle-settings"]').first().click();
       };
@@ -3726,6 +3731,14 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
       await expect(workspace).toHaveAttribute('data-settings-category', id);
       await expect(workspace).toHaveAttribute('aria-label', `${title} Settings`);
     }
+
+    await choose(category, 'guidance');
+    const guidanceSource = settings.locator('[name="workspace-guidance-source"]');
+    await expect(workspace.getByText('Register a source to browse its rules and skills.')).toBeVisible();
+    await shot('guidance-empty', workspace.getByRole('heading', { name: 'Project guidance' }));
+    await choose(guidanceSource, 'registered');
+    await expect(workspace.locator('[data-guidance-rule="hotsheet-visual-qa"]')).toBeVisible();
+    await shot('guidance-registered', workspace.locator('[data-guidance-rule="hotsheet-visual-qa"]'));
 
     await choose(category, 'terminals');
     await shot('terminals', workspace.getByRole('checkbox', { name: /global shell history/ }));

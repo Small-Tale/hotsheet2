@@ -2004,7 +2004,7 @@
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
-      "purpose": "Discover pinned project rule sources and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy.",
+      "purpose": "Discover pinned project rule sources in the Project guidance Settings tab and choose rules and skills for the selected instruction writer; rule descriptions lead each row, followed by slug, available version, and natural installation-status copy.",
       "publicExports": [
         {
           "name": "GuidanceSettings"
@@ -4630,7 +4630,7 @@
       "id": "settings-navigation",
       "name": "SettingsNavigation",
       "kind": "component",
-      "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
+      "purpose": "Grouped project and app settings categories, including the own Project guidance tab, arranged by Kerf List in an unpadded sidebar pane.",
       "publicExports": [
         {
           "name": "SettingsNavigation"
@@ -4698,7 +4698,7 @@
       "id": "settings-workspace",
       "name": "SettingsWorkspace",
       "kind": "component",
-      "purpose": "One category-selected project or app settings surface.",
+      "purpose": "One category-selected project or app settings surface, with Project guidance separate from AI tools.",
       "publicExports": [
         {
           "name": "SettingsWorkspace"

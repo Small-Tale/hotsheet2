@@ -472,7 +472,7 @@ export function ProjectSidebarDemo() {
 export function SettingsNavigationDemo() {
   return (
     <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
-      <SettingsNavigation selected="ai" collapseControl />
+      <SettingsNavigation selected="guidance" collapseControl />
     </CatalogExample>
   );
 }

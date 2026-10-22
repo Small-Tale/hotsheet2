@@ -18,6 +18,26 @@ const props: SettingsWorkspaceProps = {
 };
 
 describe('SettingsWorkspace', () => {
+  it('shows project guidance only in its own category', () => {
+    const guidance: NonNullable<SettingsWorkspaceProps['guidance']> = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: 'main',
+      sourceId: 'ai-playbook',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    const ownTab = String(SettingsWorkspace({ ...props, category: 'guidance', guidance }));
+    expect(ownTab).toContain('aria-label="Project guidance Settings"');
+    expect(ownTab).toContain('data-component="guidance-settings"');
+    expect(ownTab).toContain('Register a source to browse its rules and skills.');
+    const aiTab = String(SettingsWorkspace({ ...props, category: 'ai', guidance }));
+    expect(aiTab).toContain('data-component="ai-tool-settings"');
+    expect(aiTab).not.toContain('data-component="guidance-settings"');
+  });
+
   it('renders the selected category with its stable delegated action', () => {
     const general = String(SettingsWorkspace(props));
     expect(general).toContain('data-component="settings-workspace"');

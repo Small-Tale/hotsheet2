@@ -12,6 +12,7 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
     expect(SETTINGS_WORKSPACE_DEMO_CATEGORIES).toEqual([
       'sources',
       'ai',
+      'guidance',
       'commands',
       'lifecycle',
       'terminals',
@@ -25,15 +26,18 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
     const markup = String(SettingsWorkspaceSettings());
     expect(markup).toContain('name="workspace-category"');
     expect(markup).toContain('name="workspace-permission-action"');
+    expect(markup).toContain('name="workspace-guidance-source"');
     expect(markup).toContain('data-action="reset-settings"');
   });
 
   it('resets state and the live controls to the sources category with automation off', () => {
     settingsWorkspaceSettings.category.value = 'permissions';
     settingsWorkspaceSettings.permissionAction.value = 'deny';
+    settingsWorkspaceSettings.guidanceSource.value = 'registered';
     const controls: Record<string, { value: string; checked: boolean }> = {
       'workspace-category': { value: 'permissions', checked: false },
       'workspace-permission-action': { value: 'deny', checked: false },
+      'workspace-guidance-source': { value: 'registered', checked: false },
     };
     const root = {
       querySelector: (selector: string) => {
@@ -44,7 +48,9 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
     resetSettingsWorkspaceDemo(root);
     expect(settingsWorkspaceSettings.category.value).toBe('sources');
     expect(settingsWorkspaceSettings.permissionAction.value).toBe('off');
+    expect(settingsWorkspaceSettings.guidanceSource.value).toBe('empty');
     expect(controls['workspace-category'].value).toBe('sources');
     expect(controls['workspace-permission-action'].value).toBe('off');
+    expect(controls['workspace-guidance-source'].value).toBe('empty');
   });
 });

@@ -86,11 +86,9 @@ export function SettingsWorkspace({
         {category === 'accounts' && <AccountsSettings {...accounts} />}
         {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
         {category === 'ai' && (
-          <List gap="l">
-            <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
-            {guidance && <GuidanceSettings {...guidance} />}
-          </List>
+          <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
         )}
+        {category === 'guidance' && guidance && <GuidanceSettings {...guidance} />}
         {category === 'commands' && <CommandSettingsEditor {...commands} />}
         {category === 'lifecycle' && (
           <TrashSettings days={lifecycle.days} message={lifecycle.message} draft={lifecycle.draft} />

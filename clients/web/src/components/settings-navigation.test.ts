@@ -13,13 +13,22 @@ describe('SettingsNavigation', () => {
     expect(markup).not.toContain('divider-sides');
     expect(markup).toContain('data-item-id="sources"');
     expect(markup).toContain('data-item-id="ai"');
+    expect(markup).toContain('data-item-id="guidance"');
     expect(markup).toContain('data-item-id="commands"');
     expect(markup).toContain('data-item-id="lifecycle"');
     expect(markup).toContain('data-item-id="terminals"');
     expect(markup).toMatch(/data-item-id="permissions"[^>]*aria-current="page"/);
     expect(markup).toContain('data-item-id="columns"');
     expect(markup).toContain('aria-label="Hide Settings Sidebar"');
-    for (const icon of ['database', 'bot', 'terminal-square', 'archive-restore', 'shield-check', 'columns-3'])
+    for (const icon of [
+      'database',
+      'bot',
+      'book-open',
+      'terminal-square',
+      'archive-restore',
+      'shield-check',
+      'columns-3',
+    ])
       expect(markup).toContain(`data-lucide="${icon}"`);
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
     expect(markup).toContain('class="kui-text" data-component="text"');
@@ -37,6 +46,7 @@ describe('SettingsNavigation', () => {
   it('uses the same category labels for navigation and workspace headings', () => {
     expect(settingsCategoryTitle('sources')).toBe('Ticket sources');
     expect(settingsCategoryTitle('ai')).toBe('AI tools');
+    expect(settingsCategoryTitle('guidance')).toBe('Project guidance');
     expect(settingsCategoryTitle('commands')).toBe('Commands');
     expect(settingsCategoryTitle('lifecycle')).toBe('Lifecycle');
     expect(settingsCategoryTitle('terminals')).toBe('Terminals');

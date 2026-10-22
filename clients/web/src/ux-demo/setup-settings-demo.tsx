@@ -196,6 +196,44 @@ export function SettingsWorkspaceDemo() {
         sources={{ sources: DEMO_PROJECT_SOURCES.slice(0, 1) }}
         accounts={{ accounts: DEMO_ACCOUNTS }}
         ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
+        guidance={{
+          loading: false,
+          message: '',
+          query: '',
+          repository: 'https://github.com/Small-Tale/ai-playbook.git',
+          sourceRef: 'v1.2.0',
+          sourceId: 'ai-playbook',
+          ownerFilter: '',
+          tagFilter: '',
+          overview: {
+            owner: 'builtin',
+            explicit_selection: settingsWorkspaceSettings.guidanceSource.value === 'registered',
+            default_repository: 'https://github.com/Small-Tale/ai-playbook.git',
+            sources:
+              settingsWorkspaceSettings.guidanceSource.value === 'registered'
+                ? [
+                    {
+                      id: 'ai-playbook',
+                      repository: 'https://github.com/Small-Tale/ai-playbook.git',
+                      requested_ref: 'v1.2.0',
+                      commit: '7cb9499a655a15213666d684a6659db43f840acf',
+                      rules: [
+                        {
+                          name: 'hotsheet-visual-qa',
+                          version: 2,
+                          installed_version: 1,
+                          description: 'Visual review of rendered changes',
+                          owner: 'hotsheet',
+                          tags: ['ui', 'testing'],
+                          selected: true,
+                        },
+                      ],
+                      skills: [{ name: 'example-skill', selected: false }],
+                    },
+                  ]
+                : [],
+          },
+        }}
         commands={{ commands: [] }}
         lifecycle={{ days: 30, message: '' }}
         terminals={{ inheritGlobalShellHistory: false, message: '' }}
@@ -531,6 +569,16 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(root, 'change', '[data-settings="settings-workspace"] [name="workspace-category"]', (_event, target) => {
       settingsWorkspaceSettings.category.value = (target as FormControl).value as SettingsCategory;
     }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      '[data-settings="settings-workspace"] [name="workspace-guidance-source"]',
+      (_event, target) => {
+        settingsWorkspaceSettings.guidanceSource.value = (target as FormControl).value as 'empty' | 'registered';
+      },
+    ),
   );
   demoListeners.add(
     delegate(
