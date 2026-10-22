@@ -1237,6 +1237,16 @@ hard-code mode names.
 bridge still receives the prompts `auto` raises); making it the Claude default is
 `HS2-YAS0FR`.
 
+For a driven headless Claude chat in `auto`, the Hot Sheet hook observes `PreToolUse` but
+defers to Claude's own classifier. A resulting native `PermissionRequest` is sent to the
+Hot Sheet bridge; remembered rules can answer it, and otherwise the user sees a pending
+request. If the bridge cannot answer an auto-mode `PermissionRequest`, the hook returns an
+explicit deny so the headless process cannot treat an unanswered ask as approval
+(`HS2-QD1D9H`). Other modes retain their existing headless PreToolUse path. Live Claude Code
+2.1.307 probes verified an ordinary Read generated no bridge request, while an explicit
+native Bash ask generated one request and honored both allow and deny answers. This does
+not yet prove which unconfigured actions Claude's auto classifier flags as risky.
+
 **External interactive terminals.** `hotsheet-cli launch <tool>` runs the plugin's
 interactive `[launch]` command in the caller's existing terminal after installing its
 setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`

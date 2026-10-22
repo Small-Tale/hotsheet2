@@ -756,6 +756,47 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
 }
 
 #[test]
+fn headless_claude_auto_denies_an_unanswered_native_permission_request() {
+    let home = tempfile::tempdir().unwrap();
+    let input = r#"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"pwd"}}"#;
+    for server in [None, Some("http://127.0.0.1:1")] {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command
+            .env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_CLAUDE_HEADLESS_AUTO", "1")
+            .env_remove("HOTSHEET_PROJECT")
+            .env_remove("HOTSHEET_SERVER")
+            .env_remove("HOTSHEET_SECRET")
+            .args(["permission-hook", "--agent", "claude"])
+            .write_stdin(input);
+        if let Some(server) = server {
+            command
+                .env("HOTSHEET_SERVER", server)
+                .env("HOTSHEET_SECRET", "probe");
+        }
+        let output = command.assert().success().get_output().stdout.clone();
+        let answer: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(answer["hookSpecificOutput"]["decision"]["behavior"], "deny");
+    }
+
+    let output = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_CLAUDE_HEADLESS_AUTO", "1")
+        .env_remove("HOTSHEET_PROJECT")
+        .env_remove("HOTSHEET_SERVER")
+        .env_remove("HOTSHEET_SECRET")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(r#"{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"probe"}}"#)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(output.is_empty(), "auto PreToolUse must not ask or decide");
+}
+
+#[test]
 fn retained_permission_hook_uses_restarted_server_route() {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;

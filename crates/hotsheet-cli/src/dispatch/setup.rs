@@ -291,6 +291,8 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     let event = permission_hook_event(&input);
     let headless_pre_tool = event == PermissionHookEvent::PreToolUse
         && std::env::var("HOTSHEET_CLAUDE_PRETOOLUSE").as_deref() == Ok("1");
+    let headless_auto = std::env::var("HOTSHEET_CLAUDE_HEADLESS_AUTO").as_deref() == Ok("1")
+        && installed_agent == Some("claude");
     // In an interactive Claude terminal, PreToolUse observes every harmless operation
     // before Claude evaluates its own rules. Leave those calls alone and wait for the
     // PermissionRequest event that means Claude would actually show a dialog.
@@ -302,6 +304,13 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     let route = hook_server_route();
     let terminal_env = std::env::var("HOTSHEET_TERMINAL_ID").ok();
     let terminal = permission_terminal_id(event, terminal_env.as_deref());
+    let fallback = || {
+        // In Claude auto's headless mode, a native ask with no bridge answer may be
+        // treated as approved. Deny it explicitly; ordinary interactive hooks still
+        // defer to the provider's own permission UI on route failure.
+        (headless_auto && event == PermissionHookEvent::PermissionRequest)
+            .then_some(hotsheet_cli::permission_hook::HookDecision::Deny)
+    };
     let Some(decision) = (match route {
         // Governed by a Hot Sheet server: raise a blocking request and honor the answer.
         Some((url, secret)) => {
@@ -316,12 +325,13 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             });
             match ask_server(&url, &secret, &request) {
                 Ok(reply) => Some(decision_from_server(&reply)),
-                // Server unreachable / error → emit nothing and preserve Claude's native flow.
-                Err(_) => None,
+                // On route failure, headless auto denies its native ask; other hooks
+                // preserve the provider's own permission flow.
+                Err(_) => fallback(),
             }
         }
-        // Not a Hot Sheet-governed run → emit nothing and preserve Claude's native flow.
-        None => None,
+        // With no route, deny a headless auto ask; other hooks defer to the provider.
+        None => fallback(),
     }) else {
         return Ok(());
     };

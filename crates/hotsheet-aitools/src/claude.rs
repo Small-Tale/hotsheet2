@@ -867,10 +867,22 @@ pub struct ClaudeStreamSpawnOptions<'a> {
     pub env: &'a [(String, String)],
 }
 
-fn headless_claude_env(input: &[(String, String)]) -> Vec<(String, String)> {
+fn headless_claude_env(
+    input: &[(String, String)],
+    permission_mode: Option<&str>,
+) -> Vec<(String, String)> {
     let mut env = input.to_vec();
-    env.retain(|(key, _)| key != "HOTSHEET_CLAUDE_PRETOOLUSE");
-    env.push(("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into()));
+    env.retain(|(key, _)| {
+        key != "HOTSHEET_CLAUDE_PRETOOLUSE" && key != "HOTSHEET_CLAUDE_HEADLESS_AUTO"
+    });
+    // Auto mode classifies a tool after PreToolUse. Bridging that earlier event would ask
+    // Hot Sheet about every harmless action. Let native PermissionRequest signal the calls
+    // Claude actually needs a decision for; older modes retain their current hook path.
+    if permission_mode == Some("auto") {
+        env.push(("HOTSHEET_CLAUDE_HEADLESS_AUTO".into(), "1".into()));
+    } else {
+        env.push(("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into()));
+    }
     env
 }
 
@@ -885,7 +897,7 @@ impl ClaudeStreamTransport {
     ) -> std::io::Result<Box<Self>> {
         let args = stream_args(&options);
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let env = headless_claude_env(options.env);
+        let env = headless_claude_env(options.env, options.permission_mode);
         Ok(Box::new(Self(StreamChild::spawn(
             program, &refs, cwd, &env,
         )?)))
@@ -1239,19 +1251,41 @@ mod usage_tests {
     use serde_json::json;
 
     #[test]
-    fn headless_stream_marks_pre_tool_permission_bridging() {
-        let env = headless_claude_env(&[
+    fn headless_stream_marks_pre_tool_permission_bridging_except_in_auto_mode() {
+        let input = [
             ("KEEP".into(), "yes".into()),
             ("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "stale".into()),
-        ]);
-        assert_eq!(
-            env.iter()
-                .filter(|(key, _)| key == "HOTSHEET_CLAUDE_PRETOOLUSE")
-                .count(),
-            1
+            ("HOTSHEET_CLAUDE_HEADLESS_AUTO".into(), "stale".into()),
+        ];
+        for mode in [
+            None,
+            Some("acceptEdits"),
+            Some("manual"),
+            Some("bypassPermissions"),
+        ] {
+            let env = headless_claude_env(&input, mode);
+            assert_eq!(
+                env.iter()
+                    .filter(|(key, _)| key == "HOTSHEET_CLAUDE_PRETOOLUSE")
+                    .count(),
+                1,
+                "{mode:?}"
+            );
+            assert!(env.contains(&("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into())));
+            assert!(
+                !env.iter()
+                    .any(|(key, _)| key == "HOTSHEET_CLAUDE_HEADLESS_AUTO")
+            );
+            assert!(env.contains(&("KEEP".into(), "yes".into())));
+        }
+        let auto = headless_claude_env(&input, Some("auto"));
+        assert!(
+            !auto
+                .iter()
+                .any(|(key, _)| key == "HOTSHEET_CLAUDE_PRETOOLUSE")
         );
-        assert!(env.contains(&("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into())));
-        assert!(env.contains(&("KEEP".into(), "yes".into())));
+        assert!(auto.contains(&("HOTSHEET_CLAUDE_HEADLESS_AUTO".into(), "1".into())));
+        assert!(auto.contains(&("KEEP".into(), "yes".into())));
     }
 
     #[test]

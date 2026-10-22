@@ -418,6 +418,9 @@ tools behave under each mode is not. In the app, open an AI chat from the termin
 2. Switch the chat to `Auto` from the model menu's Permissions submenu: a harmless read-only
    command runs without a popup, and a risky one still reaches the Hot Sheet popup
    (validating this is `HS2-YAS0FR`).
+   On Claude Code 2.1.307, also exercise a temporary explicit native ask rule for a harmless
+   command: confirm the corresponding `PermissionRequest` reaches Hot Sheet exactly once,
+   its allow and deny answers are honored, and disconnecting the bridge denies the ask.
 3. `Plan only` makes no edits; `Bypass permissions` asks for confirmation first and then runs
    without popups.
 4. Codex under `Ask when needed`: an action outside the workspace sandbox reaches the popup;
