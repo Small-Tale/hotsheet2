@@ -38,6 +38,7 @@ export interface PermissionItem extends WirePermissionRequest {
   key: string;
   projectId: string;
   projectName: string;
+  projectRoot?: string;
   agent: string;
   role: string;
   receivedAt: number;
@@ -236,6 +237,7 @@ export class PermissionInbox {
           key,
           projectId: project.id,
           projectName: project.name,
+          projectRoot: project.root,
           agent: displayAgent(connection?.tool || request.agent),
           role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
           receivedAt: now,
@@ -248,6 +250,7 @@ export class PermissionInbox {
         ...existing,
         ...request,
         projectName: project.name,
+        projectRoot: project.root,
         agent: displayAgent(connection?.tool || request.agent || existing.agent),
         role: connection?.role === 'worker' ? 'worker' : connection?.role === 'main' ? 'main worker' : '',
       };
@@ -257,6 +260,7 @@ export class PermissionInbox {
         existing.action !== next.action ||
         existing.always_allow_supported !== next.always_allow_supported ||
         existing.projectName !== next.projectName ||
+        existing.projectRoot !== next.projectRoot ||
         existing.agent !== next.agent ||
         existing.role !== next.role
       ) {

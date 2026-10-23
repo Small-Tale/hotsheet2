@@ -27,6 +27,7 @@ import { PERMISSION_RULE_BATCH_SIZE, permissionRulesList, PermissionRulesSetting
 
 const pending: PermissionItem = {
   id: 7,
+  project: 'checkout:project',
   connection: 'claude-main',
   tool: 'Bash',
   action: 'npm run test\nnpm run lint',
@@ -34,6 +35,7 @@ const pending: PermissionItem = {
   key: 'project:7',
   projectId: 'project',
   projectName: 'Hot Sheet 2',
+  projectRoot: '/projects/hot-sheet-2',
   agent: 'Claude',
   role: 'main worker',
   receivedAt: 10,
@@ -382,7 +384,8 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     for (const scope of ['chat', 'session', 'always'] as const) {
       const rule = { ...rules[0], scope, connection: scope === 'chat' ? 'opaque-terminal-or-chat-id' : undefined };
       const markup = String(PermissionRulesSettings({ rules: [rule] }));
-      expect(markup).toContain(scope === 'chat' ? 'This AI session only in /p' : 'All AI sessions in /p');
+      expect(markup).toContain(scope === 'chat' ? 'Applies to: This AI session only' : 'Applies to: All AI sessions');
+      expect(markup).toContain('Legacy ticket-source answer: /p');
       expect(markup).toContain(
         scope === 'chat'
           ? 'Until this AI session ends'
@@ -396,6 +399,31 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
         permissionRulesList([rule], scope === 'chat' ? 'This AI session only' : 'All AI sessions', 100).matches,
       ).toEqual([rule]);
     }
+  });
+
+  it('names the code project in preview, full dialog, and editor without assigning legacy rules to it (HS2-7T5GPN)', () => {
+    const owner = { id: 'one', name: 'Shared Name', root: '/code/one' };
+    const current: PermissionRule = { ...rules[0], project: 'checkout:one' };
+    const legacy: PermissionRule = { ...rules[1], project: '/shared/ticket-store' };
+    const other: PermissionRule = { ...rules[2], project: 'checkout:two' };
+    const items = [current, legacy, other];
+    for (const props of [
+      { rules: items, owner },
+      { rules: items, owner, dialog: { query: '', visibleCount: 100 } },
+      {
+        rules: items,
+        owner,
+        editor: { ruleKey: permissionRuleKey(current), kind: 'exact' as const, expression: '', busy: false },
+      },
+    ]) {
+      const markup = String(PermissionRulesSettings(props));
+      expect(markup).toContain('Code project: Shared Name · /code/one');
+      expect(markup).toContain('Legacy ticket-source answer: /shared/ticket-store');
+      expect(markup).toContain('Code project identity unavailable (checkout:two)');
+      expect(markup).not.toContain('Code project: Shared Name · /shared/ticket-store');
+    }
+    expect(permissionRulesList(items, '/code/one', 100, undefined, owner).rows).toEqual([current]);
+    expect(permissionRulesList(items, 'ticket-store', 100, undefined, owner).rows).toEqual([legacy]);
   });
 
   it('renders one dedicated controlled match editor with every mode, busy state, and validation (HS2-400WZZ)', () => {
@@ -589,6 +617,20 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
 });
 
 describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
+  it('identifies the actual rule owner in confirmation cards (HS2-7T5GPN)', () => {
+    setRememberedPermissionPreview(pending.key, 'always');
+    expect(String(PermissionRequestCard({ item: pending }))).toContain(
+      'Rule owner</dt><dd>Code project: Hot Sheet 2 · /projects/hot-sheet-2',
+    );
+    expect(String(PermissionRequestCard({ item: { ...pending, project: '/shared/store' } }))).toContain(
+      'Rule owner</dt><dd>Legacy ticket-source request: /shared/store',
+    );
+    expect(String(PermissionRequestCard({ item: { ...pending, project: undefined } }))).toContain(
+      'Rule owner</dt><dd>Project identity unavailable (Hot Sheet 2)',
+    );
+    setRememberedPermissionPreview(pending.key);
+  });
+
   it('keeps a remembered-rule preview on its request and clears it after use', () => {
     const other = { ...pending, key: `${pending.key}-other` };
     setRememberedPermissionPreview(pending.key, 'always');

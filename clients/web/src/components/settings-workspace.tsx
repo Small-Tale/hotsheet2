@@ -46,6 +46,7 @@ export interface SettingsWorkspaceProps {
   permissions: {
     automation: PermissionAutomation;
     delays: readonly number[];
+    owner?: PermissionRulesSettingsProps['owner'];
     /** Remembered answers for this project (HS2-JNHAYB). */
     rules?: readonly PermissionRule[];
     editor?: PermissionRulesSettingsProps['editor'];
@@ -140,6 +141,7 @@ export function SettingsWorkspace({
               </Text>
               <PermissionRulesSettings
                 rules={permissions.rules ?? []}
+                owner={permissions.owner}
                 editor={permissions.editor}
                 dialog={permissions.dialog}
                 preview={permissions.preview}

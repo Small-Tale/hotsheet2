@@ -546,6 +546,18 @@ Automated coverage checks representative fresh/existing fixtures and all writer
 transitions. This manual review covers the human judgment needed to classify arbitrary
 project customizations during an actual migration.
 
+## Remembered permission owner (HS2-7T5GPN)
+
+With two code projects sharing one Git ticket store, remember an approval from one
+project and open Settings → Permissions in each. The answer must identify only its
+owning code project's name and path. Link a second provider, change the default
+ticket source, and reopen the preview, full dialog, and match editor; the owner
+must remain the code project. An old source-scoped answer, if present before
+discard, must say it is a legacy ticket-source answer with its original source
+identity. In each project's live remembered-answer confirmation, verify that the
+owner path, AI-session reach, and lifetime name separate facts. Repeat at desktop
+and phone widths.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

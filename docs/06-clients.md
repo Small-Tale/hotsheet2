@@ -2759,9 +2759,13 @@ and keeps the query and selection across views. Both dialog and preview rows ret
 decision, lifetime, and exact match label so each rule is independently reviewable; the
 duplicate result-count line is absent (HS2-CA5MSD).
 Preview and dialog answers use the same compact ListItem layout with the decision shield in
-its leading icon slot. Each row shows its exact action, tool, project/chat reach, decision,
+its leading icon slot. Each row shows its exact action, tool, AI-session reach, decision,
 lifetime, and match type. Copy, Edit Match, and Delete live in the row context menu; double-click
-opens the editor. A patterned row shows
+opens the editor. Checkout-owned rows name the code project and path in preview, full dialog,
+and editor. Legacy source-scoped rows identify the original ticket source instead of implying
+project-wide approval; the confirmation card likewise distinguishes code-project, legacy, and
+unknown owners (HS2-7T5GPN).
+A patterned row shows
 its reviewed expression; a person can replace it or restore exact matching. An action that cannot be decrypted shows
 an unavailable state so it can be revoked and reviewed on its next request. The permission
 prompt keeps the real command readable; choosing a remembered scope opens a separate review

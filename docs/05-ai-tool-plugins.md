@@ -1383,12 +1383,18 @@ the lifetime; a duration edit keeps the answer and changes only a project-wide r
 Chat rules cannot change duration. Durable changes are written before
 the in-memory answer or lifetime changes. A failed keychain read, authentication check,
 or write leaves an Always request pending without installing or cascading an approval. Before
-remembering a chat or persistent answer, the popup reviews the tool, exact action, project,
+remembering a chat or persistent answer, the popup reviews the tool, exact action, rule owner,
 AI-session reach, match type, and lifetime, then requires a separate confirmation. Settings →
-Permissions lists only the selected project's remembered answers with decrypted exact actions,
-and allowed rows convey the decision through their shield and accessible name without a
-redundant visible Allowed label in the preview or full dialog (HS2-0HKES8). The rows retain
-reviewed patterns, tool, project/AI-session reach, lifetime, and decision. Tool and lifetime use
+Permissions lists only the selected project's remembered answers with decrypted exact actions
+and identifies checkout-owned rules by the code project's name and path in the recent preview,
+full dialog, and match editor (HS2-7T5GPN). An older source-scoped answer is labeled as a
+legacy ticket-source answer with its original source identity; it is never presented as a
+checkout-wide approval before fresh consent. Confirmation cards use the same code-project
+identity, or explicitly identify a legacy or unknown request owner. AI-session reach and
+lifetime remain separate from ownership. Allowed rows convey the decision through their shield
+and accessible name without a redundant visible Allowed label in the preview or full dialog
+(HS2-0HKES8). The rows retain reviewed patterns, tool, owner, AI-session reach, lifetime, and
+decision. Tool and lifetime use
 compact badges in a naturally wrapping group in both preview and full dialog; the row
 accessible name retains their full text (HS2-R3R7JE). The exact command is the primary
 monospace title without a shaded code background, limited to two lines until Expand action

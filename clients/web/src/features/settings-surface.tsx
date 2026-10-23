@@ -184,6 +184,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
         permissions={{
           automation: permissionAutomation(current.id),
           delays: PERMISSION_DELAYS,
+          owner: { id: current.id, name: current.name, root: current.root },
           // Loaded only while the Permissions category shows (HS2-JNHAYB).
           rules: settingsCategory() === 'permissions' ? permissionRules(current.id) : [],
           editor: permissionRuleEditorFor(current.id, settingsCategory() === 'permissions'),

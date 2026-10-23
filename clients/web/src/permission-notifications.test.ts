@@ -37,6 +37,14 @@ describe('permission notifications', () => {
     expect(inbox.reconcile(project, [{ ...request, action: 'cargo test' }], [], 40)).toBe(true);
     expect(inbox.reconcile(project, [], [], 50)).toBe(true);
   });
+  it('updates the code project path shown during remembered-answer review (HS2-7T5GPN)', () => {
+    const inbox = new PermissionInbox();
+    const owned = { ...request, project: 'checkout:p' };
+    expect(inbox.reconcile(project, [owned], [], 10)).toBe(true);
+    expect(inbox.visible()).toMatchObject({ projectName: 'Project', projectRoot: '/p' });
+    expect(inbox.reconcile({ ...project, root: '/renamed-code' }, [owned], [], 20)).toBe(true);
+    expect(inbox.visible()).toMatchObject({ projectName: 'Project', projectRoot: '/renamed-code' });
+  });
   it('hides a disconnected project without inventing a decision, then accepts its live refill', () => {
     const inbox = new PermissionInbox();
     inbox.reconcile(project, [request], [], 10);

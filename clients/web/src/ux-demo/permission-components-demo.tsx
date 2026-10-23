@@ -25,6 +25,7 @@ import { syncSettingsControls } from './settings-controls';
 
 const pending: PermissionItem = {
   id: 42,
+  project: 'checkout:hotsheet2',
   connection: 'claude-main',
   tool: 'Edit',
   action: `~/Documents/hotsheet2/clients/web/src/components/notification-center.tsx
@@ -34,6 +35,7 @@ Add a shared pending and history presentation for permission requests.`,
   key: 'hotsheet2:42',
   projectId: 'hotsheet2',
   projectName: 'Hot Sheet 2',
+  projectRoot: '/work/hotsheet2',
   agent: 'Claude',
   role: 'main worker',
   receivedAt: Date.now() - 68_000,
@@ -57,6 +59,8 @@ const history: PermissionHistoryItem[] = [
     id: 17,
     projectId: 'glassbox',
     projectName: 'Glassbox',
+    project: 'checkout:glassbox',
+    projectRoot: '/work/glassbox',
     agent: 'Codex',
     tool: 'applyPatchApproval',
     action: 'Update the provider connection contract.',

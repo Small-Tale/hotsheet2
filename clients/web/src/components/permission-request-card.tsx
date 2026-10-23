@@ -136,6 +136,12 @@ export function PermissionRequestCard({
   const alwaysSupported = !history && item.always_allow_supported === true;
   const preview = history ? undefined : rememberedPermissionPreview(item.key);
   const previewScope = preview?.scope;
+  const ruleOwner =
+    item.project === `checkout:${item.projectId}`
+      ? `Code project: ${item.projectName} · ${item.projectRoot ?? 'path unavailable'}`
+      : item.project
+        ? `Legacy ticket-source request: ${item.project}`
+        : `Project identity unavailable (${item.projectName})`;
   const statusLabel = history
     ? `${item.tool}: ${historyLabel(item)}`
     : reviewAlreadyAllowed
@@ -278,8 +284,8 @@ export function PermissionRequestCard({
           )}
           {preview.kind === 'exact' && 'Exact action only'}
         </dd>
-        <dt>Project</dt>
-        <dd>{item.projectName}</dd>
+        <dt>Rule owner</dt>
+        <dd>{ruleOwner}</dd>
         <dt>Applies to</dt>
         <dd>{previewScope === 'chat' ? 'This AI session only' : 'All AI sessions'}</dd>
         <dt>Lifetime</dt>

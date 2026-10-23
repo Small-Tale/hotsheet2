@@ -287,7 +287,7 @@ function applyTrashDemo(state: TrashDemoState, value: string): TrashDemoState {
 
 const PERMISSION_RULES_DEMO = [
   {
-    project: '/work/demo.hs2',
+    project: 'checkout:demo',
     connection: 'hotsheet-drawer-chat-1',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'a'.repeat(16)}:${'a'.repeat(56)}12345678`,
@@ -297,7 +297,7 @@ const PERMISSION_RULES_DEMO = [
     scope: 'chat',
   },
   {
-    project: '/work/demo.hs2',
+    project: 'checkout:demo',
     tool: 'WebFetch',
     action: `hmac-sha256:v2:${'b'.repeat(16)}:${'b'.repeat(56)}87654321`,
     exact_action: 'https://example.test/api/status',
@@ -305,7 +305,7 @@ const PERMISSION_RULES_DEMO = [
     scope: 'session',
   },
   {
-    project: '/work/demo.hs2',
+    project: 'checkout:demo',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'c'.repeat(16)}:${'c'.repeat(56)}feedcafe`,
     description: 'Review Git changes',
@@ -314,7 +314,7 @@ const PERMISSION_RULES_DEMO = [
     scope: 'always',
   },
   {
-    project: '/work/demo.hs2',
+    project: 'checkout:demo',
     tool: 'Bash',
     action: `hmac-sha256:v2:${'d'.repeat(16)}:${'d'.repeat(56)}00000004`,
     exact_action:
@@ -323,7 +323,7 @@ const PERMISSION_RULES_DEMO = [
     scope: 'always',
   },
   {
-    project: '/work/demo.hs2',
+    project: 'checkout:demo',
     tool: 'WebFetch',
     action: `hmac-sha256:v2:${'e'.repeat(16)}:${'e'.repeat(56)}00000005`,
     exact_action: 'https://example.test/changelog',
@@ -401,6 +401,7 @@ export function PermissionRulesSettingsDemo() {
         <div data-demo-permission-rules>
           <PermissionRulesSettings
             rules={permissionRulesDemoRules.value}
+            owner={{ id: 'demo', name: 'Demo Code Project', root: '/work/demo-code' }}
             editor={permissionRulesDemoEditor.value}
             preview={permissionRulesDemoPreview.value}
             dialog={permissionRulesDemoDialog.value}
@@ -410,6 +411,7 @@ export function PermissionRulesSettingsDemo() {
       <CatalogExample label="Revoking, with a Failure Message">
         <PermissionRulesSettings
           rules={PERMISSION_RULES_DEMO}
+          owner={{ id: 'demo', name: 'Demo Code Project', root: '/work/demo-code' }}
           revoking={[JSON.stringify(['/work/demo.hs2', '', 'Bash', 'rm -rf build'])]}
           message="Could not revoke the rule. The server is unavailable."
         />

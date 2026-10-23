@@ -21,7 +21,7 @@ import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
 } from '../interaction-attrs/notifications-and-links';
-import { type PermissionRule, permissionRuleKey } from '../permission-notifications';
+import { type PermissionProject, type PermissionRule, permissionRuleKey } from '../permission-notifications';
 import type { LegacyPermissionPreview } from '../server-response-parsers';
 
 export type PermissionRuleMatchKind = 'exact' | 'template' | 'regex';
@@ -35,6 +35,7 @@ export interface PermissionRuleEditorState {
 
 export interface PermissionRulesSettingsProps {
   rules: readonly PermissionRule[];
+  owner?: Pick<PermissionProject, 'id' | 'name' | 'root'>;
   editor?: PermissionRuleEditorState;
   dialog?: {
     query: string;
@@ -82,6 +83,7 @@ export function permissionRulesList(
   query: string,
   requestedVisibleCount: number,
   filters?: PermissionRuleFilters,
+  owner?: PermissionRulesSettingsProps['owner'],
 ) {
   const term = query.trim().toLocaleLowerCase(),
     matches = [...rules]
@@ -92,7 +94,7 @@ export function permissionRulesList(
           (!filters || rule.decision === filters.decision),
       )
       .filter((rule) => {
-        return ruleLabel(rule).toLocaleLowerCase().includes(term);
+        return ruleLabel(rule, owner).toLocaleLowerCase().includes(term);
       }),
     visibleCount = Math.min(
       Math.max(
@@ -111,8 +113,15 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   always: 'Persistent',
 };
 
-function ruleLabel(rule: PermissionRule) {
-  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${reachLabel(rule)} in ${rule.project} · ${SCOPE_LABELS[rule.scope]} · ${rule.match_type ?? 'exact'} match · ${rule.pattern?.expression ?? ''}`;
+/** HS2-7T5GPN: only the checkout namespace proves code-project ownership. */
+function ruleOwner(rule: PermissionRule, owner?: PermissionRulesSettingsProps['owner']) {
+  if (owner && rule.project === `checkout:${owner.id}`) return `Code project: ${owner.name} · ${owner.root}`;
+  if (rule.project.startsWith('checkout:')) return `Code project identity unavailable (${rule.project})`;
+  return `Legacy ticket-source answer: ${rule.project}`;
+}
+
+function ruleLabel(rule: PermissionRule, owner?: PermissionRulesSettingsProps['owner']) {
+  return `${rule.tool} · ${rule.exact_action ?? 'Action unavailable'} · ${reachLabel(rule)} · ${ruleOwner(rule, owner)} · ${SCOPE_LABELS[rule.scope]} · ${rule.match_type ?? 'exact'} match · ${rule.pattern?.expression ?? ''}`;
 }
 
 function reachLabel(rule: PermissionRule) {
@@ -131,6 +140,7 @@ function matchLabel(rule: PermissionRule) {
  */
 export function PermissionRulesSettings({
   rules,
+  owner,
   editor,
   dialog,
   preview,
@@ -140,12 +150,12 @@ export function PermissionRulesSettings({
   legacy,
 }: PermissionRulesSettingsProps) {
   const editingRule = editor && rules.find((rule) => permissionRuleKey(rule) === editor.ruleKey);
-  const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE).matches,
+  const ordered = permissionRulesList(rules, '', PERMISSION_RULE_BATCH_SIZE, undefined, owner).matches,
     filters: PermissionRuleFilters = {
       lifetime: dialog?.lifetime ?? 'permanent',
       decision: dialog?.decision ?? 'allow',
     },
-    list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount, filters) : undefined,
+    list = dialog ? permissionRulesList(rules, dialog.query, dialog.visibleCount, filters, owner) : undefined,
     dialogSelected = new Set(dialog?.selected ?? []),
     previewSelected = new Set(preview?.selected ?? []),
     selectedCount = rules.filter((rule) => dialogSelected.has(permissionRuleKey(rule))).length,
@@ -181,7 +191,7 @@ export function PermissionRulesSettings({
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
-        label = ruleLabel(rule),
+        label = ruleLabel(rule, owner),
         selected = surface === 'dialog' ? dialogSelected.has(key) : previewSelected.has(key),
         busy = surface === 'dialog' ? dialog?.busy : preview?.busy,
         expanded = (surface === 'dialog' ? dialog?.expandedActions : preview?.expandedActions)?.includes(key) ?? false;
@@ -238,7 +248,8 @@ export function PermissionRulesSettings({
                 </Badge>
               </Row>
 
-              <span class="permission-rules-settings__context">{`${reachLabel(rule)} in ${rule.project}`}</span>
+              <span class="permission-rules-settings__context">{`Applies to: ${reachLabel(rule)}`}</span>
+              <span class="permission-rules-settings__context">{ruleOwner(rule, owner)}</span>
               {matchLabel(rule) && <span class="permission-rules-settings__context">{matchLabel(rule)}</span>}
               {rule.exact_action && (
                 <Row gap="xs">
@@ -645,7 +656,7 @@ export function PermissionRulesSettings({
               <Text
                 size="compact"
                 flush
-              >{`${editingRule.tool} · ${reachLabel(editingRule)} in ${editingRule.project}`}</Text>
+              >{`${editingRule.tool} · ${reachLabel(editingRule)} · ${ruleOwner(editingRule, owner)}`}</Text>
               <TextField label="Exact Action" value={editingRule.exact_action ?? ''} multiline rows={3} readOnly />
               <SegmentedControl<PermissionRuleMatchKind>
                 id="permission-rule-editor-kind"

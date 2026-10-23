@@ -417,6 +417,92 @@ test('alerts for a terminal question and opens its originating session (HS2-KP9K
   await expect(popup).toBeVisible();
 });
 
+for (const width of [1280, 768, 390]) {
+  test(`shows code-project and legacy rule owners in remembered-answer surfaces at ${width}px (HS2-7T5GPN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    await page.route('**/permissions/rules', (route) =>
+      route.fulfill({
+        json: [
+          {
+            project: `checkout:${project.id}`,
+            tool: 'Bash',
+            action: rememberedActionKey('npm test'),
+            exact_action: 'npm test',
+            decision: 'allow',
+            scope: 'always',
+          },
+          {
+            project: project.stores[0],
+            tool: 'WebFetch',
+            action: rememberedActionKey('https://example.test'),
+            exact_action: 'https://example.test',
+            decision: 'allow',
+            scope: 'always',
+          },
+        ],
+      }),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSidebar.isVisible()) await showSidebar.click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (await hideSidebar.isVisible()) await hideSidebar.click();
+    const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
+    await expect(preview).toContainText('Code project: demo · /work/demo');
+    await expect(preview).toContainText('Legacy ticket-source answer: /work/demo.hs2');
+    await preview.screenshot({ path: `target/visual-captures/hs2-7t5gpn-preview-${width}.png` });
+    await page.getByRole('button', { name: 'Show all 2 answers' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remembered answers' });
+    await expect(dialog).toContainText('Code project: demo · /work/demo');
+    await expect(dialog).toContainText('Legacy ticket-source answer: /work/demo.hs2');
+    await dialog.screenshot({ path: `target/visual-captures/hs2-7t5gpn-dialog-${width}.png` });
+    if (width === 1280) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(dialog).toContainText('Code project: demo · /work/demo');
+      await page.setViewportSize({ width: 1280, height: 844 });
+      await expect(dialog).toContainText('Legacy ticket-source answer: /work/demo.hs2');
+    }
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`shows the code project and path before remembering a permission at ${width}px (HS2-7T5GPN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    await page.route('**/permissions', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 81,
+            project: `checkout:${project.id}`,
+            connection: 'chat',
+            tool: 'Bash',
+            action: 'npm test',
+            always_allow_supported: true,
+          },
+        ],
+      }),
+    );
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await popup.getByRole('button', { name: 'Always Allow', exact: true }).click();
+    await expect(popup).toContainText('Rule owner');
+    await expect(popup).toContainText('Code project: demo · /work/demo');
+    await popup.screenshot({ path: `target/visual-captures/hs2-7t5gpn-confirm-${width}.png` });
+  });
+}
+
 for (const width of [1280, 390]) {
   test(`answers all AI terminal questions from the notice at ${width}px (HS2-SWY32A)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
