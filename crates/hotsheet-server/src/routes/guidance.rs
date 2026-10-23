@@ -25,6 +25,7 @@ pub(crate) struct GuidanceQuery {
 #[derive(Serialize)]
 pub(crate) struct GuidanceOverview {
     owner: &'static str,
+    pending_consolidation_review: bool,
     explicit_selection: bool,
     default_repository: &'static str,
     local_rules: Vec<String>,
@@ -100,9 +101,23 @@ fn queue_consolidation_review(
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
 }
 
+pub(crate) fn retry_pending_review(state: &AppState, checkout: &Checkout) -> Result<(), ApiError> {
+    let project = FsPath::new(&checkout.root);
+    if hotsheet_plugins::setup::guidance_owner_in(project)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+        == "rulesync"
+        && hotsheet_plugins::rulesync_consolidation::needs_review(project, state.machine_home())
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+    {
+        queue_consolidation_review(state, project, selected_ticket_source(checkout))?;
+    }
+    Ok(())
+}
+
 fn overview(
     project: &std::path::Path,
     query: &GuidanceQuery,
+    home: &FsPath,
 ) -> Result<GuidanceOverview, ApiError> {
     let config = sources::load(project)
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
@@ -111,6 +126,9 @@ fn overview(
     let term = query.query.as_deref().unwrap_or("").to_lowercase();
     Ok(GuidanceOverview {
         owner,
+        pending_consolidation_review: owner == "rulesync"
+            && hotsheet_plugins::rulesync_consolidation::needs_review(project, home)
+                .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?,
         explicit_selection: config.explicit_selection,
         default_repository: sources::DEFAULT_REPOSITORY,
         local_rules: if owner == "rulesync" {
@@ -172,7 +190,7 @@ pub(crate) async fn get_checkout_guidance(
     Query(query): Query<GuidanceQuery>,
 ) -> Result<Json<GuidanceOverview>, ApiError> {
     let project = project_root(&state, &reference)?;
-    tokio::task::spawn_blocking(move || overview(&project, &query))
+    tokio::task::spawn_blocking(move || overview(&project, &query, state.machine_home()))
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map(Json)
@@ -425,6 +443,7 @@ pub(crate) async fn update_checkout_guidance(
                 owner: None,
                 tag: None,
             },
+            state.machine_home(),
         )
     })
     .await

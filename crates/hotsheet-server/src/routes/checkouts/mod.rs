@@ -9,6 +9,7 @@ pub(crate) use listing::{
 use crate::api_error::ApiError;
 use crate::multistore::{StoreEntry, StoreHost};
 use crate::routes::checkout_tickets::{checkout_git_ticket, checkout_ticket_owner};
+use crate::routes::guidance::retry_pending_review;
 use crate::routes::providers::provider_transfer_error;
 use crate::watcher::repository_change_event;
 use crate::{AppState, code_review, repository_browser};
@@ -49,6 +50,20 @@ pub(crate) struct OpenProjectBody {
 pub(crate) struct OpenProjectResponse {
     checkout: hotsheet_ticketing::checkouts::Checkout,
     discovered: bool,
+}
+
+pub(crate) async fn retry_pending_guidance(
+    state: &AppState,
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+) {
+    let state = state.clone();
+    let checkout = checkout.clone();
+    match tokio::task::spawn_blocking(move || retry_pending_review(&state, &checkout)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) | Err(_) => {
+            tracing::warn!("pending Rulesync review could not be queued after source registration")
+        }
+    }
 }
 
 fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::checkouts::Checkout) {
@@ -255,6 +270,7 @@ pub(crate) async fn open_project(
     state.watch_checkout_repository(&checkout);
     schedule_worklist_regeneration(&state, &checkout);
     schedule_setup_freshness(&state, &checkout);
+    retry_pending_guidance(&state, &checkout).await;
     Ok((
         StatusCode::CREATED,
         Json(OpenProjectResponse {
@@ -301,6 +317,7 @@ pub(crate) async fn register_checkout(
     hotsheet_ticketing::worklist::regenerate_checkout(&entry)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     state.watch_checkout_repository(&entry);
+    retry_pending_guidance(&state, &entry).await;
     Ok((StatusCode::CREATED, Json(entry)))
 }
 
@@ -356,7 +373,7 @@ pub(crate) async fn add_checkout_source(
             locator: body.locator,
         }
     };
-    state
+    let checkout = state
         .checkout_registry
         .add_registered_source(
             &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
@@ -364,8 +381,9 @@ pub(crate) async fn add_checkout_source(
             source,
             body.make_default,
         )
-        .map(Json)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    retry_pending_guidance(&state, &checkout).await;
+    Ok(Json(checkout))
 }
 
 /// Remove a ticket source from one project (HS2-SM9PM8). A connection no other project
@@ -497,11 +515,12 @@ pub(crate) async fn set_checkout_default_source(
     Path(reference): Path<String>,
     Json(body): Json<CheckoutDefaultSourceBody>,
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
-    state
+    let checkout = state
         .checkout_registry
         .set_default_source(&reference, body.connection_id.as_deref())
-        .map(Json)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    retry_pending_guidance(&state, &checkout).await;
+    Ok(Json(checkout))
 }
 
 pub(crate) async fn checkout_repository_status(

@@ -383,6 +383,11 @@ pub(crate) async fn create_checkout_provider_connection(
             ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
         }
     })?;
+    let linked = state
+        .checkout_registry
+        .resolve(&checkout.id)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    super::checkouts::retry_pending_guidance(&state, &linked).await;
     let (_, checkouts) = account_listing_inputs(&state)?;
     Ok((
         StatusCode::CREATED,

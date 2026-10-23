@@ -73,6 +73,7 @@ import { completionDayStarts } from './ticket-completion-trend';
 
 export interface GuidanceOverview {
   owner: 'builtin' | 'rulesync';
+  pending_consolidation_review?: boolean;
   explicit_selection: boolean;
   default_repository: string;
   local_rules?: string[];

@@ -1260,6 +1260,10 @@ pub(crate) fn cmd_provider_connect(path: &Path, args: ProviderConnectArgs) -> Re
             }),
         hotsheet_extsync::ConnectMode::Reconnect,
     )?;
+    if let Some(reference) = &checkout {
+        let linked = checkout_registry.resolve(reference)?;
+        super::setup::retry_pending_consolidation(path, Path::new(&linked.root));
+    }
     println!(
         "Connected {} '{}' as '{}'.",
         connection.name.as_deref().unwrap_or(provider.id()),

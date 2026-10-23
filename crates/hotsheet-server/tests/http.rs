@@ -14261,6 +14261,127 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
 }
 
 #[tokio::test]
+async fn hs2_c9fc2k_linking_first_source_queues_pending_rulesync_review() {
+    let (store_dir, state) = state();
+    let project = tempfile::tempdir().unwrap();
+    let local = tempfile::tempdir().unwrap();
+    std::fs::write(project.path().join("AGENTS.md"), "Project guidance.\n").unwrap();
+    let app = app(state
+        .with_checkout_registry(local.path().join("checkouts.json"))
+        .with_machine_home(local.path().join("home")));
+    let registration = serde_json::json!({
+        "root": project.path(),
+        "alias": "pending-review",
+        "sources": []
+    });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(&registration.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let guidance = "/checkouts/pending-review/guidance";
+    let switched = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                guidance,
+                Some(r#"{"action":"owner","owner":"rulesync"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(switched["owner"], "rulesync");
+    std::fs::write(
+        project.path().join("AGENTS.md"),
+        "Rulesync-generated guidance.\n",
+    )
+    .unwrap();
+    let pending = body_json(
+        app.clone()
+            .oneshot(authed("GET", guidance, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(pending["pending_consolidation_review"], true);
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store_dir.path());
+    let uri = format!("/checkouts/pending-review/sources/{}", source.connection_id);
+    let body = serde_json::json!({
+        "provider": "git", "locator": store_dir.path(), "make_default": true
+    });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("PUT", &uri, Some(&body.to_string())))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let overview = body_json(
+        app.clone()
+            .oneshot(authed("GET", guidance, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(overview["pending_consolidation_review"], false);
+    let reviews = hotsheet_ticketing::ops::query(
+        &hotsheet_ticketing::FsStore::open(store_dir.path()).unwrap(),
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(reviews.len(), 1);
+    assert!(
+        !reviews[0]
+            .details
+            .contains(&project.path().display().to_string())
+    );
+    let source_store = hotsheet_ticketing::FsStore::open(store_dir.path()).unwrap();
+    let mut completed = reviews[0].clone();
+    completed.status = hotsheet_model::Status::Completed;
+    completed.up_next = false;
+    source_store.write_ticket_committing(&completed).unwrap();
+    std::fs::write(
+        project.path().join("AGENTS.md"),
+        "Further Rulesync update.\n",
+    )
+    .unwrap();
+    let selected = serde_json::json!({ "connection_id": source.connection_id });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                "/checkouts/pending-review/default-source",
+                Some(&selected.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let after = hotsheet_ticketing::ops::query(
+        &source_store,
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(after.len(), 2);
+}
+
+#[tokio::test]
 async fn hs2_34s102_rulesync_switch_queues_external_provider_review() {
     let (_store, state) = state();
     let project = tempfile::tempdir().unwrap();

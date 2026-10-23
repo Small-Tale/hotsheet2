@@ -128,6 +128,10 @@ for an AI worker to consolidate `AGENTS.md` and `project-local.md` after review
 (HS2-34S102). A completed task does not block a new task after a later rule change.
 Direct `rulesync` updates are noticed when Hot Sheet next checks standalone
 Rulesync status; the review task is then queued in the linked ticket source.
+When no writable source is linked, Project guidance shows a pending-review notice.
+Linking or selecting a ticket source retries the review ticket immediately;
+`check-rulesync-updates` remains the headless retry. A failed ticket write leaves
+the fingerprint pending without interrupting source registration (HS2-C9FC2K).
 
 ## Install, update, and customize
 

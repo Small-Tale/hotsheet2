@@ -36,6 +36,8 @@ queues the later deduplicated review task through CLI and server callers. `guida
 guide; `scripts/validate-rulesync.mjs` runs optional real-tool acceptance flows.
 The consolidation module keeps only a machine-local digest under the Hot Sheet
 home so standalone Rulesync changes can be recognized at the next update check.
+Checkout source registration in CLI and server retries a pending review; the
+guidance overview exposes the pending flag for the Settings notice (HS2-C9FC2K).
 `crates/hotsheet-plugins/src/guidance_sources.rs` validates and caches project-pinned
 rule/skill repositories in `.hotsheet2/guidance-sources.json`. The CLI `guidance`
 subcommands and authenticated checkout guidance route share its selection and apply

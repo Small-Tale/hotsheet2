@@ -590,6 +590,61 @@ fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership
 }
 
 #[test]
+fn hs2_c9fc2k_cli_links_source_and_queues_pending_rulesync_review() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    for path in [&store, &project, &home] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let source_store =
+        hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+            .unwrap();
+    std::fs::write(project.join("AGENTS.md"), "Project guidance.\n").unwrap();
+    hs(Path::new("."))
+        .env("HOTSHEET_HOME", &home)
+        .args(["checkout", "register"])
+        .arg(&project)
+        .arg("--alias")
+        .arg("pending-review")
+        .assert()
+        .success();
+    hs(Path::new("."))
+        .env("HOTSHEET_HOME", &home)
+        .args(["setup", "--guidance-owner", "rulesync", "--project"])
+        .arg(&project)
+        .assert()
+        .success();
+    std::fs::write(project.join("AGENTS.md"), "Rulesync-generated guidance.\n").unwrap();
+    assert!(hotsheet_plugins::rulesync_consolidation::needs_review(&project, &home).unwrap());
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(&store);
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args([
+            "checkout",
+            "add-source",
+            "pending-review",
+            &source.connection_id,
+            "git",
+        ])
+        .arg(&store)
+        .arg("--default")
+        .assert()
+        .success();
+    assert!(!hotsheet_plugins::rulesync_consolidation::needs_review(&project, &home).unwrap());
+    let reviews = hotsheet_ticketing::ops::query(
+        &source_store,
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(reviews.len(), 1);
+}
+
+#[test]
 fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

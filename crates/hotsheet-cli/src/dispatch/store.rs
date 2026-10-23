@@ -760,6 +760,7 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 }
                 Err(error) => return Err(error.into()),
             };
+            super::setup::retry_pending_consolidation(store, Path::new(&entry.root));
             println!("{}", serde_json::to_string_pretty(&entry)?);
         }
         CheckoutCmd::List => println!("{}", serde_json::to_string_pretty(&registry.list()?)?),
@@ -804,15 +805,14 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             let store_root = FsStore::open(store)
                 .map(|opened| opened.root().to_path_buf())
                 .unwrap_or_else(|_| store.to_path_buf());
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&registry.add_registered_source(
-                    &ProviderConfigRegistry::new(store_root.join("providers.json")),
-                    &reference,
-                    source,
-                    default,
-                )?)?
-            );
+            let checkout = registry.add_registered_source(
+                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &reference,
+                source,
+                default,
+            )?;
+            super::setup::retry_pending_consolidation(store, Path::new(&checkout.root));
+            println!("{}", serde_json::to_string_pretty(&checkout)?);
         }
         CheckoutCmd::RemoveSource {
             reference,
@@ -887,10 +887,9 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             } else {
                 connection_id.as_deref()
             };
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&registry.set_default_source(&reference, selected)?)?
-            );
+            let checkout = registry.set_default_source(&reference, selected)?;
+            super::setup::retry_pending_consolidation(store, Path::new(&checkout.root));
+            println!("{}", serde_json::to_string_pretty(&checkout)?);
         }
         CheckoutCmd::RepoSize { reference, json } => {
             let report =

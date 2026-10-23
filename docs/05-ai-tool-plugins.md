@@ -245,6 +245,11 @@ Hot Sheet also detects changes made directly with Rulesync to `AGENTS.md` or
 `rulesync.lock` on the next standalone update check and queues the same task.
 Only a content digest is stored in the machine-local Hot Sheet home. Hot Sheet
 does not remove guidance automatically.
+If no writable source is linked yet, the digest stays pending and Project guidance
+shows a review notice. Linking or selecting a source retries ticket creation
+immediately (HS2-C9FC2K); the standalone check remains a headless retry path.
+Source linking still succeeds if that follow-up cannot be written, and the notice
+persists until a later successful retry.
 `guidance apply` reconciles the selected files. With the built-in writer,
 selected rule sections are merged into `AGENTS.md` and exact deselected bodies are
 removed. With Rulesync ownership, `apply` materializes the selected pinned rules in

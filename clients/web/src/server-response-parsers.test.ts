@@ -55,6 +55,12 @@ describe('server response parsers (HS2-34P6XY)', () => {
     };
     expect(parseGuidanceOverview(overview).local_rules).toEqual(['project-local']);
     expect(() => parseGuidanceOverview({ ...overview, local_rules: [42] })).toThrow(ServerResponseShapeError);
+    expect(
+      parseGuidanceOverview({ ...overview, pending_consolidation_review: true }).pending_consolidation_review,
+    ).toBe(true);
+    expect(() => parseGuidanceOverview({ ...overview, pending_consolidation_review: 'yes' })).toThrow(
+      ServerResponseShapeError,
+    );
   });
   it('validates the optional guidance interview contract (HS2-YGV9RN)', () => {
     const review = {

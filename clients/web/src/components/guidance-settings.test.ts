@@ -3,6 +3,28 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-C9FC2K shows the pending Rulesync review action until a source is linked', () => {
+    const props = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    const overview = { owner: 'rulesync' as const, explicit_selection: false, default_repository: '', sources: [] };
+    const pending = String(
+      GuidanceSettings({ ...props, overview: { ...overview, pending_consolidation_review: true } }),
+    );
+    expect(pending).toContain('Rulesync Guidance Review Pending');
+    expect(pending).toContain('Ticket sources');
+    expect(pending).toContain('check-rulesync-updates');
+    expect(
+      String(GuidanceSettings({ ...props, overview: { ...overview, pending_consolidation_review: false } })),
+    ).not.toContain('Rulesync Guidance Review Pending');
+  });
   it('shows exact interview preview, consent, advisory answer, and unknown status (HS2-YGV9RN)', () => {
     const base = {
       loading: false,

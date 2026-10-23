@@ -511,6 +511,11 @@ and applies reuse it while open, and a later change after completion creates a n
 task. Update `AGENTS.md` or `rulesync.lock` directly, run the standalone Rulesync
 status check, and confirm it queues the same review flow. Confirm the task never
 copies project prose into its body.
+Repeat with no linked ticket source: Project guidance should show a pending-review
+notice at wide and phone widths with the Ticket sources action and headless retry
+command. Link a writable default source and confirm the ticket appears immediately
+and the notice clears. Make the source temporarily unwritable and confirm linking
+still succeeds while the notice remains until a successful retry.
 After generation, verify the chosen reusable sections appear once, local policies
 remain readable, CLAUDE imports AGENTS, and Hot Sheet refresh leaves both files unchanged.
 Make a further local-rule edit and generate again. Rebuild local-only guidance and

@@ -82,6 +82,25 @@ fn queue_consolidation(store: &Path, project: &Path, announce: bool) -> Result<(
     Ok(())
 }
 
+pub(super) fn retry_pending_consolidation(store: &Path, project: &Path) {
+    let result = (|| -> Result<()> {
+        if hotsheet_plugins::setup::guidance_owner_in(project)? == "rulesync"
+            && hotsheet_plugins::rulesync_consolidation::needs_review(
+                project,
+                &hotsheet_plugins::hotsheet_home(),
+            )?
+        {
+            queue_consolidation(store, project, true)?;
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        eprintln!(
+            "Pending Rulesync guidance review could not be queued; retry with guidance check-rulesync-updates"
+        );
+    }
+}
+
 fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
     use hotsheet_plugins::guidance_sources as sources;
     match cmd {

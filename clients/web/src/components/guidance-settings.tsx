@@ -80,6 +80,15 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             copyLayout="stacked"
           />
         )}
+        {overview?.pending_consolidation_review && (
+          <StateBanner
+            title="Rulesync Guidance Review Pending"
+            detail="Hot Sheet still needs to create a follow-up ticket for this guidance change. In Project Settings → Ticket sources, link or select a writable default source. Hot Sheet will retry automatically. To retry headlessly, run hotsheet-cli guidance --project <code-project> check-rulesync-updates."
+            tone="warning"
+            urgency="status"
+            copyLayout="stacked"
+          />
+        )}
         <section aria-label="Guidance Recommendations" data-guidance-recommendations="">
           <List gap="xs">
             <Text variant="h3">Recommendations</Text>

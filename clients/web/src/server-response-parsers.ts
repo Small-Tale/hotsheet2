@@ -116,6 +116,8 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
   const what = 'guidance',
     body = record(value, what);
   if (body.owner !== 'builtin' && body.owner !== 'rulesync') invalid(what);
+  if (body.pending_consolidation_review !== undefined && typeof body.pending_consolidation_review !== 'boolean')
+    invalid(what);
   if (typeof body.explicit_selection !== 'boolean') invalid(what);
   requiredString(body, 'default_repository', what);
   if (body.local_rules !== undefined && !isStringArray(body.local_rules)) invalid(what);

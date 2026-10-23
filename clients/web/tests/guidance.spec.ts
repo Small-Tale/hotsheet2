@@ -724,3 +724,49 @@ test('Project guidance keeps standalone Rulesync lock status separate from pinne
     await page.screenshot({ path: `target/visual-captures/rulesync-local-guidance-${width}.png` });
   }
 });
+
+test('HS2-C9FC2K shows pending Rulesync review until a ticket source is linked', async ({ page }) => {
+  await openDemoProject(page);
+  let pending = true;
+  await page.route('**/checkouts/demo-checkout/guidance', (route) =>
+    route.fulfill({
+      json: {
+        owner: 'rulesync',
+        pending_consolidation_review: pending,
+        explicit_selection: false,
+        default_repository: '',
+        local_rules: ['project-local'],
+        sources: [],
+      },
+    }),
+  );
+  for (const [index, width] of [1280, 768, 390, 1280].entries()) {
+    await page.setViewportSize({ width, height: 844 });
+    if (index > 0) await page.reload();
+    await page.getByLabel('Settings View').click();
+    const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSettings.isVisible()) await showSettings.click();
+    await page.getByRole('button', { name: 'Project guidance' }).click();
+    const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (width === 390) await page.waitForTimeout(250);
+    if (await hideSettings.isVisible()) await hideSettings.click();
+    if (width === 390) await page.waitForTimeout(500);
+    const picker = page.locator('[data-component="guidance-settings"]');
+    const notice = picker.getByText('Rulesync Guidance Review Pending');
+    await expect(notice).toBeVisible();
+    const box = await picker.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await expect(picker).toContainText('Ticket sources');
+    expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `target/visual-captures/hs2-c9fc2k-pending-${width}.png` });
+  }
+  pending = false;
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  await expect(page.getByText('Rulesync Guidance Review Pending')).toHaveCount(0);
+});
