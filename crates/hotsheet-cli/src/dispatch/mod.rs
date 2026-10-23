@@ -77,7 +77,8 @@ impl Cmd {
             | Read { .. }
             | ConfidenceReport { .. }
             | PhaseReport { .. }
-            | Metrics { .. } => Group::Tickets,
+            | Metrics { .. }
+            | Reprice { .. } => Group::Tickets,
             Providers { .. }
             | GithubSignIn { .. }
             | GithubConnect(_)

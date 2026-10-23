@@ -88,6 +88,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             prune_before,
             team,
         } => cmd_metrics(path, refresh_codex, roll_up, prune_before, team),
+        Cmd::Reprice {
+            apply,
+            rebuild_ledger,
+            json,
+        } => cmd_reprice(path, apply, rebuild_ledger, json),
         _ => misrouted("tickets"),
     }
 }
@@ -477,6 +482,52 @@ pub(crate) fn cmd_metrics(
         for (d, c) in &r.by_day {
             println!("  {d}: ${c:.4}");
         }
+    }
+    Ok(())
+}
+
+/// Preview by default; an explicit --apply replaces the local correction projection.
+pub(crate) fn cmd_reprice(
+    path: &Path,
+    apply: bool,
+    rebuild_ledger: bool,
+    json: bool,
+) -> Result<()> {
+    use hotsheet_ticketing::metrics::reprice;
+    let store = FsStore::open(path)?;
+    let report = if apply {
+        reprice::apply(&store, rebuild_ledger)?
+    } else {
+        reprice::preview(&store)?
+    };
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        for row in &report.rows {
+            let rate = |value: Option<f64>| {
+                value.map_or_else(|| "n/a".to_owned(), |value| format!("${value:.4}"))
+            };
+            println!(
+                "{} {} revision {}: ${:.6} -> ${:.6} (delta ${:+.6}); USD/Mtok input ${:.4}, cache read {}, 5m write {}, 1h write {}, output ${:.4}",
+                row.event_id,
+                row.model,
+                row.price_revision,
+                row.previous_cost_usd,
+                row.effective_cost_usd,
+                row.delta_usd,
+                row.rate.input_per_mtok,
+                rate(row.rate.cache_read_per_mtok),
+                rate(row.rate.cache_write_5m_per_mtok),
+                rate(row.rate.cache_write_1h_per_mtok),
+                row.rate.output_per_mtok,
+            );
+        }
+        println!(
+            "{}: {} eligible, {} changed",
+            if apply { "Applied" } else { "Preview" },
+            report.rows.len(),
+            report.changed
+        );
     }
     Ok(())
 }

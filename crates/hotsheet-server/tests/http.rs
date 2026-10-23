@@ -25979,6 +25979,88 @@ async fn checkout_ticket_usage_lists_attributed_events_in_order_and_keeps_settle
 }
 
 #[tokio::test]
+async fn hs2_38saet_checkout_usage_route_projects_repriced_cost_once() {
+    use hotsheet_ticketing::metrics::{self, ClaudeTokenCategories, UsageEvent};
+
+    let (store_dir, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"repriced","stores":[store_dir.path()]});
+    let registered = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&registration.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/repriced/tickets",
+                Some(r#"{"title":"Synthetic usage"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let qualified = created["qualified_id"].as_str().unwrap().to_owned();
+    let store = FsStore::open(store_dir.path()).unwrap();
+    metrics::record_once_with_claude_tokens(
+        &store,
+        &UsageEvent {
+            ts: "2026-10-22T12:00:00Z".into(),
+            tool: "claude".into(),
+            model: Some("claude-fable-5-1".into()),
+            tokens_in: 2_000_000,
+            tokens_out: 0,
+            cost_usd: None,
+            ticket: Some(id),
+            session: Some("session-1".into()),
+        },
+        "turn-1",
+        Some(ClaudeTokenCategories {
+            uncached_input: 1_000_000,
+            cache_read: 1_000_000,
+            cache_write_5m: 0,
+            cache_write_1h: 0,
+            cache_write_unclassified: 0,
+            output: 0,
+        }),
+    )
+    .unwrap();
+    assert_eq!(metrics::reprice::apply(&store, false).unwrap().changed, 1);
+    let usage_path = format!("/checkouts/repriced/tickets/{qualified}/usage");
+    let history = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", &usage_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(history["events"][0]["cost_usd"], 10.25);
+    metrics::roll_up_through(&store, "2026-10-23").unwrap();
+    assert_eq!(metrics::reprice::apply(&store, false).unwrap().changed, 0);
+    let history = body_json(
+        router
+            .oneshot(authed("GET", &usage_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(history["events"][0]["cost_usd"], 10.25);
+    assert_eq!(history["settled_cost_usd"], 10.25);
+}
+
+#[tokio::test]
 async fn human_edits_an_ai_feedback_prompt_only_when_explicitly_requested() {
     // HS2-MB2Q10 refuses a human text edit of an AI FEEDBACK NEEDED prompt; HS2-ZXGEFE allows
     // it when the client explicitly opened the prompt for editing.

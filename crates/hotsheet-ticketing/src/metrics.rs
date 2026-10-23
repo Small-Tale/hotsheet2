@@ -26,6 +26,7 @@ use crate::FileLock;
 use crate::store::{FsStore, StoreError};
 
 pub mod codex_work;
+pub mod reprice;
 
 /// Attribute a turn only when these session identities hold exactly one unexpired claim.
 /// Incomplete listings are ambiguous too: a corrupt ticket could hide another claim.
@@ -294,7 +295,7 @@ pub fn record_priced(store: &FsStore, event: UsageEvent) -> io::Result<()> {
 
 /// The store's usage rollup — read the raw JSONL and aggregate (the DB-free read path).
 pub fn summary(store: &FsStore) -> io::Result<Rollup> {
-    Ok(rollup(&read_raw(store)?))
+    Ok(rollup(&reprice::project_raw(store)?))
 }
 
 // ---- rollup files + settled read path (docs/14 §14.3/§14.4, HS2-8BCRHS) -----------
@@ -306,6 +307,13 @@ struct SettledRollup {
     /// The last day (`YYYY-MM-DD`) folded into `total`; raw newer than this is the live tail.
     #[serde(default)]
     last_rolled_up_through: String,
+    /// Raw, uncorrected settled totals. A correction revision replaces the projection
+    /// computed from this base, so repeated applies cannot add its cost twice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    base_total: Option<Rollup>,
+    /// A damaged ledger cannot be rebuilt from evidence that retention deleted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pruned_before: Option<String>,
     #[serde(flatten)]
     total: Rollup,
 }
@@ -341,12 +349,52 @@ fn sanitize_contributor(email: &str) -> String {
         .collect()
 }
 
-fn read_settled(store: &FsStore, contributor: &str) -> SettledRollup {
+fn read_settled(store: &FsStore, contributor: &str) -> io::Result<SettledRollup> {
     let path = rollups_dir(store).join(contributor).join("rollup.json");
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+    match fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("corrupt settled usage rollup: {error}"),
+            )
+        }),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(SettledRollup::default()),
+        Err(error) => Err(error),
+    }
+}
+
+fn corrected_settled_with(
+    store: &FsStore,
+    contributor: &str,
+    corrections: &BTreeMap<String, reprice::Correction>,
+) -> io::Result<SettledRollup> {
+    let mut settled = read_settled(store, contributor)?;
+    let base = settled.base_total.as_ref().unwrap_or(&settled.total);
+    settled.total = reprice::project_settled(base, &settled.last_rolled_up_through, corrections);
+    Ok(settled)
+}
+
+/// Repair the on-disk projection after the ledger has been replaced. Readers can also
+/// calculate it from the base if a process stops between the two atomic file writes.
+fn refresh_settled_projection(
+    store: &FsStore,
+    corrections: &BTreeMap<String, reprice::Correction>,
+) -> io::Result<()> {
+    let contributor = contributor_id(store);
+    let path = rollups_dir(store).join(&contributor).join("rollup.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut settled = read_settled(store, &contributor)?;
+    let base = settled
+        .base_total
+        .get_or_insert_with(|| settled.total.clone());
+    settled.total = reprice::project_settled(base, &settled.last_rolled_up_through, corrections);
+    let bytes = serde_json::to_vec_pretty(&settled).map_err(io::Error::other)?;
+    if fs::read(&path).ok().as_deref() == Some(bytes.as_slice()) {
+        return Ok(());
+    }
+    reprice::atomic_write(&path, &bytes)
 }
 
 /// Fold every raw event **settled** as of `through_day` (`YYYY-MM-DD`) into this
@@ -355,20 +403,31 @@ fn read_settled(store: &FsStore, contributor: &str) -> SettledRollup {
 /// into the existing total, so the rollup survives raw-JSONL pruning (retention) and stays
 /// correct across repeated runs. Returns the updated cumulative total.
 pub fn roll_up_through(store: &FsStore, through_day: &str) -> io::Result<Rollup> {
+    let _lock = reprice::lock(store)?;
     let contributor = contributor_id(store);
-    let mut settled = read_settled(store, &contributor);
+    let mut settled = read_settled(store, &contributor)?;
+    if through_day < settled.last_rolled_up_through.as_str() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cannot move the settled usage frontier backward",
+        ));
+    }
     // Aggregate only the tail beyond what's already settled, up to and including through_day.
     let tail: Vec<UsageEvent> = read_raw(store)?
         .into_iter()
         .filter(|e| e.day() > settled.last_rolled_up_through.as_str() && e.day() <= through_day)
         .collect();
-    settled.total.merge(&rollup(&tail));
+    let base = settled
+        .base_total
+        .get_or_insert_with(|| settled.total.clone());
+    base.merge(&rollup(&tail));
     settled.last_rolled_up_through = through_day.to_string();
+    settled.total = reprice::project_settled(base, through_day, &reprice::corrected_costs(store)?);
 
     let dir = rollups_dir(store).join(&contributor);
     fs::create_dir_all(&dir)?;
-    let json = serde_json::to_string_pretty(&settled).map_err(io::Error::other)?;
-    fs::write(dir.join("rollup.json"), json)?;
+    let json = serde_json::to_vec_pretty(&settled).map_err(io::Error::other)?;
+    reprice::atomic_write(&dir.join("rollup.json"), &json)?;
     Ok(settled.total.clone())
 }
 
@@ -377,10 +436,11 @@ pub fn roll_up_through(store: &FsStore, through_day: &str) -> io::Result<Rollup>
 /// [`summary`] when nothing is rolled up yet (the whole store is "tail"), but O(tail) once a
 /// roll-up has settled the history.
 pub fn summary_settled(store: &FsStore) -> io::Result<Rollup> {
+    let corrections = reprice::corrected_costs(store)?;
     let contributor = contributor_id(store);
-    let settled = read_settled(store, &contributor);
+    let settled = corrected_settled_with(store, &contributor, &corrections)?;
     let mut total = settled.total;
-    let tail: Vec<UsageEvent> = read_raw(store)?
+    let tail: Vec<UsageEvent> = reprice::project_raw_with(store, &corrections)?
         .into_iter()
         .filter(|e| e.day() > settled.last_rolled_up_through.as_str())
         .collect();
@@ -391,19 +451,25 @@ pub fn summary_settled(store: &FsStore) -> io::Result<Rollup> {
 /// A **team** view: sum every contributor's settled rollup file (the shared unit that syncs
 /// via git, §14.4) plus this device's own live raw tail. Cross-person, conflict-free.
 pub fn team_summary(store: &FsStore) -> io::Result<Rollup> {
+    let corrections = reprice::corrected_costs(store)?;
+    let contributor = contributor_id(store);
     let mut total = Rollup::default();
     if let Ok(entries) = fs::read_dir(rollups_dir(store)) {
         for entry in entries.flatten() {
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                 let name = entry.file_name().to_string_lossy().to_string();
-                total.merge(&read_settled(store, &name).total);
+                let settled = if name == contributor {
+                    corrected_settled_with(store, &name, &corrections)?
+                } else {
+                    read_settled(store, &name)?
+                };
+                total.merge(&settled.total);
             }
         }
     }
     // This device's un-rolled tail isn't in any rollup file yet — add it for a live view.
-    let contributor = contributor_id(store);
-    let settled = read_settled(store, &contributor);
-    let tail: Vec<UsageEvent> = read_raw(store)?
+    let settled = corrected_settled_with(store, &contributor, &corrections)?;
+    let tail: Vec<UsageEvent> = reprice::project_raw_with(store, &corrections)?
         .into_iter()
         .filter(|e| e.day() > settled.last_rolled_up_through.as_str())
         .collect();
@@ -415,11 +481,33 @@ pub fn team_summary(store: &FsStore) -> io::Result<Rollup> {
 /// but **only** what's already rolled up (`before_day <= last_rolled_up_through`), so
 /// un-settled events are never lost. Returns how many files were pruned.
 pub fn prune_raw_before(store: &FsStore, before_day: &str) -> io::Result<usize> {
-    let settled = read_settled(store, &contributor_id(store));
+    let _lock = reprice::lock(store)?;
+    let contributor = contributor_id(store);
+    let mut settled = read_settled(store, &contributor)?;
     // Never prune past the settled frontier — that data isn't in a rollup yet.
     if before_day > settled.last_rolled_up_through.as_str() {
         return Ok(0);
     }
+    if reprice::pending_before(store, before_day)? {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "apply pending Claude price corrections before pruning their raw evidence",
+        ));
+    }
+    // Commit the corrected projection and retention marker before removing evidence.
+    // A crash at either boundary remains conservative for ledger rebuilds.
+    let base = settled
+        .base_total
+        .get_or_insert_with(|| settled.total.clone());
+    settled.total = reprice::project_settled(
+        base,
+        &settled.last_rolled_up_through,
+        &reprice::corrected_costs(store)?,
+    );
+    settled.pruned_before = Some(before_day.to_owned());
+    let path = rollups_dir(store).join(&contributor).join("rollup.json");
+    let bytes = serde_json::to_vec_pretty(&settled).map_err(io::Error::other)?;
+    reprice::atomic_write(&path, &bytes)?;
     let dir = store.root().join("metrics").join("raw");
     let mut pruned = 0;
     let Ok(entries) = fs::read_dir(&dir) else {
@@ -459,21 +547,26 @@ pub struct TicketUsage {
 /// the settled per-ticket cost. Unattributed events never match, and an unknown ticket yields
 /// an empty history rather than an error.
 pub fn ticket_usage(store: &FsStore, ticket: &str) -> io::Result<TicketUsage> {
-    let mut events: Vec<UsageEvent> = read_raw(store)?
+    let corrections = reprice::corrected_costs(store)?;
+    let mut events: Vec<_> = reprice::project_raw_with_ids(store, &corrections)?
         .into_iter()
-        .filter(|event| event.ticket.as_deref() == Some(ticket))
+        .filter(|(event, _)| event.ticket.as_deref() == Some(ticket))
         .collect();
-    events.sort_by(|left, right| left.ts.cmp(&right.ts));
-    events.dedup_by(|left, right| {
-        left.ts == right.ts
-            && left.session == right.session
-            && left.tool == right.tool
-            && left.tokens_in == right.tokens_in
-            && left.tokens_out == right.tokens_out
+    events.sort_by(|(left, _), (right, _)| left.ts.cmp(&right.ts));
+    events.dedup_by(|left, right| match (&left.1, &right.1) {
+        (Some(left_id), Some(right_id)) => left_id == right_id,
+        (None, None) => {
+            left.0.ts == right.0.ts
+                && left.0.session == right.0.session
+                && left.0.tool == right.0.tool
+                && left.0.tokens_in == right.0.tokens_in
+                && left.0.tokens_out == right.0.tokens_out
+        }
+        _ => false,
     });
-    let settled = read_settled(store, &contributor_id(store));
+    let settled = corrected_settled_with(store, &contributor_id(store), &corrections)?;
     Ok(TicketUsage {
-        events,
+        events: events.into_iter().map(|(event, _)| event).collect(),
         settled_cost_usd: settled.total.by_ticket.get(ticket).copied().unwrap_or(0.0),
         settled_through: settled.last_rolled_up_through,
     })
@@ -938,6 +1031,8 @@ mod tests {
         fs::create_dir_all(&mate).unwrap();
         let their = SettledRollup {
             last_rolled_up_through: "2026-08-19".into(),
+            base_total: None,
+            pruned_before: None,
             total: rollup(&[ev(
                 "2026-08-19T12:00:00Z",
                 "codex",

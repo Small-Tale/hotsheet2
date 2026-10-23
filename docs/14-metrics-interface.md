@@ -100,8 +100,9 @@ Metrics can be shared across a team **through git** — no server sync needed:
 - The **cost widget** + **analytics/stats dashboards** (HS2-47) read via §14.3.
 - The **ticket timeline** reads one ticket's history through
   `metrics::ticket_usage` (`GET /checkouts/{checkout}/tickets/{ticket}/usage`, HS2-ZA7W6E,
-  HS2-J14225): the attributed raw events in `ts` order, de-duplicated by timestamp, session,
-  tool, and token counts, plus the settled rollup's `by_ticket` cost and
+  HS2-J14225): the attributed raw events in `ts` order, distinguishing stable turn ids
+  even when counters match and using timestamp/session/tool/count de-duplication for
+  older rows without ids, plus the settled rollup's `by_ticket` cost and
   `last_rolled_up_through` day, so the client can show per-phase tokens and models while raw
   events exist and still a cost total after the raw tail is pruned. Tickets on other
   providers return an empty history rather than a capability error. Raw events are
@@ -192,26 +193,30 @@ Metrics can be shared across a team **through git** — no server sync needed:
   events are unchanged; ordinary usage readers ignore the new object. No
   transcript content, paths, or message ids enter raw metrics.
 
-  **Historical Claude repricing design (HS2-WMWRHZ; design only):** existing raw
+  **Historical Claude repricing boundary (HS2-WMWRHZ):** existing raw
   terminal events retain a model and aggregate input/output counts, but no cache
   categories, transcript byte range, or assistant message ids. A session id and
   timestamp do not identify a unique transcript turn. Those events remain unpriced
   when their original cost was unknown; neither an ordinary-input fallback nor an
   unverified transcript match can recover a trustworthy cost.
 
-  A future event is eligible only when its raw numeric evidence names one model,
+  A new event is eligible only when its raw numeric evidence names one model,
   has a stable event id, and retains uncached input, cache read, five-minute cache
   write, one-hour cache write, unclassified cache write, and output counts. A
   nonzero unclassified write remains unpriced until its TTL is known. Capture this
-  evidence without transcript text or prompt content (HS2-WZ986Q). An explicit
-  headless reprice command will preview eligible ids, the effective rates, and each
-  cost delta, then write a machine-local correction ledger atomically. The ledger
-  is keyed by raw event id and a canonical price revision: repeating apply with the
-  same revision is a no-op; a later revision replaces the projected cost rather
-  than adding another charge. Raw JSONL remains unchanged. Ticket history, the
-  live summary, and settled rollups must use the same corrected projection, with
-  settled rollups rebuilt before source raw events are pruned (HS2-38SAET). A
-  damaged ledger fails closed and can be rebuilt from retained numeric evidence.
+  evidence without transcript text or prompt content (HS2-WZ986Q). The headless
+  `hotsheet-cli reprice` command previews eligible ids, effective model rates,
+  canonical price revisions, and replacement cost deltas. `--apply` atomically
+  writes a machine-local, gitignored `metrics/local/corrections.json` ledger under
+  a writer lock (HS2-38SAET). One entry per raw turn id stores the revision and a
+  hash of its evidence. Repeating apply with the same revision changes nothing;
+  a later revision replaces the effective cost. Raw JSONL is never rewritten.
+  Ticket history, live summaries, and settled rollups project the same effective
+  cost. A settled rollup retains its uncorrected base so a stale file can be
+  recalculated after an interrupted apply; retention refuses pending eligible
+  corrections and writes the corrected rollup before pruning raw files. A damaged
+  ledger fails closed. Explicit `--apply --rebuild-ledger` recovers it from
+  retained numeric raw evidence and refuses a rebuild after raw history is pruned.
 
   Codex Work sessions outside Hot Sheet drives/terminals have a local claim-window
   capture path (`HS2-2K2D7E`, `HS2-NFQ1NK`). CLI and MCP renewal and release capture

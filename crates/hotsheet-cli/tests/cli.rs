@@ -8,6 +8,64 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[test]
+fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
+    use hotsheet_ticketing::metrics::{self, ClaudeTokenCategories, UsageEvent};
+    use hotsheet_ticketing::{FsStore, StoreMetadata};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    metrics::record_once_with_claude_tokens(
+        &store,
+        &UsageEvent {
+            ts: "2026-10-22T12:00:00Z".into(),
+            tool: "claude".into(),
+            model: Some("claude-fable-5-1".into()),
+            tokens_in: 2_000_000,
+            tokens_out: 0,
+            cost_usd: None,
+            ticket: None,
+            session: Some("session-1".into()),
+        },
+        "turn-1",
+        Some(ClaudeTokenCategories {
+            uncached_input: 1_000_000,
+            cache_read: 1_000_000,
+            cache_write_5m: 0,
+            cache_write_1h: 0,
+            cache_write_unclassified: 0,
+            output: 0,
+        }),
+    )
+    .unwrap();
+    let raw_path = dir.path().join("metrics/raw/2026-10-22.jsonl");
+    let original = std::fs::read(&raw_path).unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.args(["-C", dir.path().to_str().unwrap()]).args(args);
+        let output = cmd.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let preview: serde_json::Value = serde_json::from_str(&run(&["reprice", "--json"])).unwrap();
+    assert_eq!(preview["changed"], 1);
+    assert_eq!(preview["rows"][0]["event_id"], "turn-1");
+    assert!(run(&["reprice"]).contains("cache read $0.2500"));
+    assert!(!dir.path().join("metrics/local/corrections.json").exists());
+    let applied: serde_json::Value =
+        serde_json::from_str(&run(&["reprice", "--apply", "--json"])).unwrap();
+    assert_eq!(applied["changed"], 1);
+    assert_eq!(std::fs::read(raw_path).unwrap(), original);
+    assert!(run(&["metrics"]).contains("$10.2500 total"));
+    let again: serde_json::Value =
+        serde_json::from_str(&run(&["reprice", "--apply", "--json"])).unwrap();
+    assert_eq!(again["changed"], 0);
+}
+
 fn rendered_instruction(raw: &str) -> String {
     raw.replace(
         "<!-- hotsheet-instructions-version: 64 -->",

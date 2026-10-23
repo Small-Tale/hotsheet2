@@ -592,6 +592,18 @@ enum Cmd {
         #[arg(long)]
         team: bool,
     },
+    /// Preview or apply verifiable Claude usage price corrections without changing raw events.
+    Reprice {
+        /// Atomically apply the previewed corrections to the local ledger.
+        #[arg(long)]
+        apply: bool,
+        /// Rebuild a damaged local ledger from retained raw evidence (requires --apply).
+        #[arg(long, requires = "apply")]
+        rebuild_ledger: bool,
+        /// Print the preview and result as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Review or explicitly copy legacy Git-store permission rules into one registered project.
     PermissionMigrate {
         /// Registered checkout id, alias, or root path.
