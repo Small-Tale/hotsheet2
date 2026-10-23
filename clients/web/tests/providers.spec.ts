@@ -32496,7 +32496,8 @@ test('project statistics previews ticket-store compaction without rewriting atta
     await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ).toBeLessThanOrEqual(0);
   await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide-return.png', fullPage: true });
+  // HS2-12HS8Y: a returned-wide full-page capture can omit glyphs while the viewport remains readable.
+  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide-return.png' });
 });
 
 test('a server size-limit crossing event brings up the repository size banner without polling (HS2-KKFEY5)', async ({
