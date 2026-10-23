@@ -108,7 +108,7 @@ test('optional guidance interview previews context, requires consent, and record
   await page.setViewportSize({ width: 390, height: 1600 });
   const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSettings.isVisible()) await hideSettings.click();
-  await settings.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await settings.locator('[name="guidance-owner"]').scrollIntoViewIfNeeded();
   await interview.scrollIntoViewIfNeeded();
   const settingsBox = await settings.boundingBox();
   expect(settingsBox).not.toBeNull();
@@ -249,7 +249,7 @@ test('Project guidance reviews local recommendations and keeps accept separate f
   await page.setViewportSize({ width: 390, height: 844 });
   const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSettings.isVisible()) await hideSettings.click();
-  await settings.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await settings.locator('[name="guidance-owner"]').scrollIntoViewIfNeeded();
   const settingsBox = await settings.boundingBox();
   expect(settingsBox).not.toBeNull();
   expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
@@ -395,7 +395,7 @@ test('Project guidance reviews a changed source revision before refreshing its p
   await page.setViewportSize({ width: 390, height: 844 });
   const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSettings.isVisible()) await hideSettings.click();
-  await picker.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await picker.locator('[name="guidance-owner"]').scrollIntoViewIfNeeded();
   await expect(picker).toBeVisible();
   const pickerBox = await picker.boundingBox();
   expect(pickerBox).not.toBeNull();
@@ -577,17 +577,99 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await expect(picker).toBeVisible();
   const overflow = await picker.evaluate((element) => element.scrollWidth - element.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
-  await picker.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
-  const heading = await picker.getByRole('heading', { name: 'Project guidance' }).boundingBox();
-  expect(heading?.x).toBeGreaterThanOrEqual(0);
-  expect((heading?.x ?? 0) + (heading?.width ?? 0)).toBeLessThanOrEqual(390);
+  await writer.scrollIntoViewIfNeeded();
+  const writerBox = await writer.boundingBox();
+  expect(writerBox?.x).toBeGreaterThanOrEqual(0);
+  expect((writerBox?.x ?? 0) + (writerBox?.width ?? 0)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-top.png', fullPage: true });
   await picker.getByRole('button', { name: 'Apply Selected Guidance' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-page.png', fullPage: true });
-  await picker.getByRole('heading', { name: 'Project guidance' }).scrollIntoViewIfNeeded();
+  await writer.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-top-settled.png', fullPage: true });
   await visualRule.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-rules-phone.png' });
+});
+
+test('HS2-T0GHX5 puts Instruction Writer first in the shipped Settings view', async ({ page }) => {
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/guidance', (route) =>
+    route.fulfill({
+      json: {
+        owner: 'rulesync',
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'sample-source',
+            repository: 'https://example.test/guidance.git',
+            requested_ref: 'v1',
+            commit: '1'.repeat(40),
+            rules: [
+              {
+                name: 'sample-rule',
+                description: 'Synthetic guidance rule',
+                version: 1,
+                installed_version: 1,
+                owner: null,
+                tags: [],
+                selected: true,
+              },
+            ],
+            skills: [],
+          },
+        ],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const picker = page.locator('[data-component="guidance-settings"]');
+  const writer = picker.locator('[name="guidance-owner"]');
+  await expect(writer).toBeVisible();
+  await expect(picker.getByRole('heading', { name: 'Project guidance' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Project guidance' })).toBeVisible();
+  expect(
+    await writer.evaluate((element) => {
+      const recommendations = document.querySelector('[data-guidance-recommendations]');
+      return recommendations !== null && Boolean(element.compareDocumentPosition(recommendations) & 4);
+    }),
+  ).toBe(true);
+  for (const [width, height, label] of [
+    [1280, 800, 'wide'],
+    [1024, 768, 'medium'],
+    [390, 844, 'phone'],
+    [1280, 800, 'wide-return'],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    if (label === 'phone' || label === 'wide-return') {
+      await page.reload();
+      await page.getByLabel('Settings View').click();
+      const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await page.getByRole('button', { name: 'Project guidance' }).click();
+    }
+    const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (width === 390 && (await hideSettings.isVisible())) await hideSettings.click();
+    const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (width === 390) await expect(showSettings).toBeVisible();
+    if (width !== 390 && (await showSettings.isVisible())) await showSettings.click();
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    await expect(writer).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await picker.boundingBox();
+        return box !== null && box.x >= 0 && box.x + box.width <= width;
+      })
+      .toBe(true);
+    const writerBox = await writer.boundingBox();
+    expect(writerBox?.x).toBeGreaterThanOrEqual(0);
+    expect((writerBox?.x ?? 0) + (writerBox?.width ?? 0)).toBeLessThanOrEqual(width);
+    expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `target/visual-captures/hs2-t0ghx5-${label}.png`, animations: 'disabled' });
+  }
 });
 
 test('Project guidance has its own Settings tab with an empty source state at wide and phone sizes', async ({

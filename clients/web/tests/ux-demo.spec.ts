@@ -3768,7 +3768,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await choose(category, 'guidance');
     const guidanceSource = settings.locator('[name="workspace-guidance-source"]');
     await expect(workspace.getByText('Register a source to browse its rules and skills.')).toBeVisible();
-    await shot('guidance-empty', workspace.getByRole('heading', { name: 'Project guidance' }));
+    await shot('guidance-empty', workspace.locator('[name="guidance-owner"]'));
     await choose(guidanceSource, 'registered');
     await expect(workspace.locator('[data-guidance-rule="hotsheet-visual-qa"]')).toBeVisible();
     await shot('guidance-registered', workspace.locator('[data-guidance-rule="hotsheet-visual-qa"]'));

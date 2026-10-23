@@ -67,10 +67,34 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
   return (
     <section data-component="guidance-settings" aria-label="Project Guidance" aria-busy={String(loading)}>
       <List gap="l">
-        <List gap="xs">
-          <Text variant="h2">Project guidance</Text>
-          <Text tone="quiet">Choose a pinned rule source and the guidance this project receives.</Text>
-        </List>
+        <Select
+          name="guidance-owner"
+          label="Instruction Writer"
+          value={overview?.owner ?? 'builtin'}
+          choices={[
+            { value: 'builtin', label: 'Hot Sheet Built-in' },
+            { value: 'rulesync', label: 'Rulesync' },
+          ]}
+        />
+        {overview?.owner === 'rulesync' && (
+          <List gap="xs">
+            <Text tone="quiet">
+              Rulesync regenerates <code>AGENTS.md</code> from its rule inputs. Hot Sheet saves unmarked local guidance
+              in <code>.rulesync/rules/project-local.md</code> when you switch writers. Review that rule before
+              applying.
+            </Text>
+            {(overview.local_rules ?? []).length > 0 && (
+              <section aria-label="Project-Local Rulesync Rules">
+                <Text variant="h3">Project-local rules</Text>
+                {(overview.local_rules ?? []).map((name) => (
+                  <Text>
+                    {name} · .rulesync/rules/{name}.md
+                  </Text>
+                ))}
+              </section>
+            )}
+          </List>
+        )}
         {!!props.bundledGuidanceBlocked?.length && (
           <StateBanner
             title="Bundled Guidance Needs Review"
@@ -483,34 +507,6 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
               )}
             </List>
           </section>
-        )}
-        <Select
-          name="guidance-owner"
-          label="Instruction Writer"
-          value={overview?.owner ?? 'builtin'}
-          choices={[
-            { value: 'builtin', label: 'Hot Sheet Built-in' },
-            { value: 'rulesync', label: 'Rulesync' },
-          ]}
-        />
-        {overview?.owner === 'rulesync' && (
-          <List gap="xs">
-            <Text tone="quiet">
-              Rulesync regenerates <code>AGENTS.md</code> from its rule inputs. Hot Sheet saves unmarked local guidance
-              in <code>.rulesync/rules/project-local.md</code> when you switch writers. Review that rule before
-              applying.
-            </Text>
-            {(overview.local_rules ?? []).length > 0 && (
-              <section aria-label="Project-Local Rulesync Rules">
-                <Text variant="h3">Project-local rules</Text>
-                {(overview.local_rules ?? []).map((name) => (
-                  <Text>
-                    {name} · .rulesync/rules/{name}.md
-                  </Text>
-                ))}
-              </section>
-            )}
-          </List>
         )}
         <Grid minColumnWidth={rem(14)} gap="m">
           <TextField name="guidance-source-id" label="Source ID" value={sourceId} />

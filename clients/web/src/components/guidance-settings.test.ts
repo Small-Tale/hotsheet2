@@ -3,6 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-T0GHX5 starts setup with Instruction Writer without repeating the navigation title', () => {
+    const markup = String(
+      GuidanceSettings({
+        loading: false,
+        message: '',
+        query: '',
+        repository: '',
+        sourceRef: '',
+        sourceId: '',
+        ownerFilter: '',
+        tagFilter: '',
+        overview: { owner: 'rulesync', explicit_selection: false, default_repository: '', sources: [] },
+      }),
+    );
+    expect(markup).not.toContain('>Project guidance</');
+    expect(markup).not.toContain('Choose a pinned rule source and the guidance this project receives.');
+    expect(markup.indexOf('Instruction Writer')).toBeLessThan(markup.indexOf('Guidance Recommendations'));
+    expect(markup.indexOf('Rulesync regenerates')).toBeLessThan(markup.indexOf('Guidance Recommendations'));
+  });
+
   it('HS2-C9FC2K shows the pending Rulesync review action until a source is linked', () => {
     const props = {
       loading: false,
