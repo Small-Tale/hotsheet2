@@ -89,8 +89,23 @@ the default-on path is checked by hand.
 3. Repeat on Linux with a live Secret Service session. An unavailable service must fail
    closed; `HOTSHEET_API_KEY_TEST_PROVIDER` is the explicit read-only fallback.
 4. On Windows, repeat set/get/list/delete and confirm the generic credential appears in
-   Credential Manager under `com.smalltale.hotsheet2/test-provider`. Confirm a missing
+   Credential Manager under `com.smalltale.hotsheet2/machine-secrets-v1-master`. Confirm a missing
    credential is reported as absent and other Win32 failures remain visible.
+5. In a disposable home, migrate two old provider entries and an old permission
+   vault by opening each once. Restart a signed development server and launch the
+   app. Confirm the new launch asks for at most one machine master approval.
+   The first migration launch may still ask for each old item. Check that
+   `machine-secrets/` contains owner-only encrypted envelopes, no token text,
+   and one native `machine-secrets-v1-master` item.
+6. Export the machine master to an owner-only backup outside the repository;
+   rotate, restart, and confirm credentials and durable permissions still work.
+   Simulate interruption after the new root is written, run `key master-resume`,
+   and confirm all values survive. Remove the root, verify secrets fail closed,
+   then restore the backed-up matching root and verify they return. A wrong
+   backup must be rejected without changing the native item.
+7. With the current backup verified, run `key master-cleanup-legacy --backup <backup>`
+   and confirm the migrated per-account OS items are gone while the single machine
+   master remains. Restart and confirm provider access and durable permissions still work.
 
 ### Encrypted remembered permissions (HS2-1S4QEX)
 

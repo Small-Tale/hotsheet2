@@ -1,5 +1,18 @@
 # Feature Coverage Matrix
 
+HS2-5A6JNS covers machine secret consolidation in
+`crates/hotsheet-ticketing/src/secrets/machine_secrets.rs`: three legacy
+account shapes migrate to one native master read on the next process start;
+concurrent migration, refresh, deletion tombstones, corrupt or missing data,
+denied master, verified restore, backup-gated legacy cleanup, and both
+interruption points of rotation, including a running second process that refreshes
+its cached root before its next write.
+The Linux fake-Secret-Service CLI flow in
+`crates/hotsheet-cli/tests/cli.rs # key_registry_cli_uses_os_adapter_without_persisting_secret`
+exercises encrypted storage, backup, rotate, missing-root failure, and restore
+through the shipped commands. The OS-specific prompt count remains a manual check in
+`docs/manual-test-plan.md`.
+
 HS2-GDF4ZJ coordinates four direct-poll slots across independent tabs with Web
 Locks and paces zero-wait polls when locks are unavailable. `change-poll-slots.test.ts`
 covers two contexts, refill, fallback pacing, and abort; `change-poll-mux.spec.ts`

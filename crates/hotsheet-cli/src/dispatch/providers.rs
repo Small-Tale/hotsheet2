@@ -1018,7 +1018,7 @@ pub(crate) fn cmd_key(cmd: KeyCmd) -> Result<()> {
                 rpassword::prompt_password(prompt).map_err(Into::into)
             })?;
             registry.set(&provider, &secret)?;
-            println!("Stored key for {provider} in the OS credential store");
+            println!("Stored encrypted key for {provider} in the machine secret store");
         }
         KeyCmd::Get { provider } => println!("{}", registry.get(&provider)?),
         KeyCmd::List => {
@@ -1036,6 +1036,51 @@ pub(crate) fn cmd_key(cmd: KeyCmd) -> Result<()> {
             } else {
                 println!("No registered key for {provider}");
             }
+        }
+        KeyCmd::MasterExport { output } => {
+            use std::io::Write;
+            let encoded = OsKeychain.export_machine_master()?;
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| std::path::Path::new("."));
+            let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                staged
+                    .as_file()
+                    .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+            }
+            writeln!(staged, "{encoded}")?;
+            staged.as_file().sync_all()?;
+            staged
+                .persist_noclobber(&output)
+                .map_err(|error| error.error)?;
+            println!(
+                "Wrote an owner-only machine master backup. Keep this file secure; it opens every local encrypted secret."
+            );
+        }
+        KeyCmd::MasterRestore { input } => {
+            let encoded = std::fs::read_to_string(input)?;
+            OsKeychain.restore_machine_master(&encoded)?;
+            println!("Restored the machine master after verifying an encrypted secret.");
+        }
+        KeyCmd::MasterRotate => {
+            OsKeychain.rotate_machine_master()?;
+            println!("Rotated and verified the machine master.");
+        }
+        KeyCmd::MasterResume => {
+            if OsKeychain.resume_machine_master_rotation()? {
+                println!("Completed the interrupted machine master rotation.");
+            } else {
+                println!("No machine master rotation is pending.");
+            }
+        }
+        KeyCmd::MasterCleanupLegacy { backup } => {
+            let encoded = std::fs::read_to_string(backup)?;
+            let count = OsKeychain.cleanup_legacy_machine_items(&encoded)?;
+            println!("Removed {count} migrated legacy credential-store items.");
         }
     }
     Ok(())
@@ -1296,8 +1341,27 @@ pub(crate) enum KeyCmd {
     Get { provider: String },
     /// List registered provider names and their read-only environment fallbacks.
     List,
-    /// Delete a provider key from the OS credential store and registry.
+    /// Delete a provider key from encrypted machine storage and the registry.
     Delete { provider: String },
+    /// Save the machine master to a new owner-only backup file.
+    MasterExport {
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Restore a backed-up master after checking it against existing encrypted data.
+    MasterRestore {
+        #[arg(long)]
+        input: PathBuf,
+    },
+    /// Rotate the native master and re-encrypt all local secret envelopes.
+    MasterRotate,
+    /// Finish an interrupted master rotation without starting another.
+    MasterResume,
+    /// Remove migrated legacy OS items after verifying a backup of the current master.
+    MasterCleanupLegacy {
+        #[arg(long)]
+        backup: PathBuf,
+    },
 }
 
 /// How `github-connect` changes a connection's attachment repository (HS2-HSA64D).

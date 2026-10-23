@@ -8236,16 +8236,18 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     let project = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
     let bin = tempfile::tempdir().unwrap();
-    let value_file = home.path().join("fake-value");
+    let keychain_dir = home.path().join("fake-keychain");
+    std::fs::create_dir(&keychain_dir).unwrap();
+    std::fs::write(keychain_dir.join("openai"), "legacy-synthetic").unwrap();
     let program = if cfg!(target_os = "macos") {
         "security"
     } else {
         "secret-tool"
     };
     let script = if cfg!(target_os = "macos") {
-        "#!/bin/sh\ncase \"$1\" in\nadd-generic-password) IFS= read -r value; printf %s \"$value\" > \"$FAKE_KEYCHAIN_FILE\";;\nfind-generic-password) test -f \"$FAKE_KEYCHAIN_FILE\" && cat \"$FAKE_KEYCHAIN_FILE\";;\ndelete-generic-password) test -f \"$FAKE_KEYCHAIN_FILE\" && rm \"$FAKE_KEYCHAIN_FILE\";;\nesac\n"
+        "#!/bin/sh\nfor arg do account=\"$arg\"; done\nfile=\"$FAKE_KEYCHAIN_DIR/$account\"\ncase \"$1\" in\nadd-generic-password) IFS= read -r value; printf %s \"$value\" > \"$file\";;\nfind-generic-password) test -f \"$file\" && cat \"$file\";;\ndelete-generic-password) test -f \"$file\" && rm \"$file\";;\nesac\n"
     } else {
-        "#!/bin/sh\ncase \"$1\" in\nstore) IFS= read -r value; printf %s \"$value\" > \"$FAKE_KEYCHAIN_FILE\";;\nlookup) test -f \"$FAKE_KEYCHAIN_FILE\" && cat \"$FAKE_KEYCHAIN_FILE\";;\nclear) test -f \"$FAKE_KEYCHAIN_FILE\" && rm \"$FAKE_KEYCHAIN_FILE\";;\nesac\n"
+        "#!/bin/sh\nfor arg do account=\"$arg\"; done\nfile=\"$FAKE_KEYCHAIN_DIR/$account\"\ncase \"$1\" in\nstore) IFS= read -r value; printf %s \"$value\" > \"$file\";;\nlookup) test -f \"$file\" && cat \"$file\";;\nclear) test -f \"$file\" && rm \"$file\";;\nesac\n"
     };
     let executable = bin.path().join(program);
     std::fs::write(&executable, script).unwrap();
@@ -8258,7 +8260,7 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
 
     hs(project.path())
         .env("HOTSHEET_HOME", home.path())
-        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
         .env("PATH", &path)
         .args(["key", "set", "openai"])
         .write_stdin("do-not-write-me\n")
@@ -8266,7 +8268,7 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
         .success();
     hs(project.path())
         .env("HOTSHEET_HOME", home.path())
-        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
         .env("PATH", &path)
         .args(["key", "get", "openai"])
         .assert()
@@ -8275,9 +8277,94 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     let metadata = std::fs::read_to_string(home.path().join("keys.json")).unwrap();
     assert!(metadata.contains("openai"));
     assert!(!metadata.contains("do-not-write-me"));
+    let envelope_dir = home.path().join("machine-secrets");
+    let envelope = std::fs::read_dir(&envelope_dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+        .unwrap();
+    assert!(
+        !std::fs::read(envelope.path())
+            .unwrap()
+            .windows(b"do-not-write-me".len())
+            .any(|bytes| bytes == b"do-not-write-me")
+    );
+    let backup = home.path().join("master-backup");
     hs(project.path())
         .env("HOTSHEET_HOME", home.path())
-        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args(["key", "master-export", "--output", backup.to_str().unwrap()])
+        .assert()
+        .success();
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args(["key", "master-rotate"])
+        .assert()
+        .success();
+    let rotated_backup = home.path().join("rotated-backup");
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args([
+            "key",
+            "master-export",
+            "--output",
+            rotated_backup.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    assert_ne!(
+        std::fs::read(&backup).unwrap(),
+        std::fs::read(&rotated_backup).unwrap()
+    );
+    std::fs::remove_file(keychain_dir.join("machine-secrets-v1-master")).unwrap();
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args(["key", "get", "openai"])
+        .assert()
+        .failure();
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args([
+            "key",
+            "master-restore",
+            "--input",
+            rotated_backup.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args(["key", "get", "openai"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("do-not-write-me"));
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
+        .env("PATH", &path)
+        .args([
+            "key",
+            "master-cleanup-legacy",
+            "--backup",
+            rotated_backup.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    assert!(!keychain_dir.join("openai").exists());
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_DIR", &keychain_dir)
         .env("PATH", &path)
         .args(["key", "delete", "openai"])
         .assert()

@@ -441,7 +441,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: NotificationsCmd,
     },
-    /// Manage global provider API keys in the OS credential store (values never enter settings).
+    /// Manage encrypted machine-local provider keys backed by one OS credential-store master.
     Key {
         #[command(subcommand)]
         cmd: KeyCmd,

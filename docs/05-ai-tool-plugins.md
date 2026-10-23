@@ -1138,11 +1138,12 @@ rules take precedence over patterns at the same chat/project reach. The action, 
 and match scope are shown before confirmation; a matching future request can then be
 answered automatically. Remembered identities are keyed HMAC-SHA-256 values, while the
 original action and optional pattern live only in memory and in the authenticated,
-encrypted machine-local store. One OS credential-store master key is read at most once
-per process for all hosted stores; a refused read fails closed for that process instead
+encrypted machine-local store. One machine OS credential-store master key is read at most once
+per process for provider credentials and all hosted stores; a refused read fails closed for that process instead
 of reopening the same OS prompt for each request. Only the server that wins the machine
 writer lock initializes stores and reaches the credential store. Each rules file uses a
-distinct derived key. Existing
+distinct derived key from its vault master, whose value is itself encrypted under
+the machine master after migration (HS2-5A6JNS). Existing
 v3 files migrate to v4 on first access after their own legacy key is read, preserving
 approvals. A missing master or legacy key and invalid ciphertext disable durable
 approvals. Rebuilt ad hoc signed development binaries may still request access to the

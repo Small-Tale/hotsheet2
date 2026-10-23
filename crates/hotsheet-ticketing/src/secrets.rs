@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::settings::{Settings, SettingsError};
 
+mod machine_secrets;
+
 const SERVICE: &str = "com.smalltale.hotsheet2";
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +56,53 @@ pub trait SecretStore {
 pub struct OsKeychain;
 
 impl SecretStore for OsKeychain {
+    fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
+        machine_secrets::with_machine_store(|store| store.set(account, secret))
+    }
+
+    fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
+        machine_secrets::with_machine_store(|store| store.get(account))
+    }
+
+    fn delete(&self, account: &str) -> Result<bool, SecretError> {
+        machine_secrets::with_machine_store(|store| store.delete(account))
+    }
+}
+
+impl OsKeychain {
+    /// Explicit backup of the machine master. The caller must handle the returned
+    /// value as a secret; normal settings and diagnostics never include it.
+    pub fn export_machine_master(&self) -> Result<String, SecretError> {
+        machine_secrets::with_machine_store(|store| store.export_master())
+    }
+
+    /// Restore a backed-up master only after it authenticates an existing envelope.
+    pub fn restore_machine_master(&self, encoded: &str) -> Result<(), SecretError> {
+        machine_secrets::with_machine_store(|store| store.restore_master(encoded))
+    }
+
+    /// Re-encrypt every machine secret under a new native master. A recovery wrap
+    /// permits resuming safely if the process stops between the native write and
+    /// the last envelope update.
+    pub fn rotate_machine_master(&self) -> Result<(), SecretError> {
+        machine_secrets::with_machine_store(|store| store.rotate_master())
+    }
+
+    pub fn resume_machine_master_rotation(&self) -> Result<bool, SecretError> {
+        machine_secrets::with_machine_store(|store| store.resume_rotation())
+    }
+
+    /// Delete migrated per-account native items only after checking a backup of
+    /// the current master and authenticating every encrypted envelope.
+    pub fn cleanup_legacy_machine_items(&self, encoded_backup: &str) -> Result<usize, SecretError> {
+        machine_secrets::with_machine_store(|store| store.cleanup_legacy(encoded_backup))
+    }
+}
+
+/// The old per-account native adapter remains available only to the migration layer.
+struct NativeKeychain;
+
+impl SecretStore for NativeKeychain {
     fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
         platform_set(account, secret)
     }

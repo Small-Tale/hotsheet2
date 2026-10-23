@@ -1243,6 +1243,8 @@ dependencies = [
 name = "hotsheet-ticketing"
 version = "0.0.0"
 dependencies = [
+ "base64",
+ "getrandom 0.3.4",
  "hotsheet-model",
  "hotsheet-sync",
  "image",
@@ -1251,6 +1253,7 @@ dependencies = [
  "png",
  "proptest",
  "quick-xml",
+ "ring",
  "rusqlite",
  "security-framework",
  "serde",

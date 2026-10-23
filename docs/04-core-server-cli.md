@@ -1483,8 +1483,25 @@ set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt whe
 > (HS2-16MYXN, HS2-1D350D).
 
 Settings refer to a secret as `{ "secret": "provider-id" }`; consumers call the
-shared resolver, which fetches the value from the OS credential store. If no credential
-exists, the only fallback is the explicit read-only environment variable
+shared resolver. Since HS2-5A6JNS, the OS credential store holds one machine master.
+Provider values and permission-vault master values live in authenticated, owner-only
+envelopes under `${HOTSHEET_HOME}/machine-secrets/`, with a distinct derived key per
+account. A successful master read is cached once per process; a machine-local
+revision marker invalidates that cache after rotation or restore. The first access to an
+old per-account Keychain item copies and verifies its envelope; the old item remains
+for recovery, but later reads use the envelope. Corrupt envelopes and a missing or
+denied master fail closed rather than falling back to old credentials. The first
+migration launch may still request access to those old items.
+
+`hotsheet key master-export --output <backup>` writes a new owner-only root backup;
+`master-restore --input <backup>` verifies it against existing envelopes before
+restoring a missing root. `master-rotate` re-encrypts envelopes under a new root;
+`master-resume` completes a rotation interrupted after the native root changed.
+`master-cleanup-legacy --backup <backup>` verifies the current backup and every
+envelope before removing migrated per-account OS items.
+Keep the backup outside the repository and treat it as access to every local secret.
+
+If no credential exists, the only fallback is the explicit read-only environment variable
 `HOTSHEET_API_KEY_<NORMALIZED_PROVIDER>`. There is deliberately no plaintext file
 fallback: an unavailable keychain makes writes fail closed. Secret values must not be
 placed in project/global settings, ticket files, logs, diagnostics, or command arguments.

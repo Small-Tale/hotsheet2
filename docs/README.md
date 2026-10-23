@@ -15,6 +15,10 @@ Hot Sheet embeds pinned offline snapshots with upstream drift checks. See
 sources, local guidance capture, and an asynchronous consolidation ticket after
 switches, changed applies, or detected direct Rulesync updates are described in the
 [Rulesync guide](../guidance/rulesync/README.md). Built-in setup remains the default.
+**Shipped machine secrets:** one OS credential-store master opens authenticated,
+machine-local provider and permission-vault envelopes after verified legacy migration
+(HS2-5A6JNS). Backup, restore, rotation, and explicit legacy cleanup are headless
+`key master-*` commands; see [secure provider keys](04-core-server-cli.md#471-secure-provider-keys).
 
 > Status legend used throughout: **Decided** (recommendation made, ready to
 > build) · **Proposed** (recommendation made, wants maintainer confirmation) ·
