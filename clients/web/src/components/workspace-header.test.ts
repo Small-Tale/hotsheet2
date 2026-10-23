@@ -343,7 +343,7 @@ describe('WorkspaceHeader', () => {
   it("leaves the disabled utility buttons to Kerf's ToolbarControlGroup (KF-FTADQT, HS2-0MH5V1)", () => {
     const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(css).not.toContain(':disabled');
-    expect(css).not.toContain('--kui-toolbar-control-hover-background');
+    expect(css).not.toContain('.workspace-header__utility-action');
     const empty = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
     expect(empty).not.toContain('workspace-header__utility-action');
     expect(empty).toMatch(/<button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
