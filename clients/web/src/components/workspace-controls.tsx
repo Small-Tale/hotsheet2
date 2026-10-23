@@ -26,6 +26,7 @@ import {
   ListSortDescending,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   Star,
@@ -407,6 +408,14 @@ function WorkspaceOverflowControls({
         ...(guidanceRecommendations
           ? [
               {
+                label: 'Check Guidance Sources…',
+                icon: overflowIcon(RefreshCw, 'refresh-cw'),
+                attributes: {
+                  'data-workspace-overflow-kind': 'utility',
+                  'data-workspace-overflow-action': 'open-guidance-updates',
+                },
+              } satisfies PopupMenuItem,
+              {
                 label: 'AI Recommendations…',
                 icon: overflowIcon(WandSparkles, 'wand-sparkles'),
                 attributes: {
@@ -630,6 +639,25 @@ export function WorkspaceControls({
           hideBelow={px(480)}
         >
           {utilityButtons}
+        </ToolbarControlGroup>
+      )}
+      {guidanceRecommendations && !rail && (
+        <ToolbarControlGroup
+          className="workspace-header__updates-group"
+          single
+          shape="pill"
+          visibility="yield-to-expanded-sibling"
+          hideBelow={px(480)}
+        >
+          <button
+            type="button"
+            class="workspace-header__updates-action"
+            {...COMMANDS_AND_AI_ACTIONS.openGuidanceUpdates.attrs}
+            aria-label="Check Guidance Sources"
+            title="Check Guidance Sources"
+          >
+            <LucideIcon icon={RefreshCw} name="refresh-cw" />
+          </button>
         </ToolbarControlGroup>
       )}
       {guidanceRecommendations && !rail && (

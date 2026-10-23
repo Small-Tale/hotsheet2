@@ -31,6 +31,8 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
   readonly guidanceSearchOpen: Signal<boolean>;
   readonly guidanceRecommendationsOpen: Signal<boolean>;
+  readonly guidanceUpdatesOpen: Signal<boolean>;
+  readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
   readonly guidanceSearchModel: SearchFieldModel;
   readonly guidanceSearchActive: () => boolean;
   /** Kerf-managed ticket search models, keyed by their TicketSearchField ids (HS2-5JXBQY). */
@@ -308,10 +310,19 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       openGuidanceRecommendations: () => {
         if (guidanceSearchActive()) dependencies.guidanceRecommendationsOpen.value = true;
       },
+      openGuidanceUpdates: () => {
+        if (guidanceSearchActive()) {
+          dependencies.guidanceUpdatesOpen.value = true;
+          void dependencies.checkGuidanceUpdates(true);
+        }
+      },
       setViewMode: (mode) => {
         resetProgressiveTicketRendering();
         viewMode.value = mode;
-        if (mode !== 'settings') dependencies.guidanceRecommendationsOpen.value = false;
+        if (mode !== 'settings') {
+          dependencies.guidanceRecommendationsOpen.value = false;
+          dependencies.guidanceUpdatesOpen.value = false;
+        }
         persistWorkspacePreferences();
         if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
       },

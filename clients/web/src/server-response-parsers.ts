@@ -252,6 +252,14 @@ const parseGuidanceSourceUpdate: ResponseParser<GuidanceSourceUpdate> = (value) 
   if (!['current', 'revision_changed', 'pinned', 'tag_moved', 'check_failed'].includes(String(body.state)))
     invalid(what);
   if (body.reason !== undefined && typeof body.reason !== 'string') invalid(what);
+  list(body.other_refs, what, (entry) => {
+    const ref = record(entry, what);
+    requiredString(ref, 'reference', what);
+    requiredString(ref, 'commit', what);
+    return ref;
+  });
+  if (typeof body.other_refs_truncated !== 'boolean') invalid(what);
+  if (body.other_refs_reason !== undefined && typeof body.other_refs_reason !== 'string') invalid(what);
   return body as unknown as GuidanceSourceUpdate;
 };
 

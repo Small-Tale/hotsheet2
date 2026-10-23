@@ -38,6 +38,19 @@ describe('WorkspaceHeader', () => {
     expect(guidance).toContain('data-lucide="wand-sparkles"');
     expect(String(WorkspaceControls({ mode: 'settings' }))).not.toContain('open-guidance-recommendations');
   });
+  it('HS2-B8M0QB shows a brand source-check action and narrow overflow entry only in guidance', () => {
+    const guidance = String(
+      WorkspaceControls({ mode: 'settings', guidanceSearch: true, guidanceRecommendations: true }),
+    );
+    expect(guidance).toContain('data-action="open-guidance-updates"');
+    expect(guidance).toContain('aria-label="Check Guidance Sources"');
+    expect(guidance).toContain('data-workspace-overflow-action="open-guidance-updates"');
+    expect(guidance).toContain('data-lucide="refresh-cw"');
+    expect(String(WorkspaceControls({ mode: 'settings' }))).not.toContain('open-guidance-updates');
+    expect(readFileSync(resolve('src/components/workspace-header.css'), 'utf8')).toContain(
+      '--kui-toolbar-control-background: var(--wa-color-brand-fill-loud)',
+    );
+  });
   it('collapses disabled search in Notifications and Settings even if an open state is supplied (HS2-6ZK9KF)', () => {
     for (const mode of ['notifications', 'settings'] as const) {
       const markup = String(WorkspaceControls({ mode, searchOpen: true }));

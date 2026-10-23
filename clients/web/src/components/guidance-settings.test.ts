@@ -344,6 +344,8 @@ describe('GuidanceSettings rule summaries', () => {
       pinned_commit: base.overview.sources[0].commit,
       observed_commit: '2222222222222222222222222222222222222222',
       state: 'revision_changed' as const,
+      other_refs: [{ reference: 'refs/tags/v2', commit: '3333333333333333333333333333333333333333' }],
+      other_refs_truncated: false,
     };
     const changed = String(
       GuidanceSettings({
@@ -359,6 +361,7 @@ describe('GuidanceSettings rule summaries', () => {
     );
     expect(changed).toContain('fixture Has A Different Source Revision');
     expect(changed).toContain('Review fixture');
+    expect(changed).toContain('refs/tags/v2');
     expect(changed).toContain('rule example: updated v2 → v3');
     expect(changed).toContain('1 selected rule(s) still need Apply Selected Guidance');
     const failed = String(

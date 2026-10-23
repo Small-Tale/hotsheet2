@@ -183,6 +183,7 @@ test('client contracts accept real ticket and replay responses', async () => {
       `/checkouts/${server.checkoutId}/providers`,
       `/checkouts/${server.checkoutId}/repository/status`,
       `/checkouts/${server.checkoutId}/guidance`,
+      `/checkouts/${server.checkoutId}/guidance/updates`,
     ]) {
       const documentedPath = path.replace(server.checkoutId, '{reference}');
       validateResponse(documentedPath, await server.request(path));

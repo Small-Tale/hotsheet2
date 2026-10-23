@@ -43,6 +43,13 @@
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }
+/* HS2-B8M0QB: source checks are a primary Project Guidance toolbar action. */
+.workspace-header__updates-group.workspace-header__updates-group {
+  --kui-toolbar-control-background: var(--wa-color-brand-fill-loud);
+  --kui-toolbar-control-border: var(--wa-color-brand-fill-loud);
+  --kui-toolbar-control-color: var(--wa-color-brand-on-loud);
+  --kui-toolbar-control-hover-background: var(--wa-color-brand-fill-normal);
+}
 /* Keep search and More in one app-owned flex slot so Kerf may shrink the inline search
    without either group taking a separate toolbar line. */
 .workspace-header__search-actions {

@@ -14308,6 +14308,12 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     assert_eq!(updates[0]["id"], "fixture");
     assert_eq!(updates[0]["state"], "check_failed");
     assert_eq!(updates[0]["reason"], "Source ref could not be checked");
+    assert_eq!(updates[0]["other_refs"], serde_json::json!([]));
+    assert_eq!(updates[0]["other_refs_truncated"], false);
+    assert_eq!(
+        updates[0]["other_refs_reason"],
+        "Other refs could not be checked"
+    );
     let review = body_json(
         app.clone()
             .oneshot(authed(

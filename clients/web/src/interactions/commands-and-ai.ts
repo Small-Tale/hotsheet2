@@ -81,6 +81,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
   readonly previewGuidanceRule: (source: string, rule: string) => Promise<void>;
   readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
+  readonly guidanceUpdatesOpen: Signal<boolean>;
   readonly reviewGuidanceSource: (sourceId: string) => Promise<void>;
   readonly refreshReviewedGuidance: () => Promise<void>;
   readonly refreshGuidanceRecommendations: () => Promise<void>;
@@ -244,6 +245,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     updateGuidance,
     previewGuidanceRule,
     checkGuidanceUpdates,
+    guidanceUpdatesOpen,
     reviewGuidanceSource,
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,
@@ -995,7 +997,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
       resetProgressiveTicketRendering();
       viewMode.value = mode;
-      if (mode !== 'settings') guidanceRecommendationsOpen.value = false;
+      if (mode !== 'settings') {
+        guidanceRecommendationsOpen.value = false;
+        guidanceUpdatesOpen.value = false;
+      }
       persistWorkspacePreferences();
       if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
       finishTiming();
@@ -1006,7 +1011,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const current = project(),
         category = (data(target).itemId ?? 'sources') as SettingsCategory;
       if (!current) return;
-      if (category !== 'guidance') guidanceRecommendationsOpen.value = false;
+      if (category !== 'guidance') {
+        guidanceRecommendationsOpen.value = false;
+        guidanceUpdatesOpen.value = false;
+      }
       if (category !== 'keyboard') setCapturingShortcut(undefined);
       setSettingsCategory(current.id, category);
       if (category === 'sources') void refreshProviderConnections();
@@ -1070,6 +1078,17 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.selector, () => {
       void checkGuidanceUpdates(true);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openGuidanceUpdates.selector, () => {
+      guidanceUpdatesOpen.value = true;
+      void checkGuidanceUpdates(true);
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'kui-request-close', COMMANDS_AND_AI_TARGETS.guidanceUpdatesDialog.selector, () => {
+      guidanceUpdatesOpen.value = false;
     }),
   );
   lifetime.add(

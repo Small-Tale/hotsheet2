@@ -18,6 +18,7 @@ import {
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
   parseGuidanceRulePreview,
+  parseGuidanceSourceUpdates,
   parseOpenedCheckout,
   parsePermissionDecision,
   parsePermissionRequest,
@@ -46,6 +47,24 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('HS2-B8M0QB accepts bounded other refs and rejects malformed discovery results', () => {
+    const update = {
+      id: 'fixture',
+      requested_ref: 'main',
+      pinned_commit: 'a'.repeat(40),
+      observed_commit: null,
+      state: 'pinned',
+      other_refs: [{ reference: 'refs/tags/v2', commit: 'b'.repeat(40) }],
+      other_refs_truncated: false,
+    };
+    expect(parseGuidanceSourceUpdates([update])).toEqual([update]);
+    expect(() => parseGuidanceSourceUpdates([{ ...update, other_refs: [{ reference: 3, commit: 'b' }] }])).toThrow(
+      ServerResponseShapeError,
+    );
+    expect(() => parseGuidanceSourceUpdates([{ ...update, other_refs_truncated: 'false' }])).toThrow(
+      ServerResponseShapeError,
+    );
+  });
   it('HS2-019VVA validates read-only rule preview outcomes and bodies', () => {
     const preview = { owner: 'builtin', current: null, pinned: 'Pinned rule', after: 'Pinned rule', outcome: 'add' };
     expect(parseGuidanceRulePreview(preview)).toEqual(preview);

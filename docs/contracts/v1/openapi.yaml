@@ -14881,6 +14881,8 @@ components:
         - pinned_commit
         - observed_commit
         - state
+        - other_refs
+        - other_refs_truncated
       properties:
         id:
           type: string
@@ -14900,6 +14902,23 @@ components:
             - tag_moved
             - check_failed
         reason:
+          type: string
+        other_refs:
+          type: array
+          items:
+            type: object
+            required:
+              - reference
+              - commit
+            properties:
+              reference:
+                type: string
+              commit:
+                type: string
+            additionalProperties: false
+        other_refs_truncated:
+          type: boolean
+        other_refs_reason:
           type: string
       additionalProperties: false
     GuidanceChange:

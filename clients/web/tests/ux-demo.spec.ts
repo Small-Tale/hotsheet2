@@ -3863,7 +3863,7 @@ test('shows optional guidance interview consent and advice variants', async ({ p
   }
 });
 
-test('shows reviewed, current, and stale pinned source variants at wide and phone widths', async ({ page }) => {
+test('keeps source-update dialog specimens closed until the toolbar action opens one', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/ux-demo?component=guidance-settings');
@@ -3879,10 +3879,9 @@ test('shows reviewed, current, and stale pinned source variants at wide and phon
       ['stale', page.locator('[data-component="guidance-settings"]').filter({ hasText: 'Source Check Failed' })],
     ] as const;
     for (const [state, variant] of variants) {
-      await expect(variant.locator('[data-guidance-updates]')).toBeVisible();
-      await variant
-        .locator('[data-guidance-updates]')
-        .screenshot({ path: `target/visual-captures/guidance-${state}-demo-${width}.png` });
+      const dialog = variant.locator('[data-guidance-updates-dialog]');
+      await expect(dialog, state).toHaveAttribute('data-controlled-open', 'false');
+      await expect(dialog, state).not.toBeVisible();
     }
   }
 });

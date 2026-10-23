@@ -422,6 +422,7 @@ export async function startHotSheetWebClient() {
   const guidanceUpdatesCheckedAt = signal<number | undefined>(undefined);
   const guidanceUpdatesLoading = signal(false);
   const guidanceUpdatesError = signal('');
+  const guidanceUpdatesOpen = signal(false);
   const guidanceReview = signal<GuidanceSourceReview | undefined>(undefined);
   const guidanceReviewLoading = signal(false);
   const guidanceReviewError = signal('');
@@ -1470,6 +1471,7 @@ export async function startHotSheetWebClient() {
   async function reviewGuidanceSource(sourceId: string) {
     const current = project();
     if (!current || guidanceReviewLoading.value) return;
+    guidanceUpdatesOpen.value = true;
     guidanceReviewLoading.value = true;
     guidanceReviewError.value = '';
     guidanceReview.value = undefined;
@@ -1511,6 +1513,7 @@ export async function startHotSheetWebClient() {
       guidanceOverview.value = undefined;
       guidanceUpdates.value = [];
       guidanceUpdatesCheckedAt.value = undefined;
+      guidanceUpdatesOpen.value = false;
       guidanceReview.value = undefined;
       guidanceRulePreview.value = undefined;
       guidanceRecommendations.value = undefined;
@@ -3956,6 +3959,7 @@ export async function startHotSheetWebClient() {
       updatesCheckedAt: guidanceUpdatesCheckedAt.value,
       updatesLoading: guidanceUpdatesLoading.value,
       updatesError: guidanceUpdatesError.value,
+      updatesOpen: guidanceUpdatesOpen.value,
       review: guidanceReview.value,
       reviewLoading: guidanceReviewLoading.value,
       reviewError: guidanceReviewError.value,
@@ -4866,6 +4870,7 @@ export async function startHotSheetWebClient() {
     updateGuidance,
     previewGuidanceRule,
     checkGuidanceUpdates,
+    guidanceUpdatesOpen,
     reviewGuidanceSource,
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,

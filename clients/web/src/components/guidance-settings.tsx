@@ -32,6 +32,7 @@ export interface GuidanceSettingsProps {
   updatesCheckedAt?: number;
   updatesLoading?: boolean;
   updatesError?: string;
+  updatesOpen?: boolean;
   review?: GuidanceSourceReview;
   reviewLoading?: boolean;
   reviewError?: string;
@@ -275,21 +276,32 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             </List>
           </section>
         )}
-        {!!overview?.sources.length && (
-          <section aria-label="Pinned Source Updates" data-guidance-updates="">
+        <DialogSurface
+          label="Guidance Source Updates"
+          size="medium"
+          maxHeight="viewport"
+          rootAttributes={{
+            'data-key': 'guidance-updates-dialog',
+            'data-guidance-updates-dialog': '',
+            'data-dialog-component': 'guidance-updates-dialog',
+            'data-controlled-open': String(Boolean(props.updatesOpen)),
+          }}
+        >
+          <section aria-label="Guidance Source Updates" data-guidance-updates="">
             <List gap="xs">
-              <Text variant="h3">Pinned source updates</Text>
               <Text tone="quiet" size="compact">
                 {props.updatesCheckedAt
-                  ? `Last checked ${new Date(props.updatesCheckedAt).toLocaleString()}. Pins stay unchanged until you refresh a reviewed source.`
-                  : 'Check registered source refs when you are online. Pins stay unchanged.'}
+                  ? `Last checked ${new Date(props.updatesCheckedAt).toLocaleString()}. Pins remain unchanged until you refresh a reviewed source.`
+                  : 'Check registered sources for revisions and other branches or tags. Pins remain unchanged.'}
               </Text>
               <Button
                 action={COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.value}
                 disabled={props.updatesLoading || loading}
+                tone="brand"
               >
-                {props.updatesLoading ? 'Checking sources…' : 'Check Now'}
+                {props.updatesLoading ? 'Checking sources…' : 'Check again'}
               </Button>
+              {!overview?.sources.length && <Text tone="quiet">Register a source to check for updates.</Text>}
               {props.updatesError ? (
                 <StateBanner
                   title="Source Check Failed"
@@ -298,7 +310,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                   urgency="status"
                 />
               ) : null}
-              {overview.sources.map((source) => {
+              {overview?.sources.map((source) => {
                 const update = props.updates?.find((item) => item.id === source.id);
                 const pendingRules = source.rules.filter(
                   (rule) => rule.selected && rule.installed_version !== rule.version,
@@ -343,6 +355,26 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                       {update?.reason ? (
                         <Text tone="quiet" size="compact">
                           {update.reason}
+                        </Text>
+                      ) : null}
+                      {!!update?.other_refs.length && (
+                        <List gap="xs">
+                          <Text size="compact">Other available branches and tags for manual review:</Text>
+                          {update.other_refs.map((item) => (
+                            <Text tone="quiet" size="compact">
+                              {item.reference} · {item.commit.slice(0, 12)}
+                            </Text>
+                          ))}
+                          {update.other_refs_truncated && (
+                            <Text tone="quiet" size="compact">
+                              More refs are available in the source repository.
+                            </Text>
+                          )}
+                        </List>
+                      )}
+                      {update?.other_refs_reason ? (
+                        <Text tone="quiet" size="compact">
+                          Other refs could not be checked: {update.other_refs_reason}.
                         </Text>
                       ) : null}
                       {!!pendingRules.length && (
@@ -425,7 +457,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
               )}
             </List>
           </section>
-        )}
+        </DialogSurface>
         <Grid minColumnWidth={rem(14)} gap="m">
           <TextField name="guidance-source-id" label="Source ID" value={sourceId} />
           <TextField

@@ -459,6 +459,8 @@ export function GuidanceSettingsDemo() {
     pinned_commit: updateOverview.sources[0].commit,
     observed_commit: '2222222222222222222222222222222222222222',
     state: 'revision_changed' as const,
+    other_refs: [{ reference: 'refs/tags/v2', commit: '3333333333333333333333333333333333333333' }],
+    other_refs_truncated: false,
   };
   return (
     <>

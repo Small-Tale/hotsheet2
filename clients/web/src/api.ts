@@ -109,6 +109,9 @@ export interface GuidanceSourceUpdate {
   observed_commit: string | null;
   state: 'current' | 'revision_changed' | 'pinned' | 'tag_moved' | 'check_failed';
   reason?: string;
+  other_refs: Array<{ reference: string; commit: string }>;
+  other_refs_truncated: boolean;
+  other_refs_reason?: string;
 }
 export interface GuidanceSourceReview {
   update: GuidanceSourceUpdate;

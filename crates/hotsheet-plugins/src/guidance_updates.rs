@@ -3,12 +3,21 @@
 
 use crate::guidance_sources::{self, GuidanceSource, GuidanceSourceError};
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::io::{Read, Seek};
 use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 const CHECK_TIMEOUT: Duration = Duration::from_secs(20);
+const MAX_OTHER_REFS: usize = 12;
+const MAX_REF_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AvailableRef {
+    pub reference: String,
+    pub commit: String,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +36,11 @@ pub struct SourceUpdate {
     pub pinned_commit: String,
     pub observed_commit: Option<String>,
     pub state: UpdateState,
+    /// Other branch and tag tips, for manual review outside the selected ref.
+    pub other_refs: Vec<AvailableRef>,
+    pub other_refs_truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub other_refs_reason: Option<&'static str>,
     /// A bounded, credential-free explanation when a check cannot establish freshness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<&'static str>,
@@ -189,6 +203,9 @@ impl SourceUpdate {
             pinned_commit: source.commit.clone(),
             observed_commit,
             state,
+            other_refs: Vec::new(),
+            other_refs_truncated: false,
+            other_refs_reason: None,
             reason: None,
         }
     }
@@ -211,6 +228,18 @@ pub fn check_project(project: &Path) -> Result<Vec<SourceUpdate>, GuidanceSource
 /// A changed branch ref is a review candidate, not proof of chronological advancement:
 /// force pushes can move a branch backwards or sideways.
 pub fn check_source(source: &GuidanceSource) -> SourceUpdate {
+    let mut update = check_selected_ref(source);
+    match discover_other_refs(source) {
+        Ok((refs, truncated)) => {
+            update.other_refs = refs;
+            update.other_refs_truncated = truncated;
+        }
+        Err(reason) => update.other_refs_reason = Some(reason),
+    }
+    update
+}
+
+fn check_selected_ref(source: &GuidanceSource) -> SourceUpdate {
     let requested = source.requested_ref.as_str();
     if (7..=40).contains(&requested.len())
         && requested.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -314,6 +343,94 @@ pub fn check_source(source: &GuidanceSource) -> SourceUpdate {
         return SourceUpdate::new(source, state, Some(observed));
     }
     SourceUpdate::failed(source, "Source ref was not found")
+}
+
+/// Report other refs without fetching or applying their bodies. A file-backed child output
+/// avoids a pipe deadlock when a remote advertises more refs than the OS pipe can hold.
+fn discover_other_refs(source: &GuidanceSource) -> Result<(Vec<AvailableRef>, bool), &'static str> {
+    let mut output_file = tempfile::tempfile().map_err(|_| "Could not prepare ref discovery")?;
+    let stdout = output_file
+        .try_clone()
+        .map_err(|_| "Could not prepare ref discovery")?;
+    let mut command = hotsheet_ticketing::git::command();
+    command
+        .args(["ls-remote", "--quiet", "--"])
+        .arg(&source.repository)
+        .args(["refs/heads/*", "refs/tags/*"])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(stdout)
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|_| "Git could not start ref discovery")?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(Some(_)) => return Err("Other refs could not be checked"),
+            Ok(None) if started.elapsed() < CHECK_TIMEOUT => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Other ref check timed out");
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Git could not finish ref discovery");
+            }
+        }
+    }
+    let size = output_file
+        .metadata()
+        .map_err(|_| "Other ref response could not be read")?
+        .len();
+    if size > MAX_REF_RESPONSE_BYTES {
+        return Err("Source advertises too many refs to list safely");
+    }
+    let mut text = String::new();
+    output_file
+        .rewind()
+        .map_err(|_| "Other ref response could not be read")?;
+    output_file
+        .read_to_string(&mut text)
+        .map_err(|_| "Other ref response was invalid")?;
+    let mut refs = BTreeMap::<String, String>::new();
+    for line in text.lines() {
+        let (commit, reference) = line
+            .split_once('\t')
+            .ok_or("Other ref response was invalid")?;
+        if commit.len() != 40 || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("Other ref response was invalid");
+        }
+        let peeled = reference.strip_suffix("^{}");
+        let name = peeled.unwrap_or(reference);
+        if !(name.starts_with("refs/heads/") || name.starts_with("refs/tags/")) {
+            continue;
+        }
+        if peeled.is_some() || !refs.contains_key(name) {
+            refs.insert(name.to_owned(), commit.to_owned());
+        }
+    }
+    let selected = source.requested_ref.as_str();
+    let mut other: Vec<_> = refs
+        .into_iter()
+        .filter(|(reference, _)| {
+            let short = reference
+                .strip_prefix("refs/heads/")
+                .or_else(|| reference.strip_prefix("refs/tags/"))
+                .unwrap_or(reference);
+            reference != selected && short != selected
+        })
+        .map(|(reference, commit)| AvailableRef { reference, commit })
+        .collect();
+    // Prefer lexically newer tag names without claiming their release order or compatibility.
+    other.sort_by(|a, b| b.reference.cmp(&a.reference));
+    let truncated = other.len() > MAX_OTHER_REFS;
+    other.truncate(MAX_OTHER_REFS);
+    Ok((other, truncated))
 }
 
 #[cfg(test)]
@@ -610,6 +727,50 @@ mod tests {
         assert_eq!(
             check_source(&source(repo, "v2", &first)).state,
             UpdateState::TagMoved
+        );
+    }
+
+    #[test]
+    fn hs2_b8m0qb_discovers_other_refs_without_changing_the_selected_pin() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path();
+        git(repo, &["init", "-q"]);
+        let first = commit(repo, "first");
+        git(repo, &["branch", "-M", "main"]);
+        let second = commit(repo, "second");
+        git(repo, &["branch", "maintenance", &first]);
+        git(repo, &["tag", "-a", "v2", "-m", "release", &second]);
+        let update = check_source(&source(repo, "main", &first));
+        assert_eq!(update.state, UpdateState::RevisionChanged);
+        assert_eq!(update.observed_commit.as_deref(), Some(second.as_str()));
+        assert_eq!(update.other_refs.len(), 2);
+        assert!(
+            update
+                .other_refs
+                .iter()
+                .any(|item| { item.reference == "refs/heads/maintenance" && item.commit == first })
+        );
+        assert!(
+            update
+                .other_refs
+                .iter()
+                .any(|item| { item.reference == "refs/tags/v2" && item.commit == second })
+        );
+        assert!(!update.other_refs_truncated);
+        assert_eq!(update.other_refs_reason, None);
+        for number in 0..15 {
+            git(repo, &["tag", &format!("candidate-{number:02}"), &second]);
+        }
+        let bounded = check_source(&source(repo, "main", &first));
+        assert_eq!(bounded.other_refs.len(), MAX_OTHER_REFS);
+        assert!(bounded.other_refs_truncated);
+
+        let missing = source(&root.path().join("missing"), "main", &first);
+        let failed = check_source(&missing);
+        assert_eq!(failed.state, UpdateState::CheckFailed);
+        assert_eq!(
+            failed.other_refs_reason,
+            Some("Other refs could not be checked")
         );
     }
 }

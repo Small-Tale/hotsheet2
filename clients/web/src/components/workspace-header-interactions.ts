@@ -22,6 +22,7 @@ export interface WorkspaceHeaderActionBindings {
   readonly openSelectedTicketActions: (anchor: HTMLElement) => void;
   readonly openSearch: () => void;
   readonly openGuidanceRecommendations?: () => void;
+  readonly openGuidanceUpdates?: () => void;
   readonly setViewMode: (mode: WorkspaceViewMode) => void;
 }
 
@@ -46,6 +47,7 @@ export function wireWorkspaceHeaderActions(root: HTMLElement, bindings: Workspac
       else if (action === 'open-selected-ticket-actions') bindings.openSelectedTicketActions(item);
       else if (action === 'open-workspace-search') bindings.openSearch();
       else if (action === 'open-guidance-recommendations') bindings.openGuidanceRecommendations?.();
+      else if (action === 'open-guidance-updates') bindings.openGuidanceUpdates?.();
       else if (action === 'set-view-mode' && viewMode) bindings.setViewMode(viewMode as WorkspaceViewMode);
       else if (action === 'set-workspace-sort' && workspaceSort) sortBy(workspaceSort as WorkspaceSort);
     }),

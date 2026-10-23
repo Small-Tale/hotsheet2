@@ -268,6 +268,7 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
   function setup(apple: boolean) {
     const capturingShortcutId = signal<string | undefined>(undefined);
     const guidanceRecommendationsOpen = signal(false);
+    const guidanceUpdatesOpen = signal(false);
     const keyboardShortcutOverrides = signal<Record<string, ShortcutChord>>({});
     const storage = new Map<string, string>();
     const frames: FrameRequestCallback[] = [];
@@ -282,6 +283,7 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     wireCommandAndAiInteractions({
       capturingShortcutId,
       guidanceRecommendationsOpen,
+      guidanceUpdatesOpen,
       keyboardShortcutOverrides,
       appleShortcutPlatform: apple,
       project: () => ({ id: 'project' }),
@@ -301,6 +303,7 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     return {
       capturingShortcutId,
       guidanceRecommendationsOpen,
+      guidanceUpdatesOpen,
       keyboardShortcutOverrides,
       storage,
       frames,
@@ -357,8 +360,10 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     click('select-settings-category', { itemId: 'keyboard' });
     expect(state.capturingShortcutId.value).toBe('undo');
     state.guidanceRecommendationsOpen.value = true;
+    state.guidanceUpdatesOpen.value = true;
     click('select-settings-category', { itemId: 'appearance' });
     expect(state.guidanceRecommendationsOpen.value).toBe(false);
+    expect(state.guidanceUpdatesOpen.value).toBe(false);
     expect(press('undo', 'k', { ctrlKey: true }).defaultPrevented).toBe(false);
     click('edit-shortcut', { shortcutId: 'activate' });
     click('edit-shortcut', { shortcutId: 'unknown' });
