@@ -1423,9 +1423,11 @@ Exact text is decrypted only in server memory. A missing, corrupt, or unavailabl
 and a corrupt envelope fail closed. Atomic owner-only writes and a cross-process file
 lock guard edits. Authenticated Settings lists the decrypted action and any reviewed
 matcher; unauthenticated events and logs do not expose either.
-The server's HTTP integration tests enable an in-memory permission-vault backend through
-the `hotsheet-aitools` dev-dependency feature; ordinary server builds continue to use
-the OS credential store (HS2-R8S894).
+The server's HTTP integration tests and debug server executable explicitly opt into
+an in-memory permission-vault backend when the `hotsheet-aitools` test feature is
+enabled. The feature alone keeps the OS credential store for other binaries and
+subprocesses, including CLI migration tests built with `--all-features`; release
+builds always use the OS store (HS2-R8S894).
 The `*` matcher on Claude's hook registration selects which tool events reach Hot
 Sheet; it does not broaden a remembered answer.
 

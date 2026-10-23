@@ -124,6 +124,9 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // HS2-R8S894: real-server integration binaries opt into the test vault;
+    // the CLI migration subprocess keeps the OS credential store.
+    hotsheet_aitools::enable_test_permission_vault();
     init_logging();
     let cli = Cli::parse();
 

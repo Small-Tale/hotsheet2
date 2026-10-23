@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
-#[cfg(not(any(test, feature = "test-permission-vault")))]
+#[cfg(not(test))]
 use hotsheet_ticketing::secrets::OsKeychain;
 use hotsheet_ticketing::secrets::SecretStore;
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
@@ -188,19 +188,16 @@ fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
 /// startup request cannot produce an immediate chain of identical prompts. Missing
 /// keys are re-checked because another process may create them.
 #[derive(Clone)]
-#[cfg(any(test, not(feature = "test-permission-vault")))]
 enum CachedRead {
     Present(String),
     Error(String),
 }
 
-#[cfg(any(test, not(feature = "test-permission-vault")))]
 struct CachedSecrets<'a, S> {
     backend: S,
     cache: &'a std::sync::Mutex<std::collections::HashMap<String, CachedRead>>,
 }
 
-#[cfg(any(test, not(feature = "test-permission-vault")))]
 impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
     fn set(
         &self,
@@ -253,8 +250,8 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
     }
 }
 
-#[cfg(not(any(test, feature = "test-permission-vault")))]
-fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+#[cfg(not(test))]
+fn with_os_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
@@ -266,7 +263,7 @@ fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Res
 }
 
 #[cfg(any(test, feature = "test-permission-vault"))]
-pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+fn with_test_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
@@ -294,6 +291,36 @@ pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>)
     f(&TestSecrets(
         TEST_KEYS.get_or_init(|| Mutex::new(HashMap::new())),
     ))
+}
+
+// HS2-R8S894: a feature alone cannot select this backend. Cargo unifies features
+// for unrelated integration binaries, including CLI subprocess migration tests.
+#[cfg(feature = "test-permission-vault")]
+static TEST_VAULT_ENABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "test-permission-vault")]
+pub(crate) fn enable_test_permission_vault() {
+    TEST_VAULT_ENABLED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+    with_test_secrets(f)
+}
+
+#[cfg(all(not(test), feature = "test-permission-vault"))]
+pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+    if TEST_VAULT_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        with_test_secrets(f)
+    } else {
+        with_os_secrets(f)
+    }
+}
+
+#[cfg(all(not(test), not(feature = "test-permission-vault")))]
+pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+    with_os_secrets(f)
 }
 
 pub(super) fn key_for(path: &Path) -> io::Result<ActionKey> {

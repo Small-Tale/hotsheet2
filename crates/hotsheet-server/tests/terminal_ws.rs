@@ -86,6 +86,7 @@ args = ["--permission", "Bash", "rm important"]
     )
     .unwrap();
 
+    hotsheet_aitools::enable_test_permission_vault();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_permission_rules(&rules)

@@ -24,6 +24,11 @@ pub mod permission;
 pub mod permission_pattern;
 pub mod permission_suggestions;
 mod permission_vault;
+#[doc(hidden)]
+pub fn enable_test_permission_vault() {
+    #[cfg(all(feature = "test-permission-vault", debug_assertions))]
+    permission_vault::enable_test_permission_vault();
+}
 pub mod ports;
 pub mod probe;
 mod procio;

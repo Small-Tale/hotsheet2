@@ -22,6 +22,17 @@ use hotsheet_extsync::{
 };
 
 const SECRET: &str = "test-secret";
+
+trait TestPermissionRules {
+    fn with_test_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self;
+}
+
+impl TestPermissionRules for AppState {
+    fn with_test_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self {
+        hotsheet_aitools::enable_test_permission_vault();
+        self.with_permission_rules(path)
+    }
+}
 type RecordedClientTurns =
     Arc<Mutex<Vec<(String, Option<String>, Option<String>, Option<String>)>>>;
 type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
@@ -16480,7 +16491,7 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
     let rules = dir.path().join("permissions.json");
     let st = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules);
+        .with_test_permission_rules(&rules);
     let bridge = st.permission_bridge();
     let app = app(st);
 
@@ -16535,7 +16546,7 @@ async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installe
     let rules = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules);
+        .with_test_permission_rules(&rules);
     let bridge = state.permission_bridge();
     let app = app(state);
     std::fs::write(
@@ -16600,7 +16611,7 @@ async fn remembered_web_request_lists_exact_action_only_after_authentication() {
     let rules = dir.path().join("permissions.json");
     let st = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules);
+        .with_test_permission_rules(&rules);
     let bridge = st.permission_bridge();
     let app = app(st);
     let project = dir.path().display().to_string();
@@ -16799,7 +16810,7 @@ async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() 
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let app = app(state);
     let worker = std::thread::spawn(move || {
@@ -16863,7 +16874,7 @@ async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let app = app(state);
     let worker_bridge = bridge.clone();
@@ -16972,7 +16983,7 @@ async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in
     let after_session_restart = hotsheet_server::app(
         AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
-            .with_permission_rules(&rules_path),
+            .with_test_permission_rules(&rules_path),
     );
     let reloaded = body_json(
         after_session_restart
@@ -17010,7 +17021,7 @@ async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in
     let after_always_restart = hotsheet_server::app(
         AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
-            .with_permission_rules(&rules_path),
+            .with_test_permission_rules(&rules_path),
     );
     let reloaded = body_json(
         after_always_restart
@@ -17076,7 +17087,7 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let app = app(state);
     let worker_bridge = bridge.clone();
@@ -17244,7 +17255,7 @@ async fn allow_once_can_finish_a_reviewed_rule_after_the_request_is_settled() {
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let app = app(state);
     let first_bridge = bridge.clone();
@@ -17396,7 +17407,7 @@ async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() 
     .unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let response = app(state)
         .oneshot(authed("GET", "/permissions/rules", None))
@@ -17431,7 +17442,7 @@ async fn chat_scoped_answers_cascade_list_and_revoke_through_real_routes() {
     let project = dir.path().display().to_string();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(&rules);
+        .with_test_permission_rules(&rules);
     let bridge = st.permission_bridge();
     let app = app(st);
     let ask = |connection: &'static str, action: &'static str| {
@@ -17602,7 +17613,7 @@ async fn remembering_and_revoking_permission_rules_emit_a_replayable_change_even
     let project = dir.path().display().to_string();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(dir.path().join("permissions.json"));
+        .with_test_permission_rules(dir.path().join("permissions.json"));
     let bridge = st.permission_bridge();
     let app = app(st);
     let cursor = || {
@@ -17716,7 +17727,7 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
     let primary_rules = rules_dir.join("primary.json");
     let state = AppState::new(primary, SECRET.into())
         .unwrap()
-        .with_permission_rules(&primary_rules);
+        .with_test_permission_rules(&primary_rules);
     let bridge = state.permission_bridge();
     let app = app(state);
     let body = format!(r#"{{"path":"{}"}}"#, secondary_dir.path().display());
@@ -17789,6 +17800,7 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
 
 #[tokio::test]
 async fn permission_migration_requires_explicit_checkout_and_preserves_shared_legacy_vault() {
+    hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
     let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
@@ -17854,7 +17866,7 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
     let state = AppState::new(store.clone(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let router = app(state);
     assert_eq!(
         router
@@ -17937,7 +17949,7 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
     let restarted = app(AppState::new(store, SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path));
+        .with_test_permission_rules(&rules_path));
     let listed = body_json(
         restarted
             .oneshot(authed("GET", "/permissions/rules", None))
@@ -17985,7 +17997,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let state = AppState::new(store.clone(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let router = app(state);
     assert_eq!(
@@ -18100,7 +18112,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let restarted = AppState::new(store, SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let restarted_bridge = restarted.permission_bridge();
     let restarted_app = app(restarted);
     assert_eq!(
@@ -18245,7 +18257,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let cold_state = AppState::new(FsStore::open(&store_path).unwrap(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let cold_bridge = cold_state.permission_bridge();
     let cold_list = body_json(
         app(cold_state)
@@ -18431,7 +18443,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let cold_state = AppState::new(FsStore::open(&store_path).unwrap(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
-        .with_permission_rules(&rules_path);
+        .with_test_permission_rules(&rules_path);
     let cold_bridge = cold_state.permission_bridge();
     let cold_app = app(cold_state);
     assert_eq!(
@@ -18493,7 +18505,7 @@ async fn unknown_checkout_cannot_receive_a_durable_permission() {
     let store = FsStore::init(root.path().join("store.hs2"), &StoreMetadata::new("SH")).unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
-        .with_permission_rules(root.path().join("permissions").join("store.json"));
+        .with_test_permission_rules(root.path().join("permissions").join("store.json"));
     let router = app(state);
     let waiting_router = router.clone();
     let waiting = tokio::spawn(async move {
