@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use time::OffsetDateTime;
 
@@ -332,6 +332,33 @@ fn add_tombstone_notes(
     Ok(())
 }
 
+/// git-filter-repo's paths file treats line breaks as separators and `==>` as a
+/// rename directive. Encode those paths as exact byte regexes; ordinary paths
+/// retain its faster literal matching (HS2-M0VTRA).
+fn write_filter_paths(
+    mut output: impl Write,
+    candidates: &[CompactionCandidate],
+) -> io::Result<()> {
+    for candidate in candidates {
+        let path = candidate.path.as_bytes();
+        if path.contains(&b'\n')
+            || path.contains(&b'\r')
+            || path.windows(3).any(|part| part == b"==>")
+        {
+            output.write_all(b"regex:\\A")?;
+            for byte in path {
+                write!(output, "\\x{byte:02x}")?;
+            }
+            output.write_all(b"\\Z\n")?;
+        } else {
+            output.write_all(b"literal:")?;
+            output.write_all(path)?;
+            output.write_all(b"\n")?;
+        }
+    }
+    output.flush()
+}
+
 /// Rewrite a disposable clone, keeping a mirror backup and an untouched original checkout.
 /// The caller must display the full plan and obtain an exact confirmation string first.
 /// Only the selected branch is accepted; all other local and remote refs must be absent.
@@ -431,6 +458,9 @@ pub fn execute_store(
             "backup and rewrite directories must be outside the ticket store".into(),
         ));
     }
+    let mut paths_file = tempfile::NamedTempFile::new_in(backup_parent)?;
+    write_filter_paths(paths_file.as_file_mut(), &current.candidates)?;
+    let paths_file_arg = paths_file.path().to_string_lossy().into_owned();
     run_git(
         &[
             "clone",
@@ -474,12 +504,16 @@ pub fn execute_store(
             "Record attachment compaction tombstones",
         ],
     )?;
-    let mut args = vec!["filter-repo", "--force", "--invert-paths"];
-    for candidate in &current.candidates {
-        args.push("--path");
-        args.push(&candidate.path);
-    }
-    run_git(&args, &work)?;
+    run_git(
+        &[
+            "filter-repo",
+            "--force",
+            "--invert-paths",
+            "--paths-from-file",
+            &paths_file_arg,
+        ],
+        &work,
+    )?;
     let new_head = git(&work, &["rev-parse", "HEAD"])?;
     let after = crate::repository_size::git_object_size(&work)
         .ok_or_else(|| CompactionError::Invalid("cannot measure rewritten Git size".into()))?
@@ -590,6 +624,121 @@ mod tests {
         );
         git_ok(&root, &["push", "-q", "-u", "origin", "main"]);
         (dir, store, now)
+    }
+
+    fn candidate(path: String) -> CompactionCandidate {
+        CompactionCandidate {
+            ticket_id: String::new(),
+            ticket_slug: String::new(),
+            attachment_id: String::new(),
+            filename: String::new(),
+            path,
+            bytes: 1,
+            sha256: String::new(),
+            reason: CandidateReason::Oversized,
+        }
+    }
+
+    #[test]
+    fn hs2_m0vtra_paths_file_handles_a_plan_larger_than_process_argv() {
+        let (dir, store, now) = fixture();
+        let mut plan = plan_store(&store, now, 30, 15).unwrap();
+        let actual = plan.candidates.remove(0);
+        let mut candidates = vec![actual];
+        candidates.extend((0..MAX_CANDIDATES - 1).map(|index| {
+            candidate(format!(
+                "attachments/{index:026}/{index:026}/payload-{index:05}-with-a-long-name.bin"
+            ))
+        }));
+        let mut paths_file = tempfile::NamedTempFile::new_in(dir.path()).unwrap();
+        write_filter_paths(paths_file.as_file_mut(), &candidates).unwrap();
+        let contents = fs::read(paths_file.path()).unwrap();
+        assert!(
+            contents.len() > 1_000_000,
+            "selection exceeds typical argv limits"
+        );
+        assert_eq!(
+            contents.iter().filter(|byte| **byte == b'\n').count(),
+            MAX_CANDIDATES
+        );
+        let probe = dir.path().join("probe");
+        run_git(
+            &[
+                "clone",
+                "-q",
+                &store.root().to_string_lossy(),
+                &probe.to_string_lossy(),
+            ],
+            dir.path(),
+        )
+        .unwrap();
+        run_git(
+            &[
+                "filter-repo",
+                "--force",
+                "--dry-run",
+                "--invert-paths",
+                "--paths-from-file",
+                &paths_file.path().to_string_lossy(),
+            ],
+            &probe,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn hs2_m0vtra_rewrites_paths_with_line_breaks_and_rename_markers() {
+        let (dir, store, now) = fixture();
+        let ticket = store.list_tickets().unwrap().remove(0);
+        let old = Timestamp::new("2026-01-01T00:00:00Z");
+        for filename in ["line\nbreak.png", "rename==>marker.png"] {
+            store
+                .write_attachment(
+                    &ticket.id,
+                    Ulid::new(),
+                    old.clone(),
+                    filename,
+                    b"another oversized payload",
+                )
+                .unwrap();
+        }
+        git_ok(store.root(), &["push", "-q", "origin", "main"]);
+        let plan = plan_store(&store, now, 30, 15).unwrap();
+        assert_eq!(plan.candidates.len(), 4);
+        let backup = dir.path().join("backup.git");
+        let result = execute_store(
+            &store,
+            now,
+            &plan,
+            &backup,
+            &format!("rewrite {} {}", plan.branch, plan.fingerprint),
+        )
+        .unwrap();
+        assert_eq!(result.candidates_removed, 4);
+        let rewritten =
+            FsStore::open_without_maintenance(backup.with_extension("rewrite-work")).unwrap();
+        assert_eq!(
+            rewritten
+                .list_tickets()
+                .unwrap()
+                .remove(0)
+                .attachments
+                .len(),
+            1
+        );
+        let names = crate::git::command_in(backup.with_extension("rewrite-work"))
+            .args(["log", "--all", "--name-only", "-z", "--pretty=format:"])
+            .output()
+            .unwrap();
+        assert!(names.status.success());
+        for path in plan.candidates.iter().map(|candidate| &candidate.path) {
+            assert!(
+                !names
+                    .stdout
+                    .windows(path.len())
+                    .any(|part| part == path.as_bytes())
+            );
+        }
     }
 
     #[test]

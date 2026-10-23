@@ -439,7 +439,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/checkouts.rs       #   readable path-derived checkout ids + OS-locked/atomic machine registry; many-to-many checkout/store discovery, scoped routing, and backup-first recovery of the legacy duplicated-suffix race (HS2-NGC8AE/VSPFD9/1S6DS9)
       src/repository_status.rs # git porcelain-v2 repository snapshot parser/runner (HS2-RPVFA4)
       src/repository_size.rs # repository size report (HS2-QF44T7): `git count-objects -v` + bounded attachment walk per checkout repo/store, WARNING_BYTES/CRITICAL_BYTES GitHub-limit levels; `git_object_size`/`limit_messages`/`crossing_message` behind `doctor` and `sync` warnings (HS2-P1GYWH); server `/checkouts/{id}/repository/size` and CLI `checkout repo-size`
-      src/repository_compaction.rs # dedicated Git ticket-store attachment plan and opt-in disposable-clone history rewrite with mirror backup, tombstone notes, exact confirmation, and remote-head lease (HS2-T2Q7KM)
+      src/repository_compaction.rs # dedicated Git ticket-store attachment plan and opt-in disposable-clone history rewrite with mirror backup, tombstone notes, exact confirmation, remote-head lease, and argv-bounded paths file with exact unusual-name matching (HS2-T2Q7KM, HS2-M0VTRA)
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/checkout_order.rs  #   shared multi-source checkout merge order, ranks, global limit (HS2-M0YTB6), and the value-keyset `MergeKey`/`AfterKey` (HS2-74H84S)
       src/checkout_page.rs   #   shared batched k-way checkout page merge, v2 cursor codec, filter fingerprint, counts envelope (server + serverless MCP, HS2-JVF20F)
