@@ -182,6 +182,28 @@ Metrics can be shared across a team **through git** — no server sync needed:
   the cache-write TTL. Unclassified cache writes are not guessed. A store's committed
   `metrics/prices.json` can override these rates. Source:
   [Claude Fable 5.1 model pricing](https://platform.claude.com/docs/en/models/fable-5-1/overview).
+
+  **Historical Claude repricing design (HS2-WMWRHZ; design only):** existing raw
+  terminal events retain a model and aggregate input/output counts, but no cache
+  categories, transcript byte range, or assistant message ids. A session id and
+  timestamp do not identify a unique transcript turn. Those events remain unpriced
+  when their original cost was unknown; neither an ordinary-input fallback nor an
+  unverified transcript match can recover a trustworthy cost.
+
+  A future event is eligible only when its raw numeric evidence names one model,
+  has a stable event id, and retains uncached input, cache read, five-minute cache
+  write, one-hour cache write, unclassified cache write, and output counts. A
+  nonzero unclassified write remains unpriced until its TTL is known. Capture this
+  evidence without transcript text or prompt content (HS2-WZ986Q). An explicit
+  headless reprice command will preview eligible ids, the effective rates, and each
+  cost delta, then write a machine-local correction ledger atomically. The ledger
+  is keyed by raw event id and a canonical price revision: repeating apply with the
+  same revision is a no-op; a later revision replaces the projected cost rather
+  than adding another charge. Raw JSONL remains unchanged. Ticket history, the
+  live summary, and settled rollups must use the same corrected projection, with
+  settled rollups rebuilt before source raw events are pruned (HS2-38SAET). A
+  damaged ledger fails closed and can be rebuilt from retained numeric evidence.
+
   Codex Work sessions outside Hot Sheet drives/terminals have a local claim-window
   capture path (`HS2-2K2D7E`, `HS2-NFQ1NK`). CLI and MCP renewal and release capture
   usage; `hotsheet-cli metrics --refresh-codex` explicitly reads new usage while a
@@ -198,6 +220,7 @@ Metrics can be shared across a team **through git** — no server sync needed:
   public export contract, so unrecognized records fail closed. Usage becomes visible during a live claim after
   renewal or explicit refresh; opening the Timeline reads the latest recorded usage.
   Historical unattributed raw metrics are never reassigned.
+
 - **Live-verified + hardened (HS2-CQ6B96):** Codex 0.148 emits per-turn camelCase counts
   under `thread/tokenUsage/updated.params.tokenUsage.last`; `inputTokens` already includes
   its `cachedInputTokens` subset (`totalTokens == inputTokens + outputTokens`), so cached

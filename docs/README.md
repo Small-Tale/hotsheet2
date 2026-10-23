@@ -144,6 +144,11 @@ client runners remain unbuilt.
 | [14-metrics-interface.md](14-metrics-interface.md)                       | Usage/cost metrics capability + JSONL/rollup storage                          | Partial (ticketing::metrics: UsageEvent + raw JSONL writer/reader + per-contributor rollup files (`metrics/rollups/<git-email>/rollup.json`) + summary + `hotsheet-cli metrics` — HS2-69; plugin `[metrics]` mappers wired and live-verified for Codex 0.148 + Claude 2.1.241 — HS2-TJ8FGR/HS2-8PSAFE/HS2-CQ6B96; local Codex Work capture — HS2-2K2D7E. Git-sharing/team delivery → HS2-8BCRHS)                                                                                                  |
 | [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer)                             | Partial (HS2-KP31ZE/4C68Y8/SW655F: event model, bounded timeline, APIs, persistence+broadcast, coarse turn/permission events, and rich version-pinned Codex/Claude native activity mapped through the attributed live sink. Durable AI note policy is HS2-3GRNZW; Announcer UI/TTS is HS2-17)                                                                                                                                                                                                     |
 
+Historical Claude usage repricing in [14-metrics-interface.md](14-metrics-interface.md)
+is design-only (HS2-WMWRHZ). Existing aggregate-only raw events lack safe cache
+category evidence; HS2-WZ986Q and HS2-38SAET track numeric evidence capture and
+the explicit correction path.
+
 **F · Collaboration & distribution**
 
 | Doc                                                                      | Topic                                                                                                                                                                        | Status                                                                                     |
