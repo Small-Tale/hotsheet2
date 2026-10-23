@@ -114,34 +114,3 @@ code.permission-rules-settings__command {
   max-height: min(60dvh, 34rem);
   overflow-y: auto;
 }
-
-.permission-rules-settings__migration-rule {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  min-width: 0;
-  padding: 1rem;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-medium);
-  cursor: pointer;
-}
-
-.permission-rules-settings__migration-rule:focus-within {
-  outline: 2px solid var(--wa-color-brand-border-loud);
-  outline-offset: 2px;
-}
-
-.permission-rules-settings__migration-rule input {
-  cursor: pointer;
-}
-
-.permission-rules-settings__migration-rule span {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.permission-rules-settings__migration-rule code,
-.permission-rules-settings__migration-rule small {
-  overflow-wrap: anywhere;
-}

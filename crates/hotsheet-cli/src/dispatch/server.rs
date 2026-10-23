@@ -712,7 +712,7 @@ pub(crate) fn local_server_json(
     local_server_json_with_body(store, method, route, None)
 }
 
-fn local_server_json_with_body(
+pub(crate) fn local_server_json_with_body(
     store: &Path,
     method: &str,
     route: &str,

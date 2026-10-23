@@ -15358,11 +15358,12 @@ test('switches settings categories from the project sidebar', async ({ page }) =
 });
 
 for (const width of [1280, 390])
-  test(`reviews legacy permission answers before project-wide copying at ${width}px (HS2-ZQ6TV2)`, async ({ page }) => {
+  test(`discards legacy permission answers with confirmation at ${width}px (HS2-AFSF4X)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await mockProject(page);
+    await page.route('**/permissions/rules', (route) => route.fulfill({ json: [] }));
     const applied: unknown[] = [];
-    await page.route('**/permissions/migration*', async (route) => {
+    await page.route('**/permissions/legacy*', async (route) => {
       const request = route.request(),
         url = new URL(request.url());
       if (request.method() === 'GET')
@@ -15371,11 +15372,11 @@ for (const width of [1280, 390])
             checkout: 'checkout:demo-checkout',
             project_name: 'demo',
             source: url.searchParams.get('source'),
-            rules: [{ id: 'legacy-rule', tool: 'Bash', action: 'npm test', decision: 'allow' }],
+            count: 1,
           },
         });
       applied.push(request.postDataJSON());
-      return route.fulfill({ json: { added: 1, existing: 0 } });
+      return route.fulfill({ json: { discarded: 1 } });
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
@@ -15386,30 +15387,37 @@ for (const width of [1280, 390])
     if (width === 390) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
     const settings = page.locator('[data-component="permission-rules-settings"]');
     await settings
-      .getByRole('button', { name: /Review / })
+      .getByRole('button', { name: /Discard .* answers/ })
       .first()
       .click();
-    const dialog = page.getByRole('dialog', { name: 'Copy legacy permission answers' });
-    await expect(dialog).toContainText('npm test');
-    await expect(dialog.getByRole('button', { name: 'Copy 0 to project' })).toBeDisabled();
+    const dialog = page.getByRole('dialog', { name: 'Discard legacy permission answers' });
+    await expect(dialog).toContainText('1 legacy answer will be discarded');
+    await expect(dialog).toContainText('every linked project');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     expect(applied).toEqual([]);
-    await settings.screenshot({ path: `target/visual-captures/hs2-zq6tv2-migration-settings-${width}.png` });
+    await settings.screenshot({ path: `target/visual-captures/hs2-afsf4x-settings-${width}.png` });
     await settings
-      .getByRole('button', { name: /Review / })
+      .getByRole('button', { name: /Discard .* answers/ })
       .first()
       .click();
-    await dialog.getByRole('checkbox').check();
-    await expect(dialog.getByRole('button', { name: 'Copy 1 to project' })).toBeEnabled();
-    await dialog.screenshot({ path: `target/visual-captures/hs2-zq6tv2-migration-review-${width}.png` });
+    await expect(dialog.getByRole('button', { name: 'Discard Answers' })).toBeEnabled();
+    await dialog.screenshot({ path: `target/visual-captures/hs2-afsf4x-confirm-${width}.png` });
+    if (width === 1280) {
+      await page.setViewportSize({ width: 768, height: 844 });
+      await expect(dialog).toBeVisible();
+      await dialog.screenshot({ path: 'target/visual-captures/hs2-afsf4x-confirm-768.png' });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(dialog).toBeVisible();
+      await page.setViewportSize({ width: 1280, height: 844 });
+    }
     const bounds = await dialog.boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
-    await dialog.getByRole('button', { name: 'Copy 1 to project' }).click();
+    await dialog.getByRole('button', { name: 'Discard Answers' }).click();
     await expect(dialog).toHaveCount(0);
-    expect(applied).toEqual([expect.objectContaining({ consent: true, selected_ids: ['legacy-rule'] })]);
+    expect(applied).toEqual([expect.objectContaining({ confirm: true })]);
   });
 
 test('answers identical permission requests for this chat and revokes the remembered rule in Settings (HS2-JNHAYB)', async ({

@@ -72,10 +72,9 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly changePermissionRuleEditorExpression: (projectId: string, expression: string) => void;
   readonly savePermissionRuleEditor: (projectId: string) => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
-  readonly openPermissionMigration: (projectId: string, sourceId: string) => Promise<void>;
-  readonly closePermissionMigration: () => void;
-  readonly togglePermissionMigrationRule: (id: string) => void;
-  readonly applyPermissionMigration: () => Promise<void>;
+  readonly openLegacyPermissionDiscard: (projectId: string, sourceId: string) => Promise<void>;
+  readonly closeLegacyPermissionDiscard: () => void;
+  readonly applyLegacyPermissionDiscard: () => Promise<void>;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
   readonly filterPermissionRules: (projectId: string, filters: Partial<PermissionRuleFilters>) => void;
@@ -137,10 +136,9 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     changePermissionRuleEditorExpression,
     savePermissionRuleEditor,
     openPermissionRules,
-    openPermissionMigration,
-    closePermissionMigration,
-    togglePermissionMigrationRule,
-    applyPermissionMigration,
+    openLegacyPermissionDiscard,
+    closeLegacyPermissionDiscard,
+    applyLegacyPermissionDiscard,
     closePermissionRules,
     searchPermissionRules,
     filterPermissionRules,
@@ -368,41 +366,30 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     delegate(
       document.body,
       'click',
-      NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionMigration.selector,
+      NOTIFICATIONS_AND_LINKS_ACTIONS.openLegacyPermissionDiscard.selector,
       (_event, target) => {
         const sourceId = data(target).sourceId;
-        if (sourceId) void openPermissionMigration(selectedProjectId.value, sourceId);
+        if (sourceId) void openLegacyPermissionDiscard(selectedProjectId.value, sourceId);
       },
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionMigration.selector, () => {
-      closePermissionMigration();
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.closeLegacyPermissionDiscard.selector, () => {
+      closeLegacyPermissionDiscard();
     }),
   );
   lifetime.add(
-    delegate(
-      document.body,
-      'change',
-      NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionMigrationRule.selector,
-      (_event, target) => {
-        const id = data(target).migrationId;
-        if (id) togglePermissionMigrationRule(id);
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.applyPermissionMigration.selector, () => {
-      void applyPermissionMigration();
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.applyLegacyPermissionDiscard.selector, () => {
+      void applyLegacyPermissionDiscard();
     }),
   );
   lifetime.add(
     delegateCapture(
       document.body,
       'kui-request-close',
-      NOTIFICATIONS_AND_LINKS_TARGETS.permissionMigrationDialog.selector,
+      NOTIFICATIONS_AND_LINKS_TARGETS.legacyPermissionDialog.selector,
       () => {
-        closePermissionMigration();
+        closeLegacyPermissionDiscard();
       },
     ),
   );

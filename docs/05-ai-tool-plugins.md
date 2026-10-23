@@ -1287,7 +1287,7 @@ hooks and the native driven bridge; `HOTSHEET_PROJECT` remains the selected tick
 store path for existing Codex Work usage attribution. A launch without a registered checkout uses an `unregistered:`
 identity with no durable-rule location. Existing store-keyed grants remain in their
 original namespace. Legacy hook installations that have not received the new launch
-environment also retain their old namespace; `HS2-ZQ6TV2` handles explicit migration.
+environment also retain their old namespace; `HS2-AFSF4X` provides explicit discard and fresh approval.
 Source-independent project launch remains tracked by `HS2-TSXSH6`.
 Permission vault health is checked per checkout before applying a durable rule.
 If one checkout vault is corrupt or disappears, its in-memory durable answers are
@@ -1314,45 +1314,40 @@ ask for one-time or connection-scoped consent while guiding the user through pro
 registration. Changing a checkout path or identity needs an explicit remap; matching a
 path string by coincidence is not authorization.
 
-Existing store/source-scoped approvals remain valid only in their original namespace
-until the user explicitly consents to migration, or reapproves the action in the new
-project scope (HS2-ZQ6TV2). A legacy store linked to two code projects is ambiguous:
-never duplicate its grants into both. A checkout linked to multiple stores may offer a
-review of candidate grants, but may not merge or broaden them silently. Migration must
-be idempotent across retry/restart, preserve the original grant until a verified new
-write succeeds, and fail closed when identity, source provenance, or encryption material
-is unavailable. Machine-local encrypted files remain outside ticket stores and provider
-systems. The user-facing owner in the remembered-answer list is the code project after
-this contract ships (HS2-7T5GPN), not its default source.
+Existing store/source-scoped approvals remain limited to their original namespace
+until discarded; actions then require fresh approval in the project scope
+(`HS2-AFSF4X`). A legacy store linked to two code projects never duplicates its
+grants into either project. Settings → Permissions → Legacy Answers lists verified
+linked Git sources. The person can inspect the count, then explicitly discard all
+answers scoped to one source. The count does not expose action text. Discard removes
+the source-scoped answers from the encrypted legacy vault for every linked project
+while preserving unrelated namespaces and checkout vaults. It withdraws cached
+grants before mutation, retries safely, and fails closed if identity, provenance,
+or encryption material is unavailable. The headless equivalent is
+`hotsheet-cli permission-discard --project <checkout-id> --source <connection-id>`
+for JSON count, followed by `--confirm` to delete. Machine-local encrypted files
+remain outside ticket stores and provider systems. The user-facing owner in the
+remembered-answer list is the code project after this contract ships
+(`HS2-7T5GPN`), not its default source.
+When a server instance record exists, the CLI routes through that source's server;
+it refuses an offline deletion if another server record could hold cached answers.
 
-`HS2-ZQ6TV2` provides an explicit copy path. Settings → Permissions → Legacy answers
-lists linked Git sources for the selected project. Review decrypts and displays that
-source's candidate actions locally; the person selects individual answers and confirms
-their wider project reach. The server verifies that the source still belongs to the
-registered checkout and that both vaults are available, then copies selected rules into
-the checkout vault. The source vault remains intact. Existing destination answers take
-precedence, and retrying a selection does not add another copy. The headless equivalent
-is `hotsheet-cli permission-migrate --project <checkout-id> --source <connection-id>`
-for JSON preview, followed by `--approve --id <candidate-id>` for each chosen answer.
-The destination vault must already be initialized by a project launch. A missing or
-unreadable vault, stale candidate, or unlinked source fails without broadening a grant.
+Acceptance cases for HS2-G1SG1P, HS2-AFSF4X, and HS2-TSXSH6:
 
-Acceptance cases for HS2-G1SG1P, HS2-ZQ6TV2, and HS2-TSXSH6:
-
-| Situation                                                                    | Required result                                                                                                       |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| One checkout, Git plus external providers; switch default source or ticket   | Same project rule and durable capability across terminal, CLI, MCP, and driven paths.                                 |
-| Two checkouts share one git store                                            | A grant in one checkout never answers the other's request or appears as its rule.                                     |
-| External-only registered checkout                                            | Project rules persist and are listed without a git store; project launch loads its configured sources.                |
-| Missing or ambiguous checkout registration                                   | No project grant matches or persists; the request remains answerable with a narrower scope.                           |
-| Legacy store rule maps to one or multiple projects                           | No reach expansion before explicit consent; ambiguous candidates require separate decisions or reapproval.            |
-| Migration retries, restart, failed vault access, or failed destination write | One destination grant at most; no half-migrated authorization, loss of the source grant, or fallback to another file. |
-| Project move/remap                                                           | Old identity cannot authorize the new identity until the user confirms the remap.                                     |
+| Situation                                                                  | Required result                                                                                             |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| One checkout, Git plus external providers; switch default source or ticket | Same project rule and durable capability across terminal, CLI, MCP, and driven paths.                       |
+| Two checkouts share one git store                                          | A grant in one checkout never answers the other's request or appears as its rule.                           |
+| External-only registered checkout                                          | Project rules persist and are listed without a git store; project launch loads its configured sources.      |
+| Missing or ambiguous checkout registration                                 | No project grant matches or persists; the request remains answerable with a narrower scope.                 |
+| Legacy store rule maps to one or multiple projects                         | Source-scoped answers are discarded for every linked project; future actions require fresh approval.        |
+| Discard retries, restart, or failed vault access                           | No stale cached authorization or fallback to another file; unrelated namespaces and checkout grants remain. |
+| Project move/remap                                                         | Old identity cannot authorize the new identity until the user confirms the remap.                           |
 
 Regression coverage must exercise those transitions through the matcher, encrypted
 persistence, real server routes, and the headless launch path; browser tests must cover
 capability and consent presentation. `HS2-G1SG1P` owns identity propagation,
-`HS2-ZQ6TV2` owns migration, and `HS2-TSXSH6` owns source-independent project launch.
+`HS2-AFSF4X` owns discard, and `HS2-TSXSH6` owns source-independent project launch.
 
 Implementation references: `crates/hotsheet-server/src/routes/terminals/launch.rs`
 (`terminal_project_for_cwd`), `crates/hotsheet-cli/src/dispatch/setup.rs`

@@ -39,7 +39,7 @@ import {
   projectPermissionRules,
   VisiblePermissionTimer,
 } from '../permission-notifications';
-import type { PermissionMigrationPreview } from '../server-response-parsers';
+import type { LegacyPermissionPreview } from '../server-response-parsers';
 
 export interface PermissionsDependencies {
   projects: Signal<Project[]>;
@@ -106,72 +106,58 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       | undefined
     >(undefined);
   const loadingPermissionRules = new Set<string>();
-  const migrationReview = signal<
+  const legacyDiscard = signal<
     | {
         projectId: string;
         sourceId: string;
-        preview?: PermissionMigrationPreview;
-        selected: readonly string[];
+        preview?: LegacyPermissionPreview;
         busy: boolean;
         error?: string;
       }
     | undefined
   >(undefined);
 
-  function migrationReviewFor(projectId: string) {
-    return migrationReview.value?.projectId === projectId ? migrationReview.value : undefined;
+  function legacyDiscardFor(projectId: string) {
+    return legacyDiscard.value?.projectId === projectId ? legacyDiscard.value : undefined;
   }
-  async function openPermissionMigration(projectId: string, sourceId: string) {
+  async function openLegacyPermissionDiscard(projectId: string, sourceId: string) {
     const project = projects.value.find((item) => item.id === projectId);
     if (!project) return;
-    migrationReview.value = { projectId, sourceId, selected: [], busy: true };
+    legacyDiscard.value = { projectId, sourceId, busy: true };
     try {
-      const preview = await new Api(project.apiPath).checkoutPermissionMigrationPreview(projectId, sourceId);
-      if (migrationReviewFor(projectId)?.sourceId === sourceId)
-        migrationReview.value = { projectId, sourceId, preview, selected: [], busy: false };
+      const preview = await new Api(project.apiPath).checkoutLegacyPermissionPreview(projectId, sourceId);
+      if (legacyDiscardFor(projectId)?.sourceId === sourceId)
+        legacyDiscard.value = { projectId, sourceId, preview, busy: false };
     } catch (reason) {
-      if (migrationReviewFor(projectId)?.sourceId === sourceId)
-        migrationReview.value = {
+      if (legacyDiscardFor(projectId)?.sourceId === sourceId)
+        legacyDiscard.value = {
           projectId,
           sourceId,
-          selected: [],
           busy: false,
-          error: `Could not review legacy answers. ${reason instanceof Error ? reason.message : String(reason)}`,
+          error: `Could not inspect legacy answers. ${reason instanceof Error ? reason.message : String(reason)}`,
         };
     }
   }
-  function closePermissionMigration() {
-    if (!migrationReview.value?.busy) migrationReview.value = undefined;
+  function closeLegacyPermissionDiscard() {
+    if (!legacyDiscard.value?.busy) legacyDiscard.value = undefined;
   }
-  function togglePermissionMigrationRule(id: string) {
-    const review = migrationReview.value;
-    if (!review?.preview || review.busy || !review.preview.rules.some((rule) => rule.id === id)) return;
-    const selected = new Set(review.selected);
-    if (selected.has(id)) selected.delete(id);
-    else selected.add(id);
-    migrationReview.value = { ...review, selected: [...selected] };
-  }
-  async function applyPermissionMigration() {
-    const review = migrationReview.value;
+  async function applyLegacyPermissionDiscard() {
+    const review = legacyDiscard.value;
     const project = projects.value.find((item) => item.id === review?.projectId);
-    if (!review?.preview || !project || review.busy || review.selected.length === 0) return;
-    migrationReview.value = { ...review, busy: true, error: undefined };
+    if (!review?.preview || !project || review.busy) return;
+    legacyDiscard.value = { ...review, busy: true, error: undefined };
     try {
-      const outcome = await new Api(project.apiPath).migrateCheckoutPermissions(
-        project.id,
-        review.sourceId,
-        review.selected,
-      );
-      if (migrationReviewFor(project.id)?.sourceId !== review.sourceId) return;
-      migrationReview.value = undefined;
-      permissionRulesMessage.value = `${outcome.added} remembered answer${outcome.added === 1 ? '' : 's'} copied to this project; ${outcome.existing} already present.`;
+      const outcome = await new Api(project.apiPath).discardCheckoutLegacyPermissions(project.id, review.sourceId);
+      if (legacyDiscardFor(project.id)?.sourceId !== review.sourceId) return;
+      legacyDiscard.value = undefined;
+      permissionRulesMessage.value = `${outcome.discarded} legacy answer${outcome.discarded === 1 ? '' : 's'} discarded. Future requests need fresh approval.`;
       markPermissionRulesStale(project.id);
     } catch (reason) {
-      if (migrationReviewFor(project.id)?.sourceId === review.sourceId)
-        migrationReview.value = {
+      if (legacyDiscardFor(project.id)?.sourceId === review.sourceId)
+        legacyDiscard.value = {
           ...review,
           busy: false,
-          error: `Could not copy the selected answers. ${reason instanceof Error ? reason.message : String(reason)}`,
+          error: `Could not discard legacy answers. ${reason instanceof Error ? reason.message : String(reason)}`,
         };
     }
   }
@@ -933,7 +919,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   /** Stop the countdown interval and storage listener; a later start re-registers them. */
   function dispose() {
     permissionRuleEditor.value = undefined;
-    migrationReview.value = undefined;
+    legacyDiscard.value = undefined;
     lifetime.dispose();
     lifetime = createScope();
   }
@@ -942,11 +928,10 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRules,
     permissionRulesChanged,
     permissionRulesMessage,
-    migrationReviewFor,
-    openPermissionMigration,
-    closePermissionMigration,
-    togglePermissionMigrationRule,
-    applyPermissionMigration,
+    legacyDiscardFor,
+    openLegacyPermissionDiscard,
+    closeLegacyPermissionDiscard,
+    applyLegacyPermissionDiscard,
     lockedPermissionRules,
     revokingPermissionRules,
     revokePermissionRule,

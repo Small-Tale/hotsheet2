@@ -354,8 +354,7 @@ const permissionRulesDemoDialog = signal<
   | undefined
 >(undefined);
 const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
-const permissionMigrationDemoReview = signal(false);
-const permissionMigrationDemoSelected = signal(false);
+const legacyPermissionDemoOpen = signal(false);
 const permissionRulesDemoEditor = signal<PermissionRuleEditorState | undefined>(undefined);
 const permissionRulesDemoPreview = signal<
   | {
@@ -415,23 +414,22 @@ export function PermissionRulesSettingsDemo() {
           message="Could not revoke the rule. The server is unavailable."
         />
       </CatalogExample>
-      <CatalogExample label="Review Legacy Answers Before Copying to a Project">
+      <CatalogExample label="Discard Legacy Permission Answers">
         <div data-demo-permission-migration>
           <PermissionRulesSettings
             rules={[]}
-            migration={{
+            legacy={{
               sources: [{ id: 'git-legacy', name: 'Legacy Git', locator: '/work/demo.hs2' }],
-              review: permissionMigrationDemoReview.value
+              review: legacyPermissionDemoOpen.value
                 ? {
                     projectId: 'demo',
                     sourceId: 'git-legacy',
-                    selected: permissionMigrationDemoSelected.value ? ['legacy-1'] : [],
                     busy: false,
                     preview: {
                       checkout: 'checkout:demo',
                       project_name: 'Demo',
                       source: 'git-legacy',
-                      rules: [{ id: 'legacy-1', tool: 'Bash', action: 'npm test', decision: 'allow' }],
+                      count: 1,
                     },
                   }
                 : undefined,
@@ -612,9 +610,9 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionMigration.selector}`,
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openLegacyPermissionDiscard.selector}`,
       () => {
-        permissionMigrationDemoReview.value = true;
+        legacyPermissionDemoOpen.value = true;
       },
     ),
   );
@@ -622,19 +620,9 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.closePermissionMigration.selector}`,
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.closeLegacyPermissionDiscard.selector}`,
       () => {
-        permissionMigrationDemoReview.value = false;
-      },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'change',
-      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.togglePermissionMigrationRule.selector}`,
-      (_event, target) => {
-        permissionMigrationDemoSelected.value = (target as HTMLInputElement).checked;
+        legacyPermissionDemoOpen.value = false;
       },
     ),
   );
@@ -642,9 +630,9 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.applyPermissionMigration.selector}`,
+      `[data-demo-permission-migration] ${NOTIFICATIONS_AND_LINKS_ACTIONS.applyLegacyPermissionDiscard.selector}`,
       () => {
-        permissionMigrationDemoReview.value = false;
+        legacyPermissionDemoOpen.value = false;
       },
     ),
   );

@@ -21,37 +21,34 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Deserialize)]
-pub(crate) struct PermissionMigrationQuery {
+pub(crate) struct LegacyPermissionQuery {
     source: String,
 }
 
 #[derive(Serialize)]
-pub(crate) struct PermissionMigrationPreview {
+pub(crate) struct LegacyPermissionPreview {
     checkout: String,
     project_name: String,
     source: String,
-    rules: Vec<hotsheet_aitools::PermissionMigrationCandidate>,
+    count: usize,
 }
 
 #[derive(Deserialize)]
-pub(crate) struct PermissionMigrationRequest {
+pub(crate) struct LegacyPermissionDiscardRequest {
     source: String,
-    selected_ids: Vec<String>,
-    consent: bool,
+    confirm: bool,
 }
 
-fn permission_migration_paths(
+#[derive(Serialize)]
+pub(crate) struct LegacyPermissionDiscardOutcome {
+    discarded: usize,
+}
+
+fn legacy_permission_source(
     state: &AppState,
     reference: &str,
     source_id: &str,
-) -> Result<
-    (
-        hotsheet_ticketing::checkouts::Checkout,
-        std::path::PathBuf,
-        std::path::PathBuf,
-    ),
-    ApiError,
-> {
+) -> Result<(hotsheet_ticketing::checkouts::Checkout, std::path::PathBuf), ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(reference)
@@ -59,20 +56,7 @@ fn permission_migration_paths(
     let store = checkout
         .verified_git_source(source_id)
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
-    let identity = checkout.permission_identity();
-    if !state.register_checkout_permission_rules(&identity) {
-        return Err(ApiError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "checkout permission vault unavailable",
-        ));
-    }
     let paths = state.permission_rule_paths.lock_or_recover();
-    let destination = paths.get(&identity).cloned().ok_or_else(|| {
-        ApiError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "checkout permission vault unavailable",
-        )
-    })?;
     let source = crate::watcher::same_path(store.root(), state.store.root())
         .then(|| paths.get("").cloned())
         .flatten()
@@ -87,21 +71,10 @@ fn permission_migration_paths(
                 })
                 .map(|(_, path)| path.clone())
         })
-        .or_else(|| {
-            paths
-                .get("")
-                .and_then(|path| path.parent())
-                .map(|directory| {
-                    directory.join(format!(
-                        "{}.json",
-                        hotsheet_ticketing::git_connection_id(&store)
-                    ))
-                })
-        })
         .ok_or_else(|| {
             ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "legacy permission vault unavailable",
+                "linked Git source is not hosted by this server",
             )
         })?;
     if !source.is_file() {
@@ -110,19 +83,19 @@ fn permission_migration_paths(
             "legacy permission vault missing",
         ));
     }
-    Ok((checkout, source, destination))
+    Ok((checkout, source))
 }
 
-/// Review exactly one linked Git source before a project-wide consent decision.
-pub(crate) async fn preview_checkout_permission_migration(
+/// Count the old answers for one verified Git source without exposing action content.
+pub(crate) async fn preview_checkout_legacy_permissions(
     State(state): State<AppState>,
     Path(reference): Path<String>,
-    Query(query): Query<PermissionMigrationQuery>,
-) -> Result<Json<PermissionMigrationPreview>, ApiError> {
-    let (checkout, source, _) = permission_migration_paths(&state, &reference, &query.source)?;
+    Query(query): Query<LegacyPermissionQuery>,
+) -> Result<Json<LegacyPermissionPreview>, ApiError> {
+    let (checkout, source) = legacy_permission_source(&state, &reference, &query.source)?;
     let legacy_project = checkout.source(&query.source).unwrap().locator.clone();
-    let rules = tokio::task::spawn_blocking(move || {
-        hotsheet_aitools::preview_legacy_permission_rules(&source, &legacy_project)
+    let count = tokio::task::spawn_blocking(move || {
+        hotsheet_aitools::count_legacy_permission_rules(&source, &legacy_project)
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
@@ -132,59 +105,83 @@ pub(crate) async fn preview_checkout_permission_migration(
             "legacy permission vault unavailable",
         )
     })?;
-    Ok(Json(PermissionMigrationPreview {
+    Ok(Json(LegacyPermissionPreview {
         checkout: checkout.permission_identity(),
         project_name: checkout.alias,
         source: query.source,
-        rules,
+        count,
     }))
 }
 
-/// Copy only reviewed rules after explicit consent; the source vault is retained.
-pub(crate) async fn migrate_checkout_permissions(
+/// Delete old source-scoped answers after explicit confirmation. Withdraw active cached
+/// grants before touching storage, so a failed write stays fail closed (HS2-AFSF4X).
+pub(crate) async fn discard_checkout_legacy_permissions(
     State(state): State<AppState>,
     Path(reference): Path<String>,
-    Json(body): Json<PermissionMigrationRequest>,
-) -> Result<Json<hotsheet_aitools::PermissionMigrationOutcome>, ApiError> {
-    if !body.consent {
+    Json(body): Json<LegacyPermissionDiscardRequest>,
+) -> Result<Json<LegacyPermissionDiscardOutcome>, ApiError> {
+    if !body.confirm {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "explicit migration consent required",
+            "explicit legacy-answer deletion confirmation required",
         ));
     }
-    let (checkout, source, destination) =
-        permission_migration_paths(&state, &reference, &body.source)?;
+    if state.permission_rules_loading.load(Ordering::Acquire) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission rules still loading",
+        ));
+    }
+    let (checkout, source) = legacy_permission_source(&state, &reference, &body.source)?;
     let legacy_project = checkout.source(&body.source).unwrap().locator.clone();
-    let identity = checkout.permission_identity();
-    let selected = body.selected_ids;
-    let target = identity.clone();
+    let aliases = state
+        .permission_rule_paths
+        .lock_or_recover()
+        .iter()
+        .filter(|(project, path)| {
+            !project.starts_with("checkout:") && crate::watcher::same_path(path, &source)
+        })
+        .map(|(project, _)| project.clone())
+        .collect::<Vec<_>>();
+    for alias in &aliases {
+        state.permissions.drop_durable_rules_for_project(alias);
+        emit_permission_rules_changed(&state, alias);
+    }
+    let source_for_write = source.clone();
     let outcome = tokio::task::spawn_blocking(move || {
-        hotsheet_aitools::migrate_legacy_permission_rules(
-            &source,
-            &destination,
-            &legacy_project,
-            &target,
-            &selected,
-        )
+        hotsheet_aitools::discard_legacy_permission_rules(&source_for_write, &legacy_project)
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-    .map_err(|error| {
-        let status = if error.kind() == std::io::ErrorKind::InvalidInput {
-            StatusCode::CONFLICT
-        } else {
-            StatusCode::SERVICE_UNAVAILABLE
-        };
-        ApiError::new(status, "permission migration failed or review is stale")
-    })?;
-    if !state.register_checkout_permission_rules(&identity) {
-        return Err(ApiError::new(
+    .map_err(|_| {
+        ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "checkout permission vault unavailable after migration",
-        ));
+            "legacy permission vault unavailable",
+        )
+    })?;
+    let (key, rules) =
+        hotsheet_aitools::load_existing_permission_rules_with_key(&source).map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy answers deleted but cache reload failed",
+            )
+        })?;
+    for alias in aliases {
+        let restored = rules
+            .iter()
+            .filter(|rule| rule.project == alias)
+            .cloned()
+            .map(|mut rule| {
+                rule.project = alias.clone();
+                rule
+            })
+            .collect();
+        state
+            .permissions
+            .add_project_rules(alias.clone(), key, restored);
+        emit_permission_rules_changed(&state, &alias);
     }
-    emit_permission_rules_changed(&state, &identity);
-    Ok(Json(outcome))
+    Ok(Json(LegacyPermissionDiscardOutcome { discarded: outcome }))
 }
 
 // ---- permission round-trip (HS2-9R9YZW) ------------------------------------------

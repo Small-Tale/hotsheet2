@@ -9494,7 +9494,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RememberPermission'
-  /checkouts/{reference}/permissions/migration:
+  /checkouts/{reference}/permissions/legacy:
     parameters:
       - name: reference
         in: path
@@ -9502,14 +9502,14 @@ paths:
         schema:
           type: string
     get:
-      operationId: preview_checkout_permission_migration
+      operationId: preview_checkout_legacy_permissions
       responses:
         '200':
           description: Server-owned response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PermissionMigrationPreview'
+                $ref: '#/components/schemas/LegacyPermissionPreview'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -9546,15 +9546,15 @@ paths:
           required: true
           schema:
             type: string
-    post:
-      operationId: migrate_checkout_permissions
+    delete:
+      operationId: discard_checkout_legacy_permissions
       responses:
         '200':
           description: Server-owned response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PermissionMigrationOutcome'
+                $ref: '#/components/schemas/LegacyPermissionDiscardOutcome'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -9590,7 +9590,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PermissionMigrationRequest'
+              $ref: '#/components/schemas/LegacyPermissionDiscardRequest'
   /checkouts/{reference}/guidance:
     parameters:
       - name: reference
@@ -15285,34 +15285,13 @@ components:
         path:
           type: string
       additionalProperties: false
-    PermissionMigrationCandidate:
-      type: object
-      required:
-        - id
-        - tool
-        - action
-        - decision
-      properties:
-        id:
-          type: string
-        tool:
-          type: string
-        action:
-          type: string
-        pattern:
-          type: object
-        description:
-          type: string
-        decision:
-          type: string
-      additionalProperties: false
-    PermissionMigrationPreview:
+    LegacyPermissionPreview:
       type: object
       required:
         - checkout
         - project_name
         - source
-        - rules
+        - count
       properties:
         checkout:
           type: string
@@ -15320,36 +15299,26 @@ components:
           type: string
         source:
           type: string
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/PermissionMigrationCandidate'
+        count:
+          type: integer
       additionalProperties: false
-    PermissionMigrationRequest:
+    LegacyPermissionDiscardRequest:
       type: object
       required:
         - source
-        - selected_ids
-        - consent
+        - confirm
       properties:
         source:
           type: string
-        selected_ids:
-          type: array
-          items:
-            type: string
-        consent:
+        confirm:
           type: boolean
       additionalProperties: false
-    PermissionMigrationOutcome:
+    LegacyPermissionDiscardOutcome:
       type: object
       required:
-        - added
-        - existing
+        - discarded
       properties:
-        added:
-          type: integer
-        existing:
+        discarded:
           type: integer
       additionalProperties: false
     ProviderPatch:

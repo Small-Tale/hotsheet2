@@ -274,18 +274,13 @@ fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
     Ok(())
 }
 
-fn cmd_permission_migrate(
-    project: &str,
-    source_id: &str,
-    ids: &[String],
-    approve: bool,
-) -> Result<()> {
+fn cmd_permission_discard(project: &str, source_id: &str, confirm: bool) -> Result<()> {
     let home = hotsheet_plugins::hotsheet_home();
     let registry =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
     let checkout = registry
         .resolve(project)
-        .context("registered project required for permission migration")?;
+        .context("registered project required for legacy-answer deletion")?;
     let store = checkout
         .verified_git_source(source_id)
         .context("verified linked Git source required")?;
@@ -293,48 +288,61 @@ fn cmd_permission_migrate(
         "{}.json",
         hotsheet_ticketing::git_connection_id(&store)
     ));
-    let destination = home
-        .join("permissions")
-        .join(format!("checkout-{}.json", checkout.id));
     if !source.is_file() {
         bail!("legacy permission vault is missing; reapprove actions in the project scope");
     }
     let legacy_project = store.root().display().to_string();
-    if !approve {
-        if !ids.is_empty() {
-            bail!("--id requires --approve; review the candidates first");
+    let instance = hotsheet_cli::external_launch::instance_path(&home, store.root());
+    if instance.exists() {
+        let route = format!(
+            "checkouts/{}/permissions/legacy",
+            urlencoding_component(&checkout.id.to_string())
+        );
+        let result = if confirm {
+            super::server::local_server_json_with_body(
+                store.root(),
+                "DELETE",
+                &route,
+                Some(&serde_json::json!({"source": source_id, "confirm": true})),
+            )?
+        } else {
+            super::server::local_server_json_with_body(
+                store.root(),
+                "GET",
+                &format!("{route}?source={}", urlencoding_component(source_id)),
+                None,
+            )?
+        };
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+    let instances = home.join("instances");
+    if confirm && instances.exists() {
+        let entries =
+            std::fs::read_dir(&instances).context("checking live server instance records")?;
+        for entry in entries {
+            if entry?.path().extension().is_some_and(|ext| ext == "json") {
+                bail!(
+                    "a Hot Sheet server may cache these answers; use Settings or stop running servers before retrying"
+                );
+            }
         }
-        let rules = hotsheet_aitools::preview_legacy_permission_rules(&source, &legacy_project)?;
+    }
+    if !confirm {
+        let count = hotsheet_aitools::count_legacy_permission_rules(&source, &legacy_project)?;
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "project": checkout.alias,
                 "checkout": checkout.permission_identity(),
                 "source": source_id,
-                "rules": rules,
+                "count": count,
             }))?
         );
         return Ok(());
     }
-    if ids.is_empty() {
-        bail!("select at least one previewed --id before --approve");
-    }
-    if !destination.is_file() {
-        bail!(
-            "checkout permission vault is not initialized; launch the registered project once, then retry"
-        );
-    }
-    let outcome = hotsheet_aitools::migrate_legacy_permission_rules(
-        &source,
-        &destination,
-        &legacy_project,
-        &checkout.permission_identity(),
-        ids,
-    )?;
-    println!(
-        "Copied {} rule(s); {} already present",
-        outcome.added, outcome.existing
-    );
+    let discarded = hotsheet_aitools::discard_legacy_permission_rules(&source, &legacy_project)?;
+    println!("Discarded {discarded} legacy answer(s). Future actions require fresh approval.");
     Ok(())
 }
 
@@ -369,12 +377,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
         Cmd::Guidance { project, cmd } => cmd_guidance(path, &project, cmd),
-        Cmd::PermissionMigrate {
+        Cmd::PermissionDiscard {
             project,
             source,
-            ids,
-            approve,
-        } => cmd_permission_migrate(&project, &source, &ids, approve),
+            confirm,
+        } => cmd_permission_discard(&project, &source, confirm),
         Cmd::HookDiagnose { json } => cmd_hook_diagnose(json),
         Cmd::Launch {
             tool,

@@ -154,11 +154,11 @@ the default-on path is checked by hand.
    a pending request. Approve Keychain access and confirm durable rules become
    available without a server restart (HS2-Q7R2RM).
 
-### Legacy permission migration (HS2-ZQ6TV2)
+### Legacy permission discard (HS2-AFSF4X)
 
-1. With two registered projects sharing a Git ticket store, remember a disposable approval in the old store namespace. Open one project's Settings → Permissions → Legacy answers, review the source, and confirm that the exact action and decision are legible only in the review dialog.
-2. Cancel once, then select the answer and copy it. Confirm it appears only in the chosen project's remembered answers, while the other project still has no project-scoped copy. Retry the same selection and confirm there is one copy.
-3. Repeat from a terminal with `hotsheet-cli permission-migrate --project <checkout-id> --source <connection-id>` and then `--approve --id <candidate-id>`. Confirm the legacy vault remains readable. Remove or lock either vault and confirm the copy fails without granting the action.
+1. With two registered projects sharing a Git ticket store, remember a disposable approval in the old store namespace. Open one project's Settings → Permissions → Legacy Answers, inspect the source's answer count, and confirm no action text is exposed.
+2. Cancel once, then discard the source's answers. Confirm neither project can auto-approve the old action, both can request fresh approval, and unrelated checkout answers remain. Retry and confirm zero answers are discarded.
+3. Repeat from a terminal with `hotsheet-cli permission-discard --project <checkout-id> --source <connection-id>` for the count, then `--confirm`. Remove or damage the source vault and confirm the operation fails without granting the action.
 
 ### Permission secret suggestions (HS2-5ZRSJW)
 

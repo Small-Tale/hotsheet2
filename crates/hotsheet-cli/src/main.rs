@@ -604,20 +604,17 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Review or explicitly copy legacy Git-store permission rules into one registered project.
-    PermissionMigrate {
+    /// Review or explicitly discard old Git-source permission answers; fresh approval is required.
+    PermissionDiscard {
         /// Registered checkout id, alias, or root path.
         #[arg(long)]
         project: String,
-        /// Linked Git ticket-source connection id to review.
+        /// Verified linked Git ticket-source connection id.
         #[arg(long)]
         source: String,
-        /// Candidate id from the preview; repeat to select several rules.
-        #[arg(long = "id")]
-        ids: Vec<String>,
-        /// Confirm the selected rules' broader project scope.
+        /// Confirm deletion of this source's old answers.
         #[arg(long)]
-        approve: bool,
+        confirm: bool,
     },
     /// Native lifecycle **permission hook** (docs/05 §5.7): reads PermissionRequest JSON
     /// from Claude or Codex, finds the current project server (falling back to

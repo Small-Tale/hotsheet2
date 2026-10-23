@@ -108,9 +108,9 @@ use routes::guidance::{
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
-    discovered_ai_tools_off_runtime, get_ai_settings, get_checkout_ai_settings,
-    interrupt_drive_turn, list_ai_tools, list_connections, list_drive_sessions, list_permissions,
-    migrate_checkout_permissions, now_ms, preview_checkout_permission_migration,
+    discard_checkout_legacy_permissions, discovered_ai_tools_off_runtime, get_ai_settings,
+    get_checkout_ai_settings, interrupt_drive_turn, list_ai_tools, list_connections,
+    list_drive_sessions, list_permissions, now_ms, preview_checkout_legacy_permissions,
     probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
 };
 use routes::project_tools::{
@@ -1404,8 +1404,8 @@ pub fn app(state: AppState) -> Router {
             get(get_checkout_ticket_usage),
         )
         .route(
-            "/checkouts/{reference}/permissions/migration",
-            get(preview_checkout_permission_migration).post(migrate_checkout_permissions),
+            "/checkouts/{reference}/permissions/legacy",
+            get(preview_checkout_legacy_permissions).delete(discard_checkout_legacy_permissions),
         )
         .route(
             "/checkouts/{reference}/guidance",

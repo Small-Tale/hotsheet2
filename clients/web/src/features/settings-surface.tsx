@@ -51,7 +51,7 @@ export interface SettingsSurfaceDependencies {
   permissionRulesPreviewFor: (projectId: string, visible: boolean) => Props['permissions']['preview'];
   permissionRulesMessage: Readable<string>;
   lockedPermissionRules: Readable<ReadonlySet<string>>;
-  permissionMigrationReviewFor: (projectId: string) => NonNullable<Props['permissions']['migration']>['review'];
+  permissionLegacyDiscardFor: (projectId: string) => NonNullable<Props['permissions']['legacy']>['review'];
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
@@ -104,7 +104,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     permissionRulesPreviewFor,
     permissionRulesMessage,
     lockedPermissionRules,
-    permissionMigrationReviewFor,
+    permissionLegacyDiscardFor,
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
@@ -192,13 +192,13 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           revoking: revokingPermissionRules.value,
           rulesMessage: permissionRulesMessage.value,
           locked: lockedPermissionRules.value.has(current.id),
-          migration: {
+          legacy: {
             sources: projectSourcesSettings(current)
               .sources.filter(
                 (source) => source.provider === 'git' && !source.unverifiedRecovery && !source.identityMismatch,
               )
               .map((source) => ({ id: source.connectionId, name: source.name, locator: source.locator })),
-            review: permissionMigrationReviewFor(current.id),
+            review: permissionLegacyDiscardFor(current.id),
           },
         }}
         columns={{ hideVerified: hideVerifiedColumn() }}

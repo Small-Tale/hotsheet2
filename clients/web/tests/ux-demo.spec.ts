@@ -781,20 +781,19 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-dialog-remote-narrow.png' });
 });
 
-test('keeps the legacy-answer review closed until requested in the catalog (HS2-ZQ6TV2)', async ({ page }) => {
+test('keeps the legacy-answer discard closed until requested in the catalog (HS2-AFSF4X)', async ({ page }) => {
   await page.goto('/ux-demo?component=permission-rules-settings');
-  const example = page.getByRole('region', { name: 'Review Legacy Answers Before Copying to a Project' });
-  const dialog = page.getByRole('dialog', { name: 'Copy legacy permission answers' });
+  const example = page.getByRole('region', { name: 'Discard Legacy Permission Answers' });
+  const dialog = page.getByRole('dialog', { name: 'Discard legacy permission answers' });
   await expect(example).toBeVisible();
   await expect(dialog).toHaveCount(0);
-  await example.getByRole('button', { name: 'Review Legacy Git' }).click();
+  await example.getByRole('button', { name: 'Discard Legacy Git answers' }).click();
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('checkbox').check();
-  await expect(dialog.getByRole('button', { name: 'Copy 1 to project' })).toBeEnabled();
-  await page.screenshot({ path: 'target/visual-captures/hs2-zq6tv2-migration-demo-wide.png', fullPage: true });
+  await expect(dialog.getByRole('button', { name: 'Discard Answers' })).toBeEnabled();
+  await page.screenshot({ path: 'target/visual-captures/hs2-afsf4x-demo-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-zq6tv2-migration-demo-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-afsf4x-demo-phone.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
 });

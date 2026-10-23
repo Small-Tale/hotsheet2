@@ -54,7 +54,7 @@ export interface SettingsWorkspaceProps {
     revoking?: readonly string[];
     rulesMessage?: string;
     locked?: boolean;
-    migration?: PermissionRulesSettingsProps['migration'];
+    legacy?: PermissionRulesSettingsProps['legacy'];
   };
   columns: { hideVerified: boolean };
   general: { showLoadingActivity: boolean };
@@ -145,7 +145,7 @@ export function SettingsWorkspace({
                 preview={permissions.preview}
                 revoking={permissions.revoking}
                 message={permissions.rulesMessage}
-                migration={permissions.migration}
+                legacy={permissions.legacy}
                 locked={permissions.locked}
               />
             </List>

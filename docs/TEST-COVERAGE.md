@@ -110,7 +110,7 @@ inventory check in `clients/web/tests/contracts.spec.ts` compares every server
 router path and method to OpenAPI, then validates compatibility, ticket, row,
 and replay responses from a real server against the core schemas. The event
 schema also encodes assignment, activity, and turn envelope fields. The route
-inventory includes the checkout permission-migration and guidance endpoints
+inventory includes the checkout legacy-permission discard and guidance endpoints
 (HS2-N44D0P); `clients/web/scripts/sync-openapi-routes.mjs` regenerates
 route-level entries from the Axum router before contract verification. Detailed
 request and response schemas for operations marked `route-only` are tracked by
@@ -1247,7 +1247,7 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks two vault keys, shared-store isolation, and reload; `crates/hotsheet-server/src/lib.rs` checks terminal launch identity; `clients/web/src/permission-notifications.test.ts` checks checkout rule filtering.
-- End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy migration have separate tickets (`HS2-TSXSH6`, `HS2-ZQ6TV2`).
+- End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy discard have separate tickets (`HS2-TSXSH6`, `HS2-AFSF4X`).
 
 ### Isolated checkout vault health (HS2-KJA1V4)
 
@@ -1268,13 +1268,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-server/src/permission_startup_tests.rs # failed_vault_loader_stays_closed` pins the error transition with synthetic credentials.
 - End to end: `crates/hotsheet-server/src/permission_startup_tests.rs # stalled_vault_loader_leaves_http_available_and_rules_locked` discovers a configured extra store, holds a synthetic primary loader, checks that both vault loads finish after release, requests `/health` over a real loopback listener, and exercises permission listing and answer transitions through the shipped router.
 
-### Explicit legacy permission migration (HS2-ZQ6TV2)
+### Explicit legacy permission discard (HS2-AFSF4X)
 
-- Behavior: a linked Git source exposes local decrypted candidates for review, and only selected answers with explicit consent copy to one checkout vault. The original vault remains intact, existing destination answers win, retries are idempotent, and unavailable vaults or stale candidates fail closed.
-- Unit: `crates/hotsheet-aitools/src/permission.rs # migration_requires_review_preserves_source_and_is_idempotent_across_destinations`.
-- End to end: `crates/hotsheet-cli/tests/cli.rs # permission_migrate_requires_review_and_explicit_selected_consent` on Linux (a separately built macOS CLI can trigger an interactive Keychain authorization prompt in headless tests); `crates/hotsheet-server/tests/http.rs # permission_migration_requires_explicit_checkout_and_preserves_shared_legacy_vault`; `clients/web/tests/providers.spec.ts # reviews legacy permission answers before copying them` at wide and phone widths; `clients/web/tests/ux-demo.spec.ts # keeps the legacy-answer review closed until requested` prevents its modal from blocking adjacent catalog interactions.
-- Vault test isolation (HS2-R8S894): the real-server HTTP permission tests and startup tests opt into in-memory credentials; the Linux CLI migration test runs under `--all-features` with a separate subprocess and the OS secret service, pinning the feature-unification boundary.
-- Manual: `docs/manual-test-plan.md # Legacy permission migration`.
+- Behavior: a verified linked Git source exposes only an answer count. Explicit confirmation deletes that source's old answers for every linked project; it preserves unrelated vault namespaces and checkout answers, withdraws cached grants, and retries idempotently. Missing or damaged vaults fail closed.
+- Unit: `crates/hotsheet-aitools/src/permission.rs # hs2_afsf4x_discards_only_source_scoped_legacy_answers_and_retries_safely`.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # hs2_afsf4x_permission_discard_requires_explicit_confirmation` on Linux (a separately built macOS CLI can trigger an interactive Keychain authorization prompt in headless tests); `crates/hotsheet-server/tests/http.rs # hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_grants`; `clients/web/tests/providers.spec.ts # discards legacy permission answers with confirmation` at wide and phone widths; `clients/web/tests/ux-demo.spec.ts # keeps the legacy-answer discard closed until requested` checks its modal.
+- Vault test isolation (HS2-R8S894): real-server HTTP permission tests and startup tests opt into in-memory credentials; the Linux CLI discard test runs under `--all-features` with a separate subprocess and the OS secret service.
+- Manual: `docs/manual-test-plan.md # Legacy permission discard`.
 
 ### Ticket-store attachment compaction (HS2-T2Q7KM)
 

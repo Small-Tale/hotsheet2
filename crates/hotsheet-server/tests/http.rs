@@ -17941,7 +17941,7 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
 }
 
 #[tokio::test]
-async fn permission_migration_requires_explicit_checkout_and_preserves_shared_legacy_vault() {
+async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_grants() {
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
@@ -18005,10 +18005,43 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
         },
     )
     .unwrap();
+    hotsheet_aitools::append_permission_rule(
+        &rules_path,
+        &hotsheet_aitools::PermissionRule {
+            project: "unrelated-source".into(),
+            tool: "Bash".into(),
+            action: "cargo test".into(),
+            exact_action: Some("cargo test".into()),
+            pattern: None,
+            description: None,
+            decision: hotsheet_aitools::PermissionDecision::Allow,
+            persist: true,
+            connection: None,
+        },
+    )
+    .unwrap();
     let state = AppState::new(store.clone(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path)
         .with_test_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    assert!(
+        bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("npm test"))
+    );
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            legacy_project.clone(),
+            "before-discard",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny,
+        ),
+        hotsheet_aitools::PermissionDecision::Allow,
+    );
     let router = app(state);
     assert_eq!(
         router
@@ -18016,7 +18049,23 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
             .oneshot(authed(
                 "GET",
                 &format!(
-                    "/checkouts/{}/permissions/migration?source={source_id}",
+                    "/checkouts/{}/permissions/legacy?source={other_source_id}",
+                    first.id
+                ),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{}/permissions/legacy?source={source_id}",
                     external.id
                 ),
                 None,
@@ -18027,7 +18076,7 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
         StatusCode::CONFLICT,
     );
     let preview_path = format!(
-        "/checkouts/{}/permissions/migration?source={source_id}",
+        "/checkouts/{}/permissions/legacy?source={source_id}",
         first.id
     );
     let preview = body_json(
@@ -18043,49 +18092,97 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
         first.permission_identity(),
         "{preview}"
     );
-    assert_eq!(preview["rules"][0]["action"], "npm test");
-    let id = preview["rules"][0]["id"].as_str().unwrap();
-    let apply_path = format!("/checkouts/{}/permissions/migration", first.id);
-    let denied =
-        serde_json::json!({"source":source_id,"selected_ids":[id],"consent":false}).to_string();
+    assert_eq!(preview["count"], 1);
+    assert!(preview.get("rules").is_none());
+    let apply_path = format!("/checkouts/{}/permissions/legacy", first.id);
+    let denied = serde_json::json!({"source":source_id,"confirm":false}).to_string();
     assert_eq!(
         router
             .clone()
-            .oneshot(authed("POST", &apply_path, Some(&denied)))
+            .oneshot(authed("DELETE", &apply_path, Some(&denied)))
             .await
             .unwrap()
             .status(),
         StatusCode::BAD_REQUEST
     );
-    let body =
-        serde_json::json!({"source":source_id,"selected_ids":[id],"consent":true}).to_string();
-    let copied = body_json(
+    let body = serde_json::json!({"source":source_id,"confirm":true}).to_string();
+    let intact = std::fs::read(&rules_path).unwrap();
+    std::fs::write(&rules_path, b"damaged vault").unwrap();
+    assert_eq!(
         router
             .clone()
-            .oneshot(authed("POST", &apply_path, Some(&body)))
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+    );
+    assert!(
+        !bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("npm test"))
+    );
+    std::fs::write(&rules_path, intact).unwrap();
+    let discarded = body_json(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
             .await
             .unwrap(),
     )
     .await;
-    assert_eq!(copied["added"], 1);
+    assert_eq!(discarded["discarded"], 1);
+    assert!(
+        !bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("npm test"))
+    );
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            legacy_project.clone(),
+            "after-discard",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny,
+        ),
+        hotsheet_aitools::PermissionDecision::Deny,
+    );
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            legacy_project.clone(),
+            "unrelated",
+            "Bash",
+            "cargo test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny,
+        ),
+        hotsheet_aitools::PermissionDecision::Deny,
+    );
     let retry = body_json(
         router
             .clone()
-            .oneshot(authed("POST", &apply_path, Some(&body)))
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
             .await
             .unwrap(),
     )
     .await;
-    assert_eq!(retry["existing"], 1);
+    assert_eq!(retry["discarded"], 0);
     assert_eq!(
         hotsheet_aitools::load_permission_rules(&rules_path).len(),
         1
+    );
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path)[0].project,
+        "unrelated-source"
     );
     let first_rules = rules_path.with_file_name(format!("checkout-{}.json", first.id));
     let second_rules = rules_path.with_file_name(format!("checkout-{}.json", second.id));
     assert_eq!(
         hotsheet_aitools::load_permission_rules(&first_rules).len(),
-        1
+        0
     );
     assert!(hotsheet_aitools::load_permission_rules(&second_rules).is_empty());
     let restarted = app(AppState::new(store, SECRET.into())
@@ -18100,7 +18197,7 @@ async fn permission_migration_requires_explicit_checkout_and_preserves_shared_le
     )
     .await;
     assert!(
-        listed
+        !listed
             .as_array()
             .unwrap()
             .iter()

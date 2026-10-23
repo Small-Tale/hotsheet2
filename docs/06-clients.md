@@ -2747,10 +2747,10 @@ the three most recently remembered answers, newest first. A centered, bordered s
 button, matching Load more tickets, opens the searchable dialog by pointer or keyboard
 (HS2-Q6GKWQ, HS2-CSBW35). The dialog starts with 100 answers in a bounded scrolling list
 and loads another 100 on request, still newest first (HS2-988X4X).
-Legacy answers lists linked Git sources separately. Reviewing one source opens an explicit
-selection dialog with its remembered actions and explains that copying extends each chosen
-answer to every AI session in the code project. Cancel leaves both vaults unchanged; Copy
-selected preserves the source vault and refreshes the project answer list (HS2-ZQ6TV2).
+Legacy Answers lists linked Git sources separately. Opening one source shows its answer count
+without revealing action text. Confirmation discards that source's old answers for every linked
+project; future actions need fresh approval. Cancel leaves the encrypted vault unchanged
+(HS2-AFSF4X).
 Search sits above two equal-width segmented controls that filter the dialog by Persistent or
 Session and by Allow or Disallow, defaulting to Persistent and Allow. The controls stack at
 phone width. Session includes chat-only answers, whose exact lifetime remains in their row.

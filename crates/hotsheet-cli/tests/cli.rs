@@ -458,17 +458,15 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
 
 // A freshly built macOS CLI is a different unsigned Keychain client from this test
 // process. Reading the fixture credential can open an authorization prompt and hang
-// a headless test run. Linux CI exercises the complete cross-process migration flow;
+// a headless test run. Linux CI exercises the complete cross-process discard flow;
 // the permission vault's macOS behavior is covered in-process separately.
 #[cfg(not(target_os = "macos"))]
 #[test]
-fn permission_migrate_fixture_helper() {
-    let Ok(action) = std::env::var("HS2_PERMISSION_MIGRATE_FIXTURE") else {
+fn permission_discard_fixture_helper() {
+    let Ok(action) = std::env::var("HS2_PERMISSION_DISCARD_FIXTURE") else {
         return;
     };
     let source = std::path::PathBuf::from(std::env::var_os("HS2_PERMISSION_SOURCE").unwrap());
-    let destination =
-        std::path::PathBuf::from(std::env::var_os("HS2_PERMISSION_DESTINATION").unwrap());
     match action.as_str() {
         "seed" => {
             hotsheet_aitools::append_permission_rule(
@@ -486,23 +484,20 @@ fn permission_migrate_fixture_helper() {
                 },
             )
             .unwrap();
-            hotsheet_aitools::ensure_permission_rules_file(&destination).unwrap();
         }
-        "assert-empty" => assert!(hotsheet_aitools::load_permission_rules(&destination).is_empty()),
-        "assert-migrated" => {
-            assert_eq!(
-                hotsheet_aitools::load_permission_rules(&destination).len(),
-                1
-            );
-            assert_eq!(hotsheet_aitools::load_permission_rules(&source).len(), 1);
+        "assert-source-present" => {
+            assert_eq!(hotsheet_aitools::load_permission_rules(&source).len(), 1)
         }
-        _ => panic!("unexpected permission migration fixture action"),
+        "assert-source-empty" => {
+            assert!(hotsheet_aitools::load_permission_rules(&source).is_empty())
+        }
+        _ => panic!("unexpected permission discard fixture action"),
     }
 }
 
 #[cfg(not(target_os = "macos"))]
 #[test]
-fn permission_migrate_requires_review_and_explicit_selected_consent() {
+fn hs2_afsf4x_permission_discard_requires_explicit_confirmation() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let project = root.path().join("project");
@@ -524,16 +519,14 @@ fn permission_migrate_requires_review_and_explicit_selected_consent() {
         "{}.json",
         hotsheet_ticketing::git_connection_id(&store)
     ));
-    let destination = permissions.join(format!("checkout-{}.json", checkout.id));
     // HS2-5A6JNS keeps the encrypted key under HOTSHEET_HOME. Seed and inspect
     // the vault in isolated processes with the same home as the shipped CLI.
     let fixture = |action: &str| {
         let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "permission_migrate_fixture_helper"])
+            .args(["--exact", "permission_discard_fixture_helper"])
             .env("HOTSHEET_HOME", &home)
-            .env("HS2_PERMISSION_MIGRATE_FIXTURE", action)
+            .env("HS2_PERMISSION_DISCARD_FIXTURE", action)
             .env("HS2_PERMISSION_SOURCE", &source)
-            .env("HS2_PERMISSION_DESTINATION", &destination)
             .env("HS2_PERMISSION_PROJECT", store.root())
             .output()
             .unwrap();
@@ -549,7 +542,7 @@ fn permission_migrate_requires_review_and_explicit_selected_consent() {
         let mut cmd = hs(&project);
         cmd.env("HOTSHEET_HOME", &home)
             .args([
-                "permission-migrate",
+                "permission-discard",
                 "--project",
                 &checkout.id,
                 "--source",
@@ -560,14 +553,17 @@ fn permission_migrate_requires_review_and_explicit_selected_consent() {
     };
     let preview = run(&[]).assert().success().get_output().stdout.clone();
     let preview: serde_json::Value = serde_json::from_slice(&preview).unwrap();
-    assert_eq!(preview["rules"][0]["action"], "npm test");
-    let id = preview["rules"][0]["id"].as_str().unwrap();
-    run(&["--approve"]).assert().failure();
-    run(&["--id", id]).assert().failure();
-    fixture("assert-empty");
-    run(&["--approve", "--id", id]).assert().success();
-    run(&["--approve", "--id", id]).assert().success();
-    fixture("assert-migrated");
+    assert_eq!(preview["count"], 1);
+    assert!(preview.get("rules").is_none());
+    fixture("assert-source-present");
+    let instance_dir = home.join("instances");
+    std::fs::create_dir_all(&instance_dir).unwrap();
+    std::fs::write(instance_dir.join("other.json"), "{}").unwrap();
+    run(&["--confirm"]).assert().failure();
+    std::fs::remove_file(instance_dir.join("other.json")).unwrap();
+    run(&["--confirm"]).assert().success();
+    run(&["--confirm"]).assert().success();
+    fixture("assert-source-empty");
 }
 
 #[test]

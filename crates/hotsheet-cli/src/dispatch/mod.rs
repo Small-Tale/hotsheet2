@@ -117,7 +117,7 @@ impl Cmd {
             | AiSettings { .. }
             | Settings { .. }
             | PermissionHook { .. }
-            | PermissionMigrate { .. }
+            | PermissionDiscard { .. }
             | HookDiagnose { .. }
             | Launch { .. }
             | Trigger(_)
@@ -136,7 +136,7 @@ impl Cmd {
                 | Cmd::Checkout { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
-                | Cmd::PermissionMigrate { .. }
+                | Cmd::PermissionDiscard { .. }
                 | Cmd::Guidance { .. }
                 | Cmd::Serve { list: true, .. }
         )
@@ -158,7 +158,7 @@ impl Cmd {
                 | Cmd::Notifications { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
-                | Cmd::PermissionMigrate { .. }
+                | Cmd::PermissionDiscard { .. }
                 | Cmd::Guidance { .. }
                 | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
