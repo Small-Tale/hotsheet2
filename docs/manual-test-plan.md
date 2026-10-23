@@ -148,6 +148,11 @@ the default-on path is checked by hand.
    server: persistent answers return once, while a chat answer, session answer, and
    pending request remain. Repeat with a different authenticated vault file and confirm
    only its persistent answers return (HS2-8DAA0P).
+7. On a disposable macOS profile, delay Keychain approval while starting a server
+   with a primary and a configured extra store. Confirm `/health` responds before
+   approval, remembered permissions remain unavailable, and Allow Once still answers
+   a pending request. Approve Keychain access and confirm durable rules become
+   available without a server restart (HS2-Q7R2RM).
 
 ### Legacy permission migration (HS2-ZQ6TV2)
 

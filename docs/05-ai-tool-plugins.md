@@ -1171,6 +1171,14 @@ copied ad hoc server and CLI binaries with that identity; it leaves distribution
 signatures and build outputs unchanged (HS2-FYXRRM). The first launch under the
 new identity may need Keychain authorization, while later rebuilds retain the
 same code identity. Without setup, ad hoc rebuilds may request it again.
+The server binds HTTP before starting its primary and configured-store
+permission-vault Keychain loads on a separate thread (HS2-Q7R2RM). While those
+loads are pending, durable legacy answers cannot auto-allow or be edited, and an
+explicit Always answer returns 503 without resolving the pending request. Once
+the authenticated vault loads, its rules become available without replacing
+in-session or checkout answers, and a rule-change event notifies open clients;
+a load failure leaves the legacy vault locked. Health and unrelated routes
+remain available during an OS credential prompt.
 Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under

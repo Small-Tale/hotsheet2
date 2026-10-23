@@ -1252,6 +1252,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-aitools/src/permission.rs # checkout_vaults_keep_shared_store_permissions_isolated_after_reload` covers legacy lock and recovery without dropping checkout grants.
 - End to end: `crates/hotsheet-server/tests/http.rs # checkout_rules_survive_restart_without_crossing_a_shared_ticket_store` checks authenticated rule listing, matching, and pending-request capability through damage and recovery; `damaged_vault_after_startup_locks_list_and_disables_durable_auto_answers` covers the legacy-only 503.
 
+### Deferred legacy vault startup (HS2-Q7R2RM)
+
+- Behavior: primary and configured-store OS credential reads cannot prevent HTTP binding. While startup vault loads are pending, durable auto-answers and writes stay locked, Always is not offered, a direct Always answer returns 503 without resolving the ask, and Allow Once still works. Successful loading restores durable rules without discarding live session or checkout rules; failure stays locked.
+- Unit: `crates/hotsheet-server/src/permission_startup_tests.rs # failed_vault_loader_stays_closed` pins the error transition with synthetic credentials.
+- End to end: `crates/hotsheet-server/src/permission_startup_tests.rs # stalled_vault_loader_leaves_http_available_and_rules_locked` discovers a configured extra store, holds a synthetic primary loader, checks that both vault loads finish after release, requests `/health` over a real loopback listener, and exercises permission listing and answer transitions through the shipped router.
+
 ### Explicit legacy permission migration (HS2-ZQ6TV2)
 
 - Behavior: a linked Git source exposes local decrypted candidates for review, and only selected answers with explicit consent copy to one checkout vault. The original vault remains intact, existing destination answers win, retries are idempotent, and unavailable vaults or stale candidates fail closed.

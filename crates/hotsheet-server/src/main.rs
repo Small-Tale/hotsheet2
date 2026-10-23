@@ -265,7 +265,7 @@ async fn main() -> Result<()> {
         .join(&store_id);
     let mut state = AppState::with_index(store, secret.clone(), index)
         .with_persistent_registered_indexes()
-        .with_permission_rules(permission_rules_path)
+        .with_permission_rules_deferred(permission_rules_path)
         .with_client_drive_persistence(
             drive_root.join("sessions.json"),
             drive_root.join("homes"),
@@ -286,7 +286,7 @@ async fn main() -> Result<()> {
     }
 
     // Auto-host any stores configured in ${HOTSHEET_HOME}/stores.json (HS2-87 discovery).
-    let extra = state.host_configured_stores();
+    let extra = state.host_configured_stores_deferred();
     if extra > 0 {
         println!("hosting {extra} configured store(s) from stores.json");
     }
@@ -318,6 +318,9 @@ async fn main() -> Result<()> {
     let local = listener.local_addr()?;
     let url = format!("{scheme}://{local}");
     state.set_terminal_server_url(url.clone());
+    // Keychain can block for an OS approval. The bridge remains fail-closed until
+    // this loader finishes, while unrelated HTTP routes can start (HS2-Q7R2RM).
+    let _permission_rules_load = state.spawn_permission_rules_load();
     println!(
         "hotsheet-server listening on {url} (store: {}){}",
         cli.path.display(),

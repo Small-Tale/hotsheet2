@@ -268,6 +268,9 @@ pub struct AppState {
     /// Where `Always` allow-rules persist (a store-local JSON file), so remembered answers
     /// survive a restart. `None` in tests (they don't touch disk for rules).
     permission_rule_paths: Arc<Mutex<std::collections::HashMap<String, std::path::PathBuf>>>,
+    /// While startup loads the legacy vault off-thread, no route may retry Keychain on
+    /// an HTTP worker or offer a durable answer (HS2-Q7R2RM).
+    permission_rules_loading: Arc<AtomicBool>,
     /// One-time Allows whose reviewed persistent rule is still being composed (HS2-WZK2QK).
     permission_rule_continuations: Arc<
         Mutex<
@@ -536,6 +539,7 @@ impl AppState {
             worklist_refresher: Default::default(),
             permissions,
             permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            permission_rules_loading: Arc::new(AtomicBool::new(false)),
             permission_rule_continuations: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but
             // the shared one tracks "currently driving" by registration, not the window.
@@ -878,15 +882,42 @@ impl AppState {
     }
 
     /// Seed the permission bridge with the durable `Always` allow-rules stored at `path`,
-    /// and persist future `Always` answers there (call this in a real run; leave off in
-    /// tests so they never touch disk). Builder-style.
+    /// and persist future `Always` answers there. This synchronous builder remains
+    /// for tests and embedders; the server binary uses deferred loading so Keychain
+    /// cannot delay HTTP binding (HS2-Q7R2RM).
     pub fn with_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self {
         let path = path.into();
+        self.register_permission_rule_path(&path);
+        let key = match hotsheet_aitools::permission_action_key_for(&path) {
+            Ok(key) => key,
+            Err(error) => {
+                tracing::warn!(%error, "permission action key unavailable; durable rules disabled");
+                self.permissions.drop_durable_rules();
+                return self;
+            }
+        };
+        self.permissions
+            .reseed_rules_with_key(key, self.legacy_permission_rules(&path));
+        self
+    }
+
+    /// Configure the legacy vault without touching Keychain. Production calls this
+    /// before binding, then starts the loader after the listener exists. Durable
+    /// auto-answers and writes fail closed until the loader succeeds (HS2-Q7R2RM).
+    pub fn with_permission_rules_deferred(self, path: impl Into<std::path::PathBuf>) -> Self {
+        let path = path.into();
+        self.register_permission_rule_path(&path);
+        self.permissions.drop_durable_rules();
+        self.permission_rules_loading.store(true, Ordering::Release);
+        self
+    }
+
+    fn register_permission_rule_path(&self, path: &std::path::Path) {
         let project = self.store.root().display().to_string();
         {
             let mut paths = self.permission_rule_paths.lock_or_recover();
-            paths.insert(String::new(), path.clone());
-            paths.insert(project.clone(), path.clone());
+            paths.insert(String::new(), path.to_path_buf());
+            paths.insert(project, path.to_path_buf());
         }
         let validation_paths = self.permission_rule_paths.clone();
         self.permissions.set_durable_validator(move |project| {
@@ -897,15 +928,14 @@ impl AppState {
                     path.is_file() && hotsheet_aitools::permission_rules_health(path).is_ok()
                 })
         });
-        let key = match hotsheet_aitools::permission_action_key_for(&path) {
-            Ok(key) => key,
-            Err(error) => {
-                tracing::warn!(%error, "permission action key unavailable; durable rules disabled");
-                self.permissions.drop_durable_rules();
-                return self;
-            }
-        };
-        let stored_rules = hotsheet_aitools::load_permission_rules(&path);
+    }
+
+    fn legacy_permission_rules(
+        &self,
+        path: &std::path::Path,
+    ) -> Vec<hotsheet_aitools::PermissionRule> {
+        let project = self.store.root().display().to_string();
+        let stored_rules = hotsheet_aitools::load_permission_rules(path);
         let mut rules = stored_rules
             .clone()
             .into_iter()
@@ -918,9 +948,76 @@ impl AppState {
             rule.project = project.clone();
             rule
         }));
-        // Re-seed the bridge with the loaded rules (keeping the on_pending observer).
-        self.permissions.reseed_rules_with_key(key, rules);
-        self
+        rules
+    }
+
+    /// Begin the potentially blocking OS credential lookup after HTTP has bound.
+    /// A failed read leaves legacy durable rules locked; Settings can retry later.
+    pub fn spawn_permission_rules_load(&self) -> std::thread::JoinHandle<()> {
+        self.spawn_permission_rules_load_with(hotsheet_aitools::load_permission_rules_with_key)
+    }
+
+    fn spawn_permission_rules_load_with<F>(&self, load: F) -> std::thread::JoinHandle<()>
+    where
+        F: Fn(
+                &std::path::Path,
+            ) -> std::io::Result<([u8; 32], Vec<hotsheet_aitools::PermissionRule>)>
+            + Send
+            + 'static,
+    {
+        let paths = self.permission_rule_paths.lock_or_recover().clone();
+        let path = paths
+            .get("")
+            .cloned()
+            .expect("deferred permission rules path configured");
+        let project = self.store.root().display().to_string();
+        let extra_paths = paths
+            .into_iter()
+            .filter(|(name, _)| {
+                !name.is_empty() && name != &project && !name.starts_with("checkout:")
+            })
+            .collect::<Vec<_>>();
+        let state = self.clone();
+        std::thread::spawn(move || {
+            match load(&path) {
+                Ok((key, stored)) => {
+                    let mut rules = stored.clone();
+                    for rule in &mut rules {
+                        rule.project.clear();
+                    }
+                    rules.extend(stored.into_iter().map(|mut rule| {
+                        rule.project = project.clone();
+                        rule
+                    }));
+                    state.permissions.restore_durable_rules_with_key(key, rules);
+                    routes::terminals::emit_permission_rules_changed(&state, &project);
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "permission action key unavailable; durable rules disabled")
+                }
+            }
+            for (project, path) in extra_paths {
+                match load(&path) {
+                    Ok((key, rules)) => {
+                        let rules = rules
+                            .into_iter()
+                            .map(|mut rule| {
+                                rule.project = project.clone();
+                                rule
+                            })
+                            .collect();
+                        state.permissions.add_project_rules(&project, key, rules);
+                        routes::terminals::emit_permission_rules_changed(&state, &project);
+                    }
+                    Err(error) => {
+                        tracing::warn!(%project, %error, "configured permission vault unavailable")
+                    }
+                }
+            }
+            state
+                .permission_rules_loading
+                .store(false, Ordering::Release);
+        })
     }
 
     /// The shared permission bridge — the drive/tool side blocks on it via
@@ -1904,3 +2001,6 @@ mod ai_terminal_tool_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod permission_startup_tests;

@@ -86,6 +86,14 @@ impl AppState {
     /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
     /// was newly added. Shared by `POST /stores` and startup discovery.
     pub(crate) fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
+        self.host_store_with_permission_loading(store, false)
+    }
+
+    fn host_store_with_permission_loading(
+        &self,
+        store: FsStore,
+        defer_permission_rules: bool,
+    ) -> Result<bool, ApiError> {
         let store = store.with_deferred_push().with_background_autocommit();
         // Validate the store boundary before registering an index, watcher, or discovery
         // file. Otherwise an older server can appear to accept a newer store and fail only
@@ -134,15 +142,17 @@ impl AppState {
                 .map(|directory| directory.join(format!("{id}.json")))
         };
         if let Some(path) = rule_path {
-            if let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) {
-                let rules = rules
-                    .into_iter()
-                    .map(|mut rule| {
-                        rule.project = project.clone();
-                        rule
-                    })
-                    .collect();
-                self.permissions.add_project_rules(&project, key, rules);
+            if !defer_permission_rules {
+                if let Ok((key, rules)) = hotsheet_aitools::load_permission_rules_with_key(&path) {
+                    let rules = rules
+                        .into_iter()
+                        .map(|mut rule| {
+                            rule.project = project.clone();
+                            rule
+                        })
+                        .collect();
+                    self.permissions.add_project_rules(&project, key, rules);
+                }
             }
             self.permission_rule_paths
                 .lock_or_recover()
@@ -369,10 +379,25 @@ impl AppState {
     /// discovery). A path that isn't a store is logged and skipped — one bad entry never
     /// stops the server. Returns how many were newly hosted.
     pub fn host_configured_stores(&self) -> usize {
+        self.host_configured_stores_with_permission_loading(false)
+    }
+
+    /// Register configured stores before the server binds, leaving their vault
+    /// reads to the post-bind loader (HS2-Q7R2RM).
+    pub fn host_configured_stores_deferred(&self) -> usize {
+        self.host_configured_stores_with_permission_loading(true)
+    }
+
+    fn host_configured_stores_with_permission_loading(
+        &self,
+        defer_permission_rules: bool,
+    ) -> usize {
         let mut hosted = 0;
         for path in multistore::configured_store_paths(&self.machine_home) {
             match FsStore::open(&path) {
-                Ok(store) => match self.host_store(store) {
+                Ok(store) => match self
+                    .host_store_with_permission_loading(store, defer_permission_rules)
+                {
                     Ok(true) => hosted += 1,
                     Ok(false) => {}
                     Err(e) => tracing::warn!("could not host {}: {}", path.display(), e.message),

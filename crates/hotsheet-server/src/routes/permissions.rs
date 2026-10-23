@@ -208,8 +208,10 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
                     tool: request.tool,
                     action: request.action,
                     agent: request.agent,
-                    always_allow_supported: rule_projects.get(&request.project).is_some_and(
-                        |path| {
+                    always_allow_supported: !state
+                        .permission_rules_loading
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        && rule_projects.get(&request.project).is_some_and(|path| {
                             if path.is_file() {
                                 hotsheet_aitools::permission_rules_health(path).is_ok()
                             } else {
@@ -221,8 +223,7 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
                                             && rule.project == request.project
                                     })
                             }
-                        },
-                    ),
+                        }),
                     suggestions,
                 }
             })

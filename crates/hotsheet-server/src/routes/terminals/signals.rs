@@ -998,6 +998,16 @@ pub(crate) async fn resolve_permission(
             .ok_or_else(|| {
                 ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}"))
             })?;
+        if !project.starts_with("checkout:")
+            && state
+                .permission_rules_loading
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "permission-rule store still loading",
+            ));
+        }
         let path = state
             .permission_rule_paths
             .lock_or_recover()
@@ -1135,6 +1145,16 @@ pub(crate) async fn remember_permission_after_allow(
         .get(&id)
         .map(|(request, _)| request.clone())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no active permission rule review"))?;
+    if !request.project.starts_with("checkout:")
+        && state
+            .permission_rules_loading
+            .load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission-rule store still loading",
+        ));
+    }
     if let Some(description) = body.description.as_deref() {
         if !request.tool.eq_ignore_ascii_case("bash")
             || !hotsheet_aitools::valid_user_bash_description(description)
@@ -1212,6 +1232,15 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
 pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
+    if state
+        .permission_rules_loading
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission-rule store still loading",
+        ));
+    }
     for checkout in state.checkout_registry.list().unwrap_or_default() {
         state.register_checkout_permission_rules(&checkout.permission_identity());
     }
@@ -1327,6 +1356,15 @@ pub(crate) async fn update_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<UpdatePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
+    if state
+        .permission_rules_loading
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission-rule store still loading",
+        ));
+    }
     let (path, mirror_legacy) = {
         let paths = state.permission_rule_paths.lock_or_recover();
         let path = paths.get(&body.project).cloned();
@@ -1418,6 +1456,15 @@ pub(crate) async fn revoke_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<RevokePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
+    if state
+        .permission_rules_loading
+        .load(std::sync::atomic::Ordering::Acquire)
+    {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission-rule store still loading",
+        ));
+    }
     let path = state
         .permission_rule_paths
         .lock_or_recover()
