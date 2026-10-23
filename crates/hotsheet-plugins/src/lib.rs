@@ -722,6 +722,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/requirements-documentation.md"),
         ),
         (
+            "sandbox-recovery.md",
+            include_str!("../../../plugins/shared/sandbox-recovery.md"),
+        ),
+        (
             "testing-philosophy.md",
             include_str!("../../../plugins/shared/testing-philosophy.md"),
         ),

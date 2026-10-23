@@ -132,6 +132,27 @@ mod tests {
     }
 
     #[test]
+    fn hs2_dvzxsd_setup_renders_sandbox_recovery_for_launched_agents() {
+        for (tool, skill_path) in [
+            ("claude", ".claude/skills/hotsheet/SKILL.md"),
+            ("codex", ".agents/skills/hotsheet/SKILL.md"),
+        ] {
+            let d = project();
+            setup(d.path(), d.path(), Some(tool), false).unwrap();
+            let instructions = read(d.path(), "AGENTS.md");
+            let skill = read(d.path(), skill_path);
+            for guidance in [instructions, skill] {
+                assert!(guidance.contains("Operation not permitted (os error 1)"));
+                assert!(guidance.contains("hotsheet_*"));
+                assert!(guidance.contains("EPERM"));
+                assert!(guidance.contains("mach-port"));
+                assert!(guidance.contains("unsandboxed"));
+                assert!(guidance.contains("blocked"));
+            }
+        }
+    }
+
+    #[test]
     fn setup_claude_writes_canonical_guidance_native_import_and_integrations() {
         let d = project();
         let reports = setup(d.path(), d.path(), Some("claude"), false).unwrap();

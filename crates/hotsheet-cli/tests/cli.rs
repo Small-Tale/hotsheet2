@@ -2567,11 +2567,12 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
         rendered_instruction(include_str!("../../../plugins/codex/instructions.md").trim_end());
     let expected = |tools: &str| {
         format!(
-            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n\n{}\n",
+            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
             include_str!("../../../plugins/shared/ticket-driven-work.md").trim(),
             include_str!("../../../plugins/shared/testing-philosophy.md").trim(),
             include_str!("../../../plugins/shared/requirements-documentation.md").trim(),
             include_str!("../../../plugins/shared/visual-qa.md").trim(),
+            include_str!("../../../plugins/shared/sandbox-recovery.md").trim(),
         )
     };
 

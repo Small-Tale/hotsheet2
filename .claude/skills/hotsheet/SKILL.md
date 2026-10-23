@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 65 -->
+<!-- hotsheet-skill-version: 66 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -177,6 +177,14 @@ Notes:
 
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work
   without a server.
+- In a Hot Sheet-launched sandbox, `hotsheet-cli` may fail to open a sibling
+  `<repo>.hs2` store with `Operation not permitted (os error 1)`. Use the
+  configured `hotsheet_*` MCP tools for that operation and preserve the same
+  claim, actor, note, and completion workflow (HS2-DVZXSD).
+- If a Chromium or WebKit browser gate cannot launch because of EPERM or a
+  mach-port denial, rerun that gate with approved unsandboxed execution. If
+  approval or a browser is unavailable, record the gate as blocked, not passed
+  (HS2-DVZXSD).
 - Confirm HS2 generation before using connected MCP: `hotsheet-store.json` (directly
   or through `.hotsheet2/store`, with read-only legacy `.hotsheet/store` fallback)
   identifies HS2; `.hotsheet/db/PG_VERSION` identifies

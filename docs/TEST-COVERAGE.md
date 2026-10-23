@@ -1,5 +1,13 @@
 # Feature Coverage Matrix
 
+HS2-DVZXSD pins launched-agent sandbox recovery in
+`crates/hotsheet-plugins/src/tests.rs # hs2_dvzxsd_launched_workflows_explain_sandbox_fallbacks`
+and `crates/hotsheet-cli/src/setup.rs # hs2_dvzxsd_setup_renders_sandbox_recovery_for_launched_agents`.
+The source and generated Claude/Codex guidance names the MCP fallback for
+sibling-store `Operation not permitted (os error 1)`, plus approved unsandboxed
+browser-gate retry for EPERM or mach-port launch denials. The actual host
+sandbox behavior remains a manual launched-session check.
+
 HS2-CD3D2T provides a checked-in root gate, gate-before-push command, and
 pre-commit/pre-push hooks. `scripts/git-hooks.test.mjs` uses temporary Git
 repositories to verify clean-tree cache reuse and invalidation, no duplicate

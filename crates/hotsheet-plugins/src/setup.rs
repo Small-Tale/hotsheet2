@@ -1876,6 +1876,11 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             "../../../plugins/shared/legacy-visual-qa-v1.md"
         )],
     },
+    GuidanceSection {
+        name: "sandbox-recovery",
+        current: include_str!("../../../plugins/shared/sandbox-recovery.md"),
+        legacy: &[],
+    },
 ];
 
 fn guidance_bounds(contents: &str, name: &str) -> Option<(usize, usize)> {
@@ -4123,8 +4128,9 @@ args = ["--path", "{{store}}"]
         let path = project.path().join("AGENTS.md");
         let mut contents = std::fs::read_to_string(&path).unwrap();
         for section in GUIDANCE_SECTIONS {
-            let previous = section.legacy.last().expect("new snapshot has prior body");
-            contents = contents.replace(section.current.trim(), previous.trim());
+            if let Some(previous) = section.legacy.last() {
+                contents = contents.replace(section.current.trim(), previous.trim());
+            }
         }
         contents.push_str("\nLocal policy remains.\n");
         std::fs::write(&path, contents).unwrap();
@@ -4138,7 +4144,9 @@ args = ["--path", "{{store}}"]
                 "{} did not upgrade",
                 section.name
             );
-            assert!(!refreshed.contains(section.legacy.last().unwrap().trim()));
+            if let Some(previous) = section.legacy.last() {
+                assert!(!refreshed.contains(previous.trim()));
+            }
         }
         assert!(refreshed.contains("Local policy remains."));
     }

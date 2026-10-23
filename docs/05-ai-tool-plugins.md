@@ -499,6 +499,17 @@ shim on that `PATH` or keep its MCP entry in a local-only tool config. In a link
 worktree the entry goes to the common directory's `info/exclude` (via the gitdir's
 `commondir`), because git never reads a per-worktree exclude file (HS2-8XTDZP).
 
+Launched-agent guidance handles sandbox denials explicitly (HS2-DVZXSD).
+A sibling `<repo>.hs2` ticket store can be outside the command sandbox even
+when its configured MCP shim can reach it. When `hotsheet-cli` reports
+`Operation not permitted (os error 1)` opening the store, the agent uses the
+equivalent `hotsheet_*` MCP operation without treating the store as corrupt.
+If Chromium or WebKit fails to launch with EPERM or a mach-port denial, the
+agent reruns that browser gate through approved unsandboxed execution. Without
+that approval or a browser, the gate remains blocked and is never reported as
+passing. Setup renders this recovery path into the shared instructions and the
+Claude/Codex worklist skills; it does not widen filesystem access automatically.
+
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
 summaries use repository-relative paths inside the current checkout. References to another

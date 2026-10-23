@@ -5,6 +5,17 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Launched-agent sandbox recovery (HS2-DVZXSD)
+
+Launch Claude Code and Codex for a project whose ticket store is the sibling
+`<repo>.hs2` directory. If the command sandbox denies `hotsheet-cli ls
+--up-next` with `Operation not permitted (os error 1)`, confirm the agent
+reads and updates the same synthetic test ticket through configured
+`hotsheet_*` MCP tools, preserving its claim and actor. On a host where the
+sandbox denies Chromium or WebKit startup with EPERM or a mach-port error,
+confirm the agent requests approved unsandboxed execution for that browser
+gate and reports it blocked if approval or the browser is unavailable.
+
 ### Gallery annotation conflict (HS2-8SD6XQ, HS2-KTHP6F)
 
 With a real attachment provider, open the same image in two clients, save a markup
