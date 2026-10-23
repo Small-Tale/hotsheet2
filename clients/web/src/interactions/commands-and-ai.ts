@@ -73,7 +73,6 @@ export interface CommandAndAiInteractionsDependencies {
   readonly refreshAiConfiguration: (current?: Project, refresh?: boolean) => Promise<void>;
   readonly guidanceOverview: Signal<GuidanceOverview | undefined>;
   readonly guidanceLoading: Signal<boolean>;
-  readonly guidanceQuery: Signal<string>;
   readonly guidanceOwnerFilter: Signal<string>;
   readonly guidanceTagFilter: Signal<string>;
   readonly guidanceRepository: Signal<string>;
@@ -236,7 +235,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshAiConfiguration,
     guidanceOverview,
     guidanceLoading,
-    guidanceQuery,
     guidanceOwnerFilter,
     guidanceTagFilter,
     guidanceRepository,
@@ -1013,11 +1011,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', 'input[name="guidance-search"]', (_event, target) => {
-      guidanceQuery.value = (target as HTMLInputElement).value;
     }),
   );
   lifetime.add(

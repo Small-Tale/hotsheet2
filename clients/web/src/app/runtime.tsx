@@ -136,6 +136,7 @@ import { createWorkspaceSearchController, type SidebarSearchCounts } from '../fe
 import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
+import { createGuidanceSearchModel } from '../guidance-search-model';
 import {
   guidanceUpdateBuildIdentity,
   type GuidanceUpdateCacheEntry,
@@ -449,7 +450,8 @@ export async function startHotSheetWebClient() {
   const rulesyncUpdateReport = signal<RulesyncUpdateReport | null>(null);
   const guidanceLoading = signal(false);
   const guidanceMessage = signal('');
-  const guidanceQuery = signal('');
+  const guidanceSearchOpen = signal(false);
+  const guidanceSearchModel = createGuidanceSearchModel(() => guidanceOverview.value);
   const guidanceOwnerFilter = signal('');
   const guidanceTagFilter = signal('');
   const guidanceRepository = signal('');
@@ -1518,7 +1520,8 @@ export async function startHotSheetWebClient() {
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
       guidanceSourceId.value = 'ai-playbook';
-      guidanceQuery.value = '';
+      guidanceSearchModel.clear();
+      guidanceSearchOpen.value = false;
       guidanceOwnerFilter.value = '';
       guidanceTagFilter.value = '';
     }
@@ -3969,7 +3972,7 @@ export async function startHotSheetWebClient() {
       bundledGuidanceBlocked: project()?.bundledGuidanceBlocked,
       loading: guidanceLoading.value,
       message: guidanceMessage.value,
-      query: guidanceQuery.value,
+      search: guidanceSearchModel.state.value,
       repository: guidanceRepository.value,
       sourceRef: guidanceRef.value,
       sourceId: guidanceSourceId.value,
@@ -4277,6 +4280,7 @@ export async function startHotSheetWebClient() {
     repositorySizeReport,
     searchHelpOpen,
     searchOpen,
+    guidanceSearchOpen,
     previewInspectorProps,
     selectedCorruptKey,
     selectedInspectorProps,
@@ -4312,6 +4316,7 @@ export async function startHotSheetWebClient() {
     viewMode,
     viewportMobile,
     workspaceSearchModel,
+    guidanceSearchModel,
     workspaceSurfaceProps,
   });
 
@@ -4851,7 +4856,6 @@ export async function startHotSheetWebClient() {
     commandGroupsCollapsed,
     guidanceOverview,
     guidanceLoading,
-    guidanceQuery,
     guidanceOwnerFilter,
     guidanceTagFilter,
     guidanceRepository,
@@ -5003,7 +5007,10 @@ export async function startHotSheetWebClient() {
     openTicketLinkMatch,
     cancelTicketLinkChoice,
     searchOpen,
+    guidanceSearchOpen,
     workspaceSearchModel,
+    guidanceSearchModel,
+    guidanceSearchActive: () => viewMode.value === 'settings' && settingsCategory() === 'guidance',
     workspaceSearchTokenOffset,
     searchHelpOpen,
     focusWorkspaceSearch,

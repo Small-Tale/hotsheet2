@@ -118,6 +118,18 @@ describe('WorkspaceHeader', () => {
       'data-segment-value="settings" data-selected="true" aria-label="Settings View" aria-pressed="true"',
     );
     expect(markup).not.toContain('data-search-field-editor="workspace-search"');
+    const guidance = String(
+      WorkspaceControls({
+        mode: 'settings',
+        guidanceSearch: true,
+        searchOpen: true,
+        searchModel: searchModelWith('', []),
+      }),
+    );
+    expect(guidance).toContain('data-search-field-editor="guidance-search"');
+    expect(guidance).toContain('role="searchbox" aria-label="Search guidance rules"');
+    expect(guidance).toContain('Focus Search');
+    expect(guidance).not.toContain('aria-label="Search Syntax Help"');
     expect(enabled).toContain('data-search-field-editor="workspace-search"');
     expect(enabled).toContain('role="searchbox" aria-label="Search tickets"');
     expect(enabled).toMatch(

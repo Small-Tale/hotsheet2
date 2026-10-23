@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-6ZA2RN covers Project guidance's toolbar search with
+`clients/web/src/guidance-search-model.test.ts` for text, owner/tag chips,
+suggestions, and clearing; `clients/web/tests/guidance.spec.ts` exercises the
+composed screen at wide, medium, and phone widths, including keyboard behavior.
+
 HS2-DVZXSD pins launched-agent sandbox recovery in
 `crates/hotsheet-plugins/src/tests.rs # hs2_dvzxsd_launched_workflows_explain_sandbox_fallbacks`
 and `crates/hotsheet-cli/src/setup.rs # hs2_dvzxsd_setup_renders_sandbox_recovery_for_launched_agents`.

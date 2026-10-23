@@ -5,6 +5,7 @@ import { rem } from '@kerfjs/ui/css-values';
 import { Disclosure } from '@kerfjs/ui/disclosure';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import type { SearchFieldState } from '@kerfjs/ui/search-field-model';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
@@ -19,6 +20,7 @@ import type {
   GuidanceSourceUpdate,
   RulesyncUpdateReport,
 } from '../api';
+import { createGuidanceSearchModel, guidanceRuleMatches } from '../guidance-search-model';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export interface GuidanceSettingsProps {
@@ -42,7 +44,9 @@ export interface GuidanceSettingsProps {
   rulesyncUpdateReport?: RulesyncUpdateReport | null;
   loading: boolean;
   message: string;
-  query: string;
+  search?: SearchFieldState;
+  /** Standalone demo compatibility; the application supplies the toolbar model. */
+  query?: string;
   repository: string;
   sourceRef: string;
   sourceId: string;
@@ -63,9 +67,12 @@ export interface GuidanceSettingsProps {
   }[];
 }
 
+const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
+
 /** Project Settings → AI tools: discover and apply pinned guidance (HS2-2RD1M1). */
 export function GuidanceSettings(props: GuidanceSettingsProps) {
-  const { overview, loading, message, query, repository, sourceRef, sourceId, ownerFilter, tagFilter } = props;
+  const { overview, loading, message, repository, sourceRef, sourceId, ownerFilter, tagFilter } = props;
+  const search = props.search ?? emptyGuidanceSearch;
   const rules = overview?.sources.flatMap((source) => source.rules) ?? [];
   const owners = [
     ...new Set(rules.map((rule) => rule.owner).filter((owner): owner is string => Boolean(owner))),
@@ -541,7 +548,6 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
         {overview?.sources.length ? (
           <List gap="l">
             <Grid minColumnWidth={rem(12)} gap="m">
-              <TextField name="guidance-search" label="Search Rules" value={query} />
               <Select
                 name="guidance-owner-filter"
                 label="Owner"
@@ -558,7 +564,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             {overview.sources.map((source) => {
               const visible = source.rules.filter(
                 (rule) =>
-                  (!query || `${rule.name} ${rule.description}`.toLowerCase().includes(query.toLowerCase())) &&
+                  guidanceRuleMatches(rule, search) &&
                   (!ownerFilter || rule.owner === ownerFilter) &&
                   (!tagFilter || rule.tags.includes(tagFilter)),
               );

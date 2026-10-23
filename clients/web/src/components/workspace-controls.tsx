@@ -102,6 +102,8 @@ export interface WorkspaceHeaderProps {
   mode: WorkspaceViewMode;
   presentation?: WorkspaceControlsPresentation;
   searchOpen?: boolean;
+  /** Guidance search replaces ticket search only in Project guidance (HS2-6ZA2RN). */
+  guidanceSearch?: boolean;
   /**
    * The Kerf-managed workspace search model the TicketSearchField renders (HS2-5JXBQY). The app
    * always passes its own; a standalone preview without one renders an inert, tag-less model.
@@ -303,6 +305,8 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
 function WorkspaceOverflowControls({
   mode,
   projectActionsDisabled,
+  searchDisabled,
+  guidanceSearch,
   ticketActionsDisabled,
   selectedActionsDisabled,
   searchOpen,
@@ -316,6 +320,8 @@ function WorkspaceOverflowControls({
 }: {
   mode: WorkspaceViewMode;
   projectActionsDisabled: boolean;
+  searchDisabled: boolean;
+  guidanceSearch: boolean;
   ticketActionsDisabled: boolean;
   selectedActionsDisabled: boolean;
   searchOpen: boolean;
@@ -385,8 +391,8 @@ function WorkspaceOverflowControls({
         }),
         { kind: 'divider' },
         {
-          label: searchOpen ? 'Focus Search' : 'Search Tickets',
-          disabled: projectActionsDisabled,
+          label: searchOpen ? 'Focus Search' : guidanceSearch ? 'Search Guidance Rules' : 'Search Tickets',
+          disabled: searchDisabled,
           icon: overflowIcon(Search, 'search'),
           attributes: {
             'data-workspace-overflow-kind': 'search',
@@ -432,6 +438,7 @@ function WorkspaceOverflowControls({
  */
 export function WorkspaceControls({
   mode,
+  guidanceSearch = false,
   presentation = 'toolbar',
   searchOpen = false,
   searchModel = previewSearchModel(),
@@ -445,7 +452,8 @@ export function WorkspaceControls({
   selectedTicketsMutable = true,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
-  const visibleSearchOpen = searchOpen && !projectActionsDisabled;
+  const searchDisabled = projectActionsDisabled && !guidanceSearch;
+  const visibleSearchOpen = searchOpen && !searchDisabled;
   const selectedActionsDisabled = projectActionsDisabled || selectedTicketCount === 0;
   const ticketActionsDisabled = selectedActionsDisabled || !selectedTicketsMutable;
   const visibleSortOptions = mode === 'board' ? sortOptions.filter((option) => option.value !== 'status') : sortOptions;
@@ -517,14 +525,16 @@ export function WorkspaceControls({
   // Both toolbars give search and More one app-owned flex slot; other groups yield as needed.
   const searchField = (
     <TicketSearchField
-      id="workspace-search"
-      label="Search tickets"
+      id={guidanceSearch ? 'guidance-search' : 'workspace-search'}
+      label={guidanceSearch ? 'Search guidance rules' : 'Search tickets'}
       model={searchModel}
-      disabled={projectActionsDisabled}
+      placeholder={guidanceSearch ? 'Search rules, owner:, tag:' : 'Search tickets'}
+      disabled={searchDisabled}
       autofocus
       collapsible
       expanded={visibleSearchOpen}
-      helpOpen={searchHelpOpen && visibleSearchOpen}
+      help={!guidanceSearch}
+      helpOpen={!guidanceSearch && searchHelpOpen && visibleSearchOpen}
       layout="inline"
     />
   );
@@ -532,6 +542,8 @@ export function WorkspaceControls({
     <WorkspaceOverflowControls
       mode={mode}
       projectActionsDisabled={projectActionsDisabled}
+      searchDisabled={searchDisabled}
+      guidanceSearch={guidanceSearch}
       ticketActionsDisabled={ticketActionsDisabled}
       selectedActionsDisabled={selectedActionsDisabled}
       searchOpen={visibleSearchOpen}

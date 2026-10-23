@@ -2,6 +2,87 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('HS2-6ZA2RN searches guidance from the main toolbar with owner and tag chips', async ({ page }) => {
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/guidance', (route) =>
+    route.fulfill({
+      json: {
+        owner: 'builtin',
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'playbook',
+            repository: 'https://example.test/playbook',
+            requested_ref: 'main',
+            commit: 'a'.repeat(40),
+            skills: [],
+            rules: [
+              {
+                name: 'rust-cli',
+                description: 'Command line guidance',
+                version: 1,
+                installed_version: null,
+                owner: 'Hot Sheet',
+                tags: ['rust'],
+                selected: true,
+              },
+              {
+                name: 'web-ui',
+                description: 'Browser guidance',
+                version: 1,
+                installed_version: null,
+                owner: 'Kerf',
+                tags: ['web'],
+                selected: false,
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const settings = page.locator('[data-component="guidance-settings"]');
+  await expect(settings.getByLabel('Search Rules')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Search guidance rules' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search guidance rules' });
+  await search.fill('owner:"Hot Sheet" tag:rust ');
+  await expect(settings.locator('[data-guidance-rule="rust-cli"]')).toBeVisible();
+  await expect(settings.locator('[data-guidance-rule="web-ui"]')).toHaveCount(0);
+  await expect(page.locator('[data-search-field-editor="guidance-search"] .kui-search-field__token')).toHaveCount(2);
+  await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-filtered-wide.png' });
+  await page.keyboard.press('Escape');
+  await expect(search).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(settings.locator('[data-guidance-rule]')).toHaveCount(2);
+  await search.pressSequentially('browser', { delay: 10 });
+  await expect(settings.locator('[data-guidance-rule="web-ui"]')).toBeVisible();
+  await expect(settings.locator('[data-guidance-rule="rust-cli"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(settings.locator('[data-guidance-rule]')).toHaveCount(2);
+  await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-wide.png' });
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.waitForTimeout(400);
+  await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-medium.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
+  expect(await settings.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await expect(settings.locator('[data-guidance-rule]')).toHaveCount(2);
+});
+
 test('HS2-019VVA browses grouped rules and previews changes at wide and phone widths', async ({ page }) => {
   await openDemoProject(page);
   let writes = 0;
@@ -623,10 +704,12 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.screenshot({ path: 'target/visual-captures/guidance-rules-wide.png' });
   await picker.screenshot({ path: 'target/visual-captures/guidance-wide.png' });
   await page.screenshot({ path: 'target/visual-captures/guidance-wide-page.png', fullPage: true });
-  await picker.locator('input[name="guidance-search"]').fill('rust');
+  await page.getByRole('button', { name: 'Search guidance rules' }).click();
+  const toolbarSearch = page.getByRole('searchbox', { name: 'Search guidance rules' });
+  await toolbarSearch.fill('rust');
   await expect(picker.locator('[data-guidance-rule="rust-lint-and-format"]')).toBeVisible();
   await expect(picker.locator('[data-guidance-rule="hotsheet-visual-qa"]')).toBeHidden();
-  await picker.locator('input[name="guidance-search"]').fill('');
+  await toolbarSearch.fill('');
   const ownerFilter = picker.locator('kui-select[name="guidance-owner-filter"]');
   await ownerFilter.locator('.kui-select__trigger').click();
   await ownerFilter.locator('.kui-select__option[data-value="rust"]').click();

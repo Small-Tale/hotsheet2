@@ -147,7 +147,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(369);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(368);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))
@@ -168,9 +168,9 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   it('retains shared Kerf tab and search-field adapters in their owning modules', () => {
     const search = read('./interactions/search-and-composer.ts'),
       navigation = read('./interactions/navigation-and-tabs.ts');
-    // The workspace and saved-view fields are Kerf model-managed (HS2-5JXBQY): no app input/submit callbacks.
+    // Workspace, saved-view, and guidance fields are Kerf model-managed (HS2-5JXBQY, HS2-6ZA2RN).
     expect(search).toContainSource(
-      "models:{'workspace-search':workspaceSearchModel,'saved-view-query':savedViewSearchModel}",
+      "models:{'workspace-search':workspaceSearchModel,'saved-view-query':savedViewSearchModel,'guidance-search':guidanceSearchModel}",
     );
     expect(search).not.toContain('onEdit:');
     expect(search).not.toContain("delegate(document.body,'input','[data-search-field-editor=\"workspace-search\"]'");

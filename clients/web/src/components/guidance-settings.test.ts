@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { createGuidanceSearchModel } from '../guidance-search-model';
 import { GuidanceSettings } from './guidance-settings';
+
+const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
 
 describe('GuidanceSettings rule summaries', () => {
   it('HS2-019VVA groups long catalogs, preserves selections, and shows protected rule previews', () => {
@@ -16,7 +19,7 @@ describe('GuidanceSettings rule summaries', () => {
     const base = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: 'catalog',
@@ -77,7 +80,7 @@ describe('GuidanceSettings rule summaries', () => {
       GuidanceSettings({
         loading: false,
         message: '',
-        query: '',
+        search: emptyGuidanceSearch,
         repository: '',
         sourceRef: '',
         sourceId: '',
@@ -96,7 +99,7 @@ describe('GuidanceSettings rule summaries', () => {
     const props = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: '',
@@ -118,7 +121,7 @@ describe('GuidanceSettings rule summaries', () => {
     const base = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: '',
@@ -174,7 +177,7 @@ describe('GuidanceSettings rule summaries', () => {
     const base = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: '',
@@ -231,7 +234,7 @@ describe('GuidanceSettings rule summaries', () => {
     const base = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: 'main',
       sourceId: 'fixture',
@@ -326,7 +329,7 @@ describe('GuidanceSettings rule summaries', () => {
     const base = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: '',
@@ -355,7 +358,7 @@ describe('GuidanceSettings rule summaries', () => {
     const props = {
       loading: false,
       message: '',
-      query: '',
+      search: emptyGuidanceSearch,
       repository: '',
       sourceRef: '',
       sourceId: '',
@@ -380,7 +383,7 @@ describe('GuidanceSettings rule summaries', () => {
       GuidanceSettings({
         loading: false,
         message: '',
-        query: '',
+        search: emptyGuidanceSearch,
         repository: '',
         sourceRef: '',
         sourceId: '',

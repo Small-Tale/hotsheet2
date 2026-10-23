@@ -191,7 +191,6 @@ commands-and-ai	wireTrashSettings	document.body
 commands-and-ai	delegateCapture	document.body	'click'	heldNavigationSelector
 commands-and-ai	delegate	document.body	'click'	'[data-action="set-view-mode"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-settings-category"]'
-commands-and-ai	delegate	document.body	'input'	'input[name="guidance-search"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-source-id"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-repository"]'
 commands-and-ai	delegate	document.body	'input'	'input[name="guidance-ref"]'

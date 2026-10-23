@@ -17,6 +17,7 @@ import {
 import { wireWorkspaceHeaderActions } from '../components/workspace-header-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
+import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
@@ -28,6 +29,9 @@ import { type PendingEvidence, type Project } from './types';
 /** Live application bindings used by this handler group. */
 export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
+  readonly guidanceSearchOpen: Signal<boolean>;
+  readonly guidanceSearchModel: SearchFieldModel;
+  readonly guidanceSearchActive: () => boolean;
   /** Kerf-managed ticket search models, keyed by their TicketSearchField ids (HS2-5JXBQY). */
   readonly workspaceSearchModel: SearchFieldModel;
   readonly savedViewSearchModel: SearchFieldModel;
@@ -78,6 +82,9 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   const lifetime = createScope();
   const {
     searchOpen,
+    guidanceSearchOpen,
+    guidanceSearchModel,
+    guidanceSearchActive,
     workspaceSearchModel,
     savedViewSearchModel,
     workspaceSearchTokenOffset,
@@ -122,17 +129,27 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // saved-view dialog); each callback routes by the owning field id (HS2-N5G6JS). It is wired
   // before Kerf's so the focus handlers read a chip's position before Kerf removes or expands it.
   const modelFor = (id: string) =>
-      id === 'workspace-search' ? workspaceSearchModel : id === 'saved-view-query' ? savedViewSearchModel : undefined,
+      id === 'workspace-search'
+        ? workspaceSearchModel
+        : id === 'saved-view-query'
+          ? savedViewSearchModel
+          : id === 'guidance-search'
+            ? guidanceSearchModel
+            : undefined,
     focusField = (id: string, offset?: number) => {
       if (id === 'workspace-search') focusWorkspaceSearch(offset);
       else if (id === 'saved-view-query') focusSavedViewQuery(offset);
+      else if (id === 'guidance-search')
+        restoreInlineSearchCaret(document, '[data-search-field-editor="guidance-search"]', offset);
     },
     tokenOffset = (id: string, raw: string) =>
       id === 'workspace-search'
         ? workspaceSearchTokenOffset(raw)
         : id === 'saved-view-query'
           ? savedViewSearchTokenOffset(raw)
-          : undefined;
+          : id === 'guidance-search'
+            ? guidanceSearchModel.state.value.tokens.find((token) => token.value === raw)?.offset
+            : undefined;
   lifetime.add(
     wireTicketSearchFields(document.body, {
       applyDate: (id, _prefix, value) => {
@@ -180,8 +197,15 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // An empty search blurred by a pointer press collapses only after that press's click, so the
   // collapsing row never shifts the control the user pressed (Kerf KF-64W0RN, HS2-YVBGW3).
   const tokenSearchFields = wireSearchFields(document.body, {
-    models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
-    collapsible: { signals: { 'workspace-search': searchOpen }, keepOpenOn: keepSearchOpenForShadowTarget },
+    models: {
+      'workspace-search': workspaceSearchModel,
+      'saved-view-query': savedViewSearchModel,
+      'guidance-search': guidanceSearchModel,
+    },
+    collapsible: {
+      signals: { 'workspace-search': searchOpen, 'guidance-search': guidanceSearchOpen },
+      keepOpenOn: keepSearchOpenForShadowTarget,
+    },
     // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
     onSubmit: ({ id }) => {
       focusField(id);
@@ -278,7 +302,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
         ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
       },
       openSearch: () => {
-        tokenSearchFields.open('workspace-search');
+        tokenSearchFields.open(guidanceSearchActive() ? 'guidance-search' : 'workspace-search');
       },
       setViewMode: (mode) => {
         resetProgressiveTicketRendering();

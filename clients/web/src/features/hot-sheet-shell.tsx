@@ -137,6 +137,7 @@ export interface HotSheetShellDependencies {
   repositorySizeReport: (projectId: string) => RepositorySizeReport | undefined;
   searchHelpOpen: Signal<boolean>;
   searchOpen: Signal<boolean>;
+  guidanceSearchOpen: Signal<boolean>;
   selectedCorruptKey: Signal<string | undefined>;
   selectedInspectorProps: () => TicketInspectorProps | undefined;
   previewInspectorProps: (row: WireTicketRow) => TicketInspectorProps | undefined;
@@ -177,6 +178,7 @@ export interface HotSheetShellDependencies {
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
+  guidanceSearchModel: SearchFieldModel;
   workspaceSurfaceProps: () => WorkspaceSurfaceProps;
   /** The search's scope and whether it may switch into All Tickets (HS2-4J6764). */
   searchScope: () => TicketScope;
@@ -225,6 +227,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     repositorySizeReport,
     searchHelpOpen,
     searchOpen,
+    guidanceSearchOpen,
     selectedCorruptKey,
     selectedInspectorProps,
     previewInspectorProps,
@@ -260,6 +263,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     viewMode,
     viewportMobile,
     workspaceSearchModel,
+    guidanceSearchModel,
     workspaceSurfaceProps,
     searchScope,
     allTicketsSearchAvailable,
@@ -530,7 +534,10 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       <MainShell
         tabs={tabs}
         mode="project"
-        workspaceSearchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
+        workspaceSearchOpen={
+          (searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')) ||
+          (guidanceSearchOpen.value && viewMode.value === 'settings' && settingsCategory() === 'guidance')
+        }
         mobile={viewportMobile.value}
         sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
         sidebarVisible={!sidebarCollapsed.value}
@@ -545,8 +552,17 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         headerActions={
           <WorkspaceControls
             mode={viewMode.value}
-            searchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
-            searchModel={workspaceSearchModel}
+            guidanceSearch={viewMode.value === 'settings' && settingsCategory() === 'guidance'}
+            searchOpen={
+              viewMode.value === 'settings' && settingsCategory() === 'guidance'
+                ? guidanceSearchOpen.value
+                : searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')
+            }
+            searchModel={
+              viewMode.value === 'settings' && settingsCategory() === 'guidance'
+                ? guidanceSearchModel
+                : workspaceSearchModel
+            }
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}
             sortDirection={sortDirection.value}
