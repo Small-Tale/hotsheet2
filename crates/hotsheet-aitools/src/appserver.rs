@@ -312,6 +312,15 @@ mod catalog_probe_tests {
             std::thread::spawn(move || catalog.discover(&cwd))
         };
         let pid = app_server_pid(&pid_file);
+        // HS2-RR9Q42: the child can write its PID before the parent registers its probe.
+        let registration_deadline = Instant::now() + Duration::from_secs(5);
+        while crate::probe::in_flight_probes() == 0 {
+            assert!(
+                Instant::now() < registration_deadline,
+                "the fake app-server was never registered as a probe"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
         assert!(crate::probe::stop_probes() >= 1);
         assert_gone(pid);
         assert!(listing.join().unwrap().is_err());
