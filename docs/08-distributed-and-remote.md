@@ -22,6 +22,11 @@ Keep two separable concerns apart:
 
 ## 8.2 One UI over many servers (orchestration)
 
+An orchestration *project* with its own tickets and explicit target-project
+membership is specified separately in [26](26-orchestration-projects.md)
+(HS2-4JFP0S). It uses the live-mounted projects described here; it does not
+change the hosting decisions below.
+
 The model carried from HS1's shipped remote-client work (§112) already fits:
 
 - A client holds a **machine-global registry of remote servers** (`~/.hotsheet2/

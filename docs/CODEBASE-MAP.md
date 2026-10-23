@@ -73,6 +73,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md) — AI note feedback synthesis (HS2-355565)
 - [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
+- [26-orchestration-projects.md](26-orchestration-projects.md) — Design-only orchestration project targets, bindings, links, and headless contracts (HS2-4JFP0S)
 
 Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
