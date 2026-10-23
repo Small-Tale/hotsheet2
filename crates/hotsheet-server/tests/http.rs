@@ -2612,6 +2612,13 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     send("POST", endpoint, turn("start", "native-session")).await;
     let pending_stop = tokio::spawn(send("POST", endpoint, turn("stop", "native-session")));
     tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+    assert_eq!(
+        send("POST", endpoint, turn("stop", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT,
+        "a concurrent Stop cannot process the turn twice"
+    );
     let delayed = serde_json::json!({
         "type":"assistant", "timestamp":"2026-10-23T00:00:03Z",
         "message":{"id":"message-3","model":"claude-opus-4-8", "usage":{
@@ -2631,6 +2638,99 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     assert_eq!(events.len(), 3);
     assert_eq!(events[2].ticket, None);
     assert_eq!((events[2].tokens_in, events[2].tokens_out), (3, 1));
+
+    // HS2-F8578J: an I/O failure after Stop starts processing retains the
+    // prompt-time cursor and claim for the next Stop hook.
+    let before_read_failure = std::fs::read(&transcript).unwrap();
+    send("POST", endpoint, turn("start", "native-session")).await;
+    std::fs::write(&transcript, b"").unwrap();
+    assert_eq!(
+        send("POST", endpoint, turn("stop", "native-session"))
+            .await
+            .status(),
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
+    assert_eq!(
+        send("POST", endpoint, turn("start", "native-session"))
+            .await
+            .status(),
+        StatusCode::CONFLICT,
+        "a new prompt cannot replace a turn awaiting retry"
+    );
+    let retried = serde_json::json!({
+        "type":"assistant", "timestamp":"2026-10-23T00:00:04Z",
+        "message":{"id":"message-4","model":"claude-opus-4-8", "usage":{
+            "input_tokens":8,"output_tokens":2
+        }}
+    });
+    std::fs::write(&transcript, before_read_failure).unwrap();
+    writeln!(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript)
+            .unwrap(),
+        "{retried}"
+    )
+    .unwrap();
+    assert_eq!(
+        send("POST", endpoint, turn("stop", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        4
+    );
+    send("POST", endpoint, turn("stop", "native-session")).await;
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        4
+    );
+
+    // A metrics write failure is retried under the same turn identity.
+    send("POST", endpoint, turn("start", "native-session")).await;
+    let fifth = serde_json::json!({
+        "type":"assistant", "timestamp":"2026-10-23T00:00:05Z",
+        "message":{"id":"message-5","model":"claude-opus-4-8", "usage":{
+            "input_tokens":9,"output_tokens":1
+        }}
+    });
+    writeln!(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript)
+            .unwrap(),
+        "{fifth}"
+    )
+    .unwrap();
+    let raw = dir.path().join("metrics").join("raw");
+    let parked = dir.path().join("metrics").join("raw-parked");
+    std::fs::rename(&raw, &parked).unwrap();
+    std::fs::write(&raw, b"blocked").unwrap();
+    assert_eq!(
+        send("POST", endpoint, turn("failure", "native-session"))
+            .await
+            .status(),
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
+    std::fs::remove_file(&raw).unwrap();
+    std::fs::rename(&parked, &raw).unwrap();
+    assert_eq!(
+        send("POST", endpoint, turn("failure", "native-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        5
+    );
+    send("POST", endpoint, turn("failure", "native-session")).await;
+    assert_eq!(
+        hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
+        5
+    );
     send("DELETE", "/terminals/claude-use", String::new()).await;
 }
 

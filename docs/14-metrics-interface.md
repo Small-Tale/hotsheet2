@@ -164,7 +164,11 @@ Metrics can be shared across a team **through git** — no server sync needed:
   counters. The server snapshots the transcript byte offset and unique live claim of
   the terminal's Claude or shell worker at prompt time. At turn end it reads only the
   appended JSONL records, sums numeric assistant usage once per message id, and records
-  one priced event. Duplicate stops and historical records cannot add usage; an
+  one priced event. A turn stays pending through transient transcript or metrics
+  failures so a repeated Stop retries its original cursor and claim. The raw event
+  carries a unique turn identity and retains the first Stop timestamp, preventing
+  a retry across day boundaries from appending it twice
+  (HS2-F8578J). Duplicate stops and historical records cannot add usage; an
   ambiguous or later-acquired claim leaves the event project-only. The parser skips
   subagent, malformed, and unknown records and bounds each scan to 64 MiB. The first
   prompt can precede transcript creation, so its cursor starts at byte zero; `Stop`

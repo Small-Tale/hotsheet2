@@ -17,11 +17,12 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 
 use hotsheet_model::{Status, Timestamp};
 use serde::{Deserialize, Serialize};
 
+use crate::FileLock;
 use crate::store::{FsStore, StoreError};
 
 pub mod codex_work;
@@ -124,6 +125,14 @@ impl Rollup {
 pub fn record(store: &FsStore, event: &UsageEvent) -> io::Result<()> {
     let dir = store.root().join("metrics").join("raw");
     fs::create_dir_all(&dir)?;
+    let _lock = FileLock::acquire(
+        fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join(".usage.lock"))?,
+    )?;
+    ensure_gitignored(store, "metrics/raw/")?;
     let path = dir.join(format!("{}.jsonl", event.day()));
     let line = serde_json::to_string(event).map_err(io::Error::other)?;
     let mut f = fs::OpenOptions::new()
@@ -131,8 +140,50 @@ pub fn record(store: &FsStore, event: &UsageEvent) -> io::Result<()> {
         .append(true)
         .open(path)?;
     writeln!(f, "{line}")?;
-    ensure_gitignored(store, "metrics/raw/")?;
     Ok(())
+}
+
+/// Record a turn once even when its caller retries after a write error. The identity
+/// lives in raw JSONL but is ignored by the ordinary [`UsageEvent`] reader (HS2-F8578J).
+pub fn record_once(store: &FsStore, event: &UsageEvent, turn_id: &str) -> io::Result<()> {
+    let dir = store.root().join("metrics").join("raw");
+    fs::create_dir_all(&dir)?;
+    let _lock = FileLock::acquire(
+        fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join(".usage.lock"))?,
+    )?;
+    ensure_gitignored(store, "metrics/raw/")?;
+    let path = dir.join(format!("{}.jsonl", event.day()));
+    match fs::File::open(&path) {
+        Ok(file) => {
+            for line in BufReader::new(file).lines() {
+                let line = line?;
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue;
+                };
+                if value.get("turn_id").and_then(|id| id.as_str()) == Some(turn_id) {
+                    return Ok(());
+                }
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let mut value = serde_json::to_value(event).map_err(io::Error::other)?;
+    value
+        .as_object_mut()
+        .expect("usage event serializes as an object")
+        .insert("turn_id".into(), turn_id.into());
+    let mut line = serde_json::to_vec(&value).map_err(io::Error::other)?;
+    line.push(b'\n');
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?
+        .write_all(&line)
 }
 
 /// Read every raw usage event in the store (all days), skipping unparseable lines.
@@ -410,6 +461,26 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, store)
+    }
+
+    #[test]
+    fn hs2_f8578j_raw_turn_identity_prevents_duplicate_usage() {
+        let (_dir, store) = store();
+        let event = UsageEvent {
+            ts: "2026-10-23T00:00:00Z".into(),
+            tool: "claude".into(),
+            model: None,
+            tokens_in: 7,
+            tokens_out: 3,
+            cost_usd: None,
+            ticket: None,
+            session: Some("session-1".into()),
+        };
+        record_once(&store, &event, "turn-1").unwrap();
+        record_once(&store, &event, "turn-1").unwrap();
+        assert_eq!(read_raw(&store).unwrap(), vec![event.clone()]);
+        record_once(&store, &event, "turn-2").unwrap();
+        assert_eq!(read_raw(&store).unwrap(), vec![event.clone(), event]);
     }
 
     #[test]

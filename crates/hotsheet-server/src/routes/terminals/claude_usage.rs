@@ -18,10 +18,21 @@ const TRANSCRIPT_FLUSH_RETRY: Duration = Duration::from_millis(50);
 
 #[derive(Clone)]
 pub struct ClaudeTurnStart {
+    turn_id: String,
     session_id: String,
     transcript: PathBuf,
     offset: u64,
     ticket: Option<String>,
+    phase: TurnPhase,
+    end_attempted: bool,
+    ended_at: Option<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TurnPhase {
+    Pending,
+    Processing,
+    Completed,
 }
 
 #[derive(Deserialize)]
@@ -105,7 +116,7 @@ fn current_claude_session(state: &AppState, terminal: &str, session_id: &str) ->
 }
 
 /// A hook report from one known Claude session. Unmatched and historical turns cannot
-/// create metrics events; a repeated stop has no start state left to count twice.
+/// create metrics events; a repeated stop reuses the same turn identity.
 pub(crate) async fn report_claude_turn(
     State(state): State<AppState>,
     Path(terminal): Path<String>,
@@ -139,9 +150,20 @@ pub(crate) async fn report_claude_turn(
             )
             .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
             let mut starts = state.claude_turn_starts.lock_or_recover();
+            if starts.get(&terminal).is_some_and(|previous| {
+                previous.phase == TurnPhase::Processing
+                    || (previous.end_attempted && previous.phase == TurnPhase::Pending)
+            }) {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "Claude turn end needs retry",
+                ));
+            }
             // A duplicate prompt hook before the transcript grows keeps its original claim.
             if starts.get(&terminal).is_some_and(|previous| {
-                previous.session_id == body.session_id
+                previous.phase == TurnPhase::Pending
+                    && !previous.end_attempted
+                    && previous.session_id == body.session_id
                     && previous.transcript == transcript
                     && previous.offset == offset
             }) {
@@ -150,26 +172,40 @@ pub(crate) async fn report_claude_turn(
             starts.insert(
                 terminal,
                 ClaudeTurnStart {
+                    turn_id: ulid::Ulid::new().to_string(),
                     session_id: body.session_id,
                     transcript,
                     offset,
                     ticket,
+                    phase: TurnPhase::Pending,
+                    end_attempted: false,
+                    ended_at: None,
                 },
             );
         }
         TurnEvent::Stop | TurnEvent::Failure => {
             let start = {
                 let mut starts = state.claude_turn_starts.lock_or_recover();
-                if starts.get(&terminal).is_none_or(|start| {
-                    start.session_id != body.session_id || start.transcript != transcript
-                }) {
+                let Some(start) = starts.get_mut(&terminal) else {
+                    return Ok(StatusCode::NO_CONTENT);
+                };
+                if start.session_id != body.session_id
+                    || start.transcript != transcript
+                    || start.phase != TurnPhase::Pending
+                {
                     return Ok(StatusCode::NO_CONTENT);
                 }
-                starts.remove(&terminal).expect("checked above")
+                start.phase = TurnPhase::Processing;
+                start.end_attempted = true;
+                if start.ended_at.is_none() {
+                    start.ended_at = Some(now().as_str().to_owned());
+                }
+                start.clone()
             };
             let store = state.store.clone();
             let session_id = body.session_id;
-            tokio::task::spawn_blocking(move || {
+            let turn_id = start.turn_id.clone();
+            let result = tokio::task::spawn_blocking(move || {
                 let prices = hotsheet_ticketing::pricing::load_prices(&store);
                 // Claude can invoke Stop before its last transcript row is visible. Wait
                 // briefly for that local append; never poll the server or infer older rows.
@@ -190,10 +226,10 @@ pub(crate) async fn report_claude_turn(
                     std::thread::sleep(TRANSCRIPT_FLUSH_RETRY);
                 };
                 if let Some(usage) = usage {
-                    metrics::record(
+                    metrics::record_once(
                         &store,
                         &metrics::UsageEvent {
-                            ts: now().as_str().to_owned(),
+                            ts: start.ended_at.clone().expect("Stop set the turn timestamp"),
                             tool: "claude".to_owned(),
                             model: usage.model,
                             tokens_in: usage.tokens_in,
@@ -202,13 +238,32 @@ pub(crate) async fn report_claude_turn(
                             ticket: start.ticket,
                             session: Some(session_id),
                         },
+                        &start.turn_id,
                     )?;
                 }
                 Ok::<(), std::io::Error>(())
             })
             .await
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+            .and_then(|result| {
+                result.map_err(|error| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                })
+            });
+            if let Some(current) = state
+                .claude_turn_starts
+                .lock_or_recover()
+                .get_mut(&terminal)
+            {
+                if current.turn_id == turn_id {
+                    current.phase = if result.is_ok() {
+                        TurnPhase::Completed
+                    } else {
+                        TurnPhase::Pending
+                    };
+                }
+            }
+            result?;
         }
     }
     Ok(StatusCode::NO_CONTENT)

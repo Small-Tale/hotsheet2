@@ -346,6 +346,8 @@ Native Claude terminal hooks report prompt and turn-end boundaries to the authen
 `POST /terminals/{id}/claude-turn` route (HS2-W2GNTT). The route accepts only the
 currently connected Claude session, reads appended numeric transcript usage on turn
 end, and records the unique live ticket claim captured at prompt time (`docs/14` §14.5).
+Transient read or metrics-write errors can be retried by the same turn-end hook
+without counting the turn twice (HS2-F8578J).
 
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the
