@@ -1,0 +1,9 @@
+#!/bin/bash
+# HS2-CD3D2T: fast staged whitespace and formatting gate.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+git diff --cached --check
+(
+  cd clients/web
+  zsh -ic 'npm run format:check'
+)

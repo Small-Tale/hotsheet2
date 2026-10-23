@@ -629,6 +629,17 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
+- **Local push gate (HS2-CD3D2T):** Run `scripts/install-git-hooks.sh` once per
+  checkout, then `scripts/push.sh origin main` for each verified ticket commit.
+  The checked-in pre-commit hook runs staged whitespace and format checks.
+  `scripts/check.sh` runs the Rust, root Node, web, migrator, and spike checks
+  before `git push` opens a remote connection; the pre-push hook runs the same
+  check for direct pushes. A clean tree that passed is cached under Git's local
+  metadata by tree id. `scripts/push.sh` passes its verified tree to the hook so
+  the gate runs only once even when unrelated local files are dirty. The root
+  gate requires `cargo-nextest`, `git-filter-repo`, and installed npm packages.
+  Permission integration tests use an in-memory vault under the test-only dependency
+  feature, so the same full Rust suite runs on macOS and Linux (`HS2-R8S894`).
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
   `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin
   **conformance test** (HS2-64), the CLI

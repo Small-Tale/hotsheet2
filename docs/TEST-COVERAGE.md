@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-CD3D2T provides a checked-in root gate, gate-before-push command, and
+pre-commit/pre-push hooks. `scripts/git-hooks.test.mjs` uses temporary Git
+repositories to verify clean-tree cache reuse and invalidation, no duplicate
+gate during a push, gate failure before remote contact, and staged whitespace
+rejection. CI runs that test; `docs/12-code-organization-and-testing.md` records
+the local setup command and required tools.
+
 HS2-5A6JNS covers machine secret consolidation in
 `crates/hotsheet-ticketing/src/secrets/machine_secrets.rs`: three legacy
 account shapes migrate to one native master read on the next process start;

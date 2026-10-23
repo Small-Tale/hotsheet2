@@ -61,7 +61,7 @@ hotsheet-mcp.workspace = true
 libc.workspace = true
 tower.workspace = true
 http-body-util.workspace = true
-hotsheet-aitools.workspace = true
+hotsheet-aitools = { workspace = true, features = ["test-permission-vault"] }
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
 ureq.workspace = true

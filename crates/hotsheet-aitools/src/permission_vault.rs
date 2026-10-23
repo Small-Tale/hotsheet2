@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "test-permission-vault")))]
 use hotsheet_ticketing::secrets::OsKeychain;
 use hotsheet_ticketing::secrets::SecretStore;
 use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
@@ -188,16 +188,19 @@ fn key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionKey> {
 /// startup request cannot produce an immediate chain of identical prompts. Missing
 /// keys are re-checked because another process may create them.
 #[derive(Clone)]
+#[cfg(any(test, not(feature = "test-permission-vault")))]
 enum CachedRead {
     Present(String),
     Error(String),
 }
 
+#[cfg(any(test, not(feature = "test-permission-vault")))]
 struct CachedSecrets<'a, S> {
     backend: S,
     cache: &'a std::sync::Mutex<std::collections::HashMap<String, CachedRead>>,
 }
 
+#[cfg(any(test, not(feature = "test-permission-vault")))]
 impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
     fn set(
         &self,
@@ -250,7 +253,7 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
     }
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "test-permission-vault")))]
 fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
@@ -262,7 +265,7 @@ fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Res
     })
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-permission-vault"))]
 pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
