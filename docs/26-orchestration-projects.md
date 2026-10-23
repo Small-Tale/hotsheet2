@@ -18,7 +18,7 @@ its tickets, claims, AI sessions, CI evidence, and deployment operations.
 The current checkout registry is machine-local and maps one checkout to zero or
 more ticket sources ([04](04-core-server-cli.md) §4.3). Its readable checkout id
 is path-derived, so it cannot serve as a portable orchestration target id. An
-orchestration target also differs from a ticket source: a target is a *project*
+orchestration target also differs from a ticket source: a target is a _project_
 and may contain several sources. The existing exact claim/lease operation is the
 execution primitive; orchestration does not add a second claim coordinator.
 
@@ -48,7 +48,7 @@ its existing pairing/registry path updates the origin without changing the logic
 target id. If its identity cannot be verified, the binding becomes unavailable
 until reviewed.
 
-The declaration belongs to the orchestration *checkout*, independently of which
+The declaration belongs to the orchestration _checkout_, independently of which
 source holds its tickets. The same target can appear in several orchestration
 projects under different ids and grants. A target checkout can still have its own
 orchestration declaration. Cycle detection belongs to dispatch planning, not
@@ -126,7 +126,7 @@ client. Removing orchestration configuration does not delete target tickets.
 
 ## 26.6 Relationship to other work
 
-This design defines explicit *orchestration-run* membership, not a global
+This design defines explicit _orchestration-run_ membership, not a global
 cross-server queue. HS2-42B2FD owns general cross-server aggregate views;
 HS2-7QHWHJ can reuse its transport and
 identity work while showing only linked runs. HS2-AZ15GA, HS2-EBHDSB,
