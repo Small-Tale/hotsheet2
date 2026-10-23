@@ -1,317 +1,235 @@
-# Shared project guidance
+# Additional Conventions Beyond the Built-in Functions
 
-`AGENTS.md` is the shared source of truth for this repository's engineering rules.
-Read it completely before making or reviewing changes. `CLAUDE.md` imports this file.
+As this project's AI coding tool, you must follow the additional conventions below, in addition to the built-in functions.
 
-- Project workflows live under `.agents/skills/`; use a workflow when named or clearly applicable.
-- Shared workflow sources live under `.claude/skills/`; edit the canonical file and keep its adapters in sync.
-- Tool-specific names in shared workflows describe capabilities; use the equivalent available tool.
-- Keep durable project guidance here and provider-specific configuration in its provider directory.
+# Hot Sheet 2 project guidance
 
-## Identity terminology
+Read the generated `AGENTS.md` before changing code. Project workflows live in
+`.agents/skills/`; shared workflow sources live in `.claude/skills/`. Use the
+equivalent available tool when a shared workflow names a tool-specific capability.
+Keep durable project additions in this local Rulesync rule and provider
+configuration in its provider directory.
 
-A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), not a git
-id, ticket-store id, or secret. Keep checkout↔store links many-to-many. Only server
-instance data carries bearer credentials.
+## Identity and provider boundaries
 
-## Headless setup parity
+A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), not a
+Git id, ticket-store id, or secret. Checkout-to-store links are many-to-many. Only
+server instance data carries bearer credentials.
 
-No project-bootstrap or recovery capability may exist only in a graphical client.
-Every workflow that initializes or links an HS2 ticket source, installs or updates the
-shared Hot Sheet skills, configures MCP integrations, or prepares supported AI tools
-must be available through an idempotent headless CLI path. Graphical clients should
-invoke the same underlying application workflow rather than reimplementing setup.
-When remote creation cannot be automated safely, the CLI must prompt for an existing
-remote or print exact provider-neutral next steps; a checkout prepared from a terminal
-must be as usable as one prepared through the client.
+Ticketing is provider-neutral. Markdown/Git is the default and fullest-featured
+provider, but no project must use it. GitHub Issues, Jira, and GitLab remain their
+own authoritative systems; do not mirror them bidirectionally into Git. One code
+project can connect several sources. Route every ticket by qualified
+`(connection_id, native_id)` and expose unsupported provider operations explicitly.
+Cross-provider copy or move is user-initiated and idempotent by operation id and
+source provenance.
 
-## Ticket-provider architecture
+## Headless setup
 
-Ticketing is provider-neutral. The existing Markdown/git implementation is the
-default and fullest-featured `git` provider, not a mandatory store for every project.
-GitHub Issues, Jira, GitLab, and future providers are accessed directly as their own
-authoritative systems; do not build automatic bidirectional mirrors into git. One
-code project may connect multiple ticket-provider instances. Route every ticket by
-its qualified `(connection_id, native_id)` identity and expose provider capabilities
-so unsupported fields or operations fail explicitly.
+Every project bootstrap or recovery path available in the graphical client also
+needs an idempotent headless CLI path. This includes ticket source linking, shared
+Hot Sheet skills, MCP integrations, and AI-tool setup. Both clients should call the
+same underlying workflow. If remote creation cannot be automated safely, print
+exact provider-neutral next steps.
 
-Cross-provider ticket transfer is user-initiated `copy`/`move`, not synchronization.
-Make transfers idempotent using a stable operation id plus source provenance so
-concurrent collaborators and retries resolve the same destination ticket.
+## Client behavior
 
-## Ticket activity notes
+Hot Sheet's Tauri web UI uses Kerf for application state, routing, lists, API
+resources, rendering, and event delegation. Read the installed Kerf guidance and
+`clients/web/ai/component-catalog-extension.json` before selecting a component.
+The project-specific UI decisions are in `docs/ui-design-philosophy.md` and
+`docs/design-guidelines.md`; those documents point to Kerf for shared conventions.
+Web Awesome Pro requires a separate license decision. The validated Web Awesome
+integration and browser tests live in `spikes/kerf-webawesome/`, with rationale in
+`docs/09-technology-decisions.md`. Its form controls emit host-level `input` and
+`change`; lifecycle events such as `wa-show` and `wa-hide` retain their prefix.
 
-Use `activity` notes for meaningful subtask boundaries: record when an investigation
-or other important subtask starts and when it finishes. Keep repeated and reversed
-transitions as separate entries; they are history, not current-state fields. Ordinary
-commentary remains a `regular` note.
+List and column tickets share one responsive ticket-summary component contract,
+including narrow horizontal sizes. App-owned component styles stay beside their
+modules and are represented in `clients/web/kerf.components.json`; regenerate the
+catalog after changes. Symbolic client icons use official Lucide assets through
+the shared icon component, with an accessible name for icon-only controls. Every
+actionable context-menu item has a meaningful icon. If several Lucide metaphors
+fit equally well, ask the maintainer which one to standardize.
 
-Activity notes are timeline history, not the primary home for a result. Put an
-investigation's conclusion, decision, recommendation, or other important durable content
-in a `regular` Markdown note. A finishing activity may briefly point to that regular note.
-Format every AI-authored note for human scanning. Lead with the outcome or decision, not a
-chronological transcript. For a substantial note, use short descriptive sections such as
-`## Result`, `## Verification`, and `## Follow-ups`; use bullets for parallel facts, numbered
-lists only for a real sequence, and tables when they make a dense comparison or timeline
-materially easier to read. Break long prose into short paragraphs and format commands,
-paths, and ticket slugs as code. Never paste an undifferentiated text/log dump or compress a
-multi-part result into one dense paragraph. Keep simple updates brief and omit empty sections.
-For multiline Markdown passed through the CLI, always use `--note-file`; `--note` rejects
-literal `\n` sequences outside inline/fenced backtick code so escaped line breaks cannot
-silently become visible text. Use `--allow-literal-backslash-n` only when such prose is
-intentional.
+Application state updates use WebSockets or genuine long polling with cursor replay
+and bounded failure backoff. Fixed-interval network polling is not allowed. Local
+display timers must not issue requests. Cover idle request rate and reconnection.
 
-When an AI writes an `activity` note, provide a durable `note_summary` alongside the
-full Markdown body. The summary is the Timeline headline: plain text, one line,
-outcome-oriented, preferably no more than 80 characters, and free of verification
-inventories or implementation detail. The complete body remains visible in Notes.
-Generate both in the same turn; never invoke AI while rendering or opening a ticket.
-Legacy notes and providers without summary metadata use a deterministic bounded
-first-line fallback.
+Ticket text editors save to the server on blur, page hide, or explicit finish,
+never while the user is typing. A 150 ms debounced local recovery copy is keyed
+by project, ticket, and field and retains the value at edit start. Merge against
+that value, keep the draft visible while saving, and restore an unsaved draft when
+the editor reopens. Ordinary text fields have no routine Save/Cancel buttons;
+discrete edits can save immediately, and object creation can submit explicitly.
+Cover rapid coalescing, composed-editor focus moves, edits after save, and reload
+recovery.
 
-## Active AI work
+## Push policy and verification
 
-Treat a live, renewable ticket claim lease as the authoritative signal that an AI is
-actively working on that ticket. `started` is durable workflow state and may remain set
-while nobody is working; `claim_count` is historical retry/poison metadata. Workers
-claim before active work; claiming atomically advances a Not Started ticket to Started.
-Workers renew during long work and release when they stop. Never
-derive live activity from status or claim count. Self-claim workers use `claim-next`;
-general orchestration and delegated agents use exact `claim <slug-or-id>`, then renew and
-release that same ticket with one stable, session-specific worker id.
-On git-backed Started tickets, set `started_phase` as work moves through analyzing,
-planning, working, initial testing, integrating, and final testing. The phase is
-durable progress; it does not signal a live worker without a claim.
+Push policy: `push-per-ticket`. The maintainer has authorized routine
+fast-forward pushes of verified ticket commits to `origin/main`; do not ask again.
+Commit a finished ticket before starting the next one. After pushing, confirm the
+remote contains the commit and use `node scripts/ci-gate.mjs status --covers
+<full-sha>` to check the successful `main` CI run. A remote run never replaces a
+failing local gate.
 
-For a claim ETA, estimate the time until the ticket can actually be completed, including
-local checks and likely CI or handoff waits. Base it on the work in this ticket rather
-than a habitual 60-, 90-, or 120-minute allowance; completed single-claim tickets have
-usually taken much less than those allowances. If work is released and later reclaimed,
-estimate the remaining work afresh, including any external wait. Renew the ETA when
-new scope or a delayed gate changes the expected finish time.
+## Project references
 
-## Client UI stack
+The codebase map is `docs/CODEBASE-MAP.md`; requirements status is in
+`docs/README.md`; feature coverage is in `docs/TEST-COVERAGE.md`. Update them when
+their source behavior changes. The manual plan is `docs/manual-test-plan.md`.
+Rust tests use `cargo nextest run`; web tests run from `clients/web`; migrator tests
+run from `migrator/`. Prefer `node scripts/test-quiet.mjs` for quiet affected suites.
+The terminal-sizing arbiter, merge and sync logic, claims, indexes, auth, migration,
+and shared guidance setup require T2 transition coverage.
 
-Use **Kerf (`kerfjs`)** for the Tauri web UI's application state, routing, lists,
-API resources, rendering/morphing, delegated event handling, and reusable UI
-components. Prefer Kerf components, then native HTML. Use Web Awesome Core only
-for a specific integration feature that Kerf does not replace; never render a
-Web Awesome element marked `Discouraged` in Kerf's catalog. Kerf's installed
-guidance at `clients/web/node_modules/@kerfjs/ui/llms.txt` and
-`clients/web/node_modules/@kerfjs/ui/ai/skill.md` names the replacements and
-component-gap workflow. Build custom components only for Hot Sheet-specific
-interactions those components do not cover. Web Awesome Pro is optional and
-requires a separate decision/license.
+Hot Sheet 2 is developed by **Small Tale Inc.** under `Small-Tale/hotsheet2`.
+Package metadata, licenses, user-facing credits, and bundle identifiers use the
+company identity. Individual developers remain the normal Git commit authors.
 
-For shared interface and interaction conventions, read Kerf's installed
-`clients/web/node_modules/@kerfjs/ui/docs/interaction-conventions.md` and its
-linked design philosophy. Keep Hot Sheet decisions in
-`docs/ui-design-philosophy.md` and `docs/design-guidelines.md`.
+<!-- hotsheet:begin section=conventions-as-code v=2 -->
 
-Never use fixed-interval, timer-based, or immediate-repeat network polling for
-application state. Live updates must use WebSockets or genuine long polling: an idle
-long-poll request remains pending until an event or bounded server timeout, then the
-client reconnects with replay/cursor semantics and bounded failure backoff. Local-only
-UI timers such as countdown rendering are allowed, but they must not issue network
-requests. Cover idle request rate, timeout blocking, reconnect, and client/server
-version skew in integration tests so an authentication or protocol error cannot turn
-into a tight request loop.
+## Conventions as Code
 
-Import only the Web Awesome components the client uses, style them primarily through
-their documented theme tokens and parts, and keep application state outside custom
-elements. Form controls such as `<wa-input>` emit standard host-level `input` and
-`change` events—not `wa-input` or `wa-change`. Web Awesome-specific lifecycle events
-remain prefixed (for example `wa-show`, `wa-hide`, `wa-after-show`, and
-`wa-after-hide`) and can be handled through Kerf delegation. The validated integration
-and executable browser tests live in [`spikes/kerf-webawesome/`](spikes/kerf-webawesome/);
-the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technology-decisions.md).
+Instruction-file prose does not hold on its own. When a reviewer corrects a convention, encode it in the same change as a source-level test or a lint rule, and name the test or rule with the ticket slug so the reason stays discoverable.
 
-Keep shared domain components aligned across clients and presentations. In particular,
-list and column tickets use one responsive ticket-summary component contract (rather
-than separate row/card behavior) that remains usable at narrow horizontal sizes.
-Keep production component styles colocated with their component modules and imported
-from those modules; demos may provide stage/shell styles but must not own or duplicate
-the production component CSS being validated.
+- **Policy tests.** Keep one structural test file per package that greps or parses source to pin conventions: no emoji or Unicode glyph icons; no cross-component CSS selectors; one exported component per file; every export has a demo; every signal has a reset; no handwritten boundary types outside the contract module; no machine-local paths; no invisible Unicode. The same file pins the instruction files: each managed section marker (`hotsheet:begin section=…`, `hotsheet-instructions-version`) occurs once and at one version, `CLAUDE.md` contains only the `@AGENTS.md` import, and, when the project uses Rulesync, the committed instruction file equals a dry-run regeneration. Add a case for each new correction; never delete one without the ticket that retires the convention.
+- **Suppressions.** A lint disable carries a reason and a ticket slug on the same line, and a policy test caps disables per file. Unused disables fail lint. Formatter-ignore comments are banned.
+- **Doctor and profile exceptions.** UI library doctor exceptions are exact `{id, rule, target, rationale}` entries, each naming the upstream ticket; a test pins their count and asserts each rationale's target still exists. The count only decreases. No broad suppression or raised budget substitutes for a fix; a missing library capability is an upstream ticket, not an exception.
+- **Generated artifacts** (catalogs, composition manifests, API contracts, lockfiles) are checked in and byte-checked in CI; regenerate them in the same change that changes their source.
 
-**Styling a Kerf UI component with application CSS is a bug** (HS2-AD9WRF). Kerf components
-are configured: through their documented props, variants, and public `--kui-*` theme tokens,
-never through selectors that target `.kui-*` classes, Kerf-rendered parts, or the Kerf root
-an app class happens to sit on. When no prop or token expresses what the app needs, add the
-prop, token, or a new component to Kerf (file a `KF-*` ticket in the Kerf store and adopt it
-when it ships) instead of overriding the component; until then the finding stays counted in
-the Kerf UI doctor budgets, which only ever decrease. **This holds even when the
-maintainer directly asks for the visual change** (HS2-JS9PSP): if satisfying a request
-would mean overriding a Kerf component's styling, do not quietly break the rule. Either
-ask the maintainer for feedback (naming the conflict and the Kerf API that is missing) or
-proactively file a `KF-*` ticket in the Kerf store requesting the prop, token, variant, or
-component, and adopt it when it ships. Application-owned components may carry
-CSS for their own markup (native HTML and raw Web Awesome elements), and every surface should
-compose Kerf components before implementing a custom one.
+<!-- hotsheet:end section=conventions-as-code -->
 
-Treat reusable visual presentations as explicit component API variants, not
-consumer-specific descendant CSS overrides. A component's UX demo must expose every
-supported public variant and state that consumers rely on, including appearance and
-size options, so the catalog is a complete interactive account of the component API.
+<!-- hotsheet:begin section=customer-data-hygiene v=1 -->
 
-Before selecting or wrapping a visual component, read Hot Sheet's consumer catalog at
-`clients/web/ai/component-catalog-extension.json` together with Kerf's installed
-`@kerfjs/ui/ai/component-catalog.json`. Preserve the package source identity and use the
-declared `geometry` ownership (`self`, `parent`, `child`, `none`, or documented
-`conditional`) instead of inferring margin, border, or padding from a screenshot. When
-an app-owned reusable visual component or composition changes, update its UX-demo entry
-and its record in `clients/web/kerf.components.json`, then run `npm run catalog:generate`
-from `clients/web` (Kerf's `kerf-component-catalog --write`); CI/lint runs
-`npm run catalog:check` so the generated extension remains current.
+## Customer Data Hygiene
 
-Use native `<button type="button">` controls for ordinary actions inside Kerf
-`ToolbarControlGroup`. The group owns their sizing, border, padding, and hover/focus
-geometry; do not add Web Awesome button hosts or recreate that chrome in consumer CSS.
-Reserve `wa-button` in a group for an actual Web Awesome-specific feature, such as a
-dropdown popup trigger, as documented by the installed component catalog.
+Never copy customer documents, messages, names, or figures into tickets, notes, commit messages, logs, test fixtures, demo data, or telemetry. Record ids, counts, sizes, timings, and shapes instead. Reproduce a customer-reported defect with synthetic data that matches the shape, and state in the ticket that no customer content was copied. Observability events carry identifiers and metrics only. When a capture would show customer content, use demo data or redact before attaching.
 
-UX demos may replace production data sources and external side effects with deterministic
-fixtures, but they must not be the sole owners of component interaction behavior. When a
-component is composed into the real app, inventory every rendered action/event from that
-component and wire or deliberately capability-disable each one. An enabled control that
-only works in `/ux-demo` is a production bug. Browser coverage must exercise representative
-child actions through every shipped parent composition (for example TicketRow through both
-TicketList and TicketBoard), not merely through the isolated demo.
+<!-- hotsheet:end section=customer-data-hygiene -->
 
-Ticket text editing autosaves when focus leaves the editing surface, never while the user
-is still typing: keystrokes update the controlled draft and, after a 150 ms debounce, a
-local recovery copy (localStorage, keyed by project, ticket, and field, with the value the
-edit started from); the single server write happens on blur, page hide, or an explicit
-finish, and merges against that edit-start value so a user's own typing can never be
-presented as a conflict. Do not add routine Save/Cancel buttons for details, notes, titles,
-tags, blocked reasons, or similar fields. Keep the controlled draft visible while saving,
-restore an unsaved local copy when the editor reopens, and test rapid coalescing, blur,
-composed-editor focus moves, post-save editing, and recovery after a reload. Explicit
-submission actions remain appropriate when they create a new object or complete a
-workflow rather than merely persisting an edit; discrete edits such as tag chips still save
-immediately.
+<!-- hotsheet:begin section=deployment-scripts v=1 -->
 
-Every change that can affect rendered client visuals requires a deliberate visual QA
-pass in a real browser before completion. Automated DOM, accessibility, computed-style,
-and geometry assertions remain necessary, but are not substitutes for looking at the
-rendered result. Exercise the affected demo states and transitions at representative
-wide and narrow viewport sizes; capture screenshots when they make comparison easier.
-An existing problem/design screenshot on the ticket makes a corresponding attached
-after screenshot a required part of the visual QA pass, not merely an optional aid.
-Review critically for correctness, clipping/overflow, alignment, spacing, typography,
-contrast, icon rendering, responsive behavior, platform/design-system conformance,
-consistency with adjacent components, and overall aesthetic appeal. Fix issues found,
-rerun behavioral tests, and record the visual states/viewports inspected on the ticket.
-If no usable browser is available, do not claim visual validation or complete the
-visual ticket: record `FEEDBACK NEEDED`/the outstanding review and leave it open.
-The web client keeps `domotion-svg` as a development dependency so its bundled Chromium
-is available for reproducible local screenshots even when no interactive browser is
-attached. Use that Chromium (or Playwright's browser when available) for the required
-rendered review; dependency presence alone is not visual validation.
+## Deployment Scripts
 
-Use cursor semantics that accurately communicate the interaction under the pointer.
-Clickable controls and selectable rows use `pointer`; editable text uses `text`;
-disabled controls use `not-allowed`; draggable/resizable surfaces use the appropriate
-grab or resize cursor; non-interactive content keeps the platform default. Apply the
-rule to custom elements through their documented CSS parts, and cover representative
-native and Web Awesome controls in rendered browser tests.
+Deploying is one checked-in script that takes the environment as its argument (`scripts/deploy.sh beta`), lives beside the infrastructure definitions it applies, and runs the same way for a person and for an agent. Nothing is deployed by hand from a cloud console.
 
-Use **Lucide icons** for all decorative or symbolic client iconography across web,
-Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
-dingbats, or other font characters (for example `◇`, `✓`, or `●`) as icons. Render
-official Lucide assets through a shared icon component; do not copy SVG path markup
-into feature components. Decorative icons are hidden from assistive technology when
-adjacent text carries the meaning; icon-only controls require an accessible name.
-Literal characters in user-authored content, code, or text whose actual content is
-the character are unaffected. If several Lucide icons are materially good semantic
-choices, ask the maintainer which metaphor to standardize before committing one.
-Every actionable context-menu item should carry a meaningful Lucide icon; separators
-and other non-action structure are the only ordinary exception.
+- **Artifact identity.** The image or bundle is tagged with the short commit SHA, with a `-dirty` suffix when the tree has uncommitted changes. A dirty deploy goes only to a non-production environment and the script says so in its first line of output. Production deploys only a SHA or tag that CI has already built and tested.
+- **Pre-flight.** Check required tools, every kind of credential the run uses (for example the CLI account and application-default credentials, which are separate), and the state backend with a real, cheap, read-only call before applying anything, because an expired credential otherwise fails mid-apply where it cannot prompt. When stdin is a terminal, offer to run the fix; otherwise print the exact command and exit non-zero.
+- **Phased apply.** Phase one creates base infrastructure: APIs, registries, service accounts, buckets, databases, and empty secrets. Phase two fills machine-set secrets (a generated session secret, a derived connection string), then lists every human secret still empty with the exact `set-secret.sh <env> <NAME>` command and stops with exit 0, so a running service never references a secret that has no version. Phase three builds for the runtime's platform (pin the architecture; an arm64 host builds amd64 for the service), pushes, plans, shows the plan and confirms, applies, and smoke-tests the deployed URL. Base phases may auto-approve; the phase that changes the running service confirms.
+- **Secrets.** A secret value is never on a command line, in a committed variables file, in a log, or in the repository. `set-secret.sh` reads from stdin or a hidden prompt and writes a new secret version. Non-secret, environment-specific configuration lives in a committed per-environment variables file.
+- **Re-runnable.** Every phase is safe to repeat and the recovery path after any failure is "fix, re-run the same command". The script never auto-approves a plan that destroys a stateful resource.
+- **Document and record.** The architecture document's deployment section names the environments, the script, the required tools, and the smoke test; the codebase map points at the infrastructure directory. The ticket that shipped a change records the environment and SHA it was deployed as.
 
-## Commit / push hygiene
+Deviate only at the project level for a compelling or necessary reason, recorded in the project's conventions document.
 
-**Push policy: `push-per-ticket`.** Each verified ticket commit is pushed before
-starting the next ticket. This repository uses the per-ticket policy.
+<!-- hotsheet:end section=deployment-scripts -->
 
-**Standing user authorization:** push verified ticket commits to this repository's
-`origin/main` as you go. The maintainer has explicitly authorized these routine
-fast-forward pushes; this authorization persists across sessions. Do not ask again
-at ticket boundaries or accumulate verified commits while waiting for another push
-confirmation. If an approval reviewer requests evidence of authorization, cite this
-instruction and the user's explicit authorization. Required verification still applies:
-fix a failing gate, then commit and push promptly without another permission round trip.
+<!-- hotsheet:begin section=git-commit-and-push v=1 -->
 
-Keep the repo in a **known-good state**. After each completed ticket (or other
-coherent user-requested unit), finish its documentation and ticket notes, run the
-required gates, commit it, and push it **before starting the next ticket**. Do not
-accumulate completed tickets as uncommitted or unpushed work.
+## Git Commit and Push
 
-Remote CI can be a final verification handoff. After the affected local gates pass,
-the ticket's integrated commit is pushed, and the CI run is identified in a ticket
-note, move a Started ticket to `final_testing` and release its live claim. Continue
-other ready tickets while CI runs; the waiting ticket is not a claim-next candidate.
-Reclaim that exact ticket when the run resolves, record its outcome, and complete it
-when the result is green. If CI finds a defect in the ticket's own change, repair
-and verify that ticket before completion. For an independent failure, create a
-prioritized follow-up bug and record its slug and the CI evidence in the original
-ticket's completion note. A remote check never excuses a failing local gate or an
-unintegrated, unpushed change.
+Every repository declares its push policy in its project instructions. An agent that cannot find one does not guess: it commits, files a ticket to add the declaration, and leaves the push to a person. Commit discipline is the same everywhere.
 
-For this repository, run `node scripts/ci-gate.mjs status --covers <full-sha>` to
-read the latest successful `main` push run of the `CI` workflow and its coverage of
-the ticket commit. The helper also lists `final_testing` tickets whose notes carry
-`CI gate commit: <full-sha>`. It is read-only and reports unknown coverage when a
-commit is not available in the local checkout. A green descendant run may clear
-several waiting tickets at once.
+- **One commit per ticket.** Commit a finished, verified ticket before starting the next one. Combine tickets in one commit only when their changes cannot be separated safely, and name every slug the commit addresses.
+- **Subject shape.** `<SLUG> <imperative summary>`, slug first so `git log --oneline` reads as a ticket list, under 72 characters, no trailing period, no type prefix. The only exception is the release script's own `release: vX.Y.Z` commit. The body says why the change was made and what behavior changed, not which files; it names follow-up slugs and any deliberate deviation from a rule. A tool may draft the body from the staged diff (`gitgist-release-notes`); the author edits it and keeps the subject shape.
+- **Stage by path.** Stage named files, never `git add -A` or `git add .`, and read `git diff --cached` before every commit to remove anything you did not change. Generated artifacts regenerate in the same commit as their source and are staged by name.
+- **Never rewrite shared history.** No amend, rebase, reset, or force-push on a commit that has reached the shipping branch or any remote; fix forward with a new commit. Local unpushed commits may be amended before they leave the machine. Never pass `--no-verify`: a failing hook is a failing gate, and the fix is the code, not the flag.
+- **Gates before the remote opens.** A pre-commit hook runs the cheap whitespace and format checks; a pre-push hook runs the root check once per push and skips when the same tree already passed. Provide a `push` script that runs the check first and then `git push`, so a long gate does not run inside an idle remote connection that times out.
+- **Declared push policy.** The instructions name exactly one of two policies and carry a standing authorization sentence so agents stop asking at ticket boundaries ("The maintainer has authorized routine fast-forward pushes of verified ticket commits to `<branch>`; do not ask again").
+  - `push-per-ticket`: push each verified ticket commit immediately after committing it and confirm the push succeeded before taking the next ticket. This is the default for applications and services.
+  - `push-per-batch`: hold verified ticket commits locally and push once per queue drain, or sooner when a fix must reach CI. Choose it only for a measured reason recorded beside the declaration (for example a multi-minute pre-push gate plus a long CI run that cancels superseded runs), and still push before ending the session.
+- **Trunk-based.** Commit to the shipping branch. Use a branch only for a change that must land through review or for a worktree another agent works in, and integrate it per the Hot Sheet workflow: merge or cherry-pick, confirm the commit is reachable from the shipping branch, remove the worktree.
+- **What never enters a commit.** Secrets and tokens, machine-local paths, customer content (`customer-data-hygiene`), build output that is not a declared generated artifact, and editor or OS files. `.gitignore` covers them, and a policy test fails on machine-local paths in tracked files.
+- **Verify, then record.** After a push, confirm the remote has the commit (no ahead count in `git status -sb`) and record the CI gate commit in the ticket per the Hot Sheet workflow. A push that was never confirmed is not a push.
 
-For each ticket:
+Deviate only at the project level for a compelling or necessary reason, recorded beside the policy declaration.
 
-1. Implement the coherent ticket-sized change and update its docs and coverage matrix.
-2. **Lint and fix** every affected package — `cargo fmt --all --check` + `cargo lint`
-   for Rust; `npm run lint` in affected TypeScript packages.
-3. Run the affected unit, integration, browser, and visual tests. Use the full local
-   suite for shared/risky changes and always before publishing an accumulated recovery
-   batch (per [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
-   §12.7). The full Playwright suite runs sharded in CI (`browser-full`, HS2-D95TXJ),
-   so locally run only the affected browser specs. The job is required (HS2-6H4M85),
-   so a ticket in `final_testing` completes only after it passes.
-4. Mark the ticket completed with its verification note, review the diff, make **one
-   commit for that ticket**, and push immediately. Combine tickets in one commit only
-   when their implementations overlap so strongly that separating them would be unsafe
-   or misleading, or when the tickets are duplicates of the same work.
-5. Confirm the push succeeded and the worktree is clean before taking the next ticket.
+<!-- hotsheet:end section=git-commit-and-push -->
 
-If pre-existing changes have accumulated, separate them into one commit per ticket
-wherever attribution remains safe. Use a combined recovery commit only for strongly
-overlapping or duplicate tickets whose changes cannot be separated without rewriting
-or risking completed work. CI may still surface issues from heavier CI-only tests, but
-the local environment must be green before every push. **Exception:** when deliberately
-testing CI itself, a red-ish push may be intentional, but then do not push to `main`.
+<!-- hotsheet:begin section=gitgist-release-notes v=1 -->
 
-For documentation-only changes, verify referenced paths and commands against the
-current repository; run code gates when documentation changes code-facing contracts.
+## gitgist Release Notes
 
-## Project attribution
+gitgist turns a commit range into grounded, user-facing release notes and drafts a commit message from the staged diff. Since 1.2.0 it reads the range's actual code diff, so what it is allowed to read is a repository decision recorded in config, not a flag typed per run.
 
-Hot Sheet 2 is developed by **Small Tale Inc.** and lives under the **`Small-Tale`**
-GitHub org (`Small-Tale/hotsheet2`) — **not** under an individual (e.g. not "Brian
-Westphal"). Whenever the project is named, authored, or copyrighted, use **Small Tale
-Inc.**:
+- **Install and wire.** A pinned dev dependency with two call sites: a `commit:msg` script that runs `gitgist --staged --commit-message`, and the release script calling `gitgist <last-tag>..HEAD` (no range means latest tag to `HEAD`). Draft large commits and every release's notes with these rather than summarizing a diff by hand; the author edits the draft and keeps the repository's slug-first subject shape (`git-commit-and-push`).
+- **Configure once.** Settings live in `gitgist.config.json` at the repository root or under the `gitgist` key of `package.json`, never repeated as flags in CI: `exclude`, `provider`, `maxDiffChars`, `linkCommits`. Command-line `--exclude` patterns append to the file's list, and unknown keys are rejected, so keep the file to documented keys.
+- **Exclude generated and vendored files.** The built-in list already covers lockfiles, source maps, and `dist/`. Add every file the repository generates or imports (demo captures, AI guidance mirrors, benchmark imports, snapshots), because one regeneration would otherwise consume the diff budget and crowd out real source changes. Excluded files still show as changed, only without a diff body. Keep the project's additions in a two-column table in the instructions, pattern and why, and leave hand-authored content included however large it is.
+- **Provider.** Default to the signed-in `claude` CLI (`claude-cli`), which needs no API key; never add an API key to the repository or CI for notes alone. Configure `--fallback-provider` so one flaky backend does not block a release. `--no-ai` is the deterministic offline path and the floor the release script falls back to.
+- **House style.** When the project wants fixed sections, order, or emoji, commit a template file and pass it with `--template` from the release script instead of post-editing every draft.
+- **Traceable bullets.** Enable `linkCommits` in a repository with a GitHub, GitLab, or Bitbucket remote so each bullet ends with the commit it came from.
+- **Review before tagging.** The draft is an input, not the notes: remove internal noise it kept, check each claim against the diff, add the migration steps it cannot know, and only then let the release script write the changelog and the tag message. A draft is never committed unread.
 
-- Package manifests (`package.json` `author`/`publisher`, `Cargo.toml`
-  `authors`/`publish`, Xcode/Gradle org identifiers) → **Small Tale Inc.**
-- `LICENSE` copyright holder → **Small Tale Inc.** (year(s) as applicable).
-- User-facing "about"/credits strings, docs bylines, and app bundle identifiers →
-  **Small Tale Inc.** (bundle id under a `com.smalltale.*` / similar namespace).
-- Individual developers still appear as normal git commit authors; that's separate
-  from how the _project_ is attributed.
+Deviate only at the project level for a compelling or necessary reason, recorded in the project's conventions document.
 
-References to the _original_ Hot Sheet (the predecessor at
-`github.com/brianwestphal/hotsheet`) are historical/factual and may remain as
-predecessor links; they do not attribute Hot Sheet 2.
+<!-- hotsheet:end section=gitgist-release-notes -->
 
-<!-- BEGIN hotsheet:agents-md -->
-<!-- hotsheet-shared-section: antigravity, claude, codex, opencode -->
-<!-- hotsheet-instructions-version: 65 -->
+<!-- hotsheet:begin section=requirements-documentation v=4 -->
+
+## Requirements Documentation
+
+Keep human-readable requirements as the source of truth for product behavior. Update them in the same change that adds, removes, or changes behavior. Create and cross-link documents for major new functional areas.
+
+Maintain two concise AI-readable synthesis documents at project-specific, repository-relative locations:
+
+- A codebase map of directory structure, entry points, schema, settings, build and test paths, and where to find important behavior. Update it when structure or contracts change.
+- A requirements summary covering each requirements document and marking what is shipped, partial, design-only, or deferred. Update it when requirements or implementation status change.
+
+If either document is absent, create a minimal, truthful version in the same change that first needs it; link it from the project's documentation index and record its relative path in local `hotsheet:specifics` guidance. Setup and refresh install these instructions but do not invent a map or product status. Preserve any existing document locations and prefer targeted updates over rewrites. Source requirements documents and code win if a summary conflicts with them.
+
+Any project with a rendered interface keeps a UI conventions document. It points at the design system's own guidance for philosophy and interaction conventions and records only the project's deviations and project-specific decisions. Cite ticket slugs for decisions in prose and code comments; use one name per concept and keep a glossary once terms accumulate; render diagrams rather than drawing them in text; record performance baselines and audits as dated documents.
+
+<!-- hotsheet:end section=requirements-documentation -->
+
+<!-- hotsheet:begin section=testing-philosophy v=6 -->
+
+## Testing Philosophy
+
+- Scale testing to risk. Declare a tier in the ticket's preliminary-thoughts note (in the claim note for trivial work); reviewers may raise it. **T0 trivial** (copy, docs, constants, one style token or config value): lint, typecheck, and directly related tests; check visuals only when something visibly changes. **T1 normal** (an ordinary feature or bug fix): the affected tests only; a fix adds one regression test at the most natural layer, and a new feature gets unit and end-to-end coverage. **T2 high-risk** (merge and sync logic, claims and leases, indexes, file formats and parsers, shared components, auth and credentials, data migrations, and any surface the project names as high-risk): everything below, plus the full affected suites.
+- Cover each feature with unit tests of its logic and end-to-end tests through the real shipped flow. Mock external dependencies in unit tests; keep browser fixtures faithful to real server shapes, optional fields, and status codes. Exercise each newly composed API surface against a real server as well as mocked client tests.
+- Aim to cover every documented feature and reach 100% line and branch coverage. Treat those numbers as a floor: executed lines do not prove behavior or sequences. For stateful modules, enumerate states and transitions, then test repeated, interleaved, out-of-order, reset, and empty-then-refill sequences.
+- Test stateful controls in both directions: control to application state and rendered output, and programmatic state changes back to live controls. Verify resets and a further edit. For custom elements, assert live properties and relevant focus/events. Check every part of a selected presentation, including icons, badges, counts, and other derived decoration.
+- Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
+- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
+- Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
+- When a reviewer corrects a convention, pin it in the same change as a source-level policy test or lint rule named with the ticket slug; prose alone does not hold.
+- Verify on the rebuilt instance and reproduce the user's actual steps or command before claiming a fix; never test against the user's running host or a stale build. Isolation, build-once, and flake policy live in the `test-operations` rule when a project installs it.
+
+<!-- hotsheet:end section=testing-philosophy -->
+
+<!-- hotsheet:begin section=ticket-driven-work v=6 -->
+
+## Ticket-Driven Work
+
+Create a Hot Sheet ticket before substantial work described directly by a user, including features, bugs, refactors, and multi-step code changes. Claim it before editing, keep its phase and ETA current, and release the claim whenever work stops. A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
+
+- Create follow-up tickets immediately for unfinished steps, open decisions, known gaps, and designed but unbuilt behavior. Include their slugs in the current ticket's completion note.
+- Use `FEEDBACK NEEDED` only when the current ticket cannot proceed without a user decision or unavailable external state. Leave it Started, describe the blocker, and release its claim. Status reports, release waits, and sandbox blockers are regular notes, not feedback requests; close tickets you created yourself; give a visual tradeoff captures and `CHOICE` options; check open tickets and the code before asking.
+- Before completing, verify the scope, update tests, coverage and docs, scan for placeholders and incomplete behavior, and record the result, verification, and every follow-up.
+- When a UI ticket has a problem or design image, capture and attach an after image of the matching component, state, and viewport. Explain any unavailable capture in the completion note.
+- Name every addressed ticket slug in its commit message.
+- Re-read the whole ticket, including notes added since your last read, before every action on it, and quote the note you are acting on in your result.
+- Change only what the ticket asks and preserve neighboring appearance and behavior; propose collateral changes as separate tickets. When the ticket names an attachment, reference art, a prior implementation, or another project, open it before designing.
+- Measure before restructuring: record the number that justifies a performance or architecture change, and close the ticket as not worth it when the number is small.
+- Record `activity` notes when a meaningful subtask starts and finishes; keep repeated or reversed transitions as separate history entries. Put conclusions, decisions, and recommendations in `regular` Markdown notes, with a short activity entry pointing to them when useful.
+- Give each AI-authored activity note a one-line, outcome-oriented `note_summary` in the same update as its Markdown body. Keep the summary plain text and preferably under 80 characters; put implementation and verification detail in the body.
+- For multiline CLI Markdown, use `--note-file <path>` (or `--note-file -` for stdin) with real line breaks. Use `--allow-literal-backslash-n` only when literal backslash-n prose is intentional.
+
+<!-- hotsheet:end section=ticket-driven-work -->
+
+<!-- hotsheet:begin section=visual-qa v=2 -->
+
+## Visual QA
+
+For any change that can affect a rendered interface, inspect the real application (not a demo route) on the rebuilt instance in a browser at representative wide, medium, and narrow sizes, including the wide-to-narrow-to-wide transition, before completing the ticket. Exercise the affected states and transitions, then review readability, clipping and overflow, alignment, spacing, typography, contrast, icons, responsive behavior, and consistency with adjacent components. Fix defects, rerun affected behavioral checks, and inspect the corrected result. DOM, accessibility, style, and geometry assertions support this review but do not replace looking at the rendered page. A capture that shows a visible defect is never correctness evidence; fix, rerun, and recapture before attaching.
+
+If the ticket has a problem or design image, capture the corresponding after state at the same component and viewport as closely as practical. Attach the image to the ticket and name it in the completion note. Screenshots supplement behavioral tests. If browser capture or attachment is unavailable after practical attempts, describe the exact blocker and leave the visual ticket open for review rather than claiming visual validation.
+
+<!-- hotsheet:end section=visual-qa -->
+
+<!-- hotsheet-instructions-version: 64 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -515,178 +433,174 @@ compare the commits since the last green run and the failing checks, then repair
 responsible ticket or file an independent bug. Do not add a local last-green marker
 or repeat the full suite for every ticket; keep each ticket's affected local gates.
 
-<!-- hotsheet:push-policy:begin -->
-Push policy: `push-per-ticket`. The maintainer authorizes routine fast-forward
-pushes of verified ticket commits to the shipping branch. Push each ticket
-commit immediately, confirm it succeeded, then begin the next ticket.
-<!-- hotsheet:push-policy:end -->
-<!-- END hotsheet:agents-md -->
+**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
+already uses; this default guidance does not require or forbid pushing on its own.
 
-<!-- hotsheet:begin section=ticket-driven-work v=5 -->
+<!-- hotsheet:begin section=kerf-ui-catalog-demos v=1 -->
 
-## Ticket-Driven Work
+## Kerf UI Catalog Demos
 
-Create a Hot Sheet ticket before substantial work described directly by a user, including features, bugs, refactors, and multi-step code changes. Claim it before editing, keep its phase and ETA current, and release the claim whenever work stops. A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
+The `/ux-demo` route mounts Kerf's `Catalog` with production components. It is absent from production builds and is the first place to look before composing a screen.
 
-- Create follow-up tickets immediately for unfinished steps, open decisions, known gaps, and designed but unbuilt behavior. Include their slugs in the current ticket's completion note.
-- Use `FEEDBACK NEEDED` only when the current ticket cannot proceed without a user decision or unavailable external state. Leave it Started, describe the blocker, and release its claim.
-- Before completing, verify the scope, update tests, coverage and docs, scan for placeholders and incomplete behavior, and record the result, verification, and every follow-up.
-- When a UI ticket has a problem or design image, capture and attach an after image of the matching component, state, and viewport. Explain any unavailable capture in the completion note.
-- Name every addressed ticket slug in its commit message.
-- Record `activity` notes when a meaningful subtask starts and finishes; keep repeated or reversed transitions as separate history entries. Put conclusions, decisions, and recommendations in `regular` Markdown notes, with a short activity entry pointing to them when useful.
-- Give each AI-authored activity note a one-line, outcome-oriented `note_summary` in the same update as its Markdown body. Keep the summary plain text and preferably under 80 characters; put implementation and verification detail in the body.
-- For multiline CLI Markdown, use `--note-file <path>` (or `--note-file -` for stdin) with real line breaks. Use `--allow-literal-backslash-n` only when literal backslash-n prose is intentional.
+- Every exported component has its own demo file that renders the production component with deterministic fixtures (no API calls), exposes every variant and state through settings with a reset, opens dialogs from a visible trigger and lets them dismiss, and runs live behavior (timers, drag, validation) for real.
+- Demos reuse production CSS and wiring and never own interaction behavior; a demo that reimplements a fake version of a screen is misinformation and is removed.
+- An application-views group mounts the real root for every routed state so the whole app is reviewable without setup.
+- A structural test enforces export-level demo coverage and signal resets; the catalog manifest (`kerf.components.json` → `component-composition.json`) is regenerated in the same change and byte-checked in CI.
+- An enabled control that works only in the demo is a production bug: end-to-end tests exercise child actions through each shipped parent, and unsupported controls are disabled with a reason.
 
-<!-- hotsheet:end section=ticket-driven-work -->
+<!-- hotsheet:end section=kerf-ui-catalog-demos -->
 
-<!-- hotsheet:begin section=testing-philosophy v=5 -->
+<!-- hotsheet:begin section=kerf-ui-interaction-defaults v=1 -->
 
-## Testing Philosophy
+## Kerf UI Interaction Defaults
 
-- Scale testing to risk. Declare a tier in the ticket's preliminary-thoughts note (in the claim note for trivial work); reviewers may raise it. **T0 trivial** (copy, docs, constants, one style token or config value): lint, typecheck, and directly related tests; check visuals only when something visibly changes. **T1 normal** (an ordinary feature or bug fix): the affected tests only; a fix adds one regression test at the most natural layer, and a new feature gets unit and end-to-end coverage. **T2 high-risk** (merge and sync logic, claims and leases, indexes, file formats and parsers, shared components, auth and credentials, data migrations, and any surface the project names as high-risk): everything below, plus the full affected suites.
-- Cover each feature with unit tests of its logic and end-to-end tests through the real shipped flow. Mock external dependencies in unit tests; keep browser fixtures faithful to real server shapes, optional fields, and status codes. Exercise each newly composed API surface against a real server as well as mocked client tests.
-- Aim to cover every documented feature and reach 100% line and branch coverage. Treat those numbers as a floor: executed lines do not prove behavior or sequences. For stateful modules, enumerate states and transitions, then test repeated, interleaved, out-of-order, reset, and empty-then-refill sequences.
-- Test stateful controls in both directions: control to application state and rendered output, and programmatic state changes back to live controls. Verify resets and a further edit. For custom elements, assert live properties and relevant focus/events. Check every part of a selected presentation, including icons, badges, counts, and other derived decoration.
-- Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
-- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
-- Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
+Kerf owns the interaction conventions of every application built on `@kerfjs/ui`. They are the consumer house grammar at `node_modules/@kerfjs/ui/docs/interaction-conventions.md` (shipped from `@kerfjs/ui@5.0.0-beta.118`; Kerf's `llms.txt` and `ai/skill.md` link it; in a workspace the path is relative to the package that installs `@kerfjs/ui`). They are defaults, not suggestions: a composition that departs from them without a recorded deviation is a defect, whoever asked for it.
 
-<!-- hotsheet:begin specifics=testing-philosophy v=1 -->
+- **Read it before composing.** After the retrieval order in `kerf-ui-usage`, open the installed document before planning a screen, toolbar, list, dialog, or editor. It governs chrome ownership and hierarchy; actions, feedback, and dialogs; lists and selection; text editing, autosave, and continuity; latency; responsive layout, platform, and roles; and the review of a real composition. Name the sections that apply in the ticket's preliminary note and carry their nouns into the region plan and test names.
+- **Point, never restate.** The project's UI conventions document links the installed path and records only the project's deviations and project-specific decisions. Local copies of these conventions (a design-philosophy section, a hard-rejection list, a lesson table) are retired in favor of the pointer, because copies drift and a correction made in one project never reaches the others.
+- **Deviate on record.** A project departs from a default only for a compelling product reason, decided at the project level and written in its UI conventions document as the section departed from, the reason, and the ticket slug. One screen's screenshot, a maintainer's request for a specific visual, an AI note, or an existing screen that already differs is not a deviation; the first three are tickets and the last is a defect.
+- **Grow it upstream.** When a question the grammar does not answer recurs, or a default proves wrong in use, file a `KF-*` ticket in the Kerf store that proposes the sentence to add or change, reference it from the application ticket, record the interim local decision beside that slug, and remove the local decision when the Kerf release ships it.
+- **Pin corrections.** When a reviewer corrects a violation, pin it as `conventions-as-code` prescribes: a source-level policy test or lint rule, named with the ticket slug and the house-grammar section, in the same change as the fix.
+- **Re-read on upgrade.** Each Kerf upgrade (`kerf-ui-upgrades`) diffs the installed document against the previous version. A new or changed default yields one ticket per surface that no longer complies, never a silent local exception.
 
-### Risk tiers (HS2-GC3D2X)
+<!-- hotsheet:end section=kerf-ui-interaction-defaults -->
 
-Scale testing to the ticket's tier. Declare it in `## Preliminary thoughts`, or in the
-claim note for trivial work. A reviewer or the maintainer may raise it.
+<!-- hotsheet:begin section=kerf-ui-upgrades v=1 -->
 
-- **T0 trivial** (copy, docs, constants, one CSS token or config value): lint, typecheck,
-  and directly related tests. Do a visual check only when something visibly changes, and
-  take a screenshot only when the ticket has a before image.
-- **T1 normal** (ordinary feature or bug fix): affected tests only. A fix gets one
-  regression test at the most natural layer. Double coverage (unit + E2E) applies to new
-  features.
-- **T2 high-risk**: the full treatment above (transition matrix, adversarial pass) plus the
-  full affected suites for every ticket. T2 covers:
-  - the merge driver and claims/leases (`hotsheet-ticketing` `merge.rs`, `distclaim.rs`)
-  - the file-format parser (`hotsheet-model`)
-  - index reconcile (`hotsheet-index`)
-  - the sync engine and write-behind (`hotsheet-sync`, `hotsheet-extsync`)
-  - the terminal-sizing arbiter (`hotsheet-terminals`)
-  - auth, credentials, and TLS (`hotsheet-tls`, keychain adapters)
-  - data migration (the migrator, HS1 import)
-  - shared Kerf/Web Awesome-composed components used by several surfaces
-  - the shared guidance templates and setup refresh (`hotsheet-plugins`)
+## Kerf UI Upgrades
 
-Rate the `## Confidence` verification factor against the declared tier. A fully checked
-T0 change can score high.
+- Pin `kerfjs`, `@kerfjs/ui`, `eslint-plugin-kerfjs`, and `create-kerf-component` to one exact version and assert the match in a unit test.
+- On each Kerf release: bump all four in lockstep; re-run `npx kerfjs setup` with the project's options (`--ui`, `--guidance-source`) as a dry run and then with `--write --yes`; regenerate the catalog; run the full root check; re-read `node_modules/@kerfjs/ui/ai/skill.md` and the changelog for newly Discouraged Web Awesome elements and new primitives; remove app workarounds and profile exceptions the release makes obsolete; file a `KF-*` ticket for anything the release broke.
+- Never work around a Kerf regression locally: stay on the last good version, file the ticket, and upgrade when the fix ships.
 
-**Targeted reruns (HS2-AEE51Y).** After a failure, rerun only the failing tests until they
-pass:
+<!-- hotsheet:end section=kerf-ui-upgrades -->
 
-- Rust: `node scripts/test-quiet.mjs rust -- -p <crate> -E 'test(<name>)'`
-- web unit: `npx vitest run <file> -t '<name>'`
-- browser: `HOTSHEET_WEB_TEST_PORT=<port> npx playwright test <spec> -g '<title>'`
+<!-- hotsheet:begin section=kerf-ui-usage v=2 -->
 
-Then run the ticket's affected set once. A rebase onto commits outside the ticket's area
-needs no rerun; an overlap reruns only the overlap's affected tests. Never rerun a passing
-suite to double-check.
+## Kerf UI Usage
 
-### This project's test setup
+Kerf's own guidance is authoritative for component selection, layout and spacing, the styling boundary, accessibility, overlays, responsive layouts, theming tokens, writing style, and catalog authoring. Read it from the installed packages rather than restating it; in a workspace the paths are relative to the package that installs `@kerfjs/ui`.
 
-> **Implemented test paths.** Rust unit/integration tests run with `cargo nextest run`;
-> server HTTP/WS tests use temporary stores. `clients/web` runs Vitest unit tests and
-> Playwright browser flows (`npm run test:unit`, `npm run test:e2e`), including real
-> checkout/server compositions. CI runs web lint, typecheck, unit tests, build, Chromium
-> smoke flows, a WebKit lane, and the full Playwright suite in four shards
-> (`.github/workflows/ci.yml`). The migrator's Vitest
-> suite includes cross-language export/import conformance. Rust and migrator coverage
-> gates are separate; `node scripts/check-test-coverage.mjs` validates the feature
-> coverage matrix. A credentials-gated live tier runs separately. See
-> [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
-> §12.7 and [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for current commands.
+- **Retrieval order, before touching any file that imports `kerfjs` or `@kerfjs/ui`:** `node_modules/kerfjs/ai/skill.md`; then `node_modules/@kerfjs/ui/llms.txt` and the order it prescribes (`docs/component-selection.md`, `ai/components/README.md` plus the pages for the components you use, `ai/public-api-signatures-v1.md`, `ai/skill.md`); then the project's consumer catalog extension and `ai/component-catalog.json`, respecting declared geometry ownership rather than inferring it from screenshots. For any screen, toolbar, list, dialog, or editor add `docs/interaction-conventions.md`, the consumer house grammar whose deviations `kerf-ui-interaction-defaults` governs; for a screen also `docs/app-layouts.md`, `docs/layout.md`, and `docs/design-philosophy.md`; for controls `docs/accessibility.md`; for copy `docs/writing.md`.
+- **Styling boundary.** `ai/skill.md` and `docs/design-philosophy.md` define what app CSS may do. In short: configure through props, variants, and public `--kui-*` tokens; never target `.kui-*` classes, parts, private tokens, or an app class placed on a Kerf root; never pad, size, or position a component from outside; import `foundation.css` then `document.css` and keep the browser-default root font size. Styling a Kerf component with application CSS is a bug, even when the maintainer asks for the visual directly: name the conflict and the missing API, and file the gap.
+- **Setup and gates.** Run `npx kerfjs setup --ui` as a dry run, then with `--write --yes`, on day one and after every upgrade; add `--guidance-source AGENTS.md` when the project keeps one instruction file. Keep `kerf.components.json` authored and `component-composition.json` generated and byte-checked, and keep `kerf:check` (typecheck, Kerf ESLint `recommended-ui`, `kerf-component-catalog --check`, `kerf-ui-doctor --full` with `failOn: warning` and no suppressions) inside the root check command.
+- **Web Awesome.** Never render a Discouraged `wa-*` element where a Kerf component replaces it (`Button`, `TextField`, `Select`, `PopupMenu`, `DialogSurface`, `TabBar`, `LucideIcon`); `docs/webawesome-migration.md` lists them. Inside `ToolbarControlGroup` use plain `<button type="button">`, not `wa-button` or a standalone `Button`.
+- **Component gaps.** A missing prop, variant, or component is a `KF-*` ticket in the Kerf store (`hotsheet-cli -C <kerf-store> new --title "…" --category feature`) that describes the gap, referenced from the app ticket, which stays blocked rather than shipping an override; adopt the capability when it ships and remove any interim profile exception. Doctor budgets and profile exceptions only decrease.
 
-- **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
-  `crates/*/tests/**`): run with **`cargo-nextest`**. Pure logic uses injected-fake
-  adapters (in-memory fs, temp git repo, in-memory SQLite); integration uses a real
-  temp store + real SQLite. **Always use the shared fixtures:** `TempStore` builder
-  and the `TestServer` harness.
-- **Property / fuzz / snapshot:** `proptest` for the semantic **merge driver** and
-  `cargo-fuzz` for the file-format parser are implemented; `insta` snapshots remain
-  planned. The **git-native claim** has deterministic bare-repo integration tests (concurrent
-  workers); the GitHub-live variant is opt-in (creds-gated).
-- **Server E2E:** boot the real server on an ephemeral port against a temp store,
-  drive over HTTP/WS. **Web E2E** (`clients/web`): **Playwright** against a real
-  running server. SwiftUI: XCUITest (later).
-- **Migrator** (`migrator/`, Node): **`vitest`**, plus the cross-language
-  **conformance test** — real `hotsheet-model` must parse + round-trip what the
-  migrator wrote.
-- **Stateful modules** (claim/lease, index reconcile, terminal-sizing arbiter, sync
-  engine) get **transition-matrix + adversarial-sequence** tests; pin every stateful
-  bug as a regression test.
-- **Stateful clients** get bidirectional binding contract tests: controls → state and
-  rendered output, then programmatic reset/replacement → live control properties and
-  output, followed by another edit. Browser tests must exercise every user-visible
-  action and inspect custom-element properties rather than relying on attributes.
-- **Coverage:** per-language gates + the feature-layer matrix in
-  `docs/TEST-COVERAGE.md` (NOT one merged lcov):
-  `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).
-- **Quiet runs (HS2-CP63FG):** prefer `node scripts/test-quiet.mjs <rust|web-unit|web-e2e|migrator>`
-  (runner args after `--`). It prints one summary line per tier plus capped failure
-  excerpts and writes the full output to the printed `target/test-quiet/` log path.
-- **Fast web unit runs (HS2-3PX1E4):** `npm run test:unit:fast` skips the binary-spawning
-  Vitest suites and their cargo build. Targeted `npx vitest run <file>` builds only when a
-  binary suite is selected and the binaries are stale. Profile slow tests with
-  `node scripts/test-profile.mjs`. Quarantine a known flake per
-  [`docs/test-quarantine.md`](docs/test-quarantine.md) instead of rerunning it.
-- **Commands:** Rust `cargo nextest run` and `cargo lint`; from `clients/web`,
-  `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:e2e`, and
-  `npm run build`; from `migrator`, `npm run lint`, `npm test`, and
-  `npm run test:coverage`. CI runs a separate Rust `cargo llvm-cov` gate.
+<!-- hotsheet:end section=kerf-ui-usage -->
 
-<!-- hotsheet:end specifics=testing-philosophy -->
+<!-- hotsheet:begin section=playwright-operations v=1 -->
 
-<!-- hotsheet:end section=testing-philosophy -->
+## Playwright Operations
 
-<!-- hotsheet:begin section=requirements-documentation v=3 -->
+- **Isolation.** Each worker gets its own server, port, and data directory (keyed on `parallelIndex`); each spec seeds its own data and addresses it by id; nothing shares state across specs or depends on order. Build the client once in global setup.
+- **Waiting.** Wait on events, readiness signals, or state, never `waitForTimeout`. Route fixtures gate pending responses behind a promise, not a timer, and mirror the real endpoints' fields, optional values, and status codes.
+- **Realism.** Interaction tests hit real targets (the glyph, the line number), use real pointer events rather than synthesized shortcuts, assert positive fitted geometry and distinct drag coordinates, hit-test overlays for clipping, and assert live `value`, focus, and emitted events rather than attributes. Resize wide to narrow to wide inside the test when layout is under test.
+- **Engines and fonts.** Include WebKit for sizing, overflow, sticky layers, and focus rings; pin CI fonts to match local metrics when specs measure text.
+- **Flakes.** A flake fix is done when `--repeat-each=N --workers=M --retries=0` passes under full-suite load; retries only in the full CI job, bounded at two, with a ticket per retried test; quarantine with a tagged title naming the fix ticket (see `test-operations`).
+- **Captures.** Save screenshots to a project path named by slug, state, and width; do not add snapshot diffing by default; review captures per `ui-evaluation`.
 
-## Requirements Documentation
+<!-- hotsheet:end section=playwright-operations -->
 
-Keep human-readable requirements as the source of truth for product behavior. Update them in the same change that adds, removes, or changes behavior. Create and cross-link documents for major new functional areas.
+<!-- hotsheet:begin section=release-scripts v=1 -->
 
-Maintain two concise AI-readable synthesis documents at project-specific, repository-relative locations:
+## Release Scripts
 
-- A codebase map of directory structure, entry points, schema, settings, build and test paths, and where to find important behavior. Update it when structure or contracts change.
-- A requirements summary covering each requirements document and marking what is shipped, partial, design-only, or deferred. Update it when requirements or implementation status change.
+A release is one command, run from a clean checkout of the shipping branch, that produces an annotated tag CI publishes from. Nothing publishes from a developer machine, and nobody performs a release by hand from a checklist.
 
-If either document is absent, create a minimal, truthful version in the same change that first needs it; link it from the project's documentation index and record its relative path in local `hotsheet:specifics` guidance. Setup and refresh install these instructions but do not invent a map or product status. Preserve any existing document locations and prefer targeted updates over rewrites. Source requirements documents and code win if a summary conflicts with them.
+- **One entry point.** `npm run release` (or the language's equivalent task runner) drives the stable flow in order: pre-flight, version choice, release notes, changelog update, local gate, version bump in every lockstep package, release commit, annotated tag, push of commit and tag. `npm run release:beta` is tag-only: no version-file bump, no changelog write, no commit; it tags `vX.Y.Z-beta.N` off `HEAD` with `N` one more than the highest existing beta in that series. A non-interactive variant answers every prompt from flags (`--version`, `--notes <file>`, `--skip-checks`, `--dry-run`) so automation and agents can cut a beta without an editor.
+- **Pre-flight refuses.** A dirty tree, the wrong branch, a missing tool, an existing tag, or a stale lockfile stops the script before it changes anything, and it prints the fix rather than a stack trace. Pre-flight distinguishes what the local machine needs (git, the toolchain) from what CI holds (registry credentials), and does not demand a local registry login the publish path does not use.
+- **Resumable and idempotent.** The script records each completed step and the answers so far in an ignored state file and resumes after an interruption without repeating the bump or re-asking; a finished release removes the file. A re-run after a partial release commit stages nothing and proceeds to tag.
+- **Versions.** Semantic versioning. Packages that release together carry one version and one tag; the script bumps every embedded version (manifests, scaffold templates, documented ranges) from the one root version, and a `--check` mode of that sync runs in the root gate so drift fails long before release day. Widening a supported-version range is a tested act, never a convenience edit.
+- **Changelog.** Keep a Changelog format with an `[Unreleased]` section maintained in the same commit as each behavior change, with the ticket slug in the bullet. The stable release moves the whole `[Unreleased]` body into the new dated version entry and then appends the distinct release-note draft; a draft never replaces hand-curated history. Betas do not write the changelog. The script formats the changelog before the lint gate runs.
+- **Notes.** Draft notes from the commit range since the last tag with gitgist (`gitgist-release-notes`), open the draft in the editor, and require a non-empty, user-facing result; the annotated tag message carries the final notes. Without an AI provider, fall back to deterministic grouping, then to a `git log` pointer; a notes provider never blocks a release.
+- **CI publishes from the tag.** The release workflow triggers on `v*` tags only. Jobs that test, build, or pack hold no publish credential; the one job that holds the registry token or OIDC identity only downloads and publishes already-packed bytes and never checks out or executes repository code. Betas publish under a `beta` dist-tag with a prerelease GitHub release; stable releases create the GitHub release from the notes. When several packages publish from one tag, dependents wait until the core package is visible on the registry and fail fast when the core run fails, so a failed core release is re-run first and the dependents after.
+- **Rollback.** A tag CI has not yet published is deleted locally and remotely and re-cut. A published version is never unpublished or re-tagged; ship a patch.
+- **Reference.** A new project copies the reference release script, changelog helper, and release workflow from an existing repository and changes names, packages, and gate commands; it does not write them from scratch. Record the source in the codebase map (or in a local note when the project must not name it).
 
-<!-- hotsheet:begin specifics=requirements-documentation v=1 -->
+Deviate only at the project level for a compelling or necessary reason, recorded in the project's conventions document.
 
-### This project's docs layout
+<!-- hotsheet:end section=release-scripts -->
 
-- **Requirements docs** live in [`docs/`](docs/), numbered by topic (`00-…`, `01-…`,
-  … `11-…`, growing). Cross-reference related docs with relative links.
-- **Requirements summary** (the AI-read synthesis with status markers): the
-  "Requirements summary" table in [`docs/README.md`](docs/README.md). Keep it in
-  sync in the same change as a design/code change.
-- **Codebase map:** [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) — the AI-read
-  orientation doc (directory tree, entry points, formats, build/test, where-to-look).
-  Keep it in sync in the same change that adds a file/dir, command, schema field, or
-  setting.
-- The Rust core, CLI/server, migrator, and Kerf web client are implemented; some
-  client and provider areas remain partial. See [`docs/README.md`](docs/README.md)
-  for the requirements status and
-  [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for what's built.
+<!-- hotsheet:begin section=rust-lint-and-format v=1 -->
 
-<!-- hotsheet:end specifics=requirements-documentation -->
+## Rust Lint and Format
 
-<!-- hotsheet:end section=requirements-documentation -->
+- `cargo clippy --all-targets -- -D warnings -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented` and `cargo fmt --check` run in the root check command, on a toolchain pinned by `rust-toolchain.toml`. Give the lint run its own target directory when it would otherwise invalidate the build cache.
+- Force an isolated home for tests through `.cargo/config.toml` `[env]` so no test can touch the developer's real stores or settings; a test asserts the isolation.
+- Libraries define errors with `thiserror`; binaries aggregate with `anyhow`.
+- Build binaries once in test global setup, never per test file; integration tests spawn the built binary.
+- An `#[allow]` carries a reason and a ticket slug; `#[ignore]` names the quarantine ticket (see `conventions-as-code` and `test-operations`).
 
-<!-- hotsheet:begin section=visual-qa v=1 -->
+<!-- hotsheet:end section=rust-lint-and-format -->
 
-## Visual QA
+<!-- hotsheet:begin section=test-operations v=1 -->
 
-For any change that can affect a rendered interface, inspect the real result in a browser at representative wide and narrow sizes before completing the ticket. Exercise the affected states and transitions, then review readability, clipping and overflow, alignment, spacing, typography, contrast, icons, responsive behavior, and consistency with adjacent components. Fix defects, rerun affected behavioral checks, and inspect the corrected result. DOM, accessibility, style, and geometry assertions support this review but do not replace looking at the rendered page.
+## Test Operations
 
-If the ticket has a problem or design image, capture the corresponding after state at the same component and viewport as closely as practical. Attach the image to the ticket and name it in the completion note. Screenshots supplement behavioral tests. If browser capture or attachment is unavailable after practical attempts, describe the exact blocker and leave the visual ticket open for review rather than claiming visual validation.
+- **Isolation.** Tests never touch the developer's real home, stores, or running services. Force an isolated home and data directory at config level (environment in the test runner or build config, not in each test), and keep a test that fails on machine-local paths in fixtures or output.
+- **Build once.** Binaries and client bundles build in the suite's global setup, skipped when fresh, never inside a test file. The full gate executes the built artifact (boot the bundle or binary and hit its health endpoint), not only builds it.
+- **Waiting.** Wait on events, readiness signals, or state, never fixed delays. Fixtures that simulate pending responses gate on a promise or channel, not a timer.
+- **Flakes.** A flake fix is done when the test passes repeatedly with retries disabled under full-suite load (for example `--repeat-each=20 --retries=0`). Retries run only in the full CI job, bounded at two, visible in the report, and every retried test gets a ticket. Quarantine markers name the fix ticket, one table row per marker, checked one-to-one in CI. A retry or quarantine is a reprieve, not a fix.
+- **Realism.** Reproduce the user's actual steps or command before claiming a fix, on the rebuilt instance, never against the user's running host or a stale build kept open from before the change.
+- **Output.** Run suites through a failure-only wrapper that prints a summary, capped failure excerpts, and a log path; keep a slowest-tests profile and act on it.
+- **Record.** A script validates the coverage matrix (unit, end-to-end, manual per feature) by checking each status against its evidence paths; the manual test plan holds only what CI cannot do reliably.
 
-<!-- hotsheet:end section=visual-qa -->
+<!-- hotsheet:end section=test-operations -->
+
+<!-- hotsheet:begin section=typescript-lint-and-format v=1 -->
+
+## TypeScript Lint and Format
+
+- **Format.** Prettier runs repo-wide (code, docs, YAML) as the first step of the lint command; house defaults are 120 columns and single quotes. Lint bans `prettier-ignore`; generated files go in `.prettierignore`.
+- **Lint.** ESLint flat config with `typescript-eslint` `strictTypeChecked`, `strict-boolean-expressions`, `switch-exhaustiveness-check`, `consistent-type-imports`, import sorting, JSX self-closing, and the UI library's preset (Kerf: `eslint-plugin-kerfjs` `recommended-ui`). Run with `--max-warnings 0` and `reportUnusedDisableDirectives: error`. Restrict barrel imports that defeat tree-shaking (for example icon libraries) with `no-restricted-imports`.
+- **Types.** `tsconfig` `strict` plus `noUncheckedIndexedAccess`; scripts and config files are linted without type information rather than excluded.
+- **Order.** Format check, lint, typecheck, then the UI library doctor last (Kerf: `kerf-ui-doctor --full` with `failOn: warning` and `suppressions: []`), all inside the root check command.
+- Fix lint and type errors as you go; never finish with a warning. Suppression and policy-test governance is in `conventions-as-code`.
+
+Deviate only at the project level for a compelling or necessary reason, recorded in the project's conventions doc.
+
+<!-- hotsheet:end section=typescript-lint-and-format -->
+
+<!-- hotsheet:begin section=ui-composition v=2 -->
+
+## UI Composition
+
+Build interfaces from the design system's components, configured through their public API, and from the project's existing patterns. The design system's own guidance governs selection, layout, the styling boundary, and the interaction defaults (Kerf: see `kerf-ui-usage` and `kerf-ui-interaction-defaults`); this rule governs the process around it.
+
+- **Look it up before you build it.** Before writing any UI, read the library guidance in its retrieval order, the project's component catalog and demo route, and the named reference project's same surface. Copy a working reference implementation rather than approximating it, and cite the paths you read in the preliminary note.
+- **Name the owner of every region.** For a screen or redesign, the preliminary note lists each region and the public component that owns it: shell and rails, toolbars, search, tabs, columns, popups, banners, empty states, dialogs, the demo route. A handwritten `nav`, `button`, or `input` with CSS for border, selected, hover, or disabled state, position, or z-index is a defect unless the catalog has no component; then file the gap upstream and say so in the ticket. Raw `div`, `p`, or `span` where the library has a primitive is the same defect.
+- **Configure, never override.** A missing prop, variant, or token is an upstream ticket referenced from the app ticket, which stays blocked rather than shipping an override. This holds even when the maintainer asks for the visual directly: name the conflict and the missing API, and file the gap.
+- **Earn every control.** Every control, container, and line of copy traces to a human requirement or a reference precedent. Do not add explanatory paragraphs, permanent caveats, counts, "view options" menus, custom back and forward, theme toggles, duplicate titles, nested boxes, or editable fields for values the interaction already knows; use browser history and `prefers-color-scheme`. When a human says remove, remove; do not relocate.
+- **Human words are the spec.** Carry the human's exact component, placement, state, and viewport nouns into derived tickets and test names. AI notes, preliminary thoughts, and rewritten requirements never supersede them; when a phrase admits two behaviors, ask with a `CHOICE` note before building.
+- **Sign off before fanning out.** For a new screen or redesign, especially from a title-only ticket, post the region plan or wide and narrow captures and wait for feedback before building further; never fan dozens of tickets off an unreviewed layout.
+- **Reuse semantics.** The same feature uses the same component everywhere, in a read-only variant when needed, never a copy; new lists inherit the app's selection, context-menu, edit, and autosave grammar; one concept per indicator and one name per concept.
+
+<!-- hotsheet:end section=ui-composition -->
+
+<!-- hotsheet:begin section=ui-evaluation v=1 -->
+
+## UI Evaluation
+
+- **Evidence comes from the real app**, not the demo route, on the rebuilt instance, with revealing content (long titles, two-line fields, full output). Capture wide, medium, and narrow widths and the wide-narrow-wide transition; open rails, dialogs, and menus; include empty and loading states; use WebKit as well as Chromium when sizing, overflow, sticky layers, or focus rings are involved; check both color schemes on the real backdrop.
+- **Inspect before attaching**, zoomed to the edge in question: anything clipped by an ancestor (shadows and focus rings included); icons not on one x, labels not on one x, selection boxes not on one edge, measured against the highlight box even when hidden; double insets; stray separators; truncation; overlap; contrast; popovers off the viewport; font or size that differs from the reference app. A capture with a visible defect is never correctness evidence: fix, rerun, recapture.
+- **Tool output is not judgment.** A green doctor, analyzer, or evaluator proves the checks it encodes, not component-contract compliance, hierarchy, rhythm, density, or fit. After composing a component, re-read its parent and children contract and pin it with a real-parent browser assertion. A passing DOM or computed-style assertion does not establish that content is readable, centered, unclipped, or aligned.
+- **Compare to the reference.** Typography, toolbar density, search affordances, settings layout, and the demo route match the named reference app before any customization; a visible difference from the reference is a defect unless the ticket asked for it.
+- **Measure performance** against the user's baseline (for example the CLI the product wraps) before shipping a first render; no per-item subprocess loops; keep local interactions within the project's latency budget.
+- **Review loop.** Prefer annotated real-browser captures reviewed by the human over prose; derive one ticket per annotation carrying its exact nouns; the after capture matches the before's component, state, and viewport.
+
+<!-- hotsheet:end section=ui-evaluation -->
+
+<!-- hotsheet:begin section=web-client-organization v=1 -->
+
+## Web Client Organization
+
+- **Layout.** Split the client by role: `app/` (entry, composition roots, interaction wiring), `components/` (reusable across features), `features/<domain>/` or `views/<area>/` (vertical slices: `index.tsx` plus a local `components/`), `lib/` or `platform/` (pure, UI-free modules), `shared/` (contracts shared with the server), and `ux-demo/demos/` (one file per component). Match the named reference project's layout when one exists. Kebab-case file names, PascalCase component names.
+- **Components.** One exported PascalCase component per `.tsx` file; no private components defined inside another component's file. A component takes no props or one destructured named-props object. Its root class is the component name in kebab-case; its stylesheet sits beside it and is imported only by it. A view's `index.css` may import sub-sheets but never owns a sub-component's styles, and no component styles another component's markup. A component stylesheet is rare, and every rule in it has a stated reason.
+- **Logic.** Pure logic lives in flat modules with a sibling unit test, not inside components. No import-time side effects: no listeners, observers, timers, or polling at module load; wiring happens in `app/` and returns a disposer. Server and client share schema-validated contracts (for example zod under `shared/contract`); the client imports inferred types only, and dev and test builds throw on response drift.
+- **Size.** Split a file over about 500 lines, or one that mixes session orchestration with rendering, before the next feature lands in it; keep composition roots small. Extract discrete sections, dialogs, and repeated domain controls; never duplicate logic another module owns.
+- **Generated artifacts** (catalogs, composition manifests, API contracts) are checked in and byte-checked in CI; regenerate them in the same change.
+
+Deviate only at the project level for a compelling or necessary reason, recorded in the project's conventions doc.
+
+<!-- hotsheet:end section=web-client-organization -->

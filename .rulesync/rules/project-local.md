@@ -6,10 +6,11 @@ description: "Hot Sheet 2 project-specific guidance"
 
 # Hot Sheet 2 project guidance
 
-Read this repository's `AGENTS.md` before changing code. Project workflows live in
-`.agents/skills/`; shared workflow sources live in `.claude/skills/`. Keep durable
-project guidance in local Rulesync rules and provider configuration in its provider
-directory.
+Read the generated `AGENTS.md` before changing code. Project workflows live in
+`.agents/skills/`; shared workflow sources live in `.claude/skills/`. Use the
+equivalent available tool when a shared workflow names a tool-specific capability.
+Keep durable project additions in this local Rulesync rule and provider
+configuration in its provider directory.
 
 ## Identity and provider boundaries
 
@@ -35,28 +36,47 @@ exact provider-neutral next steps.
 
 ## Client behavior
 
-Use Kerf for app state, routing, lists, rendering, event delegation, and reusable
-components. Prefer Kerf UI components, then native HTML. Read the installed
-`@kerfjs/ui` guidance and `clients/web/ai/component-catalog-extension.json` before
-selecting or wrapping a visual component. App-owned component styles stay beside
-their modules and are represented in `clients/web/kerf.components.json`; regenerate
-the catalog after changes. Use Lucide through the shared icon component for symbolic
-icons; never substitute Unicode glyphs or emoji.
+Hot Sheet's Tauri web UI uses Kerf for application state, routing, lists, API
+resources, rendering, and event delegation. Read the installed Kerf guidance and
+`clients/web/ai/component-catalog-extension.json` before selecting a component.
+The project-specific UI decisions are in `docs/ui-design-philosophy.md` and
+`docs/design-guidelines.md`; those documents point to Kerf for shared conventions.
+Web Awesome Pro requires a separate license decision. The validated Web Awesome
+integration and browser tests live in `spikes/kerf-webawesome/`, with rationale in
+`docs/09-technology-decisions.md`. Its form controls emit host-level `input` and
+`change`; lifecycle events such as `wa-show` and `wa-hide` retain their prefix.
+
+List and column tickets share one responsive ticket-summary component contract,
+including narrow horizontal sizes. App-owned component styles stay beside their
+modules and are represented in `clients/web/kerf.components.json`; regenerate the
+catalog after changes. Symbolic client icons use official Lucide assets through
+the shared icon component, with an accessible name for icon-only controls. Every
+actionable context-menu item has a meaningful icon. If several Lucide metaphors
+fit equally well, ask the maintainer which one to standardize.
 
 Application state updates use WebSockets or genuine long polling with cursor replay
 and bounded failure backoff. Fixed-interval network polling is not allowed. Local
 display timers must not issue requests. Cover idle request rate and reconnection.
 
-Ticket text editors save to the server on blur, page hide, or explicit finish. A
-150 ms debounced local recovery copy keeps drafts between edits. Merge against the
-value at edit start and keep the draft visible while saving. Discrete edits can
-save immediately; object-creation workflows can have explicit submission.
+Ticket text editors save to the server on blur, page hide, or explicit finish,
+never while the user is typing. A 150 ms debounced local recovery copy is keyed
+by project, ticket, and field and retains the value at edit start. Merge against
+that value, keep the draft visible while saving, and restore an unsaved draft when
+the editor reopens. Ordinary text fields have no routine Save/Cancel buttons;
+discrete edits can save immediately, and object creation can submit explicitly.
+Cover rapid coalescing, composed-editor focus moves, edits after save, and reload
+recovery.
 
-An enabled child control must work through every shipped parent composition, not
-only in its UX demo. Update the demo and component catalog for reusable variants.
-Use a native `button` inside Kerf `ToolbarControlGroup` for ordinary actions.
+## Push policy and verification
 
-## Verification and project references
+Push policy: `push-per-ticket`. The maintainer has authorized routine
+fast-forward pushes of verified ticket commits to `origin/main`; do not ask again.
+Commit a finished ticket before starting the next one. After pushing, confirm the
+remote contains the commit and use `node scripts/ci-gate.mjs status --covers
+<full-sha>` to check the successful `main` CI run. A remote run never replaces a
+failing local gate.
+
+## Project references
 
 The codebase map is `docs/CODEBASE-MAP.md`; requirements status is in
 `docs/README.md`; feature coverage is in `docs/TEST-COVERAGE.md`. Update them when
@@ -65,10 +85,6 @@ Rust tests use `cargo nextest run`; web tests run from `clients/web`; migrator t
 run from `migrator/`. Prefer `node scripts/test-quiet.mjs` for quiet affected suites.
 The terminal-sizing arbiter, merge and sync logic, claims, indexes, auth, migration,
 and shared guidance setup require T2 transition coverage.
-
-For a pushed ticket commit, `node scripts/ci-gate.mjs status --covers <full-sha>`
-checks whether a successful `main` CI run covers it. A remote run never replaces a
-failing local gate.
 
 Hot Sheet 2 is developed by **Small Tale Inc.** under `Small-Tale/hotsheet2`.
 Package metadata, licenses, user-facing credits, and bundle identifiers use the

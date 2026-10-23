@@ -68,3 +68,4 @@ Thumbs.db
 /.glassbox/*
 !/.glassbox/settings.json
 .hotsheet2/settings.local.json
+/.rulesync/rules/.curated/

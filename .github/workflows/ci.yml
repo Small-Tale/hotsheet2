@@ -166,7 +166,7 @@ jobs:
 
       - name: Verify pinned ai-playbook guidance and snapshot tooling
         run: |
-          node --test scripts/sync-ai-playbook.test.mjs
+          node --test scripts/instruction-policy.test.mjs scripts/sync-ai-playbook.test.mjs
           node scripts/sync-ai-playbook.mjs --check --fetch
 
       - name: Validate feature double-coverage matrix
