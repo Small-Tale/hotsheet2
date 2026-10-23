@@ -114,7 +114,10 @@ inventory includes the checkout permission-migration and guidance endpoints
 (HS2-N44D0P); `clients/web/scripts/sync-openapi-routes.mjs` regenerates
 route-level entries from the Axum router before contract verification. Detailed
 request and response schemas for operations marked `route-only` are tracked by
-HS2-11BVBS.
+HS2-11BVBS now types the full 165-path inventory, including attachment binary
+and multipart routes, terminal WebSocket upgrade, provider outbox, guidance,
+permission, and analytics DTOs. The contract test rejects any remaining
+`route-only` marker and compiles every component schema.
 
 HS2-9X1A6G covers Codex chat writes to a linked sibling ticket store. The
 `isolated_codex_home_grants_*` tests in `crates/hotsheet-aitools/src/launch_safety.rs`

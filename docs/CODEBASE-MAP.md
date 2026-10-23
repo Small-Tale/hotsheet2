@@ -88,8 +88,9 @@ Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
 synchronized from `crates/hotsheet-server/src/lib.rs` by
 `clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
-`clients/web/tests/contracts.spec.ts`. Routes marked `route-only` await detailed
-DTO schemas in `HS2-11BVBS`.
+`clients/web/tests/contracts.spec.ts`. All 165 current paths have typed
+operations; newly synchronized routes receive a `route-only` marker until their
+request and response DTOs are modeled (HS2-11BVBS).
 
 Portable client-state transition fixtures and their schema are under
 `docs/contracts/v1/client-state/`. The web runner

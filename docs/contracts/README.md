@@ -2,12 +2,11 @@
 
 `v1/openapi.yaml` describes the server-owned HTTP surface. The JSON Schemas in the
 same directory describe each `/ws/sync` text frame and the `/ws/poll` response.
-The OpenAPI file inventories every server router path and HTTP method. An
-operation carrying `x-hotsheet-contract-depth: route-only` has its path and
-method recorded but still needs concrete request and response DTOs; that work
-is tracked by `HS2-11BVBS`. Core compatibility, ticket, and replay responses
-have schemas now. Run `npm run contract:sync` from `clients/web` after changing
-the router.
+The OpenAPI file inventories all 165 current server router paths and their HTTP methods,
+with request and response DTO schemas, status codes, query parameters, and media
+types (HS2-11BVBS). Run `npm run contract:sync` from `clients/web` after changing
+the router. A newly discovered operation is marked `route-only` until its wire
+contract is modeled.
 These are transport contracts: authorization, Git writes, claim decisions, and
 permission policy remain on the server. A client may own a temporary draft or
 optimistic display, but it must reconcile with the returned server ticket.
