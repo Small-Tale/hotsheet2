@@ -404,6 +404,46 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
 // the permission vault's macOS behavior is covered in-process separately.
 #[cfg(not(target_os = "macos"))]
 #[test]
+fn permission_migrate_fixture_helper() {
+    let Ok(action) = std::env::var("HS2_PERMISSION_MIGRATE_FIXTURE") else {
+        return;
+    };
+    let source = std::path::PathBuf::from(std::env::var_os("HS2_PERMISSION_SOURCE").unwrap());
+    let destination =
+        std::path::PathBuf::from(std::env::var_os("HS2_PERMISSION_DESTINATION").unwrap());
+    match action.as_str() {
+        "seed" => {
+            hotsheet_aitools::append_permission_rule(
+                &source,
+                &hotsheet_aitools::PermissionRule {
+                    project: std::env::var("HS2_PERMISSION_PROJECT").unwrap(),
+                    tool: "Bash".into(),
+                    action: "npm test".into(),
+                    exact_action: Some("npm test".into()),
+                    pattern: None,
+                    description: None,
+                    decision: hotsheet_aitools::PermissionDecision::Allow,
+                    persist: true,
+                    connection: None,
+                },
+            )
+            .unwrap();
+            hotsheet_aitools::ensure_permission_rules_file(&destination).unwrap();
+        }
+        "assert-empty" => assert!(hotsheet_aitools::load_permission_rules(&destination).is_empty()),
+        "assert-migrated" => {
+            assert_eq!(
+                hotsheet_aitools::load_permission_rules(&destination).len(),
+                1
+            );
+            assert_eq!(hotsheet_aitools::load_permission_rules(&source).len(), 1);
+        }
+        _ => panic!("unexpected permission migration fixture action"),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
 fn permission_migrate_requires_review_and_explicit_selected_consent() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -427,22 +467,26 @@ fn permission_migrate_requires_review_and_explicit_selected_consent() {
         hotsheet_ticketing::git_connection_id(&store)
     ));
     let destination = permissions.join(format!("checkout-{}.json", checkout.id));
-    hotsheet_aitools::append_permission_rule(
-        &source,
-        &hotsheet_aitools::PermissionRule {
-            project: store.root().display().to_string(),
-            tool: "Bash".into(),
-            action: "npm test".into(),
-            exact_action: Some("npm test".into()),
-            pattern: None,
-            description: None,
-            decision: hotsheet_aitools::PermissionDecision::Allow,
-            persist: true,
-            connection: None,
-        },
-    )
-    .unwrap();
-    hotsheet_aitools::ensure_permission_rules_file(&destination).unwrap();
+    // HS2-5A6JNS keeps the encrypted key under HOTSHEET_HOME. Seed and inspect
+    // the vault in isolated processes with the same home as the shipped CLI.
+    let fixture = |action: &str| {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "permission_migrate_fixture_helper"])
+            .env("HOTSHEET_HOME", &home)
+            .env("HS2_PERMISSION_MIGRATE_FIXTURE", action)
+            .env("HS2_PERMISSION_SOURCE", &source)
+            .env("HS2_PERMISSION_DESTINATION", &destination)
+            .env("HS2_PERMISSION_PROJECT", store.root())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "fixture {action}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    };
+    fixture("seed");
     let run = |extra: &[&str]| {
         let mut cmd = hs(&project);
         cmd.env("HOTSHEET_HOME", &home)
@@ -462,14 +506,10 @@ fn permission_migrate_requires_review_and_explicit_selected_consent() {
     let id = preview["rules"][0]["id"].as_str().unwrap();
     run(&["--approve"]).assert().failure();
     run(&["--id", id]).assert().failure();
-    assert!(hotsheet_aitools::load_permission_rules(&destination).is_empty());
+    fixture("assert-empty");
     run(&["--approve", "--id", id]).assert().success();
     run(&["--approve", "--id", id]).assert().success();
-    assert_eq!(
-        hotsheet_aitools::load_permission_rules(&destination).len(),
-        1
-    );
-    assert_eq!(hotsheet_aitools::load_permission_rules(&source).len(), 1);
+    fixture("assert-migrated");
 }
 
 #[test]
