@@ -14191,6 +14191,21 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
         overview["sources"][0]["rules"][0]["installed_version"],
         serde_json::Value::Null
     );
+    let preview_path = "/checkouts/guidance/guidance/rules/fixture/project-bootstrap/preview";
+    let preview = body_json(
+        app.clone()
+            .oneshot(authed("GET", preview_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(preview["outcome"], "add");
+    assert_eq!(preview["current"], serde_json::Value::Null);
+    assert!(preview["after"].as_str().unwrap().contains("Fixture."));
+    assert!(
+        !project.path().join("AGENTS.md").exists(),
+        "preview is read-only"
+    );
     let recommendation_path = "/checkouts/guidance/guidance/recommendations";
     let interview = body_json(
         app.clone()
@@ -14274,6 +14289,14 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
             .unwrap()
             .contains("Fixture.")
     );
+    let preview = body_json(
+        app.clone()
+            .oneshot(authed("GET", preview_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(preview["outcome"], "current");
     let pinned = std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap();
     let updates = body_json(
         app.clone()

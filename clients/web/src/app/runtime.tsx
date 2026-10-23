@@ -29,6 +29,7 @@ import {
   type GuidanceOverview,
   type GuidanceRecommendationDecision,
   type GuidanceRecommendationReport,
+  type GuidanceRulePreview,
   type GuidanceSourceReview,
   type GuidanceSourceUpdate,
   type PollResponse,
@@ -423,6 +424,16 @@ export async function startHotSheetWebClient() {
   const guidanceReview = signal<GuidanceSourceReview | undefined>(undefined);
   const guidanceReviewLoading = signal(false);
   const guidanceReviewError = signal('');
+  const guidanceRulePreview = signal<
+    | {
+        source: string;
+        rule: string;
+        loading: boolean;
+        error: string;
+        result?: GuidanceRulePreview;
+      }
+    | undefined
+  >(undefined);
   const guidanceRecommendations = signal<GuidanceRecommendationReport | undefined>(undefined);
   const guidanceRecommendationsLoading = signal(false);
   const guidanceRecommendationsError = signal('');
@@ -1499,6 +1510,7 @@ export async function startHotSheetWebClient() {
       guidanceUpdates.value = [];
       guidanceUpdatesCheckedAt.value = undefined;
       guidanceReview.value = undefined;
+      guidanceRulePreview.value = undefined;
       guidanceRecommendations.value = undefined;
       guidanceRecommendationsError.value = '';
       recommendationDecisionBusy.value = '';
@@ -1528,6 +1540,7 @@ export async function startHotSheetWebClient() {
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
         guidanceReview.value = undefined;
+        guidanceRulePreview.value = undefined;
         const chosen = next.sources.find((source) => source.id === guidanceSourceId.value);
         guidanceRepository.value = chosen?.repository ?? next.default_repository;
         guidanceRef.value = chosen?.requested_ref ?? 'main';
@@ -1673,6 +1686,7 @@ export async function startHotSheetWebClient() {
       if (generation === guidanceLoadGeneration && project()?.id === current.id) {
         guidanceOverview.value = next;
         guidanceReview.value = undefined;
+        guidanceRulePreview.value = undefined;
         void refreshGuidanceRecommendations(current);
         if (action.action === 'register') void checkGuidanceUpdates(true);
         guidanceMessage.value = {
@@ -1687,6 +1701,32 @@ export async function startHotSheetWebClient() {
         guidanceMessage.value = error instanceof Error ? error.message : String(error);
     } finally {
       if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
+    }
+  }
+  async function previewGuidanceRule(source: string, rule: string) {
+    const current = project();
+    if (!current) return;
+    const stillShown = () => {
+      const shown = guidanceRulePreview.value;
+      return shown?.source === source && shown.rule === rule;
+    };
+    if (guidanceRulePreview.value?.source === source && guidanceRulePreview.value.rule === rule) {
+      guidanceRulePreview.value = undefined;
+      return;
+    }
+    guidanceRulePreview.value = { source, rule, loading: true, error: '' };
+    try {
+      const result = await new Api(current.apiPath).checkoutGuidanceRulePreview(current.id, source, rule);
+      if (project()?.id === current.id && stillShown())
+        guidanceRulePreview.value = { source, rule, loading: false, error: '', result };
+    } catch (error) {
+      if (project()?.id === current.id && stillShown())
+        guidanceRulePreview.value = {
+          source,
+          rule,
+          loading: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
     }
   }
   const customViewsFor = (projectId = selectedProjectId.value) => customViewsByProject.value[projectId] ?? [];
@@ -3915,6 +3955,7 @@ export async function startHotSheetWebClient() {
       review: guidanceReview.value,
       reviewLoading: guidanceReviewLoading.value,
       reviewError: guidanceReviewError.value,
+      rulePreview: guidanceRulePreview.value,
       recommendations: guidanceRecommendations.value,
       recommendationsLoading: guidanceRecommendationsLoading.value,
       recommendationsError: guidanceRecommendationsError.value,
@@ -4817,6 +4858,7 @@ export async function startHotSheetWebClient() {
     guidanceSourceId,
     guidanceRef,
     updateGuidance,
+    previewGuidanceRule,
     checkGuidanceUpdates,
     reviewGuidanceSource,
     refreshReviewedGuidance,

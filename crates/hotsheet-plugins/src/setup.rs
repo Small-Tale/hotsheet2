@@ -619,6 +619,116 @@ pub fn guidance_owner_in(project: &Path) -> Result<&'static str, SetupError> {
     })
 }
 
+/// Read-only preview of the exact pinned rule input and the section an explicit
+/// selection would change. The built-in path uses the same renderer as apply.
+#[derive(Debug, serde::Serialize)]
+pub struct GuidanceRulePreview {
+    pub owner: &'static str,
+    pub current: Option<String>,
+    pub pinned: String,
+    pub after: Option<String>,
+    pub outcome: &'static str,
+}
+
+pub fn preview_guidance_rule_in(
+    project: &Path,
+    source_id: &str,
+    rule_name: &str,
+) -> Result<GuidanceRulePreview, SetupError> {
+    let mut config = crate::guidance_sources::load(project)?;
+    let source = config
+        .sources
+        .iter_mut()
+        .find(|source| source.id == source_id)
+        .ok_or_else(|| {
+            SetupError::GuidanceSource(crate::guidance_sources::GuidanceSourceError::Invalid(
+                "unknown guidance source".into(),
+            ))
+        })?;
+    let rule = source
+        .rules
+        .iter()
+        .find(|rule| rule.name == rule_name)
+        .ok_or_else(|| {
+            SetupError::GuidanceSource(crate::guidance_sources::GuidanceSourceError::Invalid(
+                "unknown guidance rule".into(),
+            ))
+        })?;
+    let pinned = rule.body.clone();
+    let known = rule.known_bodies.clone();
+    if !source.selected_rules.iter().any(|name| name == rule_name) {
+        source.selected_rules.push(rule_name.to_owned());
+    }
+    config.explicit_selection = true;
+    let owner = guidance_owner_in(project)?;
+    let (current, after) = if owner == "rulesync" {
+        let path = project
+            .join(".rulesync/rules/.curated")
+            .join(format!("{rule_name}.md"));
+        let current = match std::fs::read_to_string(path) {
+            Ok(text) => Some(
+                crate::guidance_sources::split_rule_body(&text)
+                    .map_or(text.clone(), |(body, _)| body.to_owned()),
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(crate::guidance_sources::GuidanceSourceError::Io(error).into());
+            }
+        };
+        let replaceable = current
+            .as_ref()
+            .is_none_or(|body| body == &pinned || known.contains(body));
+        let after = if replaceable {
+            Some(pinned.clone())
+        } else {
+            current.clone()
+        };
+        (current, after)
+    } else {
+        let existing = match std::fs::read_to_string(project.join("AGENTS.md")) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => {
+                return Err(crate::guidance_sources::GuidanceSourceError::Io(error).into());
+            }
+        };
+        let section = rule_name.strip_prefix("hotsheet-").unwrap_or(rule_name);
+        let extract = |text: &str| {
+            if rule_name == "hotsheet-workflow" {
+                parse_shared_section(text, "agents-md").map(|block| block.body)
+            } else {
+                guidance_bounds(text, section).map(|(start, end)| text[start..end].to_owned())
+            }
+        };
+        let current = extract(&existing);
+        let rendered =
+            render_selected_guidance(&render_guidance_sections(&existing, true), &config, true);
+        let after = extract(&rendered);
+        (current, after)
+    };
+    let outcome = if current == after {
+        if current
+            .as_deref()
+            .is_some_and(|body| body.trim() == pinned.trim())
+        {
+            "current"
+        } else {
+            "protected"
+        }
+    } else if current.is_none() {
+        "add"
+    } else {
+        "replace"
+    };
+    Ok(GuidanceRulePreview {
+        owner,
+        current,
+        pinned,
+        after,
+        outcome,
+    })
+}
+
 /// Reconcile selected rules and skills without requiring a Git ticket store or an AI tool
 /// launch. The normal setup planner calls these same writers on project open.
 pub fn apply_selected_guidance_in(project: &Path) -> Result<(), SetupError> {
@@ -3173,6 +3283,105 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_019vva_preview_reuses_apply_protection_without_writing() {
+        use crate::guidance_sources::{GuidanceConfig, GuidanceSource, SourceRule};
+        use sha2::{Digest, Sha256};
+
+        let project = tempfile::tempdir().unwrap();
+        let old = "<!-- hotsheet:begin section=example-rule v=1 -->\nOld rule\n<!-- hotsheet:end section=example-rule -->";
+        let pinned = "<!-- hotsheet:begin section=example-rule v=2 -->\nNew rule\n<!-- hotsheet:end section=example-rule -->";
+        let rule = SourceRule {
+            name: "example-rule".into(),
+            version: 2,
+            sha256: format!("{:x}", Sha256::digest(pinned.as_bytes())),
+            description: "Synthetic rule".into(),
+            owner: Some("example".into()),
+            tags: vec!["testing".into()],
+            body: pinned.into(),
+            known_bodies: vec![old.into()],
+        };
+        crate::guidance_sources::save(
+            project.path(),
+            &GuidanceConfig {
+                schema_version: 1,
+                explicit_selection: true,
+                sources: vec![GuidanceSource {
+                    id: "fixture".into(),
+                    repository: "https://example.test/rules".into(),
+                    requested_ref: "main".into(),
+                    commit: "a".repeat(40),
+                    rules: vec![rule],
+                    skills: vec![],
+                    selected_rules: vec!["example-rule".into()],
+                    selected_skills: vec![],
+                }],
+            },
+        )
+        .unwrap();
+        let agents = project.path().join("AGENTS.md");
+        let added = preview_guidance_rule_in(project.path(), "fixture", "example-rule").unwrap();
+        assert_eq!(added.outcome, "add");
+        assert!(added.current.is_none());
+        assert_eq!(added.after.as_deref(), Some(pinned));
+        assert!(!agents.exists());
+
+        std::fs::write(&agents, old).unwrap();
+        let replacement =
+            preview_guidance_rule_in(project.path(), "fixture", "example-rule").unwrap();
+        assert_eq!(replacement.outcome, "replace");
+        assert_eq!(replacement.current.as_deref(), Some(old));
+        assert_eq!(replacement.after.as_deref(), Some(pinned));
+        assert_eq!(std::fs::read_to_string(&agents).unwrap(), old);
+
+        let edited = old.replace("Old rule", "Local edit");
+        std::fs::write(&agents, &edited).unwrap();
+        let protected =
+            preview_guidance_rule_in(project.path(), "fixture", "example-rule").unwrap();
+        assert_eq!(protected.outcome, "protected");
+        assert_eq!(protected.after.as_deref(), Some(edited.as_str()));
+
+        std::fs::write(&agents, pinned).unwrap();
+        assert_eq!(
+            preview_guidance_rule_in(project.path(), "fixture", "example-rule")
+                .unwrap()
+                .outcome,
+            "current"
+        );
+
+        std::fs::write(
+            project.path().join(GUIDANCE_OWNER_PATH),
+            r#"{"schema_version":1,"owner":"rulesync"}"#,
+        )
+        .unwrap();
+        let curated = project
+            .path()
+            .join(".rulesync/rules/.curated/example-rule.md");
+        assert_eq!(
+            preview_guidance_rule_in(project.path(), "fixture", "example-rule")
+                .unwrap()
+                .outcome,
+            "add"
+        );
+        std::fs::create_dir_all(curated.parent().unwrap()).unwrap();
+        std::fs::write(
+            &curated,
+            format!("---\nroot: true\ndescription: \"Synthetic rule\"\n---\n\n{old}"),
+        )
+        .unwrap();
+        let rulesync = preview_guidance_rule_in(project.path(), "fixture", "example-rule").unwrap();
+        assert_eq!(rulesync.outcome, "replace");
+        assert_eq!(rulesync.after.as_deref(), Some(pinned));
+        std::fs::write(&curated, "locally changed without frontmatter").unwrap();
+        let protected =
+            preview_guidance_rule_in(project.path(), "fixture", "example-rule").unwrap();
+        assert_eq!(protected.outcome, "protected");
+        assert_eq!(
+            protected.current.as_deref(),
+            Some("locally changed without frontmatter")
+        );
+    }
 
     #[test]
     fn push_policy_setup_defaults_and_diagnosis_plan_stays_read_only() {

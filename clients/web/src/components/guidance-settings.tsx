@@ -1,6 +1,8 @@
+import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
 import { Checkbox } from '@kerfjs/ui/checkbox';
 import { rem } from '@kerfjs/ui/css-values';
+import { Disclosure } from '@kerfjs/ui/disclosure';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
@@ -12,6 +14,7 @@ import type {
   GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
+  GuidanceRulePreview,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
   RulesyncUpdateReport,
@@ -45,6 +48,13 @@ export interface GuidanceSettingsProps {
   sourceId: string;
   ownerFilter: string;
   tagFilter: string;
+  rulePreview?: {
+    source: string;
+    rule: string;
+    loading: boolean;
+    error: string;
+    result?: GuidanceRulePreview;
+  };
   bundledGuidanceBlocked?: readonly {
     path: string;
     section: string;
@@ -552,23 +562,129 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                   (!ownerFilter || rule.owner === ownerFilter) &&
                   (!tagFilter || rule.tags.includes(tagFilter)),
               );
+              const groups = new Map<string, typeof visible>();
+              for (const rule of visible) {
+                const owner = rule.owner || 'Other rules';
+                const group = groups.get(owner) ?? [];
+                group.push(rule);
+                groups.set(owner, group);
+              }
               return (
                 <section data-guidance-source={source.id} aria-label={`${source.id} Rules`}>
-                  <List gap="xs">
+                  <List gap="m">
                     <Text variant="h3">{source.id}</Text>
                     <Text tone="quiet" size="compact">
                       Pinned to {source.commit.slice(0, 12)} from {source.repository}
                     </Text>
-                    {visible.map((rule) => (
-                      <div data-guidance-rule={rule.name} data-guidance-source={source.id}>
-                        <Checkbox
-                          action={COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.value}
-                          checked={rule.selected}
-                          label={rule.description}
-                          hint={`${rule.name} · available v${rule.version} · ${rule.installed_version === null ? 'not installed' : `v${rule.installed_version} installed`}`}
-                        />
-                      </div>
-                    ))}
+                    {[...groups.entries()]
+                      .sort(([left], [right]) => left.localeCompare(right))
+                      .map(([owner, group]) => (
+                        <Disclosure
+                          title={`${owner} · ${group.length} ${group.length === 1 ? 'rule' : 'rules'}`}
+                          detail={`${group.filter((rule) => rule.selected).length} selected`}
+                          open
+                        >
+                          <List gap="m">
+                            {group.map((rule) => {
+                              const preview =
+                                props.rulePreview?.source === source.id && props.rulePreview.rule === rule.name
+                                  ? props.rulePreview
+                                  : undefined;
+                              return (
+                                <section
+                                  data-guidance-rule={rule.name}
+                                  data-guidance-source={source.id}
+                                  aria-label={rule.description}
+                                >
+                                  <List gap="xs">
+                                    <Checkbox
+                                      action={COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.value}
+                                      checked={rule.selected}
+                                      label={rule.description}
+                                      hint={`${rule.name} · available v${rule.version} · ${rule.installed_version === null ? 'not installed' : `v${rule.installed_version} installed`}`}
+                                    />
+                                    {!!rule.tags.length && (
+                                      <div aria-label={`${rule.name} tags`}>
+                                        {rule.tags.map((tag) => (
+                                          <Badge tone="neutral" size="compact">
+                                            {tag}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div>
+                                      <Button
+                                        action={COMMANDS_AND_AI_ACTIONS.previewGuidanceRule.value}
+                                        disabled={loading}
+                                      >
+                                        {preview ? 'Close Preview' : 'Preview Rule and Changes'}
+                                      </Button>
+                                    </div>
+                                    {preview?.loading && <Text tone="quiet">Loading pinned rule preview…</Text>}
+                                    {preview?.error ? (
+                                      <StateBanner
+                                        title="Rule Preview Unavailable"
+                                        detail={preview.error}
+                                        tone="warning"
+                                        urgency="status"
+                                      />
+                                    ) : null}
+                                    {preview?.result && (
+                                      <section aria-label={`${rule.name} Change Preview`}>
+                                        <List gap="xs">
+                                          <Text>
+                                            {
+                                              {
+                                                add: 'Applying this selection adds the pinned rule.',
+                                                replace:
+                                                  'Applying this selection replaces the installed rule with the pinned version.',
+                                                current: 'The pinned rule is already installed.',
+                                                protected:
+                                                  'Local edits or a newer installed version are protected; applying will not replace this rule.',
+                                              }[preview.result.outcome]
+                                            }
+                                          </Text>
+                                          <Text tone="quiet" size="compact">
+                                            {preview.result.owner === 'rulesync'
+                                              ? 'Rulesync input preview'
+                                              : 'AGENTS.md section preview'}{' '}
+                                            · Read-only
+                                          </Text>
+                                          <Grid minColumnWidth={rem(14)} gap="m">
+                                            <TextField
+                                              label="Currently Installed"
+                                              readOnly
+                                              multiline
+                                              rows={8}
+                                              value={preview.result.current ?? '(not installed)'}
+                                            />
+                                            <TextField
+                                              label="After Apply"
+                                              readOnly
+                                              multiline
+                                              rows={8}
+                                              value={preview.result.after ?? '(not installed)'}
+                                            />
+                                          </Grid>
+                                          {preview.result.outcome === 'protected' && (
+                                            <TextField
+                                              label="Pinned Rule Offered"
+                                              readOnly
+                                              multiline
+                                              rows={8}
+                                              value={preview.result.pinned}
+                                            />
+                                          )}
+                                        </List>
+                                      </section>
+                                    )}
+                                  </List>
+                                </section>
+                              );
+                            })}
+                          </List>
+                        </Disclosure>
+                      ))}
                     {!visible.length && <Text tone="quiet">No rules match these filters.</Text>}
                     {source.skills.map((skill) => (
                       <div data-guidance-skill={skill.name} data-guidance-source={source.id}>

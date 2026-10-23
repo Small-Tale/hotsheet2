@@ -176,6 +176,14 @@ retains selections and known prior bodies, so an exact older managed rule can be
 upgraded while local edits remain protected. Rule IDs may be unprefixed or owned by
 Hot Sheet, Kerf UI, or another project; owner and tag metadata power the picker.
 The picker reports the installed and offered section versions.
+Project guidance groups a pinned source's rules by declared owner, with selected
+counts and the source's available tags visible while browsing a long catalog
+(HS2-019VVA). A rule preview reads the pinned snapshot and current installed
+section without applying it. For the built-in writer, it uses the same section
+renderer as Apply to show the resulting text; for Rulesync it compares the curated
+rule input. A protected local edit or newer installed section is called out and
+shown beside the offered pinned text. The preview is read-only and does not change
+selection or the source pin.
 
 `hotsheet-cli guidance --project <code-repo> check-updates` and authenticated
 `GET /checkouts/{reference}/guidance/updates` query source refs without changing

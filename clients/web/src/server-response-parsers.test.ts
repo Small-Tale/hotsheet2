@@ -17,6 +17,7 @@ import {
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
+  parseGuidanceRulePreview,
   parseOpenedCheckout,
   parsePermissionDecision,
   parsePermissionRequest,
@@ -45,6 +46,12 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('HS2-019VVA validates read-only rule preview outcomes and bodies', () => {
+    const preview = { owner: 'builtin', current: null, pinned: 'Pinned rule', after: 'Pinned rule', outcome: 'add' };
+    expect(parseGuidanceRulePreview(preview)).toEqual(preview);
+    expect(() => parseGuidanceRulePreview({ ...preview, outcome: 'applied' })).toThrow(ServerResponseShapeError);
+    expect(() => parseGuidanceRulePreview({ ...preview, after: 42 })).toThrow(ServerResponseShapeError);
+  });
   it('validates the project-local Rulesync rule inventory (HS2-H99RRW)', () => {
     const overview = {
       owner: 'rulesync',

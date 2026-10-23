@@ -2,6 +2,88 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('HS2-019VVA browses grouped rules and previews changes at wide and phone widths', async ({ page }) => {
+  await openDemoProject(page);
+  let writes = 0;
+  const rules = Array.from({ length: 32 }, (_, index) => ({
+    name: `rule-${index}`,
+    version: 2,
+    installed_version: index === 0 ? 1 : null,
+    description: `Synthetic guidance ${index}`,
+    owner: index < 16 ? 'Hot Sheet' : 'Kerf',
+    tags: index === 0 ? ['rust', 'testing'] : ['testing'],
+    selected: index === 0,
+  }));
+  await page.route('**/checkouts/demo-checkout/guidance', (route) => {
+    if (route.request().method() === 'POST') writes += 1;
+    return route.fulfill({
+      json: {
+        owner: 'builtin',
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'playbook',
+            repository: 'https://example.test/playbook',
+            requested_ref: 'main',
+            commit: 'a'.repeat(40),
+            rules,
+            skills: [],
+          },
+        ],
+      },
+    });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/rules/playbook/rule-0/preview', (route) =>
+    route.fulfill({
+      json: {
+        owner: 'builtin',
+        current: 'Installed v1',
+        pinned: 'Pinned v2',
+        after: 'Pinned v2',
+        outcome: 'replace',
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const settings = page.locator('[data-component="guidance-settings"]');
+  await expect(settings.getByText('Hot Sheet · 16 rules')).toBeVisible();
+  await expect(settings.getByText('Kerf · 16 rules')).toBeVisible();
+  const first = settings.locator('[data-guidance-rule="rule-0"]');
+  await expect(first.getByRole('checkbox')).toBeChecked();
+  await expect(first.getByText('rust')).toBeVisible();
+  await first.getByRole('button', { name: 'Preview Rule and Changes' }).click();
+  await expect(first.getByText('Applying this selection replaces the installed rule')).toBeVisible();
+  await expect(first.getByLabel('Currently Installed')).toHaveValue('Installed v1');
+  await expect(first.getByLabel('After Apply')).toHaveValue('Pinned v2');
+  expect(writes).toBe(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-019vva-guidance-wide.png' });
+  await first.screenshot({ path: 'target/visual-captures/hs2-019vva-rule-wide.png' });
+  await page.setViewportSize({ width: 768, height: 900 });
+  await first.screenshot({ path: 'target/visual-captures/hs2-019vva-rule-medium.png' });
+  await page.setViewportSize({ width: 390, height: 1600 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
+  await first.scrollIntoViewIfNeeded();
+  const settingsBox = await settings.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(390);
+  expect(await settings.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-019vva-guidance-phone.png' });
+  await first.screenshot({ path: 'target/visual-captures/hs2-019vva-rule-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await expect(first.getByLabel('After Apply')).toHaveValue('Pinned v2');
+  await first.getByRole('button', { name: 'Close Preview' }).click();
+  await expect(first.getByLabel('After Apply')).toHaveCount(0);
+  expect(writes).toBe(0);
+});
+
 test('optional guidance interview previews context, requires consent, and records advice without applying', async ({
   page,
 }) => {

@@ -21,6 +21,7 @@ import type {
   GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
+  GuidanceRulePreview,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
   MessageConnectionReceipt,
@@ -146,6 +147,17 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
     return { ...source, rules, skills } as GuidanceOverview['sources'][number];
   });
   return { ...body, sources } as GuidanceOverview;
+};
+
+export const parseGuidanceRulePreview: ResponseParser<GuidanceRulePreview> = (value) => {
+  const what = 'guidance rule preview',
+    body = record(value, what);
+  if (body.owner !== 'builtin' && body.owner !== 'rulesync') invalid(what);
+  if (!['add', 'replace', 'current', 'protected'].includes(String(body.outcome))) invalid(what);
+  if (body.current !== null && typeof body.current !== 'string') invalid(what);
+  if (body.after !== null && typeof body.after !== 'string') invalid(what);
+  requiredString(body, 'pinned', what);
+  return body as unknown as GuidanceRulePreview;
 };
 
 export const parseGuidanceRecommendationReport: ResponseParser<GuidanceRecommendationReport> = (value) => {

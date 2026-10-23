@@ -102,8 +102,9 @@ use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_tick
 use routes::guidance::{
     decide_checkout_guidance_recommendation, get_checkout_guidance,
     get_checkout_guidance_interview_preview, get_checkout_guidance_recommendations,
-    get_checkout_guidance_review, get_checkout_guidance_updates, get_checkout_rulesync_updates,
-    open_checkout_guidance_interview, submit_checkout_guidance_interview, update_checkout_guidance,
+    get_checkout_guidance_review, get_checkout_guidance_rule_preview,
+    get_checkout_guidance_updates, get_checkout_rulesync_updates, open_checkout_guidance_interview,
+    submit_checkout_guidance_interview, update_checkout_guidance,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -1409,6 +1410,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/guidance",
             get(get_checkout_guidance).post(update_checkout_guidance),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/rules/{source}/{rule}/preview",
+            get(get_checkout_guidance_rule_preview),
         )
         .route(
             "/checkouts/{reference}/guidance/updates",

@@ -3,6 +3,75 @@ import { describe, expect, it } from 'vitest';
 import { GuidanceSettings } from './guidance-settings';
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-019VVA groups long catalogs, preserves selections, and shows protected rule previews', () => {
+    const rules = Array.from({ length: 36 }, (_, index) => ({
+      name: `rule-${index}`,
+      description: `Guidance rule ${index}`,
+      version: 2,
+      installed_version: index === 0 ? 1 : null,
+      owner: index < 18 ? 'Hot Sheet' : 'Kerf',
+      tags: index === 0 ? ['rust', 'testing'] : ['testing'],
+      selected: index === 0,
+    }));
+    const base = {
+      loading: false,
+      message: '',
+      query: '',
+      repository: '',
+      sourceRef: '',
+      sourceId: 'catalog',
+      ownerFilter: '',
+      tagFilter: '',
+      overview: {
+        owner: 'builtin' as const,
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'catalog',
+            repository: 'https://example.test/rules',
+            requested_ref: 'main',
+            commit: 'a'.repeat(40),
+            rules,
+            skills: [],
+          },
+        ],
+      },
+    };
+    const grouped = String(GuidanceSettings(base));
+    expect(grouped).toContain('Hot Sheet · 18 rules');
+    expect(grouped).toContain('Kerf · 18 rules');
+    expect(grouped).toContain('1 selected');
+    expect(grouped).toContain('0 selected');
+    expect(grouped).toContain('rust');
+    expect(grouped).toContain('data-guidance-rule="rule-0"');
+    expect(grouped).toContain('data-action="preview-guidance-rule"');
+    const filtered = String(GuidanceSettings({ ...base, ownerFilter: 'Hot Sheet', tagFilter: 'rust' }));
+    expect(filtered).toContain('Hot Sheet · 1 rule');
+    expect(filtered).not.toContain('Kerf · 18 rules');
+    const preview = String(
+      GuidanceSettings({
+        ...base,
+        rulePreview: {
+          source: 'catalog',
+          rule: 'rule-0',
+          loading: false,
+          error: '',
+          result: {
+            owner: 'builtin' as const,
+            current: 'Local edit',
+            pinned: 'Pinned v2',
+            after: 'Local edit',
+            outcome: 'protected' as const,
+          },
+        },
+      }),
+    );
+    expect(preview).toContain('Local edits or a newer installed version are protected');
+    expect(preview).toContain('Pinned Rule Offered');
+    expect(preview).toContain('Pinned v2');
+    expect(preview).toContain('Close Preview');
+  });
   it('HS2-T0GHX5 starts setup with Instruction Writer without repeating the navigation title', () => {
     const markup = String(
       GuidanceSettings({

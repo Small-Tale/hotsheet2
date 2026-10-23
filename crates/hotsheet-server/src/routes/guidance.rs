@@ -196,6 +196,21 @@ pub(crate) async fn get_checkout_guidance(
         .map(Json)
 }
 
+/// Preview one pinned rule against the local installed instruction section without writing.
+pub(crate) async fn get_checkout_guidance_rule_preview(
+    State(state): State<AppState>,
+    Path((reference, source, rule)): Path<(String, String, String)>,
+) -> Result<Json<hotsheet_plugins::setup::GuidanceRulePreview>, ApiError> {
+    let project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || {
+        hotsheet_plugins::setup::preview_guidance_rule_in(&project, &source, &rule)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+    .map(Json)
+}
+
 pub(crate) async fn get_checkout_guidance_recommendations(
     State(state): State<AppState>,
     Path(reference): Path<String>,

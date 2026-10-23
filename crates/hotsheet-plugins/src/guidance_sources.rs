@@ -203,7 +203,7 @@ fn git_file(repository: &Path, commit: &str, path: &str) -> Result<Vec<u8>, Guid
     git(repository, &["show", &format!("{commit}:{path}")])
 }
 
-fn split_rule_body(file: &str) -> Result<(&str, String), GuidanceSourceError> {
+pub(crate) fn split_rule_body(file: &str) -> Result<(&str, String), GuidanceSourceError> {
     let rest = file
         .strip_prefix("---\n")
         .and_then(|text| text.split_once("\n---\n\n"))

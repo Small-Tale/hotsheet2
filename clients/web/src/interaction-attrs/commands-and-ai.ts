@@ -64,6 +64,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   reviewGuidanceSource: action('review-guidance-source'),
   refreshReviewedGuidance: action('refresh-reviewed-guidance'),
   toggleGuidanceRule: action('toggle-guidance-rule'),
+  previewGuidanceRule: action('preview-guidance-rule'),
   toggleGuidanceSkill: action('toggle-guidance-skill'),
   applyGuidance: action('apply-guidance'),
   saveTerminalLimits: action('save-terminal-limits'),

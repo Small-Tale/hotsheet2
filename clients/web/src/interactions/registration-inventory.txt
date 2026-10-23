@@ -210,6 +210,7 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="submit-guidance-in
 commands-and-ai	delegate	document.body	'click'	'[data-action="review-guidance-source"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="refresh-reviewed-guidance"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-guidance-rule"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="preview-guidance-rule"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-guidance-skill"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="apply-guidance"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="edit-shortcut"]'

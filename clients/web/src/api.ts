@@ -30,6 +30,7 @@ import {
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
+  parseGuidanceRulePreview,
   parseGuidanceSourceReview,
   parseGuidanceSourceUpdates,
   parseMessageConnectionReceipt,
@@ -93,6 +94,13 @@ export interface GuidanceOverview {
     }>;
     skills: Array<{ name: string; selected: boolean }>;
   }>;
+}
+export interface GuidanceRulePreview {
+  owner: 'builtin' | 'rulesync';
+  current: string | null;
+  pinned: string;
+  after: string | null;
+  outcome: 'add' | 'replace' | 'current' | 'protected';
 }
 export interface GuidanceSourceUpdate {
   id: string;
@@ -1415,6 +1423,11 @@ export class Api {
     );
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  checkoutGuidanceRulePreview = (checkout: string, source: string, rule: string) =>
+    this.parsed(
+      parseGuidanceRulePreview,
+      `/checkouts/${encodeURIComponent(checkout)}/guidance/rules/${encodeURIComponent(source)}/${encodeURIComponent(rule)}/preview`,
+    );
   checkoutGuidanceRecommendations = (checkout: string) =>
     this.parsed(
       parseGuidanceRecommendationReport,

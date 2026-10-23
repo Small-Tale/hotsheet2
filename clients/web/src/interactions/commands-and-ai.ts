@@ -80,6 +80,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly guidanceSourceId: Signal<string>;
   readonly guidanceRef: Signal<string>;
   readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
+  readonly previewGuidanceRule: (source: string, rule: string) => Promise<void>;
   readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
   readonly reviewGuidanceSource: (sourceId: string) => Promise<void>;
   readonly refreshReviewedGuidance: () => Promise<void>;
@@ -242,6 +243,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     guidanceSourceId,
     guidanceRef,
     updateGuidance,
+    previewGuidanceRule,
     checkGuidanceUpdates,
     reviewGuidanceSource,
     refreshReviewedGuidance,
@@ -1156,6 +1158,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.selector, (_event, target) => {
       toggleGuidance(target, 'rules');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.previewGuidanceRule.selector, (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-guidance-rule]');
+      if (row?.dataset.guidanceSource && row.dataset.guidanceRule)
+        void previewGuidanceRule(row.dataset.guidanceSource, row.dataset.guidanceRule);
     }),
   );
   lifetime.add(

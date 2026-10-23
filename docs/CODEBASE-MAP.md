@@ -41,8 +41,11 @@ guidance overview exposes the pending flag for the Settings notice (HS2-C9FC2K).
 `crates/hotsheet-plugins/src/guidance_sources.rs` validates and caches project-pinned
 rule/skill repositories in `.hotsheet2/guidance-sources.json`. The CLI `guidance`
 subcommands and authenticated checkout guidance route share its selection and apply
-paths; Settings → AI tools exposes the same pinned source picker. A built-in apply
+paths; Settings → Project guidance exposes the same pinned source picker. A built-in apply
 merges selected sections, while Rulesync apply generates from cached curated inputs.
+`setup::preview_guidance_rule_in` and the authenticated per-rule preview route
+compare one pinned rule with its installed and after-Apply section without writes;
+Project guidance groups the catalog by owner and shows available tags (HS2-019VVA).
 
 ## Requirements docs
 
