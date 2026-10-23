@@ -3130,7 +3130,41 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
             source,
         })?;
     }
-    std::fs::write(path, contents).map_err(|source| SetupError::Io {
+    // HS2-QPEDJR: setup can refresh shared settings while the server reads them.
+    // Replace a complete sibling instead of exposing the truncation from fs::write.
+    static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = path
+        .file_name()
+        .expect("setup output has a file name")
+        .to_string_lossy();
+    let staged = path.with_file_name(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let result = (|| {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged)?;
+        file.write_all(contents.as_bytes())?;
+        drop(file);
+        if let Ok(metadata) = std::fs::metadata(path) {
+            if metadata.permissions().readonly() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "setup output is read-only",
+                ));
+            }
+            std::fs::set_permissions(&staged, metadata.permissions())?;
+        }
+        std::fs::rename(&staged, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&staged);
+    }
+    result.map_err(|source| SetupError::Io {
         path: path.display().to_string(),
         source,
     })
@@ -5963,6 +5997,33 @@ args = []
         permissions.set_readonly(true);
         std::fs::set_permissions(&path, permissions).unwrap();
         write_file(&path, "same").unwrap();
+    }
+
+    #[test]
+    fn hs2_qpedjr_shared_settings_readers_see_complete_replacements() {
+        use std::io::Read as _;
+
+        let project = tempfile::tempdir().unwrap();
+        let path = project.path().join(SHARED_SETTINGS_PATH);
+        let versions = [
+            "{\"$hotsheetSchema\":1,\"push_policy\":\"push-per-ticket\"}\n",
+            "{\"$hotsheetSchema\":1,\"push_policy\":\"push-per-batch\"}\n",
+        ];
+
+        // Empty -> populated, then repeatedly replace while a reader holds the old file.
+        write_file(&path, versions[0]).unwrap();
+        for index in 0..12 {
+            let old = versions[index % 2];
+            let new = versions[(index + 1) % 2];
+            let mut open_reader = std::fs::File::open(&path).unwrap();
+            write_file(&path, new).unwrap();
+            let mut snapshot = String::new();
+            open_reader.read_to_string(&mut snapshot).unwrap();
+            assert_eq!(snapshot, old);
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), new);
+            let _: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+            let _: serde_json::Value = serde_json::from_str(new).unwrap();
+        }
     }
 
     #[test]

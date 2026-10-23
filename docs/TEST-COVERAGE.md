@@ -52,6 +52,11 @@ root command/group HTTP stale, CLI-style out-of-band edit, and explicit force
 flows in `command_revisions_reject_stale_editors_and_survive_server_restart`.
 The browser save flow is covered by the HS2-X2A3C1 real-server test below.
 
+HS2-QPEDJR covers setup's shared-settings replacement while a reader holds the
+previous file open in `hs2_qpedjr_shared_settings_readers_see_complete_replacements`.
+The checkout HTTP keyset test exercises opening a project and creating tickets
+while guidance setup refreshes the same settings file.
+
 HS2-X2A3C1 covers persisted-content command and kept-group revisions in server
 HTTP tests (stale editor, same-session overlap, missing precondition, restart),
 command workflow unit tests (tab conflict and draft retention), and the real-server

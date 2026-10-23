@@ -21001,12 +21001,14 @@ async fn checkout_call(
         .oneshot(authed(method, uri, body.as_deref()))
         .await
         .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
     assert!(
-        response.status().is_success(),
-        "{method} {uri}: {}",
-        response.status()
+        status.is_success(),
+        "{method} {uri}: {status}: {}",
+        String::from_utf8_lossy(&bytes)
     );
-    body_json(response).await
+    serde_json::from_slice(&bytes).unwrap()
 }
 
 /// Keep mocked provider routes faithful to the persisted connection contract.
