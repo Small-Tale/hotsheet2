@@ -962,15 +962,27 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 println!("Source: {connection_id} ({})", source.locator);
                 println!("Branch/head: {} {}", plan.branch, plan.head);
                 println!(
-                    "Candidates: {} ({} current payload bytes)",
+                    "Candidates: {} ({} selected payload-history bytes)",
                     plan.candidates.len(),
                     plan.reclaimable_payload_bytes
                 );
                 for item in &plan.candidates {
-                    println!(
-                        "- {}: {} ({} bytes, {:?})",
-                        item.ticket_slug, item.path, item.bytes, item.reason
-                    );
+                    if item.reason
+                        == hotsheet_ticketing::repository_compaction::CandidateReason::Orphaned
+                    {
+                        println!(
+                            "- Deleted history: {:?} ({} bytes across {} blobs; removed in {})",
+                            item.path,
+                            item.bytes,
+                            item.historical_blobs.len(),
+                            item.removed_in_commit.as_deref().unwrap_or("unknown")
+                        );
+                    } else {
+                        println!(
+                            "- {}: {:?} ({} bytes, {:?})",
+                            item.ticket_slug, item.path, item.bytes, item.reason
+                        );
+                    }
                 }
                 println!(
                     "History rewrite changes commit IDs for collaborators. The original checkout remains stale after execution; every collaborator must re-clone or reset it after preserving local work."

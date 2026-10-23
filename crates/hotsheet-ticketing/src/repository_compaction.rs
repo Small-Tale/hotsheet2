@@ -7,14 +7,17 @@ use crate::store::{FsStore, StoreError};
 use hotsheet_model::{AttachmentActorRole, Note, NoteActor, NoteKind, Status, Timestamp, Ulid};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use time::OffsetDateTime;
 
 const MAX_CANDIDATES: usize = 20_000;
 const MAX_PATH_COMPONENT: usize = 255;
+const MAX_HISTORY_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_HISTORY_BLOBS: usize = 20_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompactionError {
@@ -31,6 +34,14 @@ pub enum CompactionError {
 pub enum CandidateReason {
     Duplicate,
     Oversized,
+    Orphaned,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HistoricalBlob {
+    /// Git object identity retained in the mirror backup.
+    pub oid: String,
+    pub bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +55,11 @@ pub struct CompactionCandidate {
     pub bytes: u64,
     pub sha256: String,
     pub reason: CandidateReason,
+    /// Historical versions of a deleted path. Empty for payloads still on ticket heads.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub historical_blobs: Vec<HistoricalBlob>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removed_in_commit: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -129,6 +145,232 @@ fn file_hash(path: &Path) -> Result<(u64, String), CompactionError> {
         bytes = bytes.saturating_add(n as u64);
     }
     Ok((bytes, format!("{:x}", digest.finalize())))
+}
+
+fn git_output_bounded(root: &Path, args: &[&str]) -> Result<Vec<u8>, CompactionError> {
+    let mut child = crate::git::command_in(root)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut output = Vec::new();
+    let read = child
+        .stdout
+        .take()
+        .ok_or_else(|| CompactionError::Invalid("cannot read Git history".into()))?
+        .take(MAX_HISTORY_BYTES + 1)
+        .read_to_end(&mut output);
+    if read.is_err() || output.len() as u64 > MAX_HISTORY_BYTES {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(CompactionError::Invalid(
+            "attachment history exceeds the bounded inventory; narrow the repository first".into(),
+        ));
+    }
+    if !child.wait()?.success() {
+        return Err(CompactionError::Invalid(
+            "cannot inventory attachment history".into(),
+        ));
+    }
+    Ok(output)
+}
+
+fn historical_attachment_path(path: &str) -> bool {
+    let parts = path.split('/').collect::<Vec<_>>();
+    if !(parts.len() == 3 || parts.len() == 4)
+        || parts[0] != "attachments"
+        || Ulid::from_string(parts[1]).is_err()
+        || (parts.len() == 4 && Ulid::from_string(parts[2]).is_err())
+    {
+        return false;
+    }
+    let filename = parts[parts.len() - 1];
+    !filename.is_empty()
+        && filename.len() <= MAX_PATH_COMPONENT
+        && filename != "."
+        && filename != ".."
+        && !filename.contains('\\')
+}
+
+fn deleted_attachment_commits(root: &Path) -> Result<BTreeMap<String, String>, CompactionError> {
+    let log = git_output_bounded(
+        root,
+        &[
+            "log",
+            "--all",
+            "--no-renames",
+            "--diff-filter=D",
+            "--format=%H%x00",
+            "--name-only",
+            "-z",
+            "--",
+            "attachments/",
+        ],
+    )?;
+    let mut commit = None::<String>;
+    let mut paths = BTreeMap::new();
+    for raw in log.split(|byte| *byte == 0) {
+        let raw = raw
+            .iter()
+            .copied()
+            .skip_while(|byte| *byte == b'\n')
+            .collect::<Vec<_>>();
+        if raw.is_empty() {
+            continue;
+        }
+        let Ok(value) = std::str::from_utf8(&raw) else {
+            continue;
+        };
+        if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            commit = Some(value.to_owned());
+        } else if historical_attachment_path(value) {
+            let id = commit.as_ref().ok_or_else(|| {
+                CompactionError::Invalid("malformed Git attachment deletion history".into())
+            })?;
+            paths.entry(value.to_owned()).or_insert_with(|| id.clone());
+            if paths.len() > MAX_CANDIDATES {
+                return Err(CompactionError::Invalid(
+                    "too many historical attachment paths".into(),
+                ));
+            }
+        }
+    }
+    Ok(paths)
+}
+
+fn orphaned_candidates(store: &FsStore) -> Result<Vec<CompactionCandidate>, CompactionError> {
+    let root = store.root();
+    let removed_in = deleted_attachment_commits(root)?;
+    // Raw NUL records preserve newlines and Git's rename marker in attachment names.
+    // --no-renames exposes a move as a deletion plus an addition at distinct paths.
+    let log = git_output_bounded(
+        root,
+        &[
+            "log",
+            "--all",
+            "--raw",
+            "-z",
+            "--format=",
+            "--abbrev=40",
+            "--no-renames",
+            "--",
+            "attachments/",
+        ],
+    )?;
+    let mut by_path = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut unsafe_paths = BTreeSet::new();
+    let mut blob_count = 0usize;
+    let mut records = log.split(|byte| *byte == 0);
+    while let Some(raw_header) = records.next() {
+        let header = raw_header
+            .iter()
+            .copied()
+            .skip_while(|byte| *byte == b'\n')
+            .collect::<Vec<_>>();
+        if header.is_empty() {
+            continue;
+        }
+        let Some(raw_path) = records.next() else {
+            return Err(CompactionError::Invalid(
+                "malformed Git attachment history".into(),
+            ));
+        };
+        let Ok(path) = std::str::from_utf8(raw_path) else {
+            continue;
+        };
+        if !historical_attachment_path(path) {
+            continue;
+        }
+        let fields = std::str::from_utf8(&header)
+            .map_err(|_| CompactionError::Invalid("malformed Git attachment history".into()))?
+            .split_whitespace()
+            .collect::<Vec<_>>();
+        if fields.len() != 5 || !fields[0].starts_with(':') {
+            return Err(CompactionError::Invalid(
+                "malformed Git attachment history".into(),
+            ));
+        }
+        if [fields[0].trim_start_matches(':'), fields[1]]
+            .iter()
+            .any(|mode| *mode != "000000" && *mode != "100644" && *mode != "100755")
+        {
+            unsafe_paths.insert(path.to_owned());
+            if unsafe_paths.len() > MAX_CANDIDATES {
+                return Err(CompactionError::Invalid(
+                    "too many historical attachment paths".into(),
+                ));
+            }
+            continue;
+        }
+        let entry = by_path.entry(path.to_owned()).or_default();
+        for oid in [fields[2], fields[3]] {
+            if oid.len() != 40 || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(CompactionError::Invalid(
+                    "malformed Git blob identity".into(),
+                ));
+            }
+            if !oid.bytes().all(|byte| byte == b'0') && entry.insert(oid.to_owned()) {
+                blob_count += 1;
+            }
+        }
+        if by_path.len() > MAX_CANDIDATES || blob_count > MAX_HISTORY_BLOBS {
+            return Err(CompactionError::Invalid(
+                "too many historical attachment paths or blobs".into(),
+            ));
+        }
+    }
+    let mut current_paths = BTreeSet::new();
+    for ticket in store.list_tickets()? {
+        for attachment in ticket.attachments {
+            let base = format!("attachments/{}/", ticket.id);
+            current_paths.insert(format!("{base}{}", attachment.filename));
+            current_paths.insert(format!("{base}{}/{}", attachment.id, attachment.filename));
+        }
+    }
+    let mut candidates = Vec::new();
+    for (path, oids) in by_path {
+        if unsafe_paths.contains(&path)
+            || current_paths.contains(&path)
+            || fs::symlink_metadata(root.join(&path)).is_ok()
+        {
+            continue;
+        }
+        let mut historical_blobs = Vec::new();
+        for oid in oids {
+            let bytes = git(root, &["cat-file", "-s", &oid])?
+                .parse::<u64>()
+                .map_err(|_| CompactionError::Invalid("invalid Git blob size".into()))?;
+            historical_blobs.push(HistoricalBlob { oid, bytes });
+        }
+        if historical_blobs.is_empty() {
+            continue;
+        }
+        let Some(removed_in_commit) = removed_in.get(&path) else {
+            continue;
+        };
+        let bytes = historical_blobs.iter().try_fold(0u64, |sum, blob| {
+            sum.checked_add(blob.bytes)
+                .ok_or_else(|| CompactionError::Invalid("historical blob bytes overflow".into()))
+        })?;
+        let parts = path.split('/').collect::<Vec<_>>();
+        candidates.push(CompactionCandidate {
+            ticket_id: parts[1].to_owned(),
+            ticket_slug: String::new(),
+            attachment_id: if parts.len() == 4 {
+                parts[2].to_owned()
+            } else {
+                String::new()
+            },
+            filename: parts[parts.len() - 1].to_owned(),
+            path,
+            bytes,
+            sha256: String::new(),
+            reason: CandidateReason::Orphaned,
+            historical_blobs,
+            removed_in_commit: Some(removed_in_commit.clone()),
+        });
+    }
+    Ok(candidates)
 }
 
 fn payload_path(
@@ -228,6 +470,8 @@ pub fn plan_store(
                     bytes,
                     sha256,
                     reason,
+                    historical_blobs: Vec::new(),
+                    removed_in_commit: None,
                 });
                 if candidates.len() > MAX_CANDIDATES {
                     return Err(CompactionError::Invalid(
@@ -237,7 +481,16 @@ pub fn plan_store(
             }
         }
     }
-    let reclaimable_payload_bytes = candidates.iter().map(|item| item.bytes).sum();
+    candidates.extend(orphaned_candidates(store)?);
+    if candidates.len() > MAX_CANDIDATES {
+        return Err(CompactionError::Invalid(
+            "too many compaction candidates".into(),
+        ));
+    }
+    let reclaimable_payload_bytes = candidates.iter().try_fold(0u64, |sum, item| {
+        sum.checked_add(item.bytes)
+            .ok_or_else(|| CompactionError::Invalid("candidate bytes overflow".into()))
+    })?;
     let fingerprint = {
         let payload =
             serde_json::to_vec(&(&head, &branch, min_age_days, oversized_bytes, &candidates))
@@ -262,6 +515,9 @@ fn add_tombstone_notes(
 ) -> Result<(), CompactionError> {
     let mut by_ticket = BTreeMap::<String, Vec<&CompactionCandidate>>::new();
     for candidate in &plan.candidates {
+        if candidate.reason == CandidateReason::Orphaned {
+            continue;
+        }
         by_ticket
             .entry(candidate.ticket_id.clone())
             .or_default()
@@ -489,7 +745,29 @@ pub fn execute_store(
         .with_deferred_push()
         .with_deferred_autocommit();
     add_tombstone_notes(&cloned_store, &current, now)?;
-    git(&work, &["add", "-A", "--", "tickets", "attachments"])?;
+    if current
+        .candidates
+        .iter()
+        .any(|candidate| candidate.reason != CandidateReason::Orphaned)
+    {
+        git(&work, &["add", "-A", "--", "tickets", "attachments"])?;
+    }
+    let orphans = current
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.reason == CandidateReason::Orphaned)
+        .collect::<Vec<_>>();
+    if !orphans.is_empty() {
+        let directory = work.join("compaction");
+        fs::create_dir_all(&directory)?;
+        let manifest_path = format!("compaction/orphaned-{}.json", current.fingerprint);
+        let manifest = work.join(&manifest_path);
+        let mut contents = serde_json::to_vec_pretty(&orphans)
+            .map_err(|error| CompactionError::Invalid(error.to_string()))?;
+        contents.push(b'\n');
+        fs::write(&manifest, contents)?;
+        git(&work, &["add", "--", &manifest_path])?;
+    }
     git(
         &work,
         &[
@@ -636,7 +914,150 @@ mod tests {
             bytes: 1,
             sha256: String::new(),
             reason: CandidateReason::Oversized,
+            historical_blobs: Vec::new(),
+            removed_in_commit: None,
         }
+    }
+
+    #[test]
+    fn hs2_jrt1zp_previews_and_rewrites_only_deleted_attachment_history() {
+        let (dir, store, now) = fixture();
+        let ticket = store.list_tickets().unwrap().remove(0);
+        let old = Timestamp::new("2026-01-01T00:00:00Z");
+        let orphan_id = Ulid::new();
+        store
+            .write_attachment(
+                &ticket.id,
+                orphan_id,
+                old.clone(),
+                "removed\n==>file.png",
+                b"synthetic deleted attachment bytes",
+            )
+            .unwrap();
+        let path = format!(
+            "attachments/{}/{}/removed\n==>file.png",
+            ticket.id, orphan_id
+        );
+        let first_oid = git(store.root(), &["rev-parse", &format!("HEAD:{path}")]).unwrap();
+        fs::write(store.root().join(&path), b"synthetic replacement bytes").unwrap();
+        git_ok(store.root(), &["add", "--", &path]);
+        git_ok(
+            store.root(),
+            &["commit", "-qm", "replace synthetic payload"],
+        );
+        let second_oid = git(store.root(), &["rev-parse", &format!("HEAD:{path}")]).unwrap();
+        store
+            .remove_attachment(&ticket.id, &orphan_id, old)
+            .unwrap();
+        let unrelated = store.root().join("other");
+        fs::create_dir_all(&unrelated).unwrap();
+        fs::write(unrelated.join("unrelated.bin"), b"unrelated bytes").unwrap();
+        git_ok(store.root(), &["add", "other/unrelated.bin"]);
+        git_ok(store.root(), &["commit", "-qm", "unrelated"]);
+        git_ok(store.root(), &["push", "-q", "origin", "main"]);
+
+        let plan = plan_store(&store, now, 1000, 15).unwrap();
+        let orphan = plan
+            .candidates
+            .iter()
+            .find(|item| item.reason == CandidateReason::Orphaned)
+            .unwrap();
+        assert_eq!(
+            plan.candidates.len(),
+            1,
+            "current attachments stay outside the orphan plan"
+        );
+        assert_eq!(orphan.path, path);
+        assert_eq!(orphan.historical_blobs.len(), 2);
+        assert!(
+            orphan
+                .historical_blobs
+                .iter()
+                .any(|blob| blob.oid == first_oid && blob.bytes == 34)
+        );
+        assert!(
+            orphan
+                .historical_blobs
+                .iter()
+                .any(|blob| blob.oid == second_oid && blob.bytes == 27)
+        );
+        assert_eq!(orphan.bytes, 61);
+        assert_eq!(orphan.removed_in_commit.as_ref().map(String::len), Some(40));
+        assert!(
+            !plan
+                .candidates
+                .iter()
+                .any(|item| item.path.starts_with("other/"))
+        );
+        assert_eq!(plan, plan_store(&store, now, 1000, 15).unwrap());
+
+        let backup = dir.path().join("orphan-backup.git");
+        let result = execute_store(
+            &store,
+            now,
+            &plan,
+            &backup,
+            &format!("rewrite {} {}", plan.branch, plan.fingerprint),
+        )
+        .unwrap();
+        let work = backup.with_extension("rewrite-work");
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(work.join(format!("compaction/orphaned-{}.json", plan.fingerprint))).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest[0]["path"], path);
+        assert_eq!(manifest[0]["historical_blobs"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            manifest[0]["removed_in_commit"],
+            orphan.removed_in_commit.as_deref().unwrap()
+        );
+        let rewritten_objects = git(&work, &["rev-list", "--objects", "--all"]).unwrap();
+        assert!(!rewritten_objects.contains(&path));
+        assert!(rewritten_objects.contains("other/unrelated.bin"));
+        assert_eq!(
+            git(&backup, &["rev-parse", "main"]).unwrap(),
+            result.old_head
+        );
+        assert_eq!(
+            git(&dir.path().join("remote.git"), &["rev-parse", "main"]).unwrap(),
+            result.new_head
+        );
+    }
+
+    #[test]
+    fn hs2_jrt1zp_orphan_only_rewrite_needs_no_current_attachment_directory() {
+        let (dir, store, now) = fixture();
+        let ticket = store.list_tickets().unwrap().remove(0);
+        let old = Timestamp::new("2026-01-01T00:00:00Z");
+        for attachment in ticket.attachments {
+            store
+                .remove_attachment(&ticket.id, &attachment.id, old.clone())
+                .unwrap();
+        }
+        git_ok(store.root(), &["push", "-q", "origin", "main"]);
+        let plan = plan_store(&store, now, 1000, 15).unwrap();
+        assert_eq!(plan.candidates.len(), 3);
+        assert!(
+            plan.candidates
+                .iter()
+                .all(|item| item.reason == CandidateReason::Orphaned)
+        );
+        let backup = dir.path().join("orphan-only-backup.git");
+        let result = execute_store(
+            &store,
+            now,
+            &plan,
+            &backup,
+            &format!("rewrite {} {}", plan.branch, plan.fingerprint),
+        )
+        .unwrap();
+        assert_eq!(result.candidates_removed, 3);
+        assert!(
+            backup
+                .with_extension("rewrite-work")
+                .join(format!("compaction/orphaned-{}.json", plan.fingerprint))
+                .exists()
+        );
     }
 
     #[test]

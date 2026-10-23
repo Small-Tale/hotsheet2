@@ -579,7 +579,7 @@ const compactionCandidate = shape<CompactionPlan['candidates'][number]>('compact
   path: isString,
   bytes: isNumber,
   sha256: isString,
-  reason: (value) => value === 'duplicate' || value === 'oversized',
+  reason: (value) => value === 'duplicate' || value === 'oversized' || value === 'orphaned',
 });
 export const parseCompactionPlan = shape<CompactionPlan>('compaction plan', {
   head: isString,

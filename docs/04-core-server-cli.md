@@ -254,7 +254,7 @@ server endpoint (HS2-R0131R).
   `CRITICAL_BYTES`) echoed in the response. Each entry carries its own level, and the
   report carries the highest one. Clients display levels; they never recompute them.
 
-**Attachment compaction (HS2-T2Q7KM).** Project statistics offers a read-only preview for
+**Attachment compaction (HS2-T2Q7KM, HS2-JRT1ZP).** Project statistics offers a read-only preview for
 each dedicated Git ticket store. `GET /checkouts/{id}/repository/compaction?source=<connection-id>`
 returns the same bounded plan as the headless CLI:
 
@@ -262,10 +262,15 @@ returns the same bounded plan as the headless CLI:
 hotsheet checkout compact <connection-id> <project> --min-age-days 90 --oversized-bytes 10000000 --json
 ```
 
-The plan lists duplicate and oversized payloads only on completed, verified, or archived
-tickets older than the chosen age. It shows each filename, ticket, size, SHA-256, Git path,
-and reason. Its fingerprint binds those choices to the current branch head. The default
-threshold is 10 MB. The UI shows a short preview; use CLI JSON to review the full list.
+The plan lists duplicate and oversized payloads on completed, verified, or archived
+tickets older than the chosen age. It also inventories historical attachment paths
+that have been deleted from the working tree and are absent from all current ticket
+metadata. That history scan is bounded to 64 MiB of Git change records, 20,000 paths,
+and 20,000 blob identities; exceeding a bound fails the preview. Orphaned candidates
+include each historical Git blob id and size plus the deletion commit. Their `sha256`
+field is empty because no current payload remains to hash. The fingerprint binds all
+candidates to the current branch head. The default oversized threshold is 10 MB. The
+UI shows a short preview; use CLI JSON to review the full list.
 
 Execution is deliberately an explicit headless operation. Install `git-filter-repo`, choose
 a new backup path outside the store, and copy the exact confirmation printed by the CLI:
@@ -279,7 +284,11 @@ branches or tags, an unpushed or changed `origin` head, an existing backup desti
 missing `git-filter-repo`. It makes a bare mirror backup, writes an audit note with each
 removed attachment's filename, size, digest, and reason in a disposable clone, filters the
 selected payload paths from history, then pushes with an exact remote-head lease. The audit
-note also retains each attachment's original purpose, provenance, and annotation metadata.
+note also retains each attached payload's original purpose, provenance, and annotation metadata.
+For orphaned paths, it commits `compaction/orphaned-<fingerprint>.json` with the
+historical path, Git blob identities and sizes, and deletion commit before filtering
+the selected paths. The backup retains the original bytes. Current attachment paths,
+including paths still named by ticket metadata, cannot enter the orphaned selection.
 The original checkout is deliberately left untouched and stale. Preserve its local work, then
 re-clone or reset it to the rewritten branch; every collaborator must do the same before
 another ticket write or push. Keep the backup until recovery is confirmed. A working-tree

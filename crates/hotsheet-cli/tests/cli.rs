@@ -3800,11 +3800,22 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
         .write_attachment(
             &id,
             hotsheet_model::Ulid::new(),
-            old,
+            old.clone(),
             "large.png",
             b"large attachment payload",
         )
         .unwrap();
+    let removed_id = hotsheet_model::Ulid::new();
+    store
+        .write_attachment(
+            &id,
+            removed_id,
+            old.clone(),
+            "removed.png",
+            b"synthetic removed payload",
+        )
+        .unwrap();
+    store.remove_attachment(&id, &removed_id, old).unwrap();
     git(
         root.path(),
         &["init", "-q", "--bare", &remote.to_string_lossy()],
@@ -3846,6 +3857,11 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
     assert!(output.status.success(), "{output:?}");
     let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(plan["candidates"][0]["ticket_slug"], "HS-OLD");
+    assert!(plan["candidates"].as_array().unwrap().iter().any(|item| {
+        item["reason"] == "orphaned"
+            && item["filename"] == "removed.png"
+            && item["historical_blobs"][0]["oid"].as_str().is_some()
+    }));
     assert!(plan.get("remote").is_none());
     let backup = root.path().join("backup.git");
     cli()
@@ -3880,6 +3896,7 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
         ])
         .assert()
         .success()
+        .stdout(predicate::str::contains("Deleted history:"))
         .stdout(predicate::str::contains("Git LFS"))
         .stdout(predicate::str::contains("--execute --backup"));
 }

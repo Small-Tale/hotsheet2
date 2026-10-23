@@ -395,7 +395,7 @@ export interface RepositorySizeReport {
   level: RepositorySizeLevel;
   entries: RepositorySizeEntry[];
 }
-/** Read-only preview of old, duplicate or oversized Git-store attachments. */
+/** Read-only preview of old attached payloads and orphaned Git history. */
 export interface CompactionPlan {
   head: string;
   branch: string;
@@ -409,7 +409,9 @@ export interface CompactionPlan {
     path: string;
     bytes: number;
     sha256: string;
-    reason: 'duplicate' | 'oversized';
+    reason: 'duplicate' | 'oversized' | 'orphaned';
+    historical_blobs?: Array<{ oid: string; bytes: number }>;
+    removed_in_commit?: string;
   }>;
   reclaimable_payload_bytes: number;
   fingerprint: string;

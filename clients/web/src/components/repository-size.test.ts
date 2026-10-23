@@ -172,12 +172,45 @@ describe('RepositorySize (HS2-QF44T7)', () => {
     );
     expect(markup.match(/Preview Attachment Compaction/gu)).toHaveLength(1);
     expect(markup).toContain('HS-ONE: old.png (12 MB, oversized)');
-    expect(markup).toContain('12 MB of current payloads');
+    expect(markup).toContain('12 MB of attachment payload history');
     expect(markup).toContain('requires a new mirror backup path');
     expect(parseCompactionPlan(plan)).toBe(plan);
     expect(() => parseCompactionPlan({ ...plan, candidates: [{ ...plan.candidates[0], reason: 'unknown' }] })).toThrow(
       ServerResponseShapeError,
     );
+  });
+
+  it('previews a deleted historical attachment without a current ticket label (HS2-JRT1ZP)', () => {
+    const plan: CompactionPlan = {
+      head: 'a'.repeat(40),
+      branch: 'main',
+      min_age_days: 90,
+      oversized_bytes: 10_000_000,
+      candidates: [
+        {
+          ticket_id: 'one',
+          ticket_slug: '',
+          attachment_id: 'att',
+          filename: 'removed.png',
+          path: 'attachments/one/att/removed.png',
+          bytes: 2048,
+          sha256: '',
+          reason: 'orphaned',
+          historical_blobs: [{ oid: 'b'.repeat(40), bytes: 2048 }],
+          removed_in_commit: 'c'.repeat(40),
+        },
+      ],
+      reclaimable_payload_bytes: 2048,
+      fingerprint: 'd'.repeat(64),
+    };
+    const markup = String(
+      RepositorySize({
+        state: { status: 'ready', report: report([code, store]) },
+        compaction: { status: 'ready', source: 'abc123', plan },
+      }),
+    );
+    expect(markup).toContain('Removed attachment: removed.png (2 kB, orphaned)');
+    expect(parseCompactionPlan(plan)).toBe(plan);
   });
 });
 

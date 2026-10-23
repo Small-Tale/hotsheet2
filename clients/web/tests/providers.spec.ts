@@ -32401,7 +32401,7 @@ test('warns in the project shell while a repository is over a GitHub size limit 
   await expect(panel).toHaveAttribute('data-level', 'critical');
 });
 
-test('project statistics previews ticket-store compaction without rewriting attachments (HS2-T2Q7KM)', async ({
+test('project statistics previews ticket-store compaction without rewriting attachments (HS2-T2Q7KM, HS2-JRT1ZP)', async ({
   page,
 }) => {
   await mockProject(page);
@@ -32446,8 +32446,20 @@ test('project statistics previews ticket-store compaction without rewriting atta
             sha256: 'b'.repeat(64),
             reason: 'oversized',
           },
+          {
+            ticket_id: 'one',
+            ticket_slug: '',
+            attachment_id: 'att-removed',
+            filename: 'removed-history.png',
+            path: 'attachments/one/att-removed/removed-history.png',
+            bytes: 2_200_000,
+            sha256: '',
+            reason: 'orphaned',
+            historical_blobs: [{ oid: 'd'.repeat(40), bytes: 2_200_000 }],
+            removed_in_commit: 'e'.repeat(40),
+          },
         ],
-        reclaimable_payload_bytes: 18_400_000,
+        reclaimable_payload_bytes: 20_600_000,
         fingerprint: 'c'.repeat(64),
       },
     });
@@ -32461,16 +32473,30 @@ test('project statistics previews ticket-store compaction without rewriting atta
   await expect(panel.getByRole('button', { name: 'Preview Attachment Compaction' })).toBeVisible();
   await panel.getByRole('button', { name: 'Preview Attachment Compaction' }).click();
   await expect(panel).toContainText('HS-OLD: old-capture.png (18.4 MB, oversized)');
+  await expect(panel).toContainText('Removed attachment: removed-history.png (2.2 MB, orphaned)');
   await expect(panel).toContainText('requires a new mirror backup path');
   expect(requests).toBe(1);
-  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-preview-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(panel.getByText('Removed attachment: removed-history.png (2.2 MB, orphaned)')).toBeVisible();
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-medium.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(panel.getByText('HS-OLD: old-capture.png (18.4 MB, oversized)')).toBeVisible();
+  await expect(panel.getByText('Removed attachment: removed-history.png (2.2 MB, orphaned)')).toBeVisible();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ).toBeLessThanOrEqual(0);
   await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'target/visual-captures/hs2-t2q7km-preview-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(panel.getByText('Removed attachment: removed-history.png (2.2 MB, orphaned)')).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide-return.png', fullPage: true });
 });
 
 test('a server size-limit crossing event brings up the repository size banner without polling (HS2-KKFEY5)', async ({

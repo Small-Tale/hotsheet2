@@ -126,6 +126,11 @@ ordinary known-identity replacement checks are covered by `HS2-BGTDQ1`.
 | [ux-components.md](ux-components.md)               | Cross-client component architecture and real-component `/ux-demo` catalog                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Partial: Kerf Button actions; TabBar end exception (HS2-H2ASWT) |
 | [design-guidelines.md](design-guidelines.md)       | Hot Sheet platform decisions, shortcut register, menu plan, AI-content rules, and historical HIG review evidence; shared guidance lives in Kerf UI and Apple HIG                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Decided (HS2-ZC24BS)                                            |
 
+Dedicated Git ticket stores have a shipped CLI and project-statistics preview for
+attachment compaction (HS2-T2Q7KM). Its bounded plan also finds deleted
+attachment history with no current ticket or working-tree path, and the reviewed
+rewrite retains a provenance manifest and mirror backup (HS2-JRT1ZP).
+
 The versioned [client transport contracts](contracts/README.md) inventory the
 HTTP routes and define the core ticket, compatibility, and live-change wire
 shapes. Operations marked `route-only` still need concrete DTO schemas under

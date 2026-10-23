@@ -186,13 +186,14 @@ function CompactionPreview({ state, checkout }: { state: CompactionPreviewState;
           Attachment compaction: {source}
         </Text>
         <Text variant="p" tone="quiet" flush>
-          {plan.candidates.length} candidates, {formatBytes(plan.reclaimable_payload_bytes)} of current payloads.
-          Eligible tickets are at least {plan.min_age_days} days old; oversized means at least{' '}
+          {plan.candidates.length} candidates, {formatBytes(plan.reclaimable_payload_bytes)} of attachment payload
+          history. Attached candidates are on tickets at least {plan.min_age_days} days old; oversized means at least{' '}
           {formatBytes(plan.oversized_bytes)}.
         </Text>
         {plan.candidates.slice(0, 20).map((item) => (
-          <Text variant="p" flush data-key={`compaction:${item.attachment_id}`}>
-            {item.ticket_slug}: {item.filename} ({formatBytes(item.bytes)}, {item.reason})
+          <Text variant="p" flush data-key={`compaction:${item.path}`}>
+            {item.reason === 'orphaned' ? 'Removed attachment' : item.ticket_slug}: {item.filename} (
+            {formatBytes(item.bytes)}, {item.reason})
           </Text>
         ))}
         {plan.candidates.length > 20 && (
