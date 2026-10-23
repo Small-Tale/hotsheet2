@@ -3816,7 +3816,7 @@ test('shows the blocked bundled guidance demo variant at wide and phone widths',
   }
 });
 
-test('shows guidance recommendation review, accepted, no-source, and unknown variants', async ({ page }) => {
+test('keeps guidance recommendation demo variants in closed dialogs', async ({ page }) => {
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 1600 });
     await page.goto('/ux-demo?component=guidance-settings');
@@ -3832,10 +3832,9 @@ test('shows guidance recommendation review, accepted, no-source, and unknown var
         ...(state === 'changed' ? { hasNotText: 'Recommendation Status Unknown' } : {}),
       });
       await expect(review).toHaveCount(1);
-      await expect(review).toBeVisible();
-      await review.scrollIntoViewIfNeeded();
-      expect(await review.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-      await review.screenshot({ path: `target/visual-captures/hs2-qbxrfy-demo-${state}-${width}.png` });
+      const dialog = page.locator('[data-guidance-recommendations-dialog]').filter({ has: review });
+      await expect(dialog, state).toHaveAttribute('data-controlled-open', 'false');
+      await expect(review, state).not.toBeVisible();
     }
   }
 });
