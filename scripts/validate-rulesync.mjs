@@ -34,7 +34,7 @@ const hs = (project, ...args) => run(cli, ['-C', store, 'setup', ...args, '--pro
 function project(name, sourceConfig = config, policy = 'Local project policy.') {
   const directory = path.join(temporary, name);
   write(path.join(directory, 'rulesync.jsonc'), `${JSON.stringify(sourceConfig, null, 2)}\n`);
-  write(path.join(directory, '.rulesync/rules/project.md'), localRule(policy));
+  if (policy !== null) write(path.join(directory, '.rulesync/rules/project.md'), localRule(policy));
   write(path.join(directory, '.hotsheet2/settings.json'), JSON.stringify({ enabled_plugins: ['claude', 'codex'] }));
   write(path.join(directory, 'CLAUDE.md'), '@AGENTS.md\n');
   return directory;
@@ -70,8 +70,8 @@ try {
   assert(Object.values(locked.sources).some((source) => source.resolvedRef === pinnedCommit));
   if (process.argv.includes('--write-lock')) fs.copyFileSync(path.join(fresh, 'rulesync.lock'), exampleLock);
 
-  // Reproduce the documented existing-project migration, including manual local extraction.
-  const existing = project('existing', config, 'Existing project policy.\nLocal runner: npm test.');
+  // HS2-H99RRW: switching writers captures local prose and nested specifics automatically.
+  const existing = project('existing', config, null);
   hs(existing, 'claude');
   hs(existing, 'codex');
   const specifics =
@@ -83,6 +83,10 @@ try {
   const before = read(existing);
   write(path.join(existing, '.hotsheet2/guidance-backup/AGENTS.md'), before);
   hs(existing, '--guidance-owner', 'rulesync');
+  const captured = read(existing, '.rulesync/rules/project-local.md');
+  assert(captured.includes('Existing project policy.'));
+  assert(captured.includes('Local runner: npm test.'));
+  assert(!captured.includes('## Testing Philosophy'));
   const selected = structuredClone(config);
   selected.sources[0].rules = ['hotsheet-ticket-driven-work', 'hotsheet-testing-philosophy'];
   write(path.join(existing, 'rulesync.jsonc'), JSON.stringify(selected));

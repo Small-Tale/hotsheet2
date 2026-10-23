@@ -118,6 +118,7 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
   if (body.owner !== 'builtin' && body.owner !== 'rulesync') invalid(what);
   if (typeof body.explicit_selection !== 'boolean') invalid(what);
   requiredString(body, 'default_repository', what);
+  if (body.local_rules !== undefined && !isStringArray(body.local_rules)) invalid(what);
   const sources = list(body.sources, what, (entry) => {
     const source = record(entry, what);
     for (const key of ['id', 'repository', 'requested_ref', 'commit']) requiredString(source, key, what);

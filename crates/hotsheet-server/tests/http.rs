@@ -14185,6 +14185,26 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
         std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap(),
         pinned,
     );
+    assert_eq!(overview["local_rules"], serde_json::json!([]));
+    let local_rules = project.path().join(".rulesync/rules");
+    std::fs::create_dir_all(&local_rules).unwrap();
+    std::fs::write(
+        local_rules.join("project-local.md"),
+        "---\nroot: true\n---\nLocal.\n",
+    )
+    .unwrap();
+    hotsheet_plugins::setup::set_guidance_owner_in(project.path(), "rulesync").unwrap();
+    let rulesync_overview = body_json(
+        app.clone()
+            .oneshot(authed("GET", path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        rulesync_overview["local_rules"],
+        serde_json::json!(["project-local"])
+    );
 }
 
 #[tokio::test]

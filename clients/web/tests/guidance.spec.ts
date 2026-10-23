@@ -669,7 +669,15 @@ test('Project guidance reports a blocked bundled section at wide and phone sizes
 test('Project guidance keeps standalone Rulesync lock status separate from pinned sources', async ({ page }) => {
   await openDemoProject(page);
   await page.route('**/checkouts/demo-checkout/guidance', (route) =>
-    route.fulfill({ json: { owner: 'rulesync', explicit_selection: false, default_repository: '', sources: [] } }),
+    route.fulfill({
+      json: {
+        owner: 'rulesync',
+        explicit_selection: false,
+        default_repository: '',
+        sources: [],
+        local_rules: ['project-local'],
+      },
+    }),
   );
   await page.route('**/checkouts/demo-checkout/guidance/rulesync-updates', (route) =>
     route.fulfill({
@@ -688,9 +696,9 @@ test('Project guidance keeps standalone Rulesync lock status separate from pinne
       },
     }),
   );
-  for (const width of [1280, 390]) {
+  for (const [index, width] of [1280, 768, 390, 1280].entries()) {
     await page.setViewportSize({ width, height: 844 });
-    if (width === 390) await page.reload();
+    if (index > 0) await page.reload();
     await page.getByLabel('Settings View').click();
     const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSettings.isVisible()) await showSettings.click();
@@ -707,5 +715,12 @@ test('Project guidance keeps standalone Rulesync lock status separate from pinne
     await expect(picker).not.toContainText('Pinned to');
     expect(await picker.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
     await picker.screenshot({ path: `target/visual-captures/rulesync-outdated-${width}.png` });
+    const localGuidance = picker.getByText('Hot Sheet saves unmarked local guidance');
+    await expect(localGuidance).toBeVisible();
+    await expect(picker.getByRole('region', { name: 'Project-Local Rulesync Rules' })).toContainText(
+      'project-local · .rulesync/rules/project-local.md',
+    );
+    await localGuidance.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `target/visual-captures/rulesync-local-guidance-${width}.png` });
   }
 });

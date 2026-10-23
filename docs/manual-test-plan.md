@@ -486,7 +486,10 @@ available, open an AI chat in the terminal drawer and in the conversation dialog
 
 Follow `guidance/rulesync/README.md` with a disposable copy of a real project that has
 handwritten guidance and nested `hotsheet:specifics`. Select Rulesync ownership before
-generation, retain backups, and extract each local rule into committed local inputs.
+generation, retain backups, and review the automatically saved
+`.rulesync/rules/project-local.md`. Confirm it includes unmarked prose and nested
+specifics, and excludes managed reusable sections. Review customized managed text
+separately before generation.
 Review dry-run output against the backups, including customized managed-block text.
 After generation, verify the chosen reusable sections appear once, local policies
 remain readable, CLAUDE imports AGENTS, and Hot Sheet refresh leaves both files unchanged.

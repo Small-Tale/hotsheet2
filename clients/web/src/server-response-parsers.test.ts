@@ -15,6 +15,7 @@ import {
   parseFullTicket,
   parseGitHubAuthStatus,
   parseGuidanceInterviewReview,
+  parseGuidanceOverview,
   parseGuidanceRecommendationReport,
   parseOpenedCheckout,
   parsePermissionDecision,
@@ -44,6 +45,17 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('validates the project-local Rulesync rule inventory (HS2-H99RRW)', () => {
+    const overview = {
+      owner: 'rulesync',
+      explicit_selection: false,
+      default_repository: '',
+      sources: [],
+      local_rules: ['project-local'],
+    };
+    expect(parseGuidanceOverview(overview).local_rules).toEqual(['project-local']);
+    expect(() => parseGuidanceOverview({ ...overview, local_rules: [42] })).toThrow(ServerResponseShapeError);
+  });
   it('validates the optional guidance interview contract (HS2-YGV9RN)', () => {
     const review = {
       state: 'awaiting_answer',

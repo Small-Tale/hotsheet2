@@ -485,10 +485,23 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           ]}
         />
         {overview?.owner === 'rulesync' && (
-          <Text tone="quiet">
-            Rulesync regenerates <code>AGENTS.md</code> from its rule inputs. Move project-local guidance into{' '}
-            <code>.rulesync/rules</code> before applying.
-          </Text>
+          <List gap="xs">
+            <Text tone="quiet">
+              Rulesync regenerates <code>AGENTS.md</code> from its rule inputs. Hot Sheet saves unmarked local guidance
+              in <code>.rulesync/rules/project-local.md</code> when you switch writers. Review that rule before
+              applying.
+            </Text>
+            {(overview.local_rules ?? []).length > 0 && (
+              <section aria-label="Project-Local Rulesync Rules">
+                <Text variant="h3">Project-local rules</Text>
+                {(overview.local_rules ?? []).map((name) => (
+                  <Text>
+                    {name} · .rulesync/rules/{name}.md
+                  </Text>
+                ))}
+              </section>
+            )}
+          </List>
         )}
         <Grid minColumnWidth={rem(14)} gap="m">
           <TextField name="guidance-source-id" label="Source ID" value={sourceId} />

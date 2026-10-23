@@ -86,18 +86,20 @@ from the lock. Keep the local inputs outside `.curated/`.
 
 ## Migrate an existing Hot Sheet-managed project
 
-Rulesync generates the whole `AGENTS.md` file. First move its local guidance into
-committed Rulesync inputs:
+Rulesync generates the whole `AGENTS.md` file. Hot Sheet saves unmarked local
+guidance and nested project specifics into a Rulesync input when ownership changes:
 
 1. Select Rulesync ownership before generation, so a background Hot Sheet refresh
    cannot compete. Back up both current instruction files, for example under
    `.hotsheet2/guidance-backup/`, and retain the backups until the result is reviewed.
-2. Create `.rulesync/rules/project.md` with the root frontmatter above. Copy all
-   project-local guidance there, including the contents of every nested
-   `hotsheet:specifics` block. Keep Claude-only local guidance in `CLAUDE.md` beside
-   its import. Exclude the default reusable Hot Sheet blocks from the local source;
-   ai-playbook supplies the selected ones. If a managed block was customized, retain
-   those edits as local policy or use a reviewed same-name override as below.
+2. Review `.rulesync/rules/project-local.md`, created by the ownership switch with
+   the root frontmatter. It contains unmarked `AGENTS.md` prose and the contents of
+   nested `hotsheet:specifics` blocks; the switch stops if that file already differs
+   or a managed marker is incomplete. Project guidance lists local rule names and
+   paths separately from pinned source rules. Keep Claude-only local guidance in `CLAUDE.md`
+   beside its import. If a managed block was customized, retain those edits as local
+   policy or use a reviewed same-name override as below. The reusable Hot Sheet
+   blocks come from the selected ai-playbook source.
 3. Copy the example configuration and lock. Change the selection if desired and run
    plain `install` once to update the lock's selection at its existing pinned ref.
    Run `generate --dry-run` and review the proposed result against the backups.
@@ -105,9 +107,9 @@ committed Rulesync inputs:
    policy and specific remains, and `CLAUDE.md` has one import. Run Hot Sheet
    `setup --refresh`; the generated instruction bytes must remain unchanged.
 
-This is an explicit migration review. Neither the ownership command nor Rulesync
-automatically decides whether project edits inside an old managed block are local
-customizations or obsolete default prose.
+This remains an explicit migration review. The ownership command preserves prose
+outside managed sections and nested project specifics automatically; it cannot decide
+whether edits inside an old managed block are local customizations or obsolete prose.
 
 ## Install, update, and customize
 

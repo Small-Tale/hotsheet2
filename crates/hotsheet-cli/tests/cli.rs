@@ -504,6 +504,9 @@ fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership
             .success()
     };
     run(&["setup", "--guidance-owner", "rulesync"]);
+    let local_rule =
+        std::fs::read_to_string(project.join(".rulesync/rules/project-local.md")).unwrap();
+    assert!(local_rule.contains("Rulesync-generated local and selected guidance."));
     for _ in 0..2 {
         run(&["setup", "claude"]);
         run(&["setup", "--refresh"]);

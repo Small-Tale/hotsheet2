@@ -10,6 +10,7 @@
 //! CLI and server render the same policy-specific managed workflow.
 
 use std::collections::{BTreeMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::{Plugin, all_plugins, default_dirs};
@@ -422,6 +423,167 @@ impl SetupError {
 }
 
 pub const GUIDANCE_OWNER_PATH: &str = ".hotsheet2/guidance-owner.json";
+const LOCAL_RULE_PATH: &str = ".rulesync/rules/project-local.md";
+
+/// Keep prose outside managed sections, plus project-owned nested specifics, before
+/// Rulesync replaces AGENTS.md. Refuse incomplete markers rather than lose their body.
+fn local_guidance_from_agents(contents: &str) -> Result<String, SetupError> {
+    let mut local = String::new();
+    let mut specifics = String::new();
+    let mut section_end: Option<String> = None;
+    let mut specifics_end: Option<String> = None;
+    let mut tool_end: Option<String> = None;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if let Some(end) = &specifics_end {
+            if trimmed == end {
+                specifics_end = None;
+            } else {
+                specifics.push_str(line);
+                specifics.push('\n');
+            }
+            continue;
+        }
+        if let Some(end) = &section_end {
+            if trimmed == end {
+                section_end = None;
+            } else if let Some(name) = trimmed
+                .strip_prefix("<!-- hotsheet:begin specifics=")
+                .and_then(|rest| rest.split_once(" v="))
+                .map(|(name, _)| name)
+            {
+                specifics_end = Some(format!("<!-- hotsheet:end specifics={name} -->"));
+            }
+            continue;
+        }
+        if let Some(end) = &tool_end {
+            if trimmed == end {
+                tool_end = None;
+            }
+            continue;
+        }
+        if let Some(name) = trimmed
+            .strip_prefix("<!-- hotsheet:begin section=")
+            .and_then(|rest| rest.split_once(" v="))
+            .map(|(name, _)| name)
+        {
+            section_end = Some(format!("<!-- hotsheet:end section={name} -->"));
+        } else if let Some(name) = trimmed
+            .strip_prefix("<!-- BEGIN hotsheet:")
+            .and_then(|rest| rest.strip_suffix(" -->"))
+        {
+            tool_end = Some(format!("<!-- END hotsheet:{name} -->"));
+        } else if !trimmed.starts_with("<!-- hotsheet-instructions-version:") {
+            local.push_str(line);
+            local.push('\n');
+        }
+    }
+    if section_end.is_some() || specifics_end.is_some() || tool_end.is_some() {
+        return Err(SetupError::GuidanceSource(
+            crate::guidance_sources::GuidanceSourceError::Invalid(
+                "AGENTS.md has an incomplete managed instruction marker; local guidance was not moved".into(),
+            ),
+        ));
+    }
+    let local = local.trim();
+    let specifics = specifics.trim();
+    Ok(match (local.is_empty(), specifics.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => local.to_owned(),
+        (true, false) => specifics.to_owned(),
+        (false, false) => format!("{local}\n\n{specifics}"),
+    })
+}
+
+fn preserve_local_guidance_for_rulesync(project: &Path) -> Result<(), SetupError> {
+    let agents = project.join("AGENTS.md");
+    let contents = match std::fs::read_to_string(&agents) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(SetupError::Io {
+                path: agents.display().to_string(),
+                source,
+            });
+        }
+    };
+    let body = local_guidance_from_agents(&contents)?;
+    if body.is_empty() {
+        return Ok(());
+    }
+    let path = project.join(LOCAL_RULE_PATH);
+    let rule = format!(
+        "---\nroot: true\ntargets: [\"*\"]\ndescription: \"Project-local guidance preserved from AGENTS.md\"\n---\n\n{body}\n"
+    );
+    if path.exists() {
+        let existing = std::fs::read_to_string(&path).map_err(|source| SetupError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        if existing == rule {
+            return Ok(());
+        }
+        return Err(SetupError::GuidanceSource(
+            crate::guidance_sources::GuidanceSourceError::Invalid(format!(
+                "{LOCAL_RULE_PATH} already differs; review it before switching instruction ownership"
+            )),
+        ));
+    }
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|source| SetupError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|source| SetupError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+    file.write_all(rule.as_bytes())
+        .map_err(|source| SetupError::Io {
+            path: path.display().to_string(),
+            source,
+        })
+}
+
+/// Names of project-authored Rulesync rule files. The generated `.curated` cache is
+/// deliberately excluded; the picker shows these as read-only local rules.
+pub fn local_rules_in(project: &Path) -> Result<Vec<String>, SetupError> {
+    let directory = project.join(".rulesync/rules");
+    let entries = match std::fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(source) => {
+            return Err(SetupError::Io {
+                path: directory.display().to_string(),
+                source,
+            });
+        }
+    };
+    let mut names = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|source| SetupError::Io {
+            path: directory.display().to_string(),
+            source,
+        })?;
+        let kind = entry.file_type().map_err(|source| SetupError::Io {
+            path: entry.path().display().to_string(),
+            source,
+        })?;
+        let path = entry.path();
+        if kind.is_file()
+            && path.extension().is_some_and(|extension| extension == "md")
+            && let Some(name) = path.file_stem().and_then(|name| name.to_str())
+            && !name.starts_with('.')
+        {
+            names.push(name.to_owned());
+        }
+    }
+    names.sort();
+    Ok(names)
+}
 
 /// Explicit project ownership; absent markers retain the built-in offline writer.
 fn rulesync_owns_guidance(fs: &PlanFs, project: &Path) -> Result<bool, SetupError> {
@@ -488,10 +650,13 @@ pub fn apply_selected_skills_in(project: &Path) -> Result<(), SetupError> {
     apply_operations(fs.final_operations(project))
 }
 
-/// Select the instruction writer without changing any instruction content.
+/// Select the instruction writer, preserving unmarked local prose before Rulesync owns it.
 pub fn set_guidance_owner_in(project: &Path, owner: &str) -> Result<(), SetupError> {
     if !matches!(owner, "builtin" | "rulesync") {
         return Err(SetupError::InvalidGuidanceOwner(GUIDANCE_OWNER_PATH.into()));
+    }
+    if owner == "rulesync" && !rulesync_owns_guidance(&PlanFs::default(), project)? {
+        preserve_local_guidance_for_rulesync(project)?;
     }
     let path = project.join(GUIDANCE_OWNER_PATH);
     let text =
@@ -3497,6 +3662,57 @@ args = ["--path", "{{store}}"]
             native
         );
         assert!(root.join(".claude/skills/hotsheet/SKILL.md").exists());
+    }
+
+    #[test]
+    fn hs2_h99rrw_switch_to_rulesync_saves_unmarked_and_nested_local_guidance() {
+        let project = tempfile::tempdir().unwrap();
+        let agents = "# Local policy\n\nKeep this project rule.\n\n<!-- hotsheet:begin section=testing-philosophy v=6 -->\nGenerated policy.\n<!-- hotsheet:begin specifics=testing-philosophy v=1 -->\n## Local test setup\nUse isolated fixtures.\n<!-- hotsheet:end specifics=testing-philosophy -->\n<!-- hotsheet:end section=testing-philosophy -->\n\n<!-- BEGIN hotsheet:codex -->\nGenerated tool section.\n<!-- END hotsheet:codex -->\n\nLast local line.\n";
+        std::fs::write(project.path().join("AGENTS.md"), agents).unwrap();
+        set_guidance_owner_in(project.path(), "rulesync").unwrap();
+        let rule = std::fs::read_to_string(project.path().join(LOCAL_RULE_PATH)).unwrap();
+        assert_eq!(
+            local_rules_in(project.path()).unwrap(),
+            vec!["project-local"]
+        );
+        assert!(rule.contains("# Local policy\n\nKeep this project rule."));
+        assert!(rule.contains("Last local line."));
+        assert!(rule.contains("## Local test setup\nUse isolated fixtures."));
+        assert!(!rule.contains("Generated policy."));
+        assert!(!rule.contains("Generated tool section."));
+        let original = std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
+        set_guidance_owner_in(project.path(), "rulesync").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(project.path().join(LOCAL_RULE_PATH)).unwrap(),
+            rule
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn hs2_h99rrw_switch_to_rulesync_fails_closed_on_conflict_or_bad_markers() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), "Local policy.\n").unwrap();
+        std::fs::create_dir_all(project.path().join(".rulesync/rules")).unwrap();
+        std::fs::write(
+            project.path().join(LOCAL_RULE_PATH),
+            "Different local rule.\n",
+        )
+        .unwrap();
+        assert!(set_guidance_owner_in(project.path(), "rulesync").is_err());
+        assert!(!project.path().join(GUIDANCE_OWNER_PATH).exists());
+        std::fs::remove_file(project.path().join(LOCAL_RULE_PATH)).unwrap();
+        std::fs::write(
+            project.path().join("AGENTS.md"),
+            "<!-- hotsheet:begin section=unknown v=1 -->\nLocal text.\n",
+        )
+        .unwrap();
+        assert!(set_guidance_owner_in(project.path(), "rulesync").is_err());
+        assert!(!project.path().join(LOCAL_RULE_PATH).exists());
+        assert!(!project.path().join(GUIDANCE_OWNER_PATH).exists());
     }
 
     #[test]

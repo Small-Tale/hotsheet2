@@ -75,6 +75,7 @@ export interface GuidanceOverview {
   owner: 'builtin' | 'rulesync';
   explicit_selection: boolean;
   default_repository: string;
+  local_rules?: string[];
   sources: Array<{
     id: string;
     repository: string;

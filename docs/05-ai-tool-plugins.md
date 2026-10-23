@@ -231,7 +231,12 @@ Sheet-managed pins use `guidance check-updates` instead (HS2-SFMZVJ).
 as JSON; `guidance register --id <id> --repository <url-or-local-repo> --ref <tag-or-sha>`
 pins a source; `guidance select --source <id> --rule <name> [--skill <name>]` replaces
 that source's selection; `guidance owner builtin|rulesync` chooses the instruction
-writer; and `guidance apply` reconciles the selected files. With the built-in writer,
+writer. Switching to Rulesync saves unmarked `AGENTS.md` prose and nested project
+specifics in `.rulesync/rules/project-local.md` before changing ownership. A
+conflicting local rule or incomplete managed marker stops the switch for review.
+Project guidance lists local Rulesync rule names and paths separately from pinned
+source rules.
+`guidance apply` reconciles the selected files. With the built-in writer,
 selected rule sections are merged into `AGENTS.md` and exact deselected bodies are
 removed. With Rulesync ownership, `apply` materializes the selected pinned rules in
 `.rulesync/rules/.curated`, writes `.hotsheet2/rulesync.generated.jsonc`, and invokes

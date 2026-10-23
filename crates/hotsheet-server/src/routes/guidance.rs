@@ -24,6 +24,7 @@ pub(crate) struct GuidanceOverview {
     owner: &'static str,
     explicit_selection: bool,
     default_repository: &'static str,
+    local_rules: Vec<String>,
     sources: Vec<GuidanceSourceView>,
 }
 
@@ -75,6 +76,12 @@ fn overview(
         owner,
         explicit_selection: config.explicit_selection,
         default_repository: sources::DEFAULT_REPOSITORY,
+        local_rules: if owner == "rulesync" {
+            hotsheet_plugins::setup::local_rules_in(project)
+                .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+        } else {
+            Vec::new()
+        },
         sources: config
             .sources
             .into_iter()
