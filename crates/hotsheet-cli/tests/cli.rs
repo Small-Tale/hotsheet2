@@ -610,12 +610,7 @@ fn hs2_c9fc2k_cli_links_source_and_queues_pending_rulesync_review() {
         .arg("pending-review")
         .assert()
         .success();
-    hs(Path::new("."))
-        .env("HOTSHEET_HOME", &home)
-        .args(["setup", "--guidance-owner", "rulesync", "--project"])
-        .arg(&project)
-        .assert()
-        .success();
+    hotsheet_plugins::setup::set_guidance_owner_in(&project, "rulesync").unwrap();
     std::fs::write(project.join("AGENTS.md"), "Rulesync-generated guidance.\n").unwrap();
     assert!(hotsheet_plugins::rulesync_consolidation::needs_review(&project, &home).unwrap());
     let source = hotsheet_ticketing::checkouts::TicketSource::git(&store);
