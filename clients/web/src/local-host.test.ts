@@ -164,6 +164,44 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
 });
 
 describe('pinned production artifacts (HS2-6VQ5RV)', () => {
+  it('HS2-FYXRRM signs the copied server and both CLI copies without touching build outputs', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-signing-snapshot-')),
+      dist = resolve(root, 'dist'),
+      server = resolve(root, 'hotsheet-server'),
+      cli = resolve(root, 'hotsheet-cli'),
+      home = resolve(root, 'home');
+    let snapshot: ReturnType<typeof snapshotLocalHostArtifacts> | undefined;
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), 'host');
+      await writeFile(server, 'server build');
+      await writeFile(cli, 'cli build');
+      const calls: [string, string, string][] = [];
+      snapshot = snapshotLocalHostArtifacts(
+        dist,
+        { HOTSHEET_SERVER_BIN: server, HOTSHEET_CLI_BIN: cli },
+        home,
+        (source, copy, name) => {
+          calls.push([source, copy, name]);
+        },
+      );
+      expect(calls.map(([source, , name]) => [source, name])).toEqual([
+        [server, 'hotsheet-server'],
+        [cli, 'hotsheet-cli'],
+        [cli, 'hotsheet-cli'],
+      ]);
+      expect(calls[0]?.[1]).toBe(snapshot.environment.HOTSHEET_SERVER_BIN);
+      expect(calls[1]?.[1]).toBe(snapshot.environment.HOTSHEET_CLI_BIN);
+      expect(calls[2]?.[1]).not.toBe(cli);
+      expect(readFileSync(server, 'utf8')).toBe('server build');
+      expect(readFileSync(cli, 'utf8')).toBe('cli build');
+    } finally {
+      snapshot?.dispose();
+      if (snapshot) await rm(resolve(snapshot.distRoot, '..'), { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('serves and launches the selected build after working outputs change or disappear', async () => {
     const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-source-'));
     const dist = resolve(root, 'dist');

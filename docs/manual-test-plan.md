@@ -97,6 +97,11 @@ the default-on path is checked by hand.
    The first migration launch may still ask for each old item. Check that
    `machine-secrets/` contains owner-only encrypted envelopes, no token text,
    and one native `machine-secrets-v1-master` item.
+   On macOS, run `npm run sign:setup:macos` from `clients/web`, then rebuild and
+   relaunch the development host twice. Allow the new signing identity once and
+   count Keychain prompts on the second launch and after a second rebuild.
+   Confirm `codesign --display --verbose=2` reports the same certificate for
+   both snapshotted server builds; a distribution-signed binary keeps its signer.
 6. Export the machine master to an owner-only backup outside the repository;
    rotate, restart, and confirm credentials and durable permissions still work.
    Simulate interruption after the new root is written, run `key master-resume`,

@@ -13,6 +13,12 @@ exercises encrypted storage, backup, rotate, missing-root failure, and restore
 through the shipped commands. The OS-specific prompt count remains a manual check in
 `docs/manual-test-plan.md`.
 
+HS2-FYXRRM signs only ad hoc macOS host snapshot copies with the configured
+development identity. `clients/web/src/dev-signing.test.ts` covers absent/invalid
+configuration, distinct server and CLI identifiers, distribution signature preservation,
+and signing failure; `clients/web/src/local-host.test.ts` covers snapshot wiring.
+The certificate setup and repeated rebuild prompt count are manual macOS checks.
+
 HS2-GDF4ZJ coordinates four direct-poll slots across independent tabs with Web
 Locks and paces zero-wait polls when locks are unavailable. `change-poll-slots.test.ts`
 covers two contexts, refill, fallback pacing, and abort; `change-poll-mux.spec.ts`

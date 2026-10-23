@@ -32,6 +32,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { spawnSync } from './child-process';
 import { localClientUrl, publishClientUrl } from './client-discovery';
 import { createDevApp } from './dev-server';
+import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
 import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
@@ -152,6 +153,7 @@ export function snapshotLocalHostArtifacts(
   distRoot: string,
   binaryEnvironment: Record<string, string>,
   machineHome: string,
+  signSnapshot: typeof signMacOSSnapshotIfConfigured = signMacOSSnapshotIfConfigured,
 ): { distRoot: string; environment: Record<string, string>; dispose: () => void } {
   const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
     environment = { ...binaryEnvironment },
@@ -187,6 +189,7 @@ export function snapshotLocalHostArtifacts(
       const pinned = resolve(snapshotRoot, 'bin', name);
       copyFileSync(source, pinned);
       chmodSync(pinned, statSync(source).mode & 0o777);
+      if (name === 'hotsheet-server' || name === 'hotsheet-cli') signSnapshot(source, pinned, name, machineHome);
       // Codex retains its hook command while its TUI stays open. Keep a separate CLI
       // outside the temporary host snapshot so that command survives a host restart.
       if (variable === 'HOTSHEET_CLI_BIN') {
@@ -198,6 +201,7 @@ export function snapshotLocalHostArtifacts(
             stable = resolve(stableDir, name);
           copyFileSync(source, staged);
           chmodSync(staged, statSync(source).mode & 0o777);
+          signSnapshot(source, staged, 'hotsheet-cli', machineHome);
           renameSync(staged, stable);
           environment.HOTSHEET_HOOK_CLI_BIN = stable;
           // A detached server may refresh setup independently of the host's environment.

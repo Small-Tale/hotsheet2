@@ -1151,8 +1151,13 @@ distinct derived key from its vault master, whose value is itself encrypted unde
 the machine master after migration (HS2-5A6JNS). Existing
 v3 files migrate to v4 on first access after their own legacy key is read, preserving
 approvals. A missing master or legacy key and invalid ciphertext disable durable
-approvals. Rebuilt ad hoc signed development binaries may still request access to the
-master item again on a new launch. Legacy fingerprint-only rules
+approvals. On macOS, `npm run sign:setup:macos` in `clients/web` installs an
+owner-local code-signing identity for development. The local host signs only its
+copied ad hoc server and CLI binaries with that identity; it leaves distribution
+signatures and build outputs unchanged (HS2-FYXRRM). The first launch under the
+new identity may need Keychain authorization, while later rebuilds retain the
+same code identity. Without setup, ad hoc rebuilds may request it again.
+Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or

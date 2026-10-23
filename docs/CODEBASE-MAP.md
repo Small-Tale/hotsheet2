@@ -806,7 +806,11 @@ use the server's `POST /connections/{id}/message` operation. Server terminal reg
 its launch checkout/source, which lets the selected project's drawer find its message action.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
-snapshot and keeps a separate durable hook CLI under the machine home. The setup resolver in
+snapshot and keeps a separate durable hook CLI under the machine home.
+`clients/web/src/dev-signing.ts` applies an explicitly configured, stable macOS development
+signature to ad hoc snapshot copies; `scripts/setup-macos-dev-signing.sh` creates the
+machine-local identity. Distribution signatures and build outputs remain intact (HS2-FYXRRM).
+The setup resolver in
 `crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks.
 For a production snapshot, detected from its environment or binary path, it prefers the
 machine-home binary even when the explicit override names the snapshot. A private
