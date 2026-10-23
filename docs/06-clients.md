@@ -454,7 +454,8 @@ preview/download, server directory browser) are separate design work.
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
   revalidates, and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
   return 404. Maintainer shortcuts: `server:rebuild`
-  rebuilds the server and CLI and stops the running machine server (found via the bridge's
+  rebuilds the server and CLI, installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin
+  directory (`cargo install --path`), and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary, unless the production host owns that server (see pinned-server
   ownership below; `npm run server:rebuild -- --force` overrides); `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
@@ -500,8 +501,9 @@ preview/download, server directory browser) are separate design work.
   instead of showing a setup banner on every refresh or device (HS2-6VQ5RV). The MCP shim is not snapshotted: AI-tool
   configs persist its path, so the host exports the stable `target/{release,debug}/hotsheet-mcp`
   as `HOTSHEET_MCP_BIN` for setup to record (HS2-HNXE38).
-  Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set
-  and stops the running machine server (refused while the production host owns it), and
+  Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set,
+  installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin directory as `server:rebuild` does
+  (HS2-4G2EA2), and stops the running machine server (refused while the production host owns it), and
   `prod:rebuild-lan` runs it with `--force` before serving the production client on `0.0.0.0`.
 
 - **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
