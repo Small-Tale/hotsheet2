@@ -693,6 +693,19 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await expect(page.locator('[data-component="guidance-settings"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Project guidance' }).click();
   const picker = page.locator('[data-component="guidance-settings"]');
+  const guidanceContent = picker.locator('#guidance-content');
+  const guidanceFooter = picker.locator('.guidance-settings__footer');
+  await expect(guidanceFooter.getByText('1 rule or skill selected')).toBeVisible();
+  expect(await guidanceContent.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const footerAtTop = await guidanceFooter.boundingBox();
+  await guidanceContent.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const footerAtEnd = await guidanceFooter.boundingBox();
+  expect(footerAtEnd?.y).toBeCloseTo(footerAtTop?.y ?? 0, 0);
+  await guidanceContent.evaluate((element) => {
+    element.scrollTop = 0;
+  });
   const visualRule = picker.locator('[data-guidance-rule="hotsheet-visual-qa"]');
   await expect(visualRule.locator('label')).toContainText('Visual review of rendered changes');
   await expect(visualRule.locator('label')).not.toContainText('hotsheet-visual-qa');
@@ -717,6 +730,7 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await ownerFilter.locator('.kui-select__trigger').click();
   await ownerFilter.locator('.kui-select__option[data-value=""]').click();
   await picker.locator('[data-guidance-rule="rust-lint-and-format"] input[type="checkbox"]').check();
+  await expect(guidanceFooter.getByText('2 rules and skills selected')).toBeVisible();
   await expect
     .poll(() =>
       actions.some(
@@ -740,6 +754,9 @@ test('project guidance picker searches, selects, applies, and reports versions a
     .toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(picker).toBeVisible();
+  const phoneFooter = await guidanceFooter.boundingBox();
+  expect(phoneFooter?.x).toBeGreaterThanOrEqual(0);
+  expect((phoneFooter?.x ?? 0) + (phoneFooter?.width ?? 0)).toBeLessThanOrEqual(390);
   const overflow = await picker.evaluate((element) => element.scrollWidth - element.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await writer.scrollIntoViewIfNeeded();
@@ -753,6 +770,14 @@ test('project guidance picker searches, selects, applies, and reports versions a
   await page.screenshot({ path: 'target/visual-captures/guidance-phone-top-settled.png', fullPage: true });
   await visualRule.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/guidance-rules-phone.png' });
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(guidanceFooter).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'target/visual-captures/guidance-footer-medium.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(guidanceFooter).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'target/visual-captures/guidance-footer-wide-return.png' });
 });
 
 test('HS2-T0GHX5 puts Instruction Writer first in the shipped Settings view', async ({ page }) => {

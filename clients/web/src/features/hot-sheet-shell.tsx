@@ -633,7 +633,13 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             <SearchScopeToolbar allTickets={allTickets} viewLabel={ticketViewTitle(selectedView.value)} />
           ) : undefined
         }
-        workspacePresentation={viewMode.value === 'board' && selectedView.value !== 'errors' ? 'edge-to-edge' : 'inset'}
+        workspacePresentation={
+          viewMode.value === 'board' && selectedView.value !== 'errors'
+            ? 'edge-to-edge'
+            : viewMode.value === 'settings' && settingsCategory() === 'guidance'
+              ? 'guidance'
+              : 'inset'
+        }
         terminalDrawer={
           drawerViewAllowed ? (
             terminalDrawerMounted.value ? (

@@ -181,6 +181,9 @@ counts and the source's available tags visible while browsing a long catalog
 (HS2-019VVA). The main toolbar searches rule names and descriptions
 on Project guidance, with `owner:` and `tag:` chips; the Owner and Technology or Tag
 selectors remain available for browsing (HS2-6ZA2RN).
+The rule list scrolls within Project guidance while its page footer keeps Apply
+Selected Guidance and the current rule-and-skill selection count visible. The
+action shows a busy state while applying (HS2-VSXE33).
 A rule preview reads the pinned snapshot and current installed section without
 applying it. For the built-in writer, it uses the same section
 renderer as Apply to show the resulting text; for Rulesync it compares the curated

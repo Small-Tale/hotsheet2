@@ -1,3 +1,5 @@
+import './guidance-settings.css';
+
 import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
 import { Checkbox } from '@kerfjs/ui/checkbox';
@@ -79,11 +81,24 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
   ].sort();
   const tags = [...new Set(rules.flatMap((rule) => rule.tags))].sort();
   const registeredSource = overview?.sources.find((source) => source.id === sourceId);
+  const selectedCount =
+    overview?.sources.reduce(
+      (count, source) =>
+        count +
+        source.rules.filter((rule) => rule.selected).length +
+        source.skills.filter((skill) => skill.selected).length,
+      0,
+    ) ?? 0;
   const removedSelected =
     props.review?.changes.some((change) => change.change === 'removed' && change.selected) ?? false;
   return (
-    <section data-component="guidance-settings" aria-label="Project Guidance" aria-busy={String(loading)}>
-      <List gap="l">
+    <section
+      class="guidance-settings"
+      data-component="guidance-settings"
+      aria-label="Project Guidance"
+      aria-busy={String(loading)}
+    >
+      <List gap="l" contentWidth="wide" inset="document" scrollable flex id="guidance-content">
         <Select
           name="guidance-owner"
           label="Instruction Writer"
@@ -705,9 +720,6 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                 </section>
               );
             })}
-            <Button action={COMMANDS_AND_AI_ACTIONS.applyGuidance.value} tone="brand" disabled={loading}>
-              Apply Selected Guidance
-            </Button>
           </List>
         ) : (
           <Text tone="quiet">Register a source to browse its rules and skills.</Text>
@@ -716,6 +728,18 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           {message}
         </Text>
       </List>
+      {!!overview?.sources.length && (
+        <footer class="guidance-settings__footer" aria-label="Guidance Actions">
+          <List contentWidth="wide" inset="document" gap="xs" dividerSides="t">
+            <Text tone="quiet" size="compact" role="status">
+              {selectedCount} {selectedCount === 1 ? 'rule or skill' : 'rules and skills'} selected
+            </Text>
+            <Button action={COMMANDS_AND_AI_ACTIONS.applyGuidance.value} tone="brand" disabled={loading}>
+              {loading ? 'Applying Guidance…' : 'Apply Selected Guidance'}
+            </Button>
+          </List>
+        </footer>
+      )}
     </section>
   );
 }

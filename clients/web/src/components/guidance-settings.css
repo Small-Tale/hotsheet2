@@ -1,0 +1,10 @@
+.guidance-settings {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.guidance-settings__footer {
+  flex: none;
+}

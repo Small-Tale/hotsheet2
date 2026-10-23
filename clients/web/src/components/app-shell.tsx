@@ -70,7 +70,7 @@ export interface AppShellProps {
   /** Mobile single-column layout: sidebar/inspector overlay the main column and a click-away
    * scrim dismisses whichever one is open (only one is ever open at a time — HS2-ZK51WP). */
   mobile?: boolean;
-  workspacePresentation?: 'inset' | 'edge-to-edge';
+  workspacePresentation?: 'inset' | 'edge-to-edge' | 'guidance';
   overlay?: SafeHtml;
   /** Foreground anchored to the viewport, outside the mobile side-panel stacking contexts. */
   viewportOverlay?: SafeHtml;

@@ -134,6 +134,9 @@
   overflow-anchor: none;
   flex: 1;
 }
+.app-shell__workspace[data-presentation='guidance'] {
+  overflow: hidden;
+}
 /* Project statistics uses its Kerf Pane as the sole scroll owner. Bound that Pane to the
    work-area height so its content slot scrolls instead of an outer workspace scroller. */
 .app-shell[data-mode='stats'] .app-shell__workspace {

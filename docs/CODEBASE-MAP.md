@@ -50,6 +50,8 @@ merges selected sections, while Rulesync apply generates from cached curated inp
 `setup::preview_guidance_rule_in` and the authenticated per-rule preview route
 compare one pinned rule with its installed and after-Apply section without writes;
 Project guidance groups the catalog by owner and shows available tags (HS2-019VVA).
+`GuidanceSettings` owns the scrolling rule content and persistent apply footer;
+the app shell reserves a bounded Settings work area for that page (HS2-VSXE33).
 
 ## Requirements docs
 

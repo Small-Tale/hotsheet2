@@ -6,6 +6,53 @@ import { GuidanceSettings } from './guidance-settings';
 const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-VSXE33 keeps the apply action in a separate footer with selection and busy state', () => {
+    const base = {
+      loading: false,
+      message: '',
+      search: emptyGuidanceSearch,
+      repository: '',
+      sourceRef: '',
+      sourceId: 'fixture',
+      ownerFilter: '',
+      tagFilter: '',
+      overview: {
+        owner: 'builtin' as const,
+        explicit_selection: true,
+        default_repository: '',
+        sources: [
+          {
+            id: 'fixture',
+            repository: 'https://example.test/rules',
+            requested_ref: 'main',
+            commit: 'a'.repeat(40),
+            rules: [
+              {
+                name: 'rule',
+                description: 'Rule',
+                version: 1,
+                installed_version: null,
+                owner: null,
+                tags: [],
+                selected: true,
+              },
+            ],
+            skills: [{ name: 'skill', selected: true }],
+          },
+        ],
+      },
+    };
+    const ready = String(GuidanceSettings(base));
+    const footer = ready.indexOf('aria-label="Guidance Actions"');
+    expect(ready).toContain('2 rules and skills selected');
+    expect(ready.indexOf('data-guidance-skill="skill"')).toBeLessThan(footer);
+    expect(ready.indexOf('data-action="apply-guidance"')).toBeGreaterThan(footer);
+    expect(ready.match(/<button[^>]*data-action="apply-guidance"[^>]*>/)?.[0]).not.toContain('disabled');
+    expect(ready).toContain('Apply Selected Guidance');
+    const busy = String(GuidanceSettings({ ...base, loading: true }));
+    expect(busy).toContain('Applying Guidance…');
+    expect(busy.match(/<button[^>]*data-action="apply-guidance"[^>]*>/)?.[0]).toContain('disabled');
+  });
   it('HS2-019VVA groups long catalogs, preserves selections, and shows protected rule previews', () => {
     const rules = Array.from({ length: 36 }, (_, index) => ({
       name: `rule-${index}`,
