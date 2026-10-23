@@ -211,7 +211,7 @@ pub(crate) async fn report_claude_turn(
                 // briefly for that local append; never poll the server or infer older rows.
                 let deadline = Instant::now() + TRANSCRIPT_FLUSH_WAIT;
                 let usage = loop {
-                    let usage = match hotsheet_aitools::claude_transcript_usage::priced_usage_since(
+                    let usage = match hotsheet_aitools::claude_transcript_usage::priced_usage_with_evidence_since(
                         &start.transcript,
                         start.offset,
                         &prices,
@@ -225,20 +225,21 @@ pub(crate) async fn report_claude_turn(
                     }
                     std::thread::sleep(TRANSCRIPT_FLUSH_RETRY);
                 };
-                if let Some(usage) = usage {
-                    metrics::record_once(
+                if let Some(turn) = usage {
+                    metrics::record_once_with_claude_tokens(
                         &store,
                         &metrics::UsageEvent {
                             ts: start.ended_at.clone().expect("Stop set the turn timestamp"),
                             tool: "claude".to_owned(),
-                            model: usage.model,
-                            tokens_in: usage.tokens_in,
-                            tokens_out: usage.tokens_out,
-                            cost_usd: usage.cost_usd,
+                            model: turn.usage.model,
+                            tokens_in: turn.usage.tokens_in,
+                            tokens_out: turn.usage.tokens_out,
+                            cost_usd: turn.usage.cost_usd,
                             ticket: start.ticket,
                             session: Some(session_id),
                         },
                         &start.turn_id,
+                        turn.categories,
                     )?;
                 }
                 Ok::<(), std::io::Error>(())

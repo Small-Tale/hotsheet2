@@ -75,6 +75,33 @@ pub struct UsageEvent {
     pub session: Option<String>,
 }
 
+/// Numeric Claude transcript evidence for a single-model turn. This contains no transcript
+/// content and is written only when every counted assistant message has reliable categories
+/// (HS2-WZ986Q). Older raw events have no `claude_tokens` member and stay ineligible for
+/// historical repricing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaudeTokenCategories {
+    pub uncached_input: u64,
+    pub cache_read: u64,
+    pub cache_write_5m: u64,
+    pub cache_write_1h: u64,
+    pub cache_write_unclassified: u64,
+    pub output: u64,
+}
+
+impl ClaudeTokenCategories {
+    pub fn add(&mut self, other: Self) {
+        self.uncached_input = self.uncached_input.saturating_add(other.uncached_input);
+        self.cache_read = self.cache_read.saturating_add(other.cache_read);
+        self.cache_write_5m = self.cache_write_5m.saturating_add(other.cache_write_5m);
+        self.cache_write_1h = self.cache_write_1h.saturating_add(other.cache_write_1h);
+        self.cache_write_unclassified = self
+            .cache_write_unclassified
+            .saturating_add(other.cache_write_unclassified);
+        self.output = self.output.saturating_add(other.output);
+    }
+}
+
 impl UsageEvent {
     /// The `YYYY-MM-DD` day the event belongs to (from `ts`), or `"unknown"`.
     fn day(&self) -> &str {
@@ -146,6 +173,18 @@ pub fn record(store: &FsStore, event: &UsageEvent) -> io::Result<()> {
 /// Record a turn once even when its caller retries after a write error. The identity
 /// lives in raw JSONL but is ignored by the ordinary [`UsageEvent`] reader (HS2-F8578J).
 pub fn record_once(store: &FsStore, event: &UsageEvent, turn_id: &str) -> io::Result<()> {
+    record_once_with_claude_tokens(store, event, turn_id, None)
+}
+
+/// Preserve Claude's numeric categories beside the existing stable `turn_id`. The ordinary
+/// `UsageEvent` reader ignores these extra raw members, so old readers and old rows remain
+/// compatible (HS2-WZ986Q).
+pub fn record_once_with_claude_tokens(
+    store: &FsStore,
+    event: &UsageEvent,
+    turn_id: &str,
+    categories: Option<ClaudeTokenCategories>,
+) -> io::Result<()> {
     let dir = store.root().join("metrics").join("raw");
     fs::create_dir_all(&dir)?;
     let _lock = FileLock::acquire(
@@ -173,10 +212,16 @@ pub fn record_once(store: &FsStore, event: &UsageEvent, turn_id: &str) -> io::Re
         Err(error) => return Err(error),
     }
     let mut value = serde_json::to_value(event).map_err(io::Error::other)?;
-    value
+    let object = value
         .as_object_mut()
-        .expect("usage event serializes as an object")
-        .insert("turn_id".into(), turn_id.into());
+        .expect("usage event serializes as an object");
+    object.insert("turn_id".into(), turn_id.into());
+    if let Some(categories) = categories {
+        object.insert(
+            "claude_tokens".into(),
+            serde_json::to_value(categories).map_err(io::Error::other)?,
+        );
+    }
     let mut line = serde_json::to_vec(&value).map_err(io::Error::other)?;
     line.push(b'\n');
     fs::OpenOptions::new()
@@ -481,6 +526,43 @@ mod tests {
         assert_eq!(read_raw(&store).unwrap(), vec![event.clone()]);
         record_once(&store, &event, "turn-2").unwrap();
         assert_eq!(read_raw(&store).unwrap(), vec![event.clone(), event]);
+    }
+
+    #[test]
+    fn hs2_wz986q_numeric_claude_evidence_preserves_old_raw_reader() {
+        let (_dir, store) = store();
+        let event = UsageEvent {
+            ts: "2026-10-23T00:00:00Z".into(),
+            tool: "claude".into(),
+            model: Some("claude-fable-5-1".into()),
+            tokens_in: 20,
+            tokens_out: 2,
+            cost_usd: None,
+            ticket: None,
+            session: Some("session-1".into()),
+        };
+        let categories = ClaudeTokenCategories {
+            uncached_input: 5,
+            cache_read: 10,
+            cache_write_5m: 2,
+            cache_write_1h: 1,
+            cache_write_unclassified: 2,
+            output: 2,
+        };
+        record_once_with_claude_tokens(&store, &event, "turn-1", Some(categories)).unwrap();
+        record_once_with_claude_tokens(&store, &event, "turn-1", Some(categories)).unwrap();
+        assert_eq!(read_raw(&store).unwrap(), vec![event]);
+        let raw = fs::read_to_string(store.root().join("metrics/raw/2026-10-23.jsonl")).unwrap();
+        let lines: Vec<_> = raw.lines().collect();
+        assert_eq!(lines.len(), 1);
+        let value: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(value["turn_id"], "turn-1");
+        assert_eq!(
+            serde_json::from_value::<ClaudeTokenCategories>(value["claude_tokens"].clone())
+                .unwrap(),
+            categories
+        );
+        assert_eq!(value["model"], "claude-fable-5-1");
     }
 
     #[test]

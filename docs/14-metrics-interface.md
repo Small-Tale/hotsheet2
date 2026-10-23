@@ -183,6 +183,15 @@ Metrics can be shared across a team **through git** — no server sync needed:
   `metrics/prices.json` can override these rates. Source:
   [Claude Fable 5.1 model pricing](https://platform.claude.com/docs/en/models/fable-5-1/overview).
 
+  New native Claude raw events retain the existing stable `turn_id`, one model, and
+  a `claude_tokens` object with numeric uncached input, cache read, five-minute
+  write, one-hour write, unclassified write, and output counts (HS2-WZ986Q).
+  Repeated assistant rows use the latest timestamp for each message id before
+  these counts are summed. Mixed-model turns or incomplete counters have no
+  `claude_tokens` object and remain ineligible for historical repricing. Old raw
+  events are unchanged; ordinary usage readers ignore the new object. No
+  transcript content, paths, or message ids enter raw metrics.
+
   **Historical Claude repricing design (HS2-WMWRHZ; design only):** existing raw
   terminal events retain a model and aggregate input/output counts, but no cache
   categories, transcript byte range, or assistant message ids. A session id and

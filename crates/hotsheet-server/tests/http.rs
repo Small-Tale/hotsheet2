@@ -2607,6 +2607,25 @@ async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim()
     );
     assert_eq!((events[1].tokens_in, events[1].tokens_out), (1037, 2));
     assert_eq!(events[1].cost_usd, Some(0.00087));
+    // HS2-WZ986Q: the real terminal route retains only numeric evidence and the stable
+    // turn identity; the existing aggregate reader still sees the same event.
+    let raw_path = store
+        .root()
+        .join("metrics/raw")
+        .join(format!("{}.jsonl", &events[1].ts[..10]));
+    let raw_rows: Vec<serde_json::Value> = std::fs::read_to_string(raw_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(raw_rows[1]["turn_id"].as_str().is_some());
+    assert_eq!(
+        raw_rows[1]["claude_tokens"],
+        serde_json::json!({
+            "uncached_input":7, "cache_read":1000, "cache_write_5m":20,
+            "cache_write_1h":10, "cache_write_unclassified":0, "output":2
+        })
+    );
 
     // Stop may arrive before Claude flushes the final assistant row to JSONL.
     send("POST", endpoint, turn("start", "native-session")).await;

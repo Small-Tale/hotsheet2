@@ -5,6 +5,7 @@
 //! conversation content is retained. Repeated rows for one assistant message count once.
 
 use crate::drive::Usage;
+use hotsheet_ticketing::metrics::ClaudeTokenCategories;
 use hotsheet_ticketing::pricing::Prices;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -14,15 +15,32 @@ use std::path::Path;
 
 const MAX_TURN_BYTES: u64 = 64 * 1024 * 1024;
 
+/// The usual turn aggregate plus optional categories safe to retain for later repricing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaudeTurnUsage {
+    pub usage: Usage,
+    pub categories: Option<ClaudeTokenCategories>,
+}
+
 /// Read only bytes appended after a `UserPromptSubmit` hook's file-size snapshot.
 /// A truncated/replaced transcript or an unbounded turn produces no guessed usage.
 pub fn usage_since(path: &Path, offset: u64) -> io::Result<Option<Usage>> {
-    usage_since_with_prices(path, offset, None)
+    usage_since_with_prices(path, offset, None).map(|turn| turn.map(|turn| turn.usage))
 }
 
 /// Price the transcript's separate cache categories instead of treating every input
 /// token as an uncached input token.
 pub fn priced_usage_since(path: &Path, offset: u64, prices: &Prices) -> io::Result<Option<Usage>> {
+    priced_usage_with_evidence_since(path, offset, prices).map(|turn| turn.map(|turn| turn.usage))
+}
+
+/// Return the numeric evidence with the same bounded, de-duplicated turn scan used for
+/// initial pricing. A mixed-model or malformed category turn has no repricing evidence.
+pub fn priced_usage_with_evidence_since(
+    path: &Path,
+    offset: u64,
+    prices: &Prices,
+) -> io::Result<Option<ClaudeTurnUsage>> {
     usage_since_with_prices(path, offset, Some(prices))
 }
 
@@ -30,7 +48,7 @@ fn usage_since_with_prices(
     path: &Path,
     offset: u64,
     prices: Option<&Prices>,
-) -> io::Result<Option<Usage>> {
+) -> io::Result<Option<ClaudeTurnUsage>> {
     let mut file = File::open(path)?;
     let len = file.metadata()?.len();
     if len < offset {
@@ -57,8 +75,9 @@ fn usage_since_with_prices(
     Ok(usage_from_lines(&bytes, prices))
 }
 
-fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<Usage> {
-    let mut messages = BTreeMap::<String, (String, Usage, Option<f64>)>::new();
+fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<ClaudeTurnUsage> {
+    let mut messages =
+        BTreeMap::<String, (String, Usage, Option<f64>, Option<ClaudeTokenCategories>)>::new();
     for line in bytes.split(|byte| *byte == b'\n') {
         let Ok(value) = serde_json::from_slice::<Value>(line) else {
             continue;
@@ -80,9 +99,12 @@ fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<Usage> {
         let Some(usage) = crate::claude::claude_result_usage(message) else {
             continue;
         };
+        let categories = message.get("usage").and_then(categories_from_usage);
         let cost = prices.and_then(|prices| {
             let model = usage.model.as_ref()?;
             let price = prices.get(model)?;
+            // Keep initial pricing's established zero-default for sparse transcript rows.
+            // Repricing evidence is stricter: it is omitted unless counters are explicit.
             let counters = message.get("usage")?;
             let count = |key| counters.get(key).and_then(Value::as_u64).unwrap_or(0);
             let cache_creation = counters.get("cache_creation");
@@ -112,9 +134,12 @@ fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<Usage> {
         // its counters is authoritative; stale rows received out of order cannot lower it.
         if messages
             .get(id)
-            .is_none_or(|(previous, _, _)| timestamp >= previous.as_str())
+            .is_none_or(|(previous, _, _, _)| timestamp >= previous.as_str())
         {
-            messages.insert(id.to_owned(), (timestamp.to_owned(), usage, cost));
+            messages.insert(
+                id.to_owned(),
+                (timestamp.to_owned(), usage, cost, categories),
+            );
         }
     }
     if messages.is_empty() {
@@ -124,21 +149,57 @@ fn usage_from_lines(bytes: &[u8], prices: Option<&Prices>) -> Option<Usage> {
     let mut model = None::<String>;
     let mut mixed_models = false;
     let mut total_cost = prices.map(|_| 0.0);
-    for (_, usage, cost) in messages.values() {
+    let mut categories = Some(ClaudeTokenCategories::default());
+    for (_, usage, cost, message_categories) in messages.values() {
         total.tokens_in = total.tokens_in.saturating_add(usage.tokens_in);
         total.tokens_out = total.tokens_out.saturating_add(usage.tokens_out);
         total_cost = total_cost.zip(*cost).map(|(sum, amount)| sum + amount);
-        if let Some(current) = &usage.model {
-            if model.as_ref().is_some_and(|known| known != current) {
-                mixed_models = true;
-            } else {
+        categories = categories
+            .zip(*message_categories)
+            .map(|(mut total, next)| {
+                total.add(next);
+                total
+            });
+        match &usage.model {
+            Some(current) if model.as_ref().is_none_or(|known| known == current) => {
                 model = Some(current.clone());
             }
+            _ => mixed_models = true,
         }
     }
     total.model = if mixed_models { None } else { model };
     total.cost_usd = total_cost;
-    Some(total)
+    Some(ClaudeTurnUsage {
+        categories: categories.filter(|_| total.model.is_some()),
+        usage: total,
+    })
+}
+
+/// Only retain a snapshot when the observed Claude counters are numeric and their cache
+/// write subtotals fit the reported total. Missing TTL categories become unclassified.
+fn categories_from_usage(usage: &Value) -> Option<ClaudeTokenCategories> {
+    let count = |key| usage.get(key).and_then(Value::as_u64);
+    let uncached_input = count("input_tokens")?;
+    let cache_read = count("cache_read_input_tokens")?;
+    let cache_write = count("cache_creation_input_tokens")?;
+    let output = count("output_tokens")?;
+    let ttl = usage.get("cache_creation");
+    let ttl_count = |key| {
+        ttl.and_then(|value| value.get(key))
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+    };
+    let cache_write_5m = ttl_count("ephemeral_5m_input_tokens");
+    let cache_write_1h = ttl_count("ephemeral_1h_input_tokens");
+    let classified = cache_write_5m.checked_add(cache_write_1h)?;
+    Some(ClaudeTokenCategories {
+        uncached_input,
+        cache_read,
+        cache_write_5m,
+        cache_write_1h,
+        cache_write_unclassified: cache_write.checked_sub(classified)?,
+        output,
+    })
 }
 
 #[cfg(test)]
@@ -257,5 +318,95 @@ mod tests {
         assert_eq!((usage.tokens_in, usage.tokens_out), (1040, 5));
         // 10 × $10 + 1000 × $0.25 + 20 × $12.50 + 10 × $20 + 5 × $50, per million.
         assert_eq!(usage.cost_usd, Some(0.00105));
+    }
+
+    #[test]
+    fn hs2_wz986q_keeps_latest_numeric_categories_and_unclassified_writes() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let newer = serde_json::json!({
+            "type":"assistant", "timestamp":"2026-01-01T00:00:02Z",
+            "message":{"id":"same", "model":"claude-fable-5-1", "usage":{
+                "input_tokens":5, "cache_read_input_tokens":11,
+                "cache_creation_input_tokens":7,
+                "cache_creation":{"ephemeral_5m_input_tokens":2},
+                "output_tokens":3
+            }}
+        });
+        let older = serde_json::json!({
+            "type":"assistant", "timestamp":"2026-01-01T00:00:01Z",
+            "message":{"id":"same", "model":"claude-fable-5-1", "usage":{
+                "input_tokens":1, "cache_read_input_tokens":1,
+                "cache_creation_input_tokens":0, "output_tokens":1
+            }}
+        });
+        writeln!(file, "{newer}\n{older}\n{newer}").unwrap();
+        let turn = priced_usage_with_evidence_since(
+            file.path(),
+            0,
+            &hotsheet_ticketing::pricing::default_prices(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!((turn.usage.tokens_in, turn.usage.tokens_out), (23, 3));
+        assert_eq!(turn.usage.model.as_deref(), Some("claude-fable-5-1"));
+        assert_eq!(
+            turn.usage.cost_usd, None,
+            "unknown write TTL cannot be priced"
+        );
+        assert_eq!(
+            turn.categories,
+            Some(ClaudeTokenCategories {
+                uncached_input: 5,
+                cache_read: 11,
+                cache_write_5m: 2,
+                cache_write_1h: 0,
+                cache_write_unclassified: 5,
+                output: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn hs2_wz986q_mixed_or_incomplete_models_have_no_repricing_evidence() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "{}", row("a", "1", 2, 3, 4, "claude-fable-5-1")).unwrap();
+        writeln!(file, "{}", row("b", "2", 5, 6, 7, "claude-opus-4-8")).unwrap();
+        let turn = priced_usage_with_evidence_since(
+            file.path(),
+            0,
+            &hotsheet_ticketing::pricing::default_prices(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(turn.usage.model, None);
+        assert_eq!(turn.categories, None);
+
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({
+                "type":"assistant", "message":{"id":"a", "model":"claude-fable-5-1",
+                "usage":{"input_tokens":2, "output_tokens":1}}
+            })
+        )
+        .unwrap();
+        let turn = priced_usage_with_evidence_since(
+            file.path(),
+            0,
+            &hotsheet_ticketing::pricing::default_prices(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(turn.usage.model.as_deref(), Some("claude-fable-5-1"));
+        assert_eq!(
+            turn.categories, None,
+            "missing cache counters are not guessed"
+        );
+        assert_eq!(
+            turn.usage.cost_usd,
+            Some(0.00007),
+            "sparse rows retain initial pricing"
+        );
     }
 }

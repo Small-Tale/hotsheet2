@@ -145,9 +145,9 @@ client runners remain unbuilt.
 | [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer)                             | Partial (HS2-KP31ZE/4C68Y8/SW655F: event model, bounded timeline, APIs, persistence+broadcast, coarse turn/permission events, and rich version-pinned Codex/Claude native activity mapped through the attributed live sink. Durable AI note policy is HS2-3GRNZW; Announcer UI/TTS is HS2-17)                                                                                                                                                                                                     |
 
 Historical Claude usage repricing in [14-metrics-interface.md](14-metrics-interface.md)
-is design-only (HS2-WMWRHZ). Existing aggregate-only raw events lack safe cache
-category evidence; HS2-WZ986Q and HS2-38SAET track numeric evidence capture and
-the explicit correction path.
+remains partial (HS2-WMWRHZ). Existing aggregate-only raw events lack safe cache
+category evidence. New native Claude turns retain numeric categories and stable
+turn identity (HS2-WZ986Q); HS2-38SAET tracks the explicit correction path.
 
 **F · Collaboration & distribution**
 
