@@ -29,6 +29,19 @@ test('snapshot rejects unknown, duplicate, and incomplete rule identities', () =
   assert.throws(() => validateLock({ ...lock, rules: lock.rules.map(() => lock.rules[0]) }), /Invalid snapshot/);
 });
 
+test('HS2-Y84WA5 keeps the Rulesync example on the reviewed playbook commit', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const bundled = JSON.parse(fs.readFileSync(path.join(root, 'guidance/ai-playbook.lock.json')));
+  const example = JSON.parse(fs.readFileSync(path.join(root, 'guidance/rulesync/rulesync.lock')));
+  const source = example.sources['small-tale/ai-playbook'];
+  assert.equal(bundled.release, 'v1.3.0');
+  assert.equal(source.resolvedRef, bundled.commit);
+  assert.deepEqual(source.ruleSelection, ['*']);
+  assert.equal(source.resolvedRuleNames.length, 23);
+  assert.deepEqual(source.resolvedRuleNames, Object.keys(source.rules));
+  for (const { integrity } of Object.values(source.rules)) assert.match(integrity, /^sha256-[a-f0-9]{64}$/);
+});
+
 test('real git source produces an offline bundle, detects drift, and restores it', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hotsheet-playbook-test-'));
   try {

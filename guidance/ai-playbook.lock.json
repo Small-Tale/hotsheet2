@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "repository": "https://github.com/Small-Tale/ai-playbook.git",
-  "commit": "7cb9499a655a15213666d684a6659db43f840acf",
-  "release": "v1.2.0",
+  "commit": "02b66e656098ed5de7d2b042f37b862a8a057482",
+  "release": "v1.3.0",
   "rules": [
     {
       "name": "hotsheet-ticket-driven-work",

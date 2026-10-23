@@ -3,24 +3,78 @@
   "sources": {
     "small-tale/ai-playbook": {
       "requestedRef": "main",
-      "resolvedRef": "fcb8556bef14a9dfdaf8cc53f8b36dfb13d9a36a",
-      "resolvedAt": "2026-10-21T08:48:40.213Z",
+      "resolvedRef": "02b66e656098ed5de7d2b042f37b862a8a057482",
+      "resolvedAt": "2026-10-23T06:39:35.971Z",
       "skills": {},
       "rules": {
-        "hotsheet-requirements-documentation": {
-          "integrity": "sha256-6047eff6cc28576bdf2d686e374e7cee7fae8f9aa0b487e252e22b78f098c362"
+        "hotsheet-ticket-driven-work": {
+          "integrity": "sha256-13ceeb66a6d5d41ea65ffdc0fe6c70343fe6ea497418bc5c98dde46c013d922c"
         },
         "hotsheet-testing-philosophy": {
-          "integrity": "sha256-0559667f980c462d60bfa279aca21dc5a0c5d732581f8e694392e3efb71498b5"
+          "integrity": "sha256-049f429d997fb5a2a0797562bf9632c38c2fa8497974a5ad50a90261e2448d1c"
         },
-        "hotsheet-ticket-driven-work": {
-          "integrity": "sha256-7f833a35a0a55cd5788e444b30f0b7e51e9f888c16ad23e7bd1857bb74b29a4f"
+        "hotsheet-requirements-documentation": {
+          "integrity": "sha256-96e9069fd3377a2dc0c61d5712fbf23ebd2c65fd13ba692de5a161b7f0153393"
         },
         "hotsheet-visual-qa": {
-          "integrity": "sha256-32cdeb7e01a498306668cbefe5555a2e494fdbea9c9440eab386226ea6eaf7f1"
+          "integrity": "sha256-b0be3c53b0b519eff3894bfb34c33ba3fc3fd4226acf59db72efe9e8248b0963"
         },
         "hotsheet-workflow": {
           "integrity": "sha256-2029abb0d6214f21a19c18c4562071729b7380ce903e6c5bcc15c542d8c90f77"
+        },
+        "project-bootstrap": {
+          "integrity": "sha256-3da9951b16ca3e0c411d47fc695e73bd8d9348c6b02b48473a898bf2a4228b61"
+        },
+        "conventions-as-code": {
+          "integrity": "sha256-2f8c69a84b6a2ecd732ffe5a2929c4d73a3948523618dd522ae136edaf1bb2bd"
+        },
+        "test-operations": {
+          "integrity": "sha256-c97d2a7e3ccdbd435e9d1a0081482690578e8918d0aa05ca5b0ea69f9ad844e6"
+        },
+        "ui-composition": {
+          "integrity": "sha256-d139fad36ef5ef2e9f51db12d24e049514c43a161d5b9b4a7f7da4f7b14eac17"
+        },
+        "ui-evaluation": {
+          "integrity": "sha256-a74e3bec01f3928efbbb177b2afd10dfbdd90e1a62aa27f3bf543db0bcf4ef6f"
+        },
+        "customer-data-hygiene": {
+          "integrity": "sha256-b7fbd818a7ae306e58282a2b394b2792460d349b1eff0a63412d7b50cacc3921"
+        },
+        "web-client-organization": {
+          "integrity": "sha256-29b6376bd0c3d9d66fb76658bc611100a77573670e2056d65c7cf4ba41988326"
+        },
+        "typescript-lint-and-format": {
+          "integrity": "sha256-04775a2bfdb1fda318fcd4835fe737ea553ca0d64a4ca891289604f8c1073a32"
+        },
+        "rust-lint-and-format": {
+          "integrity": "sha256-00b9f2e45619fd8e46addb793d3f6a2bf51052059f3e6d76074baf16b6f84d7c"
+        },
+        "playwright-operations": {
+          "integrity": "sha256-93da4d3aec36d1bbd900d7adccf761e90d39e581f4e8a6fadbacc2be4f197262"
+        },
+        "kerf-ui-usage": {
+          "integrity": "sha256-c74c324aaa981f3a42301df165b2c6a3c3a73b997175c0816a37c3f34b2c2613"
+        },
+        "kerf-ui-upgrades": {
+          "integrity": "sha256-20a29e8a03c16e62f362541eb3ae12421b3ffc53e411d110a8b42287c8796339"
+        },
+        "kerf-ui-catalog-demos": {
+          "integrity": "sha256-4c464df1118ba1e7b2aa68483007ba6bea96d5f23f9ae23e1db04a20eeec1b8a"
+        },
+        "git-commit-and-push": {
+          "integrity": "sha256-e8aa6649d9a762c0565f58a9cb1d9678ce5bb6500358ce817476336e89df8bd6"
+        },
+        "release-scripts": {
+          "integrity": "sha256-5ec2b340e95c4a20d373fd618b67ea401be2e2a193d93599c1e30297716620ea"
+        },
+        "gitgist-release-notes": {
+          "integrity": "sha256-836c9de92e74f57ff4d21a7d997d04f09a3784b5b365ce78ef485c37f63672bb"
+        },
+        "deployment-scripts": {
+          "integrity": "sha256-170a715e485922445b36e2afa8cc3cf5a54b94e3896e1dec12adead801627baf"
+        },
+        "kerf-ui-interaction-defaults": {
+          "integrity": "sha256-c110fd49049208d7fb294fd0a7e6ed92833c42c2bbbd70d9927d2646a07820ca"
         }
       },
       "ruleSelection": [
@@ -28,11 +82,29 @@
       ],
       "rulesPath": "rules",
       "resolvedRuleNames": [
-        "hotsheet-requirements-documentation",
-        "hotsheet-testing-philosophy",
         "hotsheet-ticket-driven-work",
+        "hotsheet-testing-philosophy",
+        "hotsheet-requirements-documentation",
         "hotsheet-visual-qa",
-        "hotsheet-workflow"
+        "hotsheet-workflow",
+        "project-bootstrap",
+        "conventions-as-code",
+        "test-operations",
+        "ui-composition",
+        "ui-evaluation",
+        "customer-data-hygiene",
+        "web-client-organization",
+        "typescript-lint-and-format",
+        "rust-lint-and-format",
+        "playwright-operations",
+        "kerf-ui-usage",
+        "kerf-ui-upgrades",
+        "kerf-ui-catalog-demos",
+        "git-commit-and-push",
+        "release-scripts",
+        "gitgist-release-notes",
+        "deployment-scripts",
+        "kerf-ui-interaction-defaults"
       ]
     }
   }

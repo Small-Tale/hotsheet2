@@ -22,9 +22,10 @@ Rulesync. Review the generated `AGENTS.md` before committing because Rulesync ow
 the whole file. The example configuration and migration steps below remain useful
 when a project manages Rulesync inputs directly rather than through the picker.
 
-The committed [example configuration](rulesync.jsonc) selects all five rules from
+The committed [example configuration](rulesync.jsonc) selects all available rules from
 ai-playbook's `main` branch. Its committed [lockfile](rulesync.lock) pins the exact
-reviewed v1.1.0 commit and artifact hashes. Frozen installs do not advance that pin.
+reviewed v1.3.0 commit (`02b66e65…`) and all 23 artifact hashes. Frozen installs do
+not advance that pin.
 Copy both files to the consuming project's root.
 To select only some rules, replace `rules: ["*"]` with, for example:
 
@@ -38,6 +39,18 @@ the canonical `AGENTS.md`; `CLAUDE.md` imports it with `@AGENTS.md`. Leave the C
 target out of this configuration so the reusable bodies have one output owner.
 In a fresh project create `CLAUDE.md` containing that import. Preserve existing
 Claude-local text beside its import in an existing project.
+
+Hot Sheet 2 itself selects the five new v1.3.0 rules through its project guidance
+picker: `git-commit-and-push`, `release-scripts`, `gitgist-release-notes`,
+`deployment-scripts`, and `kerf-ui-interaction-defaults` (HS2-Y84WA5). The declared
+`push-per-ticket` policy and standing authorization live in the local Rulesync
+rule; the release, notes, and deploy rules set the target workflows for
+`HS2-7MGYJQ` and `HS2-51HMCC`; `HS2-CD3D2T` will finish the push tooling. The
+Kerf interaction rule now owns the shared UI defaults. The picker keeps these
+rules opt-in for other projects because their release, deployment, Git, and UI
+workflows may differ. Hot Sheet 2's selection is kept in its project guidance
+state; the public example intentionally selects every available rule to exercise
+the frozen source lock.
 
 ## Choose the writer first
 
