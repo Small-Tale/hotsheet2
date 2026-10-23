@@ -837,6 +837,14 @@ fn watch_event_paths(
 /// the store's index: the writes a starting native stream may have missed. Unchanged
 /// tickets are skipped so a resync does not re-announce the whole store.
 fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::path::PathBuf> {
+    stale_ticket_files_with_reader(target, tickets_dir, |path| std::fs::read(path))
+}
+
+fn stale_ticket_files_with_reader(
+    target: &WatchTarget,
+    tickets_dir: &FsPath,
+    read: impl Fn(&FsPath) -> std::io::Result<Vec<u8>>,
+) -> Vec<std::path::PathBuf> {
     let is_md = |path: &FsPath| path.extension().and_then(|e| e.to_str()) == Some("md");
     let mut files = Vec::new();
     let mut dirs = vec![tickets_dir.to_path_buf()];
@@ -865,7 +873,7 @@ fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::pa
                 .file_stem()
                 .and_then(|stem| stem.to_str())
                 .and_then(|stem| Ulid::from_string(stem).ok())?;
-            let bytes = std::fs::read(&path).ok()?;
+            let bytes = read(&path).ok()?;
             Some((path, id, hash_bytes(&bytes)))
         })
         .collect();
@@ -1050,15 +1058,12 @@ mod watcher_tests {
     }
 
     /// A full resync reads every ticket file; the index mutex every list, detail, and note save
-    /// needs must stay free while it does (HS2-P867K1). A FIFO named like a ticket blocks the
-    /// walk's read deterministically until this test writes to it.
-    #[cfg(unix)]
+    /// needs must stay free while it does (HS2-P867K1). A controlled read of a regular ticket
+    /// file holds the walk at that boundary until the test releases it (HS2-TES8M0).
     #[test]
     fn a_resync_reads_ticket_files_without_holding_the_index_lock() {
         use hotsheet_model::Ulid;
         use hotsheet_ticketing::{FsStore, StoreMetadata};
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         let state = super::AppState::new(store.clone(), "secret".into()).unwrap();
@@ -1066,59 +1071,45 @@ mod watcher_tests {
         let tickets = dir.path().join("tickets");
         let shard = tickets.join("ZZ");
         std::fs::create_dir_all(&shard).unwrap();
-        let fifo = shard.join(format!("{}.md", Ulid::new()));
-        let path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
-        // SAFETY: a valid NUL-terminated path; mkfifo only creates the special file.
-        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+        let file = shard.join(format!("{}.md", Ulid::new()));
+        std::fs::write(&file, b"synthetic ticket bytes").unwrap();
         let index = target.entry.index.clone();
+        let (reading_tx, reading_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
         let (result_tx, result_rx) = std::sync::mpsc::channel();
         let walk = std::thread::spawn({
             let tickets = tickets.clone();
             move || {
-                let stale = super::stale_ticket_files(&target, &tickets).len();
+                let stale = super::stale_ticket_files_with_reader(&target, &tickets, |path| {
+                    let bytes = std::fs::read(path)?;
+                    reading_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    Ok(bytes)
+                })
+                .len();
                 let _ = result_tx.send(stale);
             }
         });
-        // The walk is now blocked opening the FIFO. The index must be free meanwhile.
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let mut checks = 0;
-        while checks < 20 && Instant::now() < deadline {
-            assert!(
-                index.try_lock().is_ok(),
-                "the resync held the index lock while reading ticket files"
-            );
-            checks += 1;
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        // O_NONBLOCK turns a missing FIFO reader into ENXIO. Without this bound, the
-        // writer can hang forever if the walk finished before opening this path.
-        let writer_deadline = Instant::now() + Duration::from_secs(10);
-        let mut writer = loop {
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_NONBLOCK)
-                .open(&fifo)
-            {
-                Ok(writer) => break writer,
-                Err(error)
-                    if error.raw_os_error() == Some(libc::ENXIO)
-                        && Instant::now() < writer_deadline =>
-                {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Err(error) => panic!("resync never opened the FIFO for reading: {error}"),
-            }
-        };
-        writer.write_all(b"not a ticket").unwrap();
-        drop(writer); // The reader needs EOF before it can finish parsing this file.
-        // The unindexed "file" is reported stale once the walk finishes.
-        assert_eq!(
-            result_rx
-                .recv_timeout(Duration::from_secs(10))
-                .expect("resync did not finish after the FIFO write"),
-            1
+        reading_rx
+            .recv_timeout(Duration::from_secs(30))
+            .expect("resync did not reach the ticket read");
+        let lock_free = index.try_lock().is_ok();
+        let still_blocked = matches!(
+            result_rx.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
         );
+        release_tx.send(()).unwrap();
+        // The unindexed "file" is reported stale once the walk finishes.
+        let stale = result_rx
+            .recv_timeout(Duration::from_secs(30))
+            .expect("resync did not finish after the read was released");
         walk.join().unwrap();
+        assert!(
+            lock_free,
+            "the resync held the index lock while reading ticket files"
+        );
+        assert!(still_blocked, "resync finished during the blocked read");
+        assert_eq!(stale, 1);
     }
 
     #[test]
