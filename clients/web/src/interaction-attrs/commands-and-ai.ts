@@ -55,6 +55,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   toggleGlobalShellHistory: action('toggle-global-shell-history'),
   registerGuidanceSource: action('register-guidance-source'),
   checkGuidanceUpdates: action('check-guidance-updates'),
+  openGuidanceRecommendations: action('open-guidance-recommendations'),
   recheckGuidanceRecommendations: action('recheck-guidance-recommendations'),
   acceptGuidanceRecommendation: action('accept-guidance-recommendation'),
   dismissGuidanceRecommendation: action('dismiss-guidance-recommendation'),
@@ -119,6 +120,7 @@ export const COMMANDS_AND_AI_TARGETS = {
   commandIconSearchField: attr('name', 'command-icon-search'),
   manualModelDialog: attr('data-dialog-component', 'manual-model-dialog'),
   aiFeedbackDialog: attr('data-dialog-component', 'ai-feedback-dialog'),
+  guidanceRecommendationsDialog: attr('data-dialog-component', 'guidance-recommendations-dialog'),
   trashRetentionDaysField: attr('name', 'trash-cleanup-days'),
   trashRetentionLeaveDialog: attr('data-dialog-component', 'trash-retention-leave-dialog'),
 } as const;

@@ -84,6 +84,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly reviewGuidanceSource: (sourceId: string) => Promise<void>;
   readonly refreshReviewedGuidance: () => Promise<void>;
   readonly refreshGuidanceRecommendations: () => Promise<void>;
+  readonly guidanceRecommendationsOpen: Signal<boolean>;
   readonly decideGuidanceRecommendation: (decision: GuidanceRecommendationDecision) => Promise<void>;
   readonly openGuidanceInterview: () => Promise<void>;
   readonly copyGuidanceInterviewPrompt: () => Promise<void>;
@@ -246,6 +247,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     reviewGuidanceSource,
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,
+    guidanceRecommendationsOpen,
     decideGuidanceRecommendation,
     openGuidanceInterview,
     copyGuidanceInterviewPrompt,
@@ -993,6 +995,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
       resetProgressiveTicketRendering();
       viewMode.value = mode;
+      if (mode !== 'settings') guidanceRecommendationsOpen.value = false;
       persistWorkspacePreferences();
       if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
       finishTiming();
@@ -1003,6 +1006,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const current = project(),
         category = (data(target).itemId ?? 'sources') as SettingsCategory;
       if (!current) return;
+      if (category !== 'guidance') guidanceRecommendationsOpen.value = false;
       if (category !== 'keyboard') setCapturingShortcut(undefined);
       setSettingsCategory(current.id, category);
       if (category === 'sources') void refreshProviderConnections();
@@ -1067,6 +1071,21 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.checkGuidanceUpdates.selector, () => {
       void checkGuidanceUpdates(true);
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openGuidanceRecommendations.selector, () => {
+      guidanceRecommendationsOpen.value = true;
+    }),
+  );
+  lifetime.add(
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      COMMANDS_AND_AI_TARGETS.guidanceRecommendationsDialog.selector,
+      () => {
+        guidanceRecommendationsOpen.value = false;
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.recheckGuidanceRecommendations.selector, () => {

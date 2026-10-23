@@ -439,6 +439,7 @@ export async function startHotSheetWebClient() {
   const guidanceRecommendationsLoading = signal(false);
   const guidanceRecommendationsError = signal('');
   const recommendationDecisionBusy = signal('');
+  const guidanceRecommendationsOpen = signal(false);
   let guidanceRecommendationsGeneration = 0;
   const guidanceInterview = signal<GuidanceInterviewReview | undefined>(undefined);
   const guidanceInterviewLoading = signal(false);
@@ -1516,6 +1517,7 @@ export async function startHotSheetWebClient() {
       guidanceRecommendations.value = undefined;
       guidanceRecommendationsError.value = '';
       recommendationDecisionBusy.value = '';
+      guidanceRecommendationsOpen.value = false;
       rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
@@ -3963,6 +3965,7 @@ export async function startHotSheetWebClient() {
       recommendationsLoading: guidanceRecommendationsLoading.value,
       recommendationsError: guidanceRecommendationsError.value,
       recommendationDecisionBusy: recommendationDecisionBusy.value,
+      recommendationsOpen: guidanceRecommendationsOpen.value,
       interview: guidanceInterview.value,
       interviewLoading: guidanceInterviewLoading.value,
       interviewError: guidanceInterviewError.value,
@@ -4867,6 +4870,7 @@ export async function startHotSheetWebClient() {
     reviewGuidanceSource,
     refreshReviewedGuidance,
     refreshGuidanceRecommendations,
+    guidanceRecommendationsOpen,
     decideGuidanceRecommendation,
     openGuidanceInterview,
     copyGuidanceInterviewPrompt,

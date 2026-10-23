@@ -36,6 +36,7 @@ describe('wireWorkspaceHeaderActions (HS2-AAX2B5)', () => {
     toggleSelectedUpNext: vi.fn(),
     openSelectedTicketActions: vi.fn(),
     openSearch: vi.fn(),
+    openGuidanceRecommendations: vi.fn(),
     setViewMode: vi.fn(),
   };
   wireWorkspaceHeaderActions({} as HTMLElement, bindings);
@@ -58,12 +59,14 @@ describe('wireWorkspaceHeaderActions (HS2-AAX2B5)', () => {
     overflow({ workspaceOverflowAction: 'toggle-selected-up-next' });
     const anchor = overflow({ workspaceOverflowAction: 'open-selected-ticket-actions' });
     overflow({ workspaceOverflowAction: 'open-workspace-search' });
+    overflow({ workspaceOverflowAction: 'open-guidance-recommendations' });
     overflow({ workspaceOverflowAction: 'set-view-mode', viewMode: 'board' });
     overflow({ workspaceOverflowAction: 'set-view-mode' });
     overflow({ workspaceOverflowAction: 'unknown' });
     expect(bindings.toggleSelectedUpNext).toHaveBeenCalledTimes(1);
     expect(bindings.openSelectedTicketActions).toHaveBeenCalledWith(anchor);
     expect(bindings.openSearch).toHaveBeenCalledTimes(1);
+    expect(bindings.openGuidanceRecommendations).toHaveBeenCalledTimes(1);
     expect(bindings.setViewMode.mock.calls).toEqual([['board']]);
   });
 });

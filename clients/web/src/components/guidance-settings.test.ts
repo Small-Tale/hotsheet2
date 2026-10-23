@@ -6,6 +6,31 @@ import { GuidanceSettings } from './guidance-settings';
 const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-WEKNRD keeps recommendation states in a controlled dialog outside the form scroll', () => {
+    const base = {
+      loading: false,
+      message: '',
+      search: emptyGuidanceSearch,
+      repository: '',
+      sourceRef: '',
+      sourceId: '',
+      ownerFilter: '',
+      tagFilter: '',
+    };
+    const closed = String(GuidanceSettings(base));
+    expect(closed).toContain('data-guidance-recommendations-dialog=""');
+    expect(closed).toContain('data-controlled-open="false"');
+    expect(closed.indexOf('data-guidance-recommendations-dialog')).toBeGreaterThan(
+      closed.indexOf('id="guidance-content"'),
+    );
+    const loading = String(GuidanceSettings({ ...base, recommendationsOpen: true, recommendationsLoading: true }));
+    expect(loading).toContain('data-controlled-open="true"');
+    expect(loading).toContain('Checking local project signals…');
+    const empty = String(GuidanceSettings({ ...base, recommendationsOpen: true }));
+    expect(empty).toContain('Check recommendations to review suggestions');
+    const failure = String(GuidanceSettings({ ...base, recommendationsOpen: true, recommendationsError: 'Offline.' }));
+    expect(failure).toContain('Recommendation Status Unknown');
+  });
   it('HS2-VSXE33 keeps the apply action in a separate footer with selection and busy state', () => {
     const base = {
       loading: false,

@@ -21,6 +21,7 @@ export interface WorkspaceHeaderActionBindings {
   /** Open the selected tickets' actions menu anchored below `anchor`. */
   readonly openSelectedTicketActions: (anchor: HTMLElement) => void;
   readonly openSearch: () => void;
+  readonly openGuidanceRecommendations?: () => void;
   readonly setViewMode: (mode: WorkspaceViewMode) => void;
 }
 
@@ -44,6 +45,7 @@ export function wireWorkspaceHeaderActions(root: HTMLElement, bindings: Workspac
       if (action === 'toggle-selected-up-next') bindings.toggleSelectedUpNext();
       else if (action === 'open-selected-ticket-actions') bindings.openSelectedTicketActions(item);
       else if (action === 'open-workspace-search') bindings.openSearch();
+      else if (action === 'open-guidance-recommendations') bindings.openGuidanceRecommendations?.();
       else if (action === 'set-view-mode' && viewMode) bindings.setViewMode(viewMode as WorkspaceViewMode);
       else if (action === 'set-workspace-sort' && workspaceSort) sortBy(workspaceSort as WorkspaceSort);
     }),

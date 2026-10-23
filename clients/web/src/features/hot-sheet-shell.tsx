@@ -553,6 +553,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           <WorkspaceControls
             mode={viewMode.value}
             guidanceSearch={viewMode.value === 'settings' && settingsCategory() === 'guidance'}
+            guidanceRecommendations={viewMode.value === 'settings' && settingsCategory() === 'guidance'}
             searchOpen={
               viewMode.value === 'settings' && settingsCategory() === 'guidance'
                 ? guidanceSearchOpen.value

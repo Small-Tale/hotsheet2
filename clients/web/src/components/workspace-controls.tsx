@@ -30,6 +30,7 @@ import {
   Settings,
   Star,
   Trash2,
+  WandSparkles,
 } from 'lucide';
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -104,6 +105,8 @@ export interface WorkspaceHeaderProps {
   searchOpen?: boolean;
   /** Guidance search replaces ticket search only in Project guidance (HS2-6ZA2RN). */
   guidanceSearch?: boolean;
+  /** Show the guidance recommendations action in Project Guidance (HS2-WEKNRD). */
+  guidanceRecommendations?: boolean;
   /**
    * The Kerf-managed workspace search model the TicketSearchField renders (HS2-5JXBQY). The app
    * always passes its own; a standalone preview without one renders an inert, tag-less model.
@@ -307,6 +310,7 @@ function WorkspaceOverflowControls({
   projectActionsDisabled,
   searchDisabled,
   guidanceSearch,
+  guidanceRecommendations,
   ticketActionsDisabled,
   selectedActionsDisabled,
   searchOpen,
@@ -322,6 +326,7 @@ function WorkspaceOverflowControls({
   projectActionsDisabled: boolean;
   searchDisabled: boolean;
   guidanceSearch: boolean;
+  guidanceRecommendations: boolean;
   ticketActionsDisabled: boolean;
   selectedActionsDisabled: boolean;
   searchOpen: boolean;
@@ -399,6 +404,18 @@ function WorkspaceOverflowControls({
             'data-workspace-overflow-action': 'open-workspace-search',
           },
         },
+        ...(guidanceRecommendations
+          ? [
+              {
+                label: 'AI Recommendations…',
+                icon: overflowIcon(WandSparkles, 'wand-sparkles'),
+                attributes: {
+                  'data-workspace-overflow-kind': 'utility',
+                  'data-workspace-overflow-action': 'open-guidance-recommendations',
+                },
+              } satisfies PopupMenuItem,
+            ]
+          : []),
         { kind: 'divider' },
         ...modes
           .filter((option) => presentation !== 'rail' || option.value !== 'settings')
@@ -439,6 +456,7 @@ function WorkspaceOverflowControls({
 export function WorkspaceControls({
   mode,
   guidanceSearch = false,
+  guidanceRecommendations = false,
   presentation = 'toolbar',
   searchOpen = false,
   searchModel = previewSearchModel(),
@@ -544,6 +562,7 @@ export function WorkspaceControls({
       projectActionsDisabled={projectActionsDisabled}
       searchDisabled={searchDisabled}
       guidanceSearch={guidanceSearch}
+      guidanceRecommendations={guidanceRecommendations}
       ticketActionsDisabled={ticketActionsDisabled}
       selectedActionsDisabled={selectedActionsDisabled}
       searchOpen={visibleSearchOpen}
@@ -611,6 +630,24 @@ export function WorkspaceControls({
           hideBelow={px(480)}
         >
           {utilityButtons}
+        </ToolbarControlGroup>
+      )}
+      {guidanceRecommendations && !rail && (
+        <ToolbarControlGroup
+          className="workspace-header__recommendations-group"
+          single
+          shape="pill"
+          visibility="yield-to-expanded-sibling"
+          hideBelow={px(480)}
+        >
+          <button
+            type="button"
+            {...COMMANDS_AND_AI_ACTIONS.openGuidanceRecommendations.attrs}
+            aria-label="AI Recommendations"
+            title="AI Recommendations"
+          >
+            <LucideIcon icon={WandSparkles} name="wand-sparkles" />
+          </button>
         </ToolbarControlGroup>
       )}
       <div

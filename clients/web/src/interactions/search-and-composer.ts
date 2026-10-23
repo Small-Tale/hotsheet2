@@ -30,6 +30,7 @@ import { type PendingEvidence, type Project } from './types';
 export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
   readonly guidanceSearchOpen: Signal<boolean>;
+  readonly guidanceRecommendationsOpen: Signal<boolean>;
   readonly guidanceSearchModel: SearchFieldModel;
   readonly guidanceSearchActive: () => boolean;
   /** Kerf-managed ticket search models, keyed by their TicketSearchField ids (HS2-5JXBQY). */
@@ -304,9 +305,13 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       openSearch: () => {
         tokenSearchFields.open(guidanceSearchActive() ? 'guidance-search' : 'workspace-search');
       },
+      openGuidanceRecommendations: () => {
+        if (guidanceSearchActive()) dependencies.guidanceRecommendationsOpen.value = true;
+      },
       setViewMode: (mode) => {
         resetProgressiveTicketRendering();
         viewMode.value = mode;
+        if (mode !== 'settings') dependencies.guidanceRecommendationsOpen.value = false;
         persistWorkspacePreferences();
         if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
       },

@@ -267,6 +267,7 @@ describe('extracted handlers retain live application bindings', () => {
 describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
   function setup(apple: boolean) {
     const capturingShortcutId = signal<string | undefined>(undefined);
+    const guidanceRecommendationsOpen = signal(false);
     const keyboardShortcutOverrides = signal<Record<string, ShortcutChord>>({});
     const storage = new Map<string, string>();
     const frames: FrameRequestCallback[] = [];
@@ -280,6 +281,7 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     Object.assign(document, { querySelector: vi.fn(() => ({ focus })) });
     wireCommandAndAiInteractions({
       capturingShortcutId,
+      guidanceRecommendationsOpen,
       keyboardShortcutOverrides,
       appleShortcutPlatform: apple,
       project: () => ({ id: 'project' }),
@@ -296,7 +298,16 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
       handler('keydown', '[data-shortcut-capture]')(event, target({ shortcutCapture: id }));
       return event;
     };
-    return { capturingShortcutId, keyboardShortcutOverrides, storage, frames, focus, click, press };
+    return {
+      capturingShortcutId,
+      guidanceRecommendationsOpen,
+      keyboardShortcutOverrides,
+      storage,
+      frames,
+      focus,
+      click,
+      press,
+    };
   }
 
   for (const apple of [true, false]) {
@@ -345,7 +356,9 @@ describe('shortcut capture ownership transitions (HS2-835BZD)', () => {
     expect(state.capturingShortcutId.value).toBe('undo');
     click('select-settings-category', { itemId: 'keyboard' });
     expect(state.capturingShortcutId.value).toBe('undo');
+    state.guidanceRecommendationsOpen.value = true;
     click('select-settings-category', { itemId: 'appearance' });
+    expect(state.guidanceRecommendationsOpen.value).toBe(false);
     expect(press('undo', 'k', { ctrlKey: true }).defaultPrevented).toBe(false);
     click('edit-shortcut', { shortcutId: 'activate' });
     click('edit-shortcut', { shortcutId: 'unknown' });

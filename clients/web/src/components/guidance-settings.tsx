@@ -10,6 +10,7 @@ import { List } from '@kerfjs/ui/list';
 import type { SearchFieldState } from '@kerfjs/ui/search-field-model';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
@@ -38,6 +39,7 @@ export interface GuidanceSettingsProps {
   recommendationsLoading?: boolean;
   recommendationsError?: string;
   recommendationDecisionBusy?: string;
+  recommendationsOpen?: boolean;
   interview?: GuidanceInterviewReview;
   interviewLoading?: boolean;
   interviewError?: string;
@@ -145,122 +147,6 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             copyLayout="stacked"
           />
         )}
-        <section aria-label="Guidance Recommendations" data-guidance-recommendations="">
-          <List gap="xs">
-            <Text variant="h3">Recommendations</Text>
-            <Text tone="quiet" size="compact">
-              Suggestions use local project signals and the exact versions of registered pinned sources. Review each
-              choice before applying guidance.
-            </Text>
-            <Button
-              action={COMMANDS_AND_AI_ACTIONS.recheckGuidanceRecommendations.value}
-              disabled={loading || props.recommendationsLoading || !!props.recommendationDecisionBusy}
-            >
-              {props.recommendationsLoading ? 'Checking…' : 'Recheck Recommendations'}
-            </Button>
-            {props.recommendationsLoading && !props.recommendations && (
-              <Text tone="quiet" size="compact">
-                Checking local project signals…
-              </Text>
-            )}
-            {props.recommendationsError ? (
-              <StateBanner
-                title="Recommendation Status Unknown"
-                detail={`${props.recommendationsError} Previous suggestions may be stale; no selection was changed.`}
-                tone="warning"
-                urgency="status"
-                copyLayout="stacked"
-              />
-            ) : null}
-            {props.recommendations?.changes.length ? (
-              <StateBanner
-                title="New Guidance Recommendations Are Available"
-                detail={`${props.recommendations.changes.length} new, changed, or withdrawn suggestion(s) since review. Review the changes below; nothing is applied automatically.`}
-                tone="info"
-                urgency="status"
-                copyLayout="stacked"
-              />
-            ) : null}
-            {props.recommendations?.source_registration_suggested && (
-              <Text tone="quiet">Register a pinned source to receive project-specific suggestions.</Text>
-            )}
-            {props.recommendations?.first_accept_replaces_bundled_default &&
-              props.recommendations.candidates.some((candidate) => !candidate.selected) && (
-                <Text tone="quiet" size="compact">
-                  The first accepted selection replaces the bundled default when you later apply guidance.
-                </Text>
-              )}
-            {props.recommendations?.changes
-              .filter((change) => change.change === 'withdrawn')
-              .map((change) => (
-                <Text tone="quiet" size="compact">
-                  Withdrawn: {change.source} · {change.kind} {change.name}. Installed guidance remains unchanged.
-                </Text>
-              ))}
-            {props.recommendations?.candidates.map((candidate) => {
-              const change = props.recommendations?.changes.find(
-                (item) =>
-                  item.source === candidate.source && item.kind === candidate.kind && item.name === candidate.name,
-              );
-              const decisionKey = `${candidate.source}:${candidate.kind}:${candidate.name}`;
-              const busy = props.recommendationDecisionBusy === decisionKey;
-              return (
-                <section
-                  aria-label={`${candidate.source} ${candidate.kind} ${candidate.name}`}
-                  data-recommendation={decisionKey}
-                >
-                  <List gap="xs">
-                    <Text>{candidate.description}</Text>
-                    <Text tone="quiet" size="compact">
-                      {candidate.source} · {candidate.kind} {candidate.name}
-                      {candidate.kind === 'rule' ? ` · available v${candidate.version}` : ''} · pinned{' '}
-                      {candidate.pinned_commit.slice(0, 12)} · {change?.change ?? candidate.state}
-                      {candidate.installed_version !== null ? ` · installed v${candidate.installed_version}` : ''}
-                    </Text>
-                    <Text tone="quiet" size="compact">
-                      Evidence: {candidate.evidence.join(', ')}
-                    </Text>
-                    {!candidate.selected && (
-                      <div>
-                        <Button
-                          action={COMMANDS_AND_AI_ACTIONS.acceptGuidanceRecommendation.value}
-                          rootAttributes={{
-                            'data-recommendation-source': candidate.source,
-                            'data-recommendation-kind': candidate.kind,
-                            'data-recommendation-name': candidate.name,
-                            'data-recommendation-fingerprint': candidate.fingerprint,
-                          }}
-                          disabled={loading || busy || !!props.recommendationDecisionBusy}
-                        >
-                          {busy ? 'Reviewing…' : 'Accept Selection'}
-                        </Button>{' '}
-                        <Button
-                          action={COMMANDS_AND_AI_ACTIONS.dismissGuidanceRecommendation.value}
-                          rootAttributes={{
-                            'data-recommendation-source': candidate.source,
-                            'data-recommendation-kind': candidate.kind,
-                            'data-recommendation-name': candidate.name,
-                            'data-recommendation-fingerprint': candidate.fingerprint,
-                          }}
-                          disabled={
-                            loading || busy || !!props.recommendationDecisionBusy || candidate.state === 'dismissed'
-                          }
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
-                    )}
-                  </List>
-                </section>
-              );
-            })}
-            {props.recommendations &&
-              !props.recommendations.candidates.length &&
-              !props.recommendations.source_registration_suggested && (
-                <Text tone="quiet">No guidance suggestions match the current project signals.</Text>
-              )}
-          </List>
-        </section>
         {!props.interview && props.interviewError ? (
           <StateBanner
             title="Interview Status Unknown"
@@ -728,6 +614,140 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           {message}
         </Text>
       </List>
+      <DialogSurface
+        label="AI Guidance Recommendations"
+        size="medium"
+        maxHeight="viewport"
+        rootAttributes={{
+          'data-key': 'guidance-recommendations-dialog',
+          'data-guidance-recommendations-dialog': '',
+          'data-dialog-component': 'guidance-recommendations-dialog',
+          'data-controlled-open': String(Boolean(props.recommendationsOpen)),
+        }}
+      >
+        <section aria-label="Guidance Recommendations" data-guidance-recommendations="">
+          <List gap="xs">
+            <Text tone="quiet" size="compact">
+              Suggestions use local project signals and the exact versions of registered pinned sources. Review each
+              choice before applying guidance.
+            </Text>
+            <div>
+              <Button
+                action={COMMANDS_AND_AI_ACTIONS.recheckGuidanceRecommendations.value}
+                disabled={loading || props.recommendationsLoading || !!props.recommendationDecisionBusy}
+              >
+                {props.recommendationsLoading ? 'Checking…' : 'Recheck Recommendations'}
+              </Button>
+            </div>
+            {props.recommendationsLoading && !props.recommendations && (
+              <Text tone="quiet" size="compact">
+                Checking local project signals…
+              </Text>
+            )}
+            {!props.recommendationsLoading && !props.recommendations && !props.recommendationsError && (
+              <Text tone="quiet" size="compact">
+                Check recommendations to review suggestions for this project.
+              </Text>
+            )}
+            {props.recommendationsError ? (
+              <StateBanner
+                title="Recommendation Status Unknown"
+                detail={`${props.recommendationsError} Previous suggestions may be stale; no selection was changed.`}
+                tone="warning"
+                urgency="status"
+                copyLayout="stacked"
+              />
+            ) : null}
+            {props.recommendations?.changes.length ? (
+              <StateBanner
+                title="New Guidance Recommendations Are Available"
+                detail={`${props.recommendations.changes.length} new, changed, or withdrawn suggestion(s) since review. Review the changes below; nothing is applied automatically.`}
+                tone="info"
+                urgency="status"
+                copyLayout="stacked"
+              />
+            ) : null}
+            {props.recommendations?.source_registration_suggested && (
+              <Text tone="quiet">Register a pinned source to receive project-specific suggestions.</Text>
+            )}
+            {props.recommendations?.first_accept_replaces_bundled_default &&
+              props.recommendations.candidates.some((candidate) => !candidate.selected) && (
+                <Text tone="quiet" size="compact">
+                  The first accepted selection replaces the bundled default when you later apply guidance.
+                </Text>
+              )}
+            {props.recommendations?.changes
+              .filter((change) => change.change === 'withdrawn')
+              .map((change) => (
+                <Text tone="quiet" size="compact">
+                  Withdrawn: {change.source} · {change.kind} {change.name}. Installed guidance remains unchanged.
+                </Text>
+              ))}
+            {props.recommendations?.candidates.map((candidate) => {
+              const change = props.recommendations?.changes.find(
+                (item) =>
+                  item.source === candidate.source && item.kind === candidate.kind && item.name === candidate.name,
+              );
+              const decisionKey = `${candidate.source}:${candidate.kind}:${candidate.name}`;
+              const busy = props.recommendationDecisionBusy === decisionKey;
+              return (
+                <section
+                  aria-label={`${candidate.source} ${candidate.kind} ${candidate.name}`}
+                  data-recommendation={decisionKey}
+                >
+                  <List gap="xs">
+                    <Text>{candidate.description}</Text>
+                    <Text tone="quiet" size="compact">
+                      {candidate.source} · {candidate.kind} {candidate.name}
+                      {candidate.kind === 'rule' ? ` · available v${candidate.version}` : ''} · pinned{' '}
+                      {candidate.pinned_commit.slice(0, 12)} · {change?.change ?? candidate.state}
+                      {candidate.installed_version !== null ? ` · installed v${candidate.installed_version}` : ''}
+                    </Text>
+                    <Text tone="quiet" size="compact">
+                      Evidence: {candidate.evidence.join(', ')}
+                    </Text>
+                    {!candidate.selected && (
+                      <div>
+                        <Button
+                          action={COMMANDS_AND_AI_ACTIONS.acceptGuidanceRecommendation.value}
+                          rootAttributes={{
+                            'data-recommendation-source': candidate.source,
+                            'data-recommendation-kind': candidate.kind,
+                            'data-recommendation-name': candidate.name,
+                            'data-recommendation-fingerprint': candidate.fingerprint,
+                          }}
+                          disabled={loading || busy || !!props.recommendationDecisionBusy}
+                        >
+                          {busy ? 'Reviewing…' : 'Accept Selection'}
+                        </Button>{' '}
+                        <Button
+                          action={COMMANDS_AND_AI_ACTIONS.dismissGuidanceRecommendation.value}
+                          rootAttributes={{
+                            'data-recommendation-source': candidate.source,
+                            'data-recommendation-kind': candidate.kind,
+                            'data-recommendation-name': candidate.name,
+                            'data-recommendation-fingerprint': candidate.fingerprint,
+                          }}
+                          disabled={
+                            loading || busy || !!props.recommendationDecisionBusy || candidate.state === 'dismissed'
+                          }
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    )}
+                  </List>
+                </section>
+              );
+            })}
+            {props.recommendations &&
+              !props.recommendations.candidates.length &&
+              !props.recommendations.source_registration_suggested && (
+                <Text tone="quiet">No guidance suggestions match the current project signals.</Text>
+              )}
+          </List>
+        </section>
+      </DialogSurface>
       {!!overview?.sources.length && (
         <footer class="guidance-settings__footer" aria-label="Guidance Actions">
           <List contentWidth="wide" inset="document" gap="xs" dividerSides="t">

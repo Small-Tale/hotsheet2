@@ -312,7 +312,11 @@ guidance was trusted or that a bundled rule is individually selectable.
 Re-evaluation is read-only on Project guidance entry or an explicit headless/UI
 check, with a bounded cache and no timer-based network polling. Compare a stable
 fingerprint of relevant project signals, source pins and versions, and prior
-decisions. Show a “New guidance recommendations are available” notice only when
+decisions. Project Guidance exposes a toolbar AI Recommendations action, including
+the narrow toolbar overflow menu. Its dialog presents loading, empty, result, and
+offline/unknown states, recheck, and individual decisions; the recommendation
+review does not occupy the settings form (HS2-WEKNRD). Show a “New guidance
+recommendations are available” notice in that dialog only when
 the candidate set or a candidate's evidence materially changes since the last
 review. Record accepted and dismissed decisions by stable source/rule identity,
 version, and evidence fingerprint so reopening the tab does not repeat a rejected

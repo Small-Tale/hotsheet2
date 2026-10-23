@@ -289,7 +289,12 @@ test('optional guidance interview previews context, requires consent, and record
     page.locator('[data-guidance-interview]').getByText('Ask which framework runs in production.'),
   ).toBeVisible();
   changed = true;
+  await page.getByRole('button', { name: 'AI Recommendations', exact: true }).click();
   await page.getByRole('button', { name: 'Recheck Recommendations' }).click();
+  await page
+    .getByRole('dialog', { name: 'AI Guidance Recommendations' })
+    .getByRole('button', { name: 'Close' })
+    .click();
   await expect(
     page.locator('[data-guidance-interview]').getByRole('button', { name: 'I Choose to Share This Context' }),
   ).toBeVisible();
@@ -387,50 +392,101 @@ test('Project guidance reviews local recommendations and keeps accept separate f
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Project guidance' }).click();
   const settings = page.locator('[data-component="guidance-settings"]');
-  await expect(settings.getByText('New Guidance Recommendations Are Available')).toBeVisible();
-  await expect(settings.getByText('Evidence: Cargo.toml, Rust rule tags')).toHaveCount(2);
-  await settings.locator('[data-guidance-recommendations]').screenshot({
+  await expect(settings.locator('[data-guidance-recommendations]')).not.toBeVisible();
+  await page.getByRole('button', { name: 'AI Recommendations', exact: true }).click();
+  const recommendationDialog = page.getByRole('dialog', { name: 'AI Guidance Recommendations' });
+  await expect(recommendationDialog.getByText('New Guidance Recommendations Are Available')).toBeVisible();
+  await expect(recommendationDialog.getByText('Evidence: Cargo.toml, Rust rule tags')).toHaveCount(2);
+  await page.waitForTimeout(400); // HS2-WEKNRD: capture after the dialog's entrance motion.
+  await page.screenshot({ path: 'target/visual-captures/hs2-weknrd-dialog-wide.png' });
+  await recommendationDialog.locator('[data-guidance-recommendations]').screenshot({
     path: 'target/visual-captures/hs2-qbxrfy-recommendations-wide.png',
   });
-  await settings
+  await recommendationDialog
     .locator('[data-recommendation="playbook:rule:rust-lint"]')
     .getByRole('button', { name: 'Accept Selection' })
     .click();
-  await expect(settings.getByText('Suggestion selected. Apply Selected Guidance when ready.')).toBeVisible();
+  await expect(settings.getByText('Suggestion selected. Apply Selected Guidance when ready.')).toHaveCount(1);
   expect(applyCount).toBe(0);
-  await expect(settings.getByText('New Guidance Recommendations Are Available')).toHaveCount(0);
-  await expect(settings.getByText('The first accepted selection replaces the bundled default')).toHaveCount(0);
-  await settings
+  await expect(recommendationDialog.getByText('New Guidance Recommendations Are Available')).toHaveCount(0);
+  await expect(recommendationDialog.getByText('The first accepted selection replaces the bundled default')).toHaveCount(
+    0,
+  );
+  await recommendationDialog
     .locator('[data-recommendation="playbook:rule:rust-test"]')
     .getByRole('button', { name: 'Dismiss' })
     .click();
-  await expect(settings.getByText('Suggestion dismissed for this evidence.')).toBeVisible();
+  await expect(settings.getByText('Suggestion dismissed for this evidence.')).toHaveCount(1);
   expect(decisions).toMatchObject([
     { name: 'rust-lint', decision: 'accepted', fingerprint: 'rust-lint-v1' },
     { name: 'rust-test', decision: 'dismissed', fingerprint: 'rust-test-v1' },
   ]);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(recommendationDialog).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-weknrd-dialog-medium.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSettings.isVisible()) await hideSettings.click();
-  await settings.locator('[name="guidance-owner"]').scrollIntoViewIfNeeded();
+  await recommendationDialog.locator('[data-guidance-recommendations]').scrollIntoViewIfNeeded();
   const settingsBox = await settings.boundingBox();
   expect(settingsBox).not.toBeNull();
   expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
   expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(390);
   expect(await settings.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await expect(
-    settings.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
+    recommendationDialog.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
   ).toBeVisible();
-  await settings.locator('[data-guidance-recommendations]').screenshot({
+  await recommendationDialog.locator('[data-guidance-recommendations]').screenshot({
     path: 'target/visual-captures/hs2-qbxrfy-recommendations-narrow.png',
   });
+  await page.screenshot({ path: 'target/visual-captures/hs2-weknrd-dialog-phone.png' });
   failScan = true;
-  await settings.getByRole('button', { name: 'Recheck Recommendations' }).click();
-  await expect(settings.getByText('Recommendation Status Unknown')).toBeVisible();
+  await recommendationDialog.getByRole('button', { name: 'Recheck Recommendations' }).click();
+  await expect(recommendationDialog.getByText('Recommendation Status Unknown')).toBeVisible();
   await expect(
-    settings.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
+    recommendationDialog.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
   ).toBeVisible();
+  await recommendationDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(recommendationDialog).not.toBeVisible();
+  await page.getByRole('button', { name: 'More Workspace Controls' }).click();
+  await page.locator('[data-workspace-overflow-action="open-guidance-recommendations"]').click();
+  await expect(recommendationDialog).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(recommendationDialog).toBeVisible();
   expect(applyCount).toBe(0);
+});
+
+test('HS2-WEKNRD shows loading and empty recommendation dialog states', async ({ page }) => {
+  await openDemoProject(page);
+  let finishScan: (() => void) | undefined;
+  const scanGate = new Promise<void>((resolve) => {
+    finishScan = resolve;
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/recommendations', async (route) => {
+    await scanGate;
+    await route.fulfill({
+      json: {
+        fingerprint: 'empty-v1',
+        signals: [],
+        candidates: [],
+        changes: [],
+        source_registration_suggested: false,
+        first_accept_replaces_bundled_default: false,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  await page.getByRole('button', { name: 'AI Recommendations', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'AI Guidance Recommendations' });
+  await expect(dialog.getByText('Checking local project signals…')).toBeVisible();
+  finishScan?.();
+  await expect(dialog.getByText('No guidance suggestions match the current project signals.')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole('button', { name: 'AI Recommendations', exact: true }).click();
+  await expect(dialog.getByText('No guidance suggestions match the current project signals.')).toBeVisible();
 });
 
 test('Project guidance reviews a changed source revision before refreshing its pin', async ({ page }) => {
