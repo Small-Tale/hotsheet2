@@ -19,7 +19,70 @@ use super::{Ctx, misrouted};
 #[path = "setup_diagnose.rs"]
 mod diagnose;
 
-fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
+fn queue_consolidation(store: &Path, project: &Path, announce: bool) -> Result<()> {
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let project = project
+        .canonicalize()
+        .unwrap_or_else(|_| project.to_path_buf());
+    let checkout = registry.list()?.into_iter().find(|checkout| {
+        Path::new(&checkout.root)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(&checkout.root))
+            == project
+    });
+    let selected = checkout.as_ref().and_then(|checkout| {
+        checkout
+            .default_source
+            .as_deref()
+            .and_then(|id| checkout.source(id))
+            .or_else(|| (checkout.sources.len() == 1).then(|| &checkout.sources[0]))
+    });
+    let slug = if let (Some(checkout), Some(source)) = (&checkout, selected) {
+        if source.provider == "git" {
+            let source_store = checkout.verified_git_source(&source.connection_id)?;
+            Some(hotsheet_plugins::rulesync_consolidation::ensure_ticket(
+                &source_store,
+                &project,
+            )?)
+        } else if store != Path::new(".") {
+            let provider = super::providers::configured_provider(store, &source.connection_id)?;
+            Some(
+                hotsheet_plugins::rulesync_consolidation::ensure_provider_ticket(
+                    provider.as_ref(),
+                    &project,
+                )?,
+            )
+        } else {
+            None
+        }
+    } else if store != Path::new(".") {
+        let source_store = FsStore::open(store)?;
+        Some(hotsheet_plugins::rulesync_consolidation::ensure_ticket(
+            &source_store,
+            &project,
+        )?)
+    } else {
+        None
+    };
+    if let Some(slug) = slug {
+        hotsheet_plugins::rulesync_consolidation::mark_reviewed(
+            &project,
+            &hotsheet_plugins::hotsheet_home(),
+        )?;
+        if announce {
+            println!("Rulesync guidance consolidation: {slug}");
+        }
+    } else {
+        eprintln!(
+            "Rulesync guidance changed, but no writable ticket source is available for a consolidation follow-up; link a source before the next guidance update"
+        );
+    }
+    Ok(())
+}
+
+fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
     use hotsheet_plugins::guidance_sources as sources;
     match cmd {
         GuidanceCmd::Recommendations => {
@@ -117,6 +180,14 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&review)?);
         }
         GuidanceCmd::CheckRulesyncUpdates => {
+            if hotsheet_plugins::setup::guidance_owner_in(project)? == "rulesync"
+                && hotsheet_plugins::rulesync_consolidation::needs_review(
+                    project,
+                    &hotsheet_plugins::hotsheet_home(),
+                )?
+            {
+                queue_consolidation(store, project, false)?;
+            }
             let report = hotsheet_plugins::rulesync_updates::check_project(project);
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
@@ -160,14 +231,22 @@ fn cmd_guidance(project: &Path, cmd: GuidanceCmd) -> Result<()> {
         }
         GuidanceCmd::Apply => {
             if hotsheet_plugins::setup::guidance_owner_in(project)? == "rulesync" {
+                let before = std::fs::read(project.join("AGENTS.md")).ok();
                 sources::apply_rulesync(project)?;
+                if std::fs::read(project.join("AGENTS.md")).ok() != before {
+                    queue_consolidation(store, project, true)?;
+                }
             } else {
                 hotsheet_plugins::setup::apply_selected_guidance_in(project)?;
             }
             println!("Applied selected guidance to {}", project.display());
         }
         GuidanceCmd::Owner { owner } => {
+            let before = hotsheet_plugins::setup::guidance_owner_in(project)?;
             hotsheet_plugins::setup::set_guidance_owner_in(project, &owner)?;
+            if before != "rulesync" && owner == "rulesync" {
+                queue_consolidation(store, project, true)?;
+            }
             println!(
                 "Instruction guidance owner: {owner}. Existing instruction content was preserved."
             );
@@ -270,7 +349,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
-        Cmd::Guidance { project, cmd } => cmd_guidance(&project, cmd),
+        Cmd::Guidance { project, cmd } => cmd_guidance(path, &project, cmd),
         Cmd::PermissionMigrate {
             project,
             source,
@@ -851,7 +930,11 @@ pub(crate) fn cmd_setup(
 ) -> Result<()> {
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
     if let Some(owner) = guidance_owner {
+        let before = hotsheet_plugins::setup::guidance_owner_in(&project_dir)?;
         hotsheet_plugins::setup::set_guidance_owner_in(&project_dir, &owner)?;
+        if before != "rulesync" && owner == "rulesync" {
+            queue_consolidation(store, &project_dir, !json)?;
+        }
         if tool.is_none() && !detect && !refresh {
             if json {
                 println!("{}", serde_json::json!({"guidance_owner": owner}));

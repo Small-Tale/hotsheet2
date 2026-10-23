@@ -30,9 +30,12 @@ import. The Claude manifest declares a canonical instruction target and import;
 `crates/hotsheet-plugins/src/setup.rs` plans legacy migration, shared membership, adapter
 cleanup, and read-only findings together.
 The same planner honors `.hotsheet2/guidance-owner.json` (`builtin` or `rulesync`,
-schema 1); the CLI `setup --guidance-owner` command selects ownership without changing
-instruction content. `guidance/rulesync/` holds the tested config, lock, and migration
+schema 1); the CLI `setup --guidance-owner` command captures unmarked local guidance
+in a Rulesync rule before switching writers. `crates/hotsheet-plugins/src/rulesync_consolidation.rs`
+queues the later deduplicated review task through CLI and server callers. `guidance/rulesync/` holds the tested config, lock, and migration
 guide; `scripts/validate-rulesync.mjs` runs optional real-tool acceptance flows.
+The consolidation module keeps only a machine-local digest under the Hot Sheet
+home so standalone Rulesync changes can be recognized at the next update check.
 `crates/hotsheet-plugins/src/guidance_sources.rs` validates and caches project-pinned
 rule/skill repositories in `.hotsheet2/guidance-sources.json`. The CLI `guidance`
 subcommands and authenticated checkout guidance route share its selection and apply

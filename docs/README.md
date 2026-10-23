@@ -12,7 +12,8 @@ Hot Sheet embeds pinned offline snapshots with upstream drift checks. See
 **Shipped instruction consolidation:** first-party setup writes common guidance to
 `AGENTS.md` and makes `CLAUDE.md` import it, preserving protected legacy layouts.
 **Shipped Rulesync opt-in:** explicit writer ownership, locked all/selected rule
-sources, and reviewed migration/return paths are described in the
+sources, local guidance capture, and an asynchronous consolidation ticket after
+switches, changed applies, or detected direct Rulesync updates are described in the
 [Rulesync guide](../guidance/rulesync/README.md). Built-in setup remains the default.
 
 > Status legend used throughout: **Decided** (recommendation made, ready to

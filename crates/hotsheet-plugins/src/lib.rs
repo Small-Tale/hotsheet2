@@ -26,6 +26,7 @@ pub mod guidance_interview;
 pub mod guidance_recommendations;
 pub mod guidance_sources;
 pub mod guidance_updates;
+pub mod rulesync_consolidation;
 pub mod rulesync_updates;
 pub mod setup;
 pub use setup::{

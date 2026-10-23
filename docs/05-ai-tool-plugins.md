@@ -236,6 +236,15 @@ specifics in `.rulesync/rules/project-local.md` before changing ownership. A
 conflicting local rule or incomplete managed marker stops the switch for review.
 Project guidance lists local Rulesync rule names and paths separately from pinned
 source rules.
+When a project switches to Rulesync or an applied Rulesync selection changes
+`AGENTS.md`, Hot Sheet queues one open `Consolidate Rulesync project guidance`
+task in its linked writable ticket source (HS2-34S102). Repeated changes reuse the open
+task; after it is completed, a later change creates a new one. The task asks an
+AI worker to compare generated and local guidance and review redundant text.
+Hot Sheet also detects changes made directly with Rulesync to `AGENTS.md` or
+`rulesync.lock` on the next standalone update check and queues the same task.
+Only a content digest is stored in the machine-local Hot Sheet home. Hot Sheet
+does not remove guidance automatically.
 `guidance apply` reconciles the selected files. With the built-in writer,
 selected rule sections are merged into `AGENTS.md` and exact deselected bodies are
 removed. With Rulesync ownership, `apply` materializes the selected pinned rules in

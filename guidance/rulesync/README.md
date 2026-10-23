@@ -110,6 +110,11 @@ guidance and nested project specifics into a Rulesync input when ownership chang
 This remains an explicit migration review. The ownership command preserves prose
 outside managed sections and nested project specifics automatically; it cannot decide
 whether edits inside an old managed block are local customizations or obsolete prose.
+The switch and a changed Hot Sheet Rulesync apply queue a deduplicated Up Next task
+for an AI worker to consolidate `AGENTS.md` and `project-local.md` after review
+(HS2-34S102). A completed task does not block a new task after a later rule change.
+Direct `rulesync` updates are noticed when Hot Sheet next checks standalone
+Rulesync status; the review task is then queued in the linked ticket source.
 
 ## Install, update, and customize
 

@@ -507,6 +507,20 @@ fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership
     let local_rule =
         std::fs::read_to_string(project.join(".rulesync/rules/project-local.md")).unwrap();
     assert!(local_rule.contains("Rulesync-generated local and selected guidance."));
+    run(&["setup", "--guidance-owner", "rulesync"]);
+    let reviews = hotsheet_ticketing::ops::query(
+        &hotsheet_ticketing::FsStore::open(&store).unwrap(),
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        reviews.len(),
+        1,
+        "HS2-34S102 queues one review on repeated setup"
+    );
     for _ in 0..2 {
         run(&["setup", "claude"]);
         run(&["setup", "--refresh"]);

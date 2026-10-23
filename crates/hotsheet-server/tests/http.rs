@@ -14007,7 +14007,9 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     )
     .unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let app = app(state
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_machine_home(registry.path().join("home")));
     let checkout = serde_json::json!({
         "root": project.path(), "alias": "guidance", "stores": [store_dir.path()]
     })
@@ -14186,6 +14188,15 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
         pinned,
     );
     assert_eq!(overview["local_rules"], serde_json::json!([]));
+    let owner = r#"{"action":"owner","owner":"rulesync"}"#;
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", path, Some(owner)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
     let local_rules = project.path().join(".rulesync/rules");
     std::fs::create_dir_all(&local_rules).unwrap();
     std::fs::write(
@@ -14193,7 +14204,6 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
         "---\nroot: true\n---\nLocal.\n",
     )
     .unwrap();
-    hotsheet_plugins::setup::set_guidance_owner_in(project.path(), "rulesync").unwrap();
     let rulesync_overview = body_json(
         app.clone()
             .oneshot(authed("GET", path, None))
@@ -14204,6 +14214,113 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     assert_eq!(
         rulesync_overview["local_rules"],
         serde_json::json!(["project-local"])
+    );
+    let tickets = hotsheet_ticketing::ops::query(
+        &hotsheet_ticketing::FsStore::open(store_dir.path()).unwrap(),
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(tickets.len(), 1, "HS2-34S102 queues one project review");
+    assert!(tickets[0].details.contains("project-local.md"));
+    let store = hotsheet_ticketing::FsStore::open(store_dir.path()).unwrap();
+    let mut completed = tickets[0].clone();
+    completed.status = hotsheet_model::Status::Completed;
+    completed.up_next = false;
+    store.write_ticket_committing(&completed).unwrap();
+    std::fs::write(
+        project.path().join("AGENTS.md"),
+        "External Rulesync regeneration.\n",
+    )
+    .unwrap();
+    let observed = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/guidance/guidance/rulesync-updates",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(observed.status(), StatusCode::OK);
+    let after = hotsheet_ticketing::ops::query(
+        &store,
+        &hotsheet_ticketing::TicketQuery {
+            tags: vec!["rulesync-consolidation".into()],
+            ..hotsheet_ticketing::TicketQuery::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        after.len(),
+        2,
+        "direct update after completion queues a new review"
+    );
+}
+
+#[tokio::test]
+async fn hs2_34s102_rulesync_switch_queues_external_provider_review() {
+    let (_store, state) = state();
+    let project = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, serde_json::json!([])),
+                github_response(
+                    201,
+                    github_issue(12, "Consolidate Rulesync project guidance"),
+                ),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-guidance", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(state
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_machine_home(registry.path().join("home"))
+        .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&app, &[("github-guidance", "acme/repo")]).await;
+    let registration = serde_json::json!({
+        "root": project.path(),
+        "alias": "guidance-external",
+        "sources": [{"connection_id":"github-guidance","provider":"github","locator":"acme/repo"}],
+        "default_source": "github-guidance"
+    });
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&registration.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let owner = r#"{"action":"owner","owner":"rulesync"}"#;
+    let updated = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/guidance-external/guidance",
+            Some(owner),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]["labels"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("rulesync-consolidation"))
     );
 }
 

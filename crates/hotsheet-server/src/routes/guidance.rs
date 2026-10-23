@@ -1,5 +1,6 @@
 //! Project-scoped, authenticated guidance source and selection routes (HS2-2RD1M1).
 
+use super::providers::provider_for;
 use crate::{ApiError, AppState};
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -9,8 +10,10 @@ use hotsheet_plugins::guidance_recommendations::{self, RecommendationReport};
 use hotsheet_plugins::guidance_sources as sources;
 use hotsheet_plugins::guidance_updates::{self, SourceReview, SourceUpdate};
 use hotsheet_plugins::rulesync_updates::{self, RulesyncUpdateReport};
+use hotsheet_ticketing::FsStore;
+use hotsheet_ticketing::checkouts::{Checkout, TicketSource};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 
 #[derive(Deserialize)]
 pub(crate) struct GuidanceQuery {
@@ -61,6 +64,40 @@ fn project_root(state: &AppState, reference: &str) -> Result<PathBuf, ApiError> 
         .resolve(reference)
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     Ok(checkout.root.into())
+}
+
+fn selected_ticket_source(checkout: &Checkout) -> Option<TicketSource> {
+    checkout
+        .default_source
+        .as_deref()
+        .and_then(|id| checkout.source(id))
+        .or_else(|| (checkout.sources.len() == 1).then(|| &checkout.sources[0]))
+        .cloned()
+}
+
+fn queue_consolidation_review(
+    state: &AppState,
+    project: &FsPath,
+    source: Option<TicketSource>,
+) -> Result<(), ApiError> {
+    let Some(source) = source else {
+        return Ok(());
+    };
+    if source.provider == "git" {
+        let store = FsStore::open(&source.locator)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+        hotsheet_plugins::rulesync_consolidation::ensure_ticket(&store, project)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    } else {
+        let provider = provider_for(state, &source.connection_id)?;
+        hotsheet_plugins::rulesync_consolidation::ensure_provider_ticket(
+            provider.as_ref(),
+            project,
+        )
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    }
+    hotsheet_plugins::rulesync_consolidation::mark_reviewed(project, state.machine_home())
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
 }
 
 fn overview(
@@ -273,11 +310,29 @@ pub(crate) async fn get_checkout_rulesync_updates(
     State(state): State<AppState>,
     Path(reference): Path<String>,
 ) -> Result<Json<Option<RulesyncUpdateReport>>, ApiError> {
-    let project = project_root(&state, &reference)?;
-    tokio::task::spawn_blocking(move || rulesync_updates::check_project(&project))
-        .await
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
-        .map(Json)
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let project = PathBuf::from(&checkout.root);
+    let source = selected_ticket_source(&checkout);
+    tokio::task::spawn_blocking(move || {
+        if hotsheet_plugins::setup::guidance_owner_in(&project)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+            == "rulesync"
+            && hotsheet_plugins::rulesync_consolidation::needs_review(
+                &project,
+                state.machine_home(),
+            )
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+        {
+            queue_consolidation_review(&state, &project, source)?;
+        }
+        Ok::<_, ApiError>(rulesync_updates::check_project(&project))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
 }
 
 #[derive(Deserialize)]
@@ -306,8 +361,14 @@ pub(crate) async fn update_checkout_guidance(
     Path(reference): Path<String>,
     Json(action): Json<GuidanceAction>,
 ) -> Result<Json<GuidanceOverview>, ApiError> {
-    let project = project_root(&state, &reference)?;
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let project = PathBuf::from(&checkout.root);
+    let ticket_source = selected_ticket_source(&checkout);
     tokio::task::spawn_blocking(move || {
+        let mut review_needed = false;
         match action {
             GuidanceAction::Register {
                 id,
@@ -333,21 +394,29 @@ pub(crate) async fn update_checkout_guidance(
                     .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
             }
             GuidanceAction::Owner { owner } => {
+                let before = hotsheet_plugins::setup::guidance_owner_in(&project)
+                    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
                 hotsheet_plugins::setup::set_guidance_owner_in(&project, &owner)
                     .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+                review_needed = before != "rulesync" && owner == "rulesync";
             }
             GuidanceAction::Apply => {
                 if hotsheet_plugins::setup::guidance_owner_in(&project)
                     .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
                     == "rulesync"
                 {
+                    let before = std::fs::read(project.join("AGENTS.md")).ok();
                     sources::apply_rulesync(&project)
                         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+                    review_needed = std::fs::read(project.join("AGENTS.md")).ok() != before;
                 } else {
                     hotsheet_plugins::setup::apply_selected_guidance_in(&project)
                         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
                 }
             }
+        }
+        if review_needed {
+            queue_consolidation_review(&state, &project, ticket_source)?;
         }
         overview(
             &project,

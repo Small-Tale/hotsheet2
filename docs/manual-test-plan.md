@@ -491,6 +491,11 @@ generation, retain backups, and review the automatically saved
 specifics, and excludes managed reusable sections. Review customized managed text
 separately before generation.
 Review dry-run output against the backups, including customized managed-block text.
+Confirm one Up Next consolidation ticket appears after the switch, repeated switches
+and applies reuse it while open, and a later change after completion creates a new
+task. Update `AGENTS.md` or `rulesync.lock` directly, run the standalone Rulesync
+status check, and confirm it queues the same review flow. Confirm the task never
+copies project prose into its body.
 After generation, verify the chosen reusable sections appear once, local policies
 remain readable, CLAUDE imports AGENTS, and Hot Sheet refresh leaves both files unchanged.
 Make a further local-rule edit and generate again. Rebuild local-only guidance and
