@@ -349,7 +349,7 @@ password_env = "OPENCODE_SERVER_PASSWORD"
 }
 
 #[tokio::test]
-async fn a_terminal_connection_belongs_to_its_launch_checkouts_ticket_source() {
+async fn a_terminal_connection_belongs_to_its_launch_checkout_project() {
     let store_dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project_dir = tempfile::tempdir().unwrap();
@@ -378,12 +378,7 @@ async fn a_terminal_connection_belongs_to_its_launch_checkouts_ticket_source() {
     let (_, connections) = send(&router, "GET", "/connections", None).await;
     assert_eq!(
         connection(&connections, "checkout-ai")["project"],
-        source
-            .root()
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .as_ref()
+        checkout.canonicalize().unwrap().to_string_lossy().as_ref()
     );
     let (status, _) = send(&router, "DELETE", "/terminals/checkout-ai", None).await;
     assert!(status.is_success());

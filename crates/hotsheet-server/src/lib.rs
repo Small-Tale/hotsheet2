@@ -1885,7 +1885,7 @@ mod terminal_permission_route_tests {
     }
 
     #[test]
-    fn terminal_uses_its_checkout_store_instead_of_the_primary_server_store() {
+    fn terminal_uses_its_checkout_project_instead_of_the_primary_server_store() {
         let root = tempfile::tempdir().unwrap();
         let primary =
             FsStore::init(root.path().join("primary.hs2"), &StoreMetadata::new("HS")).unwrap();
@@ -1906,12 +1906,7 @@ mod terminal_permission_route_tests {
             .unwrap()
             .with_checkout_registry(registry_path);
         let req = request(Some(project.join("nested").display().to_string()));
-        let expected = project_store
-            .root()
-            .canonicalize()
-            .unwrap()
-            .display()
-            .to_string();
+        let expected = project.canonicalize().unwrap().display().to_string();
         assert_eq!(terminal_permission_project(&state, &req), expected);
         let env = terminal_permission_route_env(&state, &req, "term-1");
         assert!(env.contains(&("HOTSHEET_PROJECT".into(), expected)));

@@ -1498,7 +1498,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
     : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));
-  const setupResult = ticketStore ? await refreshProjectSetupOnOpen(root, ticketStore) : {};
+  const setupResult = await refreshProjectSetupOnOpen(root, ticketStore ?? (await bootstrapStore()));
   return deliverProjectSetupNotice(root, setupResult, (result) => openPreparedLocalProject(root, ticketStore, result));
 }
 

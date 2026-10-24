@@ -2788,9 +2788,17 @@ fn mcp_entry(
             &p.manifest.mcp.server_name,
         );
     if locally_owned {
+        let project_abs = project
+            .canonicalize()
+            .unwrap_or_else(|_| project.to_path_buf());
+        let path = if p.is_builtin() {
+            &project_abs
+        } else {
+            store_abs
+        };
         (
             mcp_command(&p.manifest.mcp.command),
-            p.mcp_args(&store_abs.to_string_lossy()),
+            p.mcp_args(&path.to_string_lossy()),
             true,
         )
     } else {

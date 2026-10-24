@@ -3195,6 +3195,9 @@ test('opens the native folder chooser directly from Add project and only onboard
   await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-gcbc3e-direct-add-project-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 760, height: 760 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-tsxsh6-source-free-medium.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-gcbc3e-direct-add-project-narrow.png', fullPage: true });

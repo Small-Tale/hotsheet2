@@ -29,13 +29,13 @@ target = ".claude/skills/hotsheet/SKILL.md"
 source = "SKILL.md"
 
 [mcp]
-# The tool's MCP config file + how the hotsheet server is registered in it. `{store}`
+# The tool's MCP config file + how the hotsheet server is registered in it. `{project}`
 # is substituted with the project's store path at setup time (serverless `--path`).
 target = ".mcp.json"
 format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--project", "{project}"]
 
 [drive]
 # Claude is driven the HS1 play-button way: a turn injected into a running `claude`

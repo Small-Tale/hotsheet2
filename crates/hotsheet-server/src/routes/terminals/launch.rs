@@ -507,20 +507,7 @@ fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
         .filter(|checkout| cwd.starts_with(FsPath::new(&checkout.root)))
         .max_by_key(|checkout| checkout.root.len());
     if let Some(checkout) = checkout {
-        let git_source = checkout
-            .default_source
-            .as_deref()
-            .and_then(|id| checkout.source(id))
-            .filter(|source| source.provider == "git")
-            .or_else(|| {
-                checkout
-                    .sources
-                    .iter()
-                    .find(|source| source.provider == "git")
-            });
-        return git_source
-            .map(|source| source.locator.clone())
-            .unwrap_or(checkout.root);
+        return checkout.root;
     }
     cwd.display().to_string()
 }

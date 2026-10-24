@@ -25,7 +25,7 @@ target = ".agents/mcp_config.json"
 format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--project", "{project}"]
 
 [drive]
 # agy has no daemon (docs/13 §13.0): spawn per turn, but resume the conversation so a

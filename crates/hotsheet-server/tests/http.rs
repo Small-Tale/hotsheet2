@@ -16098,7 +16098,7 @@ async fn shell_and_command_terminals_carry_the_permission_route_back() {
 }
 
 #[tokio::test]
-async fn shell_terminal_routes_permissions_to_its_own_checkout_store() {
+async fn shell_terminal_routes_permissions_to_its_own_checkout_project() {
     let (_primary_dir, st) = state();
     let other = tempfile::tempdir().unwrap();
     let checkout = other.path().join("domotion");
@@ -16110,7 +16110,7 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_store() {
         .register(&checkout, None, None, vec![store.root().to_path_buf()])
         .unwrap();
     let app = app(st.with_checkout_registry(registry_path));
-    let expected = store.root().canonicalize().unwrap().display().to_string();
+    let expected = checkout.canonicalize().unwrap().display().to_string();
     let request = serde_json::json!({
         "id": "project-route",
         "command": "/bin/sh",
@@ -16141,7 +16141,7 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_store() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    panic!("terminal did not receive the checkout store identity");
+    panic!("terminal did not receive the checkout project identity");
 }
 
 /// The `connect` busy feed must also work when the terminal lives in the **detached broker**

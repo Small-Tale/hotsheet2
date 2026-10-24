@@ -1247,7 +1247,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.
 - Unit: `crates/hotsheet-aitools/src/permission.rs` checks two vault keys, shared-store isolation, and reload; `crates/hotsheet-server/src/lib.rs` checks terminal launch identity; `clients/web/src/permission-notifications.test.ts` checks checkout rule filtering.
-- End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy discard have separate tickets (`HS2-TSXSH6`, `HS2-AFSF4X`).
+- End to end: `crates/hotsheet-cli/tests/cli.rs` checks the headless launch environment; `crates/hotsheet-server/tests/http.rs` checks checkout isolation, restart, and unknown identities through authenticated routes; `clients/web/tests/providers.spec.ts` exercises checkout-owned remembered rules at wide and phone widths. Source-independent launch and explicit legacy discard are covered under `HS2-TSXSH6` and `HS2-AFSF4X`.
+
+### Source-independent project launch (HS2-TSXSH6)
+
+- Behavior: GUI, terminal, CLI, and MCP startup use the code-project root or registered identity, retain configured Git and external sources, and leave the default source and checkout permission identity unchanged. A source-free project can launch and receive setup; an ambiguous ticket operation still needs a qualified source.
+- Unit: `crates/hotsheet-mcp/src/lib.rs # project_session_defaults_to_checkout_but_preserves_qualified_targets`; `crates/hotsheet-server/src/lib.rs # terminal_uses_its_checkout_project_instead_of_the_primary_server_store` checks checkout-root session routing.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # launch_requires_only_the_project_with_zero_or_mixed_sources, setup_registers_a_source_free_code_project_without_a_server, active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage`; `crates/hotsheet-mcp/tests/portable_project_config.rs # project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart`; `crates/hotsheet-server/tests/http.rs # opening_project_without_ticket_sources_keeps_the_checkout_usable, reopening_a_project_after_server_restart_keeps_its_github_source, source_free_checkout_settings_round_trip_under_the_project_root`; `clients/web/src/project-bridge.test.ts # setup refresh warnings and no-op handling`; `clients/web/tests/providers.spec.ts # source-free onboarding at wide, medium, and narrow widths`.
 
 ### Isolated checkout vault health (HS2-KJA1V4)
 

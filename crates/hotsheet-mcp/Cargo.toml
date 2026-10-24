@@ -23,6 +23,7 @@ hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 hotsheet-extsync.workspace = true
 hotsheet-plugins.workspace = true
+hotsheet-cli = { path = "../hotsheet-cli" }
 time.workspace = true
 
 [dev-dependencies]

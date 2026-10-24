@@ -26,12 +26,12 @@ source = "SKILL.md"
 [mcp]
 # Codex stores MCP servers as TOML under [mcp_servers.<name>] in $CODEX_HOME/config.toml
 # (default ~/.codex). `format = "codex-toml"` selects the host's TOML writer; setting
-# CODEX_HOME=<project>/.codex makes it project-scoped. `{store}` is substituted at setup.
+# CODEX_HOME=<project>/.codex makes it project-scoped. `{project}` is substituted at setup.
 target = ".codex/config.toml"
 format = "codex-toml"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--project", "{project}"]
 
 [drive]
 # How the host drives Codex (docs/13): the PERSISTENT app-server daemon — a play is a

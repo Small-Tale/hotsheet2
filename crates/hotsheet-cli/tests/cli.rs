@@ -4292,7 +4292,24 @@ fn setup_refresh_preserves_a_project_github_source() {
 
 #[cfg(unix)]
 #[test]
-fn launch_discovers_the_linked_store_and_injects_the_running_server() {
+fn launch_opens_the_project_and_injects_the_running_server() {
+    fn assert_project_launch(
+        output: Vec<u8>,
+        arg: &str,
+        project: &std::path::Path,
+        identity: &str,
+    ) {
+        let output = String::from_utf8(output).unwrap();
+        let fields = output.trim_end().split('|').collect::<Vec<_>>();
+        assert_eq!(fields.len(), 6, "{output}");
+        assert!(fields[0].starts_with("http://127.0.0.1:"), "{output}");
+        assert!(!fields[1].is_empty(), "{output}");
+        assert_eq!(fields[2], arg);
+        assert_eq!(fields[3], project.canonicalize().unwrap().to_string_lossy());
+        assert_eq!(fields[4], identity);
+        let stores: Vec<String> = serde_json::from_str(fields[5]).unwrap();
+        assert_eq!(stores.len(), 1);
+    }
     let root = tempfile::tempdir().unwrap();
     let project = root.path().join("project");
     let store = root.path().join("tickets");
@@ -4309,7 +4326,7 @@ fn launch_discovers_the_linked_store_and_injects_the_running_server() {
     let agent = root.path().join("fake-agent");
     std::fs::write(
         &agent,
-        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\" \"$HOTSHEET_PROJECT\" \"$HOTSHEET_PERMISSION_PROJECT\"\n",
+        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\" \"$HOTSHEET_PROJECT\" \"$HOTSHEET_PERMISSION_PROJECT\" \"$HOTSHEET_USAGE_STORES\"\n",
     )
     .unwrap();
     std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -4374,13 +4391,7 @@ command = "hotsheet-cli permission-hook"
         .resolve(project.to_str().unwrap())
         .unwrap()
         .permission_identity();
-    assert_eq!(
-        String::from_utf8(output).unwrap(),
-        format!(
-            "http://127.0.0.1:4567|route-back|hello|{}|{identity}\n",
-            store.canonicalize().unwrap().display()
-        )
-    );
+    assert_project_launch(output, "hello", &project, &identity);
     assert!(project.join(".fake/settings.json").is_file());
     assert!(
         !nested.join(".fake/settings.json").is_file(),
@@ -4420,13 +4431,7 @@ command = "hotsheet-cli permission-hook"
         .resolve(adjacent_project.to_str().unwrap())
         .unwrap()
         .permission_identity();
-    assert_eq!(
-        String::from_utf8(output).unwrap(),
-        format!(
-            "http://127.0.0.1:4567|route-back|adjacent|{}|{adjacent_identity}\n",
-            adjacent_store.canonicalize().unwrap().display()
-        )
-    );
+    assert_project_launch(output, "adjacent", &adjacent_project, &adjacent_identity);
     assert_eq!(
         registry
             .resolve(adjacent_project.to_str().unwrap())
@@ -4479,12 +4484,11 @@ command = "hotsheet-cli permission-hook"
         .resolve(registered_project.to_str().unwrap())
         .unwrap()
         .permission_identity();
-    assert_eq!(
-        String::from_utf8(output).unwrap(),
-        format!(
-            "http://127.0.0.1:4567|route-back|registered|{}|{registered_identity}\n",
-            registered_store.canonicalize().unwrap().display()
-        )
+    assert_project_launch(
+        output,
+        "registered",
+        &registered_project,
+        &registered_identity,
     );
 
     let created_project = root.path().join("created");
@@ -4525,13 +4529,7 @@ command = "hotsheet-cli permission-hook"
         .resolve(created_project.to_str().unwrap())
         .unwrap()
         .permission_identity();
-    assert_eq!(
-        String::from_utf8(output).unwrap(),
-        format!(
-            "http://127.0.0.1:4567|route-back|created|{}|{created_identity}\n",
-            created_store.canonicalize().unwrap().display()
-        )
-    );
+    assert_project_launch(output, "created", &created_project, &created_identity);
     assert!(created_store.join("hotsheet-store.json").is_file());
 }
 
@@ -4687,39 +4685,166 @@ command = "hotsheet-cli permission-hook"
         .stdout("someone holds no claims\n");
 }
 
+#[cfg(unix)]
 #[test]
-fn launch_noninteractive_source_errors_are_actionable_and_never_guess() {
+fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     let root = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
+    let agent = root.path().join("fake-agent");
+    std::fs::write(
+        &agent,
+        "#!/bin/sh\nprintf '%s|%s\\n' \"$HOTSHEET_PROJECT\" \"$HOTSHEET_PERMISSION_PROJECT\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let plugin = home.path().join("plugins/fake");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "## Fake agent\n").unwrap();
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            "id = \"fake\"\ndisplay_name = \"Fake\"\nproduct_name = \"Fake Agent\"\ntier = \"cli-agent\"\n[instructions]\ntarget = \"AGENTS.md\"\nsection = \"instructions.md\"\n[mcp]\ntarget = \".mcp.json\"\nformat = \"claude-json\"\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \"{{store}}\"]\n[launch]\nprogram = \"{}\"\n[hooks]\ntarget = \".fake/settings.json\"\nevent = \"PreToolUse\"\ncommand = \"hotsheet-cli permission-hook\"\n",
+            agent.display()
+        ),
+    )
+    .unwrap();
     let empty = root.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     let mut zero = Command::cargo_bin("hotsheet-cli").unwrap();
-    zero.current_dir(&empty)
+    let zero_output = zero
+        .current_dir(&empty)
         .env("HOTSHEET_HOME", home.path())
         .args(["launch", "fake"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("--ticket-store <path>"))
-        .stderr(predicate::str::contains("--create-ticket-store <path>"));
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.path().join("checkouts.json"));
+    let empty_checkout = registry.resolve(empty.to_str().unwrap()).unwrap();
+    assert!(empty_checkout.sources.is_empty());
+    assert_eq!(
+        String::from_utf8(zero_output).unwrap(),
+        format!(
+            "{}|{}\n",
+            empty.canonicalize().unwrap().display(),
+            empty_checkout.permission_identity()
+        )
+    );
 
-    let ambiguous = root.path().join("ambiguous");
-    std::fs::create_dir(&ambiguous).unwrap();
-    for name in ["ambiguous.hs2", "shared.hs2"] {
-        hotsheet_ticketing::FsStore::init(
-            root.path().join(name),
-            &hotsheet_ticketing::StoreMetadata::new("HS"),
+    let mixed = root.path().join("mixed");
+    std::fs::create_dir(&mixed).unwrap();
+    let stores = [
+        root.path().join("first.hs2"),
+        root.path().join("second.hs2"),
+    ];
+    for store in &stores {
+        hotsheet_ticketing::FsStore::init(store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+            .unwrap();
+    }
+    let mut sources = stores
+        .iter()
+        .map(hotsheet_ticketing::checkouts::TicketSource::git)
+        .collect::<Vec<_>>();
+    for (connection_id, provider) in [
+        ("github-work", "github-issues"),
+        ("jira-work", "jira"),
+        ("gitlab-work", "gitlab"),
+    ] {
+        sources.push(hotsheet_ticketing::checkouts::TicketSource {
+            connection_id: connection_id.into(),
+            provider: provider.into(),
+            locator: "synthetic/project".into(),
+        });
+    }
+    registry
+        .register_sources(
+            &mixed,
+            Some("mixed-alias"),
+            None,
+            sources.clone(),
+            Some("jira-work".into()),
         )
         .unwrap();
-    }
     let mut multiple = Command::cargo_bin("hotsheet-cli").unwrap();
-    multiple
-        .current_dir(&ambiguous)
+    let mixed_output = multiple
+        .current_dir(&empty)
         .env("HOTSHEET_HOME", home.path())
-        .args(["launch", "fake"])
+        .args(["launch", "fake", "--project", "mixed-alias"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("multiple ticket sources match"))
-        .stderr(predicate::str::contains("--ticket-store <path>"));
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let mixed_checkout = registry.resolve(mixed.to_str().unwrap()).unwrap();
+    assert_eq!(mixed_checkout.sources.len(), sources.len());
+    assert_eq!(mixed_checkout.default_source.as_deref(), Some("jira-work"));
+    assert_eq!(
+        String::from_utf8(mixed_output).unwrap(),
+        format!(
+            "{}|{}\n",
+            mixed.canonicalize().unwrap().display(),
+            mixed_checkout.permission_identity()
+        )
+    );
+    let identity = mixed_checkout.permission_identity();
+    let git_default = sources[0].connection_id.clone();
+    registry
+        .set_default_source("mixed-alias", Some(&git_default))
+        .unwrap();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&empty)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["launch", "fake", "--project", "mixed-alias"])
+        .assert()
+        .success()
+        .stdout(format!(
+            "{}|{}\n",
+            mixed.canonicalize().unwrap().display(),
+            identity
+        ));
+    assert_eq!(
+        registry.resolve("mixed-alias").unwrap().sources.len(),
+        sources.len()
+    );
+}
+
+#[test]
+fn setup_registers_a_source_free_code_project_without_a_server() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "setup",
+            "claude",
+            "--project",
+            project.path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.path().join("checkouts.json"));
+    let checkout = registry.resolve(project.path().to_str().unwrap()).unwrap();
+    assert!(checkout.sources.is_empty());
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(project.path().join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--project");
+    assert_eq!(
+        mcp["mcpServers"]["hotsheet"]["args"][1],
+        project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+    assert!(!home.path().join("instances").exists());
 }
 
 #[test]
@@ -5048,7 +5173,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
     let mcp: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
     assert_eq!(mcp["mcpServers"]["user-server"]["command"], "user-command");
-    assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--path");
+    assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--project");
     assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][1], ".");
 
     let origin = Command::from_std(hotsheet_ticketing::git::command())
@@ -5653,6 +5778,19 @@ fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage(
             .env("CODEX_SESSION_ID", session)
             .env("CODEX_HOME", &home);
     };
+    let code_project = root.join("code-project");
+    std::fs::create_dir(&code_project).unwrap();
+    let bound_project = |command: &mut assert_cmd::Command| {
+        command
+            .env("HOTSHEET_PROJECT", &code_project)
+            .env(
+                "HOTSHEET_USAGE_STORES",
+                serde_json::json!([root]).to_string(),
+            )
+            .env("HOTSHEET_WORKER_ID", worker)
+            .env("CODEX_SESSION_ID", session)
+            .env("CODEX_HOME", &home);
+    };
     let mut refresh = hs(root);
     refresh.args(["metrics", "--refresh-codex"]);
     bound(&mut refresh);
@@ -5680,7 +5818,7 @@ fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage(
     .unwrap();
     let mut renew = hs(root);
     renew.args(["renew", &slug, "--worker", worker]);
-    bound(&mut renew);
+    bound_project(&mut renew);
     renew.assert().success();
     assert_eq!(
         hotsheet_ticketing::metrics::read_raw(&store).unwrap().len(),
@@ -5689,7 +5827,7 @@ fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage(
 
     let mut wrong_worker = hs(root);
     wrong_worker.args(["metrics", "--refresh-codex"]);
-    bound(&mut wrong_worker);
+    bound_project(&mut wrong_worker);
     wrong_worker.env("HOTSHEET_WORKER_ID", "another-worker");
     wrong_worker
         .assert()
@@ -5697,7 +5835,11 @@ fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage(
         .stderr(predicate::str::contains("Captured 0 Codex Work"));
     hs(root)
         .args(["release", &slug, "--worker", worker])
-        .env("HOTSHEET_PROJECT", root)
+        .env("HOTSHEET_PROJECT", &code_project)
+        .env(
+            "HOTSHEET_USAGE_STORES",
+            serde_json::json!([root]).to_string(),
+        )
         .env("HOTSHEET_WORKER_ID", worker)
         .env("CODEX_SESSION_ID", session)
         .env("CODEX_HOME", &home)
@@ -5717,7 +5859,7 @@ fn active_codex_work_refresh_renew_release_and_restart_keep_exact_numeric_usage(
     .unwrap();
     let mut refresh = hs(root);
     refresh.args(["metrics", "--refresh-codex"]);
-    bound(&mut refresh);
+    bound_project(&mut refresh);
     refresh
         .assert()
         .success()

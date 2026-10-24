@@ -389,7 +389,7 @@ pub struct Skills {
     pub source: String,
 }
 
-/// How the `hotsheet-mcp` server is registered in the tool's MCP config. `{store}` in
+/// How the `hotsheet-mcp` server is registered in the tool's MCP config. `{project}` or `{store}` in
 /// `args` is substituted with the project's store path at setup time. `format` selects
 /// the host's config writer (`claude-json` | `codex-toml`) — keyed on the format, not
 /// the tool id (docs/05 §5.3).
@@ -580,13 +580,13 @@ impl Plugin {
         Some(args)
     }
 
-    /// The MCP `args` with `{store}` substituted for the given store path.
-    pub fn mcp_args(&self, store_path: &str) -> Vec<String> {
+    /// The MCP `args` with the manifest's path placeholder substituted.
+    pub fn mcp_args(&self, path: &str) -> Vec<String> {
         self.manifest
             .mcp
             .args
             .iter()
-            .map(|a| a.replace("{store}", store_path))
+            .map(|a| a.replace("{store}", path).replace("{project}", path))
             .collect()
     }
 

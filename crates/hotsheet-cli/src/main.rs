@@ -630,16 +630,15 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Launch an interactive AI tool in this terminal with permission requests routed to
-    /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
-    /// a `.hotsheet2/store` link (with legacy `.hotsheet/store` fallback), or conservative sibling discovery.
+    /// Launch an interactive AI tool for a code project, opening every configured ticket
+    /// source and routing permission requests through the machine-local project server.
     Launch {
         /// The hook-capable tool to launch (currently `claude` or `codex`).
         tool: String,
         /// Project directory in which to run the tool (defaults to the current directory).
         #[arg(long)]
         project: Option<PathBuf>,
-        /// Explicit existing git ticket store for deterministic non-interactive onboarding.
+        /// Optionally link this existing Git ticket store while opening the project.
         #[arg(long, value_name = "PATH")]
         ticket_store: Option<PathBuf>,
         /// Create and associate this standalone git ticket store when none is linked.

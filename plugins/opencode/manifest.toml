@@ -16,7 +16,7 @@ target = "opencode.json"
 format = "opencode-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--project", "{project}"]
 
 [drive]
 # OpenCode's official ACP server is JSON-RPC over stdio (`opencode acp`).

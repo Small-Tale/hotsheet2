@@ -1078,7 +1078,8 @@ preview/download, server directory browser) are separate design work.
   closable as live projects, and every tab-persistence path retains their roots for the next
   launch. Restore failures must never leave stale compatibility or connection diagnostics
   over a different project that reopened successfully.
-  A checkout with existing sources opens directly. Source-less project setup uses a
+  A checkout with existing sources opens directly regardless of its default source;
+  project setup refresh runs for source-free checkouts too (HS2-TSXSH6). Source-less project setup uses a
   bounded dialog with shared multiline menu items whose title and explanation remain
   inside one selectable row at compact sizes. When opening from the initial dialog it
   waits for that dialog's completed close event, so the two modal surfaces never overlap;

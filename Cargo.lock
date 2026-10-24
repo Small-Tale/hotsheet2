@@ -1131,6 +1131,7 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
+ "hotsheet-cli",
  "hotsheet-extsync",
  "hotsheet-model",
  "hotsheet-plugins",

@@ -156,7 +156,8 @@ fn find_rollout(root: &Path, session: &str, depth: usize) -> io::Result<Option<P
     Ok(None)
 }
 
-/// Capture only records from this process's exact session/worker/store binding. A missing
+/// Capture only records from this process's exact session/worker/store binding. A project
+/// launch supplies its linked Git stores separately from its project identity. A missing
 /// binding is ordinary (for human CLI calls and server-managed terminals).
 pub fn capture_current_session(store: &FsStore, worker: &str) -> io::Result<usize> {
     let Ok(session) = std::env::var("CODEX_SESSION_ID") else {
@@ -168,11 +169,19 @@ pub fn capture_current_session(store: &FsStore, worker: &str) -> io::Result<usiz
     let Ok(project) = std::env::var("HOTSHEET_PROJECT") else {
         return Ok(0);
     };
-    if worker != bound_worker
-        || !valid_session_id(&session)
-        || fs::canonicalize(project).ok().as_deref()
-            != fs::canonicalize(store.root()).ok().as_deref()
-    {
+    let Some(store_root) = fs::canonicalize(store.root()).ok() else {
+        return Ok(0);
+    };
+    let direct_store = fs::canonicalize(project).ok().as_deref() == Some(store_root.as_path());
+    let linked_store = std::env::var("HOTSHEET_USAGE_STORES")
+        .ok()
+        .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+        .is_some_and(|paths| {
+            paths
+                .iter()
+                .any(|path| fs::canonicalize(path).ok().as_deref() == Some(store_root.as_path()))
+        });
+    if worker != bound_worker || !valid_session_id(&session) || !(direct_store || linked_store) {
         return Ok(0);
     }
     let home = std::env::var_os("CODEX_HOME")

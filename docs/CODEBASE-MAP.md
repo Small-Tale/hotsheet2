@@ -529,7 +529,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D)
       tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server
-      src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
+      src/main.rs            #   stdio JSON-RPC loop; --project <code project> | --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
@@ -637,10 +637,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   generation/API marker plus non-secret store prefix/schema so MCP clients can diagnose
   wrong-secret vs. HS1/wrong-endpoint failures (HS2-8H8BQM); its ticket/corrupt listing is
   a budgeted blocking-pool scan tagged `listing: fresh|cached|index` (HS2-9PPDR1).
-- **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
-  headless default) **or** `--server <url> --secret <s>` (proxy a running server).
+- **MCP shim:** `hotsheet-mcp --project <code project>` opens all configured sources
+  through the machine-local server; `hotsheet-mcp --path <store>` provides explicit
+  serverless, direct-to-disk access, and `--server <url> --secret <s>` proxies a running server.
   Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project;
-  `--path .` follows the checkout's local store link for portable shared MCP configs.
+  `--project .` resolves the code project for portable shared MCP configs.
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

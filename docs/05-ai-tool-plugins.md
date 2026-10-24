@@ -518,9 +518,9 @@ hook uses `.claude/settings.local.json`, Codex's uses `.codex/hooks.json`, and b
 added only to that checkout's `.git/info/exclude`. A newly created, wholly Hot Sheet-owned
 MCP config is excluded the same way. A pre-existing config with unrelated user content
 remains visible to git while the Hot Sheet entry is merged into it. That shared entry
-uses `hotsheet-mcp --path .`: the shim follows the checkout's machine-local
-`.hotsheet2/store` link (or `HOTSHEET_STORE`) when launched from the project, keeping
-the committed config free of the local binary and store paths. The tool must find
+uses `hotsheet-mcp --project .`: the shim resolves the code project and opens its
+configured sources through the machine-local server, keeping the committed config
+free of local binary and ticket-store paths (HS2-TSXSH6). The tool must find
 `hotsheet-mcp` on its launch `PATH`; if its GUI environment does not, install the
 shim on that `PATH` or keep its MCP entry in a local-only tool config. In a linked git
 worktree the entry goes to the common directory's `info/exclude` (via the gitdir's
@@ -1256,25 +1256,16 @@ Implementation references: `crates/hotsheet-aitools/src/permission.rs` (`Scope`,
 
 **Project versus ticket-source ownership (HS2-3Z16CB).** The `project` field in a
 permission rule is an exact matching namespace, not a guarantee of checkout ownership.
-The current terminal launcher resolves the deepest registered checkout containing its
-working directory and uses that checkout's default git source (or first git source)
-locator. Without a git source it uses the checkout root; without a matching checkout it
-uses the working directory, and a missing working directory uses the server's store root.
-CLI-launched AI tools similarly export the selected git store root as `HOTSHEET_PROJECT`.
-The hook forwards that identity; an empty request identity falls back to the server store.
+The terminal launcher resolves the deepest registered checkout containing its working
+directory and exports that code-project root as `HOTSHEET_PROJECT`; CLI launch does the
+same. `HOTSHEET_PERMISSION_PROJECT` carries the checkout's stable authorization identity.
+Opening a project retains every configured source and never selects a default merely to
+start a session (HS2-TSXSH6). Ticket-provider connection ids remain outside the
+permission authorization key.
 
-The bridge matches the identity exactly. Two code projects using the same store namespace
-can consequently share a project-wide rule, whereas two stores linked to one checkout
-do not automatically share it. `projectPermissionRules` aggregates the selected checkout
-id/root and linked-store identities for display; that aggregation does not broaden matching.
-Ticket-provider connection ids are not part of the rule's authorization key.
-
-Durable rules are machine-local encrypted files selected per hosted git store, not files
-inside or synchronized with the ticket repository. Startup seeds the primary store namespace
-and a legacy empty namespace; hosting another store adds its own file and namespace.
-Checkout-driven sessions can instead use the checkout root. The difference between those
-launch identities, external-only checkouts, and registered persistence keys needs explicit
-acceptance coverage before claiming provider-neutral checkout ownership (`HS2-G8ZSPQ`).
+Durable rules use machine-local encrypted files keyed by checkout identity; they are
+not stored in or synchronized with a ticket repository. An unregistered directory uses
+an `unregistered:` identity and cannot receive a durable remembered answer.
 
 **Decided target contract (HS2-G8ZSPQ).** The registered code project
 owns a project-scoped remembered permission. Its authorization namespace must be a
@@ -1289,12 +1280,14 @@ and source identity remain separate even when a project has only one source.
 `HS2-G1SG1P` implements the checkout identity used by the current launch paths:
 `checkout:<checkout-id>` selects its own machine-local encrypted vault. Terminal,
 CLI, and client-driven launches carry `HOTSHEET_PERMISSION_PROJECT` to permission
-hooks and the native driven bridge; `HOTSHEET_PROJECT` remains the selected ticket
-store path for existing Codex Work usage attribution. A launch without a registered checkout uses an `unregistered:`
+hooks and the native driven bridge; `HOTSHEET_PROJECT` is the code-project root
+for project launches (HS2-TSXSH6). A launch without a registered checkout uses an `unregistered:`
 identity with no durable-rule location. Existing store-keyed grants remain in their
 original namespace. Legacy hook installations that have not received the new launch
 environment also retain their old namespace; `HS2-AFSF4X` provides explicit discard and fresh approval.
-Source-independent project launch remains tracked by `HS2-TSXSH6`.
+Project launch is source independent under `HS2-TSXSH6`.
+CLI-launched Codex Work capture receives the linked Git stores separately in
+`HOTSHEET_USAGE_STORES`; that claim binding does not change the project session identity.
 Permission vault health is checked per checkout before applying a durable rule.
 If one checkout vault is corrupt or disappears, its in-memory durable answers are
 withdrawn and its pending requests cannot offer Always Allow. Other checkout
@@ -1540,9 +1533,10 @@ not yet prove which unconfigured actions Claude's auto classifier flags as risky
 
 **External interactive terminals.** `hotsheet-cli launch <tool>` runs the plugin's
 interactive `[launch]` command in the caller's existing terminal after installing its
-setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`
-route-back. From a linked code checkout, the ordinary `.hotsheet2/store` machine-local
-link resolves the ticket store, so no `-C` is needed. This path is capability-gated:
+setup artifacts and injecting the machine-local project server's
+`HOTSHEET_SERVER`/`HOTSHEET_SECRET` route-back. Launch takes a code-project path or
+registered identity and opens all configured ticket sources; it starts the machine-local
+server if necessary. No ticket source or default is required (HS2-TSXSH6). This path is capability-gated:
 Claude and Codex both declare native `PermissionRequest` adapters, so
 `hotsheet-cli launch claude` and `hotsheet-cli launch codex` are supported. A tool without
 that declared hook remains rejected rather than receiving misleading, unused route-back
@@ -1551,7 +1545,7 @@ environment. Codex permissions also remain supported through Hot Sheet's app-ser
 
 **Hot Sheet's own shell terminals.** Every shell and command terminal that the server
 hosts carries the same route-back as a Connect launch: `HOTSHEET_SECRET`,
-`HOTSHEET_PROJECT` (the terminal checkout's linked git store), the server's
+`HOTSHEET_PROJECT` (the terminal checkout's code-project root), the server's
 `HOTSHEET_HOME`, and, once the listener URL is known, `HOTSHEET_SERVER`
 (HS2-HE4AVD, HS2-Q9BP1S). Passing the machine home explicitly matters because
 terminal environment scrubbing removes ambient `HOTSHEET_*` values; hooks use
@@ -1767,14 +1761,18 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 ## 5.8 MCP & CLI access for tools
 
-> **Status: MCP shim built (v1, HS2-7/43); serverless mode added (HS2-96).**
+> **Status: MCP shim built (v1, HS2-7/43); project mode added (HS2-TSXSH6).**
 > `crates/hotsheet-mcp` → the `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server
 > exposing ticket CRUD plus git-backed Trash recovery through `hotsheet_restore`,
 > `hotsheet_claim`, `hotsheet_claim_next`,
 > `hotsheet_renew`, and `hotsheet_release`. It runs in
-> **two modes over one `Backend` trait**, so the tool surface is identical either
+> **three modes over one `Backend` trait**, so the tool surface is identical either
 > way — this is what lets a headless agent work **with or without a server**:
 >
+> - **`--project <code project>` → project startup**, opening the registered checkout
+>   and all its configured Git and external sources through the machine-local server.
+>   It starts that server when absent, and unqualified ticket operations use the
+>   checkout identity; callers can specify a connection for an ambiguous operation.
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
 >   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
 >   §4.4). The headless default. A running server's watcher still picks up its writes.
@@ -1831,14 +1829,16 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > presence lease, and the badge correctly read "MCP not connected" while Claude reported
 > the server healthy. `npm run server:rebuild` builds and installs the shim with the CLI.
 > A config shared with user-owned entries instead records the portable bare command and
-> `--path .`; the shim resolves the linked store from the project working directory.
+> `--project .`; the shim resolves the code project from the working directory.
 >
 > **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
 > restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a
 > restarted server listens on a new port. After any failed heartbeat a serverless shim
 > re-reads the instance registry for its `--path` store and, when it names a different
 > endpoint, moves the lease there and registers at once (keeping `terminal_id`). Proxy-mode
-> shims (`--server`) never relocate.
+> shims (`--server`) never relocate. A project-mode shim follows the bootstrap server's
+> instance record, reopens the same checkout after a restart, and routes later tool calls
+> to that server without changing the checkout identity (HS2-TSXSH6).
 >
 > **Client display (HS2-670ADP).** The web client folds MCP presence into the existing
 > terminal AI connection badge on drawer tabs and dashboard tiles; there is no separate MCP

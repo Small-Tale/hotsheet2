@@ -740,79 +740,60 @@ pub(crate) fn cmd_launch(
     create_ticket_store: Option<PathBuf>,
     args: Vec<String>,
 ) -> Result<()> {
-    let launch_dir = project.unwrap_or_else(|| cwd.to_path_buf());
-    let launch_dir = launch_dir
-        .canonicalize()
-        .with_context(|| format!("project path does not exist: {}", launch_dir.display()))?;
-    let project = hotsheet_cli::launch_project_root(&launch_dir);
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
+    let requested = project.unwrap_or_else(|| cwd.to_path_buf());
+    let launch_dir = match registry.resolve(requested.to_string_lossy().as_ref()) {
+        Ok(checkout) => PathBuf::from(checkout.root),
+        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => requested
+            .canonicalize()
+            .with_context(|| format!("project path does not exist: {}", requested.display()))?,
+        Err(error) => return Err(error.into()),
+    };
+    let project = hotsheet_cli::launch_project_root(&launch_dir);
     let explicit = ticket_store.or_else(|| (store != Path::new(".")).then(|| store.to_path_buf()));
     let selected = if let Some(path) = explicit {
         FsStore::open(&path)
             .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
-        path.canonicalize().unwrap_or(path)
+        Some(path.canonicalize().unwrap_or(path))
     } else if let Some(path) = create_ticket_store {
         FsStore::init(&path, &StoreMetadata::new("HS"))?;
         git_init(&path);
-        path.canonicalize().unwrap_or(path)
+        Some(path.canonicalize().unwrap_or(path))
     } else {
-        let discovery = hotsheet_cli::discover_launch_sources(&launch_dir, &registry)?;
-        if let Some(path) = discovery.selected {
-            path
-        } else if discovery.candidates.len() == 1 {
-            discovery.candidates[0].clone()
-        } else if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-            choose_launch_source(&project, &discovery.candidates)?
-        } else if discovery.candidates.is_empty() {
-            bail!(
-                "no ticket source is associated with {}; pass --ticket-store <path> or --create-ticket-store <path>",
-                project.display()
-            )
-        } else {
-            bail!(
-                "multiple ticket sources match {}: {}; pass --ticket-store <path>",
-                project.display(),
-                discovery
-                    .candidates
-                    .iter()
-                    .map(|path| path.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        }
+        None
     };
-    let source = hotsheet_ticketing::checkouts::TicketSource::git(&selected);
-    match registry.resolve(project.to_string_lossy().as_ref()) {
-        Ok(_) => {
-            registry.add_source(project.to_string_lossy().as_ref(), source.clone(), true)?;
-        }
-        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {
-            registry.register_sources(
-                &project,
-                None,
-                None,
-                vec![source],
-                Some(hotsheet_ticketing::checkouts::TicketSource::git(&selected).connection_id),
-            )?;
-        }
-        Err(error) => return Err(error.into()),
+    let home = hotsheet_plugins::hotsheet_home();
+    let bootstrap = home.join("server-bootstrap.hs2");
+    if FsStore::open(&bootstrap).is_err() {
+        FsStore::init(&bootstrap, &StoreMetadata::new("HS"))?;
     }
-    hotsheet_cli::setup::run_setup(&selected, &project, Some(tool), false)?;
-    let launch = hotsheet_cli::external_launch::prepare(
-        &selected,
-        tool,
-        args,
-        &hotsheet_plugins::hotsheet_home(),
-    )?;
+    hotsheet_cli::setup::run_setup(&bootstrap, &project, Some(tool), false)?;
+    hotsheet_cli::external_launch::ensure_running_server(&bootstrap, &home)?;
+    let launch = hotsheet_cli::external_launch::prepare(&bootstrap, tool, args, &home)?;
+    let mut open_body = serde_json::json!({"root": project});
+    if let Some(store) = selected.as_ref() {
+        open_body["stores"] = serde_json::json!([store]);
+    }
+    let opened = ureq::post(&format!("{}/projects/open", launch.server.url))
+        .set("X-Hotsheet-Secret", &launch.server.secret)
+        .set("Content-Type", "application/json")
+        .send_string(&open_body.to_string())?;
+    let opened: serde_json::Value = serde_json::from_str(&opened.into_string()?)?;
+    let checkout_id = opened["checkout"]["id"]
+        .as_str()
+        .context("project-open response did not include a checkout id")?;
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)?;
-    let permission_project = registry
+    let permission_project = format!("checkout:{checkout_id}");
+    let usage_project = project.display().to_string();
+    let usage_stores = registry
         .resolve(project.to_string_lossy().as_ref())?
-        .permission_identity();
-    let usage_project = FsStore::open(&selected)
-        .map(|store| store.root().display().to_string())
-        .unwrap_or_else(|_| selected.display().to_string());
+        .sources
+        .into_iter()
+        .filter(|source| source.provider == "git")
+        .map(|source| source.locator)
+        .collect::<Vec<_>>();
     // The session's worker id: the instructions tell the AI to claim with it, and its claims
     // are released when the tool exits (HS2-1VAW1C).
     let worker = hotsheet_cli::launch_worker_id(tool, &Ulid::new());
@@ -823,6 +804,10 @@ pub(crate) fn cmd_launch(
         .env("HOTSHEET_SERVER", &launch.server.url)
         .env("HOTSHEET_SECRET", &launch.server.secret)
         .env("HOTSHEET_PROJECT", usage_project)
+        .env(
+            "HOTSHEET_USAGE_STORES",
+            serde_json::to_string(&usage_stores)?,
+        )
         .env("HOTSHEET_PERMISSION_PROJECT", permission_project)
         .env("HOTSHEET_WORKER_ID", &worker)
         // The launched tool is an AI session: its mutations act as `ai` (HS2-RD4M29).
@@ -841,18 +826,27 @@ pub(crate) fn cmd_launch(
         libc::signal(libc::SIGHUP, libc::SIG_IGN);
     }
     let status = child.wait()?;
-    if let Ok(store) = FsStore::open(&selected) {
-        match ops::release_worker(&store, now_ts(), &worker) {
-            Ok(released) if !released.is_empty() => eprintln!(
-                "Released claims left by {tool}: {}",
-                released
-                    .iter()
-                    .map(|ticket| ticket.slug.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Ok(_) => {}
-            Err(error) => eprintln!("could not release {worker}'s claims: {error}"),
+    if let Ok(checkout) = registry.resolve(project.to_string_lossy().as_ref()) {
+        for source in checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+        {
+            let Ok(store) = FsStore::open(&source.locator) else {
+                continue;
+            };
+            match ops::release_worker(&store, now_ts(), &worker) {
+                Ok(released) if !released.is_empty() => eprintln!(
+                    "Released claims left by {tool}: {}",
+                    released
+                        .iter()
+                        .map(|ticket| ticket.slug.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Ok(_) => {}
+                Err(error) => eprintln!("could not release {worker}'s claims: {error}"),
+            }
         }
     }
     std::process::exit(hotsheet_cli::exit_code_of(status))
@@ -972,8 +966,8 @@ pub(crate) fn cmd_setup(
             return Ok(());
         }
     }
-    // Setup also makes the checkout discoverable to server/MCP consumers. This records
-    // context; generated MCP config still points directly at the store for headless use.
+    // Setup registers the code project without making a ticket source its identity.
+    // An explicit existing store is linked, while a source-free project stays valid.
     let repository = hotsheet_ticketing::git::command()
         .args([
             "-C",
@@ -988,10 +982,26 @@ pub(crate) fn cmd_setup(
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|v| v.trim().to_owned())
         .filter(|v| !v.is_empty());
-    hotsheet_ticketing::checkouts::CheckoutRegistry::new(
-        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
-    )
-    .open_git_store(&project_dir, None, repository, store)?;
+    let home = hotsheet_plugins::hotsheet_home();
+    let sources = if FsStore::open(store).is_ok() && store != home.join("server-bootstrap.hs2") {
+        vec![hotsheet_ticketing::checkouts::TicketSource::git(store)]
+    } else {
+        Vec::new()
+    };
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+        .open_registered_sources(
+            &hotsheet_ticketing::ProviderConfigRegistry::new(
+                home.join("server-bootstrap.hs2/providers.json"),
+            ),
+            &project_dir,
+            None,
+            repository,
+            hotsheet_ticketing::checkouts::OpenSourceSelection {
+                sources,
+                default_source: None,
+                mode: hotsheet_ticketing::checkouts::OpenSourceMode::Discovered,
+            },
+        )?;
     let (reports, removed) = if refresh {
         let report = hotsheet_cli::setup::refresh_setup(store, &project_dir)?;
         if report.is_empty() && !json {
@@ -1503,58 +1513,24 @@ or `hotsheet-cli ls --up-next`) and take ONLY the single highest-priority ticket
 started, implement it, and mark it completed with a note on what you did. Do just that one \
 ticket this turn, then stop. If nothing is Up Next, say so and stop.";
 
-pub(crate) fn choose_launch_source(project: &Path, candidates: &[PathBuf]) -> Result<PathBuf> {
-    use std::io::Write;
-    if candidates.is_empty() {
-        let proposed = PathBuf::from(format!("{}.hs2", project.display()));
-        eprint!(
-            "No ticket source found. [c]reate {}, [s]elect existing, or [q]uit: ",
-            proposed.display()
-        );
-        std::io::stderr().flush()?;
-        let mut answer = String::new();
-        std::io::stdin().read_line(&mut answer)?;
-        if answer.trim().eq_ignore_ascii_case("c") {
-            FsStore::init(&proposed, &StoreMetadata::new("HS"))?;
-            git_init(&proposed);
-            return Ok(proposed.canonicalize().unwrap_or(proposed));
-        }
-        if answer.trim().eq_ignore_ascii_case("s") {
-            eprint!("Existing ticket store path: ");
-            std::io::stderr().flush()?;
-            answer.clear();
-            std::io::stdin().read_line(&mut answer)?;
-            let path = PathBuf::from(answer.trim());
-            FsStore::open(&path)
-                .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
-            return Ok(path.canonicalize().unwrap_or(path));
-        }
-        bail!("ticket-source onboarding cancelled")
-    }
-    eprintln!("Choose a ticket source for {}:", project.display());
-    for (index, path) in candidates.iter().enumerate() {
-        eprintln!("  {}) {}", index + 1, path.display());
-    }
-    eprint!("Selection (or 0 to cancel): ");
-    std::io::stderr().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer)?;
-    let selection = answer.trim().parse::<usize>().unwrap_or(0);
-    hotsheet_cli::select_launch_candidate(candidates, selection)
-        .context("ticket-source onboarding cancelled")
-}
-
 /// POST the ask to the server's `/permissions/ask`, returning its JSON reply.
 /// The running Hot Sheet server a hook should talk to: the project's discovered instance, else
 /// the URL and secret the terminal was launched with.
 pub(crate) fn hook_server_route() -> Option<(String, String)> {
     let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let home = hotsheet_plugins::hotsheet_home();
+    let is_checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+            .resolve(&project)
+            .is_ok();
     let current = (!project.is_empty())
         .then(|| {
-            hotsheet_cli::external_launch::discover_running_server(
-                Path::new(&project),
-                &hotsheet_plugins::hotsheet_home(),
-            )
+            let bootstrap = home.join("server-bootstrap.hs2");
+            if is_checkout {
+                hotsheet_cli::external_launch::discover_running_server(&bootstrap, &home)
+            } else {
+                hotsheet_cli::external_launch::discover_running_server(Path::new(&project), &home)
+            }
             .ok()
         })
         .flatten();

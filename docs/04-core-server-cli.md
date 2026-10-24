@@ -840,8 +840,8 @@ unreviewed Git descriptors carry `identity_review_required`, and project opening
 does not host or project tickets from those links.
 The CLI's `checkout resolve`, `checkout register`, and `checkout source-color`
 inspect configuration without opening ticket data, so they remain usable for
-recovery. Interactive launch discovery rejects an unverified registered source
-instead of falling back to a same-path replacement.
+recovery. Project launch retains an unverified registered source for review and
+does not silently host a same-path replacement (HS2-TSXSH6).
 For this case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
 accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
 destination, including when the path is unchanged. It never overrides a known identity
@@ -1150,7 +1150,7 @@ core (§4.1), so a purely terminal workflow prepares a project for its AI tools 
 its own. When a client is in play it asks the _server_ to run the same code.
 `setup <tool>` is **built (HS2-98)**: it writes a merge-safe managed block into the
 tool's instruction file (e.g. `CLAUDE.md`), the worklist skill, and an `.mcp.json`
-entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
+entry registering `hotsheet-mcp --project <code project>` (an **absolute**
 `hotsheet-mcp` path when one sits next to the CLI, so it works without PATH munging —
 HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
 install + the `hotsheet plugin` management commands are still to come.

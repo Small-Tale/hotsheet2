@@ -68,32 +68,6 @@ pub(crate) async fn retry_pending_guidance(
 
 fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::checkouts::Checkout) {
     let settings = checkout.settings();
-    let source = checkout
-        .default_source
-        .as_deref()
-        .and_then(|id| checkout.source(id))
-        .filter(|source| {
-            source.provider == "git"
-                && checkout
-                    .store_instance_ids
-                    .contains_key(&source.connection_id)
-        })
-        .or_else(|| {
-            checkout.sources.iter().find(|source| {
-                source.provider == "git"
-                    && checkout
-                        .store_instance_ids
-                        .contains_key(&source.connection_id)
-            })
-        });
-    let Some(source) = source else {
-        tokio::task::spawn_blocking(move || {
-            if let Err(error) = settings.migrate_existing() {
-                tracing::warn!(%error, "settings migration failed");
-            }
-        });
-        return;
-    };
     let id = checkout.id.clone();
     if !state
         .setup_refreshes
@@ -103,7 +77,16 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
     }
     let active = state.setup_refreshes.clone();
     let project = std::path::PathBuf::from(&checkout.root);
-    let store = std::path::PathBuf::from(&source.locator);
+    // Custom plugins may still use a store path; built-in MCP entries use the project.
+    // Choose any linked Git source without consulting the default source.
+    let store = checkout
+        .sources
+        .iter()
+        .find(|source| source.provider == "git")
+        .map_or_else(
+            || state.store.root().to_path_buf(),
+            |source| std::path::PathBuf::from(&source.locator),
+        );
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
     tokio::task::spawn_blocking(move || {
         if let Err(error) = settings.migrate_existing() {
@@ -267,6 +250,20 @@ pub(crate) async fn open_project(
             },
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    // Setup's plan writer adds a missing push policy. Seed it through Settings' locked
+    // mutation before responding, so a background refresh cannot overwrite settings
+    // saved immediately after a source-free project opens (HS2-TSXSH6).
+    let settings = checkout.settings();
+    if matches!(
+        settings.get("push_policy", hotsheet_ticketing::Scope::Shared),
+        Ok(None)
+    ) && let Err(error) = settings.set(
+        "push_policy",
+        serde_json::json!("push-per-ticket"),
+        hotsheet_ticketing::Scope::Shared,
+    ) {
+        tracing::warn!(%error, "could not seed project push policy before setup refresh");
+    }
     state.watch_checkout_repository(&checkout);
     schedule_worklist_regeneration(&state, &checkout);
     schedule_setup_freshness(&state, &checkout);

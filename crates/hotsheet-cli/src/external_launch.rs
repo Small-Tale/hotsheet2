@@ -2,8 +2,11 @@
 //! server injected for permission-hook route-back (HS2-C46G58).
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use hotsheet_ticketing::{FsStore, StoreMetadata};
 use serde::Deserialize;
 
 /// The subset of the server's machine-local instance record needed by a launched tool.
@@ -61,6 +64,52 @@ pub fn discover_running_server(store: &Path, home: &Path) -> Result<ServerInstan
         bail!("server instance record belongs to a different ticket store");
     }
     Ok(server)
+}
+
+/// Headless project launch uses the same machine bootstrap host as the graphical client.
+/// The server owns all registered sources; this store is only its local instance anchor.
+pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance> {
+    if !store.join("hotsheet-store.json").exists() {
+        FsStore::init(store, &StoreMetadata::new("HS"))?;
+    } else {
+        FsStore::open(store)?;
+    }
+    if let Ok(server) = discover_running_server(store, home) {
+        return Ok(server);
+    }
+    let current = std::env::current_exe().context("locating the Hot Sheet binary")?;
+    let cli = if current
+        .file_stem()
+        .is_some_and(|stem| stem == "hotsheet-cli")
+    {
+        current
+    } else {
+        let sibling = current.with_file_name("hotsheet-cli");
+        if sibling.exists() {
+            sibling
+        } else {
+            PathBuf::from("hotsheet-cli")
+        }
+    };
+    let mut child = hotsheet_ticketing::git::launch(cli)
+        .arg("-C")
+        .arg(store)
+        .args(["serve", "--bind", "127.0.0.1:0"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("starting the machine-local Hot Sheet project server")?;
+    for _ in 0..100 {
+        if let Ok(server) = discover_running_server(store, home) {
+            return Ok(server);
+        }
+        if let Some(status) = child.try_wait()? {
+            bail!("Hot Sheet project server exited during startup with {status}");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    bail!("Hot Sheet project server did not become ready within 10 seconds")
 }
 
 /// Resolve a capability-aware launch. Only tools declaring a native permission hook may use

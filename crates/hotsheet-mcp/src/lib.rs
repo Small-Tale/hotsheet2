@@ -33,13 +33,23 @@ pub struct BackendError {
 /// Handle one JSON-RPC message. Returns the response value, or `None` for a
 /// notification (no `id`). Transport-level infallible.
 pub fn handle_message(msg: &Value, backend: &dyn Backend) -> Option<Value> {
+    handle_message_for_checkout(msg, backend, None)
+}
+
+/// Project-launched MCP sessions implicitly target their checkout. A caller may still
+/// name a different checkout or a qualified connection for an individual operation.
+pub fn handle_message_for_checkout(
+    msg: &Value,
+    backend: &dyn Backend,
+    checkout: Option<&str>,
+) -> Option<Value> {
     let id = msg.get("id").cloned()?; // notifications (no id) get no reply
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
 
     let result = match method {
         "initialize" => Ok(initialize_result()),
         "tools/list" => Ok(tools_list()),
-        "tools/call" => call_tool(msg.get("params"), backend),
+        "tools/call" => call_tool(msg.get("params"), backend, checkout),
         "ping" => Ok(json!({})),
         other => Err(RpcError::method_not_found(other)),
     };
@@ -411,16 +421,25 @@ fn base_tools_list() -> Value {
     ] })
 }
 
-fn call_tool(params: Option<&Value>, backend: &dyn Backend) -> Result<Value, RpcError> {
+fn call_tool(
+    params: Option<&Value>,
+    backend: &dyn Backend,
+    checkout: Option<&str>,
+) -> Result<Value, RpcError> {
     let params = params.ok_or_else(|| RpcError::invalid_params("missing params"))?;
     let name = params
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| RpcError::invalid_params("missing tool name"))?;
-    let args = params
+    let mut args = params
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
+    if let (Some(checkout), Some(object)) = (checkout, args.as_object_mut()) {
+        if !object.contains_key("checkout") && !object.contains_key("connection") {
+            object.insert("checkout".to_owned(), Value::String(checkout.to_owned()));
+        }
+    }
 
     // Tool-level failures are reported as an `isError` result, not an RPC error.
     Ok(match dispatch(name, &args, backend) {
@@ -3982,6 +4001,26 @@ mod tests {
         assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
         assert!(calls[4].starts_with("POST /checkouts/web/tickets/HS-X/assign"));
         assert!(calls[5].starts_with("POST /checkouts/web/tickets/HS-X/restore"));
+    }
+
+    #[test]
+    fn project_session_defaults_to_checkout_but_preserves_qualified_targets() {
+        let backend = FakeBackend::default();
+        for arguments in [
+            json!({"id":"HS-X"}),
+            json!({"checkout":"other","id":"HS-X"}),
+            json!({"connection":"jira-work","id":"42"}),
+        ] {
+            let message = req(
+                "tools/call",
+                json!({"name":"hotsheet_get","arguments":arguments}),
+            );
+            handle_message_for_checkout(&message, &backend, Some("code-project"));
+        }
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with("GET /checkouts/code-project/tickets/HS-X"));
+        assert!(calls[1].starts_with("GET /checkouts/other/tickets/HS-X"));
+        assert!(calls[2].starts_with("GET /providers/jira-work/tickets/42"));
     }
 
     #[test]

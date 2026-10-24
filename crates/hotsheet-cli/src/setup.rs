@@ -201,7 +201,7 @@ mod tests {
             .iter()
             .map(|a| a.as_str().unwrap())
             .collect();
-        assert_eq!(args[0], "--path");
+        assert_eq!(args[0], "--project");
         assert_eq!(args[1], d.path().canonicalize().unwrap().to_string_lossy());
     }
 

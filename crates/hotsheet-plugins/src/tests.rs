@@ -484,11 +484,11 @@ fn antigravity_is_a_spawn_resume_plugin() {
 }
 
 #[test]
-fn mcp_args_substitute_the_store_path() {
+fn mcp_args_substitute_the_project_path() {
     let p = find_in("claude", &[]).unwrap();
     assert_eq!(
         p.mcp_args("/work/proj"),
-        vec!["--path".to_string(), "/work/proj".to_string()]
+        vec!["--project".to_string(), "/work/proj".to_string()]
     );
     assert_eq!(p.manifest.mcp.command, "hotsheet-mcp");
 }
