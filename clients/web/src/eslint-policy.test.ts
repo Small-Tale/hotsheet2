@@ -3,6 +3,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('web ESLint policy', () => {
+  it('HS2-WM3SBV ignores generated web target files globally', () => {
+    const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
+    const globalIgnores = config.match(/ignores: \[([\s\S]*?)\]/)?.[1];
+    expect(globalIgnores).toContain("'target/**'");
+    expect(globalIgnores?.match(/'target\/\*\*'/g)).toHaveLength(1);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");

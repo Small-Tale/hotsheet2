@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'dist-host/**',
+      'target/**',
       'node_modules/**',
       'test-results/**',
       'playwright-report/**',
