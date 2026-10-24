@@ -445,7 +445,7 @@ describe('ChangePollMultiplexer', () => {
 });
 
 describe('multiplexed transports', () => {
-  it('two projects keep independent cursors, replay, and sinks over one shared request', async () => {
+  it('two projects keep independent cursors, replay, and sinks over one shared request (HS2-WXNVAH)', async () => {
     const bridge = fakeBridge();
     const m = mux(bridge.fetcher, { now: () => 0 });
     const seen: Record<string, Array<[string, number]>> = { a: [], b: [] };
@@ -465,7 +465,9 @@ describe('multiplexed transports', () => {
         { client: m.client(project, { pollEvents: neverDirect }), sink: sink(project), retryMs: 1, maxRetryMs: 4 },
         controller.signal,
       );
-    await tick();
+    await vi.waitFor(() => {
+      expect(bridge.calls).toHaveLength(1);
+    });
     // Handshakes ride one request.
     expect(bridge.calls).toHaveLength(1);
     expect(bridge.calls[0].body.polls.map((poll) => [poll.project, poll.since])).toEqual([
@@ -476,42 +478,52 @@ describe('multiplexed transports', () => {
       { project: 'a', body: page(10) },
       { project: 'b', body: page(50) },
     ]);
-    await tick(10);
+    await vi.waitFor(() => {
+      expect(bridge.calls.at(-1)?.body.polls).toEqual([
+        { project: 'a', since: 10, timeout_ms: 25_000 },
+        { project: 'b', since: 50, timeout_ms: 25_000 },
+      ]);
+    });
     const live = bridge.calls.at(-1)!;
-    expect(live.body.polls).toEqual([
-      { project: 'a', since: 10, timeout_ms: 25_000 },
-      { project: 'b', since: 50, timeout_ms: 25_000 },
-    ]);
     // An event for one project delivers there only; the other keeps waiting at its cursor.
     live.respond([{ project: 'b', body: page(51, ['updated']) }]);
-    await tick(10);
-    expect(seen.b).toEqual([
-      ['initial', 50],
-      ['deliver', 51],
-    ]);
+    await vi.waitFor(() => {
+      expect(seen.b).toEqual([
+        ['initial', 50],
+        ['deliver', 51],
+      ]);
+    });
     expect(seen.a).toEqual([['initial', 10]]);
+    await vi.waitFor(() => {
+      expect(bridge.calls.at(-1)?.body.polls).toEqual([
+        { project: 'a', since: 10, timeout_ms: 25_000 },
+        { project: 'b', since: 51, timeout_ms: 25_000 },
+      ]);
+    });
     const next = bridge.calls.at(-1)!;
-    expect(next.body.polls).toEqual([
-      { project: 'a', since: 10, timeout_ms: 25_000 },
-      { project: 'b', since: 51, timeout_ms: 25_000 },
-    ]);
     // A failed shared request makes both transports reconnect with a fresh handshake.
     next.fail(new TypeError('Failed to fetch'));
-    await tick(20);
+    await vi.waitFor(
+      () => {
+        expect(bridge.calls.at(-1)?.body.polls.map((poll) => poll.since)).toEqual([undefined, undefined]);
+      },
+      { timeout: 5000 },
+    );
     const reconnect = bridge.calls.at(-1)!;
-    expect(reconnect.body.polls.map((poll) => poll.since)).toEqual([undefined, undefined]);
     reconnect.respond([
       { project: 'a', body: page(12) },
       { project: 'b', body: page(51) },
     ]);
-    await tick(10);
-    expect(seen.a.slice(1)).toEqual([
-      ['reconnect', 12],
-      ['deliver', 12],
-    ]);
+    await vi.waitFor(() => {
+      expect(seen.a.slice(1)).toEqual([
+        ['reconnect', 12],
+        ['deliver', 12],
+      ]);
+    });
     controller.abort();
-    await tick(10);
-    expect(bridge.calls.at(-1)!.signal.aborted).toBe(true);
+    await vi.waitFor(() => {
+      expect(bridge.calls.at(-1)!.signal.aborted).toBe(true);
+    });
   });
 });
 
