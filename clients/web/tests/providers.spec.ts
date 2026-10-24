@@ -14457,14 +14457,22 @@ test('serves the repository Quality commands from a real server and queues Every
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    for (const width of [1280, 390]) {
+    for (const width of [2048, 768, 390, 2048]) {
       await page.setViewportSize({ width, height: 900 });
-      if (width < 1024) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+      const sidebar = page.locator('#app-left-rail'),
+        commands = sidebar.locator('[data-component="command-navigation"]');
+      if (width < 1024 && (await page.getByRole('button', { name: 'Show Project Sidebar' }).isVisible()))
+        await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
       for (const title of ['Reqs ↔ Code', 'Check Code Hygiene', 'Analyze Code Quality', 'Everything'])
         await expect(page.getByRole('button', { name: `${title} AI command`, exact: true })).toBeVisible();
-      await page
-        .locator('#app-left-rail')
-        .screenshot({ path: test.info().outputPath(`hs2-11285r-quality-commands-${width}.png`) });
+      await expect(commands.locator('[data-component="list-header"]').first()).toHaveAttribute('data-size', 'sm');
+      await expect(commands.locator('[data-command-group="Quality"] [data-component="list-header"]')).toHaveAttribute(
+        'data-size',
+        'xs',
+      );
+      for (const header of await commands.locator('[data-command-group] [data-component="list-header"]').all())
+        await expect(header).toHaveAttribute('data-size', 'xs');
+      await sidebar.screenshot({ path: test.info().outputPath(`hs2-0vtgqm-project-commands-${width}.png`) });
     }
     await page.getByRole('button', { name: 'Everything AI command', exact: true }).click();
     const everything = quality.find((command) => command.title === 'Everything')!;

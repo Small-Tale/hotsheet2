@@ -335,21 +335,24 @@ describe('ProjectSidebar component slice', () => {
         collapsedGroups: ['Quality'],
         commands: [
           { id: 'test', label: 'Test', color: 'blue', icon: 'test', group: 'Quality' },
-          { id: 'ship', label: 'Ship', color: 'purple', icon: 'send', group: 'Release' },
+          { id: 'ship', label: 'Ship', color: 'purple', icon: 'send', group: 'Git' },
           { id: 'status', label: 'Status', color: 'green', icon: 'build' },
         ],
       }),
     );
     expect(markup).toMatch(/data-command-group="Quality"[^]*aria-expanded="false"/);
+    expect(markup).toMatch(/data-command-group="Quality"[^]*data-size="xs"/);
     expect(markup).not.toContain('data-item-id="test"');
-    expect(markup).toMatch(/data-command-group="Release"[^]*aria-expanded="true"/);
+    expect(markup).toMatch(/data-command-group="Git"[^]*aria-expanded="true"/);
+    expect(markup).toMatch(/data-command-group="Git"[^]*data-size="xs"/);
+    expect(markup).toMatch(/data-component="list-header"[^]*data-size="sm"[^]*Commands/);
     expect(markup).toContain('data-item-id="ship"');
     expect(markup).toContain('data-item-id="status"');
     // Disclosure arrows reflect each header's state through Kerf's default DisclosureArrow
     // instead of a fixed chevron (HS2-DTJ5YZ).
     expect(markup).not.toContain('data-lucide="chevron-down"');
     expect(markup).toMatch(/data-command-group="Quality"[^]*--_kui-disclosure-arrow-rotation:0deg/);
-    expect(markup).toMatch(/data-command-group="Release"[^]*--_kui-disclosure-arrow-rotation:90deg/);
+    expect(markup).toMatch(/data-command-group="Git"[^]*--_kui-disclosure-arrow-rotation:90deg/);
   });
 
   it('renders a neutral or unrecognized command color as a transparent, unstyled button (HS2-ZQWQCM)', () => {

@@ -380,7 +380,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   - user-defined views when custom-view support lands
 - `CommandNavigation` — **demo built**: collapsible group of palette-colored,
   icon-bearing command actions with controlled running state. Kerf `List` owns group
-  spacing, and `ListItem.busy` owns the running indicator. Colors are constrained
+  spacing, its nested `ListHeader` uses the extra-small label size beneath the default-sized
+  Project Commands heading (HS2-0VTGQM), and `ListItem.busy` owns the running indicator. Colors are constrained
   to the exact shared HS1 custom-command palette, including contrast-aware neutral.
   Configured HS1 Lucide names are preserved (`send`, `file-text`, `arrow-left-right`,
   `soap-dispenser-droplet`, `circle-check-big`, `balloon`, `git-compare`,

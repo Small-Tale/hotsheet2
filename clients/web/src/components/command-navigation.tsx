@@ -88,6 +88,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                 {group ? (
                   <ListHeader
                     label={group}
+                    size="xs"
                     density="compact"
                     action="toggle-command-section"
                     expanded={groupExpanded}
