@@ -29,6 +29,7 @@ describe('repository formatting scope (HS2-G9K0NY)', () => {
     ).toThrow(denied);
   });
 
+  // HS2-DTPZ3A: real npm and Cargo subprocesses take about 30 seconds even without suite load.
   it('runs real package scripts through clean checkout, local config, drift, and missing tracked paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hotsheet-format-checkout-'));
     cleanup.push(root);
@@ -77,5 +78,5 @@ describe('repository formatting scope (HS2-G9K0NY)', () => {
     expect(run('format:check').status).not.toBe(0);
     expect(run('format').status).toBe(0);
     expect(run('format:check').status).toBe(0);
-  }, 30000);
+  }, 60000);
 });
