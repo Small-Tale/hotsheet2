@@ -14460,10 +14460,13 @@ test('serves the repository Quality commands from a real server and queues Every
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     for (const width of [2048, 768, 390, 2048]) {
       await page.setViewportSize({ width, height: 900 });
+      // HS2-STN4PR: let Workbench apply its responsive rail state before opening it.
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const sidebar = page.locator('#app-left-rail'),
         commands = sidebar.locator('[data-component="command-navigation"]');
-      if (width < 1024 && (await page.getByRole('button', { name: 'Show Project Sidebar' }).isVisible()))
-        await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(sidebar).toBeVisible();
       for (const title of ['Reqs ↔ Code', 'Check Code Hygiene', 'Analyze Code Quality', 'Everything'])
         await expect(page.getByRole('button', { name: `${title} AI command`, exact: true })).toBeVisible();
       await expect(commands.locator('[data-component="list-header"]').first()).toHaveAttribute('data-size', 'sm');
