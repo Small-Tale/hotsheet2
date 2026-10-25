@@ -85,6 +85,10 @@ until the queue drain or an earlier CI need, then pushes before the session ends
 Projects choosing per-batch record their measured gate or CI cost beside the
 declaration as `push_policy_reason`. Changing the setting rewrites only Hot
 Sheet's managed policy span, preserving surrounding project instructions.
+Setup apply holds the shared Settings lock and re-reads the settings file before
+adding a missing policy (HS2-0F2QC2). It preserves keys written after planning.
+If the policy changed after planning, apply stops before writing and asks for a
+new setup plan so the generated instructions match the policy.
 
 Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
 `.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized

@@ -13,6 +13,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use hotsheet_ticketing::settings::{Scope, Settings, SettingsError};
+
 use crate::{Plugin, all_plugins, default_dirs};
 
 pub const PUSH_POLICY_SETTING: &str = "push_policy";
@@ -390,6 +392,10 @@ pub enum SetupError {
     InvalidGuidanceOwner(String),
     #[error("invalid push_policy in {0}: expected push-per-ticket or push-per-batch")]
     InvalidPushPolicy(String),
+    #[error("push_policy changed since setup was planned; rerun setup to use the current policy")]
+    StalePushPolicy,
+    #[error("settings transaction: {0}")]
+    Settings(#[from] SettingsError),
     #[error("unknown MCP config format '{format}' for plugin '{id}'")]
     UnknownMcpFormat { id: String, format: String },
     #[error("unknown hook config format '{format}' for plugin '{id}'")]
@@ -998,6 +1004,52 @@ pub fn apply_setup_plan(plan: SetupPlan) -> Result<RefreshReport, SetupError> {
 }
 
 fn apply_operations(operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
+    let shared_path = operations.iter().find_map(|operation| match operation {
+        PlannedOperation::Write(path, _) if path.ends_with(SHARED_SETTINGS_PATH) => Some(path),
+        _ => None,
+    });
+    let Some(shared_path) = shared_path else {
+        return apply_operations_unlocked(operations);
+    };
+    let project = shared_path
+        .parent()
+        .and_then(Path::parent)
+        .expect("shared settings have a project root")
+        .to_path_buf();
+    let settings = Settings::for_project(&project);
+    settings.with_scope_lock(Scope::Shared, || {
+        let mut operations = operations;
+        for operation in &mut operations {
+            let PlannedOperation::Write(path, contents) = operation else {
+                continue;
+            };
+            if !path.ends_with(SHARED_SETTINGS_PATH) {
+                continue;
+            }
+            let planned: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_slice(contents)
+                    .map_err(|_| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()))?;
+            let planned_policy = planned
+                .get(PUSH_POLICY_SETTING)
+                .ok_or_else(|| SetupError::InvalidPushPolicy(SHARED_SETTINGS_PATH.into()))?;
+            let mut current = shared_settings(&PlanFs::default(), &project)?;
+            match current.get(PUSH_POLICY_SETTING) {
+                Some(value) if value != planned_policy => return Err(SetupError::StalePushPolicy),
+                Some(_) => {}
+                None => {
+                    current.insert(PUSH_POLICY_SETTING.into(), planned_policy.clone());
+                }
+            }
+            *contents = (serde_json::to_string_pretty(&current).expect("settings serialize")
+                + "\n")
+                .into_bytes();
+        }
+        apply_operations_unlocked(operations)
+    })??;
+    Ok(())
+}
+
+fn apply_operations_unlocked(operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
     for operation in operations {
         match operation {
             PlannedOperation::Write(path, contents) => {
@@ -3418,6 +3470,54 @@ mod tests {
         assert!(!skill.contains("{{HOTSHEET_PUSH_POLICY}}"));
         let instructions = std::fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
         assert!(instructions.contains("Push policy: `push-per-ticket`"));
+    }
+
+    #[test]
+    fn hs2_0f2qc2_setup_preserves_shared_settings_written_after_planning() {
+        let project = tempfile::tempdir().unwrap();
+        let mut plan = PlanFs::default();
+        ensure_push_policy(&mut plan, project.path()).unwrap();
+        let operations = plan.final_operations(project.path());
+
+        let settings = Settings::for_project(project.path());
+        settings
+            .set(
+                "concurrent_key",
+                serde_json::json!("new value"),
+                Scope::Shared,
+            )
+            .unwrap();
+        apply_operations(operations).unwrap();
+
+        let saved = shared_settings(&PlanFs::default(), project.path()).unwrap();
+        assert_eq!(saved[PUSH_POLICY_SETTING], "push-per-ticket");
+        assert_eq!(saved["concurrent_key"], "new value");
+    }
+
+    #[test]
+    fn hs2_0f2qc2_changed_push_policy_rejects_stale_plan_before_any_writes() {
+        let project = tempfile::tempdir().unwrap();
+        let mut plan = PlanFs::default();
+        ensure_push_policy(&mut plan, project.path()).unwrap();
+        let guidance = project.path().join("AGENTS.md");
+        plan.write(&guidance, b"planned guidance");
+        let operations = plan.final_operations(project.path());
+
+        let settings = Settings::for_project(project.path());
+        settings
+            .set(
+                PUSH_POLICY_SETTING,
+                serde_json::json!("push-per-batch"),
+                Scope::Shared,
+            )
+            .unwrap();
+        assert!(matches!(
+            apply_operations(operations),
+            Err(SetupError::StalePushPolicy)
+        ));
+        assert!(!guidance.exists());
+        let saved = shared_settings(&PlanFs::default(), project.path()).unwrap();
+        assert_eq!(saved[PUSH_POLICY_SETTING], "push-per-batch");
     }
 
     #[test]

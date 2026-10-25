@@ -57,8 +57,11 @@ root command/group HTTP stale, CLI-style out-of-band edit, and explicit force
 flows in `command_revisions_reject_stale_editors_and_survive_server_restart`.
 The browser save flow is covered by the HS2-X2A3C1 real-server test below.
 
-HS2-QPEDJR covers setup's shared-settings replacement while a reader holds the
-previous file open in `hs2_qpedjr_shared_settings_readers_see_complete_replacements`.
+HS2-0F2QC2 covers setup's shared-settings plan/apply interleaving with
+`Settings::set`: a concurrent key survives, and a changed push policy rejects
+the stale plan before any other planned write. HS2-QPEDJR covers setup's
+shared-settings replacement while a reader holds the previous file open in
+`hs2_qpedjr_shared_settings_readers_see_complete_replacements`.
 The checkout HTTP keyset test exercises opening a project and creating tickets
 while guidance setup refreshes the same settings file.
 

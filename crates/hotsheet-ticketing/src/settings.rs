@@ -253,6 +253,18 @@ impl Settings {
         )?)
     }
 
+    /// Run a multi-file operation while holding the same scope lock as [`Self::set`].
+    /// Re-read the scope inside `action`; a snapshot made before acquiring the lock may
+    /// already be stale. The action must not call another writer for this scope.
+    pub fn with_scope_lock<T>(
+        &self,
+        scope: Scope,
+        action: impl FnOnce() -> T,
+    ) -> Result<T, SettingsError> {
+        let _lock = self.lock_scope(scope)?;
+        Ok(action())
+    }
+
     fn read_map(
         &self,
         path: &Path,

@@ -33,6 +33,9 @@ See [snapshot maintenance](../guidance/README.md).
 import. The Claude manifest declares a canonical instruction target and import;
 `crates/hotsheet-plugins/src/setup.rs` plans legacy migration, shared membership, adapter
 cleanup, and read-only findings together.
+Applying a planned shared-settings write uses `Settings::with_scope_lock` to merge
+the current map under the same lock as `Settings::set` and reject a stale push
+policy before other setup writes (HS2-0F2QC2).
 The same planner honors `.hotsheet2/guidance-owner.json` (`builtin` or `rulesync`,
 schema 1); the CLI `setup --guidance-owner` command captures unmarked local guidance
 in a Rulesync rule before switching writers. `crates/hotsheet-plugins/src/rulesync_consolidation.rs`
