@@ -1377,6 +1377,24 @@ fn a_claude_process_that_ignores_sigterm_is_killed_after_the_grace_period() {
 }
 
 #[test]
+fn hs2_9pvhcc_incomplete_cleanup_reports_a_failed_interrupt() {
+    let claude = ScriptedClaude::new(ClaudeMode::HangIncompleteCleanup);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(30_000, 20));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    assert!(turn.interrupt());
+    assert_eq!(
+        turn.wait(),
+        DoneReason::failed(
+            1,
+            "Claude process was stopped, but tool subprocess cleanup could not be confirmed"
+        )
+    );
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM", "KILL"]);
+}
+
+#[test]
 fn a_timed_out_claude_turn_stops_its_process_instead_of_abandoning_it() {
     let claude = ScriptedClaude::new(ClaudeMode::Hang);
     let signals = claude.signal_log();
@@ -1399,6 +1417,22 @@ fn a_timed_out_turn_that_ignores_sigterm_is_killed() {
     let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(150, 100));
     let mut turn = ch.start_turn("x").unwrap();
     assert!(matches!(turn.wait(), DoneReason::Failed { .. }));
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM", "KILL"]);
+}
+
+#[test]
+fn hs2_9pvhcc_incomplete_cleanup_reports_a_failed_timeout() {
+    let claude = ScriptedClaude::new(ClaudeMode::HangIncompleteCleanup);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(150, 20));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert_eq!(
+        turn.wait(),
+        DoneReason::failed(
+            1,
+            "Timed out waiting for Claude turn result; the Claude process was stopped, but tool subprocess cleanup could not be confirmed"
+        )
+    );
     assert_eq!(*signals.lock().unwrap(), vec!["TERM", "KILL"]);
 }
 

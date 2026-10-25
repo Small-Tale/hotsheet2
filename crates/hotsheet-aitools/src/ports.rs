@@ -148,8 +148,9 @@ pub trait RpcTransport {
 pub trait ProcessSignals: Send {
     /// Ask the process to stop (SIGTERM on Unix).
     fn terminate(&mut self);
-    /// Force it to stop (SIGKILL on Unix) and reap it.
-    fn kill(&mut self);
+    /// Force it to stop (SIGKILL on Unix) and reap it. Returns whether descendant
+    /// cleanup was confirmed; `false` means the root was stopped but tools may remain.
+    fn kill(&mut self) -> bool;
     /// Whether it has exited (non-blocking; reaps an exited child).
     fn has_exited(&mut self) -> bool;
 }

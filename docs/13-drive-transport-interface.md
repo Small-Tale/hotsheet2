@@ -288,7 +288,9 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > servers) goes too: each descendant is frozen with SIGSTOP, the tree is re-walked until no
 > new process appears, and then every frozen process and `claude` get SIGKILL. On macOS,
 > descendant lookup uses the native child-process API so cleanup still works when a restricted
-> sandbox denies launching `ps` (HS2-CSMC2G). The turn
+> sandbox denies launching `ps` (HS2-CSMC2G). If native lookup fails, a verified `ps` table is
+> tried; if neither can enumerate the tree, Stop and timeout report incomplete tool-subprocess
+> cleanup instead of a confirmed interruption (HS2-9PVHHC). The turn
 > process deliberately stays in the caller's process group, so a foreground
 > `hotsheet-cli trigger` still delivers terminal Ctrl-C to it (HS2-M08WMC).
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else

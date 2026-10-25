@@ -23,6 +23,8 @@ pub enum StopOutcome {
     Terminated,
     /// It outlived the grace period and was force-killed (SIGKILL).
     Killed,
+    /// The root was force-killed, but descendant cleanup could not be confirmed.
+    CleanupIncomplete,
 }
 
 /// How often [`stop_process`] re-checks a signalled process (a local wait, no I/O).
@@ -42,8 +44,11 @@ pub fn stop_process(signals: &mut dyn ProcessSignals, grace: Duration) -> StopOu
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            signals.kill();
-            return StopOutcome::Killed;
+            return if signals.kill() {
+                StopOutcome::Killed
+            } else {
+                StopOutcome::CleanupIncomplete
+            };
         }
         std::thread::sleep(remaining.min(STOP_POLL));
     }
@@ -152,16 +157,21 @@ impl ProcessSignals for ChildSignals {
         }
     }
 
-    fn kill(&mut self) {
+    fn kill(&mut self) -> bool {
         let mut child = self.child.lock_or_recover();
         if matches!(child.try_wait(), Ok(None)) {
             // A process that ignored SIGTERM may leave tool subprocesses behind; take its whole
             // descendant tree down with it (HS2-M08WMC). The child keeps sharing our process
             // group, so a foreground CLI's terminal Ctrl-C still reaches it.
             #[cfg(unix)]
-            kill_descendants(child.id());
+            let cleanup_complete = kill_descendants(child.id());
+            #[cfg(not(unix))]
+            let cleanup_complete = true;
             let _ = child.kill();
             let _ = child.wait();
+            cleanup_complete
+        } else {
+            true
         }
     }
 
@@ -170,23 +180,28 @@ impl ProcessSignals for ChildSignals {
     }
 }
 
-/// Every live `(pid, parent pid)` pair, from `ps` on non-macOS Unix hosts.
-#[cfg(all(unix, not(target_os = "macos")))]
-fn process_table() -> Vec<(u32, u32)> {
+/// Every live `(pid, parent pid)` pair, from `ps` as a fallback on Unix hosts.
+#[cfg(unix)]
+fn process_table() -> Option<Vec<(u32, u32)>> {
     let Ok(output) = hotsheet_ticketing::git::launch("ps")
         .args(["-A", "-o", "pid=", "-o", "ppid="])
         .stderr(Stdio::null())
         .output()
     else {
-        return Vec::new();
+        return None;
     };
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.split_whitespace();
-            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
-        })
-        .collect()
+    if !output.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+            })
+            .collect(),
+    )
 }
 
 /// macOS can deny launching `ps` in a restricted sandbox while still allowing a process
@@ -228,11 +243,14 @@ fn direct_children(parent: u32) -> Option<Vec<u32>> {
 }
 
 #[cfg(target_os = "macos")]
-fn macos_descendants(root: u32) -> Option<Vec<u32>> {
+fn macos_descendants_with(
+    root: u32,
+    mut list_children: impl FnMut(u32) -> Option<Vec<u32>>,
+) -> Option<Vec<u32>> {
     let mut found = Vec::new();
     let mut frontier = vec![root];
     while let Some(parent) = frontier.pop() {
-        for pid in direct_children(parent)? {
+        for pid in list_children(parent)? {
             if pid != root && !found.contains(&pid) {
                 found.push(pid);
                 frontier.push(pid);
@@ -242,8 +260,12 @@ fn macos_descendants(root: u32) -> Option<Vec<u32>> {
     Some(found)
 }
 
+#[cfg(target_os = "macos")]
+fn macos_descendants(root: u32) -> Option<Vec<u32>> {
+    macos_descendants_with(root, direct_children)
+}
+
 /// The descendants of `root` in `table`, parents before children.
-#[cfg(any(test, not(target_os = "macos")))]
 #[cfg_attr(not(unix), allow(dead_code))]
 fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
     let mut found = Vec::new();
@@ -259,18 +281,34 @@ fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
     found
 }
 
+/// Prefer macOS's native child lookup, with a verified `ps` table as a fallback.
+#[cfg(unix)]
+fn discover_descendants(root: u32) -> Option<Vec<u32>> {
+    #[cfg(target_os = "macos")]
+    if let Some(descendants) = macos_descendants(root) {
+        return Some(descendants);
+    }
+    let table = process_table()?;
+    table
+        .iter()
+        .any(|&(pid, _)| pid == root)
+        .then(|| descendants_of(root, &table))
+}
+
 /// Force-stop every descendant of the still-running, unreaped `root` (HS2-M08WMC). Each
 /// discovered process is frozen with SIGSTOP so it cannot start more, and the tree is walked
 /// again until no new process appears; then every frozen process gets SIGKILL. While `root`
 /// is alive the tree stays parented to it, so no pid here has been reparented or recycled.
+/// Report an incomplete cleanup when lookup fails, after killing any already frozen children.
 #[cfg(unix)]
-fn kill_descendants(root: u32) {
+fn kill_descendants_with(root: u32, mut discover: impl FnMut(u32) -> Option<Vec<u32>>) -> bool {
     let mut frozen: Vec<u32> = Vec::new();
+    let mut complete = true;
     for _ in 0..8 {
-        #[cfg(target_os = "macos")]
-        let descendants = macos_descendants(root).unwrap_or_default();
-        #[cfg(not(target_os = "macos"))]
-        let descendants = descendants_of(root, &process_table());
+        let Some(descendants) = discover(root) else {
+            complete = false;
+            break;
+        };
         let fresh: Vec<u32> = descendants
             .into_iter()
             .filter(|pid| !frozen.contains(pid))
@@ -292,6 +330,12 @@ fn kill_descendants(root: u32) {
             libc::kill(pid as libc::pid_t, libc::SIGKILL);
         }
     }
+    complete
+}
+
+#[cfg(unix)]
+fn kill_descendants(root: u32) -> bool {
+    kill_descendants_with(root, discover_descendants)
 }
 
 struct PipeWriter {
@@ -370,6 +414,44 @@ mod tests {
         assert_eq!(found, vec![11, 12, 13, 14]);
         assert!(descendants_of(12, &table).is_empty());
         assert!(descendants_of(99, &table).is_empty());
+    }
+
+    /// HS2-9PVHHC: a denied descendant lookup is not an empty tree or a completed stop.
+    #[test]
+    fn failed_descendant_discovery_reports_incomplete_cleanup() {
+        assert!(!kill_descendants_with(10, |_| None));
+
+        struct FailedCleanup(bool);
+        impl ProcessSignals for FailedCleanup {
+            fn terminate(&mut self) {}
+            fn kill(&mut self) -> bool {
+                self.0 = true;
+                false
+            }
+            fn has_exited(&mut self) -> bool {
+                self.0
+            }
+        }
+        let mut signals = FailedCleanup(false);
+        assert_eq!(
+            stop_process(&mut signals, Duration::ZERO),
+            StopOutcome::CleanupIncomplete
+        );
+        assert_eq!(
+            stop_process(&mut signals, Duration::ZERO),
+            StopOutcome::AlreadyExited
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_child_lookup_error_is_not_treated_as_empty_tree() {
+        assert!(
+            macos_descendants_with(10, |parent| {
+                if parent == 10 { Some(vec![11]) } else { None }
+            })
+            .is_none()
+        );
     }
 
     /// HS2-CSMC2G: macOS child discovery does not need the sandbox-denied `ps` executable.

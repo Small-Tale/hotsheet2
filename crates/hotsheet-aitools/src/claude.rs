@@ -25,7 +25,7 @@ use crate::drive::{
     TurnControl, TurnEvent, TurnHandle,
 };
 use crate::ports::{ProcessSignals, RpcReader, RpcTransport, RpcWriter};
-use crate::procio::{StreamChild, stop_process};
+use crate::procio::{StopOutcome, StreamChild, stop_process};
 
 /// How long a turn may wait without a new event before its process is stopped.
 const TURN_TIMEOUT: Duration = Duration::from_secs(600);
@@ -121,17 +121,13 @@ impl Inner {
         self.cvar.notify_all();
     }
 
-    /// Stop the backing process: SIGTERM, then SIGKILL after the grace period. Returns
-    /// whether a process handle exists (a transport without one cannot be stopped).
-    fn stop_process(&self) -> bool {
+    /// Stop the backing process: SIGTERM, then SIGKILL after the grace period. `None`
+    /// means the transport has no process handle; the outcome records incomplete cleanup.
+    fn stop_process(&self) -> Option<StopOutcome> {
         let mut signals = self.signals.lock_or_recover();
-        match signals.as_mut() {
-            Some(signals) => {
-                stop_process(signals.as_mut(), self.terminate_grace);
-                true
-            }
-            None => false,
-        }
+        signals
+            .as_mut()
+            .map(|signals| stop_process(signals.as_mut(), self.terminate_grace))
     }
 
     fn can_stop(&self) -> bool {
@@ -715,10 +711,14 @@ impl ClaudeTurn {
                 let stopped = inner.stop_process();
                 let reason = DoneReason::failed(
                     1,
-                    if stopped {
-                        "Timed out waiting for Claude turn result; the Claude process was stopped"
-                    } else {
-                        "Timed out waiting for Claude turn result"
+                    match stopped {
+                        Some(StopOutcome::CleanupIncomplete) => {
+                            "Timed out waiting for Claude turn result; the Claude process was stopped, but tool subprocess cleanup could not be confirmed"
+                        }
+                        Some(_) => {
+                            "Timed out waiting for Claude turn result; the Claude process was stopped"
+                        }
+                        None => "Timed out waiting for Claude turn result",
                     },
                 );
                 self.finish(reason);
@@ -771,12 +771,15 @@ impl TurnHandle for ClaudeTurn {
         if self.done.is_some() || self.pending.iter().any(|e| matches!(e, TurnEvent::Done(_))) {
             return false;
         }
-        if !self.inner.stop_process() {
+        let Some(outcome) = self.inner.stop_process() else {
             return false;
-        }
+        };
         // Output already queued stays ahead of the terminal event.
-        self.pending
-            .push_back(TurnEvent::Done(DoneReason::Interrupted));
+        self.pending.push_back(TurnEvent::Done(if outcome == StopOutcome::CleanupIncomplete {
+            DoneReason::failed(1, "Claude process was stopped, but tool subprocess cleanup could not be confirmed")
+        } else {
+            DoneReason::Interrupted
+        }));
         true
     }
 
@@ -1001,6 +1004,8 @@ pub(crate) mod scripted {
         Hang,
         /// Like [`ClaudeMode::Hang`], but SIGTERM is ignored; only SIGKILL ends it.
         HangIgnoringTerm,
+        /// Like `HangIgnoringTerm`, but descendant cleanup cannot be confirmed (HS2-9PVHHC).
+        HangIncompleteCleanup,
     }
 
     /// The scripted process's output pipe: `None` once it has exited.
@@ -1066,7 +1071,11 @@ pub(crate) mod scripted {
         fn process_signals(&self) -> Option<Box<dyn ProcessSignals>> {
             Some(Box::new(ScriptedSignals {
                 pipe: self.pipe.clone(),
-                ignore_term: matches!(self.mode, ClaudeMode::HangIgnoringTerm),
+                ignore_term: matches!(
+                    self.mode,
+                    ClaudeMode::HangIgnoringTerm | ClaudeMode::HangIncompleteCleanup
+                ),
+                cleanup_complete: !matches!(self.mode, ClaudeMode::HangIncompleteCleanup),
                 log: self.signal_log.clone(),
             }))
         }
@@ -1076,6 +1085,7 @@ pub(crate) mod scripted {
     struct ScriptedSignals {
         pipe: Pipe,
         ignore_term: bool,
+        cleanup_complete: bool,
         log: Arc<Mutex<Vec<&'static str>>>,
     }
     impl ProcessSignals for ScriptedSignals {
@@ -1085,9 +1095,10 @@ pub(crate) mod scripted {
                 self.pipe.lock_or_recover().take();
             }
         }
-        fn kill(&mut self) {
+        fn kill(&mut self) -> bool {
             self.log.lock_or_recover().push("KILL");
             self.pipe.lock_or_recover().take();
+            self.cleanup_complete
         }
         fn has_exited(&mut self) -> bool {
             self.pipe.lock_or_recover().is_none()
@@ -1122,7 +1133,10 @@ pub(crate) mod scripted {
     impl RpcWriter for ClaudeWriter {
         fn close(&mut self) {
             // A hanging process keeps working after stdin EOF.
-            if !matches!(self.mode, ClaudeMode::Hang | ClaudeMode::HangIgnoringTerm) {
+            if !matches!(
+                self.mode,
+                ClaudeMode::Hang | ClaudeMode::HangIgnoringTerm | ClaudeMode::HangIncompleteCleanup
+            ) {
                 self.exit();
             }
         }
@@ -1140,7 +1154,9 @@ pub(crate) mod scripted {
                         self.exit();
                         return Ok(());
                     }
-                    ClaudeMode::Hang | ClaudeMode::HangIgnoringTerm => {
+                    ClaudeMode::Hang
+                    | ClaudeMode::HangIgnoringTerm
+                    | ClaudeMode::HangIncompleteCleanup => {
                         self.push(json!({ "type": "assistant",
                             "message": { "role": "assistant", "id": "msg-working",
                                          "content": [{ "type": "text",
@@ -1217,7 +1233,8 @@ pub(crate) mod scripted {
                     | ClaudeMode::Replay(_)
                     | ClaudeMode::Crash
                     | ClaudeMode::Hang
-                    | ClaudeMode::HangIgnoringTerm => ("success", false, "done"),
+                    | ClaudeMode::HangIgnoringTerm
+                    | ClaudeMode::HangIncompleteCleanup => ("success", false, "done"),
                     ClaudeMode::Failure => (
                         "error_during_execution",
                         true,
