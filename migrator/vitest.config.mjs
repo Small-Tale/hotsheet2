@@ -8,6 +8,10 @@ export default defineConfig({
   test: {
     // HS2-T9VXEP: spawned HS2 binaries must never see the real machine home.
     globalSetup: ['./test/isolated-home.mjs'],
+    // HS2-CZGY0M: real PGlite WASM startup and CLI migrations reached Vitest's 5s
+    // default under root-gate load. Keep a finite bound without weakening assertions.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
