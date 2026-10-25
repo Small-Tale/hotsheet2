@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn stop_process_terminates_a_cooperative_child_and_closes_its_stream() {
-        let child = shell("echo ready; while :; do sleep 0.05; done");
+        let child = shell("echo ready; exec sleep 30");
         let mut signals = child.signals();
         let (_writer, mut reader) = child.into_halves();
         assert_eq!(reader.recv().unwrap().as_deref(), Some("ready"));
@@ -325,10 +325,32 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_forced_stop_also_kills_the_tool_processes_the_child_started() {
-        let child = shell(
-            "trap '' TERM; sh -c 'sleep 300 & echo $!; trap \"\" TERM; while :; do sleep 0.05; done' & \
-             echo $!; while :; do sleep 0.05; done",
-        );
+        struct KillGroupOnDrop(Option<i32>);
+        impl Drop for KillGroupOnDrop {
+            fn drop(&mut self) {
+                if let Some(group) = self.0 {
+                    // SAFETY: this test spawned its child as the leader of a private process group.
+                    // The guard is disarmed after the fixture descendants are confirmed gone.
+                    unsafe {
+                        libc::kill(-group, libc::SIGKILL);
+                    }
+                }
+            }
+        }
+
+        let child = StreamChild::spawn_with(
+            "sh",
+            &[
+                "-c",
+                "trap '' TERM; sh -c 'sleep 30 & echo $!; trap \"\" TERM; wait' & \
+                 echo $!; wait",
+            ],
+            Path::new("."),
+            &[],
+            true,
+        )
+        .expect("spawn isolated process tree");
+        let mut cleanup = KillGroupOnDrop(Some(child.id() as i32));
         let mut signals = child.signals();
         let (_writer, mut reader) = child.into_halves();
         let mut pids: Vec<i32> = (0..2)
@@ -351,6 +373,7 @@ mod tests {
             pids.iter().all(|pid| !alive(*pid)),
             "orphaned tool processes survived the forced stop: {pids:?}"
         );
+        cleanup.0 = None;
     }
 
     /// A cooperative child that exits on SIGTERM is never escalated, so its tree is left to it.
@@ -359,9 +382,7 @@ mod tests {
     fn a_cooperative_stop_leaves_cleanup_to_the_child() {
         // The PID line is the readiness signal: install the trap first or the parent can send
         // SIGTERM in the gap and leave the sleeper behind (HS2-A179GH).
-        let child = shell(
-            "sleep 300 & trap 'kill $!; wait $!; exit 0' TERM; echo $!; while :; do sleep 0.05; done",
-        );
+        let child = shell("sleep 30 & trap 'kill $!; wait $!; exit 0' TERM; echo $!; wait");
         let mut signals = child.signals();
         let (_writer, mut reader) = child.into_halves();
         let sleeper: i32 = reader.recv().unwrap().unwrap().trim().parse().unwrap();
@@ -378,7 +399,7 @@ mod tests {
 
     #[test]
     fn stop_process_kills_a_child_that_ignores_sigterm_after_the_grace_period() {
-        let child = shell("trap '' TERM; echo ready; while :; do sleep 0.05; done");
+        let child = shell("trap '' TERM; echo ready; exec sleep 30");
         let mut signals = child.signals();
         let (_writer, mut reader) = child.into_halves();
         assert_eq!(reader.recv().unwrap().as_deref(), Some("ready"));
