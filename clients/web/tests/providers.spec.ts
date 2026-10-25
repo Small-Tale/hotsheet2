@@ -7807,8 +7807,9 @@ for (const width of [1280, 390]) {
       );
     }
     await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
-    const idleTranscriptTop = (await conversation.locator('.ai-conversation__transcript').boundingBox())!.y;
     await conversation.screenshot({ path: `target/visual-captures/hs2-0t1tm5-dialog-idle-${width}.png` });
+    // HS2-Z4KWAE: capture can shift the dialog's initial frame; measure after it.
+    const idleTranscriptTop = (await conversation.locator('.ai-conversation__transcript').boundingBox())!.y;
     await messages.nth(0).click();
     await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
     expect((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y).toBeGreaterThan(
@@ -7818,7 +7819,7 @@ for (const width of [1280, 390]) {
     await conversation.screenshot({ path: `target/visual-captures/hs2-0t1tm5-dialog-selected-${width}.png` });
     await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
     await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
-    // Fractional rem sizes can recenter the dialog by less than a CSS pixel after the bar closes.
+    await conversation.screenshot({ path: `target/visual-captures/hs2-z4kwae-dialog-cleared-${width}.png` });
     expect(
       Math.abs((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y - idleTranscriptTop),
     ).toBeLessThan(2);
