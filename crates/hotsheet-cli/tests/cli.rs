@@ -137,6 +137,14 @@ fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     let again: serde_json::Value =
         serde_json::from_str(&run(&["reprice", "--apply", "--json"])).unwrap();
     assert_eq!(again["changed"], 0);
+
+    metrics::roll_up_through(&store, "2026-10-23").unwrap();
+    assert_eq!(metrics::prune_raw_before(&store, "2026-10-23").unwrap(), 1);
+    std::fs::write(dir.path().join("metrics/local/corrections.json"), "{broken").unwrap();
+    let rebuilt: serde_json::Value =
+        serde_json::from_str(&run(&["reprice", "--apply", "--rebuild-ledger", "--json"])).unwrap();
+    assert_eq!(rebuilt["changed"], 0);
+    assert!(run(&["metrics"]).contains("$10.2500 total"));
 }
 
 fn rendered_instruction(raw: &str) -> String {

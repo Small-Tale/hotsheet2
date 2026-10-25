@@ -314,6 +314,12 @@ struct SettledRollup {
     /// A damaged ledger cannot be rebuilt from evidence that retention deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pruned_before: Option<String>,
+    /// Hash of the machine-local correction checkpoint written before raw pruning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    checkpoint_sha256: Option<String>,
+    /// One of two alternating machine-local checkpoint files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    checkpoint_slot: Option<u8>,
     #[serde(flatten)]
     total: Rollup,
 }
@@ -494,6 +500,17 @@ pub fn prune_raw_before(store: &FsStore, before_day: &str) -> io::Result<usize> 
             "apply pending Claude price corrections before pruning their raw evidence",
         ));
     }
+    let checkpoint_slot = match settled.checkpoint_slot {
+        None | Some(1) => 0,
+        Some(0) => 1,
+        Some(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid correction checkpoint slot",
+            ));
+        }
+    };
+    let checkpoint_sha256 = reprice::checkpoint(store, checkpoint_slot)?;
     // Commit the corrected projection and retention marker before removing evidence.
     // A crash at either boundary remains conservative for ledger rebuilds.
     let base = settled
@@ -505,6 +522,8 @@ pub fn prune_raw_before(store: &FsStore, before_day: &str) -> io::Result<usize> 
         &reprice::corrected_costs(store)?,
     );
     settled.pruned_before = Some(before_day.to_owned());
+    settled.checkpoint_sha256 = Some(checkpoint_sha256);
+    settled.checkpoint_slot = Some(checkpoint_slot);
     let path = rollups_dir(store).join(&contributor).join("rollup.json");
     let bytes = serde_json::to_vec_pretty(&settled).map_err(io::Error::other)?;
     reprice::atomic_write(&path, &bytes)?;
@@ -1033,6 +1052,8 @@ mod tests {
             last_rolled_up_through: "2026-08-19".into(),
             base_total: None,
             pruned_before: None,
+            checkpoint_sha256: None,
+            checkpoint_slot: None,
             total: rollup(&[ev(
                 "2026-08-19T12:00:00Z",
                 "codex",

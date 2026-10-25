@@ -66,6 +66,10 @@ fn ledger_path(store: &FsStore) -> PathBuf {
     metrics_dir(store).join("local/corrections.json")
 }
 
+fn checkpoint_path(store: &FsStore, slot: u8) -> PathBuf {
+    metrics_dir(store).join(format!("local/corrections.checkpoint-{slot}.json"))
+}
+
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -77,10 +81,22 @@ fn invalid(message: impl Into<String>) -> io::Error {
 fn load_ledger(store: &FsStore) -> io::Result<Ledger> {
     let text = match fs::read_to_string(ledger_path(store)) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Ledger::default()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let settled = super::read_settled(store, &super::contributor_id(store))?;
+            if settled.checkpoint_sha256.is_some() {
+                return Err(invalid(
+                    "correction ledger missing after raw usage was pruned",
+                ));
+            }
+            return Ok(Ledger::default());
+        }
         Err(error) => return Err(error),
     };
-    let ledger: Ledger = serde_json::from_str(&text)
+    parse_ledger(&text)
+}
+
+fn parse_ledger(text: &str) -> io::Result<Ledger> {
+    let ledger: Ledger = serde_json::from_str(text)
         .map_err(|error| invalid(format!("corrupt correction ledger: {error}")))?;
     if ledger.version != LEDGER_VERSION {
         return Err(invalid(format!(
@@ -112,6 +128,39 @@ fn load_ledger(store: &FsStore) -> io::Result<Ledger> {
         return Err(invalid("invalid correction ledger entry"));
     }
     Ok(ledger)
+}
+
+/// Persist the complete numeric correction state before retention deletes raw evidence.
+/// The settled prune marker records its slot and exact byte hash. Write the
+/// inactive slot so a crash before that marker commits leaves the prior
+/// checkpoint available.
+pub(super) fn checkpoint(store: &FsStore, slot: u8) -> io::Result<String> {
+    let mut ledger = load_ledger(store)?;
+    ledger.version = LEDGER_VERSION;
+    let bytes = serde_json::to_vec_pretty(&ledger).map_err(io::Error::other)?;
+    // A store with no eligible Claude corrections has no primary ledger yet.
+    // Materialize the validated empty ledger so post-prune readers can still
+    // distinguish that state from a lost primary file.
+    if !ledger_path(store).exists() {
+        atomic_write(&ledger_path(store), &bytes)?;
+    }
+    atomic_write(&checkpoint_path(store, slot), &bytes)?;
+    Ok(digest(&bytes))
+}
+
+fn load_checkpoint(store: &FsStore, slot: u8, expected_sha256: &str) -> io::Result<Ledger> {
+    if slot > 1 {
+        return Err(invalid("invalid correction checkpoint slot"));
+    }
+    let bytes = fs::read(checkpoint_path(store, slot))?;
+    if digest(&bytes) != expected_sha256 {
+        return Err(invalid(
+            "correction checkpoint does not match settled prune marker",
+        ));
+    }
+    let text =
+        std::str::from_utf8(&bytes).map_err(|_| invalid("correction checkpoint is not UTF-8"))?;
+    parse_ledger(text)
 }
 
 /// All correction-aware readers fail closed when the ledger is damaged.
@@ -352,11 +401,16 @@ pub fn apply(store: &FsStore, rebuild: bool) -> io::Result<RepriceReport> {
     let mut ledger = if rebuild {
         let settled = super::read_settled(store, &super::contributor_id(store))?;
         if settled.pruned_before.is_some() {
-            return Err(invalid(
-                "cannot rebuild correction ledger after raw usage was pruned",
-            ));
+            let expected = settled.checkpoint_sha256.as_deref().ok_or_else(|| {
+                invalid("cannot rebuild correction ledger after raw usage was pruned without a checkpoint")
+            })?;
+            let slot = settled
+                .checkpoint_slot
+                .ok_or_else(|| invalid("correction checkpoint slot missing"))?;
+            load_checkpoint(store, slot, expected)?
+        } else {
+            Ledger::default()
         }
-        Ledger::default()
     } else {
         load_ledger(store)?
     };
@@ -629,10 +683,164 @@ mod tests {
         super::super::prune_raw_before(&store, "2026-10-23").unwrap();
         assert_eq!(summary_settled(&store).unwrap().cost_usd, 10.25);
         fs::write(ledger_path(&store), "{broken").unwrap();
-        assert!(
-            apply(&store, true).is_err(),
-            "pruned evidence cannot be rebuilt"
+        assert!(summary(&store).is_err());
+        assert_eq!(apply(&store, true).unwrap().changed, 0);
+        assert_eq!(summary_settled(&store).unwrap().cost_usd, 10.25);
+        assert_eq!(team_summary(&store).unwrap().cost_usd, 10.25);
+    }
+
+    #[test]
+    fn hs2_5e8vy5_checkpoint_recovers_after_pruning_and_rejects_corruption() {
+        let (_dir, store) = fixture();
+        record_once_with_claude_tokens(
+            &store,
+            &event(Some("claude-fable-5-1"), 2_000_000, 0),
+            "settled-turn",
+            Some(categories()),
+        )
+        .unwrap();
+        apply(&store, false).unwrap();
+        roll_up_through(&store, "2026-10-23").unwrap();
+        assert_eq!(
+            super::super::prune_raw_before(&store, "2026-10-23").unwrap(),
+            1
         );
+        let rollup_path = super::super::rollups_dir(&store)
+            .join(super::super::contributor_id(&store))
+            .join("rollup.json");
+        let settled: serde_json::Value =
+            serde_json::from_slice(&fs::read(&rollup_path).unwrap()).unwrap();
+        let slot = settled["checkpoint_slot"].as_u64().unwrap() as u8;
+        let checkpoint = fs::read(checkpoint_path(&store, slot)).unwrap();
+        assert_eq!(settled["checkpoint_sha256"], digest(&checkpoint));
+
+        // A missing primary is an error, including for ordinary readers, until
+        // an explicit rebuild verifies the checkpoint and restores it.
+        fs::remove_file(ledger_path(&store)).unwrap();
+        assert!(summary(&store).is_err());
+        assert_eq!(apply(&store, true).unwrap().changed, 0);
+        assert_eq!(summary_settled(&store).unwrap().cost_usd, 10.25);
+        assert_eq!(team_summary(&store).unwrap().cost_usd, 10.25);
+        assert_eq!(
+            ticket_usage(&store, "ticket-1").unwrap().settled_cost_usd,
+            10.25
+        );
+
+        // A partial or stale backup must not replace a damaged primary.
+        fs::write(ledger_path(&store), "{broken").unwrap();
+        fs::write(
+            checkpoint_path(&store, slot),
+            &checkpoint[..checkpoint.len() / 2],
+        )
+        .unwrap();
+        assert!(apply(&store, true).is_err());
+        assert_eq!(fs::read(ledger_path(&store)).unwrap(), b"{broken");
+        fs::write(checkpoint_path(&store, slot), &checkpoint).unwrap();
+        let mut wrong_marker = settled.clone();
+        wrong_marker["checkpoint_sha256"] = "0".repeat(64).into();
+        fs::write(&rollup_path, serde_json::to_vec(&wrong_marker).unwrap()).unwrap();
+        assert!(apply(&store, true).is_err());
+        fs::write(&rollup_path, serde_json::to_vec(&settled).unwrap()).unwrap();
+        assert_eq!(apply(&store, true).unwrap().changed, 0);
+        assert_eq!(summary_settled(&store).unwrap().cost_usd, 10.25);
+    }
+
+    #[test]
+    fn hs2_5e8vy5_interrupted_prune_keeps_previous_checkpoint() {
+        let (_dir, store) = fixture();
+        record_once_with_claude_tokens(
+            &store,
+            &event(Some("claude-fable-5-1"), 2_000_000, 0),
+            "pruned-turn",
+            Some(categories()),
+        )
+        .unwrap();
+        apply(&store, false).unwrap();
+        roll_up_through(&store, "2026-10-23").unwrap();
+        super::super::prune_raw_before(&store, "2026-10-23").unwrap();
+        let rollup_path = super::super::rollups_dir(&store)
+            .join(super::super::contributor_id(&store))
+            .join("rollup.json");
+        let settled: serde_json::Value =
+            serde_json::from_slice(&fs::read(&rollup_path).unwrap()).unwrap();
+        let active = settled["checkpoint_slot"].as_u64().unwrap() as u8;
+        let inactive = 1 - active;
+
+        // Simulate a second prune interrupted after replacing its inactive
+        // checkpoint but before committing the new settled marker.
+        checkpoint(&store, inactive).unwrap();
+        fs::write(checkpoint_path(&store, inactive), b"{partial").unwrap();
+        fs::write(ledger_path(&store), b"{broken").unwrap();
+        assert_eq!(apply(&store, true).unwrap().changed, 0);
+        assert_eq!(summary_settled(&store).unwrap().cost_usd, 10.25);
+
+        // A completed repeat prune switches slots. The old slot can now be
+        // damaged without breaking recovery from the newly committed one.
+        assert_eq!(
+            super::super::prune_raw_before(&store, "2026-10-23").unwrap(),
+            0
+        );
+        let next: serde_json::Value =
+            serde_json::from_slice(&fs::read(&rollup_path).unwrap()).unwrap();
+        assert_eq!(next["checkpoint_slot"].as_u64(), Some(u64::from(inactive)));
+        fs::write(checkpoint_path(&store, active), b"{partial").unwrap();
+        fs::write(ledger_path(&store), b"{broken").unwrap();
+        assert_eq!(apply(&store, true).unwrap().changed, 0);
+        assert_eq!(team_summary(&store).unwrap().cost_usd, 10.25);
+    }
+
+    #[test]
+    fn hs2_5e8vy5_rebuild_combines_checkpoint_with_retained_tail() {
+        let (_dir, store) = fixture();
+        record_once_with_claude_tokens(
+            &store,
+            &event(Some("claude-fable-5-1"), 2_000_000, 0),
+            "pruned-turn",
+            Some(categories()),
+        )
+        .unwrap();
+        apply(&store, false).unwrap();
+        roll_up_through(&store, "2026-10-23").unwrap();
+        super::super::prune_raw_before(&store, "2026-10-23").unwrap();
+
+        let mut tail = event(Some("claude-fable-5-1"), 2_000_000, 0);
+        tail.ts = "2026-10-24T12:00:00Z".into();
+        record_once_with_claude_tokens(&store, &tail, "tail-turn", Some(categories())).unwrap();
+        assert_eq!(apply(&store, false).unwrap().changed, 1);
+        roll_up_through(&store, "2026-10-24").unwrap();
+        fs::write(ledger_path(&store), "{broken").unwrap();
+        assert_eq!(apply(&store, true).unwrap().changed, 1);
+        assert_eq!(summary_settled(&store).unwrap().cost_usd, 20.5);
+        assert_eq!(team_summary(&store).unwrap().cost_usd, 20.5);
+        assert_eq!(
+            ticket_usage(&store, "ticket-1").unwrap().settled_cost_usd,
+            20.5
+        );
+    }
+
+    #[test]
+    fn hs2_5e8vy5_legacy_prune_without_checkpoint_stays_fail_closed() {
+        let (_dir, store) = fixture();
+        record_once_with_claude_tokens(
+            &store,
+            &event(Some("claude-fable-5-1"), 2_000_000, 0),
+            "pruned-turn",
+            Some(categories()),
+        )
+        .unwrap();
+        apply(&store, false).unwrap();
+        roll_up_through(&store, "2026-10-23").unwrap();
+        super::super::prune_raw_before(&store, "2026-10-23").unwrap();
+        let rollup_path = super::super::rollups_dir(&store)
+            .join(super::super::contributor_id(&store))
+            .join("rollup.json");
+        let mut settled: serde_json::Value =
+            serde_json::from_slice(&fs::read(&rollup_path).unwrap()).unwrap();
+        settled.as_object_mut().unwrap().remove("checkpoint_sha256");
+        fs::write(&rollup_path, serde_json::to_vec(&settled).unwrap()).unwrap();
+        fs::write(ledger_path(&store), "{broken").unwrap();
+        assert!(apply(&store, true).is_err());
+        assert!(summary_settled(&store).is_err());
     }
 
     #[test]

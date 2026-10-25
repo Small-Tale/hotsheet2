@@ -216,7 +216,13 @@ Metrics can be shared across a team **through git** — no server sync needed:
   recalculated after an interrupted apply; retention refuses pending eligible
   corrections and writes the corrected rollup before pruning raw files. A damaged
   ledger fails closed. Explicit `--apply --rebuild-ledger` recovers it from
-  retained numeric raw evidence and refuses a rebuild after raw history is pruned.
+  retained numeric raw evidence. Before pruning, retention writes the inactive
+  of two machine-local, gitignored numeric correction checkpoints and records
+  its slot and SHA-256 in the settled rollup (HS2-5E8VY5). An interrupted prune
+  keeps the previous committed checkpoint. After pruning, an explicit rebuild accepts only that
+  validated checkpoint, then reapplies retained raw tail evidence. A missing,
+  partial, or mismatched checkpoint fails closed. Stores that pruned raw history
+  before this checkpoint existed cannot reconstruct those per-event corrections.
 
   Codex Work sessions outside Hot Sheet drives/terminals have a local claim-window
   capture path (`HS2-2K2D7E`, `HS2-NFQ1NK`). CLI and MCP renewal and release capture
