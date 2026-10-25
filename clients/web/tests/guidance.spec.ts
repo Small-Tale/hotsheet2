@@ -242,8 +242,8 @@ test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ 
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-phone.png' });
   await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
-  if (await showSettings.isVisible()) await showSettings.click();
+  // HS2-PFYJS6: wide layout restores the rail; a transient Show button can vanish during resize.
+  await expect(page.getByRole('button', { name: 'Hide Settings Sidebar' })).toBeVisible();
   await expect(row.getByText(/chosen v1/)).toBeVisible();
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-wide-return.png' });
