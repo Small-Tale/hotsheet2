@@ -1332,8 +1332,14 @@ for JSON count, followed by `--confirm` to delete. Machine-local encrypted files
 remain outside ticket stores and provider systems. The user-facing owner in the
 remembered-answer list is the code project after this contract ships
 (`HS2-7T5GPN`), not its default source.
-When a server instance record exists, the CLI routes through that source's server;
-it refuses an offline deletion if another server record could hold cached answers.
+The CLI inspects every machine-local server instance record, probes each authenticated
+host for the selected Git source, and requires exactly one host to report it as hosted.
+Before deletion it asks every host to withdraw cached source-scoped grants, then
+routes the deletion through the hosting server. An unreadable or unreachable record,
+an inconsistent response, or multiple hosts for the source stops deletion. With no
+instance records, repeated offline deletion remains safe and idempotent. A server
+anchored to another store can host an extra Git source; its anchor is not assumed to
+be the selected source (`HS2-54EBK3`).
 
 Acceptance cases for HS2-G1SG1P, HS2-AFSF4X, and HS2-TSXSH6:
 

@@ -18049,6 +18049,39 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
         hotsheet_aitools::PermissionDecision::Allow,
     );
     let router = app(state);
+    let host_path = format!(
+        "/checkouts/{}/permissions/legacy/invalidate?source={source_id}",
+        first.id
+    );
+    let host = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", &host_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(host["hosted"], true);
+    assert!(
+        bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("npm test")),
+        "read-only host discovery must retain cached grants"
+    );
+    let other_host_path = format!(
+        "/checkouts/{}/permissions/legacy/invalidate?source={other_source_id}",
+        first.id
+    );
+    let other_host = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", &other_host_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(other_host["hosted"], false);
     assert_eq!(
         router
             .clone()
@@ -18100,6 +18133,29 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
     );
     assert_eq!(preview["count"], 1);
     assert!(preview.get("rules").is_none());
+    let withdraw = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{}/permissions/legacy/invalidate", first.id),
+                Some(&serde_json::json!({"source":source_id}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(withdraw["hosted"], true);
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path).len(),
+        2
+    );
+    assert!(
+        !bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("npm test"))
+    );
     let apply_path = format!("/checkouts/{}/permissions/legacy", first.id);
     let denied = serde_json::json!({"source":source_id,"confirm":false}).to_string();
     assert_eq!(
@@ -18144,6 +18200,13 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
             .rules()
             .iter()
             .any(|rule| rule.exact_action.as_deref() == Some("npm test"))
+    );
+    assert!(
+        bridge
+            .rules()
+            .iter()
+            .any(|rule| rule.exact_action.as_deref() == Some("cargo test")),
+        "unrelated legacy answers are restored after deletion"
     );
     assert_eq!(
         bridge.request_blocking_timeout_for_project(

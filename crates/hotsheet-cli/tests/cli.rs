@@ -648,6 +648,197 @@ fn hs2_afsf4x_permission_discard_requires_explicit_confirmation() {
 }
 
 #[test]
+fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let project = root.path().join("project");
+    let anchor = root.path().join("anchor.hs2");
+    let extra = root.path().join("extra.hs2");
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::FsStore::init(&anchor, &hotsheet_ticketing::StoreMetadata::new("AN"))
+        .unwrap();
+    let extra_store =
+        hotsheet_ticketing::FsStore::init(&extra, &hotsheet_ticketing::StoreMetadata::new("EX"))
+            .unwrap();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let checkout = registry
+        .register(&project, None, None, vec![anchor.clone(), extra.clone()])
+        .unwrap();
+    let source_id = checkout
+        .sources
+        .iter()
+        .find(|source| source.locator == extra.canonicalize().unwrap().display().to_string())
+        .unwrap()
+        .connection_id
+        .clone();
+    let vault = home.join("permissions").join(format!(
+        "{}.json",
+        hotsheet_ticketing::git_connection_id(&extra_store)
+    ));
+    std::fs::create_dir_all(vault.parent().unwrap()).unwrap();
+    std::fs::write(&vault, "synthetic vault fixture").unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &anchor);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "synthetic-secret",
+            "store_path": anchor.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    assert!(!hotsheet_cli::external_launch::instance_path(&home, &extra).exists());
+    let server = std::thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut requests = Vec::new();
+        for body in [
+            r#"{"hosted":true}"#,
+            r#"{"count":0}"#,
+            r#"{"hosted":true}"#,
+            r#"{"hosted":true}"#,
+            r#"{"discarded":0}"#,
+        ] {
+            let (stream, _) = loop {
+                match listener.accept() {
+                    Ok(accepted) => break accepted,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "discard did not reach host"
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("accept failed: {error}"),
+                }
+            };
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            let request = line.trim_end().to_string();
+            let mut length = 0;
+            let mut secret = String::new();
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+                    secret = value.trim().to_owned();
+                }
+            }
+            let mut received = vec![0; length];
+            reader.read_exact(&mut received).unwrap();
+            assert_eq!(secret, "synthetic-secret");
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            reader.get_mut().flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let mut preview = hs(&project);
+    preview.env("HOTSHEET_HOME", &home).args([
+        "permission-discard",
+        "--project",
+        &checkout.id,
+        "--source",
+        &source_id,
+    ]);
+    preview
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"count\": 0"));
+    let mut apply = hs(&project);
+    apply.env("HOTSHEET_HOME", &home).args([
+        "permission-discard",
+        "--project",
+        &checkout.id,
+        "--source",
+        &source_id,
+        "--confirm",
+    ]);
+    apply
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"discarded\": 0"));
+    let requests = server.join().unwrap();
+    assert!(requests[0].starts_with("GET /checkouts/"));
+    assert!(requests[0].contains("/permissions/legacy/invalidate?source="));
+    assert!(requests[1].contains("/permissions/legacy?source="));
+    assert!(requests[2].contains("/permissions/legacy/invalidate?source="));
+    assert!(requests[3].starts_with("POST /checkouts/"));
+    assert!(requests[4].starts_with("DELETE /checkouts/"));
+}
+
+#[test]
+fn hs2_54ebk3_permission_discard_fails_closed_for_unavailable_host() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let project = root.path().join("project");
+    let store_path = root.path().join("tickets.hs2");
+    std::fs::create_dir_all(&project).unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let checkout = registry
+        .register(&project, None, None, vec![store_path.clone()])
+        .unwrap();
+    let vault = home.join("permissions").join(format!(
+        "{}.json",
+        hotsheet_ticketing::git_connection_id(&store)
+    ));
+    std::fs::create_dir_all(vault.parent().unwrap()).unwrap();
+    std::fs::write(&vault, "synthetic vault fixture").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store_path);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": "http://127.0.0.1:0",
+            "secret": "synthetic-secret",
+            "store_path": store_path.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut discard = hs(&project);
+    discard.env("HOTSHEET_HOME", &home).args([
+        "permission-discard",
+        "--project",
+        &checkout.id,
+        "--source",
+        &checkout.sources[0].connection_id,
+        "--confirm",
+    ]);
+    discard
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("probing permission host"));
+    assert_eq!(std::fs::read(&vault).unwrap(), b"synthetic vault fixture");
+}
+
+#[test]
 fn setup_rulesync_owner_preserves_generated_files_and_reports_external_ownership() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

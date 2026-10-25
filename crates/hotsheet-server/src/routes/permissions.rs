@@ -44,6 +44,19 @@ pub(crate) struct LegacyPermissionDiscardOutcome {
     discarded: usize,
 }
 
+#[derive(Serialize)]
+pub(crate) struct LegacyPermissionHost {
+    hosted: bool,
+}
+
+pub(crate) async fn probe_checkout_legacy_permission_host(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<LegacyPermissionQuery>,
+) -> Result<Json<LegacyPermissionHost>, ApiError> {
+    legacy_permission_host(&state, &reference, &query.source, false)
+}
+
 fn legacy_permission_source(
     state: &AppState,
     reference: &str,
@@ -84,6 +97,66 @@ fn legacy_permission_source(
         ));
     }
     Ok((checkout, source))
+}
+
+/// Withdraw source-scoped cached grants before a headless caller deletes the vault.
+/// The caller sends this to every live machine host, including hosts whose primary
+/// store is unrelated to the selected source (HS2-54EBK3).
+pub(crate) async fn invalidate_checkout_legacy_permissions(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<LegacyPermissionQuery>,
+) -> Result<Json<LegacyPermissionHost>, ApiError> {
+    legacy_permission_host(&state, &reference, &body.source, true)
+}
+
+fn legacy_permission_host(
+    state: &AppState,
+    reference: &str,
+    source_id: &str,
+    invalidate: bool,
+) -> Result<Json<LegacyPermissionHost>, ApiError> {
+    if state.permission_rules_loading.load(Ordering::Acquire) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "permission rules still loading",
+        ));
+    }
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let store = checkout
+        .verified_git_source(source_id)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    let paths = state.permission_rule_paths.lock_or_recover();
+    let source = paths.iter().find_map(|(project, path)| {
+        (!project.is_empty()
+            && !project.starts_with("checkout:")
+            && crate::watcher::same_path(FsPath::new(project), store.root()))
+        .then(|| path.clone())
+    });
+    let aliases = source.as_ref().map(|source| {
+        paths
+            .iter()
+            .filter(|(project, path)| {
+                !project.starts_with("checkout:") && crate::watcher::same_path(path, source)
+            })
+            .map(|(project, _)| project.clone())
+            .collect::<Vec<_>>()
+    });
+    drop(paths);
+    if let Some(aliases) = aliases {
+        if invalidate {
+            for alias in aliases {
+                state.permissions.drop_durable_rules_for_project(&alias);
+                emit_permission_rules_changed(state, &alias);
+            }
+        }
+        Ok(Json(LegacyPermissionHost { hosted: true }))
+    } else {
+        Ok(Json(LegacyPermissionHost { hosted: false }))
+    }
 }
 
 /// Count the old answers for one verified Git source without exposing action content.
@@ -169,7 +242,7 @@ pub(crate) async fn discard_checkout_legacy_permissions(
     for alias in aliases {
         let restored = rules
             .iter()
-            .filter(|rule| rule.project == alias)
+            .filter(|rule| alias.is_empty() || rule.project == alias)
             .cloned()
             .map(|mut rule| {
                 rule.project = alias.clone();

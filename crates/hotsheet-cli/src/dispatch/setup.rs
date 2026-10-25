@@ -1,5 +1,6 @@
 //! AI tool setup, settings, plugins, permission hooks, launch, and driven turns.
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -292,22 +293,55 @@ fn cmd_permission_discard(project: &str, source_id: &str, confirm: bool) -> Resu
         bail!("legacy permission vault is missing; reapprove actions in the project scope");
     }
     let legacy_project = store.root().display().to_string();
-    let instance = hotsheet_cli::external_launch::instance_path(&home, store.root());
-    if instance.exists() {
+    let hosts = permission_discard_hosts(&home)?;
+    if !hosts.is_empty() {
         let route = format!(
             "checkouts/{}/permissions/legacy",
             urlencoding_component(&checkout.id.to_string())
         );
+        let probe = format!(
+            "{route}/invalidate?source={}",
+            urlencoding_component(source_id)
+        );
+        let mut hosted = Vec::with_capacity(hosts.len());
+        for host in &hosts {
+            let response = super::server::server_json_with_body(host, "GET", &probe, None)
+                .with_context(|| format!("probing permission host {}", host.store_path))?;
+            hosted.push(
+                response["hosted"]
+                    .as_bool()
+                    .context("invalid permission host response")?,
+            );
+        }
+        let index = unique_permission_host(&hosted)?;
+        if confirm {
+            let body = serde_json::json!({"source": source_id});
+            for (candidate, host) in hosts.iter().enumerate() {
+                let response = super::server::server_json_with_body(
+                    host,
+                    "POST",
+                    &format!("{route}/invalidate"),
+                    Some(&body),
+                )
+                .with_context(|| format!("invalidating permission host {}", host.store_path))?;
+                if response["hosted"].as_bool() != Some(candidate == index) {
+                    bail!("permission host inventory changed; no answers were deleted");
+                }
+            }
+            if permission_discard_hosts(&home)? != hosts {
+                bail!("permission host inventory changed; no answers were deleted");
+            }
+        }
         let result = if confirm {
-            super::server::local_server_json_with_body(
-                store.root(),
+            super::server::server_json_with_body(
+                &hosts[index],
                 "DELETE",
                 &route,
                 Some(&serde_json::json!({"source": source_id, "confirm": true})),
             )?
         } else {
-            super::server::local_server_json_with_body(
-                store.root(),
+            super::server::server_json_with_body(
+                &hosts[index],
                 "GET",
                 &format!("{route}?source={}", urlencoding_component(source_id)),
                 None,
@@ -315,18 +349,6 @@ fn cmd_permission_discard(project: &str, source_id: &str, confirm: bool) -> Resu
         };
         println!("{}", serde_json::to_string_pretty(&result)?);
         return Ok(());
-    }
-    let instances = home.join("instances");
-    if confirm && instances.exists() {
-        let entries =
-            std::fs::read_dir(&instances).context("checking live server instance records")?;
-        for entry in entries {
-            if entry?.path().extension().is_some_and(|ext| ext == "json") {
-                bail!(
-                    "a Hot Sheet server may cache these answers; use Settings or stop running servers before retrying"
-                );
-            }
-        }
     }
     if !confirm {
         let count = hotsheet_aitools::count_legacy_permission_rules(&source, &legacy_project)?;
@@ -344,6 +366,63 @@ fn cmd_permission_discard(project: &str, source_id: &str, confirm: bool) -> Resu
     let discarded = hotsheet_aitools::discard_legacy_permission_rules(&source, &legacy_project)?;
     println!("Discarded {discarded} legacy answer(s). Future actions require fresh approval.");
     Ok(())
+}
+
+fn unique_permission_host(hosted: &[bool]) -> Result<usize> {
+    let mut selected = None;
+    for (index, value) in hosted.iter().enumerate() {
+        if *value && selected.replace(index).is_some() {
+            bail!(
+                "conflicting live Hot Sheet hosts serve this Git source; no answers were deleted"
+            );
+        }
+    }
+    selected.context("no live Hot Sheet host serves this Git source; no answers were deleted")
+}
+
+fn permission_discard_hosts(
+    home: &Path,
+) -> Result<Vec<hotsheet_cli::external_launch::ServerInstance>> {
+    let directory = home.join("instances");
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+    let mut records = std::fs::read_dir(&directory)
+        .context("checking live server instance records")?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    records.sort();
+    let mut hosts = Vec::new();
+    let mut seen = HashMap::<u32, (String, String)>::new();
+    for path in records {
+        if path.extension().is_none_or(|extension| extension != "json") {
+            continue;
+        }
+        let record: hotsheet_cli::external_launch::ServerInstance =
+            serde_json::from_slice(&std::fs::read(&path)?)
+                .with_context(|| format!("reading permission host record {}", path.display()))?;
+        let store = Path::new(&record.store_path);
+        if hotsheet_cli::external_launch::instance_path(home, store) != path {
+            bail!(
+                "permission host record has an unexpected store identity: {}",
+                path.display()
+            );
+        }
+        let host = hotsheet_cli::external_launch::discover_running_server(store, home)
+            .with_context(|| format!("permission host {} is unavailable", record.store_path))?;
+        if let Some((url, secret)) = seen.get(&host.pid) {
+            if url != &host.url || secret != &host.secret {
+                bail!(
+                    "conflicting instance records for Hot Sheet host {}",
+                    host.pid
+                );
+            }
+        } else {
+            seen.insert(host.pid, (host.url.clone(), host.secret.clone()));
+            hosts.push(host);
+        }
+    }
+    Ok(hosts)
 }
 
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
@@ -1761,5 +1840,22 @@ pub(crate) fn render_value(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s.clone(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod permission_discard_tests {
+    use super::unique_permission_host;
+
+    #[test]
+    fn hs2_54ebk3_requires_exactly_one_host() {
+        assert_eq!(unique_permission_host(&[false, true, false]).unwrap(), 1);
+        assert!(unique_permission_host(&[false, false]).is_err());
+        assert!(
+            unique_permission_host(&[true, true])
+                .unwrap_err()
+                .to_string()
+                .contains("conflicting")
+        );
     }
 }

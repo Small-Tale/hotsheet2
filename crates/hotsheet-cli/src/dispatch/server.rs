@@ -722,6 +722,15 @@ pub(crate) fn local_server_json_with_body(
         store,
         &hotsheet_plugins::hotsheet_home(),
     )?;
+    server_json_with_body(&server, method, route, body)
+}
+
+pub(crate) fn server_json_with_body(
+    server: &hotsheet_cli::external_launch::ServerInstance,
+    method: &str,
+    route: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value> {
     let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
     let request = ureq::request(method, &endpoint)
         .set("X-Hotsheet-Secret", &server.secret)
