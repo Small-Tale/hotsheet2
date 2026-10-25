@@ -355,22 +355,41 @@ mod tests {
             })
         };
         let mut cycles = 0;
+        let mut unexpected = None;
         while !writer.is_finished() || cycles < 3 {
             if cycles % 2 == 0 {
                 peer_pushes(&peer, &format!("peer-{cycles}.md"));
             }
             let report = sync_once(&store_root);
-            assert!(
-                matches!(report, SyncReport::Synced { .. } | SyncReport::UpToDate),
-                "cycle {cycles}: {report:?}"
-            );
+            // HS2-KXH2ZV: a background autocommit push can update origin's
+            // tracking ref during fetch. Offline is a retryable sync result.
+            // Keep the repository alive until the writer has joined, even if
+            // an unexpected result needs to fail the test.
+            if !matches!(
+                report,
+                SyncReport::Synced { .. } | SyncReport::UpToDate | SyncReport::Offline
+            ) {
+                unexpected = Some((cycles, report));
+                break;
+            }
             cycles += 1;
         }
         writer.join().unwrap();
-        assert!(matches!(
-            sync_once(&store_root),
-            SyncReport::Synced { .. } | SyncReport::UpToDate
-        ));
+        assert!(
+            unexpected.is_none(),
+            "unexpected sync result: {unexpected:?}"
+        );
+        let mut settled = SyncReport::Offline;
+        for _ in 0..20 {
+            settled = sync_once(&store_root);
+            if !matches!(settled, SyncReport::Offline) {
+                break;
+            }
+        }
+        assert!(
+            matches!(settled, SyncReport::Synced { .. } | SyncReport::UpToDate),
+            "sync did not settle after the writer finished: {settled:?}"
+        );
         assert!(clean(&store_root));
         ok(&peer, &["pull", "--quiet"]);
         for n in 0..writes {
