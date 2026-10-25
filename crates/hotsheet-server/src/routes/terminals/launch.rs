@@ -139,6 +139,13 @@ pub(crate) async fn open_terminal(
         rows: 24,
         cols: 80,
         replay_bytes: usize::try_from(replay_bytes).unwrap_or(usize::MAX),
+        provenance: Some(hotsheet_terminals::ProcessProvenance {
+            machine_home: state.machine_home().to_path_buf(),
+            supervisor: "machine-server".into(),
+            project_id: term_key(&state, &id).0,
+            session_id: id.clone(),
+            binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+        }),
     };
     let (term, newly_spawned) = state
         .terminals

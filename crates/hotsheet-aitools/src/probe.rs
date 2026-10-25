@@ -7,12 +7,13 @@
 //! back to the plugin manifest. Every in-flight probe is also tracked so a stopping server
 //! can kill them all and refuse new ones ([`stop_probes`]) instead of orphaning them.
 
+use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
 use hotsheet_sync::LockExt;
 use std::collections::HashSet;
 use std::io::Read;
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, mpsc};
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::Duration;
 
 /// Default deadline for one probe (a `--version` or catalog listing).
@@ -27,6 +28,32 @@ static PROBE_TIMEOUT_MS: AtomicU64 = AtomicU64::new(DEFAULT_PROBE_TIMEOUT.as_mil
 /// probe started by any caller (detection, catalog listing, tests) from a signal path that
 /// has no `AppState`, and the timeout is set once from a process-level CLI flag.
 static IN_FLIGHT: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+static JOURNAL: OnceLock<ProcessJournal> = OnceLock::new();
+
+/// Configure machine-local probe diagnostics once in a production host. In-process
+/// tests and embedded callers that do not opt in never write to a developer's home.
+pub fn configure_process_journal(home: impl AsRef<std::path::Path>) {
+    let _ = JOURNAL.set(ProcessJournal::at(home));
+}
+
+fn record_probe(pid: u32) -> Option<(ProcessJournal, String)> {
+    let journal = JOURNAL.get()?.clone();
+    match journal.start(LaunchMeta {
+        pid,
+        supervisor_pid: std::process::id(),
+        supervisor: "hotsheet".into(),
+        purpose: Purpose::AiProbe,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }) {
+        Ok(record) => Some((journal, record.launch_id)),
+        Err(error) => {
+            eprintln!("Hot Sheet probe journal unavailable: {}", error.kind());
+            None
+        }
+    }
+}
 
 /// Set once the process is stopping: no new probe starts, and one that raced the stop is
 /// killed as soon as it registers.
@@ -84,6 +111,7 @@ pub fn probes_stopped() -> bool {
 pub struct ProbeGroup {
     pid: u32,
     finished: std::sync::Arc<Mutex<bool>>,
+    record: std::sync::Arc<Mutex<Option<(ProcessJournal, String)>>>,
     disarm: Option<mpsc::Sender<()>>,
 }
 
@@ -93,16 +121,19 @@ impl ProbeGroup {
     pub fn track(pid: u32, deadline: Duration) -> Self {
         track(pid, true);
         let finished = std::sync::Arc::new(Mutex::new(false));
+        let record = std::sync::Arc::new(Mutex::new(record_probe(pid)));
         let (disarm, disarmed) = mpsc::channel::<()>();
         let watchdog = finished.clone();
+        let watchdog_record = record.clone();
         std::thread::spawn(move || {
             if let Err(mpsc::RecvTimeoutError::Timeout) = disarmed.recv_timeout(deadline) {
-                finish(pid, &watchdog);
+                finish(pid, &watchdog, &watchdog_record);
             }
         });
         Self {
             pid,
             finished,
+            record,
             disarm: Some(disarm),
         }
     }
@@ -111,7 +142,7 @@ impl ProbeGroup {
 impl Drop for ProbeGroup {
     fn drop(&mut self) {
         drop(self.disarm.take());
-        finish(self.pid, &self.finished);
+        finish(self.pid, &self.finished, &self.record);
     }
 }
 
@@ -120,7 +151,7 @@ impl Drop for ProbeGroup {
 /// [`kill_in_flight_probes`] can still see is never one the kernel could have reused. Its
 /// `Child` handle (owned by a stream reader) is dropped without waiting, so without this
 /// the killed child would linger as a zombie.
-fn finish(pid: u32, finished: &Mutex<bool>) {
+fn finish(pid: u32, finished: &Mutex<bool>, record: &Mutex<Option<(ProcessJournal, String)>>) {
     let mut finished = finished.lock_or_recover();
     if *finished {
         return;
@@ -133,6 +164,9 @@ fn finish(pid: u32, finished: &Mutex<bool>) {
             set.remove(&pid);
         }
         reap(pid);
+    }
+    if let Some((journal, launch_id)) = record.lock_or_recover().take() {
+        let _ = journal.finish(&launch_id, ExitReason::Killed);
     }
 }
 
@@ -204,6 +238,7 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
         .spawn()
         .map_err(|error| format!("starting '{program}': {error}"))?;
     let pid = child.id();
+    let record = record_probe(pid);
     track(pid, true);
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
@@ -226,9 +261,20 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
     if timed_out {
         kill_group(pid);
     }
-    let status = waiter
-        .join()
-        .map_err(|_| format!("'{program}' waiter panicked"))?;
+    let status = waiter.join();
+    if let Some((journal, launch_id)) = record {
+        let reason = if timed_out {
+            ExitReason::Killed
+        } else {
+            match &status {
+                Ok(Ok(code)) if code.success() => ExitReason::Completed,
+                Ok(Ok(_)) => ExitReason::Failed,
+                _ => ExitReason::Unknown,
+            }
+        };
+        let _ = journal.finish(&launch_id, reason);
+    }
+    let status = status.map_err(|_| format!("'{program}' waiter panicked"))?;
     let status = status.map_err(|error| format!("waiting for '{program}': {error}"))?;
     let stdout = stdout.join().unwrap_or_default();
     let stderr = stderr.join().unwrap_or_default();

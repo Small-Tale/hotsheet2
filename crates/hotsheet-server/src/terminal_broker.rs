@@ -231,6 +231,10 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
     } else {
         command.arg(socket).arg(project);
     }
+    command.env(
+        "HOTSHEET_PROCESS_JOURNAL_HOME",
+        hotsheet_plugins::hotsheet_home(),
+    );
     command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

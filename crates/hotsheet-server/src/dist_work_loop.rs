@@ -198,6 +198,7 @@ pub fn outcome_from_turn(
 /// the route-back (HS2-XCTAHM). All optional — a bare loop drives with none.
 #[derive(Clone, Default)]
 pub struct LiveDriveCtx {
+    pub journal_home: Option<std::path::PathBuf>,
     pub permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
     pub drive_registry:
         Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
@@ -285,6 +286,7 @@ fn drive_one_ticket(
         tool,
         hotsheet_aitools::TriggerOptions {
             envs,
+            journal_home: ctx.journal_home.clone(),
             persistent_codex_home: persistent_home,
             ..hotsheet_aitools::TriggerOptions::default()
         },

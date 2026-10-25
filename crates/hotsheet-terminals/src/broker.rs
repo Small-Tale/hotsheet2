@@ -514,6 +514,15 @@ async fn handle_request(
                 replay_bytes: replay_bytes.map_or(crate::SCROLLBACK_BYTES, |bytes| {
                     usize::try_from(bytes).unwrap_or(usize::MAX)
                 }),
+                provenance: std::env::var_os("HOTSHEET_PROCESS_JOURNAL_HOME").map(|home| {
+                    crate::ProcessProvenance {
+                        machine_home: std::path::PathBuf::from(home),
+                        supervisor: "terminal-broker".into(),
+                        project_id: project.to_string(),
+                        session_id: id.clone(),
+                        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+                    }
+                }),
             };
             match manager.get_or_spawn_with_status(key(&id), spec) {
                 Ok((term, spawned)) => {

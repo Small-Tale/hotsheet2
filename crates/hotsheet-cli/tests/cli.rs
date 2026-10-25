@@ -8,6 +8,41 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[test]
+fn hs2_gdcmxe_processes_lists_machine_local_session_provenance() {
+    use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
+
+    let home = tempfile::tempdir().unwrap();
+    let journal = ProcessJournal::at(home.path());
+    let record = journal
+        .start(LaunchMeta {
+            pid: 42,
+            supervisor_pid: 7,
+            supervisor: "test-host".into(),
+            purpose: Purpose::AiChannel,
+            project_id: Some("project-1".into()),
+            session_id: Some("session-1".into()),
+            binary_revision: Some("rev-1".into()),
+        })
+        .unwrap();
+    journal
+        .finish(&record.launch_id, ExitReason::Completed)
+        .unwrap();
+    let output = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .arg("processes")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let records: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(records[0]["launch_id"], record.launch_id);
+    assert_eq!(records[0]["session_id"], "session-1");
+    assert_eq!(records[0]["exit_reason"], "completed");
+    assert!(records[0].get("command").is_none());
+    assert!(records[0].get("args").is_none());
+}
+
 // HS2-QXYWNH: launch tests start a detached server. Keep tool configuration in the
 // fixture and stop the server before the temporary home disappears.
 #[cfg(unix)]

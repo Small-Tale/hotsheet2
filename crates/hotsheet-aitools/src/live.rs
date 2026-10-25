@@ -17,7 +17,7 @@ use crate::codex::{
 use crate::drive::{DoneReason, DriveCtx, TurnControl, TurnEvent};
 use crate::host::{TriggerError, TriggerRequest, trigger};
 use crate::registry::{ConnectionRegistry, Role};
-use crate::system::SystemSpawner;
+use crate::system::TrackedSystemSpawner;
 
 /// What to launch, and how to keep it from reaching HS1 (HS2-103 safety).
 pub struct LiveTrigger {
@@ -43,6 +43,10 @@ pub struct LiveTrigger {
     pub permission_mode: Option<String>,
     /// Extra env for the launched process (e.g. an isolated `CODEX_HOME`).
     pub env: Vec<(String, String)>,
+    /// Explicit machine home for child-process diagnostics; absent in isolated tests.
+    pub journal_home: Option<PathBuf>,
+    /// Store identity matching the server instance registration (HS2-GDCMXE).
+    pub project_id: String,
     /// For an app-server tool: drive the **shared daemon** for this connection's
     /// `CODEX_HOME` (one codex instance reused across turns) instead of spawning a fresh
     /// `app-server` process per connection (HS2-B7C66H). Requires `CODEX_HOME` in `env`.
@@ -110,13 +114,23 @@ pub fn run_trigger_controlled(
         .as_ref()
         .ok_or_else(|| LiveError::NotDrivable(plugin.id().to_string()))?;
     let program = spec.program.clone();
-    let spawner = SystemSpawner;
+    let process_context = |purpose| {
+        t.journal_home
+            .as_ref()
+            .map(|home| crate::procio::ProcessContext {
+                journal: hotsheet_process_journal::ProcessJournal::at(home),
+                project_id: t.project_id.clone(),
+                session_id: t.conn_id.clone(),
+                purpose,
+            })
+    };
+    let spawner = TrackedSystemSpawner(process_context(hotsheet_process_journal::Purpose::AiSpawn));
 
     // Build the tool-specific live connection, then a DriveCtx, then drive within scope so
     // the connection outlives the turn.
     match spec.transport.as_str() {
         "claude-channel" => {
-            let transport = ClaudeStreamTransport::spawn(
+            let transport = ClaudeStreamTransport::spawn_with_context(
                 &program,
                 &t.cwd,
                 ClaudeStreamSpawnOptions {
@@ -127,6 +141,7 @@ pub fn run_trigger_controlled(
                     effort: t.effort.as_deref(),
                     env: &t.env,
                 },
+                process_context(hotsheet_process_journal::Purpose::AiChannel),
             )
             .map_err(|source| LiveError::Launch {
                 program: program.clone(),
@@ -161,13 +176,16 @@ pub fn run_trigger_controlled(
             let app = if t.shared_daemon {
                 connect_shared_daemon(&program, &t.env)?
             } else {
-                let transport =
-                    StdioTransport::spawn(&program, &t.cwd, &t.env).map_err(|source| {
-                        LiveError::Launch {
-                            program: program.clone(),
-                            source,
-                        }
-                    })?;
+                let transport = StdioTransport::spawn_with_context(
+                    &program,
+                    &t.cwd,
+                    &t.env,
+                    process_context(hotsheet_process_journal::Purpose::AiAppServer),
+                )
+                .map_err(|source| LiveError::Launch {
+                    program: program.clone(),
+                    source,
+                })?;
                 CodexAppServer::connect(transport)
                     .map_err(|e| LiveError::Connect(program.clone(), e.to_string()))?
             };
@@ -206,11 +224,16 @@ pub fn run_trigger_controlled(
             drive_and_stream(plugin, t, &ctx, registry, control, on_event)
         }
         "acp" => {
-            let transport =
-                AcpStdio::spawn(&program, &t.cwd, &t.env).map_err(|source| LiveError::Launch {
-                    program: program.clone(),
-                    source,
-                })?;
+            let transport = AcpStdio::spawn_with_context(
+                &program,
+                &t.cwd,
+                &t.env,
+                process_context(hotsheet_process_journal::Purpose::AiAcp),
+            )
+            .map_err(|source| LiveError::Launch {
+                program: program.clone(),
+                source,
+            })?;
             let acp = AcpSession::connect(transport).map_err(LiveError::Drive)?;
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),

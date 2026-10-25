@@ -619,6 +619,20 @@ started it; `GET /health` and `GET /compatibility` report the same `launcher` an
 the one running. `serve --list` prints those fields per server and prunes registration
 files whose recorded pid is dead (invalid records are kept for inspection), and
 `hotsheet-server --stop` prints the launcher and build of the process it signals.
+
+**Child-process diagnostics (HS2-GDCMXE).** `hotsheet-cli processes` reads the
+machine-local `${HOTSHEET_HOME:-~/.hotsheet2}/processes` journal as JSON without a
+server or selected store. Tracked PTY, AI drive, and discovery-probe launches have
+a unique ID in addition to their PID, the
+supervisor PID and label, a fixed purpose, project and session identifiers when
+known, the supervising build revision when available, and observed start/end times
+and exit reason. It stores no command, arguments, environment, output, or customer
+content. The journal retains the newest 1,024 ended and 1,024 unresolved records
+for at most 30 days, sweeping on each new launch. After a supervisor crash, a
+record with no observed exit remains unresolved; it does not assert that the child
+is still alive. The existing server instance registration supplies the server's
+launcher and build identity when correlating a child with its host. Short-lived
+utility and detached external launches are tracked separately in HS2-G9TF60.
 **Ownership-aware stop (HS2-9AWEX5).** `lifecycle::stop_decision` makes an explicit stop
 refuse a server whose registration names the pinned launcher `local-host-snapshot` (the
 production local host): `hotsheet-server --stop` and `hotsheet-cli serve --stop` exit non-zero

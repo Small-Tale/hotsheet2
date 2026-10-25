@@ -129,6 +129,7 @@ async fn main() -> Result<()> {
     hotsheet_aitools::enable_test_permission_vault();
     init_logging();
     let cli = Cli::parse();
+    hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
 
     if cli.revision_status {
         let status =
@@ -360,6 +361,7 @@ async fn main() -> Result<()> {
         // over POST /permissions steers the tool (HS2-Q1F6HV / HS2-YMR9HE); the server URL +
         // secret let a Claude permission hook reach that route-back (HS2-XCTAHM).
         let ctx = LiveDriveCtx {
+            journal_home: Some(state.machine_home().to_path_buf()),
             permission_bridge: Some(state.permission_bridge()),
             drive_registry: Some(state.drive_registry()),
             server_env: Some((url.clone(), secret.clone())),

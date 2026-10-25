@@ -898,11 +898,20 @@ impl ClaudeStreamTransport {
         cwd: &Path,
         options: ClaudeStreamSpawnOptions<'_>,
     ) -> std::io::Result<Box<Self>> {
+        Self::spawn_with_context(program, cwd, options, None)
+    }
+
+    pub(crate) fn spawn_with_context(
+        program: &str,
+        cwd: &Path,
+        options: ClaudeStreamSpawnOptions<'_>,
+        context: Option<crate::procio::ProcessContext>,
+    ) -> std::io::Result<Box<Self>> {
         let args = stream_args(&options);
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let env = headless_claude_env(options.env, options.permission_mode);
-        Ok(Box::new(Self(StreamChild::spawn(
-            program, &refs, cwd, &env,
+        Ok(Box::new(Self(StreamChild::spawn_with_context(
+            program, &refs, cwd, &env, false, context,
         )?)))
     }
 }

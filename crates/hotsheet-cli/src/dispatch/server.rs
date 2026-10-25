@@ -13,6 +13,12 @@ use super::{Ctx, misrouted};
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     match cmd {
+        Cmd::Processes => {
+            let journal =
+                hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home());
+            println!("{}", serde_json::to_string_pretty(&journal.list()?)?);
+            Ok(())
+        }
         Cmd::Commands { cmd } => cmd_commands(path, cmd),
         Cmd::Terminal { cmd } => cmd_terminal(path, cmd),
         Cmd::Lifecycle { cmd } => match cmd {

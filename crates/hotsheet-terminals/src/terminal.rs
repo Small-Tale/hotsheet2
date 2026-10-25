@@ -73,6 +73,17 @@ pub struct TermSpec {
     /// How much recent output to retain for a reattaching viewer (HS2-Y5DYC0), clamped to
     /// [`REPLAY_BYTES_BOUNDS`](crate::limits::REPLAY_BYTES_BOUNDS) at spawn.
     pub replay_bytes: usize,
+    /// Machine-local diagnostic identity for a Hot Sheet managed PTY (HS2-GDCMXE).
+    pub provenance: Option<ProcessProvenance>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessProvenance {
+    pub machine_home: PathBuf,
+    pub supervisor: String,
+    pub project_id: String,
+    pub session_id: String,
+    pub binary_revision: Option<String>,
 }
 
 impl TermSpec {
@@ -87,6 +98,7 @@ impl TermSpec {
             rows: 24,
             cols: 80,
             replay_bytes: SCROLLBACK_BYTES,
+            provenance: None,
         }
     }
 }
@@ -263,6 +275,7 @@ pub struct Terminal {
     worker_id: Option<String>,
     /// A trailing re-decide is scheduled for a size change the min-interval deferred.
     trailing_resize: Arc<std::sync::atomic::AtomicBool>,
+    exit_hint: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 /// Wall-clock milliseconds, the same clock the terminal's callers pass as `now_ms`.
@@ -385,6 +398,7 @@ fn unread_bytes(fd: std::os::unix::io::RawFd) -> usize {
 impl Terminal {
     /// Spawn `spec` in a fresh PTY, scrubbing the environment and starting the drain thread.
     pub fn spawn(spec: TermSpec) -> Result<Terminal, TermError> {
+        let mut spec = spec;
         let worker_id = spec
             .env
             .iter()
@@ -427,6 +441,68 @@ impl Terminal {
         let reader = pair.master.try_clone_reader().map_err(pty_err)?;
         let writer = pair.master.take_writer().map_err(pty_err)?;
         let child = Arc::new(Mutex::new(child));
+        let exit_hint = if let Some(provenance) = spec.provenance.take() {
+            use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
+            let pid = child.with_lock(|child| child.process_id());
+            let journal = ProcessJournal::at(provenance.machine_home);
+            let purpose = match spec.kind {
+                TerminalKind::Shell => Purpose::TerminalShell,
+                TerminalKind::Ai => Purpose::TerminalAi,
+            };
+            let record = pid
+                .ok_or_else(|| std::io::Error::other("spawned terminal PID unavailable"))
+                .and_then(|pid| {
+                    journal.start(LaunchMeta {
+                        pid,
+                        supervisor_pid: std::process::id(),
+                        supervisor: provenance.supervisor,
+                        purpose,
+                        project_id: Some(provenance.project_id),
+                        session_id: Some(provenance.session_id),
+                        binary_revision: provenance.binary_revision,
+                    })
+                });
+            match record {
+                Ok(record) => {
+                    let hint = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    let watched = child.clone();
+                    let hint_for_watch = hint.clone();
+                    std::thread::spawn(move || {
+                        loop {
+                            match watched.with_lock(|child| child.try_wait()) {
+                                Ok(Some(status)) => {
+                                    let reason = if hint_for_watch
+                                        .load(std::sync::atomic::Ordering::Relaxed)
+                                    {
+                                        ExitReason::Killed
+                                    } else if status.success() {
+                                        ExitReason::Completed
+                                    } else {
+                                        ExitReason::Failed
+                                    };
+                                    let _ = journal.finish(&record.launch_id, reason);
+                                    break;
+                                }
+                                Ok(None) => {
+                                    std::thread::sleep(std::time::Duration::from_millis(100))
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                    });
+                    Some(hint)
+                }
+                Err(error) => {
+                    eprintln!(
+                        "Hot Sheet terminal process journal unavailable: {}",
+                        error.kind()
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
         // HS2-RA494E: a non-blocking master so a killed child can never strand the input
         // writer in a kernel write on a full input buffer (Linux does not wake it).
         #[cfg(unix)]
@@ -496,6 +572,7 @@ impl Terminal {
             size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
             worker_id,
             trailing_resize: Arc::default(),
+            exit_hint,
         })
     }
 
@@ -698,6 +775,9 @@ impl Terminal {
 
     /// Kill the child process.
     pub fn kill(&self) -> Result<(), TermError> {
+        if let Some(hint) = &self.exit_hint {
+            hint.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         self.child.lock_or_recover().kill().map_err(TermError::Io)
     }
 }
@@ -707,6 +787,33 @@ mod tests {
     use super::*;
     use std::sync::Barrier;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn hs2_gdcmxe_terminal_launch_records_session_and_exit() {
+        let home = tempfile::tempdir().unwrap();
+        let mut spec = TermSpec::new("true");
+        spec.provenance = Some(ProcessProvenance {
+            machine_home: home.path().to_path_buf(),
+            supervisor: "test-host".into(),
+            project_id: "project-1".into(),
+            session_id: "session-1".into(),
+            binary_revision: Some("rev-1".into()),
+        });
+        let term = Terminal::spawn(spec).unwrap();
+        let journal = hotsheet_process_journal::ProcessJournal::at(home.path());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let records = journal.list().unwrap();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].session_id.as_deref(), Some("session-1"));
+            if records[0].exit_reason == Some(hotsheet_process_journal::ExitReason::Completed) {
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!term.is_alive());
+    }
 
     fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
         let deadline = Instant::now() + Duration::from_secs(secs);

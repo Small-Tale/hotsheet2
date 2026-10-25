@@ -144,11 +144,22 @@ impl AcpStdio {
         cwd: &Path,
         env: &[(String, String)],
     ) -> std::io::Result<Box<Self>> {
-        Ok(Box::new(Self(StreamChild::spawn(
+        Self::spawn_with_context(program, cwd, env, None)
+    }
+
+    pub(crate) fn spawn_with_context(
+        program: &str,
+        cwd: &Path,
+        env: &[(String, String)],
+        context: Option<crate::procio::ProcessContext>,
+    ) -> std::io::Result<Box<Self>> {
+        Ok(Box::new(Self(StreamChild::spawn_with_context(
             program,
             &["acp"],
             cwd,
             env,
+            false,
+            context,
         )?)))
     }
 }

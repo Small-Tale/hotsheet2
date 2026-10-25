@@ -15,6 +15,8 @@ test-permission-vault = []
 
 [dependencies]
 hotsheet-sync.workspace = true
+hotsheet-process-journal.workspace = true
+hotsheet-tls.workspace = true
 hotsheet-plugins.workspace = true
 # Every launched AI tool drops inherited repository-locating GIT_* vars (git::launch, HS2-J79CZF).
 hotsheet-ticketing.workspace = true

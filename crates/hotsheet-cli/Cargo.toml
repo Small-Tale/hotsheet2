@@ -21,6 +21,7 @@ hotsheet-extsync.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
 hotsheet-aitools.workspace = true
+hotsheet-process-journal.workspace = true
 hotsheet-tls.workspace = true
 clap.workspace = true
 anyhow.workspace = true

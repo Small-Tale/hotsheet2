@@ -1,5 +1,14 @@
 # Feature Coverage Matrix
 
+HS2-GDCMXE covers machine-local child-process provenance in
+`hotsheet-process-journal` unit tests (launch, exit, PID reuse, unresolved crash
+recovery, corrupt record and retention), `hotsheet-terminals` PTY and real broker
+tests, `hotsheet-aitools` stream and spawn lifecycle tests, and
+`hotsheet-cli/tests/cli.rs` for the headless JSON inventory. Manual orphan
+investigation compares an unresolved record's supervisor PID and session ID with
+the machine-server instance registration; an unended record alone does not prove
+that its child remains alive.
+
 HS2-6ZA2RN covers Project guidance's toolbar search with
 `clients/web/src/guidance-search-model.test.ts` for text, owner/tag chips,
 suggestions, and clearing; `clients/web/tests/guidance.spec.ts` exercises the

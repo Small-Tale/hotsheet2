@@ -13,6 +13,7 @@ members = [
     "crates/hotsheet-tls",
     "crates/hotsheet-extsync",
     "crates/hotsheet-sync",
+    "crates/hotsheet-process-journal",
 ]
 
 [workspace.package]
@@ -83,3 +84,4 @@ hotsheet-tls = { path = "crates/hotsheet-tls" }
 hotsheet-extsync = { path = "crates/hotsheet-extsync" }
 hotsheet-mcp = { path = "crates/hotsheet-mcp" }
 hotsheet-sync = { path = "crates/hotsheet-sync" }
+hotsheet-process-journal = { path = "crates/hotsheet-process-journal" }

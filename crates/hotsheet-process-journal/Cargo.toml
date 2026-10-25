@@ -1,0 +1,18 @@
+[package]
+name = "hotsheet-process-journal"
+description = "Bounded machine-local child-process provenance without commands or credentials."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+ulid.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

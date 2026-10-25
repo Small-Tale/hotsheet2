@@ -544,6 +544,8 @@ enum Cmd {
         #[arg(long, default_value = ".")]
         project: PathBuf,
     },
+    /// List bounded machine-local child-process provenance for orphan investigation.
+    Processes,
     /// Rebuild the on-disk index (SQLite/FTS) from a full store walk. The index is a
     /// disposable cache, so this is always safe — use it after an external edit or if the
     /// index looks stale. Writes to the same path the server reads (docs/03 §3.4), then
@@ -849,6 +851,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let mut cli = Cli::parse();
+    hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
     // `.hotsheet2/store` link walked up from cwd — so a standalone store is found without -C

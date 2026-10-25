@@ -40,7 +40,9 @@ pub use limits::{REPLAY_BYTES_BOUNDS, physical_memory_bytes};
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
 pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
-pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind};
+pub use terminal::{
+    ProcessProvenance, SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind,
+};
 pub use viewer_output::{
     MAX_COALESCED_BYTES, PendingOutput, VIEWER_QUEUE_FRAMES, ViewerClosed, ViewerFrame,
     pump_viewer_output,

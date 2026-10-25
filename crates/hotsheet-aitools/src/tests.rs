@@ -1655,6 +1655,8 @@ fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
         mcp_config: None,
         permission_mode: None,
         env: Vec::new(),
+        journal_home: None,
+        project_id: hotsheet_tls::project_id(cwd),
         shared_daemon: false,
         permission_bridge: None,
         now_ms: 1_000,

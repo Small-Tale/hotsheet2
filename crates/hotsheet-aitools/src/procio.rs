@@ -10,6 +10,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
 use hotsheet_sync::LockExt;
 
 use crate::ports::{ProcessSignals, RpcReader, RpcWriter};
@@ -62,6 +63,15 @@ pub(crate) struct StreamChild {
     pid: u32,
     stdin: ChildStdin,
     stdout: ChildStdout,
+    exit_hint: Arc<std::sync::atomic::AtomicU8>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ProcessContext {
+    pub journal: ProcessJournal,
+    pub project_id: String,
+    pub session_id: String,
+    pub purpose: Purpose,
 }
 
 impl StreamChild {
@@ -72,7 +82,7 @@ impl StreamChild {
         cwd: &Path,
         envs: &[(String, String)],
     ) -> std::io::Result<Self> {
-        Self::spawn_with(program, args, cwd, envs, false)
+        Self::spawn_with_context(program, args, cwd, envs, false, None)
     }
 
     /// [`StreamChild::spawn`], optionally leading its own process group so a short-lived
@@ -83,6 +93,17 @@ impl StreamChild {
         cwd: &Path,
         envs: &[(String, String)],
         own_group: bool,
+    ) -> std::io::Result<Self> {
+        Self::spawn_with_context(program, args, cwd, envs, own_group, None)
+    }
+
+    pub(crate) fn spawn_with_context(
+        program: &str,
+        args: &[&str],
+        cwd: &Path,
+        envs: &[(String, String)],
+        own_group: bool,
+        context: Option<ProcessContext>,
     ) -> std::io::Result<Self> {
         let mut cmd = hotsheet_ticketing::git::launch(program);
         #[cfg(unix)]
@@ -100,14 +121,58 @@ impl StreamChild {
         for (k, v) in envs {
             cmd.env(k, v);
         }
-        let mut child = cmd.spawn()?;
-        let stdin = child.stdin.take().expect("piped stdin");
-        let stdout = child.stdout.take().expect("piped stdout");
+        let child = cmd.spawn()?;
+        let child_id = child.id();
+        let child = Arc::new(Mutex::new(child));
+        let exit_hint = Arc::new(std::sync::atomic::AtomicU8::new(0));
+        if let Some(context) = context {
+            let record = context.journal.start(LaunchMeta {
+                pid: child_id,
+                supervisor_pid: std::process::id(),
+                supervisor: "hotsheet".into(),
+                purpose: context.purpose,
+                project_id: Some(context.project_id),
+                session_id: Some(context.session_id),
+                binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+            });
+            if let Ok(record) = record {
+                let monitored = child.clone();
+                let hint = exit_hint.clone();
+                std::thread::spawn(move || {
+                    loop {
+                        match monitored.with_lock(|child| child.try_wait()) {
+                            Ok(Some(status)) => {
+                                let reason = match hint.load(std::sync::atomic::Ordering::Relaxed) {
+                                    2 => ExitReason::Killed,
+                                    1 => ExitReason::Interrupted,
+                                    _ if status.success() => ExitReason::Completed,
+                                    _ => ExitReason::Failed,
+                                };
+                                let _ = context.journal.finish(&record.launch_id, reason);
+                                break;
+                            }
+                            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                            Err(_) => break,
+                        }
+                    }
+                });
+            } else if let Err(error) = record {
+                eprintln!(
+                    "Hot Sheet stream process journal unavailable: {}",
+                    error.kind()
+                );
+            }
+        }
+        let mut locked = child.lock_or_recover();
+        let stdin = locked.stdin.take().expect("piped stdin");
+        let stdout = locked.stdout.take().expect("piped stdout");
+        drop(locked);
         Ok(Self {
-            pid: child.id(),
-            child: Arc::new(Mutex::new(child)),
+            pid: child_id,
+            child,
             stdin,
             stdout,
+            exit_hint,
         })
     }
 
@@ -120,6 +185,7 @@ impl StreamChild {
     pub(crate) fn signals(&self) -> Box<dyn ProcessSignals> {
         Box::new(ChildSignals {
             child: self.child.clone(),
+            exit_hint: self.exit_hint.clone(),
         })
     }
 
@@ -141,12 +207,15 @@ impl StreamChild {
 /// reaps the child, so a later signal can never reach a recycled pid.
 struct ChildSignals {
     child: Arc<Mutex<Child>>,
+    exit_hint: Arc<std::sync::atomic::AtomicU8>,
 }
 
 impl ProcessSignals for ChildSignals {
     fn terminate(&mut self) {
         let mut child = self.child.lock_or_recover();
         if matches!(child.try_wait(), Ok(None)) {
+            self.exit_hint
+                .store(1, std::sync::atomic::Ordering::Relaxed);
             #[cfg(unix)]
             // SAFETY: the pid is our own child, still unreaped (checked under the lock).
             unsafe {
@@ -160,6 +229,8 @@ impl ProcessSignals for ChildSignals {
     fn kill(&mut self) -> bool {
         let mut child = self.child.lock_or_recover();
         if matches!(child.try_wait(), Ok(None)) {
+            self.exit_hint
+                .store(2, std::sync::atomic::Ordering::Relaxed);
             // A process that ignored SIGTERM may leave tool subprocesses behind; take its whole
             // descendant tree down with it (HS2-M08WMC). The child keeps sharing our process
             // group, so a foreground CLI's terminal Ctrl-C still reaches it.
@@ -377,6 +448,39 @@ mod tests {
 
     fn shell(script: &str) -> StreamChild {
         StreamChild::spawn("sh", &["-c", script], Path::new("."), &[]).expect("spawn sh")
+    }
+
+    #[test]
+    fn hs2_gdcmxe_channel_launch_records_session_and_exit() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        let child = StreamChild::spawn_with_context(
+            "sh",
+            &["-c", "exit 0"],
+            home.path(),
+            &[],
+            false,
+            Some(ProcessContext {
+                journal: journal.clone(),
+                project_id: "project-1".into(),
+                session_id: "session-1".into(),
+                purpose: Purpose::AiChannel,
+            }),
+        )
+        .unwrap();
+        let pid = child.id();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let records = journal.list().unwrap();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].pid, pid);
+            assert_eq!(records[0].session_id.as_deref(), Some("session-1"));
+            if records[0].exit_reason == Some(ExitReason::Completed) {
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     #[test]

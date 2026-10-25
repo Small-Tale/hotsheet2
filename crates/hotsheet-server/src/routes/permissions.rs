@@ -1040,6 +1040,7 @@ pub(crate) async fn create_drive_connection(
         .client_drives
         .create_or_attach(
             client_drive::PrepareDrive {
+                journal_home: Some(state.machine_home().to_path_buf()),
                 store_path: drive_store.root().to_path_buf(),
                 source_id,
                 project_path,

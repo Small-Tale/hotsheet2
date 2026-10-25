@@ -21,6 +21,8 @@ pub struct SafeTrigger {
     /// The project directory the tool runs in (readable so callers can log it).
     pub cwd: PathBuf,
     env: Vec<(String, String)>,
+    journal_home: Option<PathBuf>,
+    project_id: String,
     mcp_config: Option<PathBuf>,
     permission_mode: String,
     // Drive codex via its isolated-home shared daemon (reuse one instance) vs. a fresh
@@ -55,6 +57,7 @@ pub fn prepare_trigger(
             permission_mode,
             envs,
             shared_daemon,
+            journal_home: Some(hotsheet_plugins::hotsheet_home()),
             persistent_codex_home: None,
         },
     )
@@ -73,6 +76,8 @@ pub struct TriggerOptions {
     pub shared_daemon: bool,
     /// A stable isolated `CODEX_HOME` instead of a throwaway one.
     pub persistent_codex_home: Option<PathBuf>,
+    /// Explicit machine home for process provenance; tests may leave it absent.
+    pub journal_home: Option<PathBuf>,
 }
 
 /// One controlled turn's inputs for [`SafeTrigger::run_turn_controlled_with_options`].
@@ -126,6 +131,7 @@ pub fn prepare_trigger_with_home(
         envs,
         shared_daemon,
         persistent_codex_home,
+        journal_home,
     } = options;
     let plugin = hotsheet_plugins::find(tool)
         .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
@@ -250,6 +256,8 @@ pub fn prepare_trigger_with_home(
         plugin,
         cwd,
         env,
+        journal_home,
+        project_id: hotsheet_tls::project_id(store_path),
         mcp_config,
         // The requested mode, else the plugin's declared default (HS2-NHRDMW), else Claude's
         // historical `acceptEdits`; tool calls the mode does not pre-approve reach the
@@ -335,6 +343,8 @@ impl SafeTrigger {
             mcp_config: self.mcp_config.clone(),
             permission_mode: Some(self.permission_mode.clone()),
             env: self.env.clone(),
+            journal_home: self.journal_home.clone(),
+            project_id: self.project_id.clone(),
             shared_daemon: self.shared_daemon,
             permission_bridge: self.permission_bridge.clone(),
             now_ms,
@@ -388,6 +398,8 @@ impl SafeTrigger {
                     .unwrap_or_else(|| self.permission_mode.clone()),
             ),
             env: self.env.clone(),
+            journal_home: self.journal_home.clone(),
+            project_id: self.project_id.clone(),
             shared_daemon: self.shared_daemon,
             permission_bridge: self.permission_bridge.clone(),
             now_ms,

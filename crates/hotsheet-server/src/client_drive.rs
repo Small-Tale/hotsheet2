@@ -15,6 +15,7 @@ use hotsheet_aitools::{
 use serde::{Deserialize, Serialize};
 
 pub struct PrepareDrive {
+    pub journal_home: Option<PathBuf>,
     pub store_path: PathBuf,
     pub source_id: String,
     pub project_path: PathBuf,
@@ -74,6 +75,7 @@ impl ClientDriveBackend for NativeClientDriveBackend {
             &request.tool,
             TriggerOptions {
                 project: Some(request.project_path),
+                journal_home: request.journal_home,
                 envs: request.env,
                 // The shared daemon uses a Unix-domain control socket. Windows uses the
                 // direct app-server transport while preserving the same client API/session.
@@ -1105,6 +1107,7 @@ mod tests {
 
     fn prepare(project: &str) -> PrepareDrive {
         PrepareDrive {
+            journal_home: None,
             store_path: PathBuf::from("/store"),
             source_id: "git-store".into(),
             project_path: PathBuf::from(project),

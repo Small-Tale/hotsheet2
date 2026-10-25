@@ -108,6 +108,7 @@ impl Cmd {
             | TicketFlow
             | Activity { .. }
             | Notifications { .. }
+            | Processes
             | Serve { .. }
             | Cert { .. } => Group::Server,
             Setup { .. }
@@ -137,6 +138,7 @@ impl Cmd {
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
+                | Cmd::Processes
                 | Cmd::Guidance { .. }
                 | Cmd::Serve { list: true, .. }
         )
@@ -159,6 +161,7 @@ impl Cmd {
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
+                | Cmd::Processes
                 | Cmd::Guidance { .. }
                 | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
