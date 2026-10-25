@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
-test('HS2-1YXCCW reviews multiple sources and full commit pins before registration', async ({ page }) => {
+test('HS2-1YXCCW and HS2-F203CG review full pins in a settled responsive shell', async ({ page }) => {
   await openDemoProject(page);
   const requests: unknown[] = [];
   const actions: unknown[] = [];
@@ -93,19 +93,53 @@ test('HS2-1YXCCW reviews multiple sources and full commit pins before registrati
   await pins.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-guidance-wide.png' });
   await page.setViewportSize({ width: 768, height: 900 });
+  const shell = page.locator('[data-component="app-shell"]');
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
   const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
   if (await hideSettings.isVisible()) await hideSettings.click();
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect
+    .poll(() =>
+      shell
+        .locator('#app-left-rail .kui-workbench__panel-content')
+        .evaluate((element) => element.getBoundingClientRect().right),
+    )
+    .toBeLessThanOrEqual(0);
+  await expect
+    .poll(() =>
+      shell
+        .locator('#app-right-rail .kui-workbench__panel-content')
+        .evaluate((element) => element.getBoundingClientRect().left),
+    )
+    .toBeGreaterThanOrEqual(768);
   await pins.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => ({ scrollX, width: document.documentElement.scrollWidth }))).toEqual({
+    scrollX: 0,
+    width: 768,
+  });
   await pins.screenshot({ path: 'target/visual-captures/hs2-1yxccw-pins-medium.png' });
+  // HS2-F203CG: the rails reach their endpoints before the resized main pane finishes painting.
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-f203cg-guidance-medium.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
   if (await hideSettings.isVisible()) await hideSettings.click();
   await pins.scrollIntoViewIfNeeded();
   expect(await pins.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
-  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-guidance-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-guidance-phone.png', animations: 'disabled' });
   await second.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-form-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(shell).toHaveAttribute('data-mobile', 'false');
+  await expect
+    .poll(() => shell.locator('#app-right-rail').evaluate((element) => element.getBoundingClientRect().right))
+    .toBeLessThanOrEqual(1280);
   await expect(pins.getByText('a'.repeat(40))).toBeVisible();
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-f203cg-guidance-wide-restored.png',
+    animations: 'disabled',
+  });
   await pins.getByRole('button', { name: 'Register Reviewed Pins' }).click();
   expect(requests).toEqual([review.requests]);
   expect(actions).toEqual([{ action: 'register_batch', review }]);
