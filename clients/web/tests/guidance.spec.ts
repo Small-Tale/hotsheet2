@@ -226,17 +226,31 @@ test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ 
   await row.getByRole('button', { name: 'Preview Rule and Changes' }).click();
   await expect(row.getByLabel('After Apply')).toHaveValue('Older v1');
   await row.getByRole('button', { name: 'Close Preview' }).click();
+  const leftRailContent = page.locator('#app-left-rail > .kui-workbench__panel-content');
+  const rightRailContent = page.locator('#app-right-rail > .kui-workbench__panel-content');
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-wide.png' });
   await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-wide.png' });
   await page.setViewportSize({ width: 768, height: 900 });
-  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
-  if (await hideSettings.isVisible()) await hideSettings.click();
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  await expect(showSettings).toBeVisible();
+  await expect
+    .poll(async () => {
+      const bounds = await leftRailContent.boundingBox();
+      return bounds && Math.round(bounds.x + bounds.width);
+    })
+    .toBe(0);
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-medium.png' });
   await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-medium.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  if (await hideSettings.isVisible()) await hideSettings.click();
+  await expect(showSettings).toBeVisible();
+  await expect
+    .poll(async () => {
+      const bounds = await leftRailContent.boundingBox();
+      return bounds && Math.round(bounds.x + bounds.width);
+    })
+    .toBe(0);
   await row.scrollIntoViewIfNeeded();
   expect(await row.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-phone.png' });
@@ -245,6 +259,10 @@ test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ 
   // HS2-PFYJS6: wide layout restores the rail; a transient Show button can vanish during resize.
   await expect(page.getByRole('button', { name: 'Hide Settings Sidebar' })).toBeVisible();
   await expect(row.getByText(/chosen v1/)).toBeVisible();
+  // HS2-JJJ9YG: the mobile overlay slides for 200 ms after the wide rail is restored.
+  await expect(leftRailContent).toHaveCSS('transform', 'none');
+  await expect(rightRailContent).toHaveCSS('transform', 'none');
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-wide-return.png' });
   expect(actions).toEqual([
