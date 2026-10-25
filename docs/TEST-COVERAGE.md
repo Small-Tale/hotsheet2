@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+The first macOS Tauri bundle (HS2-5R706Q) is covered by
+`clients/web/scripts/desktop-host-smoke.mjs`, which serves the staged app
+through the packaged Node bridge and checks owner-pipe shutdown. The release
+bundle builds with `npm run desktop:build`; signed notarization and native
+window capture remain manual checks in [the desktop guide](tauri-desktop.md).
+
 HS2-GDCMXE covers machine-local child-process provenance in
 `hotsheet-process-journal` unit tests (launch, exit, PID reuse, unresolved crash
 recovery, corrupt record and retention), `hotsheet-terminals` PTY and real broker

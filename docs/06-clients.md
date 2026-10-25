@@ -6,6 +6,13 @@
 > core.** The server is always a separate process (local included), which the
 > client auto-starts if needed and which outlives it.
 
+The first macOS Tauri host packages the production Kerf client, a local Node
+bridge, and the Rust service executables (HS2-5R706Q). It opens the same API
+client at a private loopback URL; closing the window stops the bridge and leaves
+the independent server running. The [desktop build and signing guide](tauri-desktop.md)
+describes the Developer ID distribution path. Native integrations beyond
+the host window remain planned.
+
 ## 6.1 Principle: clients are views over the service
 
 Every client is a consumer of the same service API (HTTP + WebSocket + MCP). No

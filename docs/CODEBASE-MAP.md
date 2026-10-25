@@ -21,8 +21,15 @@ Kerf model through `WorkspaceControls`; `search-and-composer.ts` wires its field
 > AI-tool **drive/permission/metrics** stack (`hotsheet-aitools`, `hotsheet-plugins`),
 > and **`hotsheet-terminals`** (PTY + manager + busy) with server `/terminals*` routes.
 > Still design-only or incomplete: serverless incremental index maintenance and the
-> Tauri/native clients. Git-aware fast-path reindex, Tier-1
+> native SwiftUI clients and broader Tauri integrations. Git-aware fast-path reindex, Tier-1
 > mTLS, and version-pinned/live AI-tool protocol verification are built.
+
+The macOS Tauri host is under `clients/web/src-tauri/` (HS2-5R706Q). Its separate
+Cargo workspace builds the native window, while `clients/web/scripts/prepare-desktop.mjs`
+stages production web assets, Node, the Rust executables, plugins, and migrator
+resources for bundling. `npm run desktop:build` packages the `.app`, and
+`npm run desktop:test` checks the staged bridge startup and shutdown. See the
+[desktop signing guide](tauri-desktop.md) for prerequisites and validation.
 
 Reusable guidance is maintained in `Small-Tale/ai-playbook`. Local provenance lives in
 `guidance/ai-playbook.lock.json`; `scripts/sync-ai-playbook.mjs` verifies or regenerates

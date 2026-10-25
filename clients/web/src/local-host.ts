@@ -38,6 +38,7 @@ import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV } from './project-br
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
+const clientDiscoveryCleanup = new WeakMap<Server, () => Promise<void>>();
 
 interface BinaryRevisionStatus {
   build_revision?: string | null;
@@ -271,6 +272,7 @@ export function startLocalHost({
       }
       void publishClientUrl(localClientUrl(address.address, address.port))
         .then((dispose) => {
+          clientDiscoveryCleanup.set(server, dispose);
           server.once('close', () => void dispose());
           resolveListen(server);
         })
@@ -291,8 +293,12 @@ function argument(name: string): string | undefined {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const host = argument('host') ?? '127.0.0.1',
     port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
-  const release = releaseBinaryEnvironment(developmentRepositoryRoot());
-  const selected = { ...release };
+  // A packaged desktop host supplies all binaries from its own resources. It has no
+  // source checkout or target directory to inspect (HS2-5R706Q).
+  const release = Object.keys(HOST_BINARIES).every((variable) => process.env[variable])
+    ? {}
+    : releaseBinaryEnvironment(developmentRepositoryRoot());
+  const selected: Record<string, string> = { ...release };
   for (const variable of Object.keys(HOST_BINARIES)) {
     if (process.env[variable]) selected[variable] = process.env[variable];
   }
@@ -321,14 +327,35 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   server.once('close', snapshot.dispose);
   const address = server.address(),
     listening = typeof address === 'object' && address ? address.port : port;
+  const readyFile = process.env.HOTSHEET_CLIENT_READY_FILE;
+  if (readyFile)
+    writeFileSync(readyFile, JSON.stringify({ url: localClientUrl(host, listening), pid: process.pid }), {
+      mode: 0o600,
+    });
   console.log(`Hot Sheet production client on http://${host}:${listening}/`);
+  let stopping = false;
   const stop = () => {
-    server.close(() => {
+    if (stopping) return;
+    stopping = true;
+    if (readyFile) rmSync(readyFile, { force: true });
+    // Upgraded terminal sockets can keep server.close pending after the desktop
+    // window disappears. Bound bridge teardown; the Rust server stays detached.
+    const finish = async () => {
+      clearTimeout(deadline);
+      await clientDiscoveryCleanup.get(server)?.();
       snapshot.dispose();
       process.exit(0);
-    });
+    };
+    const deadline = setTimeout(() => void finish(), 3_000);
+    server.close(() => void finish());
     server.closeAllConnections();
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
+  // The Tauri shell holds stdin open. Its exit, including a crash, closes the pipe;
+  // the bridge exits and the independently launched Rust server keeps running.
+  if (process.env.HOTSHEET_HOST_EXIT_ON_STDIN_EOF === '1') {
+    process.stdin.resume();
+    process.stdin.once('end', stop);
+  }
 }

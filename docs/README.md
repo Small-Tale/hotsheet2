@@ -200,7 +200,12 @@ Annotation parity (HS2-4PHSMG): Hot Sheet supports UX Review's six independent a
 > process (local included), client auto-starts it and it outlives the client;
 > clients never embed the core** · client order browser web UX → Tauri host →
 > SwiftUI macOS → iOS → Android · plugin-only AI tools.
->
+
+The Tauri host's first macOS build is shipped as a local bundle path
+(HS2-5R706Q): it packages the production web client and bridge while keeping
+the Rust server separate. Developer ID signing instructions are in
+[tauri-desktop.md](tauri-desktop.md). Broader native integrations remain partial.
+
 > **Round-2 confirmations (2026-08-19, §9.11):** one server per machine · per-project
 > MCP shim · close-reason open/closed axis · random-suffix sharding · PTY sizing
 > focus-follows · assignment = git email + committed `people.json` + one control +

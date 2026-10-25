@@ -1,5 +1,14 @@
 # Manual Test Plan
 
+For the macOS Tauri host (HS2-5R706Q), build the `.app` with
+`npm run desktop:build` from `clients/web` using a Developer ID identity.
+Launch a fresh signed copy, approve the first Keychain access if requested,
+open and create a synthetic Git ticket project, then resize the actual app
+window wide → medium → narrow → wide. Verify the server remains registered
+after the window closes, the temporary client discovery entry disappears,
+and a reopened window reconnects. Validate codesign, notarization, and
+Gatekeeper with [the desktop guide](tauri-desktop.md).
+
 Only behavior that cannot yet be exercised reliably in automated CI belongs here.
 When automation lands, remove the manual-only step and record it below.
 
