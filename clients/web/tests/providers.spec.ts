@@ -16334,6 +16334,8 @@ test('offers secret spans without changing the exact default and lets each be re
   );
   await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(popup).toBeVisible();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await popup.screenshot({ path: 'target/visual-captures/hs2-5zrsjw-suggestions-phone.png' });
   await popup.getByRole('button', { name: 'Confirm Allow This AI Session' }).click();
   await expect(popup).toHaveCount(0);
