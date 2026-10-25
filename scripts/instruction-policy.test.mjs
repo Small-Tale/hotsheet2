@@ -19,3 +19,9 @@ test('HS2-A47SCQ keeps one generated instruction owner and the local rule', () =
   assert.equal((agents.match(/<!-- hotsheet-instructions-version: \d+ -->/g) ?? []).length, 1);
   assert.match(agents, /Push policy: `push-per-ticket`/);
 });
+
+test('HS2-XJRJ9Z keeps the reviewed local guidance once in generated instructions', () => {
+  const agents = read('AGENTS.md');
+  const local = read('.rulesync/rules/project-local.md').replace(/^---\n[\s\S]*?\n---\n/, '').trim();
+  assert.equal(agents.split(local).length - 1, 1);
+});
