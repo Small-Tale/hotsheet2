@@ -231,6 +231,26 @@ The headless equivalents are `guidance review --source <id>` and
 `guidance register --id <id> --repository <url> --ref <ref>
 --expected-commit <reviewed-sha>`, followed by `guidance apply`.
 
+**Older rule revisions (HS2-63D6F9).** A source keeps its current pinned ref and
+commit while each rule may choose an older, cached version by its body SHA-256.
+Project Guidance shows the chosen version beside the available and installed
+versions. Enter a full reviewed commit SHA in that rule's Older Version Commit
+field to cache its earlier manifest entry, then choose it from Rule Version,
+preview, and apply. The cache operation verifies that the ref still resolves to
+the expected commit, checks the manifest and rule body hash, and requires the
+offered rule version to be lower than the current pin. The chosen digest and
+historic snapshot persist across a source refresh. Choosing the source pin
+restores the current rule. An explicit older choice can replace a known newer
+installation; local edits still require review. The headless equivalents are
+`guidance cache-rule-version --source <id> --rule <name> --ref <sha>
+--expected-commit <sha>`, `guidance choose-rule-version --source <id>
+--rule <name> --sha256 <body-sha>`, and `guidance apply`. Omit `--sha256` to
+restore the source pin. The source manifest may declare
+`minimum_hotsheet_version` as a semantic version per rule. Selection, preview,
+and apply reject a rule whose minimum exceeds the running Hot Sheet version;
+older manifests without that field remain compatible. Separate source refs and
+source connections are covered by HS2-1YXCCW.
+
 Bundled Hot Sheet shared guidance is a separate offline channel. On setup refresh,
 an exact known predecessor upgrades automatically. If a locally changed older section
 cannot be safely replaced, the setup report emits `bundled_guidance_blocked` with

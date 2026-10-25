@@ -86,11 +86,24 @@ export interface GuidanceOverview {
     rules: Array<{
       name: string;
       version: number;
+      pinned_sha256?: string;
       installed_version: number | null;
       description: string;
       owner: string | null;
       tags: string[];
       selected: boolean;
+      chosen_version?: number;
+      chosen_sha256?: string;
+      chosen_commit?: string;
+      compatible?: boolean;
+      minimum_hotsheet_version?: string | null;
+      historical_versions?: Array<{
+        version: number;
+        sha256: string;
+        commit: string;
+        minimum_hotsheet_version: string | null;
+        compatible: boolean;
+      }>;
     }>;
     skills: Array<{ name: string; selected: boolean }>;
   }>;
@@ -190,6 +203,8 @@ export interface RulesyncUpdateReport {
 export type GuidanceAction =
   | { action: 'register'; id: string; repository: string; ref: string; expected_commit?: string }
   | { action: 'select'; source: string; rules: string[]; skills: string[] }
+  | { action: 'cache_rule_version'; source: string; rule: string; requested_ref: string; expected_commit: string }
+  | { action: 'choose_rule_version'; source: string; rule: string; sha256: string | null }
   | { action: 'owner'; owner: 'builtin' | 'rulesync' }
   | { action: 'apply' };
 

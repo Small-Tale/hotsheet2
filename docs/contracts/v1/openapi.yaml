@@ -14763,16 +14763,25 @@ components:
       required:
         - name
         - version
+        - pinned_sha256
         - description
         - owner
         - tags
         - selected
         - installed_version
+        - chosen_version
+        - chosen_sha256
+        - chosen_commit
+        - compatible
+        - minimum_hotsheet_version
+        - historical_versions
       properties:
         name:
           type: string
         version:
           type: integer
+        pinned_sha256:
+          type: string
         description:
           type: string
         owner:
@@ -14789,6 +14798,44 @@ components:
           anyOf:
             - type: integer
             - type: 'null'
+        chosen_version:
+          type: integer
+        chosen_sha256:
+          type: string
+        chosen_commit:
+          type: string
+        compatible:
+          type: boolean
+        minimum_hotsheet_version:
+          anyOf:
+            - type: string
+            - type: 'null'
+        historical_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuidanceRuleRevision'
+      additionalProperties: false
+    GuidanceRuleRevision:
+      type: object
+      required:
+        - version
+        - sha256
+        - commit
+        - minimum_hotsheet_version
+        - compatible
+      properties:
+        version:
+          type: integer
+        sha256:
+          type: string
+        commit:
+          type: string
+        minimum_hotsheet_version:
+          anyOf:
+            - type: string
+            - type: 'null'
+        compatible:
+          type: boolean
       additionalProperties: false
     GuidanceSkill:
       type: object
@@ -14928,6 +14975,42 @@ components:
               type: array
               items:
                 type: string
+          additionalProperties: false
+        - type: object
+          required:
+            - action
+            - source
+            - rule
+            - requested_ref
+            - expected_commit
+          properties:
+            action:
+              const: cache_rule_version
+            source:
+              type: string
+            rule:
+              type: string
+            requested_ref:
+              type: string
+            expected_commit:
+              type: string
+          additionalProperties: false
+        - type: object
+          required:
+            - action
+            - source
+            - rule
+          properties:
+            action:
+              const: choose_rule_version
+            source:
+              type: string
+            rule:
+              type: string
+            sha256:
+              anyOf:
+                - type: string
+                - type: 'null'
           additionalProperties: false
         - type: object
           required:

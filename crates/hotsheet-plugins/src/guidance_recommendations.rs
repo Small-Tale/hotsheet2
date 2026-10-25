@@ -470,6 +470,9 @@ mod tests {
             tags: vec![tag.into()],
             body,
             known_bodies: Vec::new(),
+            minimum_hotsheet_version: None,
+            historical_versions: Vec::new(),
+            selected_sha256: None,
         }
     }
 

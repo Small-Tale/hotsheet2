@@ -64,6 +64,7 @@ export interface GuidanceSettingsProps {
     error: string;
     result?: GuidanceRulePreview;
   };
+  olderCommitDrafts?: Readonly<Record<string, string>>;
   bundledGuidanceBlocked?: readonly {
     path: string;
     section: string;
@@ -540,8 +541,61 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                                       action={COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.value}
                                       checked={rule.selected}
                                       label={rule.description}
-                                      hint={`${rule.name} · available v${rule.version} · ${rule.installed_version === null ? 'not installed' : `v${rule.installed_version} installed`}`}
+                                      hint={`${rule.name} · available v${rule.version}${rule.chosen_version !== undefined && rule.chosen_version !== rule.version ? ` · chosen v${rule.chosen_version}` : ''} · ${rule.installed_version === null ? 'not installed' : `v${rule.installed_version} installed`}`}
                                     />
+                                    {!!rule.pinned_sha256 && (
+                                      <Disclosure
+                                        title="Versions"
+                                        detail={`v${rule.chosen_version ?? rule.version} chosen`}
+                                      >
+                                        {!!rule.pinned_sha256 && !!rule.chosen_sha256 && (
+                                          <Select
+                                            name="guidance-rule-version"
+                                            label="Rule Version"
+                                            value={rule.chosen_sha256}
+                                            choices={[
+                                              {
+                                                value: rule.pinned_sha256,
+                                                label: `v${rule.version} · Source Pin ${source.commit.slice(0, 12)}`,
+                                              },
+                                              ...(rule.historical_versions ?? []).map((revision) => ({
+                                                value: revision.sha256,
+                                                label: `v${revision.version} · ${revision.commit.slice(0, 12)}${revision.compatible ? '' : ' · requires newer Hot Sheet'}`,
+                                                disabled: !revision.compatible,
+                                              })),
+                                            ]}
+                                            disabled={loading}
+                                          />
+                                        )}
+                                        {!rule.compatible && (
+                                          <Text tone="quiet" size="compact">
+                                            This revision requires Hot Sheet {rule.minimum_hotsheet_version} or newer.
+                                            Choose a compatible version before applying.
+                                          </Text>
+                                        )}
+                                        <List gap="xs">
+                                          <TextField
+                                            name="guidance-older-commit"
+                                            label="Older Version Commit"
+                                            value={props.olderCommitDrafts?.[`${source.id}/${rule.name}`] ?? ''}
+                                            hint="Enter the full reviewed commit SHA to cache an older rule version."
+                                          />
+                                          <div>
+                                            <Button
+                                              action={COMMANDS_AND_AI_ACTIONS.cacheGuidanceRuleVersion.value}
+                                              disabled={
+                                                loading ||
+                                                !/^[0-9a-f]{40}$/.test(
+                                                  props.olderCommitDrafts?.[`${source.id}/${rule.name}`]?.trim() ?? '',
+                                                )
+                                              }
+                                            >
+                                              Cache Older Version
+                                            </Button>
+                                          </div>
+                                        </List>
+                                      </Disclosure>
+                                    )}
                                     {!!rule.tags.length && (
                                       <div aria-label={`${rule.name} tags`}>
                                         {rule.tags.map((tag) => (

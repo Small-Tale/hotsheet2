@@ -6,6 +6,73 @@ import { GuidanceSettings } from './guidance-settings';
 const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-63D6F9 shows a cached older choice and guards incompatible revisions', () => {
+    const view = String(
+      GuidanceSettings({
+        loading: false,
+        message: '',
+        repository: '',
+        sourceRef: '',
+        sourceId: 'fixture',
+        ownerFilter: '',
+        tagFilter: '',
+        olderCommitDrafts: { 'fixture/example': 'a'.repeat(40) },
+        overview: {
+          owner: 'builtin',
+          explicit_selection: true,
+          default_repository: '',
+          sources: [
+            {
+              id: 'fixture',
+              repository: 'https://example.test/rules',
+              requested_ref: 'main',
+              commit: 'b'.repeat(40),
+              rules: [
+                {
+                  name: 'example',
+                  description: 'Example rule',
+                  version: 3,
+                  pinned_sha256: 'c'.repeat(64),
+                  chosen_version: 1,
+                  chosen_sha256: 'd'.repeat(64),
+                  chosen_commit: 'a'.repeat(40),
+                  compatible: true,
+                  minimum_hotsheet_version: null,
+                  installed_version: 3,
+                  owner: null,
+                  tags: [],
+                  selected: true,
+                  historical_versions: [
+                    {
+                      version: 1,
+                      sha256: 'd'.repeat(64),
+                      commit: 'a'.repeat(40),
+                      minimum_hotsheet_version: null,
+                      compatible: true,
+                    },
+                    {
+                      version: 2,
+                      sha256: 'e'.repeat(64),
+                      commit: 'f'.repeat(40),
+                      minimum_hotsheet_version: '999.0.0',
+                      compatible: false,
+                    },
+                  ],
+                },
+              ],
+              skills: [],
+            },
+          ],
+        },
+      }),
+    );
+    expect(view).toContain('chosen v1');
+    expect(view).toContain('Rule Version');
+    expect(view).toContain('v1 · aaaaaaaaaaaa');
+    expect(view).toContain('requires newer Hot Sheet');
+    expect(view).toContain('data-action="cache-guidance-rule-version"');
+    expect(view).toContain('Older Version Commit');
+  });
   it('HS2-WEKNRD keeps recommendation states in a controlled dialog outside the form scroll', () => {
     const base = {
       loading: false,

@@ -46,11 +46,27 @@ struct GuidanceSourceView {
 struct GuidanceRuleView {
     name: String,
     version: u64,
+    pinned_sha256: String,
     description: String,
     owner: Option<String>,
     tags: Vec<String>,
     selected: bool,
     installed_version: Option<u64>,
+    chosen_version: u64,
+    chosen_sha256: String,
+    chosen_commit: String,
+    compatible: bool,
+    minimum_hotsheet_version: Option<String>,
+    historical_versions: Vec<GuidanceRevisionView>,
+}
+
+#[derive(Serialize)]
+struct GuidanceRevisionView {
+    version: u64,
+    sha256: String,
+    commit: String,
+    minimum_hotsheet_version: Option<String>,
+    compatible: bool,
 }
 
 #[derive(Serialize)]
@@ -141,13 +157,13 @@ fn overview(
             .sources
             .into_iter()
             .map(|source| GuidanceSourceView {
-                id: source.id,
-                repository: source.repository,
-                requested_ref: source.requested_ref,
-                commit: source.commit,
+                id: source.id.clone(),
+                repository: source.repository.clone(),
+                requested_ref: source.requested_ref.clone(),
+                commit: source.commit.clone(),
                 rules: source
                     .rules
-                    .into_iter()
+                    .iter()
                     .filter(|rule| {
                         (term.is_empty()
                             || rule.name.to_lowercase().contains(&term)
@@ -161,22 +177,54 @@ fn overview(
                                 .as_deref()
                                 .is_none_or(|wanted| rule.tags.iter().any(|tag| tag == wanted))
                     })
-                    .map(|rule| GuidanceRuleView {
-                        selected: source.selected_rules.contains(&rule.name),
-                        installed_version: sources::installed_version(project, &rule.name),
-                        name: rule.name,
-                        version: rule.version,
-                        description: rule.description,
-                        owner: rule.owner,
-                        tags: rule.tags,
+                    .map(|rule| {
+                        let chosen = sources::chosen_rule(&source, rule);
+                        GuidanceRuleView {
+                            selected: source.selected_rules.contains(&rule.name),
+                            installed_version: sources::installed_version(project, &rule.name),
+                            name: rule.name.clone(),
+                            version: rule.version,
+                            pinned_sha256: rule.sha256.clone(),
+                            description: rule.description.clone(),
+                            owner: rule.owner.clone(),
+                            tags: rule.tags.clone(),
+                            chosen_version: chosen.version,
+                            chosen_sha256: chosen.sha256.to_owned(),
+                            chosen_commit: chosen.commit.to_owned(),
+                            compatible: sources::require_compatible(&chosen).is_ok(),
+                            minimum_hotsheet_version: chosen
+                                .minimum_hotsheet_version
+                                .map(str::to_owned),
+                            historical_versions: rule
+                                .historical_versions
+                                .iter()
+                                .map(|old| GuidanceRevisionView {
+                                    version: old.version,
+                                    sha256: old.sha256.clone(),
+                                    commit: old.commit.clone(),
+                                    minimum_hotsheet_version: old.minimum_hotsheet_version.clone(),
+                                    compatible: sources::require_compatible(&sources::ChosenRule {
+                                        version: old.version,
+                                        sha256: &old.sha256,
+                                        description: &old.description,
+                                        body: &old.body,
+                                        commit: &old.commit,
+                                        minimum_hotsheet_version: old
+                                            .minimum_hotsheet_version
+                                            .as_deref(),
+                                    })
+                                    .is_ok(),
+                                })
+                                .collect(),
+                        }
                     })
                     .collect(),
                 skills: source
                     .skills
-                    .into_iter()
+                    .iter()
                     .map(|skill| GuidanceSkillView {
                         selected: source.selected_skills.contains(&skill.name),
-                        name: skill.name,
+                        name: skill.name.clone(),
                     })
                     .collect(),
             })
@@ -383,6 +431,17 @@ pub(crate) enum GuidanceAction {
         rules: Vec<String>,
         skills: Vec<String>,
     },
+    CacheRuleVersion {
+        source: String,
+        rule: String,
+        requested_ref: String,
+        expected_commit: String,
+    },
+    ChooseRuleVersion {
+        source: String,
+        rule: String,
+        sha256: Option<String>,
+    },
     Owner {
         owner: String,
     },
@@ -424,6 +483,29 @@ pub(crate) async fn update_checkout_guidance(
                 skills,
             } => {
                 sources::select(&project, &source, &rules, &skills)
+                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            }
+            GuidanceAction::CacheRuleVersion {
+                source,
+                rule,
+                requested_ref,
+                expected_commit,
+            } => {
+                sources::cache_older_rule(
+                    &project,
+                    &source,
+                    &rule,
+                    &requested_ref,
+                    &expected_commit,
+                )
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            }
+            GuidanceAction::ChooseRuleVersion {
+                source,
+                rule,
+                sha256,
+            } => {
+                sources::select_rule_version(&project, &source, &rule, sha256.as_deref())
                     .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
             }
             GuidanceAction::Owner { owner } => {

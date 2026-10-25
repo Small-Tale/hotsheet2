@@ -133,9 +133,30 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
         (rule.installed_version !== null && typeof rule.installed_version !== 'number') ||
         (rule.owner !== null && typeof rule.owner !== 'string') ||
         !isStringArray(rule.tags) ||
-        typeof rule.selected !== 'boolean'
+        typeof rule.selected !== 'boolean' ||
+        (rule.chosen_version !== undefined && typeof rule.chosen_version !== 'number') ||
+        (rule.pinned_sha256 !== undefined && typeof rule.pinned_sha256 !== 'string') ||
+        (rule.chosen_sha256 !== undefined && typeof rule.chosen_sha256 !== 'string') ||
+        (rule.chosen_commit !== undefined && typeof rule.chosen_commit !== 'string') ||
+        (rule.compatible !== undefined && typeof rule.compatible !== 'boolean') ||
+        (rule.minimum_hotsheet_version !== undefined &&
+          rule.minimum_hotsheet_version !== null &&
+          typeof rule.minimum_hotsheet_version !== 'string')
       )
         invalid(what);
+      if (rule.historical_versions !== undefined)
+        list(rule.historical_versions, what, (entry) => {
+          const revision = record(entry, what);
+          if (
+            typeof revision.version !== 'number' ||
+            typeof revision.sha256 !== 'string' ||
+            typeof revision.commit !== 'string' ||
+            typeof revision.compatible !== 'boolean' ||
+            (revision.minimum_hotsheet_version !== null && typeof revision.minimum_hotsheet_version !== 'string')
+          )
+            invalid(what);
+          return revision;
+        });
       return rule as unknown as GuidanceOverview['sources'][number]['rules'][number];
     });
     const skills = list(source.skills, what, (entry) => {

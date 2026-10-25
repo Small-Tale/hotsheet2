@@ -14174,6 +14174,9 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
                     tags: vec!["rust".into()],
                     body: body.into(),
                     known_bodies: vec![],
+                    minimum_hotsheet_version: None,
+                    historical_versions: Vec::new(),
+                    selected_sha256: None,
                 }],
             }],
         },
@@ -14297,6 +14300,80 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
     )
     .await;
     assert_eq!(preview["outcome"], "current");
+    let older_body = "<!-- hotsheet:begin section=project-bootstrap v=0 -->\n\nOlder fixture.\n\n<!-- hotsheet:end section=project-bootstrap -->\n";
+    let mut config = hotsheet_plugins::guidance_sources::load(project.path()).unwrap();
+    let older_digest = format!("{:x}", sha2::Sha256::digest(older_body.as_bytes()));
+    config.sources[0].rules[0].historical_versions.push(
+        hotsheet_plugins::guidance_sources::SourceRuleRevision {
+            version: 0,
+            sha256: older_digest.clone(),
+            description: "Older bootstrap".into(),
+            body: older_body.into(),
+            commit: "b".repeat(40),
+            minimum_hotsheet_version: None,
+        },
+    );
+    config.sources[0].rules[0]
+        .known_bodies
+        .push(older_body.into());
+    hotsheet_plugins::guidance_sources::save(project.path(), &config).unwrap();
+    let choose_older = serde_json::json!({"action":"choose_rule_version", "source":"fixture",
+        "rule":"project-bootstrap", "sha256":older_digest})
+    .to_string();
+    let chosen = body_json(
+        app.clone()
+            .oneshot(authed("POST", path, Some(&choose_older)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(chosen["sources"][0]["rules"][0]["chosen_version"], 0);
+    assert_eq!(
+        chosen["sources"][0]["rules"][0]["historical_versions"][0]["compatible"],
+        true
+    );
+    let preview = body_json(
+        app.clone()
+            .oneshot(authed("GET", preview_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(preview["outcome"], "replace");
+    assert_eq!(
+        body_json(
+            app.clone()
+                .oneshot(authed("POST", path, Some(applied)))
+                .await
+                .unwrap()
+        )
+        .await["sources"][0]["rules"][0]["installed_version"],
+        0
+    );
+    assert!(
+        std::fs::read_to_string(project.path().join("AGENTS.md"))
+            .unwrap()
+            .contains("Older fixture.")
+    );
+    let reset = r#"{"action":"choose_rule_version","source":"fixture","rule":"project-bootstrap","sha256":null}"#;
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", path, Some(reset)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        body_json(
+            app.clone()
+                .oneshot(authed("POST", path, Some(applied)))
+                .await
+                .unwrap()
+        )
+        .await["sources"][0]["rules"][0]["installed_version"],
+        1
+    );
     let pinned = std::fs::read(project.path().join(".hotsheet2/guidance-sources.json")).unwrap();
     let updates = body_json(
         app.clone()
@@ -14650,6 +14727,9 @@ async fn checkout_guidance_interview_requires_consent_and_keeps_answer_advisory(
                     tags: vec!["react".into()],
                     body: body.into(),
                     known_bodies: vec![],
+                    minimum_hotsheet_version: None,
+                    historical_versions: Vec::new(),
+                    selected_sha256: None,
                 }],
             }],
         },

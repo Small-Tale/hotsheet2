@@ -660,7 +660,9 @@ pub fn preview_guidance_rule_in(
                 "unknown guidance rule".into(),
             ))
         })?;
-    let pinned = rule.body.clone();
+    let choice = crate::guidance_sources::chosen_rule(source, rule);
+    crate::guidance_sources::require_compatible(&choice)?;
+    let pinned = choice.body.to_owned();
     let known = rule.known_bodies.clone();
     if !source.selected_rules.iter().any(|name| name == rule_name) {
         source.selected_rules.push(rule_name.to_owned());
@@ -738,6 +740,18 @@ pub fn preview_guidance_rule_in(
 /// Reconcile selected rules and skills without requiring a Git ticket store or an AI tool
 /// launch. The normal setup planner calls these same writers on project open.
 pub fn apply_selected_guidance_in(project: &Path) -> Result<(), SetupError> {
+    let config = crate::guidance_sources::load(project)?;
+    for source in &config.sources {
+        for rule in source
+            .rules
+            .iter()
+            .filter(|rule| source.selected_rules.contains(&rule.name))
+        {
+            crate::guidance_sources::require_compatible(&crate::guidance_sources::chosen_rule(
+                source, rule,
+            ))?;
+        }
+    }
     let mut fs = PlanFs::default();
     if rulesync_owns_guidance(&fs, project)? {
         return Err(SetupError::GuidanceSource(
@@ -2167,18 +2181,32 @@ fn render_selected_guidance(
     if !config.explicit_selection {
         return existing.to_owned();
     }
+    if config.sources.iter().any(|source| {
+        source
+            .rules
+            .iter()
+            .filter(|rule| source.selected_rules.contains(&rule.name))
+            .any(|rule| {
+                crate::guidance_sources::require_compatible(&crate::guidance_sources::chosen_rule(
+                    source, rule,
+                ))
+                .is_err()
+            })
+    }) {
+        return existing.to_owned();
+    }
     let mut rendered = existing.to_owned();
     if active {
-        if let Some(workflow) = config
-            .sources
-            .iter()
-            .flat_map(|source| {
-                source.rules.iter().filter(move |rule| {
+        if let Some((source, workflow)) = config.sources.iter().find_map(|source| {
+            source
+                .rules
+                .iter()
+                .find(|rule| {
                     rule.name == "hotsheet-workflow" && source.selected_rules.contains(&rule.name)
                 })
-            })
-            .next()
-        {
+                .map(|rule| (source, rule))
+        }) {
+            let chosen = crate::guidance_sources::chosen_rule(source, workflow);
             let plugins = all_plugins(&default_dirs());
             if let Some(shared) = parse_shared_section(&rendered, "agents-md") {
                 let bundled = plugins.iter().any(|plugin| {
@@ -2192,7 +2220,7 @@ fn render_selected_guidance(
                         && shared.body.trim() == plugin.instructions_body().trim()
                 });
                 let known = bundled
-                    || shared.body.trim() == workflow.body.trim()
+                    || shared.body.trim() == chosen.body.trim()
                     || workflow
                         .known_bodies
                         .iter()
@@ -2200,13 +2228,13 @@ fn render_selected_guidance(
                 let installed =
                     marked_version(&shared.body, INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
                 if known
-                    && installed <= workflow.version
-                    && shared.body.trim() != workflow.body.trim()
+                    && (installed <= chosen.version || workflow.selected_sha256.is_some())
+                    && shared.body.trim() != chosen.body.trim()
                 {
                     let members = shared.tools.into_iter().collect();
                     rendered.replace_range(
                         shared.start..shared.end,
-                        &shared_block("agents-md", &members, &workflow.body),
+                        &shared_block("agents-md", &members, chosen.body),
                     );
                 }
             } else {
@@ -2229,24 +2257,23 @@ fn render_selected_guidance(
                     served = true;
                     let body = rendered[start + begin.len()..finish - end.len()].trim();
                     let known = body == plugin.instructions_body().trim()
-                        || body == workflow.body.trim()
+                        || body == chosen.body.trim()
                         || workflow.known_bodies.iter().any(|old| body == old.trim());
                     let installed = marked_version(body, INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
-                    if known && installed <= workflow.version && body != workflow.body.trim() {
+                    if known
+                        && (installed <= chosen.version || workflow.selected_sha256.is_some())
+                        && body != chosen.body.trim()
+                    {
                         rendered.replace_range(
                             start..finish,
-                            &format!("{begin}\n{}\n{end}", workflow.body.trim_end()),
+                            &format!("{begin}\n{}\n{end}", chosen.body.trim_end()),
                         );
                     }
                 }
                 if !served {
                     rendered = append_block(
                         &rendered,
-                        &shared_block(
-                            "agents-md",
-                            &std::collections::BTreeSet::new(),
-                            &workflow.body,
-                        ),
+                        &shared_block("agents-md", &std::collections::BTreeSet::new(), chosen.body),
                     );
                 }
             }
@@ -2256,13 +2283,15 @@ fn render_selected_guidance(
         .sources
         .iter()
         .flat_map(|source| {
-            source
-                .rules
-                .iter()
-                .filter(move |rule| source.selected_rules.contains(&rule.name))
+            source.rules.iter().filter_map(move |rule| {
+                source
+                    .selected_rules
+                    .contains(&rule.name)
+                    .then_some((source, rule))
+            })
         })
-        .filter(|rule| rule.name != "hotsheet-workflow")
-        .map(|rule| (rule.name.as_str(), rule))
+        .filter(|(_, rule)| rule.name != "hotsheet-workflow")
+        .map(|(source, rule)| (rule.name.as_str(), (source, rule)))
         .collect::<std::collections::HashMap<_, _>>();
     let mut candidates: std::collections::BTreeMap<
         &str,
@@ -2275,14 +2304,16 @@ fn render_selected_guidance(
         }
     }
     for (name, offered) in candidates {
-        let chosen = active
+        let selected_entry = active
             .then(|| {
                 offered
                     .iter()
                     .find_map(|rule| selected.get(rule.name.as_str()).copied())
             })
             .flatten();
-        let desired = chosen.map(|rule| rule.body.trim());
+        let chosen =
+            selected_entry.map(|(source, rule)| crate::guidance_sources::chosen_rule(source, rule));
+        let desired = chosen.as_ref().map(|choice| choice.body.trim());
         let Some((start, finish)) = guidance_bounds(&rendered, name) else {
             if let Some(body) = desired {
                 let marker = format!("<!-- hotsheet:begin section={name} v=");
@@ -2309,9 +2340,12 @@ fn render_selected_guidance(
         }
         match desired {
             Some(body) if generic != body => {
-                let selected_version = chosen.unwrap().version;
+                let selected_version = chosen.as_ref().unwrap().version;
                 if marked_version(installed, &format!("<!-- hotsheet:begin section={name} v="))
-                    .is_some_and(|version| version > selected_version)
+                    .is_some_and(|version| {
+                        version > selected_version
+                            && selected_entry.is_none_or(|(_, rule)| rule.selected_sha256.is_none())
+                    })
                 {
                     continue;
                 }
@@ -3361,6 +3395,9 @@ mod tests {
             tags: vec!["testing".into()],
             body: pinned.into(),
             known_bodies: vec![old.into()],
+            minimum_hotsheet_version: None,
+            historical_versions: Vec::new(),
+            selected_sha256: None,
         };
         crate::guidance_sources::save(
             project.path(),

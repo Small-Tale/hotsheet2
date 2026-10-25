@@ -2,6 +2,119 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ page }) => {
+  await openDemoProject(page);
+  const commit = 'a'.repeat(40);
+  const olderDigest = 'd'.repeat(64);
+  const pinnedDigest = 'c'.repeat(64);
+  const actions: unknown[] = [];
+  let cached = false;
+  let chosen = pinnedDigest;
+  const overview = () => ({
+    owner: 'builtin',
+    explicit_selection: true,
+    default_repository: '',
+    sources: [
+      {
+        id: 'playbook',
+        repository: 'https://example.test/playbook',
+        requested_ref: 'main',
+        commit: 'b'.repeat(40),
+        skills: [],
+        rules: [
+          {
+            name: 'example',
+            description: 'Example rule',
+            version: 3,
+            pinned_sha256: pinnedDigest,
+            chosen_version: chosen === olderDigest ? 1 : 3,
+            chosen_sha256: chosen,
+            chosen_commit: chosen === olderDigest ? commit : 'b'.repeat(40),
+            compatible: true,
+            minimum_hotsheet_version: null,
+            installed_version: 3,
+            owner: 'Hot Sheet',
+            tags: [],
+            selected: true,
+            historical_versions: cached
+              ? [
+                  { version: 1, sha256: olderDigest, commit, minimum_hotsheet_version: null, compatible: true },
+                  {
+                    version: 2,
+                    sha256: 'e'.repeat(64),
+                    commit: 'f'.repeat(40),
+                    minimum_hotsheet_version: '999.0.0',
+                    compatible: false,
+                  },
+                ]
+              : [],
+          },
+        ],
+      },
+    ],
+  });
+  await page.route('**/checkouts/demo-checkout/guidance', async (route) => {
+    if (route.request().method() === 'POST') {
+      const action = route.request().postDataJSON();
+      actions.push(action);
+      if (action.action === 'cache_rule_version') cached = true;
+      if (action.action === 'choose_rule_version') chosen = action.sha256;
+    }
+    await route.fulfill({ json: overview() });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance/rules/playbook/example/preview', (route) =>
+    route.fulfill({
+      json: { owner: 'builtin', current: 'Installed v3', pinned: 'Older v1', after: 'Older v1', outcome: 'replace' },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  const row = page.locator('[data-guidance-rule="example"]');
+  await row.getByText('Versions', { exact: true }).click();
+  await row.getByLabel('Older Version Commit').fill(commit);
+  await row.getByRole('button', { name: 'Cache Older Version' }).click();
+  const picker = row.locator('kui-select[name="guidance-rule-version"]');
+  await picker.locator('.kui-select__trigger').click();
+  await expect(picker.locator(`.kui-select__option[data-value="${olderDigest}"]`)).toBeVisible();
+  await picker.locator(`.kui-select__option[data-value="${olderDigest}"]`).click();
+  await expect(row.getByText(/chosen v1/)).toBeVisible();
+  await row.getByRole('button', { name: 'Preview Rule and Changes' }).click();
+  await expect(row.getByLabel('After Apply')).toHaveValue('Older v1');
+  await row.getByRole('button', { name: 'Close Preview' }).click();
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-wide.png' });
+  await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-wide.png' });
+  await page.setViewportSize({ width: 768, height: 900 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-medium.png' });
+  await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-medium.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await row.scrollIntoViewIfNeeded();
+  expect(await row.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-phone.png' });
+  await row.screenshot({ path: 'target/visual-captures/hs2-63d6f9-rule-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSettings.isVisible()) await showSettings.click();
+  await expect(row.getByText(/chosen v1/)).toBeVisible();
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-63d6f9-guidance-wide-return.png' });
+  expect(actions).toEqual([
+    {
+      action: 'cache_rule_version',
+      source: 'playbook',
+      rule: 'example',
+      requested_ref: commit,
+      expected_commit: commit,
+    },
+    { action: 'choose_rule_version', source: 'playbook', rule: 'example', sha256: olderDigest },
+  ]);
+});
+
 test('HS2-6ZA2RN searches guidance from the main toolbar with owner and tag chips', async ({ page }) => {
   await openDemoProject(page);
   await page.route('**/checkouts/demo-checkout/guidance', (route) =>

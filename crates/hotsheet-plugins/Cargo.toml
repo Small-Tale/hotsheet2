@@ -21,6 +21,7 @@ hotsheet-ticketing.workspace = true
 hotsheet-model.workspace = true
 hotsheet-process-journal.workspace = true
 time.workspace = true
+semver = "1.0"
 
 [dev-dependencies]
 tempfile.workspace = true

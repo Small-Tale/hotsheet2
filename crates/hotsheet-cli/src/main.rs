@@ -835,6 +835,26 @@ enum GuidanceCmd {
         #[arg(long = "skill")]
         skills: Vec<String>,
     },
+    /// Cache an older rule from a reviewed immutable source commit without moving the pin.
+    CacheRuleVersion {
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        rule: String,
+        #[arg(long = "ref")]
+        requested_ref: String,
+        #[arg(long)]
+        expected_commit: String,
+    },
+    /// Choose a cached rule digest, or omit the digest to use the current pin.
+    ChooseRuleVersion {
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        rule: String,
+        #[arg(long)]
+        sha256: Option<String>,
+    },
     /// Apply selected guidance through the project's chosen writer.
     Apply,
     /// Select the built-in or Rulesync instruction writer for this project.

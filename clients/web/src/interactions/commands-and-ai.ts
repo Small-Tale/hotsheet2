@@ -78,6 +78,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly guidanceRepository: Signal<string>;
   readonly guidanceSourceId: Signal<string>;
   readonly guidanceRef: Signal<string>;
+  readonly guidanceOlderCommitDrafts: Signal<Record<string, string>>;
   readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
   readonly previewGuidanceRule: (source: string, rule: string) => Promise<void>;
   readonly checkGuidanceUpdates: (force?: boolean) => Promise<void>;
@@ -242,6 +243,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     guidanceRepository,
     guidanceSourceId,
     guidanceRef,
+    guidanceOlderCommitDrafts,
     updateGuidance,
     previewGuidanceRule,
     checkGuidanceUpdates,
@@ -1190,6 +1192,51 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleGuidanceRule.selector, (_event, target) => {
       toggleGuidance(target, 'rules');
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name="guidance-older-commit"]', (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-guidance-rule][data-guidance-source]');
+      if (!row?.dataset.guidanceRule || !row.dataset.guidanceSource) return;
+      const key = `${row.dataset.guidanceSource}/${row.dataset.guidanceRule}`;
+      guidanceOlderCommitDrafts.value = {
+        ...guidanceOlderCommitDrafts.value,
+        [key]: (target as HTMLInputElement).value,
+      };
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cacheGuidanceRuleVersion.selector, (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-guidance-rule][data-guidance-source]');
+      if (!row?.dataset.guidanceRule || !row.dataset.guidanceSource || guidanceLoading.value) return;
+      const commit = (
+        guidanceOlderCommitDrafts.value[`${row.dataset.guidanceSource}/${row.dataset.guidanceRule}`] ?? ''
+      ).trim();
+      if (!commit || !/^[0-9a-f]{40}$/.test(commit)) return;
+      void updateGuidance({
+        action: 'cache_rule_version',
+        source: row.dataset.guidanceSource,
+        rule: row.dataset.guidanceRule,
+        requested_ref: commit,
+        expected_commit: commit,
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      'select[name="guidance-rule-version"], kui-select[name="guidance-rule-version"]',
+      (_event, target) => {
+        const row = target.closest<HTMLElement>('[data-guidance-rule][data-guidance-source]');
+        if (!row?.dataset.guidanceRule || !row.dataset.guidanceSource || guidanceLoading.value) return;
+        void updateGuidance({
+          action: 'choose_rule_version',
+          source: row.dataset.guidanceSource,
+          rule: row.dataset.guidanceRule,
+          sha256: (target as HTMLSelectElement).value,
+        });
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.previewGuidanceRule.selector, (_event, target) => {

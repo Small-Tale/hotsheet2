@@ -172,12 +172,22 @@ fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
                     (query.is_empty() || rule.name.to_lowercase().contains(&query) || rule.description.to_lowercase().contains(&query))
                         && owner.as_deref().is_none_or(|wanted| rule.owner.as_deref() == Some(wanted))
                         && tag.as_deref().is_none_or(|wanted| rule.tags.iter().any(|value| value == wanted))
-                }).map(|rule| serde_json::json!({
+                }).map(|rule| {
+                    let chosen = sources::chosen_rule(source, rule);
+                    serde_json::json!({
                     "name": rule.name, "version": rule.version, "description": rule.description,
                     "owner": rule.owner, "tags": rule.tags,
                     "selected": source.selected_rules.contains(&rule.name),
                     "installed_version": sources::installed_version(project, &rule.name),
-                })).collect::<Vec<_>>(),
+                    "chosen_version": chosen.version, "chosen_sha256": chosen.sha256,
+                    "chosen_commit": chosen.commit,
+                    "compatible": sources::require_compatible(&chosen).is_ok(),
+                    "minimum_hotsheet_version": chosen.minimum_hotsheet_version,
+                    "historical_versions": rule.historical_versions.iter().map(|old| serde_json::json!({
+                        "version": old.version, "sha256": old.sha256,
+                        "commit": old.commit, "minimum_hotsheet_version": old.minimum_hotsheet_version,
+                    })).collect::<Vec<_>>(),
+                })}).collect::<Vec<_>>(),
                 "skills": source.skills.iter().map(|skill| serde_json::json!({
                     "name": skill.name, "selected": source.selected_skills.contains(&skill.name),
                 })).collect::<Vec<_>>(),
@@ -248,6 +258,25 @@ fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
                 rules.len(),
                 skills.len()
             );
+        }
+        GuidanceCmd::CacheRuleVersion {
+            source,
+            rule,
+            requested_ref,
+            expected_commit,
+        } => {
+            sources::cache_older_rule(project, &source, &rule, &requested_ref, &expected_commit)?;
+            println!(
+                "Cached {rule} from {expected_commit} without changing {source}'s pin; choose its digest before applying"
+            );
+        }
+        GuidanceCmd::ChooseRuleVersion {
+            source,
+            rule,
+            sha256,
+        } => {
+            sources::select_rule_version(project, &source, &rule, sha256.as_deref())?;
+            println!("Selected {rule} revision from {source}; apply guidance to install it");
         }
         GuidanceCmd::Apply => {
             if hotsheet_plugins::setup::guidance_owner_in(project)? == "rulesync" {

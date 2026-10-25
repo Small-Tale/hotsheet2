@@ -360,6 +360,53 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
             .unwrap()
             .contains("Updated fixture.")
     );
+    run(&[
+        "cache-rule-version",
+        "--source",
+        "ai-playbook",
+        "--rule",
+        "project-bootstrap",
+        "--ref",
+        &commit,
+        "--expected-commit",
+        &commit,
+    ]);
+    let history: serde_json::Value = serde_json::from_slice(&run(&["list"])).unwrap();
+    let older_digest = history["sources"][0]["rules"][0]["historical_versions"][0]["sha256"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    run(&[
+        "choose-rule-version",
+        "--source",
+        "ai-playbook",
+        "--rule",
+        "project-bootstrap",
+        "--sha256",
+        &older_digest,
+    ]);
+    let chosen: serde_json::Value = serde_json::from_slice(&run(&["list"])).unwrap();
+    assert_eq!(chosen["sources"][0]["rules"][0]["chosen_version"], 1);
+    assert_eq!(chosen["sources"][0]["commit"], third);
+    run(&["apply"]);
+    assert!(
+        std::fs::read_to_string(project.join("AGENTS.md"))
+            .unwrap()
+            .contains("Fixture.")
+    );
+    run(&[
+        "choose-rule-version",
+        "--source",
+        "ai-playbook",
+        "--rule",
+        "project-bootstrap",
+    ]);
+    run(&["apply"]);
+    assert!(
+        std::fs::read_to_string(project.join("AGENTS.md"))
+            .unwrap()
+            .contains("Updated fixture.")
+    );
 }
 
 #[test]

@@ -459,6 +459,7 @@ export async function startHotSheetWebClient() {
   const guidanceRepository = signal('');
   const guidanceSourceId = signal('ai-playbook');
   const guidanceRef = signal('main');
+  const guidanceOlderCommitDrafts = signal<Record<string, string>>({});
   let guidanceProjectId = '';
   let guidanceLoadGeneration = 0;
   const inheritGlobalShellHistory = signal(false),
@@ -1523,6 +1524,7 @@ export async function startHotSheetWebClient() {
       rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
+      guidanceOlderCommitDrafts.value = {};
       guidanceSourceId.value = 'ai-playbook';
       guidanceSearchModel.clear();
       guidanceSearchOpen.value = false;
@@ -1699,6 +1701,8 @@ export async function startHotSheetWebClient() {
         guidanceMessage.value = {
           register: 'Source pinned. Review the selection, then apply.',
           select: 'Selection updated. Apply to install it.',
+          cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
+          choose_rule_version: 'Rule version selected. Preview changes, then apply.',
           owner: 'Instruction writer selected. Apply when ready.',
           apply: 'Selected guidance applied.',
         }[action.action];
@@ -3981,6 +3985,7 @@ export async function startHotSheetWebClient() {
       search: guidanceSearchModel.state.value,
       repository: guidanceRepository.value,
       sourceRef: guidanceRef.value,
+      olderCommitDrafts: guidanceOlderCommitDrafts.value,
       sourceId: guidanceSourceId.value,
       ownerFilter: guidanceOwnerFilter.value,
       tagFilter: guidanceTagFilter.value,
@@ -4867,6 +4872,7 @@ export async function startHotSheetWebClient() {
     guidanceRepository,
     guidanceSourceId,
     guidanceRef,
+    guidanceOlderCommitDrafts,
     updateGuidance,
     previewGuidanceRule,
     checkGuidanceUpdates,

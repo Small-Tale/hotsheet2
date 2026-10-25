@@ -57,6 +57,9 @@ rule/skill repositories in `.hotsheet2/guidance-sources.json`. The CLI `guidance
 subcommands and authenticated checkout guidance route share its selection and apply
 paths; Settings → Project guidance exposes the same pinned source picker. A built-in apply
 merges selected sections, while Rulesync apply generates from cached curated inputs.
+Rule history stores verified older bodies by commit and SHA-256, and per-rule
+selection resolves a cached revision independently of the source pin. Manifest
+minimum Hot Sheet versions are checked before selection and installation (HS2-63D6F9).
 `setup::preview_guidance_rule_in` and the authenticated per-rule preview route
 compare one pinned rule with its installed and after-Apply section without writes;
 Project guidance groups the catalog by owner and shows available tags (HS2-019VVA).

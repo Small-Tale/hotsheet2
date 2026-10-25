@@ -82,6 +82,78 @@ pub struct SourceRule {
     pub body: String,
     #[serde(default)]
     pub known_bodies: Vec<String>,
+    /// Optional lower bound declared by the source manifest (HS2-63D6F9).
+    #[serde(default)]
+    pub minimum_hotsheet_version: Option<String>,
+    /// Verified historic offerings retained independently of the source's current pin.
+    #[serde(default)]
+    pub historical_versions: Vec<SourceRuleRevision>,
+    /// None means the current pinned offering. A digest chooses one exact historic body.
+    #[serde(default)]
+    pub selected_sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SourceRuleRevision {
+    pub version: u64,
+    pub sha256: String,
+    pub description: String,
+    pub body: String,
+    pub commit: String,
+    #[serde(default)]
+    pub minimum_hotsheet_version: Option<String>,
+}
+
+pub struct ChosenRule<'a> {
+    pub version: u64,
+    pub sha256: &'a str,
+    pub description: &'a str,
+    pub body: &'a str,
+    pub commit: &'a str,
+    pub minimum_hotsheet_version: Option<&'a str>,
+}
+
+pub fn chosen_rule<'a>(source: &'a GuidanceSource, rule: &'a SourceRule) -> ChosenRule<'a> {
+    if let Some(history) = rule
+        .historical_versions
+        .iter()
+        .find(|history| Some(history.sha256.as_str()) == rule.selected_sha256.as_deref())
+    {
+        ChosenRule {
+            version: history.version,
+            sha256: &history.sha256,
+            description: &history.description,
+            body: &history.body,
+            commit: &history.commit,
+            minimum_hotsheet_version: history.minimum_hotsheet_version.as_deref(),
+        }
+    } else {
+        ChosenRule {
+            version: rule.version,
+            sha256: &rule.sha256,
+            description: &rule.description,
+            body: &rule.body,
+            commit: &source.commit,
+            minimum_hotsheet_version: rule.minimum_hotsheet_version.as_deref(),
+        }
+    }
+}
+
+pub fn require_compatible(choice: &ChosenRule<'_>) -> Result<(), GuidanceSourceError> {
+    let Some(minimum) = choice.minimum_hotsheet_version else {
+        return Ok(());
+    };
+    let required = semver::Version::parse(minimum).map_err(|_| {
+        GuidanceSourceError::Invalid("invalid Hot Sheet compatibility version".into())
+    })?;
+    let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+        .map_err(|_| GuidanceSourceError::Invalid("invalid running Hot Sheet version".into()))?;
+    if current < required {
+        return Err(GuidanceSourceError::Invalid(format!(
+            "rule requires Hot Sheet {required} or later (running {current})"
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,6 +204,8 @@ struct ManifestRule {
     owner: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    minimum_hotsheet_version: Option<String>,
 }
 
 fn slug(value: &str) -> bool {
@@ -155,6 +229,21 @@ fn digest(bytes: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+fn rule_marker(name: &str, version: u64) -> String {
+    if name == "hotsheet-workflow" {
+        format!("<!-- hotsheet-instructions-version: {version} -->")
+    } else {
+        format!(
+            "<!-- hotsheet:begin section={} v={version} -->",
+            name.strip_prefix("hotsheet-").unwrap_or(name)
+        )
+    }
+}
+
+fn valid_minimum_version(minimum: Option<&str>) -> bool {
+    minimum.is_none_or(|value| semver::Version::parse(value).is_ok())
 }
 
 fn guidance_process_context(
@@ -297,18 +386,11 @@ pub fn inspect_source(
                 entry.name
             )));
         }
-        let marker = if entry.name == "hotsheet-workflow" {
-            format!("<!-- hotsheet-instructions-version: {} -->", entry.version)
-        } else {
-            format!(
-                "<!-- hotsheet:begin section={} v={} -->",
-                entry.name.strip_prefix("hotsheet-").unwrap_or(&entry.name),
-                entry.version
-            )
-        };
-        if !body.starts_with(&marker) {
+        if !body.starts_with(&rule_marker(&entry.name, entry.version))
+            || !valid_minimum_version(entry.minimum_hotsheet_version.as_deref())
+        {
             return Err(GuidanceSourceError::Invalid(format!(
-                "rule version mismatch: {}",
+                "rule version or compatibility mismatch: {}",
                 entry.name
             )));
         }
@@ -321,6 +403,9 @@ pub fn inspect_source(
             tags: entry.tags,
             body: body.to_owned(),
             known_bodies: Vec::new(),
+            minimum_hotsheet_version: entry.minimum_hotsheet_version,
+            historical_versions: Vec::new(),
+            selected_sha256: None,
         });
     }
     let tree = String::from_utf8(git(
@@ -411,9 +496,29 @@ pub fn validate(config: &GuidanceConfig) -> Result<(), GuidanceSourceError> {
         }
         let mut rule_names = HashSet::new();
         for rule in &source.rules {
+            let mut versions = HashSet::from([rule.version]);
+            let mut digests = HashSet::from([rule.sha256.as_str()]);
             if !slug(&rule.name)
                 || !rule_names.insert(&rule.name)
                 || digest(rule.body.as_bytes()) != rule.sha256
+                || !valid_minimum_version(rule.minimum_hotsheet_version.as_deref())
+                || rule.historical_versions.iter().any(|history| {
+                    history.commit.len() != 40
+                        || !history.commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+                        || !versions.insert(history.version)
+                        || !digests.insert(history.sha256.as_str())
+                        || digest(history.body.as_bytes()) != history.sha256
+                        || !history
+                            .body
+                            .starts_with(&rule_marker(&rule.name, history.version))
+                        || !valid_minimum_version(history.minimum_hotsheet_version.as_deref())
+                })
+                || rule.selected_sha256.as_ref().is_some_and(|selected| {
+                    !rule
+                        .historical_versions
+                        .iter()
+                        .any(|history| &history.sha256 == selected)
+                })
                 || rule
                     .known_bodies
                     .iter()
@@ -537,6 +642,27 @@ pub fn register_checked(
         source.selected_skills = old.selected_skills.clone();
         for rule in &mut source.rules {
             if let Some(previous) = old.rules.iter().find(|previous| previous.name == rule.name) {
+                let mut history = previous.historical_versions.clone();
+                if previous.sha256 != rule.sha256 {
+                    history.push(SourceRuleRevision {
+                        version: previous.version,
+                        sha256: previous.sha256.clone(),
+                        description: previous.description.clone(),
+                        body: previous.body.clone(),
+                        commit: old.commit.clone(),
+                        minimum_hotsheet_version: previous.minimum_hotsheet_version.clone(),
+                    });
+                }
+                history.retain(|item| item.sha256 != rule.sha256);
+                history.sort_by_key(|item| std::cmp::Reverse(item.version));
+                rule.known_bodies
+                    .extend(history.iter().map(|item| item.body.clone()));
+                rule.historical_versions = history;
+                if let Some(chosen) = previous.selected_sha256.as_deref()
+                    && chosen != rule.sha256
+                {
+                    rule.selected_sha256 = Some(chosen.to_owned());
+                }
                 if previous.body != rule.body {
                     rule.known_bodies.push(previous.body.clone());
                 }
@@ -574,6 +700,110 @@ pub fn register_checked(
     Ok(config)
 }
 
+/// Cache one previously reviewed rule revision without changing the source pin.
+/// The full commit is required to prevent a moving tag from changing after review.
+pub fn cache_older_rule(
+    project: &Path,
+    id: &str,
+    name: &str,
+    requested_ref: &str,
+    expected_commit: &str,
+) -> Result<GuidanceConfig, GuidanceSourceError> {
+    let before = load(project)?;
+    let source = before
+        .sources
+        .iter()
+        .find(|source| source.id == id)
+        .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
+    let repository = source.repository.clone();
+    let pinned_commit = source.commit.clone();
+    let candidate = inspect_source(id, &repository, requested_ref)?;
+    if candidate.commit != expected_commit {
+        return Err(GuidanceSourceError::Invalid(
+            "historic source changed since review; inspect it again".into(),
+        ));
+    }
+    let offered = candidate
+        .rules
+        .iter()
+        .find(|rule| rule.name == name)
+        .ok_or_else(|| GuidanceSourceError::Invalid("rule missing at historic ref".into()))?;
+    let _lock = lock_config(project)?;
+    let mut config = load(project)?;
+    let source = config
+        .sources
+        .iter_mut()
+        .find(|source| {
+            source.id == id && source.repository == repository && source.commit == pinned_commit
+        })
+        .ok_or_else(|| GuidanceSourceError::Invalid("source changed since review".into()))?;
+    let rule = source
+        .rules
+        .iter_mut()
+        .find(|rule| rule.name == name)
+        .ok_or_else(|| GuidanceSourceError::Invalid("rule missing from pinned source".into()))?;
+    if offered.version >= rule.version {
+        return Err(GuidanceSourceError::Invalid(
+            "historic ref does not offer an older rule version".into(),
+        ));
+    }
+    if !rule
+        .historical_versions
+        .iter()
+        .any(|history| history.sha256 == offered.sha256)
+    {
+        rule.historical_versions.push(SourceRuleRevision {
+            version: offered.version,
+            sha256: offered.sha256.clone(),
+            description: offered.description.clone(),
+            body: offered.body.clone(),
+            commit: candidate.commit,
+            minimum_hotsheet_version: offered.minimum_hotsheet_version.clone(),
+        });
+        rule.historical_versions
+            .sort_by_key(|item| std::cmp::Reverse(item.version));
+        rule.known_bodies.push(offered.body.clone());
+        rule.known_bodies.sort();
+        rule.known_bodies.dedup();
+        save(project, &config)?;
+    }
+    Ok(config)
+}
+
+/// Choose one exact cached rule body; an empty digest restores the source's pin.
+pub fn select_rule_version(
+    project: &Path,
+    id: &str,
+    name: &str,
+    sha256: Option<&str>,
+) -> Result<GuidanceConfig, GuidanceSourceError> {
+    let _lock = lock_config(project)?;
+    let mut config = load(project)?;
+    let source = config
+        .sources
+        .iter_mut()
+        .find(|source| source.id == id)
+        .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
+    let rule = source
+        .rules
+        .iter_mut()
+        .find(|rule| rule.name == name)
+        .ok_or_else(|| GuidanceSourceError::Invalid("unknown rule".into()))?;
+    rule.selected_sha256 = sha256
+        .filter(|digest| *digest != rule.sha256)
+        .map(str::to_owned);
+    validate(&config)?;
+    let source = config
+        .sources
+        .iter()
+        .find(|source| source.id == id)
+        .unwrap();
+    let rule = source.rules.iter().find(|rule| rule.name == name).unwrap();
+    require_compatible(&chosen_rule(source, rule))?;
+    save(project, &config)?;
+    Ok(config)
+}
+
 pub fn select(
     project: &Path,
     id: &str,
@@ -589,6 +819,14 @@ pub fn select(
         .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
     source.selected_rules = rules.to_vec();
     source.selected_skills = skills.to_vec();
+    for name in rules {
+        let rule = source
+            .rules
+            .iter()
+            .find(|rule| &rule.name == name)
+            .ok_or_else(|| GuidanceSourceError::Invalid("unknown selected rule".into()))?;
+        require_compatible(&chosen_rule(source, rule))?;
+    }
     config.explicit_selection = true;
     save(project, &config)?;
     Ok(config)
@@ -620,6 +858,14 @@ pub fn select_item(
         .iter_mut()
         .find(|source| source.id == source_id)
         .ok_or_else(|| GuidanceSourceError::Invalid("unknown source".into()))?;
+    if kind == "rule" {
+        let rule = source
+            .rules
+            .iter()
+            .find(|rule| rule.name == name)
+            .ok_or_else(|| GuidanceSourceError::Invalid("unknown rule".into()))?;
+        require_compatible(&chosen_rule(source, rule))?;
+    }
     let selected = match kind {
         "rule"
             if source.rules.iter().any(|rule| {
@@ -663,15 +909,26 @@ pub fn apply_rulesync(project: &Path) -> Result<(), GuidanceSourceError> {
             "select rules before applying Rulesync".into(),
         ));
     }
+    for source in &config.sources {
+        for rule in source
+            .rules
+            .iter()
+            .filter(|rule| source.selected_rules.contains(&rule.name))
+        {
+            require_compatible(&chosen_rule(source, rule))?;
+        }
+    }
     let curated = project.join(".rulesync/rules/.curated");
     fs::create_dir_all(&curated)?;
-    let mut offered = std::collections::BTreeMap::<&str, Vec<(&SourceRule, bool)>>::new();
+    let mut offered =
+        std::collections::BTreeMap::<&str, Vec<(&GuidanceSource, &SourceRule, bool)>>::new();
     for source in &config.sources {
         for rule in &source.rules {
-            offered
-                .entry(&rule.name)
-                .or_default()
-                .push((rule, source.selected_rules.contains(&rule.name)));
+            offered.entry(&rule.name).or_default().push((
+                source,
+                rule,
+                source.selected_rules.contains(&rule.name),
+            ));
         }
     }
     for (name, entries) in offered {
@@ -682,16 +939,17 @@ pub fn apply_rulesync(project: &Path) -> Result<(), GuidanceSourceError> {
             .and_then(|text| split_rule_body(text).ok())
             .map(|(body, _)| body);
         let known = existing_body.is_some_and(|body| {
-            entries.iter().any(|(rule, _)| {
+            entries.iter().any(|(_, rule, _)| {
                 body == rule.body || rule.known_bodies.iter().any(|old| body == old)
             })
         });
-        if let Some((rule, _)) = entries.iter().find(|(_, selected)| *selected) {
+        if let Some((source, rule, _)) = entries.iter().find(|(_, _, selected)| *selected) {
+            let chosen = chosen_rule(source, rule);
             let content = format!(
                 "---\nroot: true\ntargets: [\"*\"]\ndescription: {}\n---\n\n{}",
-                serde_json::to_string(&rule.description)
+                serde_json::to_string(chosen.description)
                     .map_err(|error| GuidanceSourceError::Invalid(error.to_string()))?,
-                rule.body
+                chosen.body
             );
             if (existing.is_none() || known) && existing.as_deref() != Some(content.as_str()) {
                 fs::write(&path, content.as_bytes())?;
@@ -862,6 +1120,164 @@ mod tests {
     }
 
     #[test]
+    fn older_revision_is_selected_by_digest_and_can_replace_a_newer_install() {
+        let source = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        git(source.path(), &["init", "-q"]).unwrap();
+        write_rule(source.path(), 1, "Older instructions.");
+        let first = commit(source.path());
+        write_rule(source.path(), 2, "Newer instructions.");
+        let second = commit(source.path());
+        let repository = source.path().to_str().unwrap();
+        register_checked(project.path(), "test", repository, &second, Some(&second)).unwrap();
+        select(
+            project.path(),
+            "test",
+            &["rust-lint-and-format".into()],
+            &[],
+        )
+        .unwrap();
+        crate::setup::apply_selected_guidance_in(project.path()).unwrap();
+        assert_eq!(
+            installed_version(project.path(), "rust-lint-and-format"),
+            Some(2)
+        );
+
+        assert!(
+            cache_older_rule(
+                project.path(),
+                "test",
+                "rust-lint-and-format",
+                &first,
+                &second
+            )
+            .is_err()
+        );
+        let cached = cache_older_rule(
+            project.path(),
+            "test",
+            "rust-lint-and-format",
+            &first,
+            &first,
+        )
+        .unwrap();
+        assert_eq!(cached.sources[0].commit, second);
+        let revision = &cached.sources[0].rules[0].historical_versions[0];
+        assert_eq!(revision.version, 1);
+        let digest = revision.sha256.clone();
+        cache_older_rule(
+            project.path(),
+            "test",
+            "rust-lint-and-format",
+            &first,
+            &first,
+        )
+        .unwrap();
+        assert_eq!(
+            load(project.path()).unwrap().sources[0].rules[0]
+                .historical_versions
+                .len(),
+            1
+        );
+        select_rule_version(
+            project.path(),
+            "test",
+            "rust-lint-and-format",
+            Some(&digest),
+        )
+        .unwrap();
+        let preview =
+            crate::setup::preview_guidance_rule_in(project.path(), "test", "rust-lint-and-format")
+                .unwrap();
+        assert_eq!(preview.outcome, "replace");
+        assert!(preview.pinned.contains("Older instructions."));
+        crate::setup::apply_selected_guidance_in(project.path()).unwrap();
+        assert_eq!(
+            installed_version(project.path(), "rust-lint-and-format"),
+            Some(1)
+        );
+        assert!(
+            fs::read_to_string(project.path().join("AGENTS.md"))
+                .unwrap()
+                .contains("Older instructions.")
+        );
+        select_rule_version(project.path(), "test", "rust-lint-and-format", None).unwrap();
+        crate::setup::apply_selected_guidance_in(project.path()).unwrap();
+        assert_eq!(
+            installed_version(project.path(), "rust-lint-and-format"),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn incompatible_revision_cannot_be_selected_or_applied() {
+        let source = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        git(source.path(), &["init", "-q"]).unwrap();
+        write_rule(source.path(), 1, "Needs a newer app.");
+        let manifest_path = source.path().join("rules-manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["rules"][0]["minimum_hotsheet_version"] = serde_json::json!("999.0.0");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let first = commit(source.path());
+        write_rule(source.path(), 2, "Compatible.");
+        let second = commit(source.path());
+        let repository = source.path().to_str().unwrap();
+        register(project.path(), "test", repository, &second).unwrap();
+        let cached = cache_older_rule(
+            project.path(),
+            "test",
+            "rust-lint-and-format",
+            &first,
+            &first,
+        )
+        .unwrap();
+        let digest = &cached.sources[0].rules[0].historical_versions[0].sha256;
+        assert!(
+            select_rule_version(project.path(), "test", "rust-lint-and-format", Some(digest))
+                .is_err()
+        );
+        assert!(
+            load(project.path()).unwrap().sources[0].rules[0]
+                .selected_sha256
+                .is_none()
+        );
+        let mut tampered = load(project.path()).unwrap();
+        tampered.sources[0].rules[0].historical_versions[0]
+            .body
+            .push_str("tampered");
+        assert!(save(project.path(), &tampered).is_err());
+
+        let incompatible_project = tempfile::tempdir().unwrap();
+        register(incompatible_project.path(), "test", repository, &first).unwrap();
+        assert!(
+            select(
+                incompatible_project.path(),
+                "test",
+                &["rust-lint-and-format".into()],
+                &[],
+            )
+            .is_err()
+        );
+        let mut incompatible = load(incompatible_project.path()).unwrap();
+        incompatible.sources[0]
+            .selected_rules
+            .push("rust-lint-and-format".into());
+        save(incompatible_project.path(), &incompatible).unwrap();
+        assert!(
+            crate::setup::preview_guidance_rule_in(
+                incompatible_project.path(),
+                "test",
+                "rust-lint-and-format"
+            )
+            .is_err()
+        );
+        assert!(crate::setup::apply_selected_guidance_in(incompatible_project.path()).is_err());
+        assert!(!incompatible_project.path().join("AGENTS.md").exists());
+    }
+
+    #[test]
     fn rejects_duplicate_and_escaping_cached_entries() {
         let mut config = GuidanceConfig::default();
         let source = tempfile::tempdir().unwrap();
@@ -911,6 +1327,9 @@ mod tests {
                     tags: vec![],
                     body: body.into(),
                     known_bodies: vec![],
+                    minimum_hotsheet_version: None,
+                    historical_versions: Vec::new(),
+                    selected_sha256: None,
                 }],
             }],
         };
