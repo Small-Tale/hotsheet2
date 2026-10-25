@@ -10133,6 +10133,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/permissions/legacy/invalidate:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: probe_checkout_legacy_permission_host
+      responses:
+        '200':
+          description: Whether this host owns the selected ticket source.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyPermissionHost'
+        '404':
+          description: The checkout was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Permission rules are still loading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      parameters:
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+    post:
+      operationId: invalidate_checkout_legacy_permissions
+      responses:
+        '200':
+          description: Whether this host owned and invalidated the selected ticket source.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyPermissionHost'
+        '404':
+          description: The checkout was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Permission rules are still loading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LegacyPermissionHostRequest'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -15339,6 +15412,22 @@ components:
       properties:
         discarded:
           type: integer
+      additionalProperties: false
+    LegacyPermissionHostRequest:
+      type: object
+      required:
+        - source
+      properties:
+        source:
+          type: string
+      additionalProperties: false
+    LegacyPermissionHost:
+      type: object
+      required:
+        - hosted
+      properties:
+        hosted:
+          type: boolean
       additionalProperties: false
     ProviderPatch:
       type: object
