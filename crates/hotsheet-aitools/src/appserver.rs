@@ -235,13 +235,22 @@ mod catalog_probe_tests {
 
     /// A fake `codex` whose `app-server` records its pid and then hangs forever.
     fn wedged_codex(dir: &Path) -> (String, PathBuf) {
+        wedged_codex_with_start_delay(dir, 0)
+    }
+
+    fn wedged_codex_with_start_delay(dir: &Path, start_delay_secs: u8) -> (String, PathBuf) {
         let program = dir.join("codex");
         let pid_file = dir.join("app-server.pid");
+        let delay = if start_delay_secs == 0 {
+            String::new()
+        } else {
+            format!("sleep {start_delay_secs}\n")
+        };
         std::fs::write(
             &program,
             format!(
                 "#!/bin/sh\nif [ \"$1\" = --version ]; then echo codex-test 1.0; exit 0; fi\n\
-                 echo $$ > '{}'\nexec sleep 30\n",
+                 {delay}echo $$ > '{}'\nexec sleep 30\n",
                 pid_file.display()
             ),
         )
@@ -293,7 +302,27 @@ mod catalog_probe_tests {
         let error = catalog.discover(dir.path()).unwrap_err();
         assert!(error.contains("initialize"), "{error}");
         assert!(started.elapsed() < MODEL_CATALOG_REQUEST_TIMEOUT + Duration::from_secs(2));
-        assert_gone(app_server_pid(&pid_file));
+        // HS2-FN1W2F: under gate load the probe deadline can kill the child before
+        // the shell is scheduled to write its PID. The guard has already reaped
+        // that child when discover returns, so there is no PID to check then.
+        // The stop-probes test below waits for a confirmed PID before killing it.
+        if let Some(pid) = std::fs::read_to_string(&pid_file)
+            .ok()
+            .and_then(|text| text.trim().parse().ok())
+        {
+            assert_gone(pid);
+        }
+        assert_eq!(crate::probe::in_flight_probes(), 0);
+    }
+
+    #[test]
+    fn a_catalog_probe_can_time_out_before_the_fake_records_its_pid() {
+        let dir = tempfile::tempdir().unwrap();
+        let (program, pid_file) = wedged_codex_with_start_delay(dir.path(), 10);
+        let catalog = AppServerModelCatalog::new(program, Vec::new());
+        let error = catalog.discover(dir.path()).unwrap_err();
+        assert!(error.contains("initialize"), "{error}");
+        assert!(!pid_file.exists());
         assert_eq!(crate::probe::in_flight_probes(), 0);
     }
 
