@@ -170,8 +170,8 @@ impl ProcessSignals for ChildSignals {
     }
 }
 
-/// Every live `(pid, parent pid)` pair, from `ps` (macOS and Linux alike).
-#[cfg(unix)]
+/// Every live `(pid, parent pid)` pair, from `ps` on non-macOS Unix hosts.
+#[cfg(all(unix, not(target_os = "macos")))]
 fn process_table() -> Vec<(u32, u32)> {
     let Ok(output) = hotsheet_ticketing::git::launch("ps")
         .args(["-A", "-o", "pid=", "-o", "ppid="])
@@ -189,7 +189,61 @@ fn process_table() -> Vec<(u32, u32)> {
         .collect()
 }
 
+/// macOS can deny launching `ps` in a restricted sandbox while still allowing a process
+/// to inspect its own child's descendants through libproc (HS2-CSMC2G).
+#[cfg(target_os = "macos")]
+fn direct_children(parent: u32) -> Option<Vec<u32>> {
+    #[link(name = "proc")]
+    unsafe extern "C" {
+        fn proc_listchildpids(
+            ppid: libc::pid_t,
+            buffer: *mut libc::c_void,
+            buffersize: libc::c_int,
+        ) -> libc::c_int;
+    }
+
+    let mut capacity = 32usize;
+    loop {
+        let mut pids = vec![0 as libc::pid_t; capacity];
+        let byte_len = pids.len().checked_mul(std::mem::size_of::<libc::pid_t>())?;
+        let byte_len = libc::c_int::try_from(byte_len).ok()?;
+        // SAFETY: the buffer has `byte_len` writable bytes and remains live for the call.
+        let count = unsafe {
+            proc_listchildpids(parent as libc::pid_t, pids.as_mut_ptr().cast(), byte_len)
+        };
+        if count < 0 {
+            return None;
+        }
+        let count = count as usize;
+        if count < capacity {
+            pids.truncate(count);
+            return Some(
+                pids.into_iter()
+                    .filter_map(|pid| u32::try_from(pid).ok())
+                    .collect(),
+            );
+        }
+        capacity = capacity.checked_mul(2)?;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_descendants(root: u32) -> Option<Vec<u32>> {
+    let mut found = Vec::new();
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        for pid in direct_children(parent)? {
+            if pid != root && !found.contains(&pid) {
+                found.push(pid);
+                frontier.push(pid);
+            }
+        }
+    }
+    Some(found)
+}
+
 /// The descendants of `root` in `table`, parents before children.
+#[cfg(any(test, not(target_os = "macos")))]
 #[cfg_attr(not(unix), allow(dead_code))]
 fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
     let mut found = Vec::new();
@@ -213,7 +267,11 @@ fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
 fn kill_descendants(root: u32) {
     let mut frozen: Vec<u32> = Vec::new();
     for _ in 0..8 {
-        let fresh: Vec<u32> = descendants_of(root, &process_table())
+        #[cfg(target_os = "macos")]
+        let descendants = macos_descendants(root).unwrap_or_default();
+        #[cfg(not(target_os = "macos"))]
+        let descendants = descendants_of(root, &process_table());
+        let fresh: Vec<u32> = descendants
             .into_iter()
             .filter(|pid| !frozen.contains(pid))
             .collect();
@@ -312,6 +370,40 @@ mod tests {
         assert_eq!(found, vec![11, 12, 13, 14]);
         assert!(descendants_of(12, &table).is_empty());
         assert!(descendants_of(99, &table).is_empty());
+    }
+
+    /// HS2-CSMC2G: macOS child discovery does not need the sandbox-denied `ps` executable.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_child_lookup_tracks_an_owned_child_across_repeated_reads() {
+        let child = shell("echo ready; exec sleep 5");
+        let pid = child.id();
+        let mut signals = child.signals();
+        let (_writer, mut reader) = child.into_halves();
+        assert_eq!(reader.recv().unwrap().as_deref(), Some("ready"));
+        for _ in 0..2 {
+            assert!(direct_children(std::process::id()).unwrap().contains(&pid));
+        }
+        assert_eq!(
+            stop_process(signals.as_mut(), Duration::from_secs(1)),
+            StopOutcome::Terminated
+        );
+        assert!(!direct_children(std::process::id()).unwrap().contains(&pid));
+
+        let next = shell("echo next; exec sleep 5");
+        let next_pid = next.id();
+        let mut next_signals = next.signals();
+        let (_writer, mut next_reader) = next.into_halves();
+        assert_eq!(next_reader.recv().unwrap().as_deref(), Some("next"));
+        assert!(
+            direct_children(std::process::id())
+                .unwrap()
+                .contains(&next_pid)
+        );
+        assert_eq!(
+            stop_process(next_signals.as_mut(), Duration::from_secs(1)),
+            StopOutcome::Terminated
+        );
     }
 
     #[cfg(unix)]

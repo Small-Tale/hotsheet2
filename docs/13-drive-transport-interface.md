@@ -286,7 +286,9 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > reaches only the `claude` process, which cleans up its own
 > tools. When it has to be force-killed, its descendant tree (Bash tool commands, MCP
 > servers) goes too: each descendant is frozen with SIGSTOP, the tree is re-walked until no
-> new process appears, and then every frozen process and `claude` get SIGKILL. The turn
+> new process appears, and then every frozen process and `claude` get SIGKILL. On macOS,
+> descendant lookup uses the native child-process API so cleanup still works when a restricted
+> sandbox denies launching `ps` (HS2-CSMC2G). The turn
 > process deliberately stays in the caller's process group, so a foreground
 > `hotsheet-cli trigger` still delivers terminal Ctrl-C to it (HS2-M08WMC).
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
