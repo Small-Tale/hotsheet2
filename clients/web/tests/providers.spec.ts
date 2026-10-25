@@ -14233,17 +14233,13 @@ test('finishes local ticket creation motion without redundantly reconciling its 
     ghost = page.locator('[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]');
   await expect(ghost).toBeAttached();
   await expect(incoming).toHaveCSS('visibility', 'hidden');
-  await page.waitForTimeout(285);
-  expect(ticketGets).toBe(readsBefore);
-  const opacity = Number.parseFloat(await ghost.evaluate((element) => getComputedStyle(element).opacity));
-  expect(opacity).toBeGreaterThan(0);
-  expect(opacity).toBeLessThan(1);
-  await page.screenshot({ path: 'target/visual-captures/hs2-jgwtjj-create-watch-race-after.png', fullPage: true });
+  // HS2-2BK28S: the fade is covered above with frame sampling; a fixed mid-flight read races its removal.
   await expect(ghost).toHaveCount(0);
   await expect(incoming).toHaveCSS('visibility', 'visible');
-  await page.waitForTimeout(250);
   expect(ticketGets).toBe(readsBefore);
+  await page.screenshot({ path: 'target/visual-captures/hs2-jgwtjj-create-watch-race-after.png', fullPage: true });
   await expect(incoming).toHaveCount(1);
+  expect(ticketGets).toBe(readsBefore);
 });
 
 test('runs grouped local commands, confirms stop, exposes history, and saves settings', async ({ page }) => {
