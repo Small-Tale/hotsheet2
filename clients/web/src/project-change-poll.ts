@@ -370,7 +370,8 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
       if (!outcome.reason) options.onError?.(new Error('Project change WebSocket closed.'));
       // A socket that served live for a while was healthy: replay and reconnect promptly.
       if (liveSince !== undefined && now() - liveSince >= stableMs) retryDelay = retryMs;
-      const fallbackStarted = Date.now();
+      // HS2-Y0H2EE: use the same clock as socket stability so replay timing is testable.
+      const fallbackStarted = now();
       try {
         // Long-poll through the whole retry window (HS2-BX4MCH). A page that returns early
         // with events is followed by another long poll for the rest of the window, so an
@@ -379,7 +380,7 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
         // either the server held the poll for the whole window, or it ignored the timeout. In
         // that case the bounded wait below still rate-limits the retries.
         for (;;) {
-          const replay = await poll(cursor, Math.max(0, retryDelay - (Date.now() - fallbackStarted)));
+          const replay = await poll(cursor, Math.max(0, retryDelay - (now() - fallbackStarted)));
           // The replay cursor is authoritative. An empty gap after a failed upgrade does not
           // invalidate ticket state; forcing a refresh here made every unsupported WebSocket
           // retry wake the entire workspace. Ticket events and overflow still reconcile through
@@ -387,14 +388,14 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
           cursor = replay.cursor;
           await consume(replay);
           if (wasAborted(controller.signal)) return;
-          if (replay.events.length === 0 || Date.now() - fallbackStarted >= retryDelay) break;
+          if (replay.events.length === 0 || now() - fallbackStarted >= retryDelay) break;
         }
       } catch (reason) {
         options.onError?.(reason);
         cursor = undefined;
       }
       if (wasAborted(controller.signal)) return;
-      const remaining = Math.max(0, retryDelay - (Date.now() - fallbackStarted));
+      const remaining = Math.max(0, retryDelay - (now() - fallbackStarted));
       if (remaining) await wait(remaining, controller.signal);
       retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
     }
