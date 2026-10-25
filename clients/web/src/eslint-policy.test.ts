@@ -2,7 +2,22 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import packageJson from '../package.json';
+
 describe('web ESLint policy', () => {
+  it('HS2-6ABCVC keeps the four Kerf packages on one exact version', () => {
+    const versions = [
+      packageJson.dependencies.kerfjs,
+      packageJson.dependencies['@kerfjs/ui'],
+      packageJson.devDependencies['create-kerf-component'],
+      packageJson.devDependencies['eslint-plugin-kerfjs'],
+    ];
+    expect(new Set(versions).size).toBe(1);
+    for (const version of versions) {
+      expect(version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+    }
+  });
+
   it('HS2-WM3SBV ignores generated web target files globally', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     const globalIgnores = config.match(/ignores: \[([\s\S]*?)\]/)?.[1];

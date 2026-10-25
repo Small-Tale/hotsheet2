@@ -1377,8 +1377,8 @@ preview/download, server directory browser) are separate design work.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.117. Its Kerf/Web Awesome spike pins the
-  runtime and lint plugin at the same version (HS2-F83DZZ).
+  `eslint-plugin-kerfjs` at 5.0.0-beta.121 (HS2-6ABCVC). Its Kerf/Web Awesome
+  spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
   and any active error, review finding, or warning fails the gate; known Kerf gaps are
