@@ -8,6 +8,67 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+// HS2-QXYWNH: launch tests start a detached server. Keep tool configuration in the
+// fixture and stop the server before the temporary home disappears.
+#[cfg(unix)]
+struct TemporaryLaunchHost {
+    home: std::path::PathBuf,
+    stopped: bool,
+}
+
+#[cfg(unix)]
+impl TemporaryLaunchHost {
+    fn new(home: &Path) -> Self {
+        Self {
+            home: home.to_path_buf(),
+            stopped: false,
+        }
+    }
+
+    fn command(&self) -> Command {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command
+            .env("HOTSHEET_HOME", &self.home)
+            .env("CODEX_HOME", self.home.join("codex-home"))
+            .env("CLAUDE_CONFIG_DIR", self.home.join("claude-home"));
+        command
+    }
+
+    fn stop(&mut self) {
+        let bootstrap = self.home.join("server-bootstrap.hs2");
+        let output = self
+            .command()
+            .args(["-C", bootstrap.to_str().unwrap(), "serve", "--stop"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "temporary host did not stop: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            hotsheet_cli::external_launch::discover_running_server(&bootstrap, &self.home).is_err(),
+            "temporary host remained discoverable after stop"
+        );
+        self.stopped = true;
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TemporaryLaunchHost {
+    fn drop(&mut self) {
+        if !self.stopped {
+            let bootstrap = self.home.join("server-bootstrap.hs2");
+            if bootstrap.exists() {
+                let _ = self
+                    .command()
+                    .args(["-C", bootstrap.to_str().unwrap(), "serve", "--stop"])
+                    .output();
+            }
+        }
+    }
+}
+
 #[test]
 fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     use hotsheet_ticketing::metrics::{self, ClaudeTokenCategories, UsageEvent};
@@ -4314,6 +4375,7 @@ fn launch_opens_the_project_and_injects_the_running_server() {
     let project = root.path().join("project");
     let store = root.path().join("tickets");
     let home = root.path().join("home");
+    let mut host = TemporaryLaunchHost::new(&home);
     std::fs::create_dir_all(&project).unwrap();
     let nested = project.join("src/nested");
     std::fs::create_dir_all(&nested).unwrap();
@@ -4375,10 +4437,9 @@ command = "hotsheet-cli permission-hook"
     )
     .unwrap();
 
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = host.command();
     let output = command
         .current_dir(&nested)
-        .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "hello"])
         .assert()
         .success()
@@ -4417,10 +4478,9 @@ command = "hotsheet-cli permission-hook"
         .to_string(),
     )
     .unwrap();
-    let mut adjacent = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut adjacent = host.command();
     let output = adjacent
         .current_dir(&adjacent_project)
-        .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "adjacent"])
         .assert()
         .success()
@@ -4470,10 +4530,9 @@ command = "hotsheet-cli permission-hook"
         .to_string(),
     )
     .unwrap();
-    let mut registered = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut registered = host.command();
     let output = registered
         .current_dir(&registered_project)
-        .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--", "registered"])
         .assert()
         .success()
@@ -4508,10 +4567,9 @@ command = "hotsheet-cli permission-hook"
         .to_string(),
     )
     .unwrap();
-    let mut created = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut created = host.command();
     let output = created
         .current_dir(&created_project)
-        .env("HOTSHEET_HOME", &home)
         .args([
             "launch",
             "fake",
@@ -4531,6 +4589,7 @@ command = "hotsheet-cli permission-hook"
         .permission_identity();
     assert_project_launch(output, "created", &created_project, &created_identity);
     assert!(created_store.join("hotsheet-store.json").is_file());
+    host.stop();
 }
 
 /// A launched session gets its own worker id, and whatever it leaves claimed is released when it
@@ -4544,6 +4603,7 @@ fn launch_releases_the_claims_its_session_left_behind() {
     let project = root.path().join("project");
     let store_path = root.path().join("tickets");
     let home = root.path().join("home");
+    let mut host = TemporaryLaunchHost::new(&home);
     std::fs::create_dir_all(&project).unwrap();
     let store = hotsheet_ticketing::FsStore::init(
         &store_path,
@@ -4637,10 +4697,9 @@ command = "hotsheet-cli permission-hook"
     )
     .unwrap();
 
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = host
+        .command()
         .current_dir(&project)
-        .env("HOTSHEET_HOME", &home)
         .args(["launch", "fake", "--ticket-store", &store_arg])
         .output()
         .unwrap();
@@ -4683,6 +4742,7 @@ command = "hotsheet-cli permission-hook"
         .assert()
         .success()
         .stdout("someone holds no claims\n");
+    host.stop();
 }
 
 #[cfg(unix)]
@@ -4690,6 +4750,7 @@ command = "hotsheet-cli permission-hook"
 fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     let root = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
+    let mut host = TemporaryLaunchHost::new(home.path());
     let agent = root.path().join("fake-agent");
     std::fs::write(
         &agent,
@@ -4710,10 +4771,9 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     .unwrap();
     let empty = root.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
-    let mut zero = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut zero = host.command();
     let zero_output = zero
         .current_dir(&empty)
-        .env("HOTSHEET_HOME", home.path())
         .args(["launch", "fake"])
         .assert()
         .success()
@@ -4767,10 +4827,9 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
             Some("jira-work".into()),
         )
         .unwrap();
-    let mut multiple = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut multiple = host.command();
     let mixed_output = multiple
         .current_dir(&empty)
-        .env("HOTSHEET_HOME", home.path())
         .args(["launch", "fake", "--project", "mixed-alias"])
         .assert()
         .success()
@@ -4793,10 +4852,8 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     registry
         .set_default_source("mixed-alias", Some(&git_default))
         .unwrap();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    host.command()
         .current_dir(&empty)
-        .env("HOTSHEET_HOME", home.path())
         .args(["launch", "fake", "--project", "mixed-alias"])
         .assert()
         .success()
@@ -4809,6 +4866,7 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
         registry.resolve("mixed-alias").unwrap().sources.len(),
         sources.len()
     );
+    host.stop();
 }
 
 #[test]
