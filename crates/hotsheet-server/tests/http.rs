@@ -17948,6 +17948,7 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
 
 #[tokio::test]
 async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_grants() {
+    use std::io::{BufRead, BufReader, Read, Write};
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
@@ -17967,7 +17968,7 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
             &first_root,
             None,
             None,
-            vec![store_path.clone(), other_store_path],
+            vec![store_path.clone(), other_store_path.clone()],
         )
         .unwrap();
     let second = registry
@@ -18026,10 +18027,80 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
         },
     )
     .unwrap();
+    let machine_home = root.path().join("machine-home");
     let state = AppState::new(store.clone(), SECRET.into())
         .unwrap()
+        .with_machine_home(&machine_home)
         .with_checkout_registry(&registry_path)
         .with_test_permission_rules(&rules_path);
+    state.publish_instances("http://127.0.0.1:0".into(), "2026-10-25T00:00:00Z".into());
+    let own_instance_path = state.instance_registry().instance_path(&store_path);
+    let own_instance: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&own_instance_path).unwrap()).unwrap();
+    let peer_instance_path = state.instance_registry().instance_path(&other_store_path);
+    let peer_record = |url: &str| {
+        let mut record = own_instance.clone();
+        record["store_path"] = serde_json::json!(other_store_path);
+        record["url"] = serde_json::json!(url);
+        record["secret"] = serde_json::json!("synthetic-peer-secret");
+        std::fs::write(&peer_instance_path, record.to_string()).unwrap();
+    };
+    let peer_reply = |hosted: bool| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            let (stream, _) = loop {
+                match listener.accept() {
+                    Ok(accepted) => break accepted,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "peer was not contacted"
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("accept failed: {error}"),
+                }
+            };
+            let mut reader = BufReader::new(stream);
+            let mut request = String::new();
+            reader.read_line(&mut request).unwrap();
+            let (mut length, mut secret) = (0, String::new());
+            let mut line = String::new();
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+                    secret = value.trim().to_owned();
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let response = serde_json::json!({"hosted": hosted}).to_string();
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            )
+            .unwrap();
+            reader.get_mut().flush().unwrap();
+            (
+                request,
+                secret,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            )
+        });
+        (url, server)
+    };
     let bridge = state.permission_bridge();
     assert!(
         bridge
@@ -18169,6 +18240,37 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
     );
     let body = serde_json::json!({"source":source_id,"confirm":true}).to_string();
     let intact = std::fs::read(&rules_path).unwrap();
+    peer_record("http://127.0.0.1:0");
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "an unreachable peer must stop deletion"
+    );
+    assert_eq!(std::fs::read(&rules_path).unwrap(), intact);
+    let (url, conflicting_peer) = peer_reply(true);
+    peer_record(&url);
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "another host reporting the source must stop deletion"
+    );
+    let (request, secret, request_body) = conflicting_peer.join().unwrap();
+    assert!(request.starts_with("POST /checkouts/"));
+    assert!(request.contains("/permissions/legacy/invalidate"));
+    assert_eq!(secret, "synthetic-peer-secret");
+    assert_eq!(request_body["source"], source_id);
+    assert_eq!(std::fs::read(&rules_path).unwrap(), intact);
+    std::fs::remove_file(&peer_instance_path).unwrap();
     std::fs::write(&rules_path, b"damaged vault").unwrap();
     assert_eq!(
         router
@@ -18230,6 +18332,8 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
         ),
         hotsheet_aitools::PermissionDecision::Deny,
     );
+    let (url, unrelated_peer) = peer_reply(false);
+    peer_record(&url);
     let retry = body_json(
         router
             .clone()
@@ -18239,6 +18343,22 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
     )
     .await;
     assert_eq!(retry["discarded"], 0);
+    let (request, secret, request_body) = unrelated_peer.join().unwrap();
+    assert!(request.contains("/permissions/legacy/invalidate"));
+    assert_eq!(secret, "synthetic-peer-secret");
+    assert_eq!(request_body["source"], source_id);
+    let mut another_self_record = own_instance;
+    another_self_record["store_path"] = serde_json::json!(other_store_path);
+    std::fs::write(&peer_instance_path, another_self_record.to_string()).unwrap();
+    let same_host_retry = body_json(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &apply_path, Some(&body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(same_host_retry["discarded"], 0);
     assert_eq!(
         hotsheet_aitools::load_permission_rules(&rules_path).len(),
         1

@@ -159,6 +159,96 @@ fn legacy_permission_host(
     }
 }
 
+fn peer_discard_unavailable() -> ApiError {
+    ApiError::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "another Hot Sheet host may cache these answers; retry when all hosts are available",
+    )
+}
+
+type PermissionHost = (u32, String, String);
+
+fn live_permission_hosts(state: &AppState) -> Result<Vec<PermissionHost>, ApiError> {
+    let registry = state.instance_registry();
+    let entries = match std::fs::read_dir(registry.dir()) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return if state.instance.lock_or_recover().is_some() {
+                Err(peer_discard_unavailable())
+            } else {
+                Ok(Vec::new())
+            };
+        }
+        Err(_) => return Err(peer_discard_unavailable()),
+    };
+    let mut hosts = Vec::new();
+    for entry in entries {
+        let path = entry.map_err(|_| peer_discard_unavailable())?.path();
+        if path.extension().is_none_or(|extension| extension != "json") {
+            continue;
+        }
+        let record: crate::lifecycle::InstanceInfo = std::fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .ok_or_else(peer_discard_unavailable)?;
+        let store = FsPath::new(&record.store_path);
+        if registry.instance_path(store) != path
+            || registry.find_instance(store).as_ref() != Some(&record)
+        {
+            return Err(peer_discard_unavailable());
+        }
+        let host = (record.pid, record.url, record.secret);
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+    hosts.sort();
+    if let Some(own) = state.instance.lock_or_recover().as_ref() {
+        let identity = (std::process::id(), own.url.clone(), own.secret.clone());
+        if !hosts.contains(&identity) {
+            return Err(peer_discard_unavailable());
+        }
+    } else if !hosts.is_empty() {
+        return Err(peer_discard_unavailable());
+    }
+    Ok(hosts)
+}
+
+fn invalidate_peer_legacy_permissions(
+    state: &AppState,
+    checkout_id: &str,
+    source_id: &str,
+) -> Result<(), ApiError> {
+    let hosts = live_permission_hosts(state)?;
+    let own = state
+        .instance
+        .lock_or_recover()
+        .as_ref()
+        .map(|meta| (std::process::id(), meta.url.clone(), meta.secret.clone()));
+    let body = serde_json::json!({"source": source_id}).to_string();
+    for (_, url, secret) in hosts.iter().filter(|host| Some(*host) != own.as_ref()) {
+        let endpoint = format!(
+            "{}/checkouts/{checkout_id}/permissions/legacy/invalidate",
+            url.trim_end_matches('/')
+        );
+        let response = ureq::post(&endpoint)
+            .set("X-Hotsheet-Secret", secret)
+            .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(10))
+            .send_string(&body)
+            .map_err(|_| peer_discard_unavailable())?;
+        let response: serde_json::Value = serde_json::from_reader(response.into_reader())
+            .map_err(|_| peer_discard_unavailable())?;
+        if response["hosted"].as_bool() != Some(false) {
+            return Err(peer_discard_unavailable());
+        }
+    }
+    if live_permission_hosts(state)? != hosts {
+        return Err(peer_discard_unavailable());
+    }
+    Ok(())
+}
+
 /// Count the old answers for one verified Git source without exposing action content.
 pub(crate) async fn preview_checkout_legacy_permissions(
     State(state): State<AppState>,
@@ -207,6 +297,14 @@ pub(crate) async fn discard_checkout_legacy_permissions(
     }
     let (checkout, source) = legacy_permission_source(&state, &reference, &body.source)?;
     let legacy_project = checkout.source(&body.source).unwrap().locator.clone();
+    let state_for_peers = state.clone();
+    let checkout_id = checkout.id.to_string();
+    let source_id = body.source.clone();
+    tokio::task::spawn_blocking(move || {
+        invalidate_peer_legacy_permissions(&state_for_peers, &checkout_id, &source_id)
+    })
+    .await
+    .map_err(|_| peer_discard_unavailable())??;
     let aliases = state
         .permission_rule_paths
         .lock_or_recover()

@@ -45,6 +45,7 @@ time.workspace = true
 notify.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
+ureq.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
@@ -64,4 +65,3 @@ http-body-util.workspace = true
 hotsheet-aitools = { workspace = true, features = ["test-permission-vault"] }
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
-ureq.workspace = true

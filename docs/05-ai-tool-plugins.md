@@ -1340,6 +1340,10 @@ an inconsistent response, or multiple hosts for the source stops deletion. With 
 instance records, repeated offline deletion remains safe and idempotent. A server
 anchored to another store can host an extra Git source; its anchor is not assumed to
 be the selected source (`HS2-54EBK3`).
+The Settings deletion route performs the same authenticated peer withdrawal before
+touching the vault. A malformed, stale, or unreachable peer, or another host that
+also reports hosting the source, stops deletion. Multiple instance records for the
+same server count as one host (`HS2-7QJF8C`).
 
 Acceptance cases for HS2-G1SG1P, HS2-AFSF4X, and HS2-TSXSH6:
 
