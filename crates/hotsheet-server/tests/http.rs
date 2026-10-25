@@ -14159,6 +14159,7 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
             explicit_selection: false,
             sources: vec![hotsheet_plugins::guidance_sources::GuidanceSource {
                 id: "fixture".into(),
+                group_id: None,
                 repository: "fixture".into(),
                 requested_ref: "v1".into(),
                 commit: "a".repeat(40),
@@ -14497,6 +14498,99 @@ async fn checkout_guidance_route_selects_and_applies_pinned_rules() {
 }
 
 #[tokio::test]
+async fn hs2_1yxccw_batch_review_and_register_uses_exact_pins() {
+    let (store_dir, state) = state();
+    let project = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    let app = app(state
+        .with_checkout_registry(project.path().join("checkouts.json"))
+        .with_machine_home(project.path().join("home")));
+    let checkout = serde_json::json!({
+        "root": project.path(), "alias": "guidance-batch", "stores": [store_dir.path()]
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&checkout)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let git = |args: &[&str]| {
+        let result = hotsheet_ticketing::git::command_in(repository.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        String::from_utf8(result.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "-q"]);
+    let body = "<!-- hotsheet:begin section=project-bootstrap v=1 -->\n\nFixture.\n\n<!-- hotsheet:end section=project-bootstrap -->\n";
+    std::fs::create_dir_all(repository.path().join("rules")).unwrap();
+    std::fs::write(
+        repository.path().join("rules/project-bootstrap.md"),
+        format!("---\nroot: true\ntargets: [\"*\"]\ndescription: \"Bootstrap\"\n---\n\n{body}"),
+    )
+    .unwrap();
+    std::fs::write(
+        repository.path().join("rules-manifest.json"),
+        serde_json::json!({"schema_version": 1, "rules": [{
+            "name": "project-bootstrap", "path": "rules/project-bootstrap.md", "version": 1,
+            "sha256": format!("{:x}", sha2::Sha256::digest(body.as_bytes()))
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    git(&["add", "."]);
+    git(&[
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "fixture",
+    ]);
+    let commit = git(&["rev-parse", "HEAD"]);
+    git(&["tag", "v1.0"]);
+    let requests = serde_json::json!([{
+        "id": "fixture", "repository": repository.path(), "refs": ["v1.*"]
+    }]);
+    let review = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/guidance-batch/guidance/batch-review",
+                Some(&requests.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(review["pins"][0]["commit"], commit);
+    assert_eq!(review["pins"][0]["group_id"], "fixture");
+    let action = serde_json::json!({"action": "register_batch", "review": review});
+    let overview = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/guidance-batch/guidance",
+                Some(&action.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(overview["sources"][0]["commit"], commit);
+    assert_eq!(overview["sources"][0]["group_id"], "fixture");
+}
+
+#[tokio::test]
 async fn hs2_c9fc2k_linking_first_source_queues_pending_rulesync_review() {
     let (store_dir, state) = state();
     let project = tempfile::tempdir().unwrap();
@@ -14712,6 +14806,7 @@ async fn checkout_guidance_interview_requires_consent_and_keeps_answer_advisory(
             explicit_selection: false,
             sources: vec![hotsheet_plugins::guidance_sources::GuidanceSource {
                 id: "fixture".into(),
+                group_id: None,
                 repository: "fixture".into(),
                 requested_ref: "v1".into(),
                 commit: "a".repeat(40),

@@ -15,6 +15,7 @@ import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
 import type {
+  GuidanceBatchReview,
   GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
@@ -55,6 +56,10 @@ export interface GuidanceSettingsProps {
   repository: string;
   sourceRef: string;
   sourceId: string;
+  batchRows?: readonly { id: string; repository: string; refs: string }[];
+  batchReview?: GuidanceBatchReview;
+  batchLoading?: boolean;
+  batchError?: string;
   ownerFilter: string;
   tagFilter: string;
   rulePreview?: {
@@ -85,6 +90,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
   ].sort();
   const tags = [...new Set(rules.flatMap((rule) => rule.tags))].sort();
   const registeredSource = overview?.sources.find((source) => source.id === sourceId);
+  const hasBatchDraft = Boolean(props.batchRows?.length) || sourceRef.includes(',') || sourceRef.includes('*');
   const selectedCount =
     overview?.sources.reduce(
       (count, source) =>
@@ -466,19 +472,73 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
             label="Rule Repository"
             value={repository || overview?.default_repository || ''}
           />
-          <TextField name="guidance-ref" label="Tag or Commit" value={sourceRef} />
+          <TextField name="guidance-ref" label="Refs" value={sourceRef} />
         </Grid>
-        <Button
-          action={
-            registeredSource
-              ? COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.value
-              : COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.value
-          }
-          rootAttributes={registeredSource ? { 'data-guidance-update-source': sourceId } : undefined}
-          disabled={loading}
-        >
-          {registeredSource ? 'Review Pinned Source' : 'Register source'}
+        <Text tone="quiet" size="compact">
+          Separate branches, tags, or full commits with commas. A trailing * matches tags, such as v1.*.
+        </Text>
+        {props.batchRows?.map((row, index) => (
+          <div class="guidance-batch-row" data-guidance-batch-row={index}>
+            <Grid minColumnWidth={rem(14)} gap="m">
+              <TextField name="guidance-batch-id" label="Source ID" value={row.id} />
+              <TextField name="guidance-batch-repository" label="Rule Repository" value={row.repository} />
+              <TextField name="guidance-batch-refs" label="Refs" value={row.refs} />
+            </Grid>
+            <Button action={COMMANDS_AND_AI_ACTIONS.removeGuidanceBatchRow.value}>Remove Source</Button>
+          </div>
+        ))}
+        <Button action={COMMANDS_AND_AI_ACTIONS.addGuidanceBatchRow.value} disabled={loading || props.batchLoading}>
+          Add Another Source
         </Button>
+        <Button action={COMMANDS_AND_AI_ACTIONS.reviewGuidanceBatch.value} disabled={loading || props.batchLoading}>
+          {props.batchLoading ? 'Reviewing Source Refs…' : 'Review Exact Pins'}
+        </Button>
+        {props.batchError ? (
+          <StateBanner title="Source Review Failed" detail={props.batchError} tone="warning" urgency="status" />
+        ) : null}
+        {props.batchReview && (
+          <section aria-label="Reviewed Source Pins" class="guidance-batch-review">
+            <List gap="xs">
+              <Text variant="h3">Reviewed immutable pins</Text>
+              {props.batchReview.pins.map((pin) => (
+                <div class="guidance-batch-pin">
+                  <Text>
+                    {pin.group_id} · {pin.requested_ref}
+                  </Text>
+                  <Text tone="quiet" size="compact">
+                    {pin.commit}
+                  </Text>
+                  <Text tone="quiet" size="compact">
+                    {pin.rules} rules · {pin.skills} skills
+                  </Text>
+                </div>
+              ))}
+              <Text tone="quiet" size="compact">
+                Registration checks every ref again and stops if the reviewed set changed. Applying guidance is a
+                separate step.
+              </Text>
+              <Button
+                action={COMMANDS_AND_AI_ACTIONS.registerGuidanceBatch.value}
+                disabled={loading || props.batchLoading}
+              >
+                Register Reviewed Pins
+              </Button>
+            </List>
+          </section>
+        )}
+        {!hasBatchDraft && (
+          <Button
+            action={
+              registeredSource
+                ? COMMANDS_AND_AI_ACTIONS.reviewGuidanceSource.value
+                : COMMANDS_AND_AI_ACTIONS.registerGuidanceSource.value
+            }
+            rootAttributes={registeredSource ? { 'data-guidance-update-source': sourceId } : undefined}
+            disabled={loading}
+          >
+            {registeredSource ? 'Review Pinned Source' : 'Register source'}
+          </Button>
+        )}
         {overview?.sources.length ? (
           <List gap="l">
             <Grid minColumnWidth={rem(12)} gap="m">
@@ -510,9 +570,14 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                 groups.set(owner, group);
               }
               return (
-                <section data-guidance-source={source.id} aria-label={`${source.id} Rules`}>
+                <section
+                  data-guidance-source={source.id}
+                  aria-label={`${source.group_id ? `${source.group_id} ${source.requested_ref}` : source.id} Rules`}
+                >
                   <List gap="m">
-                    <Text variant="h3">{source.id}</Text>
+                    <Text variant="h3">
+                      {source.group_id ? `${source.group_id} · ${source.requested_ref}` : source.id}
+                    </Text>
                     <Text tone="quiet" size="compact">
                       Pinned to {source.commit.slice(0, 12)} from {source.repository}
                     </Text>

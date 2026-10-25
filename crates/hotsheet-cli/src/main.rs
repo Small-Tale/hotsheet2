@@ -826,6 +826,16 @@ enum GuidanceCmd {
         #[arg(long)]
         expected_commit: Option<String>,
     },
+    /// Resolve several source rows and refs into an exact immutable pin set as JSON.
+    ReviewBatch {
+        #[arg(long)]
+        sources_file: PathBuf,
+    },
+    /// Atomically register the exact pin set emitted by review-batch.
+    RegisterBatch {
+        #[arg(long)]
+        review_file: PathBuf,
+    },
     /// Replace this source's selected rules and skills; repeat each flag as needed.
     Select {
         #[arg(long)]

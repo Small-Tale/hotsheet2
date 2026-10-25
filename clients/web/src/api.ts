@@ -27,6 +27,7 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseGuidanceBatchReview,
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
@@ -80,6 +81,7 @@ export interface GuidanceOverview {
   local_rules?: string[];
   sources: Array<{
     id: string;
+    group_id?: string | null;
     repository: string;
     requested_ref: string;
     commit: string;
@@ -135,6 +137,23 @@ export interface GuidanceSourceReview {
     selected: boolean;
     before_version: number | null;
     after_version: number | null;
+  }>;
+}
+export interface GuidanceBatchSource {
+  id: string;
+  repository: string;
+  refs: string[];
+}
+export interface GuidanceBatchReview {
+  requests: GuidanceBatchSource[];
+  pins: Array<{
+    id: string;
+    group_id: string;
+    repository: string;
+    requested_ref: string;
+    commit: string;
+    rules: number;
+    skills: number;
   }>;
 }
 export interface GuidanceRecommendationReport {
@@ -202,6 +221,7 @@ export interface RulesyncUpdateReport {
 }
 export type GuidanceAction =
   | { action: 'register'; id: string; repository: string; ref: string; expected_commit?: string }
+  | { action: 'register_batch'; review: GuidanceBatchReview }
   | { action: 'select'; source: string; rules: string[]; skills: string[] }
   | { action: 'cache_rule_version'; source: string; rule: string; requested_ref: string; expected_commit: string }
   | { action: 'choose_rule_version'; source: string; rule: string; sha256: string | null }
@@ -1441,6 +1461,11 @@ export class Api {
     );
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
+  reviewCheckoutGuidanceBatch = (checkout: string, requests: GuidanceBatchSource[]) =>
+    this.parsed(parseGuidanceBatchReview, `/checkouts/${encodeURIComponent(checkout)}/guidance/batch-review`, {
+      method: 'POST',
+      body: JSON.stringify(requests),
+    });
   checkoutGuidanceRulePreview = (checkout: string, source: string, rule: string) =>
     this.parsed(
       parseGuidanceRulePreview,

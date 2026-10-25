@@ -165,6 +165,7 @@ fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
             let query = query.as_deref().unwrap_or("").to_lowercase();
             let items = config.sources.iter().map(|source| serde_json::json!({
                 "id": source.id,
+                "group_id": source.group_id,
                 "repository": source.repository,
                 "requested_ref": source.requested_ref,
                 "commit": source.commit,
@@ -245,6 +246,22 @@ fn cmd_guidance(store: &Path, project: &Path, cmd: GuidanceCmd) -> Result<()> {
                 source.commit,
                 source.rules.len(),
                 source.skills.len()
+            );
+        }
+        GuidanceCmd::ReviewBatch { sources_file } => {
+            let requests: Vec<sources::BatchSourceRequest> =
+                serde_json::from_slice(&std::fs::read(sources_file)?)?;
+            let review = sources::review_batch(&requests)?;
+            println!("{}", serde_json::to_string_pretty(&review)?);
+        }
+        GuidanceCmd::RegisterBatch { review_file } => {
+            let review: sources::BatchReview =
+                serde_json::from_slice(&std::fs::read(review_file)?)?;
+            sources::register_batch_checked(project, &review)?;
+            println!(
+                "Registered {} pinned revision(s) across {} source(s)",
+                review.pins.len(),
+                review.requests.len()
             );
         }
         GuidanceCmd::Select {

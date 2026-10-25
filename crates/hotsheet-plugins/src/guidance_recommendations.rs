@@ -479,6 +479,7 @@ mod tests {
     fn source(rules: Vec<SourceRule>) -> GuidanceSource {
         GuidanceSource {
             id: "fixture".into(),
+            group_id: None,
             repository: "local fixture".into(),
             requested_ref: "v1".into(),
             commit: "a".repeat(40),

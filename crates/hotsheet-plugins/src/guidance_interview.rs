@@ -383,6 +383,7 @@ mod tests {
         let body = format!("private rule body for {name}");
         GuidanceSource {
             id: id.into(),
+            group_id: None,
             repository: "https://private.invalid/secret-repository".into(),
             requested_ref: "main".into(),
             commit: "a".repeat(40),

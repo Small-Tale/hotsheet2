@@ -10206,6 +10206,42 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/LegacyPermissionHostRequest'
+  /checkouts/{reference}/guidance/batch-review:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: review_checkout_guidance_batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/GuidanceBatchSourceRequest'
+      responses:
+        '200':
+          description: Exact immutable source pins resolved for review without changing the project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuidanceBatchReview'
+        '400':
+          description: Invalid or unresolvable source set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Unknown checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -14860,6 +14896,10 @@ components:
       properties:
         id:
           type: string
+        group_id:
+          anyOf:
+            - type: string
+            - type: 'null'
         repository:
           type: string
         requested_ref:
@@ -14874,6 +14914,63 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GuidanceSkill'
+      additionalProperties: false
+    GuidanceBatchSourceRequest:
+      type: object
+      required:
+        - id
+        - repository
+        - refs
+      properties:
+        id:
+          type: string
+        repository:
+          type: string
+        refs:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    GuidanceReviewedPin:
+      type: object
+      required:
+        - id
+        - group_id
+        - repository
+        - requested_ref
+        - commit
+        - rules
+        - skills
+      properties:
+        id:
+          type: string
+        group_id:
+          type: string
+        repository:
+          type: string
+        requested_ref:
+          type: string
+        commit:
+          type: string
+        rules:
+          type: integer
+        skills:
+          type: integer
+      additionalProperties: false
+    GuidanceBatchReview:
+      type: object
+      required:
+        - requests
+        - pins
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuidanceBatchSourceRequest'
+        pins:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuidanceReviewedPin'
       additionalProperties: false
     GuidanceOverview:
       type: object
@@ -14955,6 +15052,16 @@ components:
               anyOf:
                 - type: string
                 - type: 'null'
+          additionalProperties: false
+        - type: object
+          required:
+            - action
+            - review
+          properties:
+            action:
+              const: register_batch
+            review:
+              $ref: '#/components/schemas/GuidanceBatchReview'
           additionalProperties: false
         - type: object
           required:

@@ -8,3 +8,19 @@
 .guidance-settings__footer {
   flex: none;
 }
+
+.guidance-batch-row,
+.guidance-batch-review {
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-medium);
+  padding: var(--wa-space-m);
+}
+
+.guidance-batch-row {
+  display: grid;
+  gap: var(--wa-space-s);
+}
+
+.guidance-batch-pin {
+  overflow-wrap: anywhere;
+}

@@ -480,6 +480,7 @@ mod tests {
     fn source(repo: &Path, requested_ref: &str, pinned_commit: &str) -> GuidanceSource {
         GuidanceSource {
             id: "fixture".into(),
+            group_id: None,
             repository: repo.to_str().unwrap().into(),
             requested_ref: requested_ref.into(),
             commit: pinned_commit.into(),

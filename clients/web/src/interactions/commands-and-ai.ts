@@ -78,6 +78,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly guidanceRepository: Signal<string>;
   readonly guidanceSourceId: Signal<string>;
   readonly guidanceRef: Signal<string>;
+  readonly guidanceBatchRows: Signal<Array<{ id: string; repository: string; refs: string }>>;
+  readonly invalidateGuidanceBatchReview: () => void;
+  readonly reviewGuidanceBatch: () => Promise<void>;
+  readonly registerGuidanceBatch: () => Promise<void>;
   readonly guidanceOlderCommitDrafts: Signal<Record<string, string>>;
   readonly updateGuidance: (action: GuidanceAction) => Promise<void>;
   readonly previewGuidanceRule: (source: string, rule: string) => Promise<void>;
@@ -243,6 +247,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     guidanceRepository,
     guidanceSourceId,
     guidanceRef,
+    guidanceBatchRows,
+    invalidateGuidanceBatchReview,
+    reviewGuidanceBatch,
+    registerGuidanceBatch,
     guidanceOlderCommitDrafts,
     updateGuidance,
     previewGuidanceRule,
@@ -1030,6 +1038,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'input', 'input[name="guidance-source-id"]', (_event, target) => {
       guidanceSourceId.value = (target as HTMLInputElement).value;
+      invalidateGuidanceBatchReview();
       const registered = guidanceOverview.value?.sources.find((source) => source.id === guidanceSourceId.value);
       if (registered) {
         guidanceRepository.value = registered.repository;
@@ -1040,11 +1049,50 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'input', 'input[name="guidance-repository"]', (_event, target) => {
       guidanceRepository.value = (target as HTMLInputElement).value;
+      invalidateGuidanceBatchReview();
     }),
   );
   lifetime.add(
     delegate(document.body, 'input', 'input[name="guidance-ref"]', (_event, target) => {
       guidanceRef.value = (target as HTMLInputElement).value;
+      invalidateGuidanceBatchReview();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', 'input[name^="guidance-batch-"]', (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-guidance-batch-row]');
+      const index = Number(row?.dataset.guidanceBatchRow);
+      const field = target.getAttribute('name')?.replace('guidance-batch-', '');
+      if (!row || !Number.isInteger(index) || index < 0 || !['id', 'repository', 'refs'].includes(field ?? '')) return;
+      guidanceBatchRows.value = guidanceBatchRows.value.map((item, position) =>
+        position === index ? { ...item, [field!]: (target as HTMLInputElement).value } : item,
+      );
+      invalidateGuidanceBatchReview();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.addGuidanceBatchRow.selector, () => {
+      guidanceBatchRows.value = [...guidanceBatchRows.value, { id: '', repository: '', refs: '' }];
+      invalidateGuidanceBatchReview();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.removeGuidanceBatchRow.selector, (_event, target) => {
+      const row = target.closest<HTMLElement>('[data-guidance-batch-row]');
+      const index = Number(row?.dataset.guidanceBatchRow);
+      if (!row || !Number.isInteger(index) || index < 0) return;
+      guidanceBatchRows.value = guidanceBatchRows.value.filter((_, position) => position !== index);
+      invalidateGuidanceBatchReview();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.reviewGuidanceBatch.selector, () => {
+      void reviewGuidanceBatch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.registerGuidanceBatch.selector, () => {
+      void registerGuidanceBatch();
     }),
   );
   lifetime.add(

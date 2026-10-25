@@ -251,6 +251,21 @@ and apply reject a rule whose minimum exceeds the running Hot Sheet version;
 older manifests without that field remain compatible. Separate source refs and
 source connections are covered by HS2-1YXCCW.
 
+**Several source refs in one review (HS2-1YXCCW).** Project Guidance accepts
+several source rows, each with comma-separated branch names, tag names, or full
+commits. A trailing `*` expands matching tags only; the review rejects empty,
+duplicate, or overlarge expansions. It shows every exact full commit and the
+verified rule and skill counts before registration. Registration resolves the
+refs again and rejects a changed set, then writes all pins in one config update.
+Each expanded ref receives its own stable source id under the row's group id;
+existing one-ref source ids remain valid. Selections and cached older rule
+digests stay with the matching ref across refreshes. Applying guidance remains
+a separate action, and selecting the same rule from two refs still fails the
+existing cross-source collision check. Headless clients write an array of
+`{id, repository, refs}` to JSON and run `guidance review-batch
+--sources-file <file>`; save its JSON output and pass it to `guidance
+register-batch --review-file <file>`.
+
 Bundled Hot Sheet shared guidance is a separate offline channel. On setup refresh,
 an exact known predecessor upgrades automatically. If a locally changed older section
 cannot be safely replaced, the setup report emits `bundled_guidance_blocked` with

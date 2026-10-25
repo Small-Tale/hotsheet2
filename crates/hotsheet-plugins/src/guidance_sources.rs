@@ -57,6 +57,9 @@ impl Default for GuidanceConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GuidanceSource {
     pub id: String,
+    /// A batch source's stable user-facing identity; absent on legacy one-ref sources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
     pub repository: String,
     pub requested_ref: String,
     pub commit: String,
@@ -67,6 +70,30 @@ pub struct GuidanceSource {
     pub selected_rules: Vec<String>,
     #[serde(default)]
     pub selected_skills: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchSourceRequest {
+    pub id: String,
+    pub repository: String,
+    pub refs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewedPin {
+    pub id: String,
+    pub group_id: String,
+    pub repository: String,
+    pub requested_ref: String,
+    pub commit: String,
+    pub rules: usize,
+    pub skills: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BatchReview {
+    pub requests: Vec<BatchSourceRequest>,
+    pub pins: Vec<ReviewedPin>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -449,6 +476,7 @@ pub fn inspect_source(
     skills.retain(|skill| skill.files.iter().any(|file| file.path == "SKILL.md"));
     Ok(GuidanceSource {
         id: id.to_owned(),
+        group_id: None,
         repository: repository.to_owned(),
         requested_ref: requested_ref.to_owned(),
         commit,
@@ -456,6 +484,105 @@ pub fn inspect_source(
         skills,
         selected_rules: Vec::new(),
         selected_skills: Vec::new(),
+    })
+}
+
+/// Resolve a bounded set of source refs for review. Wildcards expand tags only, so
+/// moving branches and unconstrained commit ranges cannot silently grow the set.
+pub fn review_batch(requests: &[BatchSourceRequest]) -> Result<BatchReview, GuidanceSourceError> {
+    if requests.is_empty() || requests.len() > 8 {
+        return Err(GuidanceSourceError::Invalid(
+            "review requires between one and eight sources".into(),
+        ));
+    }
+    let mut groups = HashSet::new();
+    let mut pins = Vec::new();
+    let mut ids = HashSet::new();
+    for request in requests {
+        if !slug(&request.id)
+            || !groups.insert(request.id.as_str())
+            || request.refs.is_empty()
+            || request.refs.len() > 8
+        {
+            return Err(GuidanceSourceError::Invalid(
+                "invalid or duplicate batch source".into(),
+            ));
+        }
+        let (checkout, _temporary) = source_checkout(&request.repository)?;
+        let mut refs = Vec::new();
+        let mut seen_refs = HashSet::new();
+        for pattern in &request.refs {
+            if let Some(prefix) = pattern.strip_suffix('*') {
+                if prefix.is_empty()
+                    || !prefix.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/')
+                    })
+                {
+                    return Err(GuidanceSourceError::Invalid(
+                        "only a trailing tag wildcard is supported".into(),
+                    ));
+                }
+                let expanded = String::from_utf8(git(&checkout, &["tag", "--list", pattern])?)
+                    .map_err(|_| GuidanceSourceError::Invalid("non-UTF-8 tag".into()))?;
+                let tags: Vec<_> = expanded.lines().collect();
+                if tags.is_empty() || tags.len() > 32 {
+                    return Err(GuidanceSourceError::Invalid(
+                        "tag wildcard matched zero or too many revisions".into(),
+                    ));
+                }
+                for tag in tags {
+                    if !seen_refs.insert(tag.to_owned()) {
+                        return Err(GuidanceSourceError::Invalid(
+                            "duplicate ref in batch review".into(),
+                        ));
+                    }
+                    refs.push(tag.to_owned());
+                }
+            } else {
+                if pattern.is_empty()
+                    || pattern.starts_with('-')
+                    || pattern.contains(['*', '?', '[', ']', '\\'])
+                    || !seen_refs.insert(pattern.clone())
+                {
+                    return Err(GuidanceSourceError::Invalid(
+                        "invalid or duplicate source ref".into(),
+                    ));
+                }
+                refs.push(pattern.clone());
+            }
+        }
+        refs.sort();
+        for reference in refs {
+            if pins.len() >= 32 {
+                return Err(GuidanceSourceError::Invalid(
+                    "batch review exceeds 32 pinned revisions".into(),
+                ));
+            }
+            let id = if request.refs.len() == 1 && !request.refs[0].ends_with('*') {
+                request.id.clone()
+            } else {
+                format!("{}-{}", request.id, &digest(reference.as_bytes())[..10])
+            };
+            if !ids.insert(id.clone()) {
+                return Err(GuidanceSourceError::Invalid(
+                    "batch source identities collide".into(),
+                ));
+            }
+            let source = inspect_source(&id, &request.repository, &reference)?;
+            pins.push(ReviewedPin {
+                id,
+                group_id: request.id.clone(),
+                repository: request.repository.clone(),
+                requested_ref: reference,
+                commit: source.commit,
+                rules: source.rules.len(),
+                skills: source.skills.len(),
+            });
+        }
+    }
+    Ok(BatchReview {
+        requests: requests.to_vec(),
+        pins,
     })
 }
 
@@ -486,6 +613,7 @@ pub fn validate(config: &GuidanceConfig) -> Result<(), GuidanceSourceError> {
     let mut selected_skills = HashSet::new();
     for source in &config.sources {
         if !slug(&source.id)
+            || source.group_id.as_deref().is_some_and(|id| !slug(id))
             || !ids.insert(&source.id)
             || source.commit.len() != 40
             || !source.commit.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -638,64 +766,114 @@ pub fn register_checked(
     let _lock = lock_config(project)?;
     let mut config = load(project)?;
     if let Some(old) = config.sources.iter().find(|old| old.id == id) {
-        source.selected_rules = old.selected_rules.clone();
-        source.selected_skills = old.selected_skills.clone();
-        for rule in &mut source.rules {
-            if let Some(previous) = old.rules.iter().find(|previous| previous.name == rule.name) {
-                let mut history = previous.historical_versions.clone();
-                if previous.sha256 != rule.sha256 {
-                    history.push(SourceRuleRevision {
-                        version: previous.version,
-                        sha256: previous.sha256.clone(),
-                        description: previous.description.clone(),
-                        body: previous.body.clone(),
-                        commit: old.commit.clone(),
-                        minimum_hotsheet_version: previous.minimum_hotsheet_version.clone(),
-                    });
-                }
-                history.retain(|item| item.sha256 != rule.sha256);
-                history.sort_by_key(|item| std::cmp::Reverse(item.version));
-                rule.known_bodies
-                    .extend(history.iter().map(|item| item.body.clone()));
-                rule.historical_versions = history;
-                if let Some(chosen) = previous.selected_sha256.as_deref()
-                    && chosen != rule.sha256
-                {
-                    rule.selected_sha256 = Some(chosen.to_owned());
-                }
-                if previous.body != rule.body {
-                    rule.known_bodies.push(previous.body.clone());
-                }
-                rule.known_bodies.extend(previous.known_bodies.clone());
-                rule.known_bodies.sort();
-                rule.known_bodies.dedup();
+        preserve_previous(&mut source, old);
+    }
+    config.sources.retain(|old| old.id != id);
+    config.sources.push(source);
+    save(project, &config)?;
+    Ok(config)
+}
+
+fn preserve_previous(source: &mut GuidanceSource, old: &GuidanceSource) {
+    source.group_id = old.group_id.clone().or(source.group_id.clone());
+    source.selected_rules = old.selected_rules.clone();
+    source.selected_skills = old.selected_skills.clone();
+    for rule in &mut source.rules {
+        if let Some(previous) = old.rules.iter().find(|previous| previous.name == rule.name) {
+            let mut history = previous.historical_versions.clone();
+            if previous.sha256 != rule.sha256 {
+                history.push(SourceRuleRevision {
+                    version: previous.version,
+                    sha256: previous.sha256.clone(),
+                    description: previous.description.clone(),
+                    body: previous.body.clone(),
+                    commit: old.commit.clone(),
+                    minimum_hotsheet_version: previous.minimum_hotsheet_version.clone(),
+                });
             }
-        }
-        for skill in &mut source.skills {
-            if let Some(previous) = old
-                .skills
-                .iter()
-                .find(|previous| previous.name == skill.name)
+            history.retain(|item| item.sha256 != rule.sha256);
+            history.sort_by_key(|item| std::cmp::Reverse(item.version));
+            rule.known_bodies
+                .extend(history.iter().map(|item| item.body.clone()));
+            rule.historical_versions = history;
+            if let Some(chosen) = previous.selected_sha256.as_deref()
+                && chosen != rule.sha256
             {
-                for file in &mut skill.files {
-                    if let Some(before) = previous
-                        .files
-                        .iter()
-                        .find(|before| before.path == file.path)
-                    {
-                        if before.base64 != file.base64 {
-                            file.known_base64.push(before.base64.clone());
-                        }
-                        file.known_base64.extend(before.known_base64.clone());
-                        file.known_base64.sort();
-                        file.known_base64.dedup();
+                rule.selected_sha256 = Some(chosen.to_owned());
+            }
+            if previous.body != rule.body {
+                rule.known_bodies.push(previous.body.clone());
+            }
+            rule.known_bodies.extend(previous.known_bodies.clone());
+            rule.known_bodies.sort();
+            rule.known_bodies.dedup();
+        }
+    }
+    for skill in &mut source.skills {
+        if let Some(previous) = old
+            .skills
+            .iter()
+            .find(|previous| previous.name == skill.name)
+        {
+            for file in &mut skill.files {
+                if let Some(before) = previous
+                    .files
+                    .iter()
+                    .find(|before| before.path == file.path)
+                {
+                    if before.base64 != file.base64 {
+                        file.known_base64.push(before.base64.clone());
                     }
+                    file.known_base64.extend(before.known_base64.clone());
+                    file.known_base64.sort();
+                    file.known_base64.dedup();
                 }
             }
         }
     }
-    config.sources.retain(|old| old.id != id);
-    config.sources.push(source);
+}
+
+/// Apply an exact reviewed pin set in one config write. Re-resolving every ref detects
+/// movement between review and registration before any source is replaced.
+pub fn register_batch_checked(
+    project: &Path,
+    reviewed: &BatchReview,
+) -> Result<GuidanceConfig, GuidanceSourceError> {
+    let observed = review_batch(&reviewed.requests)?;
+    if observed != *reviewed {
+        return Err(GuidanceSourceError::Invalid(
+            "source set changed since review; review it again".into(),
+        ));
+    }
+    let mut incoming = Vec::with_capacity(reviewed.pins.len());
+    for pin in &reviewed.pins {
+        let mut source = inspect_source(&pin.id, &pin.repository, &pin.commit)?;
+        source.requested_ref = pin.requested_ref.clone();
+        source.group_id = (pin.id != pin.group_id).then(|| pin.group_id.clone());
+        incoming.push(source);
+    }
+    let _lock = lock_config(project)?;
+    let mut config = load(project)?;
+    for source in &mut incoming {
+        let group = source.group_id.as_deref().unwrap_or(&source.id);
+        let old = config.sources.iter().find(|old| {
+            old.repository == source.repository
+                && old.group_id.as_deref().unwrap_or(&old.id) == group
+                && (old.id == source.id || old.requested_ref == source.requested_ref)
+        });
+        if let Some(old) = old {
+            preserve_previous(source, old);
+        }
+    }
+    let groups: HashSet<_> = reviewed
+        .requests
+        .iter()
+        .map(|request| request.id.as_str())
+        .collect();
+    config
+        .sources
+        .retain(|source| !groups.contains(source.group_id.as_deref().unwrap_or(&source.id)));
+    config.sources.extend(incoming);
     save(project, &config)?;
     Ok(config)
 }
@@ -1120,6 +1298,91 @@ mod tests {
     }
 
     #[test]
+    fn batch_review_pins_tag_glob_atomically_and_preserves_selected_ref() {
+        let repository = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        git(repository.path(), &["init", "-q"]).unwrap();
+        write_rule(repository.path(), 1, "First tagged rule.");
+        let first = commit(repository.path());
+        git(repository.path(), &["tag", "v1.0"]).unwrap();
+        write_rule(repository.path(), 2, "Second tagged rule.");
+        let second = commit(repository.path());
+        git(repository.path(), &["tag", "v1.1"]).unwrap();
+        let request = BatchSourceRequest {
+            id: "test".into(),
+            repository: repository.path().to_str().unwrap().into(),
+            refs: vec!["v1.*".into()],
+        };
+        let reviewed = review_batch(&[request]).unwrap();
+        assert_eq!(reviewed.pins.len(), 2);
+        assert_eq!(reviewed.pins[0].commit, first);
+        assert_eq!(reviewed.pins[1].commit, second);
+        assert_ne!(reviewed.pins[0].id, reviewed.pins[1].id);
+        let config = register_batch_checked(project.path(), &reviewed).unwrap();
+        assert_eq!(config.sources.len(), 2);
+        let selected = &reviewed.pins[0].id;
+        select(
+            project.path(),
+            selected,
+            &["rust-lint-and-format".into()],
+            &[],
+        )
+        .unwrap();
+        let newer = &reviewed.pins[1].id;
+        let cached = cache_older_rule(
+            project.path(),
+            newer,
+            "rust-lint-and-format",
+            &first,
+            &first,
+        )
+        .unwrap();
+        let historic_sha = cached
+            .sources
+            .iter()
+            .find(|source| &source.id == newer)
+            .unwrap()
+            .rules[0]
+            .historical_versions[0]
+            .sha256
+            .clone();
+        select_rule_version(
+            project.path(),
+            newer,
+            "rust-lint-and-format",
+            Some(&historic_sha),
+        )
+        .unwrap();
+        let repeated = register_batch_checked(project.path(), &reviewed).unwrap();
+        assert_eq!(repeated.sources.len(), 2);
+        assert!(
+            repeated
+                .sources
+                .iter()
+                .find(|source| &source.id == selected)
+                .unwrap()
+                .selected_rules
+                .contains(&"rust-lint-and-format".to_owned())
+        );
+        let retained_rule = &repeated
+            .sources
+            .iter()
+            .find(|source| &source.id == newer)
+            .unwrap()
+            .rules[0];
+        assert_eq!(
+            retained_rule.selected_sha256.as_deref(),
+            Some(historic_sha.as_str())
+        );
+        assert_eq!(retained_rule.historical_versions[0].commit, first);
+
+        git(repository.path(), &["tag", "-f", "v1.0", &second]).unwrap();
+        let before = fs::read(project.path().join(CONFIG_PATH)).unwrap();
+        assert!(register_batch_checked(project.path(), &reviewed).is_err());
+        assert_eq!(fs::read(project.path().join(CONFIG_PATH)).unwrap(), before);
+    }
+
+    #[test]
     fn older_revision_is_selected_by_digest_and_can_replace_a_newer_install() {
         let source = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
@@ -1312,6 +1575,7 @@ mod tests {
             explicit_selection: true,
             sources: vec![GuidanceSource {
                 id: "fixture".into(),
+                group_id: None,
                 repository: "fixture".into(),
                 requested_ref: "v1".into(),
                 commit: "a".repeat(40),

@@ -35,6 +35,7 @@ pub(crate) struct GuidanceOverview {
 #[derive(Serialize)]
 struct GuidanceSourceView {
     id: String,
+    group_id: Option<String>,
     repository: String,
     requested_ref: String,
     commit: String,
@@ -158,6 +159,7 @@ fn overview(
             .into_iter()
             .map(|source| GuidanceSourceView {
                 id: source.id.clone(),
+                group_id: source.group_id.clone(),
                 repository: source.repository.clone(),
                 requested_ref: source.requested_ref.clone(),
                 commit: source.commit.clone(),
@@ -386,6 +388,19 @@ pub(crate) async fn get_checkout_guidance_review(
     .map(Json)
 }
 
+pub(crate) async fn review_checkout_guidance_batch(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(requests): Json<Vec<sources::BatchSourceRequest>>,
+) -> Result<Json<sources::BatchReview>, ApiError> {
+    let _project = project_root(&state, &reference)?;
+    tokio::task::spawn_blocking(move || sources::review_batch(&requests))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        .map(Json)
+}
+
 /// Standalone Rulesync lock status; separate from Hot Sheet's pinned sources.
 pub(crate) async fn get_checkout_rulesync_updates(
     State(state): State<AppState>,
@@ -425,6 +440,9 @@ pub(crate) enum GuidanceAction {
         #[serde(rename = "ref")]
         requested_ref: String,
         expected_commit: Option<String>,
+    },
+    RegisterBatch {
+        review: sources::BatchReview,
     },
     Select {
         source: String,
@@ -476,6 +494,10 @@ pub(crate) async fn update_checkout_guidance(
                     expected_commit.as_deref(),
                 )
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+            }
+            GuidanceAction::RegisterBatch { review } => {
+                sources::register_batch_checked(&project, &review)
+                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
             }
             GuidanceAction::Select {
                 source,

@@ -60,6 +60,11 @@ merges selected sections, while Rulesync apply generates from cached curated inp
 Rule history stores verified older bodies by commit and SHA-256, and per-rule
 selection resolves a cached revision independently of the source pin. Manifest
 minimum Hot Sheet versions are checked before selection and installation (HS2-63D6F9).
+Batch source review expands bounded explicit refs and tag suffix globs, displays
+their full commits, and atomically registers only the rechecked set. Multiple
+pins keep a common `group_id` and stable per-ref ids; the CLI review/register
+batch commands and the authenticated batch-review route share this core path
+(HS2-1YXCCW).
 `setup::preview_guidance_rule_in` and the authenticated per-rule preview route
 compare one pinned rule with its installed and after-Apply section without writes;
 Project guidance groups the catalog by owner and shows available tags (HS2-019VVA).

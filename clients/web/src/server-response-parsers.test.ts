@@ -14,6 +14,7 @@ import {
   parseCustomView,
   parseFullTicket,
   parseGitHubAuthStatus,
+  parseGuidanceBatchReview,
   parseGuidanceInterviewReview,
   parseGuidanceOverview,
   parseGuidanceRecommendationReport,
@@ -47,6 +48,26 @@ import {
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 
 describe('server response parsers (HS2-34P6XY)', () => {
+  it('HS2-1YXCCW validates the exact reviewed source pin set', () => {
+    const review = {
+      requests: [{ id: 'fixture', repository: 'https://example.test/rules', refs: ['v1.*'] }],
+      pins: [
+        {
+          id: 'fixture-a',
+          group_id: 'fixture',
+          repository: 'https://example.test/rules',
+          requested_ref: 'v1.0',
+          commit: 'a'.repeat(40),
+          rules: 2,
+          skills: 1,
+        },
+      ],
+    };
+    expect(parseGuidanceBatchReview(review)).toEqual(review);
+    expect(() => parseGuidanceBatchReview({ ...review, pins: [{ ...review.pins[0], commit: 3 }] })).toThrow(
+      ServerResponseShapeError,
+    );
+  });
   it('HS2-B8M0QB accepts bounded other refs and rejects malformed discovery results', () => {
     const update = {
       id: 'fixture',

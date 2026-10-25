@@ -104,7 +104,7 @@ use routes::guidance::{
     get_checkout_guidance_interview_preview, get_checkout_guidance_recommendations,
     get_checkout_guidance_review, get_checkout_guidance_rule_preview,
     get_checkout_guidance_updates, get_checkout_rulesync_updates, open_checkout_guidance_interview,
-    submit_checkout_guidance_interview, update_checkout_guidance,
+    review_checkout_guidance_batch, submit_checkout_guidance_interview, update_checkout_guidance,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -1415,6 +1415,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/guidance",
             get(get_checkout_guidance).post(update_checkout_guidance),
+        )
+        .route(
+            "/checkouts/{reference}/guidance/batch-review",
+            post(review_checkout_guidance_batch).layer(DefaultBodyLimit::max(32 * 1024)),
         )
         .route(
             "/checkouts/{reference}/guidance/rules/{source}/{rule}/preview",

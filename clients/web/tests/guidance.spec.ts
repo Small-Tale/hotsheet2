@@ -2,6 +2,116 @@ import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
 
+test('HS2-1YXCCW reviews multiple sources and full commit pins before registration', async ({ page }) => {
+  await openDemoProject(page);
+  const requests: unknown[] = [];
+  const actions: unknown[] = [];
+  const review = {
+    requests: [
+      { id: 'one', repository: 'https://example.test/one', refs: ['main', 'v1.*'] },
+      { id: 'two', repository: 'https://example.test/two', refs: ['release'] },
+    ],
+    pins: [
+      {
+        id: 'one-a',
+        group_id: 'one',
+        repository: 'https://example.test/one',
+        requested_ref: 'main',
+        commit: 'a'.repeat(40),
+        rules: 2,
+        skills: 1,
+      },
+      {
+        id: 'one-b',
+        group_id: 'one',
+        repository: 'https://example.test/one',
+        requested_ref: 'v1.0',
+        commit: 'b'.repeat(40),
+        rules: 1,
+        skills: 0,
+      },
+      {
+        id: 'two',
+        group_id: 'two',
+        repository: 'https://example.test/two',
+        requested_ref: 'release',
+        commit: 'c'.repeat(40),
+        rules: 3,
+        skills: 0,
+      },
+    ],
+  };
+  let registered = false;
+  await page.route('**/checkouts/demo-checkout/guidance/batch-review', async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: review });
+  });
+  await page.route('**/checkouts/demo-checkout/guidance', async (route) => {
+    if (route.request().method() === 'POST') {
+      actions.push(route.request().postDataJSON());
+      registered = true;
+    }
+    await route.fulfill({
+      json: {
+        owner: 'builtin',
+        explicit_selection: true,
+        default_repository: 'https://example.test/one',
+        sources: registered
+          ? review.pins.map((pin) => ({
+              id: pin.id,
+              group_id: pin.group_id,
+              repository: pin.repository,
+              requested_ref: pin.requested_ref,
+              commit: pin.commit,
+              rules: [],
+              skills: [],
+            }))
+          : [],
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Project guidance' }).click();
+  await page.locator('input[name="guidance-source-id"]').fill('one');
+  await page.locator('input[name="guidance-repository"]').fill('https://example.test/one');
+  await page.locator('input[name="guidance-ref"]').fill('main, v1.*');
+  await page.getByRole('button', { name: 'Add Another Source' }).click();
+  const second = page.locator('[data-guidance-batch-row="0"]');
+  await second.locator('input[name="guidance-batch-id"]').fill('two');
+  await second.locator('input[name="guidance-batch-repository"]').fill('https://example.test/two');
+  await second.locator('input[name="guidance-batch-refs"]').fill('release');
+  await second.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-form-wide.png' });
+  await expect(page.getByRole('button', { name: 'Register Reviewed Pins' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Review Exact Pins' }).click();
+  const pins = page.getByRole('region', { name: 'Reviewed Source Pins' });
+  await expect(pins.getByText('a'.repeat(40))).toBeVisible();
+  await expect(pins.getByText('b'.repeat(40))).toBeVisible();
+  await expect(pins.getByText('c'.repeat(40))).toBeVisible();
+  expect(actions).toEqual([]);
+  await pins.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-guidance-wide.png' });
+  await page.setViewportSize({ width: 768, height: 900 });
+  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await pins.scrollIntoViewIfNeeded();
+  await pins.screenshot({ path: 'target/visual-captures/hs2-1yxccw-pins-medium.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await hideSettings.isVisible()) await hideSettings.click();
+  await pins.scrollIntoViewIfNeeded();
+  expect(await pins.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-guidance-phone.png' });
+  await second.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-1yxccw-form-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(pins.getByText('a'.repeat(40))).toBeVisible();
+  await pins.getByRole('button', { name: 'Register Reviewed Pins' }).click();
+  expect(requests).toEqual([review.requests]);
+  expect(actions).toEqual([{ action: 'register_batch', review }]);
+  await expect(page.getByText('Reviewed source revisions pinned.')).toBeVisible();
+});
+
 test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ page }) => {
   await openDemoProject(page);
   const commit = 'a'.repeat(40);

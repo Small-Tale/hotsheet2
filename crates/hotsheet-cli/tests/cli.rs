@@ -407,6 +407,43 @@ fn guidance_cli_pins_lists_selects_and_applies_a_source() {
             .unwrap()
             .contains("Updated fixture.")
     );
+    git(&["tag", "v1.0", &commit]);
+    git(&["tag", "v1.1", &third]);
+    let sources_file = root.path().join("guidance-sources-batch.json");
+    std::fs::write(
+        &sources_file,
+        serde_json::json!([{
+            "id": "history", "repository": source.to_str().unwrap(), "refs": ["v1.*"]
+        }])
+        .to_string(),
+    )
+    .unwrap();
+    let reviewed = run(&[
+        "review-batch",
+        "--sources-file",
+        sources_file.to_str().unwrap(),
+    ]);
+    let reviewed: serde_json::Value = serde_json::from_slice(&reviewed).unwrap();
+    assert_eq!(reviewed["pins"].as_array().unwrap().len(), 2);
+    assert_eq!(reviewed["pins"][0]["commit"], commit);
+    assert_eq!(reviewed["pins"][1]["commit"], third);
+    let review_file = root.path().join("guidance-reviewed-batch.json");
+    std::fs::write(&review_file, reviewed.to_string()).unwrap();
+    run(&[
+        "register-batch",
+        "--review-file",
+        review_file.to_str().unwrap(),
+    ]);
+    let list: serde_json::Value = serde_json::from_slice(&run(&["list"])).unwrap();
+    assert_eq!(
+        list["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|source| source["group_id"] == "history")
+            .count(),
+        2
+    );
 }
 
 #[test]

@@ -18,6 +18,7 @@ import type {
   GitHubAuthStart,
   GitHubAuthStatus,
   GitHubRepositoryAccess,
+  GuidanceBatchReview,
   GuidanceInterviewReview,
   GuidanceOverview,
   GuidanceRecommendationReport,
@@ -125,6 +126,7 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
   const sources = list(body.sources, what, (entry) => {
     const source = record(entry, what);
     for (const key of ['id', 'repository', 'requested_ref', 'commit']) requiredString(source, key, what);
+    if (source.group_id !== undefined && source.group_id !== null && typeof source.group_id !== 'string') invalid(what);
     const rules = list(source.rules, what, (entry) => {
       const rule = record(entry, what);
       for (const key of ['name', 'description']) requiredString(rule, key, what);
@@ -168,6 +170,24 @@ export const parseGuidanceOverview: ResponseParser<GuidanceOverview> = (value) =
     return { ...source, rules, skills } as GuidanceOverview['sources'][number];
   });
   return { ...body, sources } as GuidanceOverview;
+};
+
+export const parseGuidanceBatchReview: ResponseParser<GuidanceBatchReview> = (value) => {
+  const what = 'guidance batch review';
+  const body = record(value, what);
+  const requests = list(body.requests, what, (entry) => {
+    const source = record(entry, what);
+    for (const key of ['id', 'repository']) requiredString(source, key, what);
+    if (!isStringArray(source.refs)) invalid(what);
+    return source as unknown as GuidanceBatchReview['requests'][number];
+  });
+  const pins = list(body.pins, what, (entry) => {
+    const pin = record(entry, what);
+    for (const key of ['id', 'group_id', 'repository', 'requested_ref', 'commit']) requiredString(pin, key, what);
+    if (typeof pin.rules !== 'number' || typeof pin.skills !== 'number') invalid(what);
+    return pin as unknown as GuidanceBatchReview['pins'][number];
+  });
+  return { requests, pins };
 };
 
 export const parseGuidanceRulePreview: ResponseParser<GuidanceRulePreview> = (value) => {

@@ -3406,6 +3406,7 @@ mod tests {
                 explicit_selection: true,
                 sources: vec![GuidanceSource {
                     id: "fixture".into(),
+                    group_id: None,
                     repository: "https://example.test/rules".into(),
                     requested_ref: "main".into(),
                     commit: "a".repeat(40),

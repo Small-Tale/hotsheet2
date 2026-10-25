@@ -6,6 +6,57 @@ import { GuidanceSettings } from './guidance-settings';
 const emptyGuidanceSearch = createGuidanceSearchModel(() => undefined).state.value;
 
 describe('GuidanceSettings rule summaries', () => {
+  it('HS2-1YXCCW shows every reviewed immutable pin before batch registration', () => {
+    const base = {
+      loading: false,
+      message: '',
+      repository: 'https://example.test/one',
+      sourceRef: 'main, v1.*',
+      sourceId: 'one',
+      ownerFilter: '',
+      tagFilter: '',
+      batchRows: [{ id: 'two', repository: 'https://example.test/two', refs: 'release' }],
+    };
+    const draft = String(GuidanceSettings(base));
+    expect(draft).toContain('data-action="add-guidance-batch-row"');
+    expect(draft).toContain('data-action="review-guidance-batch"');
+    expect(draft).toContain('data-guidance-batch-row="0"');
+    expect(draft).not.toContain('data-action="register-guidance-batch"');
+    const reviewed = String(
+      GuidanceSettings({
+        ...base,
+        batchReview: {
+          requests: [
+            { id: 'one', repository: base.repository, refs: ['main', 'v1.*'] },
+            { id: 'two', repository: base.batchRows[0].repository, refs: ['release'] },
+          ],
+          pins: [
+            {
+              id: 'one-a',
+              group_id: 'one',
+              repository: base.repository,
+              requested_ref: 'main',
+              commit: 'a'.repeat(40),
+              rules: 2,
+              skills: 1,
+            },
+            {
+              id: 'two',
+              group_id: 'two',
+              repository: base.batchRows[0].repository,
+              requested_ref: 'release',
+              commit: 'b'.repeat(40),
+              rules: 1,
+              skills: 0,
+            },
+          ],
+        },
+      }),
+    );
+    expect(reviewed).toContain('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(reviewed).toContain('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+    expect(reviewed).toContain('data-action="register-guidance-batch"');
+  });
   it('HS2-63D6F9 shows a cached older choice and guards incompatible revisions', () => {
     const view = String(
       GuidanceSettings({

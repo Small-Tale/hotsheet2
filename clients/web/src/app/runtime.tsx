@@ -25,6 +25,8 @@ import {
   type DuplicateBacklink,
   type FullTicket,
   type GuidanceAction,
+  type GuidanceBatchReview,
+  type GuidanceBatchSource,
   type GuidanceInterviewReview,
   type GuidanceOverview,
   type GuidanceRecommendationDecision,
@@ -459,6 +461,11 @@ export async function startHotSheetWebClient() {
   const guidanceRepository = signal('');
   const guidanceSourceId = signal('ai-playbook');
   const guidanceRef = signal('main');
+  const guidanceBatchRows = signal<Array<{ id: string; repository: string; refs: string }>>([]);
+  const guidanceBatchReview = signal<GuidanceBatchReview | undefined>(undefined);
+  const guidanceBatchLoading = signal(false);
+  const guidanceBatchError = signal('');
+  let guidanceBatchGeneration = 0;
   const guidanceOlderCommitDrafts = signal<Record<string, string>>({});
   let guidanceProjectId = '';
   let guidanceLoadGeneration = 0;
@@ -1486,6 +1493,51 @@ export async function startHotSheetWebClient() {
       guidanceReviewLoading.value = false;
     }
   }
+  function invalidateGuidanceBatchReview() {
+    ++guidanceBatchGeneration;
+    guidanceBatchReview.value = undefined;
+    guidanceBatchError.value = '';
+  }
+  async function reviewGuidanceBatch() {
+    const current = project();
+    if (!current || guidanceBatchLoading.value) return;
+    const generation = ++guidanceBatchGeneration;
+    const rows = [
+      { id: guidanceSourceId.value, repository: guidanceRepository.value, refs: guidanceRef.value },
+      ...guidanceBatchRows.value,
+    ];
+    const requests: GuidanceBatchSource[] = rows.map((row) => ({
+      id: row.id.trim(),
+      repository: row.repository.trim(),
+      refs: row.refs
+        .split(/[\n,]/)
+        .map((ref) => ref.trim())
+        .filter(Boolean),
+    }));
+    if (requests.some((request) => !request.id || !request.repository || !request.refs.length)) {
+      guidanceBatchError.value = 'Each source needs an ID, repository, and at least one ref.';
+      guidanceBatchReview.value = undefined;
+      return;
+    }
+    guidanceBatchLoading.value = true;
+    guidanceBatchError.value = '';
+    guidanceBatchReview.value = undefined;
+    try {
+      const review = await new Api(current.apiPath).reviewCheckoutGuidanceBatch(current.id, requests);
+      if (generation === guidanceBatchGeneration && project()?.id === current.id) guidanceBatchReview.value = review;
+    } catch (error) {
+      if (generation === guidanceBatchGeneration && project()?.id === current.id)
+        guidanceBatchError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+      guidanceBatchLoading.value = false;
+    }
+  }
+  async function registerGuidanceBatch() {
+    const review = guidanceBatchReview.value;
+    if (!review || guidanceBatchLoading.value) return;
+    await updateGuidance({ action: 'register_batch', review });
+    invalidateGuidanceBatchReview();
+  }
   async function refreshReviewedGuidance() {
     const review = guidanceReview.value;
     const source = guidanceOverview.value?.sources.find((item) => item.id === review?.update.id);
@@ -1524,6 +1576,9 @@ export async function startHotSheetWebClient() {
       rulesyncUpdateReport.value = null;
       guidanceRepository.value = '';
       guidanceRef.value = 'main';
+      guidanceBatchRows.value = [];
+      invalidateGuidanceBatchReview();
+      guidanceBatchLoading.value = false;
       guidanceOlderCommitDrafts.value = {};
       guidanceSourceId.value = 'ai-playbook';
       guidanceSearchModel.clear();
@@ -1697,9 +1752,10 @@ export async function startHotSheetWebClient() {
         guidanceReview.value = undefined;
         guidanceRulePreview.value = undefined;
         void refreshGuidanceRecommendations(current);
-        if (action.action === 'register') void checkGuidanceUpdates(true);
+        if (action.action === 'register' || action.action === 'register_batch') void checkGuidanceUpdates(true);
         guidanceMessage.value = {
           register: 'Source pinned. Review the selection, then apply.',
+          register_batch: 'Reviewed source revisions pinned. Review the selection, then apply.',
           select: 'Selection updated. Apply to install it.',
           cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
           choose_rule_version: 'Rule version selected. Preview changes, then apply.',
@@ -3985,6 +4041,10 @@ export async function startHotSheetWebClient() {
       search: guidanceSearchModel.state.value,
       repository: guidanceRepository.value,
       sourceRef: guidanceRef.value,
+      batchRows: guidanceBatchRows.value,
+      batchReview: guidanceBatchReview.value,
+      batchLoading: guidanceBatchLoading.value,
+      batchError: guidanceBatchError.value,
       olderCommitDrafts: guidanceOlderCommitDrafts.value,
       sourceId: guidanceSourceId.value,
       ownerFilter: guidanceOwnerFilter.value,
@@ -4872,6 +4932,10 @@ export async function startHotSheetWebClient() {
     guidanceRepository,
     guidanceSourceId,
     guidanceRef,
+    guidanceBatchRows,
+    invalidateGuidanceBatchReview,
+    reviewGuidanceBatch,
+    registerGuidanceBatch,
     guidanceOlderCommitDrafts,
     updateGuidance,
     previewGuidanceRule,
