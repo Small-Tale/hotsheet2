@@ -23920,6 +23920,8 @@ test('keeps a toast dismissible over the modal media gallery and lifts one alrea
     [390, 844],
   ] as const) {
     await page.setViewportSize({ width, height });
+    // HS2-T7GHJQ: wait for the responsive inspector state before deciding whether to open it.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await openGallery();
     // A toast raised over the open gallery is part of the modal surface: focusable and clickable.
     await saveMarkup();
