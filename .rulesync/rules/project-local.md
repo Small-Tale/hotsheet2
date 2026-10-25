@@ -76,6 +76,17 @@ remote contains the commit and use `node scripts/ci-gate.mjs status --covers
 <full-sha>` to check the successful `main` CI run. A remote run never replaces a
 failing local gate.
 
+## Deployment-scripts deviation (HS2-51HMCC)
+
+Hot Sheet 2 has no hosted deployment environment or infrastructure definitions.
+The detached server runs on a user's machine; desktop packaging and local server
+startup are not a Small Tale-hosted infrastructure apply. Therefore the shared
+deployment-scripts rule's deploy entry point, credential and state preflight,
+phased resource and secret apply, SHA-tagged service image, and deployed-URL smoke
+test are presently inapplicable. Do not add a placeholder deploy script. Revisit
+the rule after HS2-VXQNVM selects a hosted target; HS2-BYXA4V owns artifact
+distribution. See `docs/01-architecture.md` §1.7.
+
 ## Project references
 
 The codebase map is `docs/CODEBASE-MAP.md`; requirements status is in

@@ -161,3 +161,23 @@ The UI never walks the store directory to draw a list; it always reads the index
 - Technology choices and rationale: [09-technology-decisions.md](09-technology-decisions.md)
 - Storage: [02-ticket-storage.md](02-ticket-storage.md)
 - Indexing: [03-indexing-and-query.md](03-indexing-and-query.md)
+
+## 1.7 Deployment boundary (HS2-51HMCC)
+
+Hot Sheet 2 currently has no Small Tale-hosted service, beta or production
+environment, infrastructure definitions, state backend, or deployed URL. The
+server runs as a detached process on a user's machine (§1.4); remote clients
+attach to a server on another user's machine (§1.2). The web client is bundled
+with the Tauri desktop app, and `clients/web` has build and local-server commands.
+Those are build and local runtime paths, not an infrastructure deployment.
+
+The shared deployment-scripts rule's environment argument, SHA-tagged deployable
+image, credential and state preflight, phased infrastructure apply, secret
+versions, and deployed-URL smoke test have no target in this repository today.
+Creating a `deploy.sh` for a nonexistent environment would imply a deployment
+that cannot run. The project-level deviation is recorded in
+`.rulesync/rules/project-local.md`. HS2-VXQNVM decides whether a hosted service
+will exist and, if so, its environments and infrastructure contract. Artifact
+distribution for the server, CLI, and desktop clients is a separate decision in
+HS2-BYXA4V. Once a hosted target is selected, its infrastructure directory must
+contain the single checked-in deployment entry point and a repeatable smoke test.
