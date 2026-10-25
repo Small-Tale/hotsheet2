@@ -334,20 +334,29 @@ pub fn run_migrate_with_progress(
 
     eprintln!("Exporting {} …", hotsheet_dir.display());
     observe(MigrationProgress::phase("export_start"));
-    let mut child = hotsheet_ticketing::git::launch("node")
+    let mut command = hotsheet_ticketing::git::launch("node");
+    command
         .arg(&export_mjs)
         .arg(hotsheet_dir)
         .arg("--out")
         .arg(&export_json)
         .arg("--progress-json")
-        .stdout(Stdio::piped())
-        .spawn()
-        .with_context(|| {
-            format!(
-                "running the migrator ({}) — is Node installed?",
-                export_mjs.display()
-            )
-        })?;
+        .stdout(Stdio::piped());
+    let mut child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet-cli",
+        purpose: hotsheet_process_journal::Purpose::CliMigrator,
+        project_id: Some(hotsheet_tls::project_id(store_path)),
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .spawn(&mut command)
+    .with_context(|| {
+        format!(
+            "running the migrator ({}) — is Node installed?",
+            export_mjs.display()
+        )
+    })?;
     // The exporter flushes NDJSON records as work completes. Read incrementally;
     // diagnostics stay on stderr and never become authoritative result counts.
     let output = child

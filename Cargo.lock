@@ -1165,6 +1165,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "hotsheet-model",
+ "hotsheet-process-journal",
  "hotsheet-ticketing",
  "include_dir",
  "serde",
@@ -1201,6 +1202,7 @@ dependencies = [
  "hotsheet-mcp",
  "hotsheet-model",
  "hotsheet-plugins",
+ "hotsheet-process-journal",
  "hotsheet-sync",
  "hotsheet-terminals",
  "hotsheet-ticketing",

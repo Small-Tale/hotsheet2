@@ -538,7 +538,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
-    hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; CLI `processes` reads it (HS2-GDCMXE)
+    hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
       src/limits.rs          #   Physical memory (sysconf) and replay bounds behind the terminal limits (HS2-Y5DYC0)
       src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring sized at spawn and resizable on a live PTY (HS2-Y5DYC0/HS2-56G204), drain thread (slave kept until the child exits and output is drained, HS2-BCE5XG), write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)

@@ -274,7 +274,15 @@ fn check_selected_ref(source: &GuidanceSource) -> SourceUpdate {
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    let Ok(mut child) = command.spawn() else {
+    let context = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(crate::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::GuidanceGit,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    };
+    let Ok(mut child) = context.spawn(&mut command) else {
         return SourceUpdate::failed(source, "Git could not start the source check");
     };
     let started = Instant::now();
@@ -360,9 +368,16 @@ fn discover_other_refs(source: &GuidanceSource) -> Result<(Vec<AvailableRef>, bo
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdout(stdout)
         .stderr(Stdio::null());
-    let mut child = command
-        .spawn()
-        .map_err(|_| "Git could not start ref discovery")?;
+    let mut child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(crate::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::GuidanceGit,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .spawn(&mut command)
+    .map_err(|_| "Git could not start ref discovery")?;
     let started = Instant::now();
     loop {
         match child.try_wait() {

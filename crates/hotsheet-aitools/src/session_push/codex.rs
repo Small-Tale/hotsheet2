@@ -194,7 +194,17 @@ enum Bounded {
 /// Run `cmd` to completion, killing it after `timeout`. Output is drained on helper threads
 /// so a chatty child never blocks on a full pipe.
 fn run_bounded(mut cmd: Command, timeout: Duration) -> Result<BoundedOutput, Bounded> {
-    let mut child = cmd.spawn().map_err(|e| Bounded::Io(e.to_string()))?;
+    let context = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::CodexQueue,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    };
+    let mut child = context
+        .spawn(&mut cmd)
+        .map_err(|e| Bounded::Io(e.to_string()))?;
     fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
         std::thread::spawn(move || {
             let mut bytes = Vec::new();

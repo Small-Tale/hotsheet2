@@ -126,13 +126,22 @@ fn run(
     // Rulesync 38 prints JSON failures (including outdated sources) on stderr.
     let stdout = tempfile::tempfile()?;
     let stderr = tempfile::tempfile()?;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args(args)
         .current_dir(project)
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdout(Stdio::from(stdout.try_clone()?))
-        .stderr(Stdio::from(stderr.try_clone()?))
-        .spawn()?;
+        .stderr(Stdio::from(stderr.try_clone()?));
+    let mut child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(crate::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::Rulesync,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .spawn(&mut command)?;
     let started = Instant::now();
     let status = loop {
         if let Some(status) = child.try_wait()? {

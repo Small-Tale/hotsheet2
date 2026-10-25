@@ -9,6 +9,13 @@ investigation compares an unresolved record's supervisor PID and session ID with
 the machine-server instance registration; an unended record alone does not prove
 that its child remains alive.
 
+HS2-G9TF60 extends that provenance to short-lived utility and detached external
+launches. `hotsheet-process-journal` tests exercise observed success and failure,
+kill, detached unresolved state, and ensure synthetic command text/output do not
+enter records. Existing Codex queue/daemon, CLI launch/setup, server configured
+command, code-review, broker, guidance, and Rulesync suites exercise the adapted
+launch paths; manual inspection compares a detached record with its supervisor.
+
 HS2-6ZA2RN covers Project guidance's toolbar search with
 `clients/web/src/guidance-search-model.test.ts` for text, owner/tag chips,
 suggestions, and clearing; `clients/web/tests/guidance.spec.ts` exercises the

@@ -844,10 +844,17 @@ fn spawn_detached(command: &mut Command) -> Result<(), CodeReviewError> {
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+        .stderr(Stdio::null());
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet-server",
+        purpose: hotsheet_process_journal::Purpose::CodeReviewDifftool,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .detached(command)
+    .map_err(|error| CodeReviewError::Launch(error.to_string()))
 }
 
 fn validate_reachable_commit(root: &Path, commit: &str) -> Result<(), CodeReviewError> {

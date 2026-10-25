@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 const HISTORY_CAP: usize = 50;
@@ -34,7 +34,7 @@ pub struct CommandRun {
 
 struct LiveRun {
     view: CommandRun,
-    child: Option<Arc<Mutex<Child>>>,
+    child: Option<Arc<Mutex<hotsheet_process_journal::TrackedChild>>>,
     next_seq: u64,
 }
 
@@ -212,13 +212,25 @@ impl CommandManager {
             .or_else(|| self.roots.lock_or_recover().get(project).cloned())
             .ok_or_else(|| "unknown command project".to_string())?;
         let (program, args) = execution(&def, &root)?;
-        let mut child = hotsheet_ticketing::git::launch(program)
+        let mut command = hotsheet_ticketing::git::launch(program);
+        command
             .args(args)
             .current_dir(root)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .stderr(Stdio::piped());
+        let mut child =
+            hotsheet_process_journal::LaunchContext {
+                journal: hotsheet_process_journal::ProcessJournal::at(
+                    hotsheet_plugins::hotsheet_home(),
+                ),
+                supervisor: "hotsheet-server",
+                purpose: hotsheet_process_journal::Purpose::ServerCommand,
+                project_id: (!project.is_empty()).then(|| project.to_owned()),
+                session_id: None,
+                binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+            }
+            .spawn(&mut command)
             .map_err(|e| e.to_string())?;
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();

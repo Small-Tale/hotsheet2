@@ -238,8 +238,16 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
     command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()?; // not waited on → outlives this server (reparented on exit)
+        .stderr(std::process::Stdio::null());
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet-server",
+        purpose: hotsheet_process_journal::Purpose::BrokerSupervisor,
+        project_id: Some(project.to_owned()),
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .detached(&mut command)?; // not waited on → outlives this server (reparented on exit)
     Ok(())
 }
 

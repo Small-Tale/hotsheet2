@@ -891,9 +891,16 @@ pub(crate) fn cmd_launch(
         .env("HOTSHEET_WORKER_ID", &worker)
         // The launched tool is an AI session: its mutations act as `ai` (HS2-RD4M29).
         .envs(hotsheet_aitools::ai_session_actor_env(&worker));
-    let mut child = command
-        .spawn()
-        .with_context(|| format!("launching {}", program.display()))?;
+    let mut child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(&home),
+        supervisor: "hotsheet-cli",
+        purpose: hotsheet_process_journal::Purpose::CliExternal,
+        project_id: Some(checkout_id.to_owned()),
+        session_id: Some(worker.clone()),
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .spawn(&mut command)
+    .with_context(|| format!("launching {}", program.display()))?;
     // The tool owns the terminal: its interrupt, quit and hang-up signals are for it. Survive
     // them here (after the spawn, so the tool keeps default dispositions) to release its claims
     // once it exits, including when the terminal window closes.

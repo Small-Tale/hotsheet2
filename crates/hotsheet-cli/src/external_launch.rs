@@ -91,14 +91,24 @@ pub fn ensure_running_server(store: &Path, home: &Path) -> Result<ServerInstance
             PathBuf::from("hotsheet-cli")
         }
     };
-    let mut child = hotsheet_ticketing::git::launch(cli)
+    let mut command = hotsheet_ticketing::git::launch(cli);
+    command
         .arg("-C")
         .arg(store)
         .args(["serve", "--bind", "127.0.0.1:0"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    let context = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(home),
+        supervisor: "hotsheet-cli",
+        purpose: hotsheet_process_journal::Purpose::CliSetup,
+        project_id: Some(hotsheet_tls::project_id(store)),
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    };
+    let mut child = context
+        .spawn(&mut command)
         .context("starting the machine-local Hot Sheet project server")?;
     for _ in 0..100 {
         if let Ok(server) = discover_running_server(store, home) {

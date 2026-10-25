@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_RECORD_BYTES: u64 = 16 * 1024;
@@ -25,6 +26,17 @@ pub enum Purpose {
     AiAcp,
     AiSpawn,
     AiProbe,
+    CodexQueue,
+    CodexDaemon,
+    CliExternal,
+    CliSetup,
+    CliMigrator,
+    CodeReviewDifftool,
+    ServerCommand,
+    RepositoryHelper,
+    BrokerSupervisor,
+    GuidanceGit,
+    Rulesync,
 }
 
 /// The observed end of one child; a crash leaves this absent rather than inventing an exit.
@@ -49,6 +61,142 @@ pub struct LaunchMeta {
     pub project_id: Option<String>,
     pub session_id: Option<String>,
     pub binary_revision: Option<String>,
+}
+
+/// Fixed provenance shared by commands whose PID is only known after spawning. It never
+/// inspects the command, arguments, environment, or output (HS2-G9TF60).
+#[derive(Clone, Debug)]
+pub struct LaunchContext {
+    pub journal: ProcessJournal,
+    pub supervisor: &'static str,
+    pub purpose: Purpose,
+    pub project_id: Option<String>,
+    pub session_id: Option<String>,
+    pub binary_revision: Option<String>,
+}
+
+impl LaunchContext {
+    pub fn spawn(&self, command: &mut Command) -> io::Result<TrackedChild> {
+        let child = command.spawn()?;
+        let record = self.journal.start(LaunchMeta {
+            pid: child.id(),
+            supervisor_pid: std::process::id(),
+            supervisor: self.supervisor.to_owned(),
+            purpose: self.purpose,
+            project_id: self.project_id.clone(),
+            session_id: self.session_id.clone(),
+            binary_revision: self.binary_revision.clone(),
+        });
+        let launch_id = match record {
+            Ok(record) => Some(record.launch_id),
+            Err(error) => {
+                eprintln!("Hot Sheet process journal unavailable: {}", error.kind());
+                None
+            }
+        };
+        Ok(TrackedChild {
+            child,
+            journal: self.journal.clone(),
+            launch_id,
+            killed: false,
+        })
+    }
+
+    pub fn status(&self, command: &mut Command) -> io::Result<ExitStatus> {
+        self.spawn(command)?.wait()
+    }
+
+    pub fn output(&self, command: &mut Command) -> io::Result<Output> {
+        command.stdin(std::process::Stdio::null());
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
+        self.spawn(command)?.wait_with_output()
+    }
+
+    /// The caller intentionally hands ownership to another process or the OS. The launch
+    /// remains unresolved because this supervisor has not observed an exit.
+    pub fn detached(&self, command: &mut Command) -> io::Result<()> {
+        self.spawn(command).map(|_| ())
+    }
+}
+
+/// A child whose observed exit updates its journal record. Dropping a still-running child
+/// deliberately leaves an unresolved record for later diagnostics.
+pub struct TrackedChild {
+    child: Child,
+    journal: ProcessJournal,
+    launch_id: Option<String>,
+    killed: bool,
+}
+
+impl TrackedChild {
+    fn finish(&mut self, status: ExitStatus) {
+        if let Some(id) = self.launch_id.take() {
+            let reason = if self.killed {
+                ExitReason::Killed
+            } else if status.success() {
+                ExitReason::Completed
+            } else {
+                ExitReason::Failed
+            };
+            let _ = self.journal.finish(&id, reason);
+        }
+    }
+
+    pub fn wait(&mut self) -> io::Result<ExitStatus> {
+        let status = self.child.wait()?;
+        self.finish(status);
+        Ok(status)
+    }
+
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        let status = self.child.try_wait()?;
+        if let Some(status) = status {
+            self.finish(status);
+        }
+        Ok(status)
+    }
+
+    pub fn wait_with_output(self) -> io::Result<Output> {
+        let Self {
+            child,
+            journal,
+            launch_id,
+            killed,
+        } = self;
+        let output = child.wait_with_output()?;
+        if let Some(id) = launch_id {
+            let reason = if killed {
+                ExitReason::Killed
+            } else if output.status.success() {
+                ExitReason::Completed
+            } else {
+                ExitReason::Failed
+            };
+            let _ = journal.finish(&id, reason);
+        }
+        Ok(output)
+    }
+
+    pub fn kill(&mut self) -> io::Result<()> {
+        self.child.kill()?;
+        self.killed = true;
+        Ok(())
+    }
+}
+
+impl std::ops::Deref for TrackedChild {
+    type Target = Child;
+
+    fn deref(&self) -> &Self::Target {
+        &self.child
+    }
+}
+
+impl std::ops::DerefMut for TrackedChild {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.child
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -333,6 +481,58 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_g9tf60_tracked_commands_record_observed_and_detached_lifecycle() {
+        let home = tempfile::tempdir().unwrap();
+        let context = LaunchContext {
+            journal: ProcessJournal::at(home.path()),
+            supervisor: "hotsheet-test",
+            purpose: Purpose::RepositoryHelper,
+            project_id: Some("project-1".into()),
+            session_id: None,
+            binary_revision: Some("test-revision".into()),
+        };
+        let mut success = Command::new("sh");
+        success.args(["-c", "printf synthetic"]);
+        assert_eq!(context.output(&mut success).unwrap().stdout, b"synthetic");
+        let mut failure = Command::new("sh");
+        failure.args(["-c", "exit 7"]);
+        assert_eq!(context.status(&mut failure).unwrap().code(), Some(7));
+        let mut detached = Command::new("sh");
+        detached.args(["-c", "exit 0"]);
+        context.detached(&mut detached).unwrap();
+        let mut sleeping = Command::new("sleep");
+        sleeping.arg("30");
+        let mut killed = context.spawn(&mut sleeping).unwrap();
+        killed.kill().unwrap();
+        killed.wait().unwrap();
+
+        let records = context.journal.list().unwrap();
+        assert_eq!(records.len(), 4);
+        for reason in [
+            Some(ExitReason::Completed),
+            Some(ExitReason::Failed),
+            None,
+            Some(ExitReason::Killed),
+        ] {
+            assert_eq!(
+                records
+                    .iter()
+                    .filter(|record| record.exit_reason == reason)
+                    .count(),
+                1
+            );
+        }
+        assert!(records.iter().all(|record| {
+            record.project_id.as_deref() == Some("project-1")
+                && record.binary_revision.as_deref() == Some("test-revision")
+        }));
+        let serialized = serde_json::to_string(&records).unwrap();
+        assert!(!serialized.contains("synthetic"));
+        assert!(!serialized.contains("exit 7"));
+    }
 
     fn meta(pid: u32) -> LaunchMeta {
         LaunchMeta {

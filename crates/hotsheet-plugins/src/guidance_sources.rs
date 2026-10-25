@@ -157,10 +157,24 @@ fn digest(bytes: &[u8]) -> String {
         .collect()
 }
 
+fn guidance_process_context(
+    purpose: hotsheet_process_journal::Purpose,
+) -> hotsheet_process_journal::LaunchContext {
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(crate::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+}
+
 fn git(repository: &Path, args: &[&str]) -> Result<Vec<u8>, GuidanceSourceError> {
-    let output = hotsheet_ticketing::git::command_in(repository)
-        .args(args)
-        .output()?;
+    let mut command = hotsheet_ticketing::git::command_in(repository);
+    command.args(args);
+    let output = guidance_process_context(hotsheet_process_journal::Purpose::GuidanceGit)
+        .output(&mut command)?;
     if !output.status.success() {
         return Err(GuidanceSourceError::Git(
             String::from_utf8_lossy(&output.stderr).trim().to_owned(),
@@ -186,11 +200,13 @@ fn source_checkout(
     }
     let temporary = tempfile::tempdir()?;
     let checkout = temporary.path().join("source");
-    let output = hotsheet_ticketing::git::command()
+    let mut command = hotsheet_ticketing::git::command();
+    command
         .args(["clone", "--quiet", "--no-checkout", "--"])
         .arg(repository)
-        .arg(&checkout)
-        .output()?;
+        .arg(&checkout);
+    let output = guidance_process_context(hotsheet_process_journal::Purpose::GuidanceGit)
+        .output(&mut command)?;
     if !output.status.success() {
         return Err(GuidanceSourceError::Git(
             String::from_utf8_lossy(&output.stderr).trim().to_owned(),
@@ -695,13 +711,15 @@ pub fn apply_rulesync(project: &Path) -> Result<(), GuidanceSourceError> {
     if fs::read(&generated).ok().as_deref() != Some(bytes.as_slice()) {
         fs::write(&generated, bytes)?;
     }
-    let output = Command::new("rulesync")
+    let mut command = Command::new("rulesync");
+    command
         .current_dir(project)
         .arg("generate")
         .arg("--delete")
         .arg("--config")
-        .arg(&generated)
-        .output()
+        .arg(&generated);
+    let output = guidance_process_context(hotsheet_process_journal::Purpose::Rulesync)
+        .output(&mut command)
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 GuidanceSourceError::Invalid(

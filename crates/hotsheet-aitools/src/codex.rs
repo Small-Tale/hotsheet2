@@ -1265,7 +1265,15 @@ fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result
     if let Some(home) = codex_home {
         cmd.env("CODEX_HOME", home);
     }
-    let output = cmd.output()?;
+    let output = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::CodexDaemon,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .output(&mut cmd)?;
     if output.status.success() {
         Ok(())
     } else {
@@ -1338,14 +1346,23 @@ impl crate::drive::BackingService for CodexDaemonService {
 /// none is running). Used to tear down a per-run isolated-home daemon so it isn't orphaned
 /// when the home goes away (HS2-9M6T68). Best-effort: returns the child's status.
 pub fn stop_codex_daemon_in(program: &str, codex_home: &Path) -> std::io::Result<()> {
-    hotsheet_ticketing::git::launch(program)
+    let mut command = hotsheet_ticketing::git::launch(program);
+    command
         .args(["app-server", "daemon", "stop"])
         .env("CODEX_HOME", codex_home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|_| ())
+        .stderr(Stdio::null());
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet",
+        purpose: hotsheet_process_journal::Purpose::CodexDaemon,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .status(&mut command)
+    .map(|_| ())
 }
 
 // ---- a scripted daemon for tests (no live codex) ---------------------------------

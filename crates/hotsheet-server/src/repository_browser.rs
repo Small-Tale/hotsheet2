@@ -401,14 +401,22 @@ fn commit_count(root: &Path) -> u64 {
 }
 
 fn spawn(program: &str, args: &[std::ffi::OsString]) -> Result<(), RepositoryBrowserError> {
-    hotsheet_ticketing::git::launch(program)
+    let mut command = hotsheet_ticketing::git::launch(program);
+    command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| RepositoryBrowserError::Launch(error.to_string()))
+        .stderr(Stdio::null());
+    hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
+        supervisor: "hotsheet-server",
+        purpose: hotsheet_process_journal::Purpose::RepositoryHelper,
+        project_id: None,
+        session_id: None,
+        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+    .detached(&mut command)
+    .map_err(|error| RepositoryBrowserError::Launch(error.to_string()))
 }
 
 #[cfg(test)]
