@@ -5133,11 +5133,22 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
       index,
     );
   const scrollLeft = () => track.evaluate((element) => Math.round(element.scrollLeft));
+  // HS2-PG15SM: A snapped inset can be observed during animation; reverse the wheel only after scrolling ends.
+  await track.evaluate((element) => {
+    element.dataset.testScrollEndCount = '0';
+    element.addEventListener('scrollend', () => {
+      element.dataset.testScrollEndCount = String(Number(element.dataset.testScrollEndCount) + 1);
+    });
+  });
+  const scrollEndCount = () => track.evaluate((element) => Number(element.dataset.testScrollEndCount));
   await track.hover();
   await page.mouse.wheel(Math.round(geometry.first.width * 0.7), 0);
+  await expect.poll(scrollEndCount, { timeout: 5000 }).toBeGreaterThan(0);
   await expect.poll(() => columnInset(1), { timeout: 5000 }).toBe(8);
   expect(await scrollLeft()).toBeGreaterThan(0);
+  const rightScrollEndCount = await scrollEndCount();
   await page.mouse.wheel(-Math.round(geometry.first.width * 0.8), 0);
+  await expect.poll(scrollEndCount, { timeout: 5000 }).toBeGreaterThan(rightScrollEndCount);
   await expect.poll(scrollLeft, { timeout: 5000 }).toBe(0);
   await expect(columns.first()).toBeInViewport({ ratio: 0.95 });
   // Selecting a card from the paged board pushes into the rail's inspector as the list does.
