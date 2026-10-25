@@ -38,7 +38,13 @@ impl TemporaryLaunchHost {
         let bootstrap = self.home.join("server-bootstrap.hs2");
         let output = self
             .command()
-            .args(["-C", bootstrap.to_str().unwrap(), "serve", "--stop"])
+            .args([
+                "-C",
+                bootstrap.to_str().unwrap(),
+                "serve",
+                "--stop",
+                "--kill-all-terminals",
+            ])
             .output()
             .unwrap();
         assert!(
@@ -62,7 +68,13 @@ impl Drop for TemporaryLaunchHost {
             if bootstrap.exists() {
                 let _ = self
                     .command()
-                    .args(["-C", bootstrap.to_str().unwrap(), "serve", "--stop"])
+                    .args([
+                        "-C",
+                        bootstrap.to_str().unwrap(),
+                        "serve",
+                        "--stop",
+                        "--kill-all-terminals",
+                    ])
                     .output();
             }
         }
@@ -1661,7 +1673,8 @@ fn retained_permission_hook_uses_restarted_server_route() {
 fn capture_one_request(listener: std::net::TcpListener) -> (String, String, String) {
     use std::io::{BufRead, BufReader, Read, Write};
     listener.set_nonblocking(true).unwrap();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    // HS2-T4TQK0: a parallel root gate can delay the client process past five seconds.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     let stream = loop {
         match listener.accept() {
             Ok((stream, _)) => break stream,
