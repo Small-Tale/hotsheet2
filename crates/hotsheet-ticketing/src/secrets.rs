@@ -19,6 +19,28 @@ use serde::{Deserialize, Serialize};
 use crate::settings::{Settings, SettingsError};
 
 mod machine_secrets;
+#[cfg(all(feature = "test-credentials", debug_assertions))]
+mod test_credentials;
+
+#[doc(hidden)]
+pub fn test_credentials_available() -> bool {
+    cfg!(all(feature = "test-credentials", debug_assertions))
+}
+
+/// HS2-SFVWN5: explicit fixture activation; environment variables cannot enable it.
+#[doc(hidden)]
+pub fn enable_test_credentials() -> Result<(), SecretError> {
+    #[cfg(all(feature = "test-credentials", debug_assertions))]
+    {
+        test_credentials::enable();
+        Ok(())
+    }
+    #[cfg(not(all(feature = "test-credentials", debug_assertions)))]
+    Err(SecretError::Unavailable(
+        "fixture credentials require a debug build with hotsheet-aitools/test-permission-vault"
+            .into(),
+    ))
+}
 
 const SERVICE: &str = "com.smalltale.hotsheet2";
 
@@ -104,16 +126,41 @@ struct NativeKeychain;
 
 impl SecretStore for NativeKeychain {
     fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
+        #[cfg(all(feature = "test-credentials", debug_assertions))]
+        if test_credentials::enabled() {
+            return test_credentials::set(account, secret);
+        }
+        if cfg!(test) {
+            return Err(native_unit_test_refusal());
+        }
         platform_set(account, secret)
     }
 
     fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
+        #[cfg(all(feature = "test-credentials", debug_assertions))]
+        if test_credentials::enabled() {
+            return test_credentials::get(account);
+        }
+        if cfg!(test) {
+            return Err(native_unit_test_refusal());
+        }
         platform_get(account)
     }
 
     fn delete(&self, account: &str) -> Result<bool, SecretError> {
+        #[cfg(all(feature = "test-credentials", debug_assertions))]
+        if test_credentials::enabled() {
+            return test_credentials::delete(account);
+        }
+        if cfg!(test) {
+            return Err(native_unit_test_refusal());
+        }
         platform_delete(account)
     }
+}
+
+fn native_unit_test_refusal() -> SecretError {
+    SecretError::Unavailable("HS2-SFVWN5: unit tests must inject synthetic credentials; native adapter tests are explicit opt-in".into())
 }
 
 #[cfg(target_os = "macos")]
@@ -519,6 +566,78 @@ fn restrict_file(_path: &Path) -> Result<(), std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_sfvwn5_unit_native_port_refuses_without_touching_os_credentials() {
+        assert!(
+            NativeKeychain
+                .get("synthetic-refusal")
+                .unwrap_err()
+                .to_string()
+                .contains("HS2-SFVWN5")
+        );
+        assert!(
+            NativeKeychain
+                .set("synthetic-refusal", "synthetic-value")
+                .is_err()
+        );
+        assert!(NativeKeychain.delete("synthetic-refusal").is_err());
+    }
+
+    #[cfg(all(feature = "test-credentials", debug_assertions))]
+    #[test]
+    fn hs2_sfvwn5_synthetic_native_port_bypasses_the_refusing_os_boundary() {
+        if let Some(mode) = std::env::var_os("HS2_SYNTHETIC_NATIVE_CHILD") {
+            enable_test_credentials().unwrap();
+            if mode == "missing-home" {
+                assert!(
+                    NativeKeychain
+                        .get("synthetic-roundtrip")
+                        .unwrap_err()
+                        .to_string()
+                        .contains("explicit HOTSHEET_HOME")
+                );
+                return;
+            }
+            NativeKeychain
+                .set("synthetic-roundtrip", "synthetic-value")
+                .unwrap();
+            assert_eq!(
+                NativeKeychain
+                    .get("synthetic-roundtrip")
+                    .unwrap()
+                    .as_deref(),
+                Some("synthetic-value")
+            );
+            assert!(NativeKeychain.delete("synthetic-roundtrip").unwrap());
+            assert_eq!(NativeKeychain.get("synthetic-roundtrip").unwrap(), None);
+            return;
+        }
+        let home = tempfile::tempdir().unwrap();
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "secrets::tests::hs2_sfvwn5_synthetic_native_port_bypasses_the_refusing_os_boundary"])
+            .env("HS2_SYNTHETIC_NATIVE_CHILD", "1")
+            .env("HOTSHEET_HOME", home.path())
+            .output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(String::from_utf8_lossy(&result.stdout).contains("1 passed"));
+        assert!(home.path().join("test-native-credentials").is_dir());
+        let failed = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "secrets::tests::hs2_sfvwn5_synthetic_native_port_bypasses_the_refusing_os_boundary"])
+            .env("HS2_SYNTHETIC_NATIVE_CHILD", "missing-home")
+            .env_remove("HOTSHEET_HOME")
+            .output().unwrap();
+        assert!(
+            failed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&failed.stderr)
+        );
+        assert!(String::from_utf8_lossy(&failed.stdout).contains("1 passed"));
+    }
     use std::cell::RefCell;
 
     #[derive(Default)]
@@ -642,6 +761,7 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
+    #[ignore = "native: explicitly opt in on a disposable Windows credential store (HS2-SFVWN5)"]
     fn windows_credential_manager_round_trip() {
         use std::time::{SystemTime, UNIX_EPOCH};
 

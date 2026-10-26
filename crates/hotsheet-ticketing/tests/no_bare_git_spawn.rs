@@ -8,6 +8,43 @@ use std::path::{Path, PathBuf};
 /// The only file allowed to spawn `git` directly.
 const SANCTIONED: &str = "hotsheet-ticketing/src/git.rs";
 
+#[test]
+fn hs2_sfvwn5_release_and_default_artifacts_refuse_fixture_activation() {
+    let available = hotsheet_ticketing::secrets::test_credentials_available();
+    assert_eq!(
+        available,
+        cfg!(all(feature = "test-credentials", debug_assertions))
+    );
+    if !available {
+        assert!(hotsheet_ticketing::secrets::enable_test_credentials().is_err());
+    }
+}
+
+#[test]
+fn hs2_sfvwn5_synthetic_credentials_require_compiled_debug_and_explicit_activation() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let source =
+        std::fs::read_to_string(root.join("crates/hotsheet-ticketing/src/secrets.rs")).unwrap();
+    assert!(source.contains(
+        "#[cfg(all(feature = \"test-credentials\", debug_assertions))]\nmod test_credentials;"
+    ));
+    assert_eq!(source.matches("if test_credentials::enabled()").count(), 3);
+    let fixture = std::fs::read_to_string(
+        root.join("crates/hotsheet-ticketing/src/secrets/test_credentials.rs"),
+    )
+    .unwrap();
+    assert!(fixture.contains("AtomicBool::new(false)"));
+    assert!(!fixture.contains("platform_get("));
+    assert!(!fixture.contains("platform_set("));
+    assert!(!fixture.contains("platform_delete("));
+    assert!(!fixture.contains("var_os(\"HOME\")"));
+    assert!(source.contains("#[ignore = \"native: explicitly opt in on a disposable Windows credential store (HS2-SFVWN5)\"]"));
+}
+
 fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();

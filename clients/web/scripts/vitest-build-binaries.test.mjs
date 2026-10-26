@@ -1,5 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,6 +126,13 @@ describe('Vitest runs the cargo build only for binary suites (HS2-3PX1E4)', () =
   function vitestCargoCalls(file) {
     scratch = mkdtempSync(join(tmpdir(), 'hs2-vitest-build-'));
     const marker = join(scratch, 'cargo-calls');
+    const target = join(scratch, 'target');
+    mkdirSync(join(target, 'debug'), { recursive: true });
+    const server = join(target, 'debug/hotsheet-server');
+    writeFileSync(server, `#!/bin/sh\necho '{"isolated_permission_vault":true,"isolated_native_credentials":true}'\n`);
+    chmodSync(server, 0o755);
+    writeFileSync(join(target, 'debug/hotsheet-cli'), readFileSync(server));
+    chmodSync(join(target, 'debug/hotsheet-cli'), 0o755);
     writeFileSync(join(scratch, 'cargo'), `#!/bin/sh\necho "$@" >> "${marker}"\n`);
     chmodSync(join(scratch, 'cargo'), 0o755);
     const result = spawnSync(
@@ -132,7 +148,12 @@ describe('Vitest runs the cargo build only for binary suites (HS2-3PX1E4)', () =
       {
         cwd: webRoot,
         encoding: 'utf8',
-        env: { ...process.env, PATH: `${scratch}:${process.env.PATH}`, HOTSHEET_VITEST_BUILD: 'always' },
+        env: {
+          ...process.env,
+          PATH: `${scratch}:${process.env.PATH}`,
+          HOTSHEET_VITEST_BUILD: 'always',
+          CARGO_TARGET_DIR: target,
+        },
       },
     );
     expect(result.status, result.stdout + result.stderr).toBe(0);
@@ -145,7 +166,7 @@ describe('Vitest runs the cargo build only for binary suites (HS2-3PX1E4)', () =
 
   it('builds once before a binary suite runs', () => {
     expect(vitestCargoCalls('scripts/real-ticket-server-owner.e2e.test.mjs')).toMatch(
-      /^build --manifest-path .*Cargo\.toml -p hotsheet-cli -p hotsheet-server --bins\n$/,
+      /^build --manifest-path .*Cargo\.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools\/test-permission-vault\n$/,
     );
   }, 60_000);
 });

@@ -18,6 +18,7 @@ import { parseArgs, promisify } from 'node:util';
 import { chromium } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from './repository-env.mjs';
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
   repoRoot = resolve(webRoot, '../..'),
@@ -28,6 +29,8 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
     HOTSHEET_CLI_BIN: resolve(targetDir, 'debug/hotsheet-cli'),
     HOTSHEET_MIGRATE_BIN: resolve(targetDir, 'debug/hotsheet-migrate'),
   };
+assertFixtureServer(binaries.HOTSHEET_SERVER_BIN);
+assertFixtureCli(binaries.HOTSHEET_CLI_BIN);
 const { values: args } = parseArgs({
   options: {
     events: { type: 'string', default: '40' },

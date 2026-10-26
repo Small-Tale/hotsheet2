@@ -615,6 +615,30 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   The feature is debug-only; a test-owner environment value never enables a backend
   or changes normal release/native credential behavior. A later default-feature build
   can replace the sibling server, so repeat the matching fixture build before tests.
+- **Unattended credential fixtures (HS2-SFVWN5):** automated tests never require an
+  interactive OS credential prompt. The explicit debug-only
+  `hotsheet-aitools/test-permission-vault` artifact includes both the permission vault
+  and a synthetic native credential port. Its server fixture hook activates both;
+  feature-enabled CLI fixtures additionally require `--test-fixture-credentials`.
+  Ordinary default debug builds and all release builds retain native credentials;
+  environment values cannot activate fixture mode in production. Never install or
+  run a feature-enabled fixture server as a personal host. Synthetic native items
+  live privately under the fixture's explicit `HOTSHEET_HOME/test-native-credentials`,
+  retaining real machine-envelope encryption and cross-process recovery behavior.
+  Server probes must report both `isolated_permission_vault: true` and
+  `isolated_native_credentials: true`; CLI probes report the latter. The read-only
+  probe opens no store or credential backend. Old permission-only artifacts fail
+  preflight before fixture state is created. Browser commands, quiet Rust/browser
+  tiers, CI, and Vitest's build-once setup request the matching feature; freshness or
+  `HOTSHEET_VITEST_BUILD=skip` never substitutes for the actual capability check.
+  Default `desktop:test` exercises the staged bridge/runtime with synthetic debug
+  backends. `desktop:test:native` explicitly opts into staged release backends and
+  may require native credential access; it is excluded from unattended suites.
+  The portable CLI permission-discard flow now runs on macOS too. Linux's mocked
+  `secret-tool` adapter remains default coverage. The real Windows Credential
+  Manager roundtrip is ignored by default and runs only through explicit
+  `cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored`
+  on the dedicated disposable Windows CI runner.
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.

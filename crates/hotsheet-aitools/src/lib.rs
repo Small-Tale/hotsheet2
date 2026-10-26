@@ -33,7 +33,11 @@ pub fn test_permission_vault_available() -> bool {
 #[doc(hidden)]
 pub fn enable_test_permission_vault() {
     #[cfg(all(feature = "test-permission-vault", debug_assertions))]
-    permission_vault::enable_test_permission_vault();
+    {
+        hotsheet_ticketing::secrets::enable_test_credentials()
+            .expect("compiled synthetic credential capability");
+        permission_vault::enable_test_permission_vault();
+    }
 }
 pub mod ports;
 pub mod probe;

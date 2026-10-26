@@ -11,13 +11,15 @@ import { createServer } from 'node:net';
 import { promisify } from 'node:util';
 
 import { withoutGitRepositoryEnv } from './repository-env.mjs';
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 const execFileAsync = promisify(execFile);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDir, '..');
 const repoRoot = resolve(webRoot, '../..');
-const cli = resolve(repoRoot, 'target/debug/hotsheet-cli');
-const server = resolve(repoRoot, 'target/debug/hotsheet-server');
+const target = resolve(repoRoot, process.env.CARGO_TARGET_DIR ?? 'target');
+const cli = resolve(target, 'debug/hotsheet-cli');
+const server = resolve(target, 'debug/hotsheet-server');
 const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 export function parseScaleCounts(value) {
@@ -685,6 +687,8 @@ async function main() {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000)
     throw new Error('--timeout-ms must be at least 1000');
   await Promise.all([requireBinary(cli, 'hotsheet-cli'), requireBinary(server, 'hotsheet-server')]);
+  assertFixtureServer(server);
+  assertFixtureCli(cli);
   const root = await realpath(await mkdtemp(join(tmpdir(), 'hotsheet-scale-')));
   const projectRoot = join(root, 'project');
   const store = join(root, 'project.hs2');

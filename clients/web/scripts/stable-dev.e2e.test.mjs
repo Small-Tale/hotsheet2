@@ -6,9 +6,40 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from '@playwright/test';
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const target = resolve(webRoot, '../..', process.env.CARGO_TARGET_DIR ?? 'target');
+const fixtureBinaries = {
+  HOTSHEET_SERVER_BIN: resolve(target, 'debug/hotsheet-server'),
+  HOTSHEET_CLI_BIN: resolve(target, 'debug/hotsheet-cli'),
+};
+let fixtureHome;
+beforeAll(async () => {
+  assertFixtureServer(fixtureBinaries.HOTSHEET_SERVER_BIN);
+  assertFixtureCli(fixtureBinaries.HOTSHEET_CLI_BIN);
+  fixtureHome = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-fixture-home-'));
+});
+afterAll(async () => {
+  if (!fixtureHome) return;
+  try {
+    await new Promise((resolveStop, reject) => {
+      const child = spawn(
+        fixtureBinaries.HOTSHEET_CLI_BIN,
+        ['--test-fixture-credentials', 'serve', '-C', resolve(fixtureHome, 'server-bootstrap.hs2'), '--stop'],
+        { env: { ...process.env, HOTSHEET_HOME: fixtureHome }, stdio: 'ignore' },
+      );
+      child.once('error', reject);
+      child.once('exit', (code) =>
+        code === 0 ? resolveStop() : reject(new Error('Could not stop the isolated stable-dev fixture server')),
+      );
+    });
+  } finally {
+    await rm(fixtureHome, { recursive: true, force: true });
+  }
+});
 
 async function availablePort() {
   const server = createServer();
@@ -91,6 +122,8 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
     {
       env: {
         ...process.env,
+        ...fixtureBinaries,
+        HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
       },
@@ -124,7 +157,7 @@ it.concurrent('starts an HS1 import job from the cache snapshot with the checkou
   await mkdir(resolve(project, '.hotsheet/db'), { recursive: true });
   await writeFile(resolve(project, '.hotsheet/db/PG_VERSION'), '17\n');
   const port = await availablePort();
-  const environment = { ...process.env, HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp, HOTSHEET_HOME: home, HOTSHEET_TEST_SERVER_OWNER_PID: 'host' };
+  const environment = { ...process.env, ...fixtureBinaries, HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp, HOTSHEET_HOME: home, HOTSHEET_TEST_SERVER_OWNER_PID: 'host' };
   // The bridge must find the checkout's migrator on its own, as a developer's `npm run dev` does,
   // and a pinned build revision belongs to the production host, not this launcher.
   delete environment.HOTSHEET_MIGRATE_BIN;
@@ -186,10 +219,10 @@ it.concurrent('starts an HS1 import job from the cache snapshot with the checkou
     await browser?.close();
     await stopChild(child);
     // The bridge's machine server outlives the host by design; stop the one under this home.
-    const cli = resolve(webRoot, '../../target/debug/hotsheet-cli');
+    const cli = fixtureBinaries.HOTSHEET_CLI_BIN;
     await new Promise((resolveStop) =>
       spawn(cli, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
-        env: { ...process.env, HOTSHEET_HOME: home },
+        env: { ...process.env, ...fixtureBinaries, HOTSHEET_HOME: home },
         stdio: 'ignore',
       }).once('exit', resolveStop),
     );
@@ -227,7 +260,7 @@ it.concurrent('exits with its Vite child when the process that started it dies (
     ],
     {
       env: {
-        ...process.env,
+        ...process.env, ...fixtureBinaries, HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: fixture,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
       },
@@ -265,6 +298,8 @@ it('does not reload when a later route first imports another dependency', async 
     {
       env: {
         ...process.env,
+        ...fixtureBinaries,
+        HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
       },
@@ -323,7 +358,7 @@ it.concurrent('serves the app without a Vite reconnect client, HMR websocket, or
     [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
     {
       env: {
-        ...process.env,
+        ...process.env, ...fixtureBinaries, HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
       },
@@ -386,7 +421,7 @@ it.concurrent('does not reload when the terminal runtime first lazy-loads its xt
     [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
     {
       env: {
-        ...process.env,
+        ...process.env, ...fixtureBinaries, HOTSHEET_HOME: fixtureHome,
         HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
         HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
       },

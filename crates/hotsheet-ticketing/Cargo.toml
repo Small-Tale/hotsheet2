@@ -8,6 +8,10 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# Explicitly activated, debug-only synthetic native credential port for unattended fixtures.
+test-credentials = []
+
 [dependencies]
 hotsheet-sync.workspace = true
 hotsheet-model.workspace = true

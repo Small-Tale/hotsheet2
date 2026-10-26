@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { MAX_LINE_CHARS, failureExcerpts, parseArgs, runTier, stripAnsi, summaryLines } from "./test-quiet.mjs";
+import { TIERS, MAX_LINE_CHARS, failureExcerpts, parseArgs, runTier, stripAnsi, summaryLines } from "./test-quiet.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Real runner output captured from deliberately failing nextest, Vitest, and Playwright runs.
@@ -149,4 +149,14 @@ test("the command line rejects bad usage with exit 2", () => {
   const result = spawnSync(process.execPath, [path.join(here, "test-quiet.mjs"), "bogus"], { encoding: "utf8" });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown tier: bogus\nusage:/);
+});
+
+test("HS2-SFVWN5 Rust and browser tiers build an isolated fixture before execution", () => {
+  for (const tier of ["rust", "web-e2e"]) {
+    const steps = TIERS[tier].steps([]);
+    assert.equal(steps[0].command, "cargo");
+    assert.equal(steps[0].args[0], "build");
+    assert.ok(steps[0].args.includes("hotsheet-aitools/test-permission-vault"));
+    assert.ok(steps.length > 1);
+  }
 });

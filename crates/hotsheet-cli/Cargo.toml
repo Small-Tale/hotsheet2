@@ -44,6 +44,7 @@ libc.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]
+hotsheet-aitools = { workspace = true, features = ["test-permission-vault"] }
 assert_cmd.workspace = true
 predicates.workspace = true
 

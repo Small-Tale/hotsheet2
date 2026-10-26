@@ -631,3 +631,16 @@ and returned-wide sizes, confirm the Message AI Session button is absent and no
 browser-native prompt opens. Drawer tab selection, creation, clipboard controls,
 and terminal output continue to work. CLI `terminal message` and the authenticated
 connection-message operation remain supported.
+
+## Native credential smoke (HS2-SFVWN5)
+
+Unattended isolation, artifact mismatch refusal, and cross-process synthetic
+credential flows are automated; see the fixture contract in
+[the testing guide](12-code-organization-and-testing.md#1276-fixtures--ci).
+
+After desktop staging, optional `npm run desktop:test:native` verifies the staged
+release backends with their real native credential port. Run this only in an
+attended or disposable native credential environment, using synthetic data. It may
+require OS credential authorization. The default `desktop:test` instead verifies
+the staged bridge/runtime with synthetic debug backends and prints that mode; it
+does not claim packaged native backend validation.

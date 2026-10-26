@@ -133,7 +133,10 @@ async fn main() -> Result<()> {
     if cli.test_fixture_capabilities {
         println!(
             "{}",
-            serde_json::json!({ "isolated_permission_vault": isolated_vault })
+            serde_json::json!({
+                "isolated_permission_vault": isolated_vault,
+                "isolated_native_credentials": hotsheet_ticketing::secrets::test_credentials_available(),
+            })
         );
         return Ok(());
     }

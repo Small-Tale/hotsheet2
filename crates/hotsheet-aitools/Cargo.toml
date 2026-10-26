@@ -11,7 +11,7 @@ rust-version.workspace = true
 [features]
 # HS2-R8S894: integration-test dependents use the same in-memory vault as unit tests.
 # Production builds do not enable this feature and retain the OS Keychain backend.
-test-permission-vault = []
+test-permission-vault = ["hotsheet-ticketing/test-credentials"]
 
 [dependencies]
 hotsheet-sync.workspace = true

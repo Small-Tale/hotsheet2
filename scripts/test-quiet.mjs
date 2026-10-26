@@ -32,6 +32,11 @@ export const TIERS = {
       {
         cwd: REPO,
         command: "cargo",
+        args: ["build", "--quiet", "-p", "hotsheet-cli", "-p", "hotsheet-server", "-p", "hotsheet-terminals", "--bins", "--features", "hotsheet-aitools/test-permission-vault"],
+      },
+      {
+        cwd: REPO,
+        command: "cargo",
         args: [
           "nextest",
           "run",
@@ -67,7 +72,7 @@ export const TIERS = {
       {
         cwd: REPO,
         command: "cargo",
-        args: ["build", "--quiet", "-p", "hotsheet-cli", "-p", "hotsheet-server", "--bins"],
+        args: ["build", "--quiet", "-p", "hotsheet-cli", "-p", "hotsheet-server", "--bins", "--features", "hotsheet-aitools/test-permission-vault"],
       },
       { cwd: path.join(REPO, "clients/web"), command: "npx", args: ["playwright", "test", "--reporter=line", ...args] },
     ],

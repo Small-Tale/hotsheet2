@@ -24,6 +24,8 @@ import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
+
 // HS2-587N4D: `npm run prod` serves the built client through the same local bridge without Vite.
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
   repoRoot = resolve(webRoot, '../..'),
@@ -123,10 +125,11 @@ const productionEnvironment = Object.fromEntries(
 productionEnvironment.HOTSHEET_TEST_SERVER_OWNER_PID = 'host';
 
 // Exercise the working tree's server, not a possibly stale release build the host would prefer.
+const target = resolve(repoRoot, process.env.CARGO_TARGET_DIR ?? 'target');
 const workingTreeBinaries = {
-  HOTSHEET_SERVER_BIN: resolve(repoRoot, 'target/debug/hotsheet-server'),
-  HOTSHEET_CLI_BIN: resolve(repoRoot, 'target/debug/hotsheet-cli'),
-  HOTSHEET_MIGRATE_BIN: resolve(repoRoot, 'target/debug/hotsheet-migrate'),
+  HOTSHEET_SERVER_BIN: resolve(target, 'debug/hotsheet-server'),
+  HOTSHEET_CLI_BIN: resolve(target, 'debug/hotsheet-cli'),
+  HOTSHEET_MIGRATE_BIN: resolve(target, 'debug/hotsheet-migrate'),
 };
 
 /** The bootstrap machine server's registration under `home` (pid, launcher, build), or undefined. */
@@ -169,6 +172,8 @@ async function openThrough(origin, root, ticketStore) {
 
 let buildRoot, ownershipBuildRoot;
 beforeAll(async () => {
+  assertFixtureServer(workingTreeBinaries.HOTSHEET_SERVER_BIN);
+  assertFixtureCli(workingTreeBinaries.HOTSHEET_CLI_BIN);
   await mkdir(resolve(webRoot, 'target'), { recursive: true });
   buildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-'));
   await run('npx', ['vite', 'build', '--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir'], {

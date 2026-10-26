@@ -3,6 +3,8 @@ import { readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
+
 // HS2-A0M8CM: several suites spawn the real target/debug hotsheet-cli, hotsheet-server, and
 // hotsheet-migrate binaries. Building them inside one test file raced every other file that
 // was already running: cargo relinked (or first created) the binaries mid-run and those files
@@ -67,7 +69,7 @@ export function binariesAreFresh(root, { targetDir = join(root, 'target'), fs = 
 
 /**
  * `HOTSHEET_VITEST_BUILD`: `auto` (default) builds unless the binaries are fresh, `always`
- * forces the cargo build, and `skip` trusts whatever binaries exist.
+ * forces the cargo build, and `skip` skips rebuilding but still requires isolated capabilities.
  */
 export function buildDecision(env, fresh) {
   const mode = env.HOTSHEET_VITEST_BUILD ?? 'auto';
@@ -79,7 +81,31 @@ export function buildDecision(env, fresh) {
 
 export default function buildTestBinaries() {
   const targetDir = process.env.CARGO_TARGET_DIR ? resolve(repoRoot, process.env.CARGO_TARGET_DIR) : undefined;
-  if (buildDecision(process.env, () => binariesAreFresh(repoRoot, { targetDir })) === 'skip') return;
+  const binary = join(
+    targetDir ?? join(repoRoot, 'target'),
+    'debug',
+    `hotsheet-server${process.platform === 'win32' ? '.exe' : ''}`,
+  );
+  const cli = join(
+    targetDir ?? join(repoRoot, 'target'),
+    'debug',
+    `hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`,
+  );
+  const fresh = () => {
+    if (!binariesAreFresh(repoRoot, { targetDir })) return false;
+    try {
+      assertFixtureServer(binary);
+      assertFixtureCli(cli);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (buildDecision(process.env, fresh) === 'skip') {
+    assertFixtureServer(binary);
+    assertFixtureCli(cli);
+    return;
+  }
   const result = spawnSync(
     'cargo',
     [
@@ -91,9 +117,13 @@ export default function buildTestBinaries() {
       '-p',
       'hotsheet-server',
       '--bins',
+      '--features',
+      'hotsheet-aitools/test-permission-vault',
     ],
     { cwd: repoRoot, stdio: 'inherit' },
   );
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`cargo build of the test binaries exited with status ${result.status}.`);
+  assertFixtureServer(binary);
+  assertFixtureCli(cli);
 }

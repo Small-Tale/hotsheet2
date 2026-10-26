@@ -754,6 +754,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli`.
   The hidden server `--test-fixture-capabilities` reports compiled isolation support;
   launch fixtures and owned bootstrap reject default artifacts before native secrets.
+- **Unattended credential fixtures (HS2-SFVWN5):**
+  `secrets/test_credentials.rs` supplies the explicitly activated debug-only native
+  substitute; release/default builds keep the real OS port. CLI fixture activation
+  is explicit. `clients/web/scripts/test-fixture-capabilities.mjs` rejects stale or
+  default binaries before browser/host fixture startup; both compiled native and
+  permission isolation capabilities are required. Build-once and quiet tiers request
+  the same fixture feature. Native Windows tests are explicit opt-in.
 - **Web client:** from `clients/web`, `npm run lint`, `npm run typecheck`,
   `npm run test:unit`, `npm run test:e2e` (Playwright against the running client
   and real server flows), and `npm run build`. CI runs the browser smoke and WebKit

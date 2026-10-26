@@ -153,6 +153,10 @@ impl TemporaryLaunchHost {
                 && capability
                     .as_ref()
                     .and_then(|c| c["isolated_permission_vault"].as_bool())
+                    == Some(true)
+                && capability
+                    .as_ref()
+                    .and_then(|c| c["isolated_native_credentials"].as_bool())
                     == Some(true),
             "CLI launch tests require a matching isolated server artifact; run once: \
              cargo build -p hotsheet-server -p hotsheet-cli --bins --features hotsheet-aitools/test-permission-vault"
@@ -166,6 +170,7 @@ impl TemporaryLaunchHost {
     fn command(&self) -> Command {
         let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
         command
+            .arg("--test-fixture-credentials")
             .env("HOTSHEET_HOME", &self.home)
             .env(
                 "HOTSHEET_TEST_SERVER_OWNER_PID",
@@ -763,13 +768,10 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
     );
 }
 
-// A freshly built macOS CLI is a different unsigned Keychain client from this test
-// process. Reading the fixture credential can open an authorization prompt and hang
-// a headless test run. Linux CI exercises the complete cross-process discard flow;
-// the permission vault's macOS behavior is covered in-process separately.
-#[cfg(not(target_os = "macos"))]
+// HS2-SFVWN5: exercise the cross-process flow portably with synthetic native credentials.
 #[test]
 fn permission_discard_fixture_helper() {
+    hotsheet_ticketing::secrets::enable_test_credentials().unwrap();
     let Ok(action) = std::env::var("HS2_PERMISSION_DISCARD_FIXTURE") else {
         return;
     };
@@ -802,7 +804,6 @@ fn permission_discard_fixture_helper() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn hs2_afsf4x_permission_discard_requires_explicit_confirmation() {
     let root = tempfile::tempdir().unwrap();
@@ -2487,12 +2488,58 @@ fn hs(dir: &Path) -> Command {
     });
     let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
     // An ambient actor role (HS2-RD4M29) must not change unrelated tests' behavior.
-    cmd.env("HOTSHEET_HOME", home)
+    cmd.arg("--test-fixture-credentials")
+        .env("HOTSHEET_HOME", home)
         .env_remove("HOTSHEET_ACTOR_ROLE")
         .env_remove("HOTSHEET_ACTOR_ID")
         .arg("-C")
         .arg(dir);
     cmd
+}
+
+#[test]
+fn hs2_sfvwn5_synthetic_credentials_persist_between_cli_processes() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    hs(root.path())
+        .env("HOTSHEET_HOME", &home)
+        .args(["key", "set", "synthetic-fixture"])
+        .write_stdin("synthetic-fixture-value\n")
+        .assert()
+        .success();
+    hs(root.path())
+        .env("HOTSHEET_HOME", &home)
+        .args(["key", "get", "synthetic-fixture"])
+        .assert()
+        .success()
+        .stdout("synthetic-fixture-value\n");
+    // The native master was written through the synthetic port, never an OS credential API.
+    let native = home.join("test-native-credentials");
+    let values = std::fs::read_dir(native)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        values
+            .iter()
+            .any(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+    );
+    let other_home = root.path().join("other-home");
+    hs(root.path())
+        .env("HOTSHEET_HOME", other_home)
+        .args(["key", "get", "synthetic-fixture"])
+        .assert()
+        .failure();
+    hs(root.path())
+        .env("HOTSHEET_HOME", &home)
+        .args(["key", "delete", "synthetic-fixture"])
+        .assert()
+        .success();
+    hs(root.path())
+        .env("HOTSHEET_HOME", &home)
+        .args(["key", "get", "synthetic-fixture"])
+        .assert()
+        .failure();
 }
 
 /// Read one complete HTTP/1.1 request (headers plus a `Content-Length` body) from a fake
@@ -9067,6 +9114,11 @@ fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
 #[cfg(target_os = "linux")]
 #[test]
 fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
+    let hs = |dir: &Path| {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command.arg("-C").arg(dir);
+        command
+    };
     use std::os::unix::fs::PermissionsExt;
 
     let project = tempfile::tempdir().unwrap();

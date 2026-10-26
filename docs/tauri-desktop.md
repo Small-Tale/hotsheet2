@@ -100,3 +100,12 @@ does not store the certificate, API key, or notarization credentials.
 See the [Tauri macOS signing guide](https://v2.tauri.app/distribute/sign/macos/)
 and [Apple's Developer ID certificate guide](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/)
 for the current account screens and credential requirements.
+
+### Unattended backend smoke tests (HS2-SFVWN5)
+
+After staging the desktop resources, `npm run desktop:test` checks the staged bridge
+and runtime using capability-verified synthetic debug server/CLI backends. It does
+not open the operating-system credential store. `npm run desktop:test:native` is an
+explicit, optional native integration test of the staged release backends; run it
+only when native credential access is available. Production packaging retains
+native credentials and never includes the synthetic backend.

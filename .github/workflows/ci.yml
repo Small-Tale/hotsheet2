@@ -90,7 +90,7 @@ jobs:
       - name: Compile and exercise the native credential adapter
         env:
           CC: cl
-        run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip
+        run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored
 
       - name: Exercise encrypted permission-vault locking on Windows
         env:
@@ -382,7 +382,7 @@ jobs:
           sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libsecret-tools gnome-keyring dbus-user-session
 
       - name: Build the CLI and server that the real-server flows spawn
-        run: cargo build -p hotsheet-cli -p hotsheet-server --bins
+        run: cargo build -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault
 
       - name: Set up Node
         uses: actions/setup-node@v4

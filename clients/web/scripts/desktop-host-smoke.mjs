@@ -1,14 +1,29 @@
-// HS2-5R706Q: exercise the same staged bridge and binaries that Tauri packages.
+// HS2-5R706Q: exercise the staged bridge/runtime. Native packaged backends are explicit opt-in.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
+import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
+
 const tauri = resolve(import.meta.dirname, '../src-tauri');
 const resources = resolve(tauri, 'resources');
 const triple = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
 const bin = (name) => resolve(tauri, 'binaries', `${name}-${triple}`);
+// HS2-SFVWN5: release binaries retain real OS credentials; a temp home cannot isolate them.
+const native = process.env.HOTSHEET_RUN_NATIVE_CREDENTIAL_TESTS === '1';
+const target = resolve(import.meta.dirname, '../../..', process.env.CARGO_TARGET_DIR ?? 'target');
+const debug = (name) => resolve(target, 'debug', name);
+const server = native ? bin('hotsheet-server') : debug('hotsheet-server');
+const cli = native ? bin('hotsheet-cli') : debug('hotsheet-cli');
+if (!native) {
+  assertFixtureServer(server);
+  assertFixtureCli(cli);
+}
+console.log(
+  `Desktop smoke backend: ${native ? 'staged release (native credentials, explicit opt-in)' : 'isolated debug fixture (synthetic credentials)'}`,
+);
 const home = mkdtempSync(resolve(tmpdir(), 'hs2-desktop-host-'));
 const ready = resolve(home, 'ready.json');
 const child = spawn(bin('node'), [resolve(resources, 'dist-host/local-host.mjs'), '--port', '0'], {
@@ -16,8 +31,8 @@ const child = spawn(bin('node'), [resolve(resources, 'dist-host/local-host.mjs')
     ...process.env,
     HOTSHEET_HOME: home,
     HOTSHEET_REPO_ROOT: resources,
-    HOTSHEET_SERVER_BIN: bin('hotsheet-server'),
-    HOTSHEET_CLI_BIN: bin('hotsheet-cli'),
+    HOTSHEET_SERVER_BIN: server,
+    HOTSHEET_CLI_BIN: cli,
     HOTSHEET_MIGRATE_BIN: bin('hotsheet-migrate'),
     HOTSHEET_MCP_BIN: bin('hotsheet-mcp'),
     HOTSHEET_MIGRATOR: resolve(resources, 'migrator/src/export.mjs'),

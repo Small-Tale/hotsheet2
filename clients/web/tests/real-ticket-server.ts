@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { assertFixtureCli, assertFixtureServer } from '../scripts/test-fixture-capabilities.mjs';
 
 const execute = promisify(execFile);
 const fixtureCleanup = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
@@ -23,13 +24,14 @@ export async function realTicketServer(
   options: { seed?: (fixture: RealTicketFixtureContext) => Promise<void>; autoCommit?: boolean } = {},
 ) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
+    target = resolve(repo, process.env.CARGO_TARGET_DIR ?? 'target'),
     suffix = process.platform === 'win32' ? '.exe' : '',
-    cli = process.env.HOTSHEET_TEST_CLI_BIN ?? resolve(repo, `target/debug/hotsheet-cli${suffix}`),
-    binary = process.env.HOTSHEET_TEST_SERVER_BIN ?? resolve(repo, `target/debug/hotsheet-server${suffix}`);
+    cli = process.env.HOTSHEET_TEST_CLI_BIN ?? resolve(target, `debug/hotsheet-cli${suffix}`),
+    binary = process.env.HOTSHEET_TEST_SERVER_BIN ?? resolve(target, `debug/hotsheet-server${suffix}`);
   if (!existsSync(cli) || !existsSync(binary))
-    throw new Error(
-      'Build the browser test binaries with npm run test:e2e, or cargo build -p hotsheet-cli -p hotsheet-server --bins.',
-    );
+    throw new Error('Build the isolated browser test binaries with npm run test:e2e.');
+  assertFixtureServer(binary);
+  assertFixtureCli(cli);
   const directory = await mkdtemp(resolve(tmpdir(), 'hotsheet-browser-')),
     store = resolve(directory, 'tickets'),
     root = resolve(directory, 'project'),
@@ -47,7 +49,10 @@ export async function realTicketServer(
     };
   await mkdir(root);
   try {
-    await execute(cli, ['init', '--standalone', '--at', store, '--prefix', 'HS2'], { cwd: root, env });
+    await execute(cli, ['--test-fixture-credentials', 'init', '--standalone', '--at', store, '--prefix', 'HS2'], {
+      cwd: root,
+      env,
+    });
     await options.seed?.({ store, root, env });
   } catch (error) {
     await rm(directory, fixtureCleanup);

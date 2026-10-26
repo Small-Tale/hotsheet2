@@ -30,6 +30,9 @@ mod feedback_synthesis;
 #[derive(Parser)]
 #[command(name = "hotsheet", version, about = "Hot Sheet 2 CLI")]
 struct Cli {
+    /// Explicit synthetic credential activation for compiled debug fixtures only.
+    #[arg(long, global = true, hide = true)]
+    test_fixture_credentials: bool,
     /// Store directory (defaults to the current directory).
     #[arg(short = 'C', long = "path", global = true, default_value = ".")]
     path: PathBuf,
@@ -880,10 +883,25 @@ enum GuidanceCmd {
 fn main() -> Result<()> {
     // `| head` closing our stdout is a normal end of output, not a panic (HS2-4BT3VF).
     hotsheet_cli::broken_pipe::install_broken_pipe_exit();
+    if std::env::args_os()
+        .skip(1)
+        .eq([std::ffi::OsString::from("--test-fixture-capabilities")])
+    {
+        println!(
+            "{}",
+            serde_json::json!({
+                "isolated_native_credentials": hotsheet_ticketing::secrets::test_credentials_available(),
+            })
+        );
+        return Ok(());
+    }
     if hotsheet_cli::print_revision_status_if_requested() {
         return Ok(());
     }
     let mut cli = Cli::parse();
+    if cli.test_fixture_credentials {
+        hotsheet_ticketing::secrets::enable_test_credentials()?;
+    }
     hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
