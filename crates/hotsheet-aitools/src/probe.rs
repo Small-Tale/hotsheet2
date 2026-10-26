@@ -11,7 +11,7 @@ use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
 use hotsheet_sync::LockExt;
 use std::collections::HashSet;
 use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::Duration;
@@ -231,15 +231,9 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
         command.process_group(0);
     }
     let program = command.get_program().to_string_lossy().into_owned();
-    if STOPPED.load(Ordering::SeqCst) {
-        return Err(format!("'{program}' not probed: the process is stopping"));
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("starting '{program}': {error}"))?;
+    let mut child = spawn_tracked(command)?;
     let pid = child.id();
     let record = record_probe(pid);
-    track(pid, true);
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
     let (done_tx, done_rx) = mpsc::channel();
@@ -289,6 +283,22 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
         stdout,
         stderr,
     })
+}
+
+/// Register a spawned child before shutdown can finish signalling the probe set.
+/// Startup discovery runs on a detached thread: after spawn, even diagnostic journal
+/// writes can lose a race with process exit (HS2-3EJNYY).
+fn spawn_tracked(command: &mut Command) -> Result<Child, String> {
+    let mut guard = IN_FLIGHT.lock_or_recover();
+    let program = command.get_program().to_string_lossy().into_owned();
+    if STOPPED.load(Ordering::SeqCst) {
+        return Err(format!("'{program}' not probed: the process is stopping"));
+    }
+    let child = command
+        .spawn()
+        .map_err(|error| format!("starting '{program}': {error}"))?;
+    guard.get_or_insert_with(HashSet::new).insert(child.id());
+    Ok(child)
 }
 
 fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
@@ -423,5 +433,67 @@ mod tests {
         let result = handle.join().unwrap();
         assert!(result.is_ok_and(|output| !output.status.success()));
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn hs2_3ejnyy_shutdown_cannot_miss_a_child_still_spawning() {
+        if isolated_probe_test(
+            "probe::tests::hs2_3ejnyy_shutdown_cannot_miss_a_child_still_spawning",
+        ) {
+            return;
+        }
+        use std::io::{Read, Write};
+        use std::os::fd::AsRawFd;
+        use std::os::unix::{net::UnixStream, process::CommandExt};
+
+        let (mut parent, child_gate) = UnixStream::pair().unwrap();
+        parent
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let fd = child_gate.as_raw_fd();
+        let spawning = std::thread::spawn(move || {
+            let mut command = sh("exec sleep 30");
+            command.process_group(0);
+            // SAFETY: this callback only uses async-signal-safe libc I/O on the inherited
+            // socket, keeping spawn parked until the test releases it.
+            unsafe {
+                command.pre_exec(move || {
+                    let byte = [1_u8];
+                    if libc::write(fd, byte.as_ptr().cast(), 1) != 1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    let mut released = [0_u8];
+                    if libc::read(fd, released.as_mut_ptr().cast(), 1) != 1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+            let result = spawn_tracked(&mut command);
+            drop(child_gate);
+            result.unwrap()
+        });
+        parent.read_exact(&mut [0]).unwrap();
+        // The child exists but spawn has not returned. Stop must share this lock, so
+        // it cannot finish its snapshot before the child is registered.
+        let spawn_holds_registry = matches!(
+            IN_FLIGHT.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        );
+        let stopping = std::thread::spawn(stop_probes);
+        parent.write_all(&[1]).unwrap();
+        let mut child = spawning.join().unwrap();
+        let stopped = stopping.join().unwrap();
+        // Release and reap the fixture even when the registration invariant regresses.
+        kill_group(child.id());
+        assert!(!child.wait().unwrap().success());
+        track(child.id(), false);
+        assert!(
+            spawn_holds_registry,
+            "spawn did not hold the shutdown registry"
+        );
+        assert_eq!(stopped, 1);
+        assert_eq!(in_flight_probes(), 0);
+        assert!(spawn_tracked(&mut sh("exit 0")).is_err());
     }
 }
