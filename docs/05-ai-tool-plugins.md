@@ -1939,6 +1939,11 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   integrates" model. Drop the retired imperative worker-pool orchestration (HS1
   moved to prompt-driven, docs/90 partial retirement); keep it prompt-driven.
 
+- **Telemetry/cost attribution & the Announcer** — defer (they ride Claude's OTLP
+  stream; port later as their own tickets, tool-agnostic where possible).
+- **Commands Log** transcript of triggers/permissions/shell runs — keep; plugins
+  emit, the host owns the log shape.
+
 **Assigned worker handoff (HS2-W3TKX9).** In a parallel Codex/Claude session, an
 integrator assigns an exact ticket after checking dependencies and file overlap. The
 worker uses a separate ticket branch and worktree linked to the same ticket store,
@@ -1951,10 +1956,16 @@ isolate code changes. No worker independently completes a ticket from its branch
 `crates/hotsheet-plugins/src/tests.rs # hs2_w3tkx9_worker_skills_require_integration_handoff`
 checks both skill variants and the completion boundary.
 
-- **Telemetry/cost attribution & the Announcer** — defer (they ride Claude's OTLP
-  stream; port later as their own tickets, tool-agnostic where possible).
-- **Commands Log** transcript of triggers/permissions/shell runs — keep; plugins
-  emit, the host owns the log shape.
+**Main-branch integrator (HS2-BNSQF9).** The `/hotsheet-integrator` skill keeps one
+coordinator in `main`. It checks the queue and worktree inventory before assigning
+independent exact tickets; on handoff it verifies the stored note, branch, SHA, and
+released claim. It serializes integration, tests the resulting main commit, pushes
+under the repository policy, and waits for a covering green CI run before removing
+the clean worker worktree and completing the ticket. A failed handoff leaves the
+ticket Started with a specific recovery note. Hot Sheet notifications trigger a
+store read; there is no fixed-interval queue polling.
+`crates/hotsheet-plugins/src/tests.rs # hs2_bnsqf9_integrator_skills_preserve_main_ownership`
+pins the mirrored skills and integration boundary.
 
 ## 5.10 Testability — injected adapters + the fake agent
 

@@ -168,6 +168,35 @@ fn hs2_w3tkx9_worker_skills_require_integration_handoff() {
 }
 
 #[test]
+fn hs2_bnsqf9_integrator_skills_preserve_main_ownership() {
+    let codex = include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md");
+    let claude = include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md");
+    let claude_portable =
+        claude.replace("allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n", "");
+    assert_eq!(
+        codex, claude_portable,
+        "integrator contracts must stay in sync"
+    );
+    for skill in [codex, claude] {
+        for invariant in [
+            "Stay in the shipping `main` checkout",
+            "git worktree list --porcelain",
+            "Confirm the worker released its claim",
+            "Claim that exact Started ticket",
+            "git branch --contains <sha>",
+            "origin/main",
+            "CI gate commit: <full main SHA>",
+            "status --covers <full main SHA>",
+            "On green CI",
+            "release the claim",
+            "Do not poll the\n   store or queue on a timer",
+        ] {
+            assert!(skill.contains(invariant), "missing {invariant}");
+        }
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.
