@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Quiet test wrapper (HS2-CP63FG): runs a test tier with failure-only reporters, writes the
+// Quiet test wrapper (HS2-CP63FG): runs a test tier with quiet diagnostic reporters, writes the
 // complete output to a log file, and prints one summary line per tier plus capped failure
 // excerpts. Agents read the summary instead of the full runner output.
 //
@@ -42,7 +42,7 @@ export const TIERS = {
           "run",
           "--hide-progress-bar",
           "--status-level",
-          "fail",
+          "leak",
           "--final-status-level",
           "fail",
           "--failure-output",
@@ -54,10 +54,11 @@ export const TIERS = {
       },
     ],
     failureStart: /^\s*(FAIL|TIMEOUT|SIGSEGV|SIGABRT|SIGKILL|LEAK-FAIL|ABORT)\s+\[/,
-    failureEnd: /^\s*(Summary \[|error: )/,
+    failureEnd: /^\s*(LEAK\s+\[|Summary \[|error: )/,
     // libtest prints captured stdout before stderr, so the panic message sits at the end.
     keep: "head-tail",
-    summary: [/^\s*Summary \[.*$/],
+    // HS2-ET5FF1: a nonfailing leak is named diagnostic metadata, never a failure body.
+    summary: [/^\s*LEAK\s+\[.*$/, /^\s*Summary \[.*$/],
   },
   "web-unit": {
     steps: (args) => [
@@ -136,7 +137,7 @@ export function failureExcerpts(tier, text, { maxFailures = DEFAULT_MAX_FAILURES
   return { excerpts, omitted: Math.max(0, distinct.length - maxFailures) };
 }
 
-/** The runner's own count lines (for example nextest's `Summary [...]`), whitespace-trimmed. */
+/** Runner count lines and named nonfailing leak statuses, whitespace-trimmed. */
 export function summaryLines(tier, text) {
   const found = [];
   for (const line of stripAnsi(text).split(/\r?\n/)) {

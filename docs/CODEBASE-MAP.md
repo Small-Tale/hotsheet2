@@ -162,7 +162,7 @@ browser observer or enter the development proxy route.
 hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE store (below)
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
-  scripts/test-quiet.mjs     # Quiet per-tier test wrapper: failure-only reporters, capped excerpts, full log path (HS2-CP63FG; tests: test-quiet.test.mjs + fixtures/test-quiet/)
+  scripts/test-quiet.mjs     # Quiet per-tier test wrapper: named leak diagnostics, capped failure excerpts, full log path (HS2-CP63FG, HS2-ET5FF1; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/{check,push,install-git-hooks}.sh # Local root gate, gate-before-push command, and hook setup (HS2-CD3D2T; tests: git-hooks.test.mjs)

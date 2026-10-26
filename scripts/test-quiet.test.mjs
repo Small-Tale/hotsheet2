@@ -160,3 +160,46 @@ test("HS2-SFVWN5 Rust and browser tiers build an isolated fixture before executi
     assert.ok(steps.length > 1);
   }
 });
+
+test("HS2-ET5FF1 quiet Rust entry points retain leak names with supported nextest status levels", () => {
+  const args = TIERS.rust.steps([]).find((step) => step.args[0] === "nextest").args;
+  assert.equal(args[args.indexOf("--status-level") + 1], "leak");
+  assert.equal(args[args.indexOf("--final-status-level") + 1], "fail", "nextest has no final leak level");
+  assert.equal(args[args.indexOf("--success-output") + 1], "never");
+  const rootGate = fs.readFileSync(path.join(here, "check.sh"), "utf8");
+  assert.match(rootGate, /^cargo nextest run --all-features --status-level leak$/m);
+});
+
+// Synthetic runner statuses exercise reporting without deliberately leaking a child process.
+for (const outcome of [
+  { name: "ordinary pass", code: 0, statuses: "", counts: "1 passed" },
+  { name: "nonfailing leak", code: 0, statuses: "        LEAK [   0.100s] fixture named_leak\n", counts: "1 passed (1 leaky)" },
+  { name: "ordinary failure", code: 100, statuses: "        FAIL [   0.010s] fixture named_failure\n  synthetic panic\n", counts: "1 failed" },
+  {
+    name: "failure beside a nonfailing leak",
+    code: 100,
+    statuses: "        FAIL [   0.010s] fixture named_failure\n  synthetic panic\n        LEAK [   0.100s] fixture named_leak\n",
+    counts: "1 passed (1 leaky), 1 failed",
+  },
+  { name: "failing leak", code: 100, statuses: "   LEAK-FAIL [   0.100s] fixture named_failure\n", counts: "1 failed" },
+]) {
+  test(`HS2-ET5FF1 ${outcome.name} keeps named diagnostics and the runner exit code`, async () => {
+    const logDir = tempDir();
+    const output = `        PASS [   0.001s] fixture ordinary_success\n${outcome.statuses}     Summary [   0.110s] ${outcome.counts}\n`;
+    const step = node(`process.stdout.write(${JSON.stringify(output)}); process.exit(${outcome.code})`, logDir);
+    const { code, log, report } = await runTier("rust", { logDir, steps: [step] });
+    assert.equal(code, outcome.code);
+    assert.deepEqual(fs.readFileSync(log, "utf8").split("\n").slice(1).join("\n"), output);
+    assert.match(report, new RegExp(`^rust: ${code === 0 ? "PASS" : "FAIL"} in `));
+    assert.doesNotMatch(report, /ordinary_success/);
+    assert.equal(report.includes("named_leak"), outcome.statuses.includes("named_leak"));
+    assert.equal(report.includes("named_failure"), outcome.code !== 0);
+    if (outcome.code === 0) assert.doesNotMatch(report, /FAIL|synthetic panic|no test failure/);
+    if (outcome.statuses.includes("named_leak")) {
+      assert.deepEqual(failureExcerpts("rust", output).excerpts, outcome.code === 0 ? [] : [
+        "        FAIL [   0.010s] fixture named_failure\n  synthetic panic",
+      ]);
+      assert.match(report.split("\n")[0], /LEAK \[.*fixture named_leak/);
+    }
+  });
+}

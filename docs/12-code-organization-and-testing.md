@@ -945,11 +945,18 @@ binary build, then `clients/web` Playwright), or `migrator` (migrator Vitest). A
 after `--` go to the single named runner, so targeted runs keep their filters, for
 example `node scripts/test-quiet.mjs rust -- -p hotsheet-cli -E 'test(claim)'`.
 
-- Each runner uses failure-only reporters: nextest `--status-level fail` with final
-  failure output, Vitest `--reporter=dot`, and Playwright `--reporter=line`.
+- Runners omit routine successful-test output: nextest uses live `--status-level leak`
+  with final `--final-status-level fail` (there is no final `leak` level), Vitest uses
+  `--reporter=dot`, and Playwright uses `--reporter=line`. The root gate also uses live
+  `leak` status (HS2-ET5FF1).
 - The wrapper prints one line per tier with PASS/FAIL, wall time, the runner's own count
   lines, and the log path. The complete output goes to
   `target/test-quiet/<tier>-<timestamp>.log` (`HOTSHEET_TEST_QUIET_LOG_DIR` overrides).
+- Named nonfailing nextest `LEAK` statuses remain in the full log and compact summary,
+  preserving diagnostic evidence even on a green run. They do not change the runner's
+  exit code or become failure excerpts; `LEAK-FAIL` remains a failure. Test payloads are
+  not included with these named statuses. A classification alone does not establish
+  a surviving process or explain historical unnamed reports (HS2-JH6KV5, HS2-ET5FF1).
 - On a red run it prints each distinct failure block, capped at `--max-failures` (8)
   blocks of `--max-lines` (30) lines. A nextest block keeps its first third and its end,
   where the panic message sits. A failure with no recognizable test block, such as a
