@@ -150,6 +150,24 @@ fn every_worklist_skill_has_a_project_push_policy_slot() {
 }
 
 #[test]
+fn hs2_w3tkx9_worker_skills_require_integration_handoff() {
+    let codex = include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md");
+    let claude = include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md");
+    let claude_portable =
+        claude.replace("allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n", "");
+    assert_eq!(codex, claude_portable, "worker contracts must stay in sync");
+    for skill in [codex, claude] {
+        assert!(skill.contains("hotsheet-cli claim <slug>"));
+        assert!(skill.contains("## Integration\n   handoff"));
+        assert!(skill.contains("full commit SHA"));
+        assert!(skill.contains("Release the claim immediately"));
+        assert!(skill.contains("Do not\n   mark the ticket Completed or Verified"));
+        assert!(!skill.contains("hotsheet-cli claim-next"));
+        assert!(!skill.contains("--status completed"));
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.

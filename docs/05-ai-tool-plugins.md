@@ -1934,10 +1934,23 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   worklist row. They are never persisted in a ticket or the index.
 - **Skills/instructions generation** for editor tools (Cursor/Copilot/Windsurf) —
   keep; it's the whole Tier-B story and already tool-agnostic in HS1.
-- **Self-claim worker loop + worktrees** (the `/hotsheet-worker` skill) — keep the
+- **Assigned worker loop + worktrees** (the `/hotsheet-worker` skill) — keep the
   claim/lease + worktree isolation + "worker never merges, the main agent
   integrates" model. Drop the retired imperative worker-pool orchestration (HS1
   moved to prompt-driven, docs/90 partial retirement); keep it prompt-driven.
+
+**Assigned worker handoff (HS2-W3TKX9).** In a parallel Codex/Claude session, an
+integrator assigns an exact ticket after checking dependencies and file overlap. The
+worker uses a separate ticket branch and worktree linked to the same ticket store,
+claims that ticket, verifies and commits the branch, then writes an `Integration
+handoff` ticket note naming its full commit SHA, branch, machine-local worktree
+location, checks, and follow-ups. It releases the claim while the ticket remains
+Started. The integrator owns merge or cherry-pick, push, CI confirmation, ticket
+completion, and worktree removal. Claims coordinate ticket ownership; worktrees
+isolate code changes. No worker independently completes a ticket from its branch.
+`crates/hotsheet-plugins/src/tests.rs # hs2_w3tkx9_worker_skills_require_integration_handoff`
+checks both skill variants and the completion boundary.
+
 - **Telemetry/cost attribution & the Announcer** — defer (they ride Claude's OTLP
   stream; port later as their own tickets, tool-agnostic where possible).
 - **Commands Log** transcript of triggers/permissions/shell runs — keep; plugins

@@ -1,65 +1,41 @@
 ---
 name: hotsheet-worker
-description: Run as a self-claim worker — continuously claim, work, and release Up Next tickets
+description: Implement an assigned Hot Sheet ticket in an isolated Git worktree and hand its verified commit to the main-branch integrator.
 ---
-<!-- hotsheet-skill-version: 33 -->
+<!-- hotsheet-skill-version: 34 -->
 
-You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
-store. Use `HOTSHEET_WORKER_ID` as the worker id when your environment sets it (Hot Sheet
-then releases its claims when the session ends); otherwise pick one stable worker id for the
-session. Use it for every claim, renewal, and release.
+Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
+push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
+full history; these instructions define the worker handoff only.
 
-## Loop
+1. **Prepare isolation.** Confirm the assigned ticket slug, the integrator, and the
+   shared Hot Sheet store. Create a ticket-named branch and separate Git worktree from
+   the current shipping branch, or use the worktree the integrator prepared. Never edit
+   the integrator's checkout. Link the worktree to the same ticket store and set up its
+   AI-tool integration if needed; do not create a second ticket store. Keep build and
+   test state inside the worktree. If the assigned ticket overlaps another worker's
+   files or an existing dirty worktree, tell the integrator and wait for a different
+   assignment.
+2. **Claim exactly that ticket** with `hotsheet-cli claim <slug> --worker <id> --eta
+   <duration>` or the equivalent Hot Sheet MCP operation. Use `HOTSHEET_WORKER_ID` when
+   set; otherwise choose one stable session-specific id. Read the whole ticket,
+   including new notes, before each action. If someone else owns its live claim, do
+   not edit it. Renew before the lease expires and before lengthy work. Record phase
+   transitions and activity as the project instructions require.
+3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
+   work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
+   Run the required local gates and inspect the diff. Stage named paths and commit the
+   verified change on the worker branch with the ticket slug in the subject. Do not
+   merge or push the worker branch or `main` as part of this handoff.
+4. **Hand off without completing.** Add a regular ticket note headed `## Integration
+   handoff` with the branch name, full commit SHA, worktree location labeled as
+   machine-local, gate results, unresolved risks, and any follow-up slugs. State that
+   the ticket remains Started pending integration. Release the claim immediately and
+   notify the integrator of the ticket slug. The integrator reclaims the ticket and
+   owns integration, push, CI confirmation, completion, and worktree removal. Do not
+   mark the ticket Completed or Verified from a worker worktree.
 
-1. Claim work with `hotsheet_claim_next` using `worker`, `label`, and optional
-   `lease_minutes`. CLI fallback:
-   `hotsheet-cli claim-next --worker <id> --label <id> [--lease-minutes N]`.
-   A successful claim atomically advances Not Started to Started; a null/no-ticket result
-   means the actionable queue is drained.
-2. Implement only that ticket. Renew before lengthy work with `hotsheet_renew` using
-   `id`, `worker`, and `lease_minutes`, or `hotsheet-cli renew <id> --worker <id>`.
-   If renewal fails, stop; another worker may now own the lease.
-   If you decide to stop working this ticket for any reason before completing it (a
-   blocker, `FEEDBACK NEEDED`, deferring it, switching tickets, or ending your turn), add a
-   note saying where you stopped and release the claim right away; leave its status alone.
-3. Run proportionate checks and commit only this ticket's changes. Never push without
-   explicit maintainer permission.
-4. Before completion, finish and verify scope; update required tests, coverage, and docs;
-   scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
-   unimplemented behavior, open questions, and known gaps. Immediately create a ticket
-   for every incomplete item without asking, waiting, or leaving it only in a note/TODO.
-   Then complete with `hotsheet_update` using `status: "completed"` and a required note,
-   or `hotsheet-cli edit <id> --status completed --note "what changed"`; include the
-   result, verification, and every follow-up slug in that note. Format substantial notes
-   as scannable Markdown: lead with the outcome, use short `## Result`, `## Verification`,
-   and `## Follow-ups` sections with bullets, and avoid dense prose or raw-log dumps. Keep
-   simple updates brief and omit empty sections.
-5. Release with `hotsheet_release` using `id` and `worker`, or
-   `hotsheet-cli release <id> --worker <id>`, then return to step 1.
-
-**Never leave a claim behind.** A live claim tells everyone you are actively on that ticket
-and blocks other workers until its lease expires. Release on every exit path, not only after
-completion, and before your final response run `hotsheet-cli ls --claimed` to confirm you
-hold no claim you are no longer working.
-
-## Coordination
-
-- HS2 claims are local leases. `claim-next` skips active claims and unresolved blockers.
-- A worker branch is a handoff artifact: keep it clean and tell the maintainer the branch
-  and commit. HS2 does not currently store HS1's `pending_integration` or
-  `integration_branch` fields.
-- Batch only small related tickets. Rebase a clean branch at the batch boundary and run
-  the project gates once before handoff. Do not merge the target branch yourself.
-- The HS2 MCP surface is `hotsheet_claim_next`, `hotsheet_update`, `hotsheet_renew`,
-  and `hotsheet_release`. Do not call HS1 channel tools or read HS1 port/secret files.
-- If MCP identity is uncertain, use `hotsheet-cli -C <HS2-store>`. A direct
-  `hotsheet-store.json` or `.hotsheet2/store` link identifies HS2; the legacy
-  `.hotsheet/store` link remains a read-only fallback;
-  `.hotsheet/db/PG_VERSION` identifies HS1.
-- `FEEDBACK NEEDED` is only for a blocker that prevents the current ticket from
-  proceeding without a user decision or unavailable external state. Leave that ticket
-  started and name the needed decision/state. It never replaces follow-up tickets for
-  independently describable gaps; create those first and continue independent work.
-
-When the queue is drained, leave the branch committed and report the handoff. HS2 has no
-`hotsheet_signal_done` tool; simply stop after reporting completion.
+If work stops earlier, record the current state and blocker in the ticket, then
+release the claim. A failed renewal also stops edits. Before ending, check
+`hotsheet-cli ls --claimed` and release every claim you still hold. Do not poll the
+queue on a timer for another assignment.
