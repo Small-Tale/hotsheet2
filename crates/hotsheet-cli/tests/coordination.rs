@@ -5,7 +5,9 @@ mod support;
 
 use hotsheet_model::{NoteKind, Timestamp};
 use hotsheet_ticketing::ops;
+use serde_json::Value;
 use std::fs;
+use std::time::{Duration, Instant};
 use support::{Fixture, git};
 
 #[test]
@@ -926,4 +928,164 @@ fn hs2_gbspp8_atomic_provider_publications_wake_create_replace_empty_and_refill(
         initial = waiting.result();
         assert_eq!(initial.uncovered_sources, expected);
     }
+}
+
+// HS2-CP6GWA: `next` re-registers its session from its own flags, so the role workflows pass
+// the registered return route and availability lease explicitly on every wait. Synthetic
+// route identifiers only.
+
+const LONG_LEASE: &str = "3600";
+
+fn now() -> i64 {
+    time::OffsetDateTime::now_utc().unix_timestamp()
+}
+
+/// The worker's durable session as `status` reports it.
+fn worker(f: &Fixture, id: &str) -> Value {
+    let args = f.coord(&["status"]);
+    let status: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    status["state"]["workers"][id].clone()
+}
+
+fn route_of(session: &Value) -> (String, Option<String>) {
+    let route = &session["return_route"];
+    (
+        route["kind"].as_str().unwrap_or_default().to_string(),
+        route["recipient"].as_str().map(str::to_string),
+    )
+}
+
+/// `next` as the role workflows prescribe it: the same route and lease as `register`.
+fn prescribed_next<'a>(
+    id: &'a str,
+    session: &'a str,
+    route: &'a str,
+    lease: &'a str,
+) -> Vec<&'a str> {
+    vec![
+        "next",
+        "--role",
+        "worker",
+        "--id",
+        id,
+        "--session",
+        session,
+        "--route",
+        route,
+        "--lease-seconds",
+        lease,
+    ]
+}
+
+#[test]
+fn hs2_cp6gwa_explicit_route_and_lease_survive_wait_and_reconnect() {
+    let f = Fixture::new();
+    for (id, route, kind, recipient) in [
+        (
+            "terminal-worker",
+            "terminal:01SYNTHETICTERMINAL",
+            "terminal",
+            "01SYNTHETICTERMINAL",
+        ),
+        (
+            "native-worker",
+            "native:/root/synthetic-agent",
+            "native_parent",
+            "/root/synthetic-agent",
+        ),
+    ] {
+        let expected = (kind.to_string(), Some(recipient.to_string()));
+        // A long gate registers the long availability lease first.
+        f.run(&[
+            "register",
+            "--role",
+            "worker",
+            "--id",
+            id,
+            "--session",
+            "generation-one",
+            "--route",
+            route,
+            "--lease-seconds",
+            LONG_LEASE,
+        ]);
+        let registered = worker(&f, id);
+        assert_eq!(route_of(&registered), expected, "{id} register");
+        assert!(registered["expires_at"].as_i64().unwrap() - now() > 3_500);
+
+        // The prescribed wait keeps both while it holds availability.
+        let waiting = f.waiting(&prescribed_next(id, "generation-one", route, LONG_LEASE));
+        let during = worker(&f, id);
+        assert_eq!(route_of(&during), expected, "{id} during next");
+        assert!(during["expires_at"].as_i64().unwrap() - now() > 3_500);
+        assert_eq!(during["generation"], "generation-one");
+
+        // A reconnect (the waiter ended and the session runs next again) keeps them too.
+        drop(waiting);
+        let reconnected = f.waiting(&prescribed_next(id, "generation-one", route, LONG_LEASE));
+        let after = worker(&f, id);
+        assert_eq!(route_of(&after), expected, "{id} after reconnect");
+        assert!(after["expires_at"].as_i64().unwrap() - now() > 3_500);
+        drop(reconnected);
+    }
+}
+
+#[test]
+fn hs2_cp6gwa_heartbeat_renewal_keeps_the_explicit_route() {
+    let f = Fixture::new();
+    let route = "terminal:01SYNTHETICTERMINAL";
+    // The shortest accepted lease renews at half its length.
+    let waiting = f.waiting(&prescribed_next("worker", "generation-one", route, "10"));
+    let first = worker(&f, "worker")["expires_at"].as_i64().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let renewed = loop {
+        let session = worker(&f, "worker");
+        if session["expires_at"].as_i64().unwrap() > first {
+            break session;
+        }
+        assert!(Instant::now() < deadline, "availability was never renewed");
+        std::thread::sleep(Duration::from_millis(250));
+    };
+    assert_eq!(
+        route_of(&renewed),
+        (
+            "terminal".to_string(),
+            Some("01SYNTHETICTERMINAL".to_string())
+        )
+    );
+    drop(waiting);
+}
+
+#[test]
+fn hs2_cp6gwa_next_without_flags_re_registers_with_cli_defaults() {
+    // Why the workflows must repeat the flags: the public CLI keeps its defaults, so a bare
+    // next silently replaces a verified route with human relay and the lease with 120 s.
+    let f = Fixture::new();
+    f.run(&[
+        "register",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "generation-one",
+        "--route",
+        "terminal:01SYNTHETICTERMINAL",
+        "--lease-seconds",
+        LONG_LEASE,
+    ]);
+    let waiting = f.waiting(&[
+        "next",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "generation-one",
+    ]);
+    let session = worker(&f, "worker");
+    assert_eq!(route_of(&session), ("human_relay".to_string(), None));
+    assert!(session["expires_at"].as_i64().unwrap() - now() <= 120);
+    drop(waiting);
 }

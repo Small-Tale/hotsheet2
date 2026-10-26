@@ -3,8 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator running, assign independent tickets, and resolve verified code or findings handoffs.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-
-<!-- hotsheet-skill-version: 5 -->
+<!-- hotsheet-skill-version: 6 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -33,8 +32,12 @@ coordinate this switch before running any pool command (HS2-A1F615).
 
 Start with `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then
 `register --role integrator --id <integrator> --session <fresh-generation> --route
-<return-route>`. Keep that generation throughout this invocation and renew with
-`register` before long gates. The code Git common directory stores the durable local
+<return-route> --lease-seconds <lease-seconds>` (10 to 3600; long gates want the
+longest). Keep that generation, route, and lease throughout this invocation, and pass
+the same `--route` and `--lease-seconds` whenever you renew with `register` before
+long gates and on every `next`. `next` re-registers the session from its own flags;
+omitted flags fall back to the CLI defaults (human relay, 120 seconds) instead of the
+registered values (HS2-CP6GWA). The code Git common directory stores the durable local
 mailboxes shared by all worktrees; ticket identities remain provider-qualified.
 This is one explicit source scope, not a declaration that every linked source was read.
 
@@ -59,7 +62,8 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    ticket; several CI records may coexist while workers take independent assignments.
 4. When waiting on local worker, ticket, or source-configuration changes, run
    `coordination next --role integrator --id <integrator> --session <generation>
---after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
+   --route <return-route> --lease-seconds <lease-seconds>
+   --after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
    filesystem events, cursor reconciliation, and known lease-expiry deadlines wake it;
    availability heartbeats do not scan the queue or network. Lost/unconfirmed session
    cues cannot erase durable assignments or handoffs.

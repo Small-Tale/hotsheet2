@@ -3,8 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-
-<!-- hotsheet-skill-version: 38 -->
+<!-- hotsheet-skill-version: 39 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -35,9 +34,11 @@ Keep the session running until the integrator ends the run, the user stops it, o
 safe progress is possible. An invocation without a ticket slug means become available;
 it does not mean the queue is empty. Either the worker or integrator may start first.
 
-1. Keep one worker id and a fresh session-generation token for this invocation. Confirm
-   the shipping checkout and shared ticket source. Run
-   `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then `status`.
+1. Keep one worker id, a fresh session-generation token, the assigned
+   `<return-route>`, and one availability `<lease-seconds>` (10 to 3600; long gates
+   want the longest) for this invocation. Confirm the shipping checkout and shared
+   ticket source. Run `hotsheet-cli -C <shared-store> coordination --project <main>
+   setup`, then `status`.
    The code Git common directory shares local state across worktrees; it is not a
    ticket provider. Use the same explicit source throughout this pool.
 2. Read existing exact claims and genuine `## Worker assignment` notes addressed to
@@ -47,8 +48,12 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    ask the integrator to publish its exact structured assignment; remain available.
    Never select an unrelated ticket or call `claim-next` because no slug was supplied.
 3. Run `coordination --project <main> next --role worker --id <worker>
---session <generation> --route <return-route>` with the same `-C` source. This
-   registers availability and blocks on filesystem events for this worker's exact
+   --session <generation> --route <return-route> --lease-seconds <lease-seconds>`
+   with the same `-C` source, on the first wait and on every later wait or
+   reconnect. `next` re-registers the session from its own flags; it does not
+   inherit the registered route or lease, and omitted flags fall back to the CLI
+   defaults (human relay, 120 seconds), silently replacing a verified route
+   (HS2-CP6GWA). It blocks on filesystem events for this worker's exact
    generation-bound assignment. Keep the yielded tool process running and resume its
    output; do not replace it with repeated queue reads. Availability lease renewal
    does not query the queue or network. A stopped run returns its explicit reason.
@@ -68,8 +73,10 @@ handoff --assignment <id> --id <worker> --session <generation> --commit <full-sh
    Do not wait for a previous ticket's remote CI before becoming available again.
 
 Use the full prefix `hotsheet-cli -C <shared-store> coordination --project <main>`
-for these commands; `--project` precedes the subcommand. `register` renews availability
-before long work or gates. On a blocker, write the ticket/worktree recovery facts,
+for these commands; `--project` precedes the subcommand. Before long work or gates,
+renew availability with `register --role worker --id <worker> --session <generation>
+--route <return-route> --lease-seconds <lease-seconds>`, repeating the same route and
+lease. On a blocker, write the ticket/worktree recovery facts,
 release the ticket claim, and record mailbox `--phase blocked`; another independent
 assignment can then proceed. An expired claim or availability lease never authorizes
 overwriting an old worktree. A replacement generation requires explicit integrator

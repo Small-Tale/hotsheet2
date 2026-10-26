@@ -363,6 +363,57 @@ fn hs2_76vmyg_role_skills_keep_local_sessions_running_between_tickets() {
 }
 
 #[test]
+fn hs2_cp6gwa_role_skills_repeat_route_and_lease_on_every_registration() {
+    // `next` re-registers from its own flags, so every registering example in both roles
+    // repeats the return route and availability lease instead of implying inheritance.
+    for (role, skill) in [
+        (
+            "worker",
+            include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+        ),
+        (
+            "worker",
+            include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        ),
+        (
+            "integrator",
+            include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+        ),
+        (
+            "integrator",
+            include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        ),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut commands = 0;
+        for verb in ["register --role", "next --role"] {
+            for (start, _) in text.match_indices(verb) {
+                let command = &text[start..];
+                let command = &command[..command.find('`').unwrap_or(command.len())];
+                commands += 1;
+                for flag in ["--route <return-route>", "--lease-seconds <lease-seconds>"] {
+                    assert!(
+                        command.contains(flag),
+                        "{role} command `{command}` omits {flag}"
+                    );
+                }
+            }
+        }
+        assert!(
+            commands >= 2,
+            "{role} skill lost its register/next examples"
+        );
+        for phrase in [
+            "re-registers the session from its own flags",
+            "CLI defaults (human relay, 120 seconds)",
+            "HS2-CP6GWA",
+        ] {
+            assert!(text.contains(phrase), "{role} missing {phrase}");
+        }
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.
