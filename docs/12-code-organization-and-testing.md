@@ -22,6 +22,16 @@
 
 ## 12.2 Workspace layout (full monorepo)
 
+The CLI constructs and parses its full Clap command tree on one explicitly sized
+8 MiB thread, then dispatches the parsed command on the original thread
+(HS2-H0MF53). The debug generated builder alone measured about 1.66 MiB; real
+startup failed with 1 and 2 MiB entry stacks and succeeded with 4 MiB on macOS.
+The chosen parser budget provides headroom without changing help/error exit codes,
+panic propagation, dispatch, or test timeouts. Portable real-process coverage checks
+help, invalid arguments and coordination setup/status with a 1 MiB entry-stack cap
+on Unix and the native default entry stack on Windows. Native Windows verification
+requires its actual CI job.
+
 A single Cargo workspace at the repo root, everything in one repo so a wire-type
 change regenerates client types and updates every client in one PR (no cross-repo
 drift).

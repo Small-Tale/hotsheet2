@@ -898,7 +898,7 @@ fn main() -> Result<()> {
     if hotsheet_cli::print_revision_status_if_requested() {
         return Ok(());
     }
-    let mut cli = Cli::parse();
+    let mut cli = parse_cli()?;
     if cli.test_fixture_credentials {
         hotsheet_ticketing::secrets::enable_test_credentials()?;
     }
@@ -921,6 +921,21 @@ fn main() -> Result<()> {
         refresh_checkout_worklists(&ctx.path, &ctx.cwd)?;
     }
     result
+}
+
+fn parse_cli() -> Result<Cli> {
+    // HS2-H0MF53: Clap's generated debug command builder alone reserves about
+    // 1.66 MiB, exceeding the Windows entry stack. Keep parsing off that stack;
+    // 8 MiB provides headroom over the measured 4 MiB successful startup budget.
+    let parser = std::thread::Builder::new()
+        .name("hotsheet-cli-parser".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(Cli::parse)
+        .context("start CLI parser thread")?;
+    match parser.join() {
+        Ok(cli) => Ok(cli),
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 fn parse_review_kind(s: &str) -> Result<ReviewKind> {

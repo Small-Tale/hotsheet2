@@ -637,6 +637,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 ## Entry points
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
+  `parse_cli` isolates the large debug Clap builder on an explicit 8 MiB parser
+  thread; dispatch remains on the original thread (HS2-H0MF53). The small-entry-stack
+  process regression lives in `tests/coordination_portable.rs`.
   Global `-C/--path` selects the store dir. `init --standalone [--at/--remote]` creates a
   separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
