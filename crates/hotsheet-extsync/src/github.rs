@@ -45,6 +45,23 @@ pub struct GitHubConfig {
 }
 
 impl GitHubConfig {
+    // HS2-FG7ZMF: metadata discovery shares live capabilities without constructing an adapter.
+    pub(crate) fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            color: None,
+            unverified_recovery: false,
+            identity_review_required: false,
+            identity_mismatch: false,
+            store_unavailable: false,
+            connection_id: self.connection_id.clone(),
+            provider: "github".into(),
+            display_name: format!("GitHub {}", self.repository),
+            locator: self.repository.clone(),
+            default: self.default,
+            capabilities: github_capabilities(self.attachments.is_some()),
+        }
+    }
+
     pub fn new(
         connection_id: impl Into<String>,
         repository: impl Into<String>,
@@ -862,19 +879,7 @@ fn merge_issue_changes(issues: &mut Vec<GitHubIssue>, changed: Vec<GitHubIssue>)
 
 impl TicketProvider for GitHubProvider {
     fn descriptor(&self) -> ProviderDescriptor {
-        ProviderDescriptor {
-            color: None,
-            unverified_recovery: false,
-            identity_review_required: false,
-            identity_mismatch: false,
-            store_unavailable: false,
-            connection_id: self.config.connection_id.clone(),
-            provider: "github".into(),
-            display_name: format!("GitHub {}", self.config.repository),
-            locator: self.config.repository.clone(),
-            default: self.config.default,
-            capabilities: github_capabilities(self.config.attachments.is_some()),
-        }
+        self.config.descriptor()
     }
 
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError> {
@@ -2023,7 +2028,8 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         offline_mutation: false,
         write_behind: false,
         history: true,
-        watch: true,
+        // HS2-SGQ183: no authenticated host subscription is implemented yet.
+        watch: false,
         provider_idempotency: false,
         query_fields: [
             "status",

@@ -197,18 +197,19 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             base,
         } => {
             let state = coordinator.state()?;
+            anyhow::ensure!(
+                ctx.path
+                    .join(hotsheet_ticketing::STORE_METADATA_FILE)
+                    .exists(),
+                "provider dispatch verification is unsupported for this selected source (HS2-3ETJ26)"
+            );
+            let store = FsStore::open_without_maintenance(&ctx.path)?;
+            anyhow::ensure!(
+                connection == git_connection_id(&store),
+                "provider dispatch verification is unsupported for this connection (HS2-3ETJ26); {}",
+                coordinator.unsupported_source(&connection)?
+            );
             if !state.assignments.contains_key(&operation) {
-                anyhow::ensure!(
-                    ctx.path
-                        .join(hotsheet_ticketing::STORE_METADATA_FILE)
-                        .exists(),
-                    "provider dispatch verification is unsupported for this selected source (HS2-3ETJ26)"
-                );
-                let store = FsStore::open_without_maintenance(&ctx.path)?;
-                anyhow::ensure!(
-                    connection == git_connection_id(&store),
-                    "provider dispatch verification is unsupported for this connection (HS2-3ETJ26)"
-                );
                 {
                     let t = store.read_ticket(&native_id.parse()?)?;
                     let at = hotsheet_model::Timestamp::from_datetime(
@@ -282,7 +283,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 let store = FsStore::open_without_maintenance(&ctx.path)?;
                 anyhow::ensure!(
                     a.ticket.connection_id == git_connection_id(&store),
-                    "provider claim/handoff verification is unsupported for this source; do not treat mailbox acknowledgement as a ticket claim"
+                    "provider claim/handoff verification is unsupported for this source; do not treat mailbox acknowledgement as a ticket claim; {}",
+                    coordinator.unsupported_source(&a.ticket.connection_id)?
                 );
                 let ticket = store.read_ticket(&a.ticket.native_id.parse()?)?;
                 let at = hotsheet_model::Timestamp::from_datetime(
@@ -369,7 +371,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             let store = FsStore::open_without_maintenance(&ctx.path)?;
             anyhow::ensure!(
                 a.ticket.connection_id == git_connection_id(&store),
-                "provider recovery verification is unsupported for this source"
+                "provider recovery verification is unsupported for this source; {}",
+                coordinator.unsupported_source(&a.ticket.connection_id)?
             );
             let t = store.read_ticket(&a.ticket.native_id.parse()?)?;
             let at = hotsheet_model::Timestamp::from_datetime(
@@ -395,6 +398,21 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 .assignments
                 .get(&assignment)
                 .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            // HS2-FG7ZMF: metadata support never authorizes a foreign code or findings
+            // transition, including records preserved from an older pool snapshot.
+            anyhow::ensure!(
+                ctx.path
+                    .join(hotsheet_ticketing::STORE_METADATA_FILE)
+                    .exists(),
+                "provider integration verification is unsupported for this selected source; {}",
+                coordinator.unsupported_source(&a.ticket.connection_id)?
+            );
+            let store = FsStore::open_without_maintenance(&ctx.path)?;
+            anyhow::ensure!(
+                a.ticket.connection_id == git_connection_id(&store),
+                "provider integration verification is unsupported for this source; {}",
+                coordinator.unsupported_source(&a.ticket.connection_id)?
+            );
             if matches!(phase, Phase::Verifying | Phase::Done)
                 && let Some(HandoffEvidence::Findings { note_id }) = &a.handoff
             {

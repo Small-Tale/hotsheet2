@@ -30,6 +30,11 @@ impl Coordinator {
                     .assignments
                     .get_mut(id)
                     .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+                ensure!(
+                    a.ticket.connection_id == git_connection_id(&store),
+                    "provider review-return verification is unsupported for this connection; {}",
+                    self.unsupported_source(&a.ticket.connection_id)?
+                );
                 if a.returned_for_review() {
                     ensure!(
                         a.recovery_note.as_deref() == Some(evidence_note),
@@ -50,10 +55,6 @@ impl Coordinator {
                         a.commit.as_deref().ok_or_else(|| anyhow::anyhow!("handoff has no commit"))?
                     }
                 };
-                ensure!(
-                    a.ticket.connection_id == git_connection_id(&store),
-                    "provider review-return verification is unsupported for this connection"
-                );
                 let ticket = store.read_ticket(&a.ticket.native_id.parse()?)?;
                 ensure!(
                     ops::is_open(&ticket)

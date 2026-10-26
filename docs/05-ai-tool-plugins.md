@@ -2106,6 +2106,19 @@ Queue observation and claim/handoff verification initially support the selected 
 Git source. `local_queue: null` means an unsupported provider query path, never empty;
 enabled additional sources appear in `uncovered_sources` and prevent `drained`.
 HS2-3ETJ26 owns provider-native query, claim-verification, and genuine event adapters.
+Its native claim and authenticated event/setup prerequisites are HS2-BPKM76 and
+HS2-SGQ183. Additive `source_support` snapshot entries expose registry-only implementation
+support (HS2-FG7ZMF): canonical provider capabilities, native query/evidence-read support,
+current queue/claim/event verification support, configuration state and explicit reasons.
+These entries never resolve an adapter, credential or external ticket, and do not prove
+remote availability or authorize a mailbox transition. Disabled, missing, invalid and
+reconfigured source metadata stay distinct; an unregistered connection gets an explicit
+unknown-source error. Additional Git stores remain outside the selected local observer.
+Older snapshots omit `source_support`; reading them defaults this field to an empty report,
+without changing the persisted pool schema or role versions. Foreign-source assignment
+replay, handoff, recovery, review-return and code/findings completion remain rejected before
+state mutation. GitHub/Jira/GitLab advertise `watch:false` until an actual authenticated
+host subscription exists; Git retains its implemented watch capability.
 This workflow adds no timer network polling. Remote CI completion needs an actual
 supported status/event route or human cue; without one the integrator reports the
 specific pending CI and unavailable wake route instead of reporting exhaustion.

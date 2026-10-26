@@ -886,7 +886,11 @@ on any `Coordinator::open` (all pool members switch artifacts before a live open
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),
 `snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
-and known lease deadlines. `dispatch/coordination.rs` exposes idempotent setup,
+and known lease deadlines. `source_support.rs` produces additive, registry-only per-source
+capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
+`source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
+zero external requests and exact unchanged state on rejected foreign transitions.
+`dispatch/coordination.rs` exposes idempotent setup,
 registration, exact dispatch/acknowledgement, findings-note validation with
 full-precision claim authority, recovery,
 and terminal outcomes through
@@ -902,6 +906,8 @@ Role instructions are canonical in
 `.claude/skills/hotsheet-{integrator,worker}/` with `.agents/skills/` mirrors.
 Source adapters beyond the selected local queue are explicit unsupported operations
 (HS2-3ETJ26); remote CI/app wake requires an actual supported route, not polling.
+External descriptors share configuration-owned canonical capabilities with live adapters;
+GitHub/Jira/GitLab watch remains false until HS2-SGQ183 implements a real subscription.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home.

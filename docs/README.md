@@ -170,7 +170,10 @@ stay unpriced (HS2-WMWRHZ).
 Local continuous integrator/worker sessions (HS2-76VMYG) have durable,
 provider-qualified local mailboxes, exact assignment, filesystem-event waits, and
 selected-source queue/claim verification. External-source adapters remain partial
-(HS2-3ETJ26); real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
+(HS2-3ETJ26), blocked on native claim evidence (HS2-BPKM76) and authenticated events/setup
+(HS2-SGQ183). Registry-only source support diagnostics and honest external watch capability
+are shipped independently (HS2-FG7ZMF); they do not enable external assignments or drained.
+Real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
 An ended independent app turn is not automatically resumed.
 Reviewed code handoffs support fenced review-return and a fresh correction
 assignment, preserving original artifacts and typed code evidence (HS2-65ETRJ).

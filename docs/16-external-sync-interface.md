@@ -323,11 +323,20 @@ labels, a provider-owned `up-next` label for active queued issues, ordinary labe
 assignees, and comments directly to the normalized contract. The queue label survives
 unrelated edits and is removed when an issue closes; queued-only reads use that label.
 It paginates while excluding pull requests, sends incremental `since` queries, exposes
-webhook invalidations for authoritative re-read, checks opaque optimistic-concurrency
+webhook invalidation payload parsing for authoritative re-read, checks opaque optimistic-concurrency
 tokens, and maps authentication/rate-limit/conflict failures to typed provider errors.
 Unsupported claims, dependencies, review requests, and query
 dimensions are declared or rejected rather than discarded. Attachments are supported only
 through a configured assets repository (below).
+
+The payload parser does not provide signature verification, a host ingestion route or
+subscription setup. GitHub, GitLab and Jira therefore report `watch:false` (HS2-FG7ZMF);
+HS2-SGQ183 owns authenticated delivery/replay and idempotent setup. Metadata descriptors
+are constructed from validated configuration without creating a live adapter or resolving
+credentials; they share the live provider's canonical capability construction. Coordination
+support reports do not equate implemented native reads with remote availability or native
+claim authority. HS2-BPKM76 owns the absent native claim/release evidence; HS2-3ETJ26 remains
+the umbrella for actual external coordination.
 
 **GitHub attachments through an assets repository (HS2-HSA64D).** GitHub has no
 issue-attachment API usable by app or personal tokens (its `user-attachments` upload is a

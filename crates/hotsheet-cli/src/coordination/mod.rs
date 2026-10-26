@@ -8,6 +8,9 @@ mod review_return;
 #[cfg(test)]
 mod review_return_tests;
 mod snapshot;
+mod source_support;
+#[cfg(test)]
+mod source_support_tests;
 #[cfg(test)]
 mod tests;
 mod wait;

@@ -1,5 +1,8 @@
 //! Real separate-process local coordination flows (HS2-76VMYG).
 
+#[path = "support/source_support.rs"]
+mod source_support_cases;
+
 #[path = "support/coordination.rs"]
 mod support;
 

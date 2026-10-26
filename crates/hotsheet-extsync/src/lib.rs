@@ -70,22 +70,13 @@ pub fn live_provider(
     }
 }
 
+/// Validate connection metadata and describe implemented operations without constructing
+/// a transport, resolving credentials, or reading provider tickets (HS2-FG7ZMF).
 pub fn descriptor(connection: &ProviderConnection) -> Result<ProviderDescriptor, ProviderError> {
     match connection.provider.as_str() {
-        "github" => Ok(GitHubProvider::live(GitHubConfig::from_connection(
-            connection,
-            String::new(),
-        )?)
-        .descriptor()),
-        "jira" => Ok(
-            JiraProvider::live(JiraConfig::from_connection(connection, String::new())?)
-                .descriptor(),
-        ),
-        "gitlab" => Ok(GitLabProvider::live(GitLabConfig::from_connection(
-            connection,
-            String::new(),
-        )?)
-        .descriptor()),
+        "github" => Ok(GitHubConfig::from_connection(connection, String::new())?.descriptor()),
+        "jira" => Ok(JiraConfig::from_connection(connection, String::new())?.descriptor()),
+        "gitlab" => Ok(GitLabConfig::from_connection(connection, String::new())?.descriptor()),
         provider => Err(ProviderError::Conflict {
             ticket: connection.id.clone(),
             message: format!("external provider '{provider}' is not implemented"),
@@ -173,5 +164,47 @@ mod connection_tests {
             ),
             Err(ProviderError::UnknownConnection(_))
         ));
+    }
+
+    #[test]
+    fn hs2_fg7zmf_metadata_descriptors_share_live_capabilities_without_resolving_credentials() {
+        for provider in ["github", "jira", "gitlab"] {
+            let mut connection = connection("synthetic-source", "synthetic/app", false);
+            connection.provider = provider.into();
+            connection.settings = serde_json::json!({
+                "credential":{"secret":"must-not-resolve"},
+                "base_url":"http://127.0.0.1:9",
+                "api_base":"http://127.0.0.1:9",
+                "email":"fixture@example.test"
+            });
+            let metadata = descriptor(&connection).unwrap();
+            let live = live_provider(&connection, "unused-synthetic-token".into()).unwrap();
+            assert_eq!(metadata, live.descriptor());
+            assert!(!metadata.capabilities.watch);
+            assert!(!metadata.capabilities.claims);
+            assert!(metadata.capabilities.notes);
+        }
+        assert!(hotsheet_ticketing::ProviderCapabilities::git().watch);
+        // Convention correction: the metadata entry point must not start constructing
+        // adapters or resolving tokens again, even if a transport currently stays lazy.
+        let source = include_str!("lib.rs");
+        let metadata = source
+            .split("pub fn descriptor(")
+            .nth(1)
+            .unwrap()
+            .split("/// Prepare a non-secret")
+            .next()
+            .unwrap();
+        for forbidden in [
+            "Provider::live",
+            "live_provider(",
+            "connection_access_token(",
+            "KeyRegistry",
+        ] {
+            assert!(
+                !metadata.contains(forbidden),
+                "metadata resolves {forbidden}"
+            );
+        }
     }
 }

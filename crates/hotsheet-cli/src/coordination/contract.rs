@@ -164,6 +164,66 @@ pub struct Snapshot {
     pub queue_support: String,
     pub uncovered_sources: Vec<String>,
     pub live_claims: Vec<LiveClaim>,
+    /// Metadata-only implementation support, never remote availability or claim evidence.
+    /// Default permits reading snapshots from older CLI executables (HS2-FG7ZMF).
+    #[serde(default)]
+    pub source_support: Vec<SourceSupport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceConfiguration {
+    Ready,
+    Disabled,
+    Missing,
+    Invalid,
+    Reconfigured,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceSupport {
+    pub connection_id: String,
+    pub provider: String,
+    pub configuration: SourceConfiguration,
+    /// Canonical descriptor capabilities; None means metadata could not be validated.
+    pub capabilities: Option<hotsheet_ticketing::ProviderCapabilities>,
+    /// Implemented reads only: does not prove credentials, reachability or queue contents.
+    pub native_query: bool,
+    pub evidence_read: bool,
+    pub queue_observed: bool,
+    pub claim_verification: bool,
+    pub event_subscription: bool,
+    pub reasons: Vec<String>,
+}
+
+#[cfg(test)]
+mod snapshot_compatibility_tests {
+    use super::*;
+
+    // Exact snapshot fields before HS2-FG7ZMF; persisted State is shared unchanged.
+    #[derive(Serialize, Deserialize)]
+    struct BeforeSourceSupport {
+        cursor: String,
+        state: State,
+        live_workers: Vec<String>,
+        live_integrator: bool,
+        local_queue: Option<Vec<QueueEntry>>,
+        queue_support: String,
+        uncovered_sources: Vec<String>,
+        live_claims: Vec<LiveClaim>,
+    }
+
+    #[test]
+    fn hs2_fg7zmf_old_snapshot_consumer_preserves_all_legacy_fields_with_additive_report() {
+        let (_root, c) = crate::coordination::tests::fixture();
+        let current = c.snapshot(1_800_000_000).unwrap();
+        let mut encoded = serde_json::to_value(&current).unwrap();
+        assert!(!encoded["source_support"].as_array().unwrap().is_empty());
+        let old: BeforeSourceSupport = serde_json::from_value(encoded.clone()).unwrap();
+        encoded.as_object_mut().unwrap().remove("source_support");
+        assert_eq!(serde_json::to_value(old).unwrap(), encoded);
+        assert_eq!(current.state.version, 3);
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -32,6 +32,23 @@ pub struct GitLabConfig {
 }
 
 impl GitLabConfig {
+    // HS2-FG7ZMF: metadata discovery shares live capabilities without constructing an adapter.
+    pub(crate) fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            color: None,
+            unverified_recovery: false,
+            identity_review_required: false,
+            identity_mismatch: false,
+            store_unavailable: false,
+            connection_id: self.connection_id.clone(),
+            provider: "gitlab".into(),
+            display_name: format!("GitLab {}", self.project),
+            locator: self.project.clone(),
+            default: self.default,
+            capabilities: capabilities(),
+        }
+    }
+
     pub fn from_connection(
         connection: &ProviderConnection,
         token: impl Into<String>,
@@ -424,19 +441,7 @@ impl GitLabProvider {
 
 impl TicketProvider for GitLabProvider {
     fn descriptor(&self) -> ProviderDescriptor {
-        ProviderDescriptor {
-            color: None,
-            unverified_recovery: false,
-            identity_review_required: false,
-            identity_mismatch: false,
-            store_unavailable: false,
-            connection_id: self.config.connection_id.clone(),
-            provider: "gitlab".into(),
-            display_name: format!("GitLab {}", self.config.project),
-            locator: self.config.project.clone(),
-            default: self.config.default,
-            capabilities: capabilities(),
-        }
+        self.config.descriptor()
     }
 
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError> {
@@ -953,7 +958,8 @@ fn capabilities() -> ProviderCapabilities {
         offline_mutation: false,
         write_behind: false,
         history: true,
-        watch: true,
+        // HS2-SGQ183: no authenticated host subscription is implemented yet.
+        watch: false,
         provider_idempotency: false,
         query_fields: [
             "status",

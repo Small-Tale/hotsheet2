@@ -13,6 +13,7 @@ impl Coordinator {
             .collect();
         let live_integrator = state.integrator.as_ref().is_some_and(|s| s.live(now));
         let mut live_claims = Vec::new();
+        let mut selected_connection = None;
         let local_queue = if self
             .source
             .join(hotsheet_ticketing::STORE_METADATA_FILE)
@@ -20,6 +21,7 @@ impl Coordinator {
         {
             let store = FsStore::open_without_maintenance(&self.source)?;
             let connection_id = git_connection_id(&store);
+            selected_connection = Some(connection_id.clone());
             let now = hotsheet_model::Timestamp::from_datetime(
                 time::OffsetDateTime::from_unix_timestamp(now)?,
             );
@@ -89,19 +91,26 @@ impl Coordinator {
             .map(|s| s.id.clone())
             .collect();
         let mut uncovered_sources: Vec<String> = connections
-            .into_iter()
+            .iter()
             .filter(|s| !s.disabled)
-            .map(|s| s.id)
+            .map(|s| s.id.clone())
             .collect();
         let registry = checkouts::CheckoutRegistry::new(
             hotsheet_plugins::hotsheet_home().join("checkouts.json"),
         );
-        for checkout in registry
+        let checkouts: Vec<_> = registry
             .list()?
             .into_iter()
             .filter(|c| c.id == self.project_id)
-        {
-            for source in checkout.sources {
+            .collect();
+        let source_support = super::source_support::reports(
+            selected_connection.as_deref(),
+            &self.source,
+            &connections,
+            &checkouts,
+        );
+        for checkout in &checkouts {
+            for source in &checkout.sources {
                 if disabled.contains(&source.connection_id) {
                     continue;
                 }
@@ -109,10 +118,10 @@ impl Coordinator {
                     && Path::new(&source.locator).canonicalize().ok().as_ref()
                         == Some(&self.source))
                 {
-                    uncovered_sources.push(source.connection_id);
+                    uncovered_sources.push(source.connection_id.clone());
                 }
             }
-            for store in checkout.stores {
+            for store in &checkout.stores {
                 if Path::new(&store).canonicalize().ok().as_ref() != Some(&self.source) {
                     uncovered_sources.push(format!("{:x}", Sha256::digest(store.as_bytes())));
                 }
@@ -132,7 +141,8 @@ impl Coordinator {
                 Self::state_cursor(&state, now)?,
                 &local_queue,
                 &uncovered_sources,
-                &live_claims
+                &live_claims,
+                &source_support
             ))?)
         );
         Ok(Snapshot {
@@ -144,6 +154,7 @@ impl Coordinator {
             queue_support,
             uncovered_sources,
             live_claims,
+            source_support,
         })
     }
 
