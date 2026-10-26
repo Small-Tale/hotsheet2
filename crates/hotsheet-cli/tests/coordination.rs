@@ -365,3 +365,91 @@ fn hs2_76vmyg_provider_scope_change_wakes_without_ticket_polling() {
         .unwrap();
     assert_eq!(waiting.result().uncovered_sources, ["synthetic-remote"]);
 }
+
+#[test]
+fn hs2_gbspp8_corrupt_provider_event_preserves_the_waiter_exit_cause() {
+    let f = Fixture::new();
+    let initial = f.run(&[
+        "register",
+        "--role",
+        "integrator",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+    ]);
+    let mut waiting = f.waiting(&[
+        "next",
+        "--role",
+        "integrator",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--after",
+        &initial.cursor,
+    ]);
+    // An in-place writer exposes this state after creation/truncation and before bytes arrive.
+    // Keep it empty until the event-backed reader exits: no scheduling delay or race is needed.
+    std::fs::write(f.store.root().join("providers.json"), b"").unwrap();
+    let output = waiting.exit_output();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{error}");
+    assert!(error.contains("invalid provider configuration"), "{error}");
+    assert!(error.contains("EOF while parsing a value"), "{error}");
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn hs2_gbspp8_atomic_provider_publications_wake_create_replace_empty_and_refill() {
+    let f = Fixture::new();
+    let mut initial = f.run(&[
+        "register",
+        "--role",
+        "integrator",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+    ]);
+    let registry =
+        hotsheet_ticketing::ProviderConfigRegistry::new(f.store.root().join("providers.json"));
+    let source = hotsheet_ticketing::ProviderConnection {
+        id: "synthetic-remote".into(),
+        provider: "github".into(),
+        locator: "synthetic/project".into(),
+        name: None,
+        default: false,
+        settings: serde_json::json!({}),
+        disabled: false,
+    };
+    let mut disabled = source.clone();
+    disabled.disabled = true;
+    for connections in [
+        vec![source.clone()],
+        vec![disabled],
+        vec![source.clone()],
+        vec![],
+        vec![source],
+    ] {
+        let mut waiting = f.waiting(&[
+            "next",
+            "--role",
+            "integrator",
+            "--id",
+            "integrator",
+            "--session",
+            "root",
+            "--after",
+            &initial.cursor,
+        ]);
+        registry.save(&connections).unwrap();
+        let expected: Vec<_> = connections
+            .iter()
+            .filter(|source| !source.disabled)
+            .map(|source| source.id.clone())
+            .collect();
+        initial = waiting.result();
+        assert_eq!(initial.uncovered_sources, expected);
+    }
+}

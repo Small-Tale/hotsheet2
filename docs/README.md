@@ -171,6 +171,9 @@ selected-source queue/claim verification. External-source adapters remain partia
 An ended independent app turn is not automatically resumed.
 Reviewed handoffs support fenced review-return and a fresh correction assignment,
 with original artifacts preserved in schema 1 (HS2-65ETRJ).
+Provider-config publications are atomic and preserve file modes; malformed committed
+config remains an explicit failure, and process-wait tests retain exit diagnostics
+(HS2-GBSPP8).
 
 **F · Collaboration & distribution**
 

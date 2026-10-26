@@ -83,12 +83,16 @@ impl Fixture {
             .spawn()
             .unwrap();
         let (ready_tx, ready_rx) = mpsc::channel();
+        let (stderr_tx, errors) = mpsc::channel();
         let stderr = child.stderr.take().unwrap();
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stderr);
             let mut line = String::new();
             let _ = reader.read_line(&mut line);
-            let _ = ready_tx.send(line);
+            let _ = ready_tx.send(line.clone());
+            let mut bytes = line.into_bytes();
+            let _ = reader.read_to_end(&mut bytes);
+            let _ = stderr_tx.send(bytes);
         });
         let line = ready_rx
             .recv_timeout(Duration::from_secs(10))
@@ -104,7 +108,11 @@ impl Fixture {
             let _ = BufReader::new(stdout).read_to_end(&mut bytes);
             let _ = tx.send(bytes);
         });
-        Waiting { child, output }
+        Waiting {
+            child,
+            output,
+            errors,
+        }
     }
 
     pub(super) fn ticket(&self) -> hotsheet_model::Ticket {
@@ -156,16 +164,36 @@ impl Fixture {
 pub(super) struct Waiting {
     pub(super) child: Child,
     output: Receiver<Vec<u8>>,
+    errors: Receiver<Vec<u8>>,
 }
 
 impl Waiting {
-    pub(super) fn result(&mut self) -> Snapshot {
-        let bytes = self
+    pub(super) fn exit_output(&mut self) -> std::process::Output {
+        let stdout = self
             .output
             .recv_timeout(Duration::from_secs(10))
             .expect("event-backed wait did not wake");
-        assert!(self.child.wait().unwrap().success());
-        serde_json::from_slice(&bytes).unwrap()
+        let status = self.child.wait().unwrap();
+        let stderr = self
+            .errors
+            .recv_timeout(Duration::from_secs(10))
+            .expect("wait process stderr did not close");
+        std::process::Output {
+            status,
+            stdout,
+            stderr,
+        }
+    }
+
+    pub(super) fn result(&mut self) -> Snapshot {
+        let output = self.exit_output();
+        assert!(
+            output.status.success(),
+            "coordination waiter failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
     }
 }
 

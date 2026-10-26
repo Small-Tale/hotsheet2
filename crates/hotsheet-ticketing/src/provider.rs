@@ -158,14 +158,46 @@ impl ProviderConfigRegistry {
 
     pub fn save(&self, connections: &[ProviderConnection]) -> Result<(), ProviderError> {
         validate_connections(connections)?;
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent).map_err(StoreError::Io)?;
-        }
+        use std::io::Write;
+
+        let parent = self
+            .path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        std::fs::create_dir_all(parent).map_err(StoreError::Io)?;
+        let permissions = match std::fs::metadata(&self.path) {
+            Ok(metadata) => Some(metadata.permissions()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(StoreError::Io(error).into()),
+        };
         let text = serde_json::to_string_pretty(&ProviderConnectionsFile {
             connections: connections.to_vec(),
         })
         .expect("provider connection config is serializable");
-        std::fs::write(&self.path, format!("{text}\n")).map_err(StoreError::Io)?;
+        // HS2-GBSPP8: Create/Modify can wake readers before fs::write publishes any JSON.
+        // Only expose a complete sibling on rename, preserving the existing config's mode.
+        let mut builder = tempfile::Builder::new();
+        builder.prefix(".providers-").suffix(".tmp");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            builder.permissions(std::fs::Permissions::from_mode(0o666));
+        }
+        let mut staged = builder.tempfile_in(parent).map_err(StoreError::Io)?;
+        if let Some(permissions) = permissions {
+            staged
+                .as_file()
+                .set_permissions(permissions)
+                .map_err(StoreError::Io)?;
+        }
+        staged
+            .write_all(format!("{text}\n").as_bytes())
+            .map_err(StoreError::Io)?;
+        staged.as_file().sync_all().map_err(StoreError::Io)?;
+        staged
+            .persist(&self.path)
+            .map_err(|error| StoreError::Io(error.error))?;
         Ok(())
     }
 
@@ -3070,6 +3102,64 @@ mod tests {
         // Every generated id passes the registry's own validation.
         for id in [long, generate_connection_id(&existing, "github", "a b/c.d")] {
             validate_connections(&[connection(&id)]).unwrap();
+        }
+    }
+
+    #[test]
+    fn hs2_gbspp8_provider_publication_keeps_open_readers_on_the_complete_previous_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = ProviderConfigRegistry::new(dir.path().join("providers.json"));
+        registry.save(&[]).unwrap();
+        let before = std::fs::read(registry.path()).unwrap();
+        let mut previous = std::fs::File::open(registry.path()).unwrap();
+        let connection = ProviderConnection {
+            id: "synthetic-remote".into(),
+            provider: "github".into(),
+            locator: "synthetic/project".into(),
+            name: None,
+            default: false,
+            settings: serde_json::json!({}),
+            disabled: false,
+        };
+        registry.save(std::slice::from_ref(&connection)).unwrap();
+        let mut still_complete = Vec::new();
+        std::io::Read::read_to_end(&mut previous, &mut still_complete).unwrap();
+        assert!(
+            still_complete == before,
+            "a published config must never truncate an existing reader's file"
+        );
+        assert_eq!(
+            registry.load().unwrap().as_slice(),
+            std::slice::from_ref(&connection)
+        );
+        assert!(
+            registry
+                .save(&[connection.clone(), connection.clone()])
+                .is_err()
+        );
+        assert_eq!(registry.load().unwrap(), [connection]);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_gbspp8_provider_publication_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let registry = ProviderConfigRegistry::new(dir.path().join("providers.json"));
+        registry.save(&[]).unwrap();
+        for mode in [0o600, 0o640, 0o644] {
+            std::fs::set_permissions(registry.path(), std::fs::Permissions::from_mode(mode))
+                .unwrap();
+            registry.save(&[]).unwrap();
+            assert_eq!(
+                std::fs::metadata(registry.path())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                mode
+            );
         }
     }
 

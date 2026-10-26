@@ -846,6 +846,10 @@ unsupported value.
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
+Provider configuration saves publish a complete synced sibling by atomic replacement,
+preserving existing file permissions. Event-driven coordination readers therefore see
+the previous or next complete configuration; malformed committed JSON still reports an
+error instead of being treated as an empty source list (HS2-GBSPP8).
 Source removal holds the checkout registry lock while it scans remaining links and updates
 `providers.json`. Explicit `checkout add-source` checks for its provider record under that same
 lock, so a concurrent orphan removal cannot leave a new dangling project link (HS2-PNCKJR).
