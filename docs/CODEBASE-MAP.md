@@ -35,6 +35,11 @@ resources for bundling. `npm run desktop:build` packages the `.app`, and
 ephemeral desktop origins (HS2-RKZKX7). The same bridge keeps staged draft attachment
 bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
 `workspace-session.ts` draft files there instead of IndexedDB on desktop, and
+`src/browser-draft-file-contract.ts` validates browser IndexedDB recovery records: the existing
+`blob` field carries ArrayBuffer bytes for insecure-origin WebKit, with compatible legacy Blob/File
+reads and conservative invalid-record handling (HS2-2HF3H4). No database reset is needed.
+`src/browser-draft-mutation-queue.ts` orders in-process writes/removals per scoped browser file
+across byte preparation and the IndexedDB transaction, with independent keys and failure recovery.
 `src/draft-file-recovery.ts` derives blocking recovery state from failed saves and unreadable
 references; `src/draft-submission-state.ts` cleans submitted origin references while preserving
 later draft text and references (HS2-791W19).

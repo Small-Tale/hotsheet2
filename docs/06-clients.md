@@ -2464,7 +2464,15 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   while successful creation moves focus into the new ticket's Details editor. Relaunch
   restores saved draft fields and staged evidence but starts the composer closed, preventing
   remembered projects from racing modal show/hide while the initial project set loads.
-  Browsers keep staged file bytes in origin-scoped IndexedDB; the packaged desktop app keeps
+  Browsers keep staged file bytes in origin-scoped IndexedDB. The existing `blob` field stores
+  ArrayBuffer bytes with filename, MIME type, modification time and size, avoiding WebKit's
+  Blob/File write failure on insecure LAN origins (HS2-2HF3H4). Existing Blob/File records remain
+  readable without a database reset; older readers also accept the new byte payload. Invalid
+  records remain unresolved recovery references rather than being silently deleted.
+  In-process writes and removals keep arrival order per scoped file, including byte preparation,
+  so a delayed save cannot restore a cancelled file or overwrite a newer edit. Other files remain
+  independent, and a failed save does not prevent a later removal or retry (HS2-2HF3H4).
+  The packaged desktop app keeps
   them in private native app-data records so a relaunch on a new bridge port restores them
   too ([desktop guide](tauri-desktop.md), HS2-791W19). A staged file whose recovery copy fails
   to save stays attached and is retried on the next change; one that cannot be read on restore

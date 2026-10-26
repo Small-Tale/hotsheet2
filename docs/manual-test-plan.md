@@ -666,3 +666,13 @@ original return after the correction claim and after completion: it must preserv
 that claim and leave the original Blocked, refusing Done. Keep an unrelated code CI
 record pending throughout. Confirm an older schema-two runtime refuses the disposable
 upgraded pool instead of mutating returned originals.
+
+### Browser draft attachment recovery on LAN (HS2-2HF3H4)
+
+On a disposable rebuilt server, open the real app from an insecure LAN origin in WebKit
+and Chromium. Stage synthetic binary and empty files in Create ticket; check recovery
+finishes, reload and reopen, and verify names and content survive. Remove a file, cancel,
+then stage another and create the ticket; verify exact attachment bytes and metadata.
+Inspect wide, medium and narrow, including wide-to-narrow-to-wide, while staged and after
+creation. Existing Blob/File recovery records remain readable without clearing IndexedDB;
+unreadable records remain visible/removable and block submission until recovered or removed.

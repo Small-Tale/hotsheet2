@@ -1,3 +1,5 @@
+import { browserDraftFileRecord, fileFromBrowserDraftRecord } from './browser-draft-file-contract';
+import { createBrowserDraftMutationQueue } from './browser-draft-mutation-queue';
 import type { InspectorTab } from './components/ticket-inspector';
 import { deleteDesktopDraftFile, loadDesktopDraftFile, saveDesktopDraftFile } from './desktop-draft-files';
 import type { InlineFeedbackReply } from './feedback-replies';
@@ -44,6 +46,7 @@ const HS1_MIGRATION_DISMISSED = 'hotsheet.workspace.hs1-migration-dismissed.v1.'
 const HS1_CLEANUP_DISMISSED = 'hotsheet.workspace.hs1-cleanup-dismissed.v1.';
 const DB_NAME = 'hotsheet-draft-files-v1',
   STORE = 'files';
+const mutateBrowserDraft = createBrowserDraftMutationQueue();
 
 const stringValue = (value: unknown, fallback = '') => (typeof value === 'string' ? value : fallback);
 const booleanValue = (value: unknown) => value === true;
@@ -206,11 +209,18 @@ export async function saveDraftFile(scope: string, id: string, file: File) {
     await saveDesktopDraftFile(`${scope}:${id}`, file);
     return;
   }
-  const db = await database();
-  await transaction(db, 'readwrite', (store) => {
-    store.put({ blob: file, name: file.name, type: file.type, lastModified: file.lastModified }, `${scope}:${id}`);
+  await mutateBrowserDraft(`${scope}:${id}`, async () => {
+    // Prepare bytes before opening the transaction: awaiting inside it can make it inactive.
+    const record = await browserDraftFileRecord(file),
+      db = await database();
+    try {
+      await transaction(db, 'readwrite', (store) => {
+        store.put(record, `${scope}:${id}`);
+      });
+    } finally {
+      db.close();
+    }
   });
-  db.close();
 }
 export interface StoredDraftFile {
   id: string;
@@ -236,16 +246,12 @@ export async function loadDraftFiles(
     const opened = await database();
     db = opened;
     read = async (item) => {
-      const value = await requestValue<{ blob: Blob; name: string; type: string; lastModified: number }>(
+      const value = await requestValue<unknown>(
         opened.transaction(STORE).objectStore(STORE).get(`${scope}:${item.id}`),
       );
-      return value
-        ? {
-            id: item.id,
-            name: value.name,
-            file: new File([value.blob], value.name, { type: value.type, lastModified: value.lastModified }),
-          }
-        : undefined;
+      if (value === undefined) return undefined;
+      const file = fileFromBrowserDraftRecord(value);
+      return { id: item.id, name: file.name, file };
     };
   }
   const results = await Promise.allSettled(items.map(read));
@@ -264,11 +270,20 @@ export async function deleteDraftFiles(scope: string, ids: readonly string[]) {
     await Promise.all(ids.map((id) => deleteDesktopDraftFile(`${scope}:${id}`)));
     return;
   }
-  const db = await database();
-  await transaction(db, 'readwrite', (store) => {
-    for (const id of ids) store.delete(`${scope}:${id}`);
-  });
-  db.close();
+  await Promise.all(
+    ids.map((id) =>
+      mutateBrowserDraft(`${scope}:${id}`, async () => {
+        const db = await database();
+        try {
+          await transaction(db, 'readwrite', (store) => {
+            store.delete(`${scope}:${id}`);
+          });
+        } finally {
+          db.close();
+        }
+      }),
+    ),
+  );
 }
 function requestValue<T>(request: IDBRequest): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
