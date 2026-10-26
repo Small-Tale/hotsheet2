@@ -2017,12 +2017,111 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     assert!(String::from_utf8_lossy(&offline.stderr).contains("start the web app"));
 }
 
+/// HS2-ZWBSH1: a Hot Sheet-launched terminal exports its session identity and the agent
+/// harness exports its own; a permission-hook child must see only what its fixture sets.
+const INHERITED_HOOK_SESSION_ENV: &[&str] = &[
+    "HOTSHEET_PERMISSION_PROJECT",
+    "HOTSHEET_PROJECT",
+    "HOTSHEET_SERVER",
+    "HOTSHEET_SECRET",
+    "HOTSHEET_TERMINAL_ID",
+    "HOTSHEET_AGENT",
+    "HOTSHEET_CLAUDE_PRETOOLUSE",
+    "HOTSHEET_CLAUDE_HEADLESS_AUTO",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_EXECPATH",
+    "AI_AGENT",
+];
+
+/// A `hotsheet-cli` child for permission-hook fixtures, without inherited session identity.
+/// Fixture-owned `.env(...)` calls after this still apply; toolchain and home settings stay.
+fn hook_cli() -> Command {
+    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    for name in INHERITED_HOOK_SESSION_ENV {
+        command.env_remove(name);
+    }
+    command
+}
+
+/// Every permission-hook fixture; HS2-ZWBSH1 reruns them under a poisoned session.
+const HOOK_TESTS: &[&str] = &[
+    "headless_claude_auto_denies_an_unanswered_native_permission_request",
+    "retained_permission_hook_uses_restarted_server_route",
+    "permission_hook_reports_interactive_question_lifecycle_to_terminal",
+    "permission_hook_returns_all_browser_answers_to_claude",
+    "permission_hook_reports_halted_and_resumed_sessions_to_its_terminal",
+    "permission_hook_reports_claude_turn_boundaries_without_prompt_content",
+    "permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection",
+    "claude_session_start_reports_its_inbox_socket_token_and_version",
+];
+
+#[test]
+fn hs2_zwbsh1_every_hook_fixture_uses_the_isolated_child() {
+    // A new permission-hook fixture must build its child with `hook_cli()` and join the
+    // poisoned-session rerun above, or a launched terminal can leak into it again.
+    let source = include_str!("cli.rs");
+    let mut found = Vec::new();
+    for chunk in source.split("\nfn ").skip(1) {
+        let name = chunk.split('(').next().unwrap();
+        let body = chunk.split("\n}\n").next().unwrap();
+        if body.contains(concat!("\"permission-hook\"", ", \"--agent\"")) {
+            assert!(
+                HOOK_TESTS.contains(&name),
+                "{name} is missing from HOOK_TESTS"
+            );
+            assert!(
+                !body.contains(concat!("Command::cargo_bin", "(\"hotsheet-cli\")")),
+                "{name} builds its hook child without hook_cli()"
+            );
+            found.push(name);
+        }
+    }
+    found.sort_unstable();
+    let mut expected = HOOK_TESTS.to_vec();
+    expected.sort_unstable();
+    assert_eq!(found, expected);
+}
+
+#[test]
+fn hs2_zwbsh1_hook_fixtures_ignore_a_poisoned_hot_sheet_session() {
+    // Reproduce a Hot Sheet-launched terminal: run every permission-hook fixture in a child
+    // of this test binary whose inherited environment carries a foreign session's identity.
+    // The parent test process's own environment is never changed.
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+    child
+        .args(["--exact", "--test-threads", "1"])
+        .args(HOOK_TESTS);
+    for name in INHERITED_HOOK_SESSION_ENV {
+        child.env(name, format!("poisoned-{}", name.to_ascii_lowercase()));
+    }
+    child
+        .env(
+            "HOTSHEET_PERMISSION_PROJECT",
+            "checkout:poisoned-session-123456",
+        )
+        .env("HOTSHEET_SERVER", "http://127.0.0.1:9")
+        .env("HOTSHEET_CLAUDE_HEADLESS_AUTO", "1")
+        .env("HOTSHEET_CLAUDE_PRETOOLUSE", "1");
+    let output = child.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "hook fixtures read the inherited session:\n{stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains(&format!("{} passed", HOOK_TESTS.len())),
+        "not every hook fixture ran:\n{stdout}"
+    );
+}
+
 #[test]
 fn headless_claude_auto_denies_an_unanswered_native_permission_request() {
     let home = tempfile::tempdir().unwrap();
     let input = r#"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"pwd"}}"#;
     for server in [None, Some("http://127.0.0.1:1")] {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = hook_cli();
         command
             .env("HOTSHEET_HOME", home.path())
             .env("HOTSHEET_CLAUDE_HEADLESS_AUTO", "1")
@@ -2041,8 +2140,7 @@ fn headless_claude_auto_denies_an_unanswered_native_permission_request() {
         assert_eq!(answer["hookSpecificOutput"]["decision"]["behavior"], "deny");
     }
 
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = hook_cli()
         .env("HOTSHEET_HOME", home.path())
         .env("HOTSHEET_CLAUDE_HEADLESS_AUTO", "1")
         .env_remove("HOTSHEET_PROJECT")
@@ -2143,8 +2241,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         )
         .unwrap();
     });
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = hook_cli()
         .env("HOTSHEET_HOME", &home)
         .env("HOTSHEET_PROJECT", &store)
         .env("HOTSHEET_SERVER", "http://127.0.0.1:1")
@@ -2227,8 +2324,7 @@ fn permission_hook_reports_interactive_question_lifecycle_to_terminal() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || capture_one_request(listener));
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        hook_cli()
             .env("HOTSHEET_HOME", home.path())
             .env_remove("HOTSHEET_PROJECT")
             .env("HOTSHEET_SERVER", &url)
@@ -2301,8 +2397,7 @@ fn permission_hook_returns_all_browser_answers_to_claude() {
         paths
     });
     let input = r#"{"hook_event_name":"PreToolUse","session_id":"s-1","tool_name":"AskUserQuestion","tool_use_id":"tool-1","tool_input":{"questions":[{"question":"First?"},{"question":"Second?","multiSelect":true}]}}"#;
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = hook_cli()
         .env("HOTSHEET_HOME", home.path())
         .env("HOTSHEET_SERVER", &url)
         .env("HOTSHEET_SECRET", "terminal-secret")
@@ -2340,7 +2435,7 @@ fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
     let hook = |listener: std::net::TcpListener, input: &'static str, terminal: Option<&str>| {
         let url = format!("http://{}", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || capture_one_request(listener));
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = hook_cli();
         command
             .env("HOTSHEET_HOME", home.path())
             .env_remove("HOTSHEET_PROJECT")
@@ -2395,8 +2490,7 @@ fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
     let quiet = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     quiet.set_nonblocking(true).unwrap();
     let url = format!("http://{}", quiet.local_addr().unwrap());
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    hook_cli()
         .env("HOTSHEET_HOME", home.path())
         .env_remove("HOTSHEET_PROJECT")
         .env_remove("HOTSHEET_TERMINAL_ID")
@@ -2430,8 +2524,7 @@ fn permission_hook_reports_claude_turn_boundaries_without_prompt_content() {
             "transcript_path": "/tmp/projects/fixture/native-session.jsonl",
             "prompt": "private prompt text"
         });
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        hook_cli()
             .env("HOTSHEET_HOME", home.path())
             .env("HOTSHEET_TERMINAL_ID", "claude-7")
             .env("HOTSHEET_SERVER", &url)
@@ -2468,7 +2561,7 @@ fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection(
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || capture_one_request(listener));
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = hook_cli();
         match codex_home {
             Some(path) => cmd.env("CODEX_HOME", path),
             None => cmd.env_remove("CODEX_HOME"),
@@ -2523,8 +2616,7 @@ fn claude_session_start_reports_its_inbox_socket_token_and_version() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let server = std::thread::spawn(move || capture_one_request(listener));
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    hook_cli()
         .env("HOTSHEET_HOME", home.path())
         .env_remove("HOTSHEET_PROJECT")
         .env("HOTSHEET_SERVER", &url)

@@ -686,6 +686,18 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
+- **Session-identity isolation (HS2-ZWBSH1):** the same launched shells also export their
+  session identity (`HOTSHEET_PERMISSION_PROJECT`, `HOTSHEET_PROJECT`, `HOTSHEET_SERVER`,
+  `HOTSHEET_SECRET`, `HOTSHEET_TERMINAL_ID`, `HOTSHEET_AGENT`) and the agent harness exports
+  its own (`CLAUDE_CODE_MESSAGING_*`, `CLAUDE_CODE_EXECPATH`, `AI_AGENT`). `.cargo/config.toml`
+  cannot remove a variable, and forcing an empty value would change the hook's fallbacks,
+  so permission-hook fixtures in `crates/hotsheet-cli/tests/cli.rs` build their child with
+  `hook_cli()`, which removes those variables before the fixture sets its own.
+  `hs2_zwbsh1_hook_fixtures_ignore_a_poisoned_hot_sheet_session` reruns every hook fixture in
+  a child test process with synthetic poisoned values (the parent environment never
+  changes), and `hs2_zwbsh1_every_hook_fixture_uses_the_isolated_child` fails when a new
+  hook fixture bypasses the helper or the rerun list. Toolchain and home settings stay
+  inherited.
 - **Local push gate (HS2-CD3D2T):** Run `scripts/install-git-hooks.sh` once per
   checkout, then `scripts/push.sh origin main` for each verified ticket commit.
   The checked-in pre-commit hook runs staged whitespace and format checks.
