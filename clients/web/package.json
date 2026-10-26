@@ -32,7 +32,7 @@
     "test:unit:fast": "vitest run --project unit",
     "test:e2e": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && playwright test",
     "test:ci:browser": "playwright test tests/providers.spec.ts --workers=2 --grep @ci-smoke",
-    "test:ci:webkit": "playwright test tests/providers.spec.ts --browser=webkit --workers=1 --grep @ci-webkit",
+    "test:ci:webkit": "playwright test tests/providers.spec.ts tests/native-prompt-replacements.spec.ts --browser=webkit --workers=1 --grep @ci-webkit",
     "test:performance": "HOTSHEET_WEB_PERFORMANCE_GATE=1 playwright test tests/providers.spec.ts --workers=1 -g 'projects Up Next immediately|projects a newly created ticket'",
     "test:real-world-performance": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && HOTSHEET_REAL_WORLD_PERFORMANCE=1 playwright test tests/providers.spec.ts --workers=1 -g 'real local Git board performance'",
     "profile:ui": "HOTSHEET_UI_PROFILE=1 playwright test tests/providers.spec.ts --workers=1 -g 'profiles mixed project'",

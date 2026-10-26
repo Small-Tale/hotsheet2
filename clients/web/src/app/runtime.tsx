@@ -48,6 +48,7 @@ import {
   saveAppRegionSize,
   terminalDrawerMinimum,
 } from '../app-region-resize';
+import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
@@ -939,6 +940,7 @@ export async function startHotSheetWebClient() {
   // The open attachment batch label editor lives in application state so a live rerender keeps it
   // open (HS2-SG0AZY).
   const attachmentLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
+  const attachmentFilenameEditing = signal<AttachmentFilenameEditing | undefined>(undefined);
 
   const editingNoteId = signal<string | undefined>(undefined),
     noteDraft = signal('');
@@ -997,6 +999,7 @@ export async function startHotSheetWebClient() {
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
+    commandGroupDialog,
     deleteCommandGroup,
     flushCommandAutosaves,
     commandRunFor,
@@ -1084,6 +1087,7 @@ export async function startHotSheetWebClient() {
     openManualModel,
     restoreCommandEditorAfterManualModel,
     aiLaunchConfiguration,
+    aiLaunchDialog,
     refreshAiConfiguration,
     saveAiDefaults,
     conversationAiSelection,
@@ -4332,6 +4336,7 @@ export async function startHotSheetWebClient() {
       api,
       attachmentContext,
       attachmentLabelEditing,
+      attachmentFilenameEditing,
       attachmentMessage,
       attachmentsEditableFor,
       blockedReasonDraft,
@@ -4380,6 +4385,7 @@ export async function startHotSheetWebClient() {
     attachmentContext,
     attachmentItems,
     attachmentLabelEditing,
+    attachmentFilenameEditing,
     attachmentMenuSurfaceProps,
     attachmentMessage,
     canAddNotes,
@@ -4670,6 +4676,7 @@ export async function startHotSheetWebClient() {
     hs1MigrationProject,
     loading,
     manualModelDialog,
+    aiLaunchDialog: aiLaunchDialog.state,
     newTicketSource,
     notWorkingError,
     notWorkingFiles,
@@ -5180,8 +5187,10 @@ export async function startHotSheetWebClient() {
     commandIconSearch,
     addCommandSetting,
     manualModelDialog,
+    aiLaunchDialog,
     deleteCommandSetting,
     addCommandGroup,
+    commandGroupDialog,
     deleteCommandGroup,
     selectCommandRow,
     commandSelection,
@@ -5303,6 +5312,7 @@ export async function startHotSheetWebClient() {
     api,
     attachmentMessage,
     attachmentLabelEditing,
+    attachmentFilenameEditing,
     refreshProject,
     galleryImages,
     resetAttachmentGallery,

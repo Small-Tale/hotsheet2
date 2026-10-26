@@ -10,6 +10,8 @@ import {
   type MediaAnnotation,
   type TicketRow,
 } from '../api';
+import { type AttachmentFilenameEditing, createAttachmentFilenameEditor } from '../attachment-filename-editing';
+import { wireAttachmentFilenameEditor } from '../attachment-filename-interactions';
 import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
 import { attachmentOwnerTarget } from '../attachment-owner';
 import { browserRandomId } from '../browser-id';
@@ -54,6 +56,7 @@ import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
+import { INPUT_DIALOG_TARGETS } from '../interaction-attrs/input-dialogs';
 import { ticketDraftKey } from '../ticket-draft-store';
 import { reconcileTicketReaderFrame, type TicketReaderFrame } from '../ticket-reader-stack';
 import { data } from './dom';
@@ -88,6 +91,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentMessage: Signal<string>;
   /** The open batch label editor, owned by application state (HS2-SG0AZY). */
   readonly attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  readonly attachmentFilenameEditing: Signal<AttachmentFilenameEditing | undefined>;
   readonly showToast: (message: string) => void;
   readonly refreshProject: ({ showLoading }?: { showLoading?: boolean }) => Promise<void>;
   readonly galleryImages: (ticket?: FullTicket | null, project?: Project) => AttachmentGalleryImage[];
@@ -163,6 +167,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     api,
     attachmentMessage,
     attachmentLabelEditing,
+    attachmentFilenameEditing,
     showToast,
     refreshProject,
     galleryImages,
@@ -319,6 +324,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   // edit drafts, merges, and saves against that frame's own ticket (HS2-W8VEMP).
   const scopeFrame = (scope?: string) =>
     scope && linkedReaderStack.value.some((item) => item.id === scope) ? scope : undefined;
+  const filenameEditor = createAttachmentFilenameEditor(attachmentFilenameEditing);
+  lifetime.add(wireAttachmentFilenameEditor(document.body, filenameEditor));
   const labelEditor = createAttachmentLabelEditor({
     editing: attachmentLabelEditing,
     draftKey: (batchKey) => {
@@ -341,6 +348,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   });
   const flushLabelOnHide = () => {
     void labelEditor.flush();
+    void filenameEditor.finish();
   };
   document.defaultView?.addEventListener('pagehide', flushLabelOnHide, { signal: lifetime.signal });
   document.addEventListener(
@@ -574,19 +582,40 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           return;
         }
         if (action === 'rename') {
-          const owner = attachmentOwner(menuFrameId(menu) || undefined),
-            filename = window.prompt('Attachment filename', menu.name);
-          if (owner?.canEdit && menu.id && filename?.trim())
-            void owner.client
-              .renameCheckoutAttachment(owner.projectId, owner.ticket.qualified_id, menu.id, filename.trim())
-              .then((result) => {
+          const owner = attachmentOwner(menuFrameId(menu) || undefined);
+          if (!owner?.canEdit || !menu.id) return;
+          const id = menu.id;
+          filenameEditor.begin(
+            { scope: menu.reader ?? 'inspector', ticketKey: owner.ticket.qualified_id, id, original: menu.name },
+            ticketDraftKey(owner.projectId, owner.ticket.qualified_id, 'attachment_filename', id),
+            async (filename) => {
+              const result = await owner.client.renameCheckoutAttachment(
+                owner.projectId,
+                owner.ticket.qualified_id,
+                id,
+                filename,
+              );
+              // A completed request must not replace a newly selected ticket.
+              if (
+                owner.frameId ||
+                (project()?.id === owner.projectId && selectedTicket.value?.qualified_id === owner.ticket.qualified_id)
+              )
                 owner.setTicket(result.ticket);
-                showToast('Attachment renamed.');
-                return owner.refresh();
-              })
-              .catch((reason: unknown) => {
-                error.value = reason instanceof Error ? reason.message : String(reason);
-              });
+              showToast('Attachment renamed.');
+              await owner.refresh();
+            },
+          );
+          requestAnimationFrame(() => {
+            const field = Array.from(
+              document.querySelectorAll<HTMLInputElement>(INPUT_DIALOG_TARGETS.filename.selector),
+            ).find(
+              (input) =>
+                input.closest<HTMLElement>('[data-attachment-id]')?.dataset.attachmentId === id &&
+                !input.closest('[hidden]'),
+            );
+            field?.focus();
+            field?.select();
+          });
           return;
         }
         if (action === 'remove') {

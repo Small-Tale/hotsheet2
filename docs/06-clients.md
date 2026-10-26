@@ -741,7 +741,10 @@ preview/download, server directory browser) are separate design work.
   outcome, and press-and-hold output history. Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the
-  primary editing interface. Each project keeps its own pending save, and hiding or unloading
+  primary editing interface. Add group opens an in-app New Command Group dialog with a blank
+  controlled name, explicit Create Group submission, Cancel/Escape, and retained empty/duplicate
+  validation (HS2-WMZ6Z5). Creation keeps the opening project as its destination.
+  Each project keeps its own pending save, and hiding or unloading
   the page flushes every pending one with a `keepalive` write to preserve an edit made just
   before a reload or tab close (HS2-25HAK3). The browser keeps an increasing command write
   sequence in session storage across reloads; the server rejects an older write from that editor
@@ -2026,7 +2029,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   separate handle glyph). Preview drags use the existing attachment identity and never fall
   through to the upload path or create a copied attachment; only
   the current group target receives a focus outline, and a New group target appears while a
-  file is being dragged. The item menu also exposes rename. The presentation remains usable at
+  file is being dragged. The item menu exposes Rename, which opens an inline filename editor
+  in the owning attachment row (HS2-WMZ6Z5). Typing updates controlled state and a 150 ms local
+  recovery copy; blur, Enter, or page hide finishes the edit. Escape restores the original, and
+  blank/unchanged names send no mutation. Failed writes retain the draft and error for another
+  finish attempt. The destination remains the captured project, qualified ticket, attachment,
+  and reader scope. The presentation remains usable at
   narrow widths without turning purpose tags into full-width fields.
 
   Notes resolve `attachment:filename` and cross-ticket
@@ -3251,8 +3259,14 @@ PopupMenu owns that recovery since 5.0.0-beta.64 (`KF-A388BJ`), so the client ca
 race workaround (HS2-ZKMCVW).
 The rail and terminal inset
 use Kerf's canonical 8 px within-group rhythm, and the tab-strip focus gutter and icon-label clusters
-use 4 px (HS2-4Y6SM9). Option/Alt on either AI choice prompts for a
-plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed
+use 4 px (HS2-4Y6SM9). Option/Alt on either AI choice opens one in-app launch dialog
+for a plugin-discovered provider, exact model identifier, and compatible effort (HS2-WMZ6Z5).
+Cancel, Escape, or closing aborts the whole launch without issuing a command; the former staged
+prompts could accidentally launch with defaults after canceling a later prompt, and that
+partial-cancel behavior is intentionally retired. Blank model and Provider Default effort use the
+chosen provider defaults; effort choices contain only declared compatible levels and disable
+for an unlisted or no-effort model; an unknown provider remains editable with inline validation. The dialog does not
+change project defaults. AI shells use the real plugin-backed
 `connect` launch path rather than treating the provider id as a shell command. A dedicated
 xterm viewport receives focus as soon as it
 mounts, allowing immediate typing without an extra click; this is a one-shot request that

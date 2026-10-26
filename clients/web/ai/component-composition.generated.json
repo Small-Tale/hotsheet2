@@ -363,6 +363,74 @@
       }
     },
     {
+      "key": "hotsheet-web:ai-launch-dialog",
+      "package": "hotsheet-web",
+      "id": "ai-launch-dialog",
+      "name": "AiLaunchDialog",
+      "kind": "component",
+      "purpose": "Configure one AI terminal or chat launch without changing saved defaults; Cancel aborts the entire launch.",
+      "publicExports": [
+        {
+          "name": "AiLaunchDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ai-launch-dialog.tsx"
+      ],
+      "source": "src/components/ai-launch-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ai-launch-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ai-launch-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-launch-dialog.tsx",
+        "composition": "src/components/ai-launch-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ai-tool-settings",
       "package": "hotsheet-web",
       "id": "ai-tool-settings",
@@ -699,6 +767,78 @@
       "provenance": {
         "selection": "src/components/app-shell.tsx",
         "composition": "src/components/app-shell.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:attachment-filename-editor",
+      "package": "hotsheet-web",
+      "id": "attachment-filename-editor",
+      "name": "AttachmentFilenameEditor",
+      "kind": "component",
+      "purpose": "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state.",
+      "publicExports": [
+        {
+          "name": "AttachmentFilenameEditor"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/attachment-filename-editor.tsx",
+        "src/components/attachment-filename-editor.css"
+      ],
+      "source": "src/components/attachment-filename-editor.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The app-owned hidden wrapper retains editor DOM identity and fills the filename flex slot; Kerf TextField owns all field chrome and insets."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": "attachment-filename-editor",
+        "publicClasses": [
+          "attachment-filename-editor"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "attachment-filename-editor"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/attachment-filename-editor.tsx",
+        "composition": "src/components/attachment-filename-editor.tsx"
       }
     },
     {
@@ -1039,6 +1179,74 @@
       "provenance": {
         "selection": "src/components/codex-hooks-notice-banner.tsx",
         "composition": "src/components/codex-hooks-notice-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:command-group-dialog",
+      "package": "hotsheet-web",
+      "id": "command-group-dialog",
+      "name": "CommandGroupDialog",
+      "kind": "component",
+      "purpose": "Create a named command group with controlled input and inline validation.",
+      "publicExports": [
+        {
+          "name": "CommandGroupDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/command-group-dialog.tsx"
+      ],
+      "source": "src/components/command-group-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "command-group-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "command-group-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-group-dialog.tsx",
+        "composition": "src/components/command-group-dialog.tsx"
       }
     },
     {

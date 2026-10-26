@@ -6605,10 +6605,6 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
       (window as unknown as { __drawerAILaunch?: unknown }).__drawerAILaunch = (event as CustomEvent).detail;
     });
   });
-  const answers = ['claude', 'claude-sonnet'];
-  page.on('dialog', async (dialog) => {
-    await dialog.accept(answers.shift() ?? '');
-  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -6661,6 +6657,10 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await menu.getByText('AI Chat').click({ modifiers: ['Alt'] });
+  const launch = page.getByRole('dialog', { name: 'New AI Chat' });
+  await launch.getByRole('textbox', { name: 'AI Provider' }).fill('claude');
+  await launch.getByRole('textbox', { name: 'Model', exact: true }).fill('claude-sonnet');
+  await launch.getByRole('button', { name: 'Create Chat' }).click();
   await expect(region).not.toHaveCSS('overflow', 'visible');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Claude chat' })).toHaveAttribute('aria-selected', 'true');
@@ -14719,7 +14719,6 @@ test('keeps an empty command group across reloads, populating, and emptying it (
     if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/command-groups'))
       groupWrites.push(request.postDataJSON());
   });
-  page.on('dialog', (dialog) => void dialog.accept('Ideas'));
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
@@ -14739,6 +14738,11 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await openCommandSettings();
   // 1. Add an empty group: it renders with its drop placeholder and delete action, and saves at once.
   await page.getByRole('button', { name: 'Add group…', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'New Command Group' })
+    .getByRole('textbox', { name: 'Group Name' })
+    .fill('Ideas');
+  await page.getByRole('dialog', { name: 'New Command Group' }).getByRole('button', { name: 'Create Group' }).click();
   await expect(ideas.locator('.command-settings-editor__group-empty')).toHaveText('Drag commands here');
   await expect(ideas.getByRole('button', { name: 'Delete empty group Ideas' })).toBeVisible();
   // The delete is the Kerf ListHeader action, with Kerf-owned geometry (HS2-7BBRJT).
@@ -14839,7 +14843,6 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
       });
       await route.fulfill({ response });
     });
-    page.on('dialog', (dialog) => void dialog.accept('Ideas'));
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
@@ -14855,6 +14858,11 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     await openCommandSettings();
     await expect(editor.getByText('No custom commands yet.')).toBeVisible();
     await page.getByRole('button', { name: 'Add group…', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'New Command Group' })
+      .getByRole('textbox', { name: 'Group Name' })
+      .fill('Ideas');
+    await page.getByRole('dialog', { name: 'New Command Group' }).getByRole('button', { name: 'Create Group' }).click();
     await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
     await expect.poll(storedGroups).toEqual(['Ideas']);
     await page.reload();

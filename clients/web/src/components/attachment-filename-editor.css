@@ -1,0 +1,6 @@
+/* HS2-WMZ6Z5: the app-owned hidden editor wrapper keeps its DOM identity while
+   filling the filename's flex slot; TextField retains its own chrome and insets. */
+.attachment-filename-editor {
+  flex: 1;
+  min-inline-size: 0;
+}

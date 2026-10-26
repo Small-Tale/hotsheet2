@@ -31,6 +31,7 @@ import {
 
 import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, DuplicateBacklink, ProviderOutboxOperation, StartedPhase, TicketCloseReason } from '../api';
+import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -119,6 +120,7 @@ export interface TicketInspectorProps {
   attachmentLabelEditing?: string;
   /** The controlled draft of that open label editor (HS2-0QQHSZ). */
   attachmentLabelDraft?: string;
+  attachmentFilenameEdit?: AttachmentFilenameEditing;
   attachmentContext?: AttachmentReferenceContext;
   notes?: readonly NoteCardProps[];
   editingNoteId?: string;
@@ -204,6 +206,7 @@ export function ticketInspectorPanel({
   attachmentMessage = '',
   attachmentLabelEditing,
   attachmentLabelDraft,
+  attachmentFilenameEdit,
   attachmentContext,
   notes,
   editingNoteId,
@@ -586,6 +589,7 @@ export function ticketInspectorPanel({
           message={attachmentMessage}
           editingLabelBatch={attachmentLabelEditing}
           editingLabelDraft={attachmentLabelDraft}
+          filenameEdit={attachmentFilenameEdit}
           presentation={presentation}
         />
       )}

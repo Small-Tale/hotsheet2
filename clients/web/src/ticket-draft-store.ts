@@ -17,7 +17,8 @@ export interface StoredTicketDraft {
 const PREFIX = 'hotsheet.ticket-draft:';
 
 /** `attachment_label` keys an attachment batch label by its batch key (HS2-0QQHSZ). */
-export type TicketDraftField = 'details' | 'title' | 'blocked_reason' | 'note' | 'attachment_label';
+export type TicketDraftField =
+  'details' | 'title' | 'blocked_reason' | 'note' | 'attachment_label' | 'attachment_filename';
 
 export function ticketDraftKey(
   projectId: string,

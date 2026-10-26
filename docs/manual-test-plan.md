@@ -676,3 +676,7 @@ then stage another and create the ticket; verify exact attachment bytes and meta
 Inspect wide, medium and narrow, including wide-to-narrow-to-wide, while staged and after
 creation. Existing Blob/File recovery records remain readable without clearing IndexedDB;
 unreadable records remain visible/removable and block submission until recovered or removed.
+
+### In-app prompt replacements (HS2-WMZ6Z5)
+
+In the packaged Tauri application, rename an attachment from its item menu in the inspector and modal reader. Verify Enter/blur finish, Escape cancellation, blank/no-change behavior, failure retention and a later edit. Create and cancel a command group in project settings, including a duplicate name. Option/Alt-click an AI drawer choice; verify initial values, unknown-provider validation, blank model and Provider Default effort, effort-select reset and unsupported-model disable, and that Cancel/Escape starts nothing. Run an explicitly chosen real provider only in an authorized native smoke session. Check keyboard focus and wide/medium/phone/wide transitions. No browser-native prompt should open.

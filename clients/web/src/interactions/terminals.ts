@@ -115,7 +115,7 @@ export interface TerminalInteractionsDependencies {
     kind: 'ai-shell' | 'ai-chat',
     customize: boolean,
     provider?: string,
-  ) => AiToolDefaults | undefined;
+  ) => Promise<AiToolDefaults | undefined>;
   readonly createDrawerAIChat: (
     selection: AiToolDefaults,
     options?: { connectionId?: string; drive?: boolean },
@@ -771,10 +771,11 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         void createProjectTerminal();
         return;
       }
-      const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey, data(target).provider);
-      if (!configuration) return;
-      if (kind === 'ai-shell') void createProjectTerminal(configuration);
-      else void createDrawerAIChat(configuration);
+      void aiLaunchConfiguration(kind, (event as MouseEvent).altKey, data(target).provider).then((configuration) => {
+        if (!configuration) return;
+        if (kind === 'ai-shell') void createProjectTerminal(configuration);
+        else void createDrawerAIChat(configuration);
+      });
     }),
   );
   lifetime.add(

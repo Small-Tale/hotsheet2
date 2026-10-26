@@ -17,8 +17,10 @@ import { TextField } from '@kerfjs/ui/text-field';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
 import type { AttachmentActor, AttachmentPurpose } from '../api';
+import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { isGalleryMediaAttachment, isVideoAttachment } from '../attachment-references';
 import { ATTACHMENTS_AND_GALLERY_ACTIONS } from '../interaction-attrs/attachments-and-gallery';
+import { AttachmentFilenameEditor } from './attachment-filename-editor';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketAttachmentItem {
@@ -141,6 +143,7 @@ export function TicketAttachments({
   presentation = 'sidebar',
   editingLabelBatch,
   editingLabelDraft,
+  filenameEdit,
 }: {
   attachments?: readonly TicketAttachmentItem[];
   /** New files can be added (the provider reports `attachments`). */
@@ -170,6 +173,7 @@ export function TicketAttachments({
    * rerender keeps what the user typed. Defaults to the batch's stored label.
    */
   editingLabelDraft?: string;
+  filenameEdit?: AttachmentFilenameEditing;
 }) {
   const manageable = enabled && editable;
   /** Rows carry the attachment menu: every editable row, and a delete-only provider's rows. */
@@ -291,8 +295,10 @@ export function TicketAttachments({
                     // row chrome (HS2-K9HSXZ).
                     <div
                       class="ticket-attachments__item"
-                      draggable={manageable ? 'true' : undefined}
-                      data-drag-attachment-id={manageable ? attachment.id : undefined}
+                      draggable={manageable && filenameEdit?.id !== attachment.id ? 'true' : undefined}
+                      data-drag-attachment-id={
+                        manageable && filenameEdit?.id !== attachment.id ? attachment.id : undefined
+                      }
                       data-component="ticket-attachment-item"
                       data-action={manageable ? 'open-attachment-row' : undefined}
                       data-attachment-id={attachment.id}
@@ -305,7 +311,11 @@ export function TicketAttachments({
                         <Row vAlign="middle" gap="xs">
                           <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                           <Row flex={flex(1, 1, px(0))}>
-                            {manageable || !attachment.url ? (
+                            <AttachmentFilenameEditor
+                              edit={manageable && filenameEdit?.id === attachment.id ? filenameEdit : undefined}
+                              name={attachment.name}
+                            />
+                            {filenameEdit?.id === attachment.id && manageable ? null : manageable || !attachment.url ? (
                               <Text
                                 variant="span"
                                 size="compact"

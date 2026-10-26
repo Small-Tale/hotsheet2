@@ -118,6 +118,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ai-launch-dialog",
+      "name": "AiLaunchDialog",
+      "kind": "component",
+      "purpose": "Configure one AI terminal or chat launch without changing saved defaults; Cancel aborts the entire launch.",
+      "useWhen": [
+        "Configure one AI terminal or chat launch without changing saved defaults; Cancel aborts the entire launch."
+      ],
+      "avoidWhen": [
+        "The interaction does not need AiLaunchDialog domain behavior."
+      ],
+      "publicClasses": [
+        "ai-launch-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ai-launch-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ai-tool-settings",
       "name": "AiToolSettings",
       "kind": "component",
@@ -234,6 +257,32 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "attachment-filename-editor",
+      "name": "AttachmentFilenameEditor",
+      "kind": "component",
+      "purpose": "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state.",
+      "useWhen": [
+        "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state."
+      ],
+      "avoidWhen": [
+        "The interaction does not need AttachmentFilenameEditor domain behavior."
+      ],
+      "publicClasses": [
+        "attachment-filename-editor"
+      ],
+      "publicTokens": [],
+      "source": "src/components/attachment-filename-editor.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The app-owned hidden wrapper retains editor DOM identity and fills the filename flex slot; Kerf TextField owns all field chrome and insets."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "attachment-gallery",
       "name": "AttachmentGallery",
       "kind": "component",
@@ -339,6 +388,29 @@
       ],
       "publicTokens": [],
       "source": "src/components/codex-hooks-notice-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "command-group-dialog",
+      "name": "CommandGroupDialog",
+      "kind": "component",
+      "purpose": "Create a named command group with controlled input and inline validation.",
+      "useWhen": [
+        "Create a named command group with controlled input and inline validation."
+      ],
+      "avoidWhen": [
+        "The interaction does not need CommandGroupDialog domain behavior."
+      ],
+      "publicClasses": [
+        "command-group-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/command-group-dialog.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",

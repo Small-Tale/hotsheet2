@@ -2,6 +2,7 @@ import type { Signal } from 'kerfjs';
 
 import { phaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, FullTicket, TicketRow as WireTicketRow } from '../api';
+import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import {
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
@@ -34,6 +35,7 @@ export interface ReaderLayersSurfaceDependencies {
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
   attachmentItems: ReturnType<typeof createInspectorSurface>['attachmentItems'];
   attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  attachmentFilenameEditing?: Signal<AttachmentFilenameEditing | undefined>;
   attachmentMenuSurfaceProps: ({
     insideGallery,
     readerScope,
@@ -124,6 +126,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     attachmentContext,
     attachmentItems,
     attachmentLabelEditing,
+    attachmentFilenameEditing,
     attachmentMenuSurfaceProps,
     attachmentMessage,
     canAddNotes,
@@ -281,6 +284,12 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
             : editable && canRemoveAttachments()
         }
         attachmentMessage={editable || (frame && active) ? attachmentMessage.value : ''}
+        attachmentFilenameEdit={
+          attachmentFilenameEditing?.value?.scope === readerScope &&
+          attachmentFilenameEditing.value.ticketKey === ticket.qualified_id
+            ? attachmentFilenameEditing.value
+            : undefined
+        }
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
         attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
         largeText={readerLargeText.value}

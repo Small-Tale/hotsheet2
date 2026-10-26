@@ -34,11 +34,18 @@ describe('web ESLint policy', () => {
       }
     };
     scan(import.meta.dirname);
-    expect(prompts).toEqual({
-      'features/ai-configuration.tsx': 3,
-      'features/commands.tsx': 1,
-      'interactions/attachments-and-gallery.ts': 1,
-    });
+    expect(prompts).toEqual({});
+  });
+
+  it('HS2-WMZ6Z5 runs all replacement-parent flows in the required WebKit route', () => {
+    const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const script = packageSource.match(/"test:ci:webkit": "([^"]+)"/)?.[1];
+    expect(script).toContain('tests/providers.spec.ts');
+    expect(script).toContain('tests/native-prompt-replacements.spec.ts');
+    expect(script).toContain('--browser=webkit');
+    expect(script).toContain('--grep @ci-webkit');
+    const flows = readFileSync(new URL('../tests/native-prompt-replacements.spec.ts', import.meta.url), 'utf8');
+    expect(flows.match(/@ci-smoke @ci-webkit/g)).toHaveLength(3);
   });
 
   it('HS2-WM3SBV ignores generated web target files globally', () => {

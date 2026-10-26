@@ -2,6 +2,7 @@ import { wireContentItems } from '@kerfjs/ui/wire-content-items';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import type { createAiLaunchDialog } from '../ai-launch-dialog';
 import {
   type AiToolDefaults,
   type AiToolDescriptor,
@@ -14,6 +15,7 @@ import {
   type GuidanceRecommendationDecision,
   type ProviderConnection,
 } from '../api';
+import type { createCommandGroupDialog } from '../command-group-dialog';
 import { type CommandDropTarget } from '../command-order';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
@@ -34,6 +36,7 @@ import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
+import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -147,6 +150,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly commandSettingsEditingId: Signal<string | undefined>;
   readonly commandIconSearch: Signal<string>;
   readonly addCommandSetting: (projectId: string) => string;
+  readonly aiLaunchDialog: ReturnType<typeof createAiLaunchDialog>;
+  readonly commandGroupDialog: ReturnType<typeof createCommandGroupDialog>;
   readonly manualModelDialog: Signal<ManualModelDialogState | undefined>;
   readonly deleteCommandSetting: (projectId: string, id: string) => void;
   readonly addCommandGroup: (projectId: string) => void;
@@ -229,6 +234,9 @@ export interface CommandAndAiInteractionsDependencies {
 /** Register this group only when the application wiring owner invokes it. */
 export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteractionsDependencies) {
   const lifetime = createScope();
+  lifetime.add(
+    wireInputDialogs(document.body, { ai: dependencies.aiLaunchDialog, group: dependencies.commandGroupDialog }),
+  );
   const {
     commandGroupExpanded,
     persistWorkspacePreferences,

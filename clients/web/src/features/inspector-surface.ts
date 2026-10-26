@@ -10,6 +10,7 @@ import type {
   ProviderOutboxOperation,
   TicketRow as WireTicketRow,
 } from '../api';
+import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { attachmentRoundNumbers } from '../attachment-grouping';
 import {
   type AttachmentLabelEditing,
@@ -38,6 +39,7 @@ export interface InspectorSurfaceDependencies {
   api: () => Api;
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
   attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
+  attachmentFilenameEditing?: Signal<AttachmentFilenameEditing | undefined>;
   attachmentMessage: Signal<string>;
   attachmentsEditableFor: (connectionId: string) => boolean;
   blockedReasonDraft: Signal<string>;
@@ -117,6 +119,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     api,
     attachmentContext,
     attachmentLabelEditing,
+    attachmentFilenameEditing,
     attachmentMessage,
     attachmentsEditableFor,
     blockedReasonDraft,
@@ -273,6 +276,11 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       attachmentsEditable: canEditAttachments(),
       attachmentsRemovable: canRemoveAttachments(),
       attachmentMessage: attachmentMessage.value,
+      attachmentFilenameEdit:
+        attachmentFilenameEditing?.value?.scope === INSPECTOR_ATTACHMENT_LABEL_SCOPE &&
+        attachmentFilenameEditing.value.ticketKey === ticket.qualified_id
+          ? attachmentFilenameEditing.value
+          : undefined,
       attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       attachmentLabelDraft: attachmentLabelEditingDraft(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       fieldConflict: readerOpen.value ? undefined : fieldConflict.value,

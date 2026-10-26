@@ -18,6 +18,7 @@ import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector
 import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as haltedSession } from './halted-session-demo';
+import { demoModule as inputDialogs } from './input-dialogs-demo';
 import { demoModule as list } from './list-demo';
 import { demoModule as listHeader } from './list-header-demo';
 import { demoModule as listItem } from './list-item-demo';
@@ -64,6 +65,7 @@ export const demoModules: readonly DemoModule[] = [
   dialogLayout,
   terminalComponents,
   appDialogs,
+  inputDialogs,
   terminalVisibility,
   contentTransition,
   repositoryStatus,

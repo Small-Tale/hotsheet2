@@ -170,14 +170,17 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     });
     owner.commandDefinitions.value = [command('one')];
     owner.setCommandSettingsDraft('a', JSON.stringify([command('one')]));
-    vi.stubGlobal('window', { prompt: () => ' Ideas ' });
     owner.addCommandGroup('a');
+    owner.commandGroupDialog.input(' Ideas ');
+    owner.commandGroupDialog.submit();
     await vi.advanceTimersByTimeAsync(0);
     expect(owner.commandSettingsExtraGroups('a')).toEqual(['Ideas']);
     expect(groupSaves).toEqual([['Ideas']]);
     // A duplicate name is rejected without another save.
     owner.addCommandGroup('a');
-    expect(owner.commandSettingsMessage('a')).toBe('A group named "Ideas" already exists.');
+    owner.commandGroupDialog.input(' Ideas ');
+    owner.commandGroupDialog.submit();
+    expect(owner.commandGroupDialog.state.value?.message).toBe('A group named "Ideas" already exists.');
     expect(groupSaves).toHaveLength(1);
     // Reload: the server's kept groups replace the in-memory list.
     owner.commandSettingsExtraGroupsByProject.value = {};
@@ -216,11 +219,84 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.commandSettingsMessage('a')).toBe('offline');
     // A group edit for a project that is no longer open is kept locally without a request.
     const requests = fetchMock.mock.calls.length;
-    vi.stubGlobal('window', { prompt: () => 'Later' });
     owner.addCommandGroup('closed');
+    owner.commandGroupDialog.input('Later');
+    owner.commandGroupDialog.submit();
     await vi.advanceTimersByTimeAsync(0);
     expect(owner.commandSettingsExtraGroups('closed')).toEqual(['Later']);
     expect(fetchMock).toHaveBeenCalledTimes(requests);
+  });
+
+  it('HS2-WMZ6Z5 clears only the current group error after retry and preserves unrelated/project messages', async () => {
+    const projects = signal([project('a'), project('b')]);
+    const owner = createCommandsController({
+      projects,
+      selectedProjectId: signal('a'),
+      storedWorkspacePreferences: DEFAULT_WORKSPACE_PREFERENCES,
+    });
+    const add = (name: string) => {
+      owner.addCommandGroup('a');
+      owner.commandGroupDialog.input(name);
+      owner.commandGroupDialog.submit();
+    };
+    fetchMock.mockRejectedValueOnce(new Error('group offline'));
+    add('First');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('group offline');
+    const held = deferred<Response>();
+    fetchMock.mockReturnValueOnce(held.promise);
+    add('Second');
+    await vi.advanceTimersByTimeAsync(0);
+    owner.setCommandSettingsMessage('a', 'newer unrelated error');
+    // Even identical text is a newer owner; comparing only strings would wrongly clear it.
+    owner.setCommandSettingsMessage('a', 'group offline');
+    owner.setCommandSettingsMessage('b', 'other project error');
+    held.resolve(json(['First', 'Second']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('group offline');
+    expect(owner.commandSettingsMessage('b')).toBe('other project error');
+    fetchMock.mockRejectedValueOnce(new Error('later group failure'));
+    add('Third');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('later group failure');
+    const earlier = deferred<Response>(),
+      latest = deferred<Response>();
+    fetchMock.mockReturnValueOnce(earlier.promise).mockReturnValueOnce(latest.promise);
+    add('Fourth');
+    await vi.advanceTimersByTimeAsync(0);
+    add('Fifth');
+    earlier.resolve(json(['First', 'Second', 'Third', 'Fourth']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('later group failure');
+    latest.resolve(json(['First', 'Second', 'Third', 'Fourth', 'Fifth']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('');
+    expect(owner.commandSettingsMessage('b')).toBe('other project error');
+  });
+
+  it('HS2-WMZ6Z5 does not clear a group error after its project path is replaced', async () => {
+    const projects = signal([project('a')]);
+    const owner = createCommandsController({
+      projects,
+      selectedProjectId: signal('a'),
+      storedWorkspacePreferences: DEFAULT_WORKSPACE_PREFERENCES,
+    });
+    const add = (name: string) => {
+      owner.addCommandGroup('a');
+      owner.commandGroupDialog.input(name);
+      owner.commandGroupDialog.submit();
+    };
+    fetchMock.mockRejectedValueOnce(new Error('owned group failure'));
+    add('First');
+    await vi.advanceTimersByTimeAsync(0);
+    const held = deferred<Response>();
+    fetchMock.mockReturnValueOnce(held.promise);
+    add('Second');
+    await vi.advanceTimersByTimeAsync(0);
+    projects.value = [{ ...project('a'), apiPath: '/replacement' }];
+    held.resolve(json(['First', 'Second']));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('owned group failure');
   });
 
   it('rejects stale repository pages after project replacement and permits reset/empty/refill pagination', async () => {
@@ -1697,6 +1773,25 @@ function chatOwners() {
 }
 
 describe('conversation feature transitions (HS2-DHYGXJ)', () => {
+  it('HS2-WMZ6Z5 cancels a whole launch, normalizes provider defaults, and refuses a retargeted project', async () => {
+    const state = chatOwners();
+    const plain = await state.ai.aiLaunchConfiguration('ai-shell', false);
+    expect(plain?.tool).toBe('codex');
+    const cancelled = state.ai.aiLaunchConfiguration('ai-chat', true);
+    state.ai.aiLaunchDialog.cancel();
+    expect(await cancelled).toBeUndefined();
+    const launch = state.ai.aiLaunchConfiguration('ai-shell', true);
+    state.ai.aiLaunchDialog.input('model', 'fast');
+    state.ai.aiLaunchDialog.input('effort', 'unsupported');
+    state.ai.aiLaunchDialog.submit();
+    expect(await launch).toMatchObject({ tool: 'codex', model: 'fast', effort: 'low' });
+    const stale = state.ai.aiLaunchConfiguration('ai-shell', true);
+    state.active.value = project('b');
+    state.ai.aiLaunchDialog.submit();
+    expect(await stale).toBeUndefined();
+    expect(state.ai.aiLaunchDialog.state.value).toBeUndefined();
+  });
+
   it('projects replacement model/effort state into selections, drawer chats and live connections', () => {
     const state = chatOwners();
     expect(state.ai.conversationAiSelection('chat-a')).toMatchObject({ model: 'slow', effort: 'high' });

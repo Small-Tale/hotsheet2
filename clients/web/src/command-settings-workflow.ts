@@ -168,6 +168,9 @@ export interface CommandSettingsSavePort {
   setMessage(projectId: string, message: string): void;
   commandSaved(projectId: string, definitions: CommandDefinition[]): void;
   groupsLoaded(projectId: string, groups: readonly string[]): void;
+  /** HS2-WMZ6Z5: only the current group save publishes an outcome to its message owner. */
+  groupsSaved?(projectId: string): void;
+  groupsFailed?(projectId: string): void;
   nextWriteOrder?(): { session: string; sequence: number };
   saveCommands(
     path: string,
@@ -284,9 +287,13 @@ export class CommandSettingsSaves {
     this.groupTail.set(projectId, task);
     try {
       await task;
-    } catch (reason) {
       if (this.port.projectPath(projectId) === path && this.groupGenerations.get(projectId) === generation)
+        this.port.groupsSaved?.(projectId);
+    } catch (reason) {
+      if (this.port.projectPath(projectId) === path && this.groupGenerations.get(projectId) === generation) {
         this.saveError(projectId, reason);
+        this.port.groupsFailed?.(projectId);
+      }
     } finally {
       const remaining = (this.groupPending.get(projectId) ?? 1) - 1;
       if (remaining > 0) this.groupPending.set(projectId, remaining);

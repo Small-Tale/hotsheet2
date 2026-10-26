@@ -2,6 +2,7 @@ import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import type { Signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import type { AiLaunchDialogState } from '../ai-launch-dialog';
 import type {
   Checkout,
   CorruptTicket,
@@ -12,6 +13,7 @@ import type {
 } from '../api';
 import { type BulkUpdateProgress } from '../bulk-update-progress';
 import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
+import { AiLaunchDialog } from '../components/ai-launch-dialog';
 import { AppError } from '../components/app-error';
 import { AppLoadingIndicator } from '../components/app-loading-indicator';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -123,6 +125,7 @@ export interface HotSheetAppDependencies {
   hs1MigrationProject: Signal<Project | undefined>;
   loading: Signal<boolean>;
   manualModelDialog: Signal<ManualModelDialogState | undefined>;
+  aiLaunchDialog: Signal<AiLaunchDialogState | undefined>;
   newTicketSource: () => TicketSourceChoice | undefined;
   notWorkingError: Signal<string>;
   notWorkingFiles: Signal<PendingEvidence[]>;
@@ -258,6 +261,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     hs1MigrationProject,
     loading,
     manualModelDialog,
+    aiLaunchDialog,
     newTicketSource,
     notWorkingError,
     notWorkingFiles,
@@ -451,6 +455,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           error={savedViewDeleteError.value}
         />
         <ManualModelDialog state={manualModelDialog.value} />
+        <AiLaunchDialog state={aiLaunchDialog.value} />
         <AiFeedbackDialog state={aiFeedbackDialog.value} />
         {migration && (
           <Hs1MigrationDialog

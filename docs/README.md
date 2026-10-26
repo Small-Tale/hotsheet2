@@ -20,6 +20,9 @@ machine-local provider and permission-vault envelopes after verified legacy migr
 (HS2-5A6JNS). Backup, restore, rotation, and explicit legacy cleanup are headless
 `key master-*` commands; see [secure provider keys](04-core-server-cli.md#471-secure-provider-keys).
 
+**Shipped in-app inputs:** filename rename, command-group creation, and customized AI launch
+use controlled application inputs rather than unsupported browser prompts (HS2-WMZ6Z5).
+
 **Shipped desktop preference persistence:** the packaged Tauri app restores projects and
 device settings across ephemeral bridge ports from private native app-data records
 (HS2-RKZKX7), including staged draft attachment bytes (HS2-791W19). See the

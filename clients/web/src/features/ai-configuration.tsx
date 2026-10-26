@@ -3,6 +3,7 @@ import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
 
 import { type ConversationState, EMPTY_CONVERSATION } from '../ai-conversation';
+import { createAiLaunchDialog } from '../ai-launch-dialog';
 import {
   compatiblePermissionMode,
   providerSelection,
@@ -51,7 +52,6 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     showToast,
     beginConversation,
     updateConversation,
-    error,
     commandSettingsDefinitions,
     commandSettingsEditingId,
   } = dependencies;
@@ -389,39 +389,21 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
    * and effort (HS2-3HT4PA), else the project default (with this session's Drive choice); Option-click
    * customizes it.
    */
-  function aiLaunchConfiguration(kind: 'ai-shell' | 'ai-chat', customize: boolean, provider?: string) {
+  const aiLaunchDialog = createAiLaunchDialog({ tools: () => aiTools.value, normalize: normalizedAiSelection });
+  async function aiLaunchConfiguration(kind: 'ai-shell' | 'ai-chat', customize: boolean, provider?: string) {
     const current = project(),
       base = provider ? normalizedAiSelection({ tool: provider }) : effectiveDriveSelection(current?.id);
     if (!current || !customize) return base;
-    const answer = window.prompt('AI provider', base.tool);
-    if (answer === null) return;
-    const descriptor = aiTools.value.find(
-      (item) =>
-        item.id.toLowerCase() === answer.trim().toLowerCase() ||
-        item.display_name.toLowerCase() === answer.trim().toLowerCase(),
-    );
-    if (!descriptor) {
-      error.value = `Unknown AI provider: ${answer}`;
-      return;
-    }
-    const initial = normalizedAiSelection({ tool: descriptor.id }),
-      model = window.prompt('Model (leave blank for provider default)', initial.model ?? ''),
-      selectedModel = descriptor.models.find((item) => item.id === model?.trim()),
-      effort = selectedModel?.effort_levels?.length
-        ? window.prompt('Effort level (leave blank for provider default)', initial.effort ?? '')
-        : '';
-    const selection = normalizedAiSelection({
-        tool: descriptor.id,
-        model: model?.trim() || undefined,
-        effort: effort?.trim() || undefined,
-      }),
-      detail = {
-        projectId: current.id,
-        kind,
-        provider: selection.tool,
-        model: selection.model,
-        effort: selection.effort,
-      };
+    const selection = await aiLaunchDialog.request(current.id, kind, base);
+    // A modal cannot authorize a command for a project selected after the dialog opened.
+    if (!selection || project()?.id !== current.id) return;
+    const detail = {
+      projectId: current.id,
+      kind,
+      provider: selection.tool,
+      model: selection.model,
+      effort: selection.effort,
+    };
     document.dispatchEvent(new CustomEvent('hotsheet-ai-launch-configuration', { detail }));
     return selection;
   }
@@ -563,6 +545,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     openManualModel,
     restoreCommandEditorAfterManualModel,
     aiLaunchConfiguration,
+    aiLaunchDialog,
     refreshAiConfiguration,
     restoreAiConfiguration,
     forgetAiConfiguration,

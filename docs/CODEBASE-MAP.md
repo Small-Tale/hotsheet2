@@ -148,7 +148,10 @@ manager's write lock, including same-session ordered saves.
 effective value and writes under all three scope locks, serializing server
 command saves with CLI settings edits across processes (HS2-KYP8ZT).
 `features/commands.tsx` adapts the workflow to project
-signals, API calls, prompts, popovers, and the rendered command surfaces.
+signals, API calls, in-app group creation, popovers, and the rendered command surfaces.
+`command-group-dialog.ts`, `ai-launch-dialog.ts`, and `attachment-filename-editing.ts` own
+controlled prompt replacements; matching components and delegated input/filename interactions
+serve production and catalog compositions (HS2-WMZ6Z5).
 
 Development request-stage tracing lives in `clients/web/src/dev-request-timing.ts`
 (bridge header marks), `request-observer.ts` and `api.ts` (browser milestones),

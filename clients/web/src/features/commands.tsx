@@ -2,6 +2,7 @@ import type { Signal } from 'kerfjs';
 import { effect, signal } from 'kerfjs';
 
 import { Api, type CommandDefinition, type CommandRun } from '../api';
+import { createCommandGroupDialog } from '../command-group-dialog';
 import type { CommandDropTarget } from '../command-order';
 import { normalizeCommandGroups } from '../command-order';
 import {
@@ -14,6 +15,7 @@ import {
   nextCommandDefinition,
   reorderCommandSettings as reorderCommandSettingsState,
 } from '../command-settings-workflow';
+import { CommandGroupDialog } from '../components/command-group-dialog';
 import { commandIconNeedsCatalog } from '../components/command-icon';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { CommandDialogSurface } from '../components/reader-overlay-surfaces';
@@ -82,6 +84,8 @@ export function createCommandsController({
     commandSettingsExtraGroupsByProject = signal<Record<string, string[]>>({}),
     commandIconSearch = signal('');
   let commandSelectionAnchor: string | undefined;
+  const messageRevisions = new Map<string, number>();
+  const groupFailureRevisions = new Map<string, number>();
   // Lazily load the full Lucide catalog once a project's commands reference an icon outside the
   // bundled popular set, so the sidebar can render those custom icons without a picker being opened.
   effect(() => {
@@ -103,6 +107,7 @@ export function createCommandsController({
     );
   }
   function setCommandSettingsMessage(projectId: string, message: string) {
+    messageRevisions.set(projectId, (messageRevisions.get(projectId) ?? 0) + 1);
     commandSettingsMessagesByProject.value = updateProjectSettingsValue(
       commandSettingsMessagesByProject.value,
       projectId,
@@ -210,6 +215,15 @@ export function createCommandsController({
       if (selectedProjectId.value === projectId) commandDefinitions.value = definitions;
     },
     groupsLoaded: setCommandSettingsExtraGroups,
+    groupsFailed: (projectId) => {
+      groupFailureRevisions.set(projectId, messageRevisions.get(projectId) ?? 0);
+    },
+    groupsSaved: (projectId) => {
+      const failedRevision = groupFailureRevisions.get(projectId);
+      if (failedRevision !== undefined && messageRevisions.get(projectId) === failedRevision)
+        setCommandSettingsMessage(projectId, '');
+      groupFailureRevisions.delete(projectId);
+    },
     nextWriteOrder: nextCommandWriteOrder,
     saveCommands: (path, definitions, options) => new Api(path).saveCommandsWithRevision(definitions, options),
     saveGroups: (path, groups, expectedRevision) =>
@@ -250,17 +264,18 @@ export function createCommandsController({
     changeCommandGroups(projectId, next.groups);
     scheduleCommandAutosave(projectId);
   }
-  function addCommandGroup(projectId: string) {
-    const name = window.prompt('New group name');
-    if (!name) return;
+  const commandGroupDialog = createCommandGroupDialog((projectId, name) => {
     const result = addCommandGroupName(
       name,
       commandSettingsDefinitions(projectId),
       commandSettingsExtraGroups(projectId),
     );
-    if (result.message) setCommandSettingsMessage(projectId, result.message);
     if (result.groups) changeCommandGroups(projectId, result.groups);
-  }
+    return result.message;
+  });
+  const addCommandGroup = (projectId: string) => {
+    commandGroupDialog.open(projectId);
+  };
   function deleteCommandGroup(projectId: string, group: string) {
     changeCommandGroups(
       projectId,
@@ -299,7 +314,12 @@ export function createCommandsController({
     const id = commandDialogId.value,
       command = commandDefinitions.value.find((item) => item.id === id),
       run = id ? commandRunFor(id) : undefined;
-    return <CommandDialogSurface command={command} run={run} confirmStop={commandStopConfirmation.value} />;
+    return (
+      <>
+        <CommandDialogSurface command={command} run={run} confirmStop={commandStopConfirmation.value} />
+        <CommandGroupDialog state={commandGroupDialog.state.value} />
+      </>
+    );
   }
 
   return {
@@ -332,6 +352,7 @@ export function createCommandsController({
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
+    commandGroupDialog,
     deleteCommandGroup,
     flushCommandAutosaves,
     commandRunFor,

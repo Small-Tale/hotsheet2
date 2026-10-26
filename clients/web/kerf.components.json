@@ -7262,6 +7262,202 @@
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific WorkspaceIdentity behavior."],
         "documentation": "../../docs/ux-components.md"
       }
+    },
+    {
+      "id": "ai-launch-dialog",
+      "name": "AiLaunchDialog",
+      "kind": "component",
+      "purpose": "Configure one AI terminal or chat launch without changing saved defaults; Cancel aborts the entire launch.",
+      "source": "src/components/ai-launch-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "AiLaunchDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/ai-launch-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ai-launch-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["ai-launch-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-launch-dialog.tsx",
+        "composition": "src/components/ai-launch-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Configure one AI terminal or chat launch without changing saved defaults; Cancel aborts the entire launch."
+        ],
+        "avoidWhen": ["The interaction does not need AiLaunchDialog domain behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "command-group-dialog",
+      "name": "CommandGroupDialog",
+      "kind": "component",
+      "purpose": "Create a named command group with controlled input and inline validation.",
+      "source": "src/components/command-group-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "CommandGroupDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/command-group-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["command-group-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["command-group-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-group-dialog.tsx",
+        "composition": "src/components/command-group-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["Create a named command group with controlled input and inline validation."],
+        "avoidWhen": ["The interaction does not need CommandGroupDialog domain behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "attachment-filename-editor",
+      "name": "AttachmentFilenameEditor",
+      "kind": "component",
+      "purpose": "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state.",
+      "source": "src/components/attachment-filename-editor.tsx",
+      "publicExports": [
+        {
+          "name": "AttachmentFilenameEditor"
+        }
+      ],
+      "sourceLinks": ["src/components/attachment-filename-editor.tsx", "src/components/attachment-filename-editor.css"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child",
+            "notes": [
+              "The app-owned hidden wrapper retains editor DOM identity and fills the filename flex slot; Kerf TextField owns all field chrome and insets."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": "attachment-filename-editor",
+        "publicClasses": ["attachment-filename-editor"],
+        "publicTokens": [],
+        "placeableClasses": ["attachment-filename-editor"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/attachment-filename-editor.tsx",
+        "composition": "src/components/attachment-filename-editor.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Edit an attachment filename inline with controlled recovery, blur or Enter finish, Escape cancellation, and retained failure state."
+        ],
+        "avoidWhen": ["The interaction does not need AttachmentFilenameEditor domain behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
     }
   ]
 }
