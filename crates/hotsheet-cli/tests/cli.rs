@@ -54,6 +54,25 @@ struct TemporaryLaunchHost {
 #[cfg(unix)]
 impl TemporaryLaunchHost {
     fn new(home: &Path) -> Self {
+        // HS2-B14HYW: a normally built server may block on the real OS Keychain even
+        // with a temporary HOTSHEET_HOME. Check the actual sibling artifact before any
+        // launch, rather than assuming Cargo feature unification rebuilt another package.
+        let server = assert_cmd::cargo::cargo_bin("hotsheet-cli")
+            .with_file_name(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        let output = std::process::Command::new(&server)
+            .arg("--test-fixture-capabilities")
+            .output()
+            .expect("build the isolated server fixture before CLI launch tests");
+        let capability = serde_json::from_slice::<serde_json::Value>(&output.stdout).ok();
+        assert!(
+            output.status.success()
+                && capability
+                    .as_ref()
+                    .and_then(|c| c["isolated_permission_vault"].as_bool())
+                    == Some(true),
+            "CLI launch tests require a matching isolated server artifact; run once: \
+             cargo build -p hotsheet-server -p hotsheet-cli --bins --features hotsheet-aitools/test-permission-vault"
+        );
         Self {
             home: home.to_path_buf(),
             stopped: false,

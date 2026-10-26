@@ -749,6 +749,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 - **Build:** `cargo build`
 - **Rust tests:** `cargo nextest run` (fallback `cargo test`)
+- **Package-scoped CLI launch fixtures (HS2-B14HYW):** first build the sibling
+  server with `cargo build -p hotsheet-server -p hotsheet-cli --bins --features
+hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli`.
+  The hidden server `--test-fixture-capabilities` reports compiled isolation support;
+  launch fixtures and owned bootstrap reject default artifacts before native secrets.
 - **Web client:** from `clients/web`, `npm run lint`, `npm run typecheck`,
   `npm run test:unit`, `npm run test:e2e` (Playwright against the running client
   and real server flows), and `npm run build`. CI runs the browser smoke and WebKit

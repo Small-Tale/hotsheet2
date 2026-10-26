@@ -48,6 +48,10 @@ struct Cli {
     #[arg(long)]
     revision_status: bool,
 
+    /// Report isolated fixture support without opening a store or credential backend.
+    #[arg(long, hide = true)]
+    test_fixture_capabilities: bool,
+
     /// Who is launching this server (`cli`, `dev-bridge`, `stable-dev`,
     /// `local-host-snapshot`, or any label). Recorded in every instance registration and
     /// reported by `/health` so `hotsheet-cli serve --list` can show which host owns the
@@ -124,11 +128,21 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let isolated_vault = hotsheet_aitools::test_permission_vault_available();
+    if cli.test_fixture_capabilities {
+        println!(
+            "{}",
+            serde_json::json!({ "isolated_permission_vault": isolated_vault })
+        );
+        return Ok(());
+    }
+    let test_owner = test_owner_pid()?;
+    ensure_fixture_capability(test_owner.is_some(), isolated_vault)?;
     // HS2-R8S894: real-server integration binaries opt into the test vault;
     // the CLI migration subprocess keeps the OS credential store.
     hotsheet_aitools::enable_test_permission_vault();
     init_logging();
-    let cli = Cli::parse();
     hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
 
     if cli.revision_status {
@@ -399,7 +413,7 @@ async fn main() -> Result<()> {
     if cli.exit_on_stdin_eof {
         stop_on_stdin_eof(state.clone());
     }
-    if let Some(owner_pid) = test_owner_pid()? {
+    if let Some(owner_pid) = test_owner {
         stop_when_test_owner_exits(state.clone(), owner_pid);
     }
 
@@ -473,6 +487,17 @@ async fn main() -> Result<()> {
             std::process::exit(0);
         }
     }
+}
+
+/// HS2-B14HYW: a fixture-owned default artifact must fail before native credentials
+/// or stores are opened. The owner environment is a refusal condition, never a bypass.
+fn ensure_fixture_capability(test_owned: bool, isolated_vault: bool) -> Result<()> {
+    anyhow::ensure!(
+        !test_owned || isolated_vault,
+        "fixture-owned server requires isolated permission-vault support; rebuild once with \
+         `cargo build -p hotsheet-server -p hotsheet-cli --bins --features hotsheet-aitools/test-permission-vault`"
+    );
+    Ok(())
 }
 
 fn terminal_broker_enabled(no_terminal_broker: bool) -> bool {
@@ -724,6 +749,20 @@ fn prune_stale_indexes() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_b14hyw_fixture_owner_requires_isolated_artifact_without_changing_normal_hosts() {
+        assert!(ensure_fixture_capability(false, false).is_ok());
+        assert!(ensure_fixture_capability(false, true).is_ok());
+        assert!(ensure_fixture_capability(true, true).is_ok());
+        let error = ensure_fixture_capability(true, false)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("requires isolated permission-vault support"));
+        assert!(error.contains("--features hotsheet-aitools/test-permission-vault"));
+        let cli = Cli::try_parse_from(["hotsheet-server", "--test-fixture-capabilities"]).unwrap();
+        assert!(cli.test_fixture_capabilities);
+    }
 
     #[test]
     fn detached_terminal_broker_is_default_with_an_explicit_diagnostic_opt_out() {

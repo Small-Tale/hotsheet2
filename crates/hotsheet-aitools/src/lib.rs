@@ -24,6 +24,12 @@ pub mod permission;
 pub mod permission_pattern;
 pub mod permission_suggestions;
 mod permission_vault;
+/// Capability for subprocess test bootstrap; never selects a backend by itself.
+#[doc(hidden)]
+pub fn test_permission_vault_available() -> bool {
+    cfg!(all(feature = "test-permission-vault", debug_assertions))
+}
+
 #[doc(hidden)]
 pub fn enable_test_permission_vault() {
     #[cfg(all(feature = "test-permission-vault", debug_assertions))]

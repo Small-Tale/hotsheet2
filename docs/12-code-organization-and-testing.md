@@ -604,6 +604,17 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 
 ### 12.7.6 Fixtures & CI
 
+- **CLI launch fixture artifact (HS2-B14HYW):** before package-scoped CLI tests,
+  build once with `cargo build -p hotsheet-server -p hotsheet-cli --bins --features
+hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet-cli`.
+  A temporary home does not isolate the OS credential store. The actual sibling
+  server must report `isolated_permission_vault: true` through the hidden read-only
+  `--test-fixture-capabilities` probe; CLI launch fixtures refuse a default or stale
+  artifact before starting it. Fixture-owned server startup also fails before opening
+  stores or native credentials when the compiled isolation capability is absent.
+  The feature is debug-only; a test-owner environment value never enables a backend
+  or changes normal release/native credential behavior. A later default-feature build
+  can replace the sibling server, so repeat the matching fixture build before tests.
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.
