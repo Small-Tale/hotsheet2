@@ -3,7 +3,8 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 39 -->
+
+<!-- hotsheet-skill-version: 40 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -22,12 +23,12 @@ installation method, then repeat the capability check. Do not install globally o
 restart the user's host from a worker. Preserve a genuine exact assignment while
 resolving this capability blocker; do not guess another ticket.
 
-Before any live pool open that would upgrade schema-one state, the integrator
-must stop old waiters and switch every pool member to the verified schema-two
-artifact. Even `status` and `setup` immediately migrate schema-one state on
+Before any live pool open that would upgrade schema-one or schema-two state, the integrator
+must stop old waiters and switch every pool member to the verified schema-three
+artifact. Even `status` and `setup` immediately migrate schema-one or schema-two state on
 `Coordinator::open`;
 older executables then refuse that pool. `coordination --help` alone does not
-prove schema-two support. When upgrading, workers wait for the integrator to
+prove schema-three support. When upgrading, workers wait for the integrator to
 coordinate this switch before running any pool command (HS2-A1F615).
 
 Keep the session running until the integrator ends the run, the user stops it, or no
@@ -122,18 +123,21 @@ handoff` with the branch name, full commit SHA, worktree location labeled as
 
 ## Reviewed handoff corrections
 
-Structured returns cover code handoffs; findings-only returns are tracked by
-HS2-AEBJYN.
+Structured returns cover code and findings handoffs (HS2-65ETRJ/HS2-AEBJYN).
+A findings return preserves the original findings note id and review evidence; it
+never requires a fabricated commit or completion of the returned operation.
 
 A review note alone is not a new assignment. Preserve the original branch, worktree
-and full commit; wait for the integrator's `review-return` and a NEW structured
+and full commit for code, or the original findings note for no-code work; wait for
+the integrator's `review-return` and a NEW structured
 assignment id for the exact ticket (HS2-65ETRJ). Read its regular `## Review return`
 note, current shipping base and correction scope. Claim the exact ticket, create a
 new ticket worktree, and acknowledge the new assignment with your current session
 generation. A lost return acknowledgement can replay without cancelling your new
 claim. Do not reopen the old mailbox handoff or pretend the ticket is complete.
-The corrected handoff identifies its new verified commit and preserved original
-artifacts. Release its claim and return that new assignment through the usual flow.
+The corrected handoff identifies its new verified commit or findings note and
+preserved original artifacts. Returned originals remain Blocked after correction
+completion; never resolve them as Done (HS2-AEBJYN). Release its claim and return that new assignment through the usual flow.
 
 ## Return route
 

@@ -447,7 +447,7 @@ fn hs2_a1f615_findings_handoff_refills_while_code_ci_is_pending() {
         "--findings-note",
         &note_id,
     ]);
-    assert_eq!(handed.state.version, 2);
+    assert_eq!(handed.state.version, 3);
     assert!(handed.state.assignments["findings"].commit.is_none());
     assert_eq!(
         handed.state.assignments["code"].phase,

@@ -3,7 +3,8 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator running, assign independent tickets, and resolve verified code or findings handoffs.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 6 -->
+
+<!-- hotsheet-skill-version: 7 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -22,12 +23,12 @@ artifact or exact upgrade command for its installation method; do not assume Car
 Repeat the capability check before registering sessions. No worker globally installs
 the tool or restarts the user's host as part of this workflow.
 
-Before any live pool open that would upgrade schema-one state, the integrator
-must stop old waiters and switch every pool member to the verified schema-two
-artifact. Even `status` and `setup` immediately migrate schema-one state on
+Before any live pool open that would upgrade schema-one or schema-two state, the integrator
+must stop old waiters and switch every pool member to the verified schema-three
+artifact. Even `status` and `setup` immediately migrate schema-one or schema-two state on
 `Coordinator::open`;
 older executables then refuse that pool. `coordination --help` alone does not
-prove schema-two support. When upgrading, workers wait for the integrator to
+prove schema-three support. When upgrading, workers wait for the integrator to
 coordinate this switch before running any pool command (HS2-A1F615).
 
 Start with `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then
@@ -92,26 +93,33 @@ Ended independent app sessions require human resume (HS2-4H7D8D), not promised w
 
 ## Return a reviewed handoff for corrections
 
-Structured returns cover code handoffs; findings-only returns are tracked by
-HS2-AEBJYN.
+Structured returns cover code and findings handoffs (HS2-65ETRJ/HS2-AEBJYN).
+A findings return preserves the original findings note id and review evidence; it
+never requires a fabricated commit or completion of the returned operation.
 
 For in-scope review corrections, preserve the original branch, worktree and full
-commit. Add a regular `## Review return` note on the exact assigned ticket. Include
-the assignment id and full reviewed commit as plain whitespace-separated tokens,
+commit for code, or the original regular `## Findings handoff` note for findings.
+Add a nonempty regular `## Review return` note on the exact assigned ticket. Include
+the assignment id and original evidence (full commit or exact findings note id) as
+plain whitespace-separated tokens,
 the concrete corrections and preserved artifact references. Release your ticket
 claim before `coordination review-return --id <integrator> --session <generation>
 --assignment <id> --evidence-note <note-id> --inspected` (HS2-65ETRJ).
 
-The runtime records Blocked plus review evidence while preserving the commit and
-typed code handoff. It refuses live claims, stale integrator generations, unrelated notes and
+Findings can be returned from Handoff or Verifying; release the integrator claim
+before returning Verifying, even if its lease expired. Code returns remain limited
+to Handoff. The runtime records Blocked plus review evidence while preserving the
+original typed code or findings handoff. It refuses live claims, stale integrator generations, unrelated notes and
 handoffs already integrating or awaiting CI. Replay the same return after a lost
 acknowledgement, then use `assign` with a NEW stable operation id and current main
 base. Replaying the old assignment id only returns its preserved record. Never mark
 the returned handoff Done or complete the ticket to bypass reassignment. Integrate
-only the corrected handoff; retain original artifacts until verified integration.
+only the corrected handoff; retain original artifacts until verified resolution.
+A returned original can never become Done, including after correction completion.
+Schema three fences schema-two mutators that would otherwise miss returned findings.
 All participants issuing correction assignments need a CLI supporting `review-return`;
 the return transition adds no record fields. The startup migration described
-above still applies before invoking any command with a schema-two CLI.
+above still applies before invoking any command with a schema-three CLI.
 
 ## Assign
 

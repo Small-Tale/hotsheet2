@@ -2,6 +2,8 @@
 //! Assignment is a reservation, not a ticket claim or permission to integrate.
 
 pub mod contract;
+#[cfg(test)]
+mod findings_review_return_tests;
 mod review_return;
 #[cfg(test)]
 mod review_return_tests;
@@ -80,7 +82,7 @@ impl Coordinator {
             Err(error) => return Err(error.into()),
         };
         ensure!(
-            matches!(state.version, 1 | 2) && state.project_id == self.project_id,
+            matches!(state.version, 1..=3) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -92,8 +94,10 @@ impl Coordinator {
                     });
                 }
             }
-            state.version = 2;
         }
+        // HS2-AEBJYN: schema-two mutators do not fence returned findings from Done.
+        // Upgrade before exposing any state so those older mutators refuse this pool.
+        state.version = 3;
         ensure!(
             state.source_id == self.source_id,
             "coordination pool is bound to another source; use the same explicit -C source as the integrator"

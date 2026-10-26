@@ -100,9 +100,11 @@ pub struct Assignment {
 }
 
 impl Assignment {
-    /// HS2-65ETRJ: schema-1 review return preserves the handoff and fences its integration.
+    /// HS2-65ETRJ/HS2-AEBJYN: returned code and findings retain their original evidence.
     pub fn returned_for_review(&self) -> bool {
-        self.phase == Phase::Blocked && self.commit.is_some() && self.recovery_note.is_some()
+        self.phase == Phase::Blocked
+            && (self.commit.is_some() || self.handoff.is_some())
+            && self.recovery_note.is_some()
     }
 }
 
@@ -122,7 +124,7 @@ pub struct State {
 impl State {
     pub fn new(project_id: String, source_id: String) -> Self {
         Self {
-            version: 2,
+            version: 3,
             project_id,
             source_id,
             revision: 0,

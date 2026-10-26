@@ -1206,3 +1206,37 @@ fn test_processes_use_the_repository_test_home_not_the_real_machine_home() {
         "tests must run under the forced repository test cache, got {cache:?}"
     );
 }
+
+#[test]
+fn hs2_aebjyn_role_skills_preserve_returned_findings_and_require_the_semantic_fence() {
+    for skill in [
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for invariant in [
+            "HS2-AEBJYN",
+            "code and findings",
+            "original findings note",
+            "NEW",
+            "schema-three",
+            "schema-one or schema-two",
+            "Done",
+        ] {
+            assert!(text.contains(invariant), "role missing {invariant}");
+        }
+        assert!(!text.contains("findings-only returns are tracked"));
+    }
+    for skill in [
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(text.contains("Findings can be returned from Handoff or Verifying"));
+        assert!(text.contains("release the integrator claim"));
+        assert!(text.contains("even if its lease expired"));
+        assert!(text.contains("exact findings note id"));
+    }
+}

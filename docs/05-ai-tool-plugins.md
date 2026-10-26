@@ -2027,12 +2027,14 @@ Its schema uses qualified `(connection_id, native_id)` references, session gener
 operation ids, availability deadlines, return-route identifiers, and typed handoff
 evidence (a code commit or findings note id);
 it stores no session credentials or ticket content.
-The first `Coordinator::open` with a schema-two executable immediately migrates
-version-one state, including pending code CI, and persists schema two. This also
-happens for `status` and `setup`, before any findings handoff. Older executables
-then refuse the upgraded state. Stop old waiters and switch all members to the
-verified schema-two artifact before any live pool open; checking
-`coordination --help` alone does not prove this capability (HS2-A1F615).
+The first `Coordinator::open` with a schema-three executable immediately migrates
+version-one or version-two state, preserving pending code CI and original findings,
+and persists schema three. This also happens for `status` and `setup`. Schema three
+is a semantic fence: older schema-two mutators do not recognize returned findings
+and could incorrectly resolve an original record. Both older versions therefore
+refuse the upgraded state. Stop old waiters and switch all members to the verified
+schema-three artifact before any live pool open; checking `coordination --help`
+alone does not prove this capability (HS2-A1F615/HS2-AEBJYN).
 
 Use the same prefix, with `--project` before the subcommand:
 
@@ -2073,20 +2075,23 @@ not complete a ticket. Availability expiry never reallocates an in-progress tick
 the integrator must inspect its artifacts and record a recovery note first. Old
 session generations cannot acknowledge replacement assignments.
 
-Reviewed code handoffs can be explicitly returned for in-scope corrections (HS2-65ETRJ).
-The live exact integrator adds a regular `## Review return` note to the assigned
-ticket, naming the assignment id and full reviewed commit as whitespace-separated
-tokens and documenting preserved artifacts and corrections, then releases any claim.
-`review-return` checks the exact provider-qualified ticket and absence of a live
-claim under its mutation lock, preserving the original commit and typed code
-evidence in Blocked state with review evidence. An identical return replays without changing a later
-assignment or claim; conflicting evidence is rejected. A new `assign` operation id
-reserves corrections from the current shipping base. The old operation remains
-Blocked, cannot integrate or become Done, and never completes the ticket. Integrating,
-CI and ordinary blocked records cannot be returned. This transition adds no record
-fields; the schema-two startup migration above still applies before the command
-opens a pool. Participants need the updated CLI capability. Findings-only return
-support is tracked by HS2-AEBJYN.
+Reviewed code and findings handoffs can be explicitly returned for in-scope
+corrections (HS2-65ETRJ/HS2-AEBJYN). Code returns require Handoff; findings permit
+Handoff or Verifying. Before returning Verifying, explicitly release the integrator
+claim, even after lease expiry. The exact live integrator adds a nonempty regular
+`## Review return` note to the assigned ticket, naming the assignment id and original
+evidence (full code commit or exact findings note id) as whitespace-separated tokens,
+plus preserved artifacts and corrections. Original findings must still be a nonempty
+regular `## Findings handoff` note on the exact qualified ticket.
+
+`review-return` checks source and absence of a live claim under the ticket mutation
+lock, retaining original typed evidence in Blocked state with the review note id.
+An identical return replays without altering a later assignment or claim; conflicting
+evidence is rejected. A NEW stable `assign` operation reserves corrections. The
+original remains fenced from verification, integration and Done, even after the
+corrected ticket completes. Integrating, CI and ordinary blocked records cannot be
+returned. Existing fields are reused, but the schema-three startup fence still
+applies before opening the pool; old mutators are not semantically compatible.
 
 `next` subscribes to filesystem events before reading snapshots, so either startup
 order and reconnect after a lost cue reconcile durable state. Queue edits, source

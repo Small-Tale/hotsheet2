@@ -302,7 +302,7 @@ fn hs2_a1f615_version_one_code_records_migrate_without_losing_ci() {
     let reopened =
         Coordinator::open(c.directory.parent().unwrap().parent().unwrap(), &c.source).unwrap();
     let state = reopened.state().unwrap();
-    assert_eq!(state.version, 2);
+    assert_eq!(state.version, 3);
     assert_eq!(state.assignments["old-code"].commit.as_deref(), Some(SHA));
     assert_eq!(
         state.assignments["old-code"].handoff,

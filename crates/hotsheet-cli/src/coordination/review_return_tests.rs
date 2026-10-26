@@ -57,7 +57,7 @@ fn hs2_65etrj_return_replays_after_restart_and_refill_without_losing_handoff() {
     let mut returned = before.clone();
     returned.phase = Phase::Blocked;
     returned.recovery_note = Some(note.clone());
-    assert_eq!(reopened.state().unwrap().version, 2);
+    assert_eq!(reopened.state().unwrap().version, 3);
     assert_eq!(reopened.state().unwrap().assignments["original"], returned);
     let mut correction = before;
     correction.id = "correction".into();

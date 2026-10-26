@@ -654,3 +654,15 @@ attended or disposable native credential environment, using synthetic data. It m
 require OS credential authorization. The default `desktop:test` instead verifies
 the staged bridge/runtime with synthetic debug backends and prints that mode; it
 does not claim packaged native backend validation.
+
+### Findings correction return (HS2-AEBJYN)
+
+Use a disposable pool with the verified schema-three runtime; never open a live pool
+until all members switch. Hand off a regular Findings note, return it with an exact
+Review return note from Handoff, and repeat from Verifying after explicitly releasing
+the integrator claim. Assign a NEW correction operation, preserve the original note,
+and verify/complete corrected findings without an empty commit or CI. Replay the
+original return after the correction claim and after completion: it must preserve
+that claim and leave the original Blocked, refusing Done. Keep an unrelated code CI
+record pending throughout. Confirm an older schema-two runtime refuses the disposable
+upgraded pool instead of mutating returned originals.

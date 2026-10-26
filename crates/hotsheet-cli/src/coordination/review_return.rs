@@ -1,4 +1,4 @@
-//! Exact, replayable review returns without changing the schema-1 mailbox (HS2-65ETRJ).
+//! Exact, replayable code and findings review returns (HS2-65ETRJ/HS2-AEBJYN).
 
 use super::*;
 use hotsheet_model::{NoteKind, Timestamp, Ulid};
@@ -37,14 +37,19 @@ impl Coordinator {
                     );
                     return Ok(());
                 }
-                ensure!(
-                    a.phase == Phase::Handoff,
-                    "only a handoff can be returned for review"
-                );
-                let commit = a
-                    .commit
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("handoff has no commit"))?;
+                let original_evidence = match a.handoff.as_ref() {
+                    Some(HandoffEvidence::Findings { note_id }) => {
+                        ensure!(
+                            matches!(a.phase, Phase::Handoff | Phase::Verifying),
+                            "only a findings handoff or verification can be returned for review"
+                        );
+                        note_id.as_str()
+                    }
+                    _ => {
+                        ensure!(a.phase == Phase::Handoff, "only a handoff can be returned for review");
+                        a.commit.as_deref().ok_or_else(|| anyhow::anyhow!("handoff has no commit"))?
+                    }
+                };
                 ensure!(
                     a.ticket.connection_id == git_connection_id(&store),
                     "provider review-return verification is unsupported for this connection"
@@ -55,13 +60,26 @@ impl Coordinator {
                         && ops::claim_available(&ticket, &Timestamp::from_datetime(now)),
                     "review return requires an open ticket without a live claim"
                 );
+                if matches!(a.handoff, Some(HandoffEvidence::Findings { .. })) {
+                    if a.phase == Phase::Verifying {
+                        ensure!(ticket.claimed_by.is_none(), "release the integrator claim before returning findings verification");
+                    }
+                    let original_note = Ulid::from_string(original_evidence)?;
+                    ensure!(
+                        ticket.notes.iter().any(|note| note.id == original_note
+                            && note.kind == NoteKind::Regular
+                            && note.text.lines().next() == Some("## Findings handoff")
+                            && note.text.lines().skip(1).any(|line| !line.trim().is_empty())),
+                        "original regular Findings handoff note must exist with findings on this exact ticket"
+                    );
+                }
                 ensure!(
                     ticket.notes.iter().any(|note| note.id == note_id
                         && note.kind == NoteKind::Regular
                         && note.text.lines().any(|line| line == "## Review return")
                         && note.text.split_whitespace().any(|word| word == id)
-                        && note.text.split_whitespace().any(|word| word == commit)),
-                    "regular Review return note must exist on this exact ticket and name the assignment id and full reviewed commit"
+                        && note.text.split_whitespace().any(|word| word == original_evidence)),
+                    "regular Review return note must exist on this exact ticket and name the assignment id and exact original handoff evidence"
                 );
                 a.phase = Phase::Blocked;
                 a.recovery_note = Some(evidence_note.into());
