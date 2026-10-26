@@ -16,9 +16,39 @@ use hotsheet_server::lifecycle::InstanceInfo;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use serde_json::json;
 
+/// A drivable AI tool on the fixture `PATH` whose probe hangs during startup discovery.
+#[derive(Clone, Copy)]
+enum SlowTool {
+    /// `opencode`: every invocation, including `--version`, hangs (HS2-NPBZJ9).
+    Opencode,
+    /// `codex`: `--version` answers, then the model-catalog `app-server` hangs (HS2-F6S04C).
+    CodexAppServer,
+}
+
+impl SlowTool {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Opencode => "opencode",
+            Self::CodexAppServer => "codex",
+        }
+    }
+
+    /// Each hanging invocation appends its pid to `<tool>.calls` before it hangs.
+    fn script(self) -> &'static str {
+        match self {
+            Self::Opencode => "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n",
+            Self::CodexAppServer => {
+                "#!/bin/sh\ncase \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
+                 app-server) echo $$ >> \"$0.calls\"; exec sleep 30 ;;\nesac\n"
+            }
+        }
+    }
+}
+
 struct Server {
     child: Child,
     log: PathBuf,
+    slow_tool: Option<SlowTool>,
     instance: PathBuf,
     lock: PathBuf,
     _fixture: tempfile::TempDir,
@@ -44,12 +74,16 @@ impl Server {
     /// startup AI catalog warmup is still running when the stop arrives (HS2-NPBZJ9).
     /// `probe_timeout_ms` sets the server's per-probe deadline (HS2-BH3M53).
     fn start_with_slow_discovery(drain_ms: u64, probe_timeout_ms: u64) -> Self {
+        Self::start_with_slow_tool(drain_ms, probe_timeout_ms, SlowTool::Opencode)
+    }
+
+    fn start_with_slow_tool(drain_ms: u64, probe_timeout_ms: u64, tool: SlowTool) -> Self {
         Self::start_inner(
             drain_ms,
             true,
             Stdio::piped(),
             None,
-            Some(probe_timeout_ms),
+            Some((probe_timeout_ms, tool)),
             None,
         )
     }
@@ -59,17 +93,17 @@ impl Server {
         watch_stdin: bool,
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
-        slow_discovery: Option<u64>,
+        slow_discovery: Option<(u64, SlowTool)>,
         test_owner_pid: Option<u32>,
     ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
         // Keep locally installed AI tools out of startup catalog discovery; a slow-discovery
-        // fixture adds only its own hanging `opencode` (a drivable plugin's detection binary).
-        let path = if slow_discovery.is_some() {
+        // fixture adds only its own hanging tool (a drivable plugin's detection binary).
+        let path = if let Some((_, slow_tool)) = slow_discovery {
             let tools = fixture.path().join("tools");
             fs::create_dir(&tools).unwrap();
-            let tool = tools.join("opencode");
-            fs::write(&tool, "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n").unwrap();
+            let tool = tools.join(slow_tool.name());
+            fs::write(&tool, slow_tool.script()).unwrap();
             fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
                 .unwrap();
             format!("{}:/usr/bin:/bin", tools.display())
@@ -94,7 +128,7 @@ impl Server {
             .env("HOTSHEET_HOME", &home)
             .envs(test_owner_pid.map(|pid| ("HOTSHEET_TEST_SERVER_OWNER_PID", pid.to_string())))
             .env("PATH", path)
-            .args(slow_discovery.map(|ms| format!("--ai-probe-timeout-ms={ms}")))
+            .args(slow_discovery.map(|(ms, _)| format!("--ai-probe-timeout-ms={ms}")))
             // Piped and held by the fixture: the server stops if this test process dies
             // without running its teardown (HS2-VQ8ZWT).
             .args(watch_stdin.then_some("--exit-on-stdin-eof"))
@@ -108,6 +142,7 @@ impl Server {
         Self {
             child,
             log,
+            slow_tool: slow_discovery.map(|(_, tool)| tool),
             instance: home.join("instances").join(format!("{project}.json")),
             lock: home.join("instances").join(format!("{project}.lock")),
             _fixture: fixture,
@@ -116,7 +151,11 @@ impl Server {
 
     /// The hanging tool's invocation record, written when discovery starts probing it.
     fn slow_tool_calls(&self) -> PathBuf {
-        self._fixture.path().join("tools").join("opencode.calls")
+        let tool = self.slow_tool.expect("a slow-tool fixture").name();
+        self._fixture
+            .path()
+            .join("tools")
+            .join(format!("{tool}.calls"))
     }
 
     /// Wait until discovery has probed the hanging tool; return every probe's pid so far.
@@ -565,6 +604,33 @@ fn stop_is_prompt_while_startup_ai_catalog_discovery_hangs() {
     server.assert_registration_released();
     // HS2-BH3M53: the stop also killed the in-flight probe; nothing it started survives.
     assert_processes_gone(&probes, &server);
+}
+
+#[test]
+fn hs2_f6s04c_stop_kills_a_startup_catalog_app_server_probe() {
+    // The startup catalog warmup lists codex models through a long-running `app-server`
+    // probe child. A stop that lands while it hangs must exit promptly and kill it: the
+    // child is registered with the probe set atomically with its spawn, so shutdown can
+    // never snapshot the set before it and leave the app-server orphaned.
+    let mut server = Server::start_with_slow_tool(5_000, 60_000, SlowTool::CodexAppServer);
+    server.ready();
+    let app_servers = server.slow_tool_pids();
+    let stopped = Instant::now();
+    server.sigterm();
+    let status = server.exits_within(Duration::from_secs(4));
+    assert!(
+        status.success(),
+        "unclean exit {status:?}: {}",
+        server.log()
+    );
+    assert!(
+        stopped.elapsed() < Duration::from_secs(2),
+        "stop waited {:?} on the hanging app-server: {}",
+        stopped.elapsed(),
+        server.log()
+    );
+    server.assert_registration_released();
+    assert_processes_gone(&app_servers, &server);
 }
 
 /// Wait (bounded) until every pid is gone; a probe left running is an orphan.

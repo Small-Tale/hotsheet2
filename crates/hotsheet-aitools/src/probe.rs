@@ -120,6 +120,25 @@ impl ProbeGroup {
     /// killing and reaping it at `deadline` if it is still running then.
     pub fn track(pid: u32, deadline: Duration) -> Self {
         track(pid, true);
+        Self::armed(pid, deadline)
+    }
+
+    /// Spawn a probe child and register it in the same step as the stop check, then track
+    /// it like [`ProbeGroup::track`]. A stop either refuses the spawn or sees the child in
+    /// its kill snapshot; it can never finish in the gap between the two (HS2-F6S04C).
+    pub(crate) fn spawn<T>(
+        spawn: impl FnOnce() -> std::io::Result<T>,
+        pid: impl Fn(&T) -> u32,
+        deadline: Duration,
+    ) -> std::io::Result<(T, Self)> {
+        let child = spawn_registered(spawn, &pid)
+            .ok_or_else(|| std::io::Error::other("not probed: the process is stopping"))??;
+        let guard = Self::armed(pid(&child), deadline);
+        Ok((child, guard))
+    }
+
+    /// Arm the deadline watchdog and drop guard for an already registered probe `pid`.
+    fn armed(pid: u32, deadline: Duration) -> Self {
         let finished = std::sync::Arc::new(Mutex::new(false));
         let record = std::sync::Arc::new(Mutex::new(record_probe(pid)));
         let (disarm, disarmed) = mpsc::channel::<()>();
@@ -289,16 +308,26 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
 /// Startup discovery runs on a detached thread: after spawn, even diagnostic journal
 /// writes can lose a race with process exit (HS2-3EJNYY).
 fn spawn_tracked(command: &mut Command) -> Result<Child, String> {
-    let mut guard = IN_FLIGHT.lock_or_recover();
     let program = command.get_program().to_string_lossy().into_owned();
+    spawn_registered(|| command.spawn(), Child::id)
+        .ok_or_else(|| format!("'{program}' not probed: the process is stopping"))?
+        .map_err(|error| format!("starting '{program}': {error}"))
+}
+
+/// Run `spawn` and register the child's `pid` while holding the in-flight registry, so
+/// [`stop_probes`] (which sets the stop flag and snapshots under the same lock) cannot
+/// finish between them. `None` means the process is already stopping and nothing spawned.
+fn spawn_registered<T>(
+    spawn: impl FnOnce() -> std::io::Result<T>,
+    pid: impl FnOnce(&T) -> u32,
+) -> Option<std::io::Result<T>> {
+    let mut guard = IN_FLIGHT.lock_or_recover();
     if STOPPED.load(Ordering::SeqCst) {
-        return Err(format!("'{program}' not probed: the process is stopping"));
+        return None;
     }
-    let child = command
-        .spawn()
-        .map_err(|error| format!("starting '{program}': {error}"))?;
-    guard.get_or_insert_with(HashSet::new).insert(child.id());
-    Ok(child)
+    Some(spawn().inspect(|child| {
+        guard.get_or_insert_with(HashSet::new).insert(pid(child));
+    }))
 }
 
 fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
@@ -495,5 +524,57 @@ mod tests {
         assert_eq!(stopped, 1);
         assert_eq!(in_flight_probes(), 0);
         assert!(spawn_tracked(&mut sh("exit 0")).is_err());
+    }
+
+    #[test]
+    fn hs2_f6s04c_shutdown_cannot_miss_a_probe_group_still_registering() {
+        if isolated_probe_test(
+            "probe::tests::hs2_f6s04c_shutdown_cannot_miss_a_probe_group_still_registering",
+        ) {
+            return;
+        }
+        use std::os::unix::process::CommandExt;
+
+        // The spawn closure parks after its child exists but before `ProbeGroup::spawn`
+        // registers it: the gap a long-running app-server probe used to leave open.
+        let (spawned_tx, spawned_rx) = mpsc::channel::<u32>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let registering = std::thread::spawn(move || {
+            ProbeGroup::spawn(
+                || {
+                    let child = sh("exec sleep 30").process_group(0).spawn()?;
+                    spawned_tx.send(child.id()).unwrap();
+                    release_rx.recv().unwrap();
+                    Ok(child)
+                },
+                Child::id,
+                Duration::from_secs(60),
+            )
+        });
+        let pid = spawned_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let spawn_holds_registry = matches!(
+            IN_FLIGHT.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        );
+        let (stopped_tx, stopped_rx) = mpsc::channel();
+        let stopping = std::thread::spawn(move || stopped_tx.send(stop_probes()).unwrap());
+        // Stop must wait for the registration instead of snapshotting an empty set.
+        let stop_waited = stopped_rx.recv_timeout(Duration::from_millis(200)).is_err();
+        release_tx.send(()).unwrap();
+        let (child, guard) = registering.join().unwrap().unwrap();
+        stopping.join().unwrap();
+        let stopped = stopped_rx.recv().unwrap();
+        // The stop already killed the group; the guard removes and reaps its leader.
+        drop(guard);
+        drop(child);
+        assert!(
+            spawn_holds_registry,
+            "spawn did not hold the shutdown registry"
+        );
+        assert!(stop_waited, "stop finished before the probe registered");
+        assert_eq!(stopped, 1, "stop missed probe {pid}");
+        assert_eq!(in_flight_probes(), 0);
+        let refused = ProbeGroup::spawn(|| sh("exit 0").spawn(), Child::id, Duration::from_secs(5));
+        assert!(refused.is_err_and(|error| error.to_string().contains("stopping")));
     }
 }

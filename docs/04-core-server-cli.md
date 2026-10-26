@@ -588,7 +588,9 @@ and terminal-launch validation wait on. A stop kills every in-flight probe and r
 ones, so no probe child outlives the server. The short-lived `codex app-server` that lists
 Codex's models is a probe too (HS2-BJ7A59): it leads its own process group, is killed and
 reaped when its listing returns or times out, at the probe deadline, or when the server stops,
-while long-lived drive sessions keep their own lifecycle.
+while long-lived drive sessions keep their own lifecycle. Every probe child, the app-server
+included, is spawned and registered in one step against the stop, so a stop that lands
+mid-spawn still kills it before the server exits (HS2-3EJNYY, HS2-F6S04C).
 
 **Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
 such as a test harness or the scale-stress script, passes the hidden

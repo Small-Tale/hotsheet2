@@ -1029,11 +1029,11 @@ impl StdioTransport {
         env: &[(String, String)],
         deadline: std::time::Duration,
     ) -> std::io::Result<(Box<Self>, crate::probe::ProbeGroup)> {
-        if crate::probe::probes_stopped() {
-            return Err(std::io::Error::other("not probed: the process is stopping"));
-        }
-        let child = StreamChild::spawn_with(program, &["app-server"], cwd, env, true)?;
-        let guard = crate::probe::ProbeGroup::track(child.id(), deadline);
+        let (child, guard) = crate::probe::ProbeGroup::spawn(
+            || StreamChild::spawn_with(program, &["app-server"], cwd, env, true),
+            StreamChild::id,
+            deadline,
+        )?;
         Ok((Box::new(Self(child)), guard))
     }
 }
