@@ -807,11 +807,20 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
         "hotsheet_resolve_checkout" => backend
-            .get(&format!("/checkouts/{}", arg_str(args, "reference")?), &[])
+            .get(
+                &format!(
+                    "/checkouts/{}",
+                    encode_checkout_reference(&arg_str(args, "reference")?)
+                ),
+                &[],
+            )
             .map_err(be_msg),
         "hotsheet_repository_size" => backend
             .get(
-                &format!("/checkouts/{}/repository/size", arg_str(args, "checkout")?),
+                &format!(
+                    "/checkouts/{}/repository/size",
+                    encode_checkout_reference(&arg_str(args, "checkout")?)
+                ),
                 &[],
             )
             .map_err(be_msg),
@@ -1011,8 +1020,34 @@ fn checkout_route(args: &Value, suffix: &str) -> String {
         .filter(|v| !v.is_empty())
         .map_or_else(
             || suffix.to_owned(),
-            |checkout| format!("/checkouts/{checkout}{suffix}"),
+            |checkout| format!("/checkouts/{}{suffix}", encode_checkout_reference(checkout)),
         )
+}
+
+/// A checkout path is one HTTP route parameter even when it contains separators.
+/// Keep the same route shape for the serverless backend, which decodes it before
+/// resolving the registry entry (HS2-VHWWA6).
+fn encode_checkout_reference(reference: &str) -> String {
+    use std::fmt::Write as _;
+
+    let mut encoded = String::with_capacity(reference.len());
+    for byte in reference.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            write!(&mut encoded, "%{byte:02X}").expect("writing to a String");
+        }
+    }
+    encoded
+}
+
+fn decode_checkout_reference(reference: &str) -> Result<std::borrow::Cow<'_, str>, BackendError> {
+    percent_encoding::percent_decode_str(reference)
+        .decode_utf8()
+        .map_err(|_| BackendError {
+            status: Some(400),
+            message: "checkout reference is not valid UTF-8".into(),
+        })
 }
 
 fn be_msg(e: BackendError) -> String {
@@ -1031,7 +1066,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 // ---- direct-core backend (serverless) --------------------------------------------
 
 mod core_backend {
-    use super::{Backend, BackendError};
+    use super::{Backend, BackendError, decode_checkout_reference};
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
@@ -1138,9 +1173,10 @@ mod core_backend {
             &self,
             reference: &str,
         ) -> Result<(hotsheet_ticketing::checkouts::Checkout, Vec<FsStore>), BackendError> {
+            let reference = decode_checkout_reference(reference)?;
             let checkout = self
                 .checkout_registry
-                .resolve(reference)
+                .resolve(&reference)
                 .map_err(checkout_err)?;
             if checkout.stores.is_empty() {
                 return Err(bad_request("checkout has no linked ticket stores"));
@@ -1446,9 +1482,10 @@ mod core_backend {
                 .strip_prefix("/checkouts/")
                 .and_then(|rest| rest.strip_suffix("/repository/size"))
             {
+                let reference = decode_checkout_reference(reference)?;
                 let checkout = self
                     .checkout_registry
-                    .resolve(reference)
+                    .resolve(&reference)
                     .map_err(checkout_err)?;
                 return Ok(to_value(&hotsheet_ticketing::repository_size::report(
                     &checkout,
@@ -1539,7 +1576,7 @@ mod core_backend {
                 }
                 return self
                     .checkout_registry
-                    .resolve(reference)
+                    .resolve(&decode_checkout_reference(reference)?)
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
             }
@@ -2790,7 +2827,7 @@ impl Backend for HttpBackend {
         for (k, v) in query {
             req = req.query(k, v);
         }
-        self.exec(req.call())
+        self.exec(path, req.call())
     }
 
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
@@ -2800,12 +2837,16 @@ impl Backend for HttpBackend {
             .set("X-Hotsheet-Secret", &self.secret)
             .set("Content-Type", "application/json");
         let payload = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
-        self.exec(req.send_string(&payload))
+        self.exec(path, req.send_string(&payload))
     }
 }
 
 impl HttpBackend {
-    fn exec(&self, res: Result<ureq::Response, ureq::Error>) -> Result<Value, BackendError> {
+    fn exec(
+        &self,
+        path: &str,
+        res: Result<ureq::Response, ureq::Error>,
+    ) -> Result<Value, BackendError> {
         match res {
             Ok(resp) => {
                 let text = resp.into_string().unwrap_or_default();
@@ -2826,6 +2867,11 @@ impl HttpBackend {
                         .and_then(|r| r.into_string().ok())
                         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
                     auth_mismatch_message(&self.base, health.as_ref(), &fallback)
+                } else if code == 404
+                    && fallback.trim().is_empty()
+                    && path.starts_with("/checkouts/")
+                {
+                    "checkout route returned an empty 404; this server may not support the shim's checkout-scoped routes. Check the checkout ID with hotsheet_checkouts, then run a matching Hot Sheet server or explicitly use --path <store> for a linked Git ticket store. No other ticket source was queried".into()
                 } else {
                     fallback
                 };
@@ -3053,6 +3099,33 @@ mod tests {
     }
 
     #[test]
+    fn hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let backend = HttpBackend::new(format!("http://{addr}"), "synthetic-secret");
+        let error = backend
+            .get("/checkouts/synthetic/tickets", &[])
+            .unwrap_err();
+        assert_eq!(error.status, Some(404));
+        assert!(error.message.contains("checkout-scoped routes"));
+        assert!(error.message.contains("No other ticket source was queried"));
+        server.join().unwrap();
+    }
+
+    #[test]
     fn tools_list_has_the_hotsheet_tools() {
         let r = handle_message(&req("tools/list", json!({})), &FakeBackend::default()).unwrap();
         let names: Vec<&str> = r["result"]["tools"]
@@ -3272,6 +3345,18 @@ mod tests {
             .unwrap();
         let backend =
             CoreBackend::new(FsStore::open(&stores[0]).unwrap()).with_checkout_registry(registry);
+        let by_path = call(
+            &backend,
+            "hotsheet_query",
+            json!({"checkout": checkout_root, "fields": "title", "limit": 1}),
+        );
+        assert_eq!(by_path.as_array().unwrap().len(), 1, "{by_path}");
+        let resolved = call(
+            &backend,
+            "hotsheet_resolve_checkout",
+            json!({"reference": checkout_root}),
+        );
+        assert_eq!(resolved["id"], checkout.id);
         let query = |args: Value| -> Value {
             let mut args = args;
             args["checkout"] = Value::from(checkout.id.clone());
@@ -4001,6 +4086,24 @@ mod tests {
         assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
         assert!(calls[4].starts_with("POST /checkouts/web/tickets/HS-X/assign"));
         assert!(calls[5].starts_with("POST /checkouts/web/tickets/HS-X/restore"));
+    }
+
+    #[test]
+    fn hs2_vhwwa6_checkout_paths_are_one_http_route_segment() {
+        let backend = FakeBackend::default();
+        call(
+            &backend,
+            "hotsheet_query",
+            json!({"checkout":"/tmp/synthetic project","open":true}),
+        );
+        call(
+            &backend,
+            "hotsheet_resolve_checkout",
+            json!({"reference":"/tmp/synthetic project"}),
+        );
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with("GET /checkouts/%2Ftmp%2Fsynthetic%20project/tickets"));
+        assert_eq!(calls[1], "GET /checkouts/%2Ftmp%2Fsynthetic%20project []");
     }
 
     #[test]

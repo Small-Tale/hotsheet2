@@ -19,6 +19,7 @@ base64.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 ureq.workspace = true
+percent-encoding.workspace = true
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 hotsheet-extsync.workspace = true

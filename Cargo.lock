@@ -1140,6 +1140,7 @@ dependencies = [
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-ticketing",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tempfile",

@@ -8793,6 +8793,51 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
 }
 
 #[tokio::test]
+async fn hs2_vhwwa6_encoded_checkout_path_reaches_the_ticket_route() {
+    let (store, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "stores": [store.path()]
+    })
+    .to_string();
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let encoded = checkout.path().display().to_string().replace('/', "%2F");
+    let raw = format!("/checkouts/{}/tickets", checkout.path().display());
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("GET", &raw, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND,
+        "a raw absolute path does not fit the checkout route parameter"
+    );
+    let response = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{encoded}/tickets?open=true&limit=2"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();

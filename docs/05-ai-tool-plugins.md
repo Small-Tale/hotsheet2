@@ -1831,6 +1831,12 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >   §4.4). The headless default. A running server's watcher still picks up its writes.
 > - **`--server <url> --secret <s>` → proxy** a running `hotsheet-server` over HTTP,
 >   for index-backed reads + instant broadcast.
+
+> Checkout-scoped MCP calls accept a checkout id, alias, or canonical path. The shim
+> encodes a path as one HTTP route segment, and the serverless backend resolves the
+> same reference after decoding it. An empty 404 from a checkout route reports a
+> possible server/shim route mismatch with safe next steps; the shim does not query
+> another ticket source to hide that error (`HS2-VHWWA6`).
 >
 > The full-ticket + list-row wire DTOs are defined once in `hotsheet_ticketing::wire`
 > (the wire SSOT, §4.2) and shared by the server and both shim backends, so the JSON

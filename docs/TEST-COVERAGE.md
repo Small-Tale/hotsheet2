@@ -1355,3 +1355,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/components/permission-components.test.ts # HS2-7T5GPN` covers checkout, legacy, unknown, and confirmation labels; `clients/web/src/permission-notifications.test.ts # HS2-7T5GPN` covers live path updates.
 - End to end: `clients/web/tests/providers.spec.ts # HS2-7T5GPN` checks real application preview, dialog, and confirmation at wide, medium, and phone widths, including wide-to-phone-to-wide transition.
 - Manual: `docs/manual-test-plan.md # Remembered permission owner` covers shared stores and changed provider defaults in live projects.
+
+### Checkout path routing in MCP (HS2-VHWWA6)
+
+- Behavior: checkout-scoped MCP reads encode an absolute path as one HTTP route segment and resolve the same path in serverless mode. An empty route-level 404 explains a possible server mismatch without falling back to another source.
+- Unit: `crates/hotsheet-mcp/src/lib.rs # hs2_vhwwa6_checkout_paths_are_one_http_route_segment`, `corebackend_pages_a_multi_store_checkout_through_the_query_tool`, and `hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch` cover route construction, serverless resolution, and HTTP diagnostics.
+- End to end: `crates/hotsheet-server/tests/http.rs # hs2_vhwwa6_encoded_checkout_path_reaches_the_ticket_route` checks the encoded path against a synthetic registered checkout and rebuilt server router.
