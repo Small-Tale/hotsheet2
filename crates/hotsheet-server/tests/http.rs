@@ -17481,8 +17481,20 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
+    let checkout_root = dir.path().join("checkout");
+    std::fs::create_dir_all(&checkout_root).unwrap();
+    let registry_path = dir.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    let checkout = registry
+        .register(&checkout_root, None, None, vec![])
+        .unwrap();
+    registry
+        .mark_permission_vault_registered(&checkout.id)
+        .unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
+        .with_machine_home(dir.path().join("home"))
+        .with_checkout_registry(&registry_path)
         .with_test_permission_rules(&rules_path);
     let bridge = state.permission_bridge();
     let app = app(state);
@@ -17554,6 +17566,13 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
     );
     assert!(bridge.rules().is_empty());
     std::fs::remove_file(&rules_path).unwrap();
+    assert!(!rules_path.exists());
+    assert!(
+        !rules_path
+            .with_file_name(format!("checkout-{}.json", checkout.id))
+            .exists(),
+        "the registered checkout has no healthy vault"
+    );
     let response = app
         .clone()
         .oneshot(authed("GET", "/permissions/rules", None))
@@ -17563,6 +17582,10 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
         response.status(),
         StatusCode::SERVICE_UNAVAILABLE,
         "a missing vault must stay locked after the durable rules are withdrawn"
+    );
+    assert!(
+        !rules_path.exists(),
+        "listing must not recreate a lost vault"
     );
     assert_eq!(
         bridge.request_blocking_timeout_for_project(

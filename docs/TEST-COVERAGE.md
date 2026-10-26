@@ -1321,7 +1321,7 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 - Behavior: a damaged legacy vault keeps its own durable answers locked and Always Allow unavailable, while healthy checkout rules remain listed and usable. Legacy recovery retains checkout grants. With no healthy checkout, the rule list still reports unavailable.
 - Unit: `crates/hotsheet-aitools/src/permission.rs # checkout_vaults_keep_shared_store_permissions_isolated_after_reload` covers legacy lock and recovery without dropping checkout grants.
-- End to end: `crates/hotsheet-server/tests/http.rs # checkout_rules_survive_restart_without_crossing_a_shared_ticket_store` checks authenticated rule listing, matching, and pending-request capability through damage and recovery; `damaged_vault_after_startup_locks_list_and_disables_durable_auto_answers` covers the legacy-only 503.
+- End to end: `crates/hotsheet-server/tests/http.rs # checkout_rules_survive_restart_without_crossing_a_shared_ticket_store` checks authenticated rule listing, matching, and pending-request capability through damage and recovery; `damaged_vault_after_startup_locks_list_and_disables_durable_auto_answers` covers the 503 after legacy corruption and removal with a registered checkout whose own vault is missing, then authenticated legacy recovery (HS2-6HEH2K).
 
 ### Deferred legacy vault startup (HS2-Q7R2RM)
 

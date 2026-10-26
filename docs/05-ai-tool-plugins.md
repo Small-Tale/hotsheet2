@@ -1342,6 +1342,10 @@ checkout vaults still register, match, and appear in `GET /permissions/rules`.
 When no healthy checkout vault is available, the list retains its 503 unavailable
 response. Restoring the legacy vault does not replace checkout grants
 (`HS2-G1K4SA`).
+Registering a checkout must not recreate a missing legacy vault. After legacy
+corruption has locked durable answers, removing its file leaves the list
+unavailable until the original authenticated file is restored, even if a
+registered checkout has also lost its own vault (`HS2-6HEH2K`).
 
 The server must register one machine-local encrypted durable-rule location per checkout
 identity before offering Always Allow. It must report unavailable durable storage as an

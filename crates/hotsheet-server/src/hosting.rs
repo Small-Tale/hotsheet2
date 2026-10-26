@@ -39,9 +39,9 @@ impl AppState {
         let Some(legacy) = legacy else {
             return false;
         };
-        if hotsheet_aitools::ensure_permission_rules_file(&legacy).is_err() {
-            self.permissions.drop_legacy_durable_rules();
-        }
+        // Checkout registration must not create the legacy vault. If that vault
+        // was lost after its rules were loaded, only restoring its original
+        // authenticated file may unlock those rules (HS2-6HEH2K).
         let path = legacy.with_file_name(format!("checkout-{id}.json"));
         let existing = checkout.permission_vault_registered || path.is_file();
         if checkout.permission_vault_registered && !path.is_file() {
