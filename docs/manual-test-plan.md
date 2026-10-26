@@ -20,6 +20,21 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Independent integrator handoff routes (HS2-J81Y9W, HS2-AJ7FJY)
+
+Use disposable code worktrees, a shared synthetic ticket store, and separate Codex
+and Claude sessions. In each assignment, name the exact integrator recipient and
+return route. For a Hot Sheet terminal route, verify its live connection advertises
+`message`, then have the worker write its handoff, release its claim, and send only
+the ticket slug through the CLI. Confirm the integrator reads the durable ticket
+before integration. An unconfirmed receipt must be reported as unconfirmed.
+
+Repeat with no addressable terminal (including an independent Codex Work/app
+session) and with a stopped terminal. Verify the worker preserves its handoff,
+releases its claim, and reports the need to resume the integrator and relay the
+slug. Confirm no automatic wake or monitoring is claimed and no timer polls the
+queue. Native parent-channel delivery applies only inside the same tool agent tree.
+
 ### Multi-collaborator attachment compaction recovery (HS2-RFJ1GN)
 
 On disposable dedicated Git ticket stores with a shared bare remote and synthetic

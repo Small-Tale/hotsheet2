@@ -1967,6 +1967,27 @@ store read; there is no fixed-interval queue polling.
 `crates/hotsheet-plugins/src/tests.rs # hs2_bnsqf9_integrator_skills_preserve_main_ownership`
 pins the mirrored skills and integration boundary.
 
+**Handoff return route (HS2-J81Y9W).** Every assignment records an exact recipient and
+one supported route: the native parent channel within the same tool's agent tree,
+or a live Hot Sheet terminal connection whose `GET /connections` entry advertises
+`message` for the expected integrator session. Separate Codex and Claude sessions
+do not share the native parent channel. With a running local server, the worker can
+use `hotsheet-cli -C <shared-store> terminal message <integrator-terminal-id> --text "<slug>"`.
+It first writes the durable handoff and releases its claim, then sends only the
+ticket slug. The integrator reads the store before acting. The terminal route uses
+the existing session-push adapters in [13 §13.12](13-drive-transport-interface.md#1312-messaging-a-live-interactive-session-session-push-hs2-pej962);
+an unconfirmed receipt does not establish that the integrator acted.
+
+Without a supported recipient, or after failed or unconfirmed delivery, the worker
+reports the delivery state and asks for human relay: resume the integrator and give
+it the ticket slug to read from the shared store. An independent Codex Work/app
+session without an advertised terminal connection uses this fallback; HS2-4H7D8D
+tracks investigating a supported wake route. Shared-store notes and the notification
+feed alone do not wake independent sessions. Automatic note delivery remains
+separate work in HS2-25TP3N; this workflow does not poll the queue on a timer.
+`crates/hotsheet-plugins/src/tests.rs # hs2_j81y9w_role_skills_require_addressed_handoff_delivery`
+pins the route choices, fallback, and note-before-release-before-cue ordering.
+
 ## 5.10 Testability — injected adapters + the fake agent
 
 > **Load-bearing rule** (maintainer, 2026-08-19): adding a tool to HS1 was a manual

@@ -3,15 +3,16 @@ name: hotsheet-worker
 description: Implement an assigned Hot Sheet ticket in an isolated Git worktree and hand its verified commit to the main-branch integrator.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 34 -->
+<!-- hotsheet-skill-version: 35 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
 full history; these instructions define the worker handoff only.
 
 1. **Prepare isolation.** Confirm the assigned ticket slug, the integrator, and the
-   shared Hot Sheet store. Create a ticket-named branch and separate Git worktree from
-   the current shipping branch, or use the worktree the integrator prepared. Never edit
+   shared Hot Sheet store, and explicit return route with its exact recipient. Create a
+   ticket-named branch and separate Git worktree from the current shipping branch, or use
+   the worktree the integrator prepared. Never edit
    the integrator's checkout. Link the worktree to the same ticket store and set up its
    AI-tool integration if needed; do not create a second ticket store. Keep build and
    test state inside the worktree. If the assigned ticket overlaps another worker's
@@ -32,9 +33,30 @@ full history; these instructions define the worker handoff only.
    handoff` with the branch name, full commit SHA, worktree location labeled as
    machine-local, gate results, unresolved risks, and any follow-up slugs. State that
    the ticket remains Started pending integration. Release the claim immediately and
-   notify the integrator of the ticket slug. The integrator reclaims the ticket and
-   owns integration, push, CI confirmation, completion, and worktree removal. Do not
+   send only the ticket slug through the assigned return route below. The integrator
+   reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal. Do not
    mark the ticket Completed or Verified from a worker worktree.
+
+## Return route
+
+- **Native parent channel:** use the assigned collaboration tool and integrator agent id
+  only within the same tool's agent tree. Separate Codex and Claude sessions do not share
+  a native parent channel.
+- **Hot Sheet terminal:** use the assigned shared store and exact integrator terminal
+  connection id, previously verified in `GET /connections` to advertise the `message`
+  action for that session:
+  `hotsheet-cli -C <shared-store> terminal message <integrator-terminal-id> --text "<slug>"`.
+  This requires a running local server and supported session adapter. Record the delivery
+  result; `confirmed: false` does not prove the integrator read or acted on the cue.
+- **Human relay:** when no supported recipient is assigned, after the durable ticket
+  handoff and claim release, report: "Resume the integrator and give it <slug> to read
+  from the shared store." An independent Codex Work/app session without an advertised
+  terminal connection uses this fallback (HS2-4H7D8D).
+
+If delivery fails or is unconfirmed, record that result and give the human relay instruction;
+do not guess another recipient or repeatedly resend. Do not include commands, branch data,
+or instructions in the cue: the integrator reads the ticket. A shared store, ticket note,
+or notification feed does not automatically wake an independent session.
 
 If work stops earlier, record the current state and blocker in the ticket, then
 release the claim. A failed renewal also stops edits. Before ending, check

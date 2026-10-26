@@ -197,6 +197,48 @@ fn hs2_bnsqf9_integrator_skills_preserve_main_ownership() {
 }
 
 #[test]
+fn hs2_j81y9w_role_skills_require_addressed_handoff_delivery() {
+    let integrators = [
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+    ];
+    let workers = [
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+    ];
+    for skill in integrators.into_iter().chain(workers) {
+        let skill = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for invariant in [
+            "explicit return route",
+            "Native parent channel",
+            "Separate Codex and Claude sessions do not share a native parent channel",
+            "GET /connections",
+            "`message` action",
+            "hotsheet-cli -C <shared-store> terminal message <integrator-terminal-id> --text \"<slug>\"",
+            "confirmed: false",
+            "Human relay",
+            "Resume the integrator and give it <slug> to read from the shared store",
+            "independent Codex Work/app session",
+            "HS2-4H7D8D",
+            "does not automatically wake an independent session",
+            "If delivery fails or is unconfirmed",
+            "do not guess another recipient or repeatedly resend",
+        ] {
+            assert!(skill.contains(invariant), "missing {invariant}");
+        }
+    }
+    for worker in workers {
+        let note = worker.find("Add a regular ticket note").unwrap();
+        let release = worker.find("Release the claim immediately").unwrap();
+        let cue = worker.find("send only the ticket slug").unwrap();
+        assert!(
+            note < release && release < cue,
+            "handoff must precede release and cue"
+        );
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.
