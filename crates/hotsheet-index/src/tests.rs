@@ -1120,6 +1120,7 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
         summary: None,
         confidence: None,
         feedback_for: None,
+        kind_explicit: false,
         feedback_request: false,
         response_to: None,
         ai_feedback: None,
@@ -2058,6 +2059,7 @@ fn complete_with_score(store: &FsStore, id: &str, now: &str, score: Option<u64>)
         Timestamp::new(now),
         hotsheet_model::NoteKind::Regular,
         ops::NoteMetadataInput {
+            kind_explicit: false,
             human_edited: false,
             summary: None,
             confidence: score.map(|value| hotsheet_model::Confidence::new(value).unwrap()),

@@ -218,9 +218,9 @@ enum Cmd {
         #[arg(long, requires = "note")]
         allow_literal_backslash_n: bool,
         /// Edit this provider-native note id instead of appending a note.
-        #[arg(long, conflicts_with = "note_kind")]
+        #[arg(long)]
         edit_note: Option<String>,
-        /// Kind for --note: regular | activity | feedback_needed | status.
+        /// Explicit appended kind, or correction with --edit-note: regular | activity | feedback_needed | status.
         #[arg(long)]
         note_kind: Option<String>,
         /// Concise plain-text timeline headline for an activity/status note.
@@ -1207,16 +1207,24 @@ fn validate_note_modifiers(
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<&String>,
 ) -> Result<()> {
+    if edit_note.is_some() {
+        hotsheet_ticketing::ops::validate_note_kind_edit(
+            note_kind.map(|kind| parse_note_kind(kind)).transpose()?,
+        )?;
+    }
     if note.is_some() {
         return Ok(());
     }
-    if note_kind.is_some() || note_summary.is_some() {
+    if (note_kind.is_some() && edit_note.is_none()) || note_summary.is_some() {
         bail!("--note-kind and --note-summary require --note or --note-file");
     }
-    match (edit_note.is_some(), note_confidence.is_some()) {
+    match (
+        edit_note.is_some(),
+        note_confidence.is_some() || note_kind.is_some(),
+    ) {
         (true, false) => bail!(
             "--edit-note requires --note, --note-file, --note-confidence, or \
-             --clear-note-confidence"
+             --clear-note-confidence, or --note-kind"
         ),
         (false, true) => {
             bail!("--note-confidence requires --note or --note-file when appending a note")

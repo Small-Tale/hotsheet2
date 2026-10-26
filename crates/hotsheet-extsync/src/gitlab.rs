@@ -321,12 +321,18 @@ impl GitLabProvider {
                 ApiNote {
                     id: note.id.to_string(),
                     hotsheet_note_id: note_trailer::parse_note_id(&note.body),
-                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
-                    {
-                        NoteKind::FeedbackNeeded
-                    } else {
-                        NoteKind::Regular
-                    },
+                    kind: note_trailer::parse_explicit_kind(&note.body).unwrap_or_else(|| {
+                        hotsheet_model::Note::infer_kind(
+                            if feedback_request {
+                                NoteKind::FeedbackNeeded
+                            } else {
+                                NoteKind::Regular
+                            },
+                            false,
+                            &text,
+                        )
+                    }),
+                    kind_explicit: note_trailer::parse_explicit_kind(&note.body).is_some(),
                     created_at: note.created_at.clone(),
                     edited_at: note.updated_at.unwrap_or(note.created_at),
                     summary: None,
@@ -762,12 +768,7 @@ impl TicketProvider for GitLabProvider {
         {
             return self.get(native_id);
         }
-        let kind =
-            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
-                NoteKind::FeedbackNeeded
-            } else {
-                kind
-            };
+        let kind = hotsheet_model::Note::infer_kind(kind, metadata.kind_explicit, &text);
         if let Some(request_id) = metadata.response_to.as_deref() {
             let ticket = self.get(native_id)?;
             if kind != NoteKind::Regular
@@ -782,12 +783,13 @@ impl TicketProvider for GitLabProvider {
                 });
             }
         }
-        let body = note_trailer::compose_feedback_comment(
+        let body = note_trailer::compose_explicit_feedback_comment(
             &text,
             metadata.confidence,
             ctx.generated_id,
             kind,
             metadata.response_to.as_deref(),
+            metadata.kind_explicit,
         );
         self.request(
             "POST",
@@ -928,6 +930,7 @@ fn capabilities() -> ProviderCapabilities {
         update: true,
         close: true,
         notes: true,
+        note_kind_edit: false,
         note_edit: false,
         note_delete: false,
         // Native project uploads linked from marked notes (HS2-ENHE8K). The original upload
@@ -1131,6 +1134,115 @@ mod tests {
     /// HS2-5YNASC: a scored note is written as a `Confidence: NN%` trailer, read back into
     /// `confidence`, and a retry with the same note id does not post twice.
     #[test]
+    fn hs2_cv5nmc_explicit_kind_roundtrip_and_kind_edit_refusal() {
+        let note_id = hotsheet_model::Ulid::new();
+        let score = hotsheet_model::Confidence::new(64).unwrap();
+        let written = note_trailer::compose_explicit_feedback_comment(
+            "not FEEDBACK NEEDED",
+            Some(score),
+            note_id,
+            NoteKind::Regular,
+            None,
+            true,
+        );
+        let mut closed = issue(7, "closed");
+        closed["state"] = json!("closed");
+        let notes = json!([
+            {"id":5,"body":written,"created_at":"2026-08-26T00:02:00Z"},
+            {"id":6,"body":"closed\n\nConfidence: 10%","created_at":"2026-08-26T00:03:00Z","system":true}
+        ]);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!([])),
+                    response(201, json!({"id":5})),
+                    response(200, closed.clone()),
+                    response(200, notes.clone()),
+                    // A scored closed issue reads its reopen history (HS2-N3RMTV): none.
+                    response(
+                        200,
+                        json!([{"state":"closed","created_at":"2026-08-26T00:04:00Z"}]),
+                    ),
+                    // The retry finds its marker and only re-reads the issue.
+                    response(200, notes.clone()),
+                    response(200, closed),
+                    response(200, notes),
+                    response(200, json!([])),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let gitlab = provider(fake.clone());
+        assert!(gitlab.supports_note_confidence());
+        assert!(!gitlab.descriptor().capabilities.note_kind_edit);
+        assert!(matches!(
+            gitlab.edit_note_with_metadata(
+                "42",
+                "91",
+                Timestamp::new("2026-10-26T00:00:00Z"),
+                hotsheet_ticketing::ops::NoteEditInput {
+                    kind: Some(NoteKind::Regular),
+                    ..Default::default()
+                }
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "note_kind_edit",
+                ..
+            })
+        ));
+
+        let add = || {
+            gitlab
+                .add_note_with_metadata(
+                    "7",
+                    MutationContext {
+                        now: Timestamp::new("2026-08-26T00:02:00Z"),
+                        generated_id: note_id,
+                    },
+                    NoteKind::Regular,
+                    NoteMetadataInput {
+                        kind_explicit: true,
+                        human_edited: false,
+                        summary: None,
+                        confidence: Some(score),
+                        actor: None,
+                        ai_feedback: None,
+                        response_to: None,
+                    },
+                    "not FEEDBACK NEEDED".into(),
+                )
+                .unwrap()
+        };
+        let ticket = add();
+        assert_eq!(ticket.notes.len(), 1, "system notes stay hidden");
+        assert_eq!(ticket.notes[0].text, "not FEEDBACK NEEDED");
+        assert_eq!(ticket.notes[0].kind, NoteKind::Regular);
+        assert!(ticket.notes[0].kind_explicit);
+        assert!(!ticket.notes[0].feedback_request);
+        assert_eq!(ticket.notes[0].confidence, Some(64));
+        assert_eq!(ticket.latest_confidence, Some(64));
+        assert_eq!(add().notes[0].confidence, Some(64));
+        assert!(
+            fake.requests.lock_or_recover()[4]
+                .1
+                .ends_with("/issues/7/resource_state_events?per_page=100&page=1")
+        );
+        let requests = fake.requests.lock_or_recover();
+        let posts = requests
+            .iter()
+            .filter(|request| request.0 == "POST")
+            .collect::<Vec<_>>();
+        assert_eq!(posts.len(), 1);
+        assert_eq!(
+            posts[0].3.as_ref().unwrap()["body"],
+            format!(
+                "not FEEDBACK NEEDED\n\nConfidence: 64%\n\n<!-- hotsheet-note-id:{note_id} -->\n<!-- hotsheet-note-kind:regular -->"
+            )
+        );
+    }
+
+    #[test]
     fn note_confidence_round_trips_through_a_note_trailer() {
         let note_id = hotsheet_model::Ulid::new();
         let score = hotsheet_model::Confidence::new(64).unwrap();
@@ -1175,6 +1287,7 @@ mod tests {
                     },
                     NoteKind::Regular,
                     NoteMetadataInput {
+                        kind_explicit: false,
                         human_edited: false,
                         summary: None,
                         confidence: Some(score),
@@ -1441,6 +1554,7 @@ mod tests {
             .unwrap();
         let id = created.native_id.clone();
         let score = |value: u64| NoteMetadataInput {
+            kind_explicit: false,
             human_edited: false,
             summary: None,
             confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),

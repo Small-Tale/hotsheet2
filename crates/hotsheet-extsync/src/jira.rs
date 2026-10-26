@@ -314,12 +314,22 @@ impl JiraProvider {
                     hotsheet_note_id: note_trailer::parse_note_id(&adf_to_text(Some(
                         &comment.body,
                     ))),
-                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
-                    {
-                        NoteKind::FeedbackNeeded
-                    } else {
-                        NoteKind::Regular
-                    },
+                    kind: note_trailer::parse_explicit_kind(&adf_to_text(Some(&comment.body)))
+                        .unwrap_or_else(|| {
+                            hotsheet_model::Note::infer_kind(
+                                if feedback_request {
+                                    NoteKind::FeedbackNeeded
+                                } else {
+                                    NoteKind::Regular
+                                },
+                                false,
+                                &text,
+                            )
+                        }),
+                    kind_explicit: note_trailer::parse_explicit_kind(&adf_to_text(Some(
+                        &comment.body,
+                    )))
+                    .is_some(),
                     created_at: comment.created.clone(),
                     edited_at: comment.updated.unwrap_or(comment.created),
                     summary: None,
@@ -763,12 +773,7 @@ impl TicketProvider for JiraProvider {
         {
             return self.get(native_id);
         }
-        let kind =
-            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
-                NoteKind::FeedbackNeeded
-            } else {
-                kind
-            };
+        let kind = hotsheet_model::Note::infer_kind(kind, metadata.kind_explicit, &text);
         if let Some(request_id) = metadata.response_to.as_deref() {
             let ticket = self.get(native_id)?;
             if kind != NoteKind::Regular
@@ -783,12 +788,13 @@ impl TicketProvider for JiraProvider {
                 });
             }
         }
-        let body = note_trailer::compose_feedback_comment(
+        let body = note_trailer::compose_explicit_feedback_comment(
             &text,
             metadata.confidence,
             ctx.generated_id,
             kind,
             metadata.response_to.as_deref(),
+            metadata.kind_explicit,
         );
         self.request(
             "POST",
@@ -1044,6 +1050,7 @@ fn capabilities() -> ProviderCapabilities {
         update: true,
         close: false,
         notes: true,
+        note_kind_edit: false,
         note_edit: false,
         note_delete: false,
         // Native issue attachments plus per-attachment Hot Sheet metadata properties
@@ -1267,6 +1274,92 @@ mod tests {
     /// HS2-5YNASC: the trailer survives Jira's ADF paragraph round trip, and an ordinary
     /// comment ending in the same words is never parsed as a score.
     #[test]
+    fn hs2_cv5nmc_explicit_kind_roundtrip_and_kind_edit_refusal() {
+        let note_id = hotsheet_model::Ulid::new();
+        let score = hotsheet_model::Confidence::new(91).unwrap();
+        let written = text_to_adf(&note_trailer::compose_explicit_feedback_comment(
+            "not FEEDBACK NEEDED",
+            Some(score),
+            note_id,
+            NoteKind::Regular,
+            None,
+            true,
+        ));
+        let mut done = issue("ENG-9", "done");
+        done["fields"]["status"]["statusCategory"]["key"] = json!("done");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"comments":[]})),
+                    response(201, json!({"id":"70"})),
+                    response(200, done),
+                    response(
+                        200,
+                        json!({"comments":[
+                            {"id":"70","body":written,"created":"2026-08-26T00:02:00Z"},
+                            {"id":"71","body":text_to_adf("Thanks.\n\nConfidence: 50%"),"created":"2026-08-26T00:03:00Z"}
+                        ]}),
+                    ),
+                    // A scored done issue reads its changelog (HS2-N3RMTV); with no status
+                    // transition the status catalogue is never requested.
+                    response(200, json!({"values":[],"isLast":true})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert!(jira.supports_note_confidence());
+        assert!(!jira.descriptor().capabilities.note_kind_edit);
+        assert!(matches!(
+            jira.edit_note_with_metadata(
+                "42",
+                "91",
+                Timestamp::new("2026-10-26T00:00:00Z"),
+                hotsheet_ticketing::ops::NoteEditInput {
+                    kind: Some(NoteKind::Regular),
+                    ..Default::default()
+                }
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "note_kind_edit",
+                ..
+            })
+        ));
+
+        let ticket = jira
+            .add_note_with_metadata(
+                "ENG-9",
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:02:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    kind_explicit: true,
+                    human_edited: false,
+                    summary: None,
+                    confidence: Some(score),
+                    actor: None,
+                    ai_feedback: None,
+                    response_to: None,
+                },
+                "not FEEDBACK NEEDED".into(),
+            )
+            .unwrap();
+        let requests = fake.requests.lock_or_recover();
+        assert_eq!(requests[1].0, "POST");
+        assert_eq!(requests[1].3.as_ref().unwrap()["body"], written);
+        assert_eq!(ticket.notes[0].text, "not FEEDBACK NEEDED");
+        assert_eq!(ticket.notes[0].kind, NoteKind::Regular);
+        assert!(ticket.notes[0].kind_explicit);
+        assert!(!ticket.notes[0].feedback_request);
+        assert_eq!(ticket.notes[0].confidence, Some(91));
+        assert_eq!(ticket.notes[1].confidence, None);
+        assert_eq!(ticket.latest_confidence, Some(91));
+    }
+
+    #[test]
     fn note_confidence_round_trips_through_an_adf_comment_paragraph() {
         let note_id = hotsheet_model::Ulid::new();
         let score = hotsheet_model::Confidence::new(91).unwrap();
@@ -1309,6 +1402,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(score),
@@ -2051,6 +2145,7 @@ mod tests {
             summary: None,
             confidence: Some(score),
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: hotsheet_model::AiFeedback::from_legacy_text("Shipped."),

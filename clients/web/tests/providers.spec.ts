@@ -19486,7 +19486,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   await inspector.getByRole('textbox', { name: 'New note' }).fill('Created note');
   await inspector.getByRole('textbox', { name: 'New note' }).blur();
   await expect
-    .poll(() => patches.some((patch) => patch.note === 'Created note' && patch.note_kind === 'regular'))
+    .poll(() => patches.some((patch) => patch.note === 'Created note' && !Object.hasOwn(patch, 'note_kind')))
     .toBe(true);
   const feedbackSurface = inspector.locator('[data-note-id="N2"] .note-card__body');
   // An AI feedback prompt is answered with a new note, never edited in place (HS2-MB2Q10).
@@ -19547,7 +19547,8 @@ test('creates a regular note once after a typing pause', async ({ page }) => {
   await expect
     .poll(
       () =>
-        patches.filter((patch) => patch.note === 'Saved after quiet typing' && patch.note_kind === 'regular').length,
+        patches.filter((patch) => patch.note === 'Saved after quiet typing' && !Object.hasOwn(patch, 'note_kind'))
+          .length,
       {
         timeout: 15_000,
       },
@@ -34200,4 +34201,127 @@ test('counts AI chat replies that settle while the page is hidden and reads them
   await setPageVisibility('visible');
   await expect(badge).toHaveCount(0);
   await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+});
+
+test('preserves explicit note kinds and infers omitted UI requests through the real server (HS2-CV5NMC)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic explicit note kind' });
+    const path = `/tickets/${created.id}`;
+    const explicit = await server.request<FullTicket>(path, 'PATCH', {
+      note: 'Implementation prerequisite, not FEEDBACK NEEDED or a decision.',
+      note_kind: 'regular',
+    });
+    const original = explicit.notes[0];
+    expect(explicit.feedback_needed).toBe(false);
+    await mockProject(page);
+    const patches: Record<string, unknown>[] = [];
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      if (route.request().method() === 'PATCH') patches.push(route.request().postDataJSON() as Record<string, unknown>);
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const inspector = page.locator('#app-right-rail');
+    const header = inspector.locator('[data-component="ticket-inspector-header"]');
+    await expect(header).toHaveAttribute('data-needs-review', 'false');
+    await expect(inspector.locator(`article[data-note-id="${original.id}"]`)).toContainText(
+      'Implementation prerequisite',
+    );
+    await inspector.getByRole('button', { name: 'Add Note' }).first().click();
+    await inspector.getByRole('textbox', { name: 'New note' }).fill('FEEDBACK NEEDED: choose the synthetic layout.');
+    await inspector.getByRole('textbox', { name: 'New note' }).blur();
+    await expect
+      .poll(() => patches.find((patch) => patch.note === 'FEEDBACK NEEDED: choose the synthetic layout.'))
+      .toBeTruthy();
+    expect(patches.find((patch) => patch.note === 'FEEDBACK NEEDED: choose the synthetic layout.')).not.toHaveProperty(
+      'note_kind',
+    );
+    await expect(header).toHaveAttribute('data-needs-review', 'true');
+    const requested = await server.request<FullTicket>(path);
+    const request = requested.notes.find((note) => note.kind === 'feedback_needed')!;
+    const corrected = await server.request<FullTicket>(path, 'PATCH', { note_id: request.id, note_kind: 'regular' });
+    expect(corrected.feedback_needed).toBe(false);
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(header).toHaveAttribute('data-needs-review', 'false');
+    const sidebar = page.locator('#app-left-rail');
+    const leftContent = sidebar.locator(':scope > .kui-workbench__panel-content');
+    const rightContent = inspector.locator(':scope > .kui-workbench__panel-content');
+    const desktopCapture = async (label: string, width: number) => {
+      await page.setViewportSize({ width, height: 900 });
+      // HS2-CV5NMC: wait for actual resize/restore state and resting geometry, not a transient frame.
+      await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+      await expect(leftContent).toHaveCSS('transform', 'none');
+      await expect.poll(async () => Math.round((await leftContent.boundingBox())!.x)).toBe(0);
+      await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+      await expect
+        .poll(async () => {
+          const box = (await rightContent.boundingBox())!;
+          return box.x >= 0 && Math.round(box.x + box.width) <= width;
+        })
+        .toBe(true);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+      await expect(inspector.locator(`article[data-note-id="${original.id}"]`)).toBeInViewport();
+      await page.screenshot({ path: test.info().outputPath(`hs2-cv5nmc-${label}.png`) });
+    };
+    await desktopCapture('wide', 1440);
+    await desktopCapture('medium', 1100);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+    await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+    await expect
+      .poll(async () => {
+        const box = (await leftContent.boundingBox())!;
+        return Math.round(box.x + box.width);
+      })
+      .toBe(0);
+    await expect.poll(async () => Math.round((await rightContent.boundingBox())!.x)).toBeGreaterThanOrEqual(390);
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toHaveAttribute('open', '');
+    await expect(dialog).not.toHaveAttribute('data-kui-dialog-motion');
+    const reader = dialog.locator('[data-component="ticket-inspector"]');
+    await expect(reader.locator(`article[data-note-id="${original.id}"]`)).toBeInViewport();
+    await expect(reader.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+      'data-needs-review',
+      'false',
+    );
+    await expect
+      .poll(async () => {
+        const box = (await reader.boundingBox())!;
+        return box.x >= 0 && Math.round(box.x + box.width) <= 390;
+      })
+      .toBe(true);
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+    await page.screenshot({ path: test.info().outputPath('hs2-cv5nmc-narrow.png') });
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+    await desktopCapture('wide-again', 1440);
+  } finally {
+    await server.stop();
+  }
 });

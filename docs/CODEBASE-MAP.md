@@ -914,3 +914,8 @@ setup writer lacks the host's environment (HS2-G8P0W9). The host leaves an alias
 (HS2-86VAAG).
 `clients/web/src/codex-hook-compat.ts` restores a removed pre-upgrade snapshot hook path
 on the first project open after upgrade, before the setup refresh writes the durable path.
+
+HS2-CV5NMC: `hotsheet-model::Note::infer_kind` owns legacy note inference and
+`kind_explicit` file/wire metadata preserves author intent. Ticketing `ops` owns
+atomic note-kind correction and its id/kind audit; provider `note_kind_edit` gates
+correction. External `note_trailer` carries append intent in native comments.

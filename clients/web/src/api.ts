@@ -252,6 +252,8 @@ export type Capabilities = Record<
   boolean
 > & {
   query_fields: string[];
+  /** Atomic note-kind correction; omitted older/provider capability is false. */
+  note_kind_edit?: boolean;
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
   attachment_edit?: boolean;
   /** Existing attachments can be deleted even when they cannot be renamed (Jira, HS2-51ADSG). */
@@ -362,6 +364,8 @@ export interface Note {
   /** Provider comment's stable Hot Sheet marker when it differs from the native id. */
   hotsheet_note_id?: string;
   kind: 'regular' | 'activity' | 'feedback_needed' | 'feedback_draft' | 'status';
+  /** Explicit author intent; absent on legacy notes (HS2-CV5NMC). */
+  kind_explicit?: boolean;
   created_at: string;
   edited_at: string;
   summary?: string;

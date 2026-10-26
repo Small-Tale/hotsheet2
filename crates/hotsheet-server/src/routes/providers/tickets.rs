@@ -245,6 +245,15 @@ pub(crate) fn do_provider_update(
         return Ok((ticket, ProviderMutationTiming::default()));
     }
     let provider = provider_for(state, connection_id)?;
+    if req.note_id.is_some()
+        && req.note_kind.is_some()
+        && !provider.descriptor().capabilities.note_kind_edit
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note_kind_edit"),
+        ));
+    }
     if req.note_id.is_some() && !provider.supports_note_edit() {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -269,6 +278,18 @@ pub(crate) fn do_provider_update(
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "response_to requires an appended note",
+        ));
+    }
+    if req.note_id.is_some() {
+        ops::validate_note_kind_edit(req.note_kind)?;
+    }
+    if req.note_kind.is_some()
+        && req.note_id.is_none()
+        && req.note.as_deref().is_none_or(str::is_empty)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_kind requires note or note_id",
         ));
     }
     let confidence_change = req.note_confidence_change(req.note_id.is_some())?;
@@ -332,6 +353,7 @@ pub(crate) fn do_provider_update(
         )
         .map_err(provider_transfer_error)?;
     let edit = ops::NoteEditInput {
+        kind: req.note_kind,
         text: note,
         confidence: confidence_change,
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
@@ -358,6 +380,7 @@ pub(crate) fn do_provider_update(
                     },
                     note_kind,
                     ops::NoteMetadataInput {
+                        kind_explicit: req.note_kind.is_some(),
                         human_edited: false,
                         summary: note_summary,
                         confidence: note_confidence,

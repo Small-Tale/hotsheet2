@@ -229,6 +229,7 @@ mod tests {
                 Timestamp::new(at),
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(Confidence::new(value).unwrap()),

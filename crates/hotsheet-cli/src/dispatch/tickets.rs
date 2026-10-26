@@ -905,6 +905,7 @@ pub(crate) fn cmd_edit(
         .unwrap_or_default();
     if let Some(note_id) = edit_note {
         let edit = ops::NoteEditInput {
+            kind: note_kind,
             text: note,
             confidence: note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
@@ -919,8 +920,9 @@ pub(crate) fn cmd_edit(
             &ticket.id,
             Ulid::new(),
             now_ts(),
-            note_kind,
+            note_kind.unwrap_or(NoteKind::Regular),
             ops::NoteMetadataInput {
+                kind_explicit: note_kind.is_some(),
                 human_edited: false,
                 summary: note_summary,
                 confidence: note_confidence.flatten(),
@@ -1266,9 +1268,9 @@ pub(crate) struct TicketEditArgs {
     #[arg(long, requires = "note")]
     allow_literal_backslash_n: bool,
     /// Edit this existing note ULID instead of appending a note.
-    #[arg(long, conflicts_with = "note_kind")]
+    #[arg(long)]
     edit_note: Option<String>,
-    /// Kind for --note: regular | activity | feedback_needed | status.
+    /// Explicit appended kind, or correction with --edit-note: regular | activity | feedback_needed | status.
     #[arg(long)]
     note_kind: Option<String>,
     /// Concise plain-text timeline headline for an activity/status note.
@@ -1394,7 +1396,7 @@ pub(crate) struct TicketEdit {
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
-    note_kind: NoteKind,
+    note_kind: Option<NoteKind>,
     note_summary: Option<String>,
     response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,
@@ -1432,7 +1434,7 @@ impl TicketEdit {
             up_next: args.up_next,
             no_up_next: args.no_up_next,
             note,
-            note_kind: parse_note_kind(args.note_kind.as_deref().unwrap_or("regular"))?,
+            note_kind: args.note_kind.as_deref().map(parse_note_kind).transpose()?,
             note_summary: args.note_summary,
             response_to: args.response_to,
             note_confidence,

@@ -27239,3 +27239,118 @@ async fn running_turn_reports_elapsed_last_activity_and_in_flight_tool() {
         );
     }
 }
+
+#[tokio::test]
+async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
+    let (_d, st) = state();
+    let app = app(st);
+    let patch = |path: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            app.oneshot(authed("PATCH", &path, Some(&body.to_string())))
+                .await
+                .unwrap()
+        }
+    };
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Synthetic explicit kind"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let path = format!("/tickets/{}", created["id"].as_str().unwrap());
+    let explicit = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note":"not FEEDBACK NEEDED","note_kind":"regular"}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(explicit["feedback_needed"], false);
+    assert_eq!(explicit["notes"][0]["kind_explicit"], true);
+    let legacy = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note":"not FEEDBACK NEEDED"}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(legacy["feedback_needed"], true);
+    let note = legacy["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["kind"] == "feedback_needed")
+        .unwrap();
+    let corrected = body_json(
+        patch(
+            path.clone(),
+            serde_json::json!({"note_id":note["id"],"note_kind":"regular"}),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(corrected["feedback_needed"], false);
+    let fixed = corrected["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["id"] == note["id"])
+        .unwrap();
+    for field in ["id", "text", "created_at"] {
+        assert_eq!(fixed[field], note[field]);
+    }
+    let invalid = patch(
+        path.clone(),
+        serde_json::json!({"note_id":note["id"],"note_kind":"invalid","title":"must not write"}),
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    for body in [
+        serde_json::json!({"note_id":note["id"],"note_kind":"feedback_draft","title":"must not write"}),
+        serde_json::json!({"note_kind":"regular","title":"must not write"}),
+    ] {
+        assert_eq!(
+            patch(path.clone(), body).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let read = body_json(app.oneshot(authed("GET", &path, None)).await.unwrap()).await;
+    assert_eq!(read["title"], "Synthetic explicit kind");
+}
+
+#[tokio::test]
+async fn hs2_cv5nmc_remote_kind_edit_refuses_before_any_write_or_lookup() {
+    let (_dir, st) = state();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(Vec::new().into()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+    let response = app
+        .oneshot(authed(
+            "PATCH",
+            "/providers/github-main/tickets/42",
+            Some(r#"{"title":"must not write","note_id":"91","note_kind":"regular"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response).await;
+    assert!(
+        body["error"].as_str().unwrap().contains("note_kind_edit"),
+        "{body}"
+    );
+    assert!(transport.requests.lock().unwrap().is_empty());
+}

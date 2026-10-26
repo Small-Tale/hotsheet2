@@ -103,7 +103,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     status,
                     expected_token,
                     note,
-                    note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                    note_kind: note_kind.as_deref().map(parse_note_kind).transpose()?,
                     note_summary,
                     response_to,
                     note_confidence,
@@ -634,6 +634,12 @@ pub(crate) fn cmd_provider_edit(
     input: ProviderEditInput,
 ) -> Result<()> {
     let provider = configured_provider(path, connection)?;
+    if input.edit_note.is_some()
+        && input.note_kind.is_some()
+        && !provider.descriptor().capabilities.note_kind_edit
+    {
+        bail!("provider connection '{connection}' does not support note_kind_edit");
+    }
     if input.edit_note.is_some() && !provider.supports_note_edit() {
         bail!("provider connection '{connection}' does not support note editing");
     }
@@ -668,6 +674,7 @@ pub(crate) fn cmd_provider_edit(
     )?;
     if let Some(note_id) = input.edit_note {
         let edit = ops::NoteEditInput {
+            kind: input.note_kind,
             text: input.note,
             confidence: input.note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
@@ -683,8 +690,9 @@ pub(crate) fn cmd_provider_edit(
                 now,
                 generated_id: Ulid::new(),
             },
-            input.note_kind,
+            input.note_kind.unwrap_or(NoteKind::Regular),
             ops::NoteMetadataInput {
+                kind_explicit: input.note_kind.is_some(),
                 human_edited: false,
                 summary: input.note_summary,
                 confidence: input.note_confidence.flatten(),
@@ -1432,7 +1440,7 @@ pub(crate) struct ProviderEditInput {
     status: Option<String>,
     expected_token: Option<String>,
     note: Option<String>,
-    note_kind: NoteKind,
+    note_kind: Option<NoteKind>,
     note_summary: Option<String>,
     response_to: Option<String>,
     note_confidence: Option<Option<Confidence>>,

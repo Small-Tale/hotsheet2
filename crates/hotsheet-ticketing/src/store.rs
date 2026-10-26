@@ -217,6 +217,8 @@ pub enum StoreError {
         "note {0} is an AI FEEDBACK NEEDED request; reply with a new note instead of editing it"
     )]
     FeedbackNoteEdit(String),
+    #[error("feedback_draft is local-only and cannot replace a persisted note kind")]
+    InvalidNoteKindEdit,
 }
 
 impl StoreError {
@@ -1613,6 +1615,7 @@ impl FsStore {
             summary: Some(summary),
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -2450,6 +2453,7 @@ mod tests {
                     summary: None,
                     confidence: None,
                     feedback_for: None,
+                    kind_explicit: false,
                     feedback_request: false,
                     response_to: None,
                     ai_feedback: Some(AiFeedback {
@@ -2554,6 +2558,7 @@ mod tests {
                     summary: None,
                     confidence: None,
                     feedback_for: None,
+                    kind_explicit: false,
                     feedback_request: false,
                     response_to: None,
                     ai_feedback: None,

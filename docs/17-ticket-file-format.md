@@ -128,14 +128,29 @@ than swallowed or discarded; a future schema can define such a section explicitl
 | ------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`               | ULID                                                         | stable identity and chronological tie-breaker (§2.6/§2.7)                                                                                                    |
 | `kind`             | `regular\|activity\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6                                                                          |
+| `kind_explicit`    | optional `true`                                              | An author intentionally selected this kind; suppresses legacy prose inference on Regular (HS2-CV5NMC). Absent/false retains legacy behavior.                 |
 | `created_at`       | RFC3339                                                      | immutable creation time; primary timeline order                                                                                                              |
-| `edited_at`        | RFC3339                                                      | last text edit; equals `created_at` when never edited                                                                                                        |
+| `edited_at`        | RFC3339                                                      | last text, confidence, or intentional kind edit; equals `created_at` when never edited                                                                       |
 | `summary`          | optional plain text                                          | concise Timeline headline, encoded as UTF-8 hex in the forward-compatible `summary_hex:` note-marker token; primarily supplied for `activity`/`status` notes |
 | `confidence`       | optional integer 0-100                                       | AI completion confidence (HS2-DWTJ43) as the plain `confidence: NN` note-marker token after `summary_hex:`; out-of-range or malformed values parse as absent |
 | `actor`            | optional `human\|ai\|system` plus id                         | who wrote the note (HS2-32QDZ3): `actor: ai` plus an optional `actor_id_hex:` (UTF-8 hex id); an unknown role parses as absent                               |
 | `feedback_request` | optional `true`                                              | New `feedback_needed` notes carry `feedback_request: true` and remain open until their own linked response arrives (HS2-W1ENZD). Absent on legacy notes.     |
 | `response_to`      | optional note ULID                                           | A regular answer or `No response needed` acknowledgement names the request it closes. Distinct from AI thumbs `feedback_for`.                                |
 | text               | Markdown                                                     | rendered; raw HTML escaped                                                                                                                                   |
+
+Explicit `kind_explicit: true` is optional additive metadata. Current readers honor
+an explicit Regular classification even when its body contains the legacy request
+marker; omitted kinds retain legacy inference. Kind corrections update this marker
+and `feedback_request` together and append an activity audit containing only the
+note id and previous/next kinds, preserving original authorship, text, creation time,
+responses and evidence. Replaying the same correction adds no duplicate audit.
+`feedback_draft` cannot replace a persisted kind because it is local-only.
+Older readers ignore this marker and may still infer feedback; older writers may
+strip it. Upgrade every writer before relying on explicit intent. This additive
+marker does not claim compatibility with old inference semantics (HS2-CV5NMC).
+External providers carry explicit kind in their existing Hot Sheet comment metadata
+as `<!-- hotsheet-note-kind:regular -->` (or another valid shared kind), after a
+valid note-id marker. Unmarked or malformed metadata retains legacy inference.
 
 AI thumbs feedback for a source note carries an optional `feedback_for: <ulid>` token
 in the note marker. Writers derive it from the known `AI feedback for note:<ulid>:`

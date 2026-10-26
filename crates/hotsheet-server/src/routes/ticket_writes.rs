@@ -139,6 +139,18 @@ pub(crate) fn do_update_with_ticket(
             format!("ticket '{}' changed since it was read", ticket.slug),
         ));
     }
+    if req.note_id.is_some() {
+        ops::validate_note_kind_edit(req.note_kind)?;
+    }
+    if req.note_kind.is_some()
+        && req.note_id.is_none()
+        && req.note.as_deref().is_none_or(str::is_empty)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_kind requires note or note_id",
+        ));
+    }
     let edit_note_id = req
         .note_id
         .as_deref()
@@ -225,6 +237,7 @@ pub(crate) fn do_update_with_ticket(
     let latest = match edit_note_id {
         Some(note_id) => {
             let edit = ops::NoteEditInput {
+                kind: req.note_kind,
                 text: note_text_edit,
                 confidence: confidence_change,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
@@ -244,6 +257,7 @@ pub(crate) fn do_update_with_ticket(
                 now(),
                 req.note_kind.unwrap_or(NoteKind::Regular),
                 ops::NoteMetadataInput {
+                    kind_explicit: req.note_kind.is_some(),
                     human_edited: false,
                     summary: req.note_summary,
                     confidence: confidence_change.flatten(),

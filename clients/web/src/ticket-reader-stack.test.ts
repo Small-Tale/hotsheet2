@@ -204,6 +204,12 @@ describe('layered ticket reader stack', () => {
       edit = { note_id: 'N1', note: 'Edited' },
       prompt = { note_id: 'N1', note: 'Edited', edit_feedback_prompt: true },
       field = { title: 'Renamed' };
+    // HS2-CV5NMC: update/text-edit permission cannot silently authorize kind correction.
+    expect(linkedReaderPatchAllowed(only('update'), { note_id: 'N1', note_kind: 'regular' })).toBe(false);
+    expect(linkedReaderPatchAllowed(only('note_edit'), { note_id: 'N1', note_kind: 'regular' })).toBe(false);
+    expect(
+      linkedReaderPatchAllowed({ ...only('note_edit'), note_kind_edit: true }, { note_id: 'N1', note_kind: 'regular' }),
+    ).toBe(true);
     expect(linkedReaderPatchAllowed(only('notes'), add)).toBe(true);
     expect(linkedReaderPatchAllowed(only('update'), add)).toBe(false);
     expect(linkedReaderPatchAllowed(only('note_edit'), edit)).toBe(true);

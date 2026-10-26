@@ -1409,3 +1409,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: checkout-scoped MCP reads encode an absolute path as one HTTP route segment and resolve the same path in serverless mode. An empty route-level 404 explains a possible server mismatch without falling back to another source.
 - Unit: `crates/hotsheet-mcp/src/lib.rs # hs2_vhwwa6_checkout_paths_are_one_http_route_segment`, `corebackend_pages_a_multi_store_checkout_through_the_query_tool`, and `hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch` cover route construction, serverless resolution, and HTTP diagnostics.
 - End to end: `crates/hotsheet-server/tests/http.rs # hs2_vhwwa6_encoded_checkout_path_reaches_the_ticket_route` checks the encoded path against a synthetic registered checkout and rebuilt server router.
+
+### Explicit note kinds and correction (HS2-CV5NMC)
+
+- Behavior: explicit kind selection wins legacy prose inference; omitted kinds retain inference. Git supports atomic kind correction; remote providers refuse kind edits before writes and preserve append intent in native comment metadata. Older readers/writers do not honor the new marker.
+- Unit: model/parser property roundtrips, explicit/omitted inference, correction/replay/reset, concurrent kind/score edits, preserved author/response metadata, and id/kind-only audit are covered in model and ticketing tests. External-provider tests cover actual append/trailer roundtrips and unsupported kind edits.
+- End to end: shipped CLI, HTTP and MCP append/correction flows cover invalid input and provider refusal before mutation. `clients/web/tests/providers.spec.ts # HS2-CV5NMC` covers the real server's explicit note, ordinary composer's omitted kind, inferred request, correction/reload, and desktop-to-phone-reader-to-desktop presentation. Reader capability tests refuse unsupported kind edits.
+- Manual: no new manual-only behavior. All writers must be upgraded before relying on explicit intent; this is a documented operational limit, not an old-reader compatibility claim.

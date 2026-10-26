@@ -337,3 +337,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 checkout-specific `/hooks` review notice only when hooks bytes change. CLI human/JSON,
 shared server setup reports and the local app project-open banner use the same core result.
 See [05](05-ai-tool-plugins.md) §5.7.
+
+HS2-CV5NMC adds explicit note-kind precedence and atomic Git note-kind correction
+through CLI, HTTP and MCP. Remote append intent roundtrips native metadata; remote
+kind edits are explicitly unsupported. Old readers/writers need upgrading to honor
+explicit intent; see [note format](17-ticket-file-format.md) §17.3.

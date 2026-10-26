@@ -891,6 +891,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         summary: Some(status_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        kind_explicit: false,
         feedback_request: false,
         response_to: None,
         ai_feedback: None,
@@ -941,6 +942,7 @@ fn append_started_phase_transition(
         summary: Some(started_phase_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        kind_explicit: false,
         feedback_request: false,
         response_to: None,
         ai_feedback: None,
@@ -997,6 +999,7 @@ pub fn prepare_not_working(
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
         feedback_for: None,
+        kind_explicit: false,
         feedback_request: false,
         response_to: None,
         ai_feedback: None,
@@ -1016,6 +1019,7 @@ pub fn prepare_not_working(
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             ai_feedback: None,
             response_to: None,
@@ -1228,6 +1232,7 @@ pub fn add_note_with_summary(
         now,
         kind,
         NoteMetadataInput {
+            kind_explicit: false,
             human_edited: false,
             summary,
             confidence: None,
@@ -1244,6 +1249,8 @@ pub fn add_note_with_summary(
 /// tokens (`docs/17` §17.3).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NoteMetadataInput {
+    /// Whether the caller explicitly selected this kind rather than defaulting it.
+    pub kind_explicit: bool,
     pub summary: Option<String>,
     pub confidence: Option<Confidence>,
     /// The note's author (HS2-32QDZ3); absent for an unspecified caller.
@@ -1269,14 +1276,10 @@ pub fn add_note_with_metadata(
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         let text = canonicalize_attachment_id_references(store, &t, &text);
-        let kind = if kind == NoteKind::Regular
-            && metadata.ai_feedback.is_none()
-            && !Note::text_is_ai_thumbs_feedback(&text)
-            && Note::text_requests_feedback(&text)
-        {
-            NoteKind::FeedbackNeeded
-        } else {
+        let kind = if metadata.ai_feedback.is_some() {
             kind
+        } else {
+            Note::infer_kind(kind, metadata.kind_explicit, &text)
         };
         let response_to = metadata
             .response_to
@@ -1317,6 +1320,7 @@ pub fn add_note_with_metadata(
                 .and_then(|feedback| feedback.target.strip_prefix("note:"))
                 .and_then(|id| Ulid::from_string(id).ok())
                 .or_else(|| Note::feedback_parent_from_text(&text)),
+            kind_explicit: metadata.kind_explicit,
             feedback_request: kind == NoteKind::FeedbackNeeded,
             response_to,
             ai_feedback: metadata.ai_feedback,
@@ -1420,6 +1424,7 @@ pub fn rate_ai_content(
                 feedback_for: target
                     .strip_prefix("note:")
                     .and_then(|id| Ulid::from_string(id).ok()),
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: Some(feedback),
@@ -1520,6 +1525,7 @@ pub fn edit_note(
         note_id,
         now,
         NoteEditInput {
+            kind: None,
             text: Some(text),
             confidence: None,
             actor: None,
@@ -1532,6 +1538,8 @@ pub fn edit_note(
 /// unchanged, so correcting or clearing a confidence score does not resend the text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NoteEditInput {
+    /// Intentional kind correction; never inferred from replacement prose.
+    pub kind: Option<NoteKind>,
     /// Replacement Markdown text.
     pub text: Option<String>,
     /// `Some(Some(score))` sets the completion confidence; `Some(None)` clears it.
@@ -1547,7 +1555,16 @@ pub struct NoteEditInput {
 impl NoteEditInput {
     /// Whether the edit changes nothing.
     pub fn is_empty(&self) -> bool {
-        self.text.is_none() && self.confidence.is_none()
+        self.text.is_none() && self.confidence.is_none() && self.kind.is_none()
+    }
+}
+
+/// Refuse a correction that would discard a persisted note during serialization.
+pub fn validate_note_kind_edit(kind: Option<NoteKind>) -> Result<(), StoreError> {
+    if kind == Some(NoteKind::FeedbackDraft) {
+        Err(StoreError::InvalidNoteKindEdit)
+    } else {
+        Ok(())
     }
 }
 
@@ -1560,6 +1577,7 @@ pub fn edit_note_with_metadata(
     now: Timestamp,
     edit: NoteEditInput,
 ) -> Result<Ticket, StoreError> {
+    validate_note_kind_edit(edit.kind)?;
     store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
         let text = edit
@@ -1592,6 +1610,23 @@ pub fn edit_note_with_metadata(
                 return Err(StoreError::FeedbackNoteEdit(note_id.to_string()));
             }
         }
+        let kind_change = edit
+            .kind
+            .filter(|kind| {
+                *kind != note.kind
+                    || !note.kind_explicit
+                    || note.feedback_request != (*kind == NoteKind::FeedbackNeeded)
+            })
+            .map(|kind| {
+                let previous = note.kind;
+                note.kind = kind;
+                note.kind_explicit = true;
+                note.feedback_request = kind == NoteKind::FeedbackNeeded;
+                (previous, kind)
+            });
+        if kind_change.is_none() && text.is_none() && edit.confidence.is_none() {
+            return Ok(ticket);
+        }
         if let Some(text) = text {
             let legacy_distillation =
                 note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
@@ -1620,6 +1655,24 @@ pub fn edit_note_with_metadata(
             note.confidence = confidence;
         }
         note.edited_at = now.clone();
+        if let Some((previous, kind)) = kind_change {
+            ticket.notes.push(Note {
+                id: Ulid::new(),
+                kind: NoteKind::Activity,
+                kind_explicit: true,
+                created_at: now.clone(),
+                edited_at: now.clone(),
+                summary: Some("Corrected note kind".into()),
+                confidence: None,
+                feedback_for: None,
+                feedback_request: false,
+                response_to: None,
+                ai_feedback: None,
+                human_edited: false,
+                actor: edit.actor,
+                text: format!("Note {note_id}: kind {previous:?} to {kind:?} (HS2-CV5NMC)."),
+            });
+        }
         ticket.updated_at = now;
         store.write_ticket_committing(&ticket)?;
         Ok(ticket)
@@ -3603,6 +3656,7 @@ mod tests {
                 at,
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: confidence.map(|value| Confidence::new(value).unwrap()),
@@ -3687,6 +3741,7 @@ mod tests {
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -4368,6 +4423,7 @@ mod tests {
                 &note_id,
                 ts("t2"),
                 NoteEditInput {
+                    kind: None,
                     text: text.map(str::to_owned),
                     confidence: None,
                     actor,
@@ -4411,6 +4467,7 @@ mod tests {
             &note_id,
             ts("t2"),
             NoteEditInput {
+                kind: None,
                 text: Some("Human summary".into()),
                 confidence: None,
                 actor: Some(hotsheet_model::NoteActor {
@@ -4718,6 +4775,216 @@ mod tests {
             edited.notes[0].text,
             "Visual evidence: attachment:proof.png."
         );
+    }
+
+    #[test]
+    fn hs2_cv5nmc_concurrent_kind_and_score_edits_preserve_source_metadata() {
+        let (_dir, store) = store();
+        let ticket = titled(&store, "Synthetic concurrent note correction");
+        let id = ticket.id;
+        let request_id = Ulid::new();
+        let source_id = Ulid::new();
+        let created = ts("2026-10-26T01:00:00Z");
+        add_note(
+            &store,
+            &id,
+            request_id,
+            created.clone(),
+            NoteKind::FeedbackNeeded,
+            "Synthetic choice?".into(),
+        )
+        .unwrap();
+        let original = add_note_with_metadata(
+            &store,
+            &id,
+            source_id,
+            created.clone(),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                kind_explicit: true,
+                summary: Some("Synthetic answer".into()),
+                confidence: Some(Confidence::new(82).unwrap()),
+                response_to: Some(request_id.to_string()),
+                human_edited: true,
+                actor: Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Ai,
+                    id: Some("synthetic-worker".into()),
+                }),
+                ..Default::default()
+            },
+            "Synthetic reply with evidence reference.".into(),
+        )
+        .unwrap();
+        let source = original
+            .notes
+            .iter()
+            .find(|n| n.id == source_id)
+            .unwrap()
+            .clone();
+        let barrier = std::sync::Barrier::new(3);
+        std::thread::scope(|scope| {
+            for edit in [
+                NoteEditInput {
+                    kind: Some(NoteKind::Status),
+                    ..Default::default()
+                },
+                NoteEditInput {
+                    confidence: Some(Some(Confidence::new(90).unwrap())),
+                    ..Default::default()
+                },
+            ] {
+                let barrier = &barrier;
+                let store = &store;
+                scope.spawn(move || {
+                    barrier.wait();
+                    edit_note_with_metadata(
+                        store,
+                        &id,
+                        &source_id,
+                        ts("2026-10-26T02:00:00Z"),
+                        edit,
+                    )
+                    .unwrap();
+                });
+            }
+            barrier.wait();
+        });
+        let result = store.read_ticket(&id).unwrap();
+        let note = result.notes.iter().find(|n| n.id == source_id).unwrap();
+        let mut expected = source;
+        expected.kind = NoteKind::Status;
+        expected.confidence = Some(Confidence::new(90).unwrap());
+        expected.edited_at = ts("2026-10-26T02:00:00Z");
+        assert_eq!(note, &expected);
+        assert_eq!(result.attachments, original.attachments);
+        assert_eq!(
+            result
+                .notes
+                .iter()
+                .filter(|n| n.kind == NoteKind::Activity)
+                .count(),
+            1
+        );
+        let before = std::fs::read(store.ticket_path(&id)).unwrap();
+        assert!(matches!(
+            edit_note_with_metadata(
+                &store,
+                &id,
+                &source_id,
+                ts("2026-10-26T03:00:00Z"),
+                NoteEditInput {
+                    kind: Some(NoteKind::FeedbackDraft),
+                    ..Default::default()
+                }
+            ),
+            Err(StoreError::InvalidNoteKindEdit)
+        ));
+        assert_eq!(std::fs::read(store.ticket_path(&id)).unwrap(), before);
+    }
+
+    #[test]
+    fn hs2_cv5nmc_explicit_intent_and_atomic_kind_correction_survive_reload() {
+        let (_dir, store) = store();
+        let ticket = titled(&store, "Synthetic kind correction");
+        let id = ticket.id;
+        let note_id = Ulid::new();
+        let body = "Implementation prerequisite, not FEEDBACK NEEDED or a decision.";
+        let created = ts("2026-10-26T01:00:00Z");
+        let explicit = add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            created.clone(),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                kind_explicit: true,
+                ..Default::default()
+            },
+            body.into(),
+        )
+        .unwrap();
+        assert!(!explicit.feedback_needed());
+        let loaded = store.read_ticket(&id).unwrap();
+        assert_eq!(loaded.notes[0].text, body);
+        assert!(loaded.notes[0].kind_explicit);
+        assert!(!loaded.feedback_needed());
+        let legacy_id = Ulid::new();
+        add_note(
+            &store,
+            &id,
+            legacy_id,
+            created.clone(),
+            NoteKind::Regular,
+            body.into(),
+        )
+        .unwrap();
+        assert!(store.read_ticket(&id).unwrap().feedback_needed());
+        let corrected = edit_note_with_metadata(
+            &store,
+            &id,
+            &legacy_id,
+            ts("2026-10-26T02:00:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::Regular),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!corrected.feedback_needed());
+        let note = corrected.notes.iter().find(|n| n.id == legacy_id).unwrap();
+        assert_eq!(note.text, body);
+        assert_eq!(note.created_at, created);
+        assert!(!note.feedback_request);
+        assert!(note.kind_explicit);
+        let audit = corrected.notes.last().unwrap();
+        assert_eq!(audit.kind, NoteKind::Activity);
+        assert!(audit.text.contains(&legacy_id.to_string()));
+        assert!(!audit.text.contains(body));
+        let replay = edit_note_with_metadata(
+            &store,
+            &id,
+            &legacy_id,
+            ts("2026-10-26T03:00:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::Regular),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(replay, corrected);
+        let request = edit_note_with_metadata(
+            &store,
+            &id,
+            &legacy_id,
+            ts("2026-10-26T04:00:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::FeedbackNeeded),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(request.feedback_needed());
+        assert!(
+            request
+                .notes
+                .iter()
+                .find(|n| n.id == legacy_id)
+                .unwrap()
+                .feedback_request
+        );
+        let again = edit_note_with_metadata(
+            &store,
+            &id,
+            &legacy_id,
+            ts("2026-10-26T05:00:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::Regular),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!again.feedback_needed());
+        assert_eq!(store.read_ticket(&id).unwrap(), again);
     }
 
     #[test]

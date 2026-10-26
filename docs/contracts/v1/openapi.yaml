@@ -10749,6 +10749,9 @@ components:
                 - system
             id:
               type: string
+        kind_explicit:
+          type: boolean
+          description: Explicit author kind intent; omitted legacy records retain inference (HS2-CV5NMC).
       additionalProperties: true
     ApiError:
       type: object
@@ -10864,6 +10867,9 @@ components:
             - feedback_needed
             - feedback_draft
             - status
+          description:
+            Explicit kind on append, or intentional kind correction with note_id. Omitted append kinds retain legacy
+            inference; omitted edit kinds remain unchanged. feedback_draft cannot replace a persisted kind.
         note_summary:
           type: string
         response_to:
@@ -11532,6 +11538,9 @@ components:
             - feedback_needed
             - feedback_draft
             - status
+          description:
+            Explicit kind on append, or intentional kind correction with note_id. Omitted append kinds retain legacy
+            inference; omitted edit kinds remain unchanged. feedback_draft cannot replace a persisted kind.
         note_summary:
           type: string
         response_to:
@@ -12449,6 +12458,10 @@ components:
           type: array
           items:
             type: string
+        note_kind_edit:
+          type: boolean
+          default: false
+          description: Atomic persisted note kind correction. Git supports it; remote providers refuse before mutation.
       additionalProperties: false
     ProviderDescriptor:
       type: object

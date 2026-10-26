@@ -119,6 +119,7 @@ pub fn api_scored_in_current_cycle(ticket: &crate::wire::ApiTicket) -> bool {
                 .confidence
                 .and_then(|score| hotsheet_model::Confidence::new(u64::from(score)).ok()),
             feedback_for: None,
+            kind_explicit: note.kind_explicit,
             feedback_request: note.feedback_request,
             response_to: note
                 .response_to
@@ -260,6 +261,7 @@ mod tests {
             at("2026-09-01T00:01:00Z"),
             NoteKind::Regular,
             NoteMetadataInput {
+                kind_explicit: false,
                 human_edited: false,
                 summary: None,
                 confidence: Some(Confidence::new(80).unwrap()),

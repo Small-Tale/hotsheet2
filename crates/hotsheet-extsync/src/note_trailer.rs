@@ -66,7 +66,26 @@ pub fn compose_feedback_comment(
     kind: NoteKind,
     response_to: Option<&str>,
 ) -> String {
+    compose_explicit_feedback_comment(text, confidence, note_id, kind, response_to, false)
+}
+
+/// Preserve an explicitly selected kind without reinterpreting the note's prose.
+pub fn compose_explicit_feedback_comment(
+    text: &str,
+    confidence: Option<Confidence>,
+    note_id: impl std::fmt::Display,
+    kind: NoteKind,
+    response_to: Option<&str>,
+    kind_explicit: bool,
+) -> String {
     let mut body = compose_comment(text, confidence, note_id);
+    if kind_explicit {
+        let encoded = serde_json::to_string(&kind).expect("note kind serializes");
+        body.push_str(&format!(
+            "\n<!-- hotsheet-note-kind:{} -->",
+            encoded.trim_matches('"')
+        ));
+    }
     if kind == NoteKind::FeedbackNeeded {
         body.push_str("\n<!-- hotsheet-feedback-request -->");
     }
@@ -80,6 +99,19 @@ pub fn compose_feedback_comment(
         body.push_str(" -->");
     }
     body
+}
+
+/// Only valid metadata after a valid Hot Sheet note marker establishes explicit intent.
+pub fn parse_explicit_kind(body: &str) -> Option<NoteKind> {
+    parse_note_id(body)?;
+    let (_, tail) = body.rsplit_once(SEPARATOR_MARKER)?;
+    let (_, metadata) = tail.split_once(" -->")?;
+    metadata.lines().find_map(|line| {
+        let value = line
+            .strip_prefix("<!-- hotsheet-note-kind:")?
+            .strip_suffix(" -->")?;
+        serde_json::from_value(serde_json::Value::String(value.into())).ok()
+    })
 }
 
 pub fn parse_feedback_metadata(body: &str) -> (bool, Option<String>) {
@@ -209,6 +241,26 @@ mod tests {
     }
 
     #[test]
+    fn hs2_cv5nmc_kind_intent_roundtrips_only_valid_metadata() {
+        let id = hotsheet_model::Ulid::new();
+        let text = "not FEEDBACK NEEDED";
+        let body = compose_explicit_feedback_comment(text, None, id, NoteKind::Regular, None, true);
+        assert_eq!(parse_explicit_kind(&body), Some(NoteKind::Regular));
+        assert_eq!(parse_comment(&body), (text.into(), None));
+        assert_eq!(parse_feedback_metadata(&body), (false, None));
+        let legacy = compose_feedback_comment(text, None, id, NoteKind::Regular, None);
+        assert_eq!(parse_explicit_kind(&legacy), None);
+        assert_eq!(
+            parse_explicit_kind("text\n<!-- hotsheet-note-kind:regular -->"),
+            None
+        );
+        assert_eq!(
+            parse_explicit_kind(&body.replace("note-kind:regular", "note-kind:unknown")),
+            None
+        );
+    }
+
+    #[test]
     fn composed_comments_round_trip_text_and_score() {
         for (text, confidence) in [
             ("## Result\nDone.\n\n## Confidence\n82", score(82)),
@@ -318,6 +370,7 @@ mod tests {
             summary: None,
             confidence,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -350,6 +403,7 @@ mod tests {
             summary: None,
             confidence,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,

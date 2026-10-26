@@ -240,7 +240,7 @@ fn base_tools_list() -> Value {
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
-                "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
+                "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; explicit selection wins inference; omitted append kind retains legacy inference; with note_id intentionally corrects kind (feedback_draft refused)"),
                 "note_summary": str_prop("optional concise plain-text timeline headline"),
                 "response_to": str_prop("feedback request note id answered by this appended note"),
                 "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
@@ -2033,8 +2033,14 @@ mod core_backend {
                         return Err(bad_request("response_to requires an appended note"));
                     }
                     let confidence_change = note_confidence_change(body, edit_note_id.is_some())?;
-                    let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
+                    let new_note_kind = opt_enum(body, "note_kind")?;
+                    if edit_note_id.is_some() {
+                        ops::validate_note_kind_edit(new_note_kind).map_err(store_err)?;
+                    }
                     let note_text = str_field(body, "note").filter(|text| !text.is_empty());
+                    if new_note_kind.is_some() && edit_note_id.is_none() && note_text.is_none() {
+                        return Err(bad_request("note_kind requires note or note_id"));
+                    }
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
                     let blocked_by = match body.get("blocked_by").filter(|v| !v.is_null()) {
                         Some(_) => Some(
@@ -2092,6 +2098,7 @@ mod core_backend {
                     let latest = match edit_note_id {
                         Some(note_id) => {
                             let edit = ops::NoteEditInput {
+                                kind: new_note_kind,
                                 text: note_text.clone(),
                                 confidence: confidence_change,
                                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
@@ -2116,8 +2123,9 @@ mod core_backend {
                                 &t.id,
                                 (self.mint)(),
                                 (self.now)(),
-                                new_note_kind,
+                                new_note_kind.unwrap_or(NoteKind::Regular),
                                 ops::NoteMetadataInput {
+                                    kind_explicit: new_note_kind.is_some(),
                                     human_edited: false,
                                     summary: str_field(body, "note_summary"),
                                     confidence: confidence_change.flatten(),
@@ -2763,7 +2771,9 @@ mod core_backend {
 
     fn store_err(e: StoreError) -> BackendError {
         let status = match &e {
-            StoreError::InvalidAnnotations(_) | StoreError::InvalidFeedbackResponse(_) => 400,
+            StoreError::InvalidAnnotations(_)
+            | StoreError::InvalidFeedbackResponse(_)
+            | StoreError::InvalidNoteKindEdit => 400,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
             _ => 500,
         };
@@ -4325,6 +4335,56 @@ mod tests {
                 .collect();
             assert_eq!(keys, ["slug", "status"].into_iter().collect());
         }
+    }
+
+    #[test]
+    fn hs2_cv5nmc_mcp_explicit_intent_and_kind_correction() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"Synthetic explicit kind"}),
+        );
+        let id = created["id"].as_str().unwrap();
+        let body = "not FEEDBACK NEEDED";
+        let explicit = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note":body,"note_kind":"regular"}),
+        );
+        assert_eq!(explicit["feedback_needed"], false);
+        let legacy = call(&backend, "hotsheet_update", json!({"id":id,"note":body}));
+        assert_eq!(legacy["feedback_needed"], true);
+        let note = legacy["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["kind"] == "feedback_needed")
+            .unwrap();
+        let note_id = &note["id"];
+        let corrected = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":note_id,"note_kind":"regular"}),
+        );
+        assert_eq!(corrected["feedback_needed"], false);
+        let fixed = corrected["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == *note_id)
+            .unwrap();
+        for field in ["id", "text", "created_at"] {
+            assert_eq!(fixed[field], note[field]);
+        }
+        let invalid = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":note_id,"note_kind":"invalid","title":"must not write"}),
+        );
+        assert!(invalid.get("error").is_some(), "{invalid}");
+        let reread = call(&backend, "hotsheet_get", json!({"id":id}));
+        assert_eq!(reread["title"], "Synthetic explicit kind");
     }
 
     #[test]

@@ -11108,3 +11108,87 @@ fn doctor_reports_repository_size_for_the_checkout_or_the_store_alone() {
         ))
         .stdout(predicate::str::contains("warning:").not());
 }
+
+#[test]
+fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let slug = new_ticket(dir.path(), "Synthetic explicit kind");
+    let body = "Implementation prerequisite, not FEEDBACK NEEDED or a decision.";
+    hs(dir.path())
+        .args(["edit", &slug, "--note", body, "--note-kind", "regular"])
+        .assert()
+        .success();
+    let providers = hs(dir.path())
+        .args(["providers", "--json"])
+        .assert()
+        .success();
+    let providers: serde_json::Value =
+        serde_json::from_slice(&providers.get_output().stdout).unwrap();
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    let read = || {
+        let out = hs(dir.path())
+            .args(["provider-get", connection, &slug])
+            .assert()
+            .success();
+        serde_json::from_slice::<serde_json::Value>(&out.get_output().stdout).unwrap()
+    };
+    let explicit = read();
+    assert_eq!(explicit["feedback_needed"], false);
+    assert_eq!(explicit["notes"][0]["kind"], "regular");
+    assert_eq!(explicit["notes"][0]["kind_explicit"], true);
+    hs(dir.path())
+        .args(["edit", &slug, "--note", body])
+        .assert()
+        .success();
+    let legacy = read();
+    assert_eq!(legacy["feedback_needed"], true);
+    let note = legacy["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["kind"] == "feedback_needed")
+        .unwrap();
+    let id = note["id"].as_str().unwrap();
+    hs(dir.path())
+        .args(["edit", &slug, "--edit-note", id, "--note-kind", "regular"])
+        .assert()
+        .success();
+    let corrected = read();
+    assert_eq!(corrected["feedback_needed"], false);
+    let fixed = corrected["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["id"] == id)
+        .unwrap();
+    for field in ["id", "text", "created_at"] {
+        assert_eq!(fixed[field], note[field]);
+    }
+    assert_ne!(
+        fixed.get("feedback_request"),
+        Some(&serde_json::json!(true))
+    );
+    hs(dir.path())
+        .args(["edit", &slug, "--edit-note", id, "--note-kind", "regular"])
+        .assert()
+        .success();
+    assert_eq!(read()["notes"], corrected["notes"]);
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "must not write",
+            "--edit-note",
+            id,
+            "--note-kind",
+            "bogus",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(read()["title"], "Synthetic explicit kind");
+}

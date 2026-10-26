@@ -121,6 +121,9 @@ pub struct ApiNote {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hotsheet_note_id: Option<String>,
     pub kind: NoteKind,
+    /// Explicit author kind intent, preserved by copy and import.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub kind_explicit: bool,
     pub created_at: String,
     pub edited_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -273,6 +276,7 @@ impl ApiTicket {
                     summary: n.summary.clone(),
                     confidence: n.confidence.map(Confidence::get),
                     feedback_for: n.ai_feedback_for_note().map(|id| id.to_string()),
+                    kind_explicit: n.kind_explicit,
                     feedback_request: n.feedback_request,
                     response_to: n.response_to.map(|id| id.to_string()),
                     ai_feedback: n.ai_feedback_value(),
@@ -589,6 +593,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -650,6 +655,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,

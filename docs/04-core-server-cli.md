@@ -970,6 +970,20 @@ regular reply or `No response needed` acknowledgement. The request must be a
 `hotsheet_update` accept the same `response_to` JSON field; it is invalid on an
 edit or without note text. New feedback requests are independently tracked, while
 older notes without the linkage retain sequential review state (HS2-W1ENZD).
+`--note-kind regular` explicitly preserves a Regular note even if its text contains
+the legacy feedback marker (HS2-CV5NMC). Omitting the flag retains legacy inference.
+With `--edit-note <id>`, `--note-kind <kind>` intentionally corrects only that note's
+classification; no replacement text is required. API/MCP callers use `note_id` plus
+`note_kind`. The atomic correction preserves note identity, body, author, creation,
+responses and evidence, updates request metadata consistently, and records an id/kind-only
+activity audit. Repeating it is safe. Local-only `feedback_draft` is refused before
+mutation. Git advertises `note_kind_edit: true`; remote providers advertise false and
+refuse kind edits before any accompanying ticket fields change. Their appended explicit
+kind is retained in native comment metadata; no provider mirroring is introduced.
+Generic add-note UI requests omit an implicit kind, while intentional choices remain
+explicit. Older readers/writers may infer or strip explicit intent; upgrade all
+writers before depending on this behavior (see §17.3).
+
 `--note-confidence <0-100>` (HS2-DWTJ43) records the author's completion confidence on the
 **appended** note, where it requires `--note`/`--note-file`. Anything but a plain integer
 from 0 to 100 is rejected before any write. With `--edit-note <note-ulid>` (HS2-CY4CWC) it

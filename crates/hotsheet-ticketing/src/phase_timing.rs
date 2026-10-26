@@ -198,6 +198,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: None,

@@ -111,6 +111,7 @@ fn arb_note() -> impl Strategy<Value = Note> {
     (
         arb_ulid(),
         arb_shared_note_kind(),
+        any::<bool>(),
         arb_ts(),
         prop_oneof![
             Just(None),
@@ -143,21 +144,24 @@ fn arb_note() -> impl Strategy<Value = Note> {
             Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
         ],
     )
-        .prop_map(|(id, kind, at, summary, confidence, actor, text)| Note {
-            id,
-            kind,
-            created_at: at.clone(),
-            edited_at: at,
-            summary,
-            confidence,
-            feedback_for: None,
-            feedback_request: false,
-            response_to: None,
-            ai_feedback: None,
-            human_edited: false,
-            actor,
-            text: text.trim().to_string(),
-        })
+        .prop_map(
+            |(id, kind, kind_explicit, at, summary, confidence, actor, text)| Note {
+                id,
+                kind,
+                created_at: at.clone(),
+                edited_at: at,
+                summary,
+                confidence,
+                feedback_for: None,
+                kind_explicit,
+                feedback_request: false,
+                response_to: None,
+                ai_feedback: None,
+                human_edited: false,
+                actor,
+                text: text.trim().to_string(),
+            },
+        )
 }
 
 fn arb_review() -> impl Strategy<Value = ReviewRequest> {

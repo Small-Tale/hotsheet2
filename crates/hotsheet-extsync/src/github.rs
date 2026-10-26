@@ -594,12 +594,18 @@ impl GitHubProvider {
                 ApiNote {
                     id: comment.id.to_string(),
                     hotsheet_note_id: note_trailer::parse_note_id(&comment.body),
-                    kind: if feedback_request || hotsheet_model::Note::text_requests_feedback(&text)
-                    {
-                        NoteKind::FeedbackNeeded
-                    } else {
-                        NoteKind::Regular
-                    },
+                    kind: note_trailer::parse_explicit_kind(&comment.body).unwrap_or_else(|| {
+                        hotsheet_model::Note::infer_kind(
+                            if feedback_request {
+                                NoteKind::FeedbackNeeded
+                            } else {
+                                NoteKind::Regular
+                            },
+                            false,
+                            &text,
+                        )
+                    }),
+                    kind_explicit: note_trailer::parse_explicit_kind(&comment.body).is_some(),
                     created_at: comment.created_at.clone(),
                     edited_at: comment.updated_at.unwrap_or(comment.created_at),
                     summary: None,
@@ -1264,12 +1270,7 @@ impl TicketProvider for GitHubProvider {
         {
             return self.get(native_id);
         }
-        let kind =
-            if kind == NoteKind::Regular && hotsheet_model::Note::text_requests_feedback(&text) {
-                NoteKind::FeedbackNeeded
-            } else {
-                kind
-            };
+        let kind = hotsheet_model::Note::infer_kind(kind, metadata.kind_explicit, &text);
         if let Some(request_id) = metadata.response_to.as_deref() {
             let ticket = self.get(native_id)?;
             if kind != NoteKind::Regular
@@ -1284,12 +1285,13 @@ impl TicketProvider for GitHubProvider {
                 });
             }
         }
-        let body = note_trailer::compose_feedback_comment(
+        let body = note_trailer::compose_explicit_feedback_comment(
             &text,
             metadata.confidence,
             ctx.generated_id,
             kind,
             metadata.response_to.as_deref(),
+            metadata.kind_explicit,
         );
         self.request(
             "POST",
@@ -1999,6 +2001,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         update: true,
         close: true,
         notes: true,
+        note_kind_edit: false,
         note_edit: false,
         note_delete: false,
         // The original asset stays immutable while markup updates the marked comment.
@@ -2617,6 +2620,96 @@ mod tests {
     /// HS2-5YNASC: a scored note is written with a `Confidence: NN%` trailer and read back
     /// into `confidence`; a human comment ending in the same words is never a score.
     #[test]
+    fn hs2_cv5nmc_explicit_kind_roundtrip_and_kind_edit_refusal() {
+        let note_id = hotsheet_model::Ulid::new();
+        let written = note_trailer::compose_explicit_feedback_comment(
+            "not FEEDBACK NEEDED",
+            Some(hotsheet_model::Confidence::new(82).unwrap()),
+            note_id,
+            NoteKind::Regular,
+            None,
+            true,
+        );
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(201, json!({"id": 91})),
+            response(200, closed_issue(42, "completed", &[])),
+            response(
+                200,
+                json!([
+                    {"id":91,"body":written,"created_at":"2026-08-26T00:02:00Z"},
+                    {"id":92,"body":"Agreed.\n\nConfidence: 99%","created_at":"2026-08-26T00:03:00Z"}
+                ]),
+            ),
+            // A scored completed issue reads its reopen history (HS2-N3RMTV): none here.
+            response(
+                200,
+                json!([{"event":"closed","created_at":"2026-08-27T00:00:00Z"}]),
+            ),
+        ]);
+        let github = provider(transport.clone());
+        assert!(github.supports_note_confidence());
+        assert!(!github.descriptor().capabilities.note_kind_edit);
+        assert!(matches!(
+            github.edit_note_with_metadata(
+                "42",
+                "91",
+                Timestamp::new("2026-10-26T00:00:00Z"),
+                hotsheet_ticketing::ops::NoteEditInput {
+                    kind: Some(NoteKind::Regular),
+                    ..Default::default()
+                }
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "note_kind_edit",
+                ..
+            })
+        ));
+
+        let ticket = github
+            .add_note_with_metadata(
+                "42",
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:02:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    kind_explicit: true,
+                    human_edited: false,
+                    summary: None,
+                    confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
+                    actor: None,
+                    ai_feedback: None,
+                    response_to: None,
+                },
+                "not FEEDBACK NEEDED".into(),
+            )
+            .unwrap();
+        let requests = transport.requests.lock_or_recover();
+        assert_eq!(requests[1].0, "POST");
+        assert_eq!(
+            requests[1].3.as_ref().unwrap()["body"],
+            format!(
+                "not FEEDBACK NEEDED\n\nConfidence: 82%\n\n<!-- hotsheet-note-id:{note_id} -->\n<!-- hotsheet-note-kind:regular -->"
+            )
+        );
+        assert_eq!(ticket.notes[0].text, "not FEEDBACK NEEDED");
+        assert_eq!(ticket.notes[0].kind, NoteKind::Regular);
+        assert!(ticket.notes[0].kind_explicit);
+        assert!(!ticket.notes[0].feedback_request);
+        assert_eq!(ticket.notes[0].confidence, Some(82));
+        assert_eq!(ticket.notes[1].text, "Agreed.\n\nConfidence: 99%");
+        assert_eq!(ticket.notes[1].confidence, None);
+        assert_eq!(ticket.latest_confidence, Some(82));
+        assert!(
+            requests[4]
+                .1
+                .ends_with("/issues/42/events?per_page=100&page=1")
+        );
+    }
+
+    #[test]
     fn note_confidence_round_trips_through_a_comment_trailer() {
         let note_id = hotsheet_model::Ulid::new();
         let written = note_trailer::compose_comment(
@@ -2652,6 +2745,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
@@ -3772,6 +3866,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
@@ -3837,6 +3932,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),

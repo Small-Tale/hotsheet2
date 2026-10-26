@@ -748,7 +748,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     composingNote.value = false;
     newNoteDraft.value = '';
     scheduleProjectSessionPersistence();
-    void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
+    void updateSelected({ note: text }).then((saved) => {
       creatingNotes.delete(key);
       if (!saved && key === `workspace:${selectedTicket.value?.qualified_id}` && !composingNote.value) {
         composingNote.value = true;

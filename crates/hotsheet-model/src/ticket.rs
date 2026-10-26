@@ -20,6 +20,8 @@ use crate::timestamp::Timestamp;
 pub struct Note {
     pub id: Ulid,
     pub kind: NoteKind,
+    /// Explicit author intent suppresses legacy lexical kind inference (HS2-CV5NMC).
+    pub kind_explicit: bool,
     pub created_at: Timestamp,
     pub edited_at: Timestamp,
     /// Concise, plain-text timeline headline. Optional for files written before
@@ -210,15 +212,26 @@ impl Note {
             .any(|line| line.contains("FEEDBACK NEEDED"))
     }
 
-    /// Whether this note opens a feedback exchange.
-    ///
-    /// Early HS2 automation wrote the historical `FEEDBACK NEEDED:` convention as a
-    /// regular note. Keep those files meaningful while new writes use the first-class
-    /// `feedback_needed` kind.
+    /// Canonical append/read inference for legacy callers only (HS2-CV5NMC).
+    /// Early automation wrote the feedback marker as a regular note. Preserve that
+    /// convention unless the caller explicitly selected the note kind.
+    pub fn infer_kind(kind: NoteKind, explicit: bool, text: &str) -> NoteKind {
+        if kind == NoteKind::Regular
+            && !explicit
+            && !Self::text_is_ai_thumbs_feedback(text)
+            && Self::text_requests_feedback(text)
+        {
+            NoteKind::FeedbackNeeded
+        } else {
+            kind
+        }
+    }
+
+    /// Whether this note opens a typed or legacy feedback exchange.
     pub fn is_feedback_needed_request(&self) -> bool {
         !self.is_ai_thumbs_feedback()
-            && (self.kind == NoteKind::FeedbackNeeded
-                || (self.kind == NoteKind::Regular && Self::text_requests_feedback(&self.text)))
+            && Self::infer_kind(self.kind, self.kind_explicit, &self.text)
+                == NoteKind::FeedbackNeeded
     }
 }
 
@@ -813,6 +826,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -820,6 +834,21 @@ mod tests {
             actor: None,
             text: String::new(),
         }
+    }
+
+    #[test]
+    fn hs2_cv5nmc_explicit_regular_suppresses_only_legacy_inference() {
+        let mut n = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            NoteKind::Regular,
+            "2026-10-26T00:00:00Z",
+        );
+        n.text = "not FEEDBACK NEEDED".into();
+        assert!(n.is_feedback_needed_request());
+        n.kind_explicit = true;
+        assert!(!n.is_feedback_needed_request());
+        n.kind = NoteKind::FeedbackNeeded;
+        assert!(n.is_feedback_needed_request());
     }
 
     #[test]

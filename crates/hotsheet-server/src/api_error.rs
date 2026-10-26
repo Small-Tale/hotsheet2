@@ -84,6 +84,7 @@ impl From<StoreError> for ApiError {
         let status = match &e {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
+            | StoreError::InvalidNoteKindEdit
             | StoreError::ImageCrop(_) => StatusCode::BAD_REQUEST,
             StoreError::FeedbackNoteEdit(_) => StatusCode::CONFLICT,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,

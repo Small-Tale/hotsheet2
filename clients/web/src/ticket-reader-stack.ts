@@ -171,7 +171,7 @@ export function linkedReaderCanUpdate(frame: TicketReaderFrame, active: boolean)
 }
 
 const NOTE_ADD_FIELDS = new Set(['note', 'note_kind']),
-  NOTE_EDIT_FIELDS = new Set(['note', 'note_id', 'edit_feedback_prompt']);
+  NOTE_EDIT_FIELDS = new Set(['note', 'note_id', 'note_kind', 'edit_feedback_prompt']);
 
 /**
  * Whether a linked reader's provider accepts `patch`: adding a note needs `notes`, editing one needs
@@ -179,6 +179,7 @@ const NOTE_ADD_FIELDS = new Set(['note', 'note_kind']),
  */
 export function linkedReaderPatchAllowed(capabilities: Capabilities, patch: Record<string, unknown>): boolean {
   const keys = Object.keys(patch).filter((key) => key !== 'expected_token');
+  if (keys.includes('note_id') && keys.includes('note_kind') && !capabilities.note_kind_edit) return false;
   if (keys.length > 0 && keys.every((key) => NOTE_ADD_FIELDS.has(key))) return capabilities.notes;
   if (keys.includes('note_id') && keys.every((key) => NOTE_EDIT_FIELDS.has(key))) return capabilities.note_edit;
   return capabilities.update;

@@ -368,6 +368,7 @@ fn parse_note_marker(line: &str) -> Option<NoteMetadata> {
 struct NoteMetadata {
     id: Ulid,
     kind: NoteKind,
+    kind_explicit: bool,
     created_at: Option<Timestamp>,
     edited_at: Option<Timestamp>,
     summary: Option<String>,
@@ -418,6 +419,7 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         // the whole file (HS2-DWTJ43); writers can only emit validated values.
         confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
         feedback_for: value_after("feedback_for:").and_then(|value| Ulid::from_string(value).ok()),
+        kind_explicit: value_after("kind_explicit:") == Some("true"),
         feedback_request: value_after("feedback_request:") == Some("true"),
         response_to: value_after("response_to:").and_then(|value| Ulid::from_string(value).ok()),
         ai_feedback: value_after("ai_feedback_hex:")
@@ -458,6 +460,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         summary: metadata.summary,
         confidence: metadata.confidence,
         feedback_for: metadata.feedback_for,
+        kind_explicit: metadata.kind_explicit,
         feedback_request: metadata.feedback_request,
         response_to: metadata.response_to,
         ai_feedback: metadata.ai_feedback,
@@ -499,6 +502,9 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(feedback_for) = n.feedback_for {
             out.push_str(" feedback_for: ");
             out.push_str(&feedback_for.to_string());
+        }
+        if n.kind_explicit {
+            out.push_str(" kind_explicit: true");
         }
         if n.feedback_request {
             out.push_str(" feedback_request: true");
@@ -736,6 +742,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: None,
@@ -751,6 +758,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: None,
@@ -1202,6 +1210,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1228,6 +1237,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1346,6 +1356,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1385,6 +1396,7 @@ mod tests {
                 summary: Some("Shipped".into()),
                 confidence: Some(Confidence::new(82).unwrap()),
                 feedback_for: None,
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: None,
@@ -1400,6 +1412,7 @@ mod tests {
                 summary: None,
                 confidence: Some(Confidence::new(0).unwrap()),
                 feedback_for: None,
+                kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
                 ai_feedback: None,
@@ -1426,6 +1439,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1470,6 +1484,7 @@ mod tests {
             summary: Some("Completed café investigation".into()),
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1527,6 +1542,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,
@@ -1595,6 +1611,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            kind_explicit: false,
             feedback_request: false,
             response_to: None,
             ai_feedback: None,

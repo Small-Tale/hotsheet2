@@ -310,6 +310,9 @@ pub struct ProviderCapabilities {
     pub close: bool,
     pub notes: bool,
     pub note_edit: bool,
+    /// Intentional atomic note-kind correction (HS2-CV5NMC).
+    #[serde(default)]
+    pub note_kind_edit: bool,
     pub note_delete: bool,
     pub attachments: bool,
     /// Existing attachments can be renamed, deleted, re-labelled, and annotated
@@ -376,6 +379,7 @@ impl ProviderCapabilities {
             update: true,
             close: true,
             notes: true,
+            note_kind_edit: true,
             note_edit: true,
             note_delete: true,
             attachments: true,
@@ -1074,6 +1078,12 @@ pub trait TicketProvider: Send + Sync {
         metadata: NoteMetadataInput,
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
+        if metadata.kind_explicit {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "note_kind_intent",
+            });
+        }
         if metadata.confidence.is_some() && !self.supports_note_confidence() {
             return Err(ProviderError::Unsupported {
                 connection_id: self.descriptor().connection_id,
@@ -1121,6 +1131,12 @@ pub trait TicketProvider: Send + Sync {
         now: Timestamp,
         edit: ops::NoteEditInput,
     ) -> Result<ApiTicket, ProviderError> {
+        if edit.kind.is_some() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "note_kind_edit",
+            });
+        }
         if edit.confidence.is_some() {
             return Err(ProviderError::Unsupported {
                 connection_id: self.descriptor().connection_id,
@@ -1584,6 +1600,7 @@ impl TicketProvider for GitProvider {
             ctx,
             kind,
             NoteMetadataInput {
+                kind_explicit: false,
                 human_edited: false,
                 summary,
                 confidence: None,
@@ -1731,6 +1748,7 @@ impl TicketProvider for GitProvider {
             note_id,
             now,
             ops::NoteEditInput {
+                kind: None,
                 text: Some(text),
                 confidence: None,
                 actor: None,
@@ -1746,6 +1764,12 @@ impl TicketProvider for GitProvider {
         now: Timestamp,
         edit: ops::NoteEditInput,
     ) -> Result<ApiTicket, ProviderError> {
+        if edit.kind.is_some() && !self.capabilities().note_kind_edit {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "note_kind_edit",
+            });
+        }
         if edit.confidence.is_some() && !self.supports_note_confidence() {
             return Err(ProviderError::Unsupported {
                 connection_id: self.connection_id.clone(),
@@ -2249,6 +2273,7 @@ pub fn copy_between(
             },
             note.kind,
             NoteMetadataInput {
+                kind_explicit: note.kind_explicit,
                 summary: note.summary.clone(),
                 confidence: note
                     .confidence
@@ -3289,6 +3314,7 @@ mod tests {
                 &source_note_id.to_string(),
                 Timestamp::new("2026-08-26T01:00:15Z"),
                 ops::NoteEditInput {
+                    kind: None,
                     text: Some("preserve this edited note".into()),
                     confidence: None,
                     actor: Some(hotsheet_model::NoteActor {
@@ -3624,6 +3650,7 @@ mod tests {
                 ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(Confidence::new(73).unwrap()),
@@ -3651,6 +3678,7 @@ mod tests {
                 ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    kind_explicit: false,
                     human_edited: false,
                     summary: None,
                     confidence: Some(Confidence::new(10).unwrap()),
@@ -3691,6 +3719,7 @@ mod tests {
                 &unscored_id,
                 Timestamp::new("2026-08-26T03:03:00Z"),
                 crate::ops::NoteEditInput {
+                    kind: None,
                     text: None,
                     confidence: Some(Some(Confidence::new(10).unwrap())),
                     actor: None,
@@ -3713,6 +3742,7 @@ mod tests {
                     &scored_note,
                     Timestamp::new("2026-08-26T03:04:00Z"),
                     crate::ops::NoteEditInput {
+                        kind: None,
                         text: text.map(str::to_owned),
                         confidence,
                         actor: None,

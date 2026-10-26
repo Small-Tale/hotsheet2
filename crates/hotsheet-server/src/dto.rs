@@ -259,7 +259,8 @@ pub(crate) struct UpdateReq {
     /// without it a human text edit of such a prompt is refused with 409 (HS2-MB2Q10).
     #[serde(default)]
     pub(crate) edit_feedback_prompt: bool,
-    /// Kind of the appended note; defaults to regular for older clients.
+    /// Explicit appended-note kind, or intentional correction of `note_id`.
+    /// Omission preserves legacy inference on append and the current kind on edit.
     pub(crate) note_kind: Option<NoteKind>,
     /// Optional concise plain-text headline used by timeline presentations.
     pub(crate) note_summary: Option<String>,
