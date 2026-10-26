@@ -43,6 +43,9 @@ across byte preparation and the IndexedDB transaction, with independent keys and
 `src/draft-file-recovery.ts` derives blocking recovery state from failed saves and unreadable
 references; `src/draft-submission-state.ts` cleans submitted origin references while preserving
 later draft text and references (HS2-791W19).
+`src/composer-restore-intent.ts` keeps parked composer modality across activation refresh
+and persistence timers, fenced by the project, activation generation and existing surface
+epoch; `app/runtime.tsx` applies it to snapshots and restoration (HS2-40JX5Q).
 `npm run desktop:storage:test` exercises
 the rebuilt production client and bridge in Chromium and WebKit. See the
 [desktop signing guide](tauri-desktop.md) for prerequisites and validation.

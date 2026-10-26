@@ -87,6 +87,7 @@ import {
   type WorkspaceSortDirection,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { createComposerRestoreIntent } from '../composer-restore-intent';
 import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
@@ -1353,6 +1354,7 @@ export async function startHotSheetWebClient() {
     openRemoteCheckout,
   } = projectLifecycleController;
   let projectSelectionGeneration = 0;
+  const composerRestoreIntent = createComposerRestoreIntent();
   let projectActivationGeneration = 0,
     ticketCollectionGeneration = 0,
     commandRefreshGeneration = 0,
@@ -2281,7 +2283,12 @@ export async function startHotSheetWebClient() {
       inspectorTab: inspectorTab.value,
       readerTab: readerTab.value,
       composer: {
-        open: composerExpanded.value,
+        open: composerRestoreIntent.persistedOpen(
+          current.id,
+          projectActivationGeneration,
+          attachmentEpochs().composer,
+          composerExpanded.value,
+        ),
         title: composerTitle.value,
         details: composerDetails.value,
         category: composerCategory.value,
@@ -2383,6 +2390,9 @@ export async function startHotSheetWebClient() {
       live = new Set(rows?.map((ticket) => ticket.slug) ?? []),
       selection = stored?.selectedTicketSlugs.filter((slug) => live.has(slug)) ?? [],
       drawerActivation = terminalDrawerActivation(localStorage, next);
+    // Resetting the old surface scheduled persistence. Keep this parked open intent while the
+    // new activation refreshes, rather than saving its temporary closed placeholder (HS2-40JX5Q).
+    composerRestoreIntent.capture(next, generation, attachmentEpochs().composer, stored?.composer.open);
     batch(() => {
       selectedProjectRestoreRoot.value = '';
       selectedProjectId.value = drawerActivation.projectId;
@@ -2554,9 +2564,11 @@ export async function startHotSheetWebClient() {
     if (!stored || !active()) return;
     const run = ++projectSessionRestoreRun,
       epochs = attachmentEpochs(),
+      canRestoreComposer = composerRestoreIntent.canRestore(current.id, generation, epochs.composer),
       originalReportTarget = notWorkingTarget.value,
       sameReport = () => notWorkingTarget.value === originalReportTarget && !notWorkingSubmitting.value,
       restoreComposerOpen =
+        canRestoreComposer &&
         stored.composer.open &&
         initialProjectRestoreComplete &&
         !ticketSourceSetupProject.value &&
@@ -2572,7 +2584,7 @@ export async function startHotSheetWebClient() {
       searchMatchKeys.value = undefined;
       inspectorTab.value = stored.inspectorTab;
       readerTab.value = stored.readerTab;
-      if (!composerOpenedByUser) {
+      if (!composerOpenedByUser && canRestoreComposer) {
         composerExpanded.value = false;
         composerTitle.value = stored.composer.title;
         composerDetails.value = stored.composer.details;
@@ -2581,7 +2593,10 @@ export async function startHotSheetWebClient() {
       }
       const previousFiles = composerAttachments.value,
         previousUnrestored = composerUnrestoredAttachments.value,
-        refs = composerOpenedByUser ? [...previousFiles, ...previousUnrestored] : stored.composer.attachments,
+        refs =
+          composerOpenedByUser || !canRestoreComposer
+            ? [...previousFiles, ...previousUnrestored]
+            : stored.composer.attachments,
         restored = await draftFiles.restore(draftScope('composer', current.id), refs);
       if (!active() || run !== projectSessionRestoreRun) return;
       if (
@@ -2674,6 +2689,7 @@ export async function startHotSheetWebClient() {
       if (searchQuery.value.trim()) void refreshTicketSearch();
     } finally {
       if (run === projectSessionRestoreRun) {
+        composerRestoreIntent.finish(current.id, generation);
         restoringProjectSession = false;
         const dirty = projectSessionDirtyDuringRestore;
         projectSessionDirtyDuringRestore = false;

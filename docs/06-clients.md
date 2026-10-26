@@ -2464,6 +2464,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   while successful creation moves focus into the new ticket's Details editor. Relaunch
   restores saved draft fields and staged evidence but starts the composer closed, preventing
   remembered projects from racing modal show/hide while the initial project set loads.
+  Returning to an opened project restores its parked composer after refresh, including a
+  delayed refresh. Session writes preserve that pending open intent; a newer open, cancel,
+  or reset supersedes the parked surface (HS2-40JX5Q).
   Browsers keep staged file bytes in origin-scoped IndexedDB. The existing `blob` field stores
   ArrayBuffer bytes with filename, MIME type, modification time and size, avoiding WebKit's
   Blob/File write failure on insecure LAN origins (HS2-2HF3H4). Existing Blob/File records remain

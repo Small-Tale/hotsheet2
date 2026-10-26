@@ -295,7 +295,8 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
       await expect(dialog(page).getByText("Couldn't save", { exact: false })).toBeVisible();
       await app.addProject(page);
       await page.getByRole('tab', { name: 'drafts', exact: true }).click();
-      await openNewTicket(page);
+      await expect(dialog(page)).toBeVisible();
+      await expect(dialog(page).getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Synthetic unsaved origin');
       await expect(dialog(page).getByText('unsaved-switch.bin', { exact: true })).toBeVisible();
       await expect(dialog(page).getByText("Couldn't save", { exact: false })).toBeVisible();
       await expect(dialog(page).getByRole('button', { name: 'Create ticket', exact: true })).toBeDisabled();

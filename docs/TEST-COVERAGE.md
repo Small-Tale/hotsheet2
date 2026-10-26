@@ -55,6 +55,15 @@ preserving the open draft, cancellation/reopening, and desktop collapse/restore 
 schemes and Chromium/WebKit. No persistent sidebar layout defect was observed; this fixes
 test observation and retains the application's existing responsive motion.
 
+HS2-40JX5Q covers composer open intent during project activation. The pure
+`composer-restore-intent.test.ts` transition matrix covers repeated placeholder saves,
+closed/empty/refill states, newer surface actions, interrupted generations and failed refresh.
+`tests/composer-activation-restore.spec.ts` holds the real refresh through a genuine session
+write, then verifies automatic reopening, retained unsaved bytes/warning/disabled submit,
+retry and exact committed bytes. Newer-project and cancel/re-edit drafts survive both successful
+and failed old refreshes. The original desktop unsaved-switch flow also asserts the intended
+automatically restored dialog/title instead of clicking its covered launcher.
+
 HS2-BNGHKM checks repeated test-owner death, fallback broker exit, and registration
 cleanup in `crates/hotsheet-server/tests/graceful_shutdown.rs`. The dedicated broker
 binary has the same exit check in `crates/hotsheet-terminals/tests/process_journal_broker.rs`;
