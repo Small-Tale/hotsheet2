@@ -6,6 +6,10 @@ field, or a setting. Requirements status lives in [README.md](README.md); the fi
 schema (including the v6 arrow-end guard) in [17-ticket-file-format.md](17-ticket-file-format.md); feature-level unit/E2E
 evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 
+`clients/web/scripts/stable-dev.mjs` snapshots web source while excluding top-level
+generated output and the exact native `src-tauri/target` build subtree; adjacent native
+source and unrelated nested `target` source directories remain included (HS2-R7T9XB).
+
 `clients/web/src/guidance-search-model.ts` owns Project guidance's toolbar token
 grammar and rule matching (HS2-6ZA2RN). The shared toolbar renders its separate
 Kerf model through `WorkspaceControls`; `search-and-composer.ts` wires its field.

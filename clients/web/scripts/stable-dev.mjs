@@ -1,6 +1,6 @@
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
@@ -71,8 +71,10 @@ export async function createStableSnapshot(
   await mkdir(temporaryRoot, { recursive: true });
   const snapshotRoot = await mkdtemp(join(temporaryRoot, SNAPSHOT_PREFIX));
   const filter = (source) => {
-    const firstSegment = relative(sourceRoot, source).split('/')[0];
-    return !excludedTopLevel.has(firstSegment);
+    const [firstSegment, secondSegment] = relative(sourceRoot, source).split(sep);
+    // HS2-R7T9XB: the native package's ignored Rust output can dwarf the web source.
+    // Keep adjacent native source and unrelated nested directories named target.
+    return !excludedTopLevel.has(firstSegment) && !(firstSegment === 'src-tauri' && secondSegment === 'target');
   };
   try {
     // Record the owner first so a concurrent pruner never mistakes a snapshot being copied for an orphan.

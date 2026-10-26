@@ -45,6 +45,33 @@ describe('stable dev snapshot', () => {
     await expect(stat(resolve(snapshot, 'target'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('HS2-R7T9XB excludes native build output while retaining adjacent and unrelated source', async () => {
+    const source = await mkdtemp(resolve(tmpdir(), 'hotsheet-web-native-source-'));
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-web-native-parent-'));
+    cleanup.push(source, parent);
+    const files = {
+      'src-tauri/target/native-release/artifact': 'generated native binary',
+      'src-tauri/target/native-harness/artifact': 'generated native harness',
+      'src-tauri/src/main.rs': 'native application source',
+      'src-tauri/Cargo.toml': 'native manifest',
+      'src-tauri/targeting.rs': 'adjacent source',
+      'src/target/source.ts': 'ordinary nested source',
+      'src-tauri/fixtures/target/source.rs': 'ordinary native fixture source',
+    };
+    await mkdir(resolve(source, 'node_modules'));
+    for (const [path, body] of Object.entries(files)) {
+      await mkdir(resolve(source, path, '..'), { recursive: true });
+      await writeFile(resolve(source, path), body);
+    }
+
+    const snapshot = await createStableSnapshot(source, parent);
+    await expect(stat(resolve(snapshot, 'src-tauri/target'))).rejects.toMatchObject({ code: 'ENOENT' });
+    for (const [path, body] of Object.entries(files)) {
+      if (!path.startsWith('src-tauri/target/')) expect(await readFile(resolve(snapshot, path), 'utf8')).toBe(body);
+    }
+    expect((await lstat(resolve(snapshot, 'node_modules'))).isSymbolicLink()).toBe(true);
+  });
+
   it('keeps snapshots out of the swept OS temporary directory (HS2-ZJ6VN3)', () => {
     expect(stableSnapshotParent({}, 'darwin', '/Users/dev')).toBe('/Users/dev/Library/Caches/hotsheet-web-stable');
     expect(stableSnapshotParent({}, 'linux', '/home/dev')).toBe('/home/dev/.cache/hotsheet-web-stable');

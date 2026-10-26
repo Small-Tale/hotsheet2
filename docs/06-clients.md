@@ -404,8 +404,10 @@ preview/download, server directory browser) are separate design work.
   interrupted test runner or terminal never leaves orphaned dev servers behind. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
-  snapshot. Generated package-local `target` output is excluded from the snapshot just
-  like `dist`, test results, and dependency output. Each stable process also owns a private Vite dependency cache inside its
+  snapshot. Generated package-local `target` and nested native `src-tauri/target` output
+  are excluded from the snapshot, like `dist`, test results, and dependency output
+  (HS2-R7T9XB). Adjacent native source and unrelated nested source directories named
+  `target` remain included. Each stable process also owns a private Vite dependency cache inside its
   snapshot and disables runtime dependency discovery. A later route may therefore load a
   previously unseen ESM dependency without Vite optimizing it and forcing a document
   reload. Instead, at startup it walks the browser import graph from `src/main.tsx` and

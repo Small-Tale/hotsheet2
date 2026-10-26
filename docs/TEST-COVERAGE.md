@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-R7T9XB's tiny natural-copy regression in `clients/web/scripts/stable-dev.test.mjs`
+checks exclusion of `src-tauri/target` while preserving adjacent native source and unrelated
+nested `target` source directories. Existing `scripts/stable-dev.e2e.test.mjs` real-process
+checks retain startup snapshots, shutdown, no-HMR and lazy dependency behavior.
+
 HS2-RFJ1GN compaction recovery transitions are covered by the
 `hs2_rfj1gn_*` tests in `crates/hotsheet-ticketing/src/repository_compaction.rs`:
 guarded purge/queued commit/activation, a sync waiting behind rewrite admission,
