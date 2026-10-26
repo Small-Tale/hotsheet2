@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -16,6 +17,28 @@ describe('web ESLint policy', () => {
     for (const version of versions) {
       expect(version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
     }
+  });
+
+  it('HS2-JVSFES prevents new browser-native prompts while HS2-WMZ6Z5 retires existing ones', () => {
+    const prompts: Record<string, number> = {};
+    const scan = (directory: string, prefix = '') => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const relative = `${prefix}${entry.name}`;
+        if (entry.isDirectory()) {
+          if (entry.name !== 'ux-demo') scan(join(directory, entry.name), `${relative}/`);
+        } else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+          const source = readFileSync(join(directory, entry.name), 'utf8');
+          const count = source.match(/\b(?:window|globalThis)\.prompt\s*\(/g)?.length ?? 0;
+          if (count) prompts[relative] = count;
+        }
+      }
+    };
+    scan(import.meta.dirname);
+    expect(prompts).toEqual({
+      'features/ai-configuration.tsx': 3,
+      'features/commands.tsx': 1,
+      'interactions/attachments-and-gallery.ts': 1,
+    });
   });
 
   it('HS2-WM3SBV ignores generated web target files globally', () => {

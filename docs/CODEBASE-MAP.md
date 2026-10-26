@@ -837,13 +837,13 @@ for the inspector and reader (HS2-11F5F7); the rendered title and mobile cap are
 the terminal rail's list and paged board. `components/terminal-ticket-rail.tsx` renders the
 shared scope toolbar within the rail's root navigation view (HS2-5WXA6W).
 
-Live terminal session-message callers (HS2-NN6EXP) are in
-`clients/web/src/features/terminal-drawer.ts` and `components/terminal-drawer.tsx`, with the
-request/response parser in `clients/web/src/api.ts` and `server-response-parsers.ts`. The headless
-`hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`; both
-use the server's `POST /connections/{id}/message` operation. Server terminal registration in
-`crates/hotsheet-server/src/routes/terminals/launch.rs` resolves each connection's project from
-its launch checkout/source, which lets the selected project's drawer find its message action.
+Live terminal session messaging uses the API/parser in `clients/web/src/api.ts` and
+`server-response-parsers.ts`; Drive-to-session routing remains supported. The drawer's
+message button and delegated browser prompt were removed in HS2-JVSFES. The headless
+`hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`
+and uses the server's `POST /connections/{id}/message` operation. Server terminal registration
+in `crates/hotsheet-server/src/routes/terminals/launch.rs` resolves each connection's project
+from its launch checkout/source.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home.

@@ -607,3 +607,11 @@ and phone widths.
 - Codex hook generation, allow/deny/fallback/retry mapping, timeout behavior, setup merge
   safety, and subdirectory launch are automated without credentials; the gated provider
   smoke above guards the installed Codex lifecycle contract.
+
+### Removed terminal message action (HS2-JVSFES)
+
+Select a capable AI terminal in the bottom drawer. At 2048×1128, medium, phone,
+and returned-wide sizes, confirm the Message AI Session button is absent and no
+browser-native prompt opens. Drawer tab selection, creation, clipboard controls,
+and terminal output continue to work. CLI `terminal message` and the authenticated
+connection-message operation remain supported.

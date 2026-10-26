@@ -27,6 +27,10 @@ does not fork Kerf's guidance.
   context-menu item carries an icon. See [design-guidelines.md](design-guidelines.md)
   §9 for platform-specific Hot Sheet decisions.
 
+- Browser-native `window.prompt` dialogs are unsupported in the desktop shell. Use in-app
+  input flows; the terminal drawer's unnecessary message action was removed (HS2-JVSFES).
+  Existing prompt conversions are tracked by HS2-WMZ6Z5, with a shrinking source inventory test.
+
 ## Hot Sheet ticket lessons
 
 Kerf's house grammar carries the general rules. These ticket clusters explain

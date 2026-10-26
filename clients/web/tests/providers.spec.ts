@@ -21346,48 +21346,71 @@ for (const width of [390, 1280] as const)
     await page.screenshot({ path: `target/visual-captures/hs2-fwce1y-drive-terminal-${width}.png` });
   });
 
-for (const width of [390, 1280] as const)
-  test(`messages a capable terminal AI session from the drawer at ${width}px (HS2-NN6EXP)`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
-    await mockProject(page);
-    const messages: Array<{ text: string }> = [];
-    await page.route('**/*', (route) => {
-      const request = route.request(),
-        path = new URL(request.url()).pathname;
-      if (path.endsWith('/connections') && request.method() === 'GET')
-        return route.fulfill({
-          json: [
-            {
-              id: 'codex-main',
-              tool: 'codex',
-              project: '/work/demo',
-              role: 'main',
-              busy: false,
-              actions: ['message'],
-            },
-          ],
-        });
-      if (path.endsWith('/connections/codex-main/message') && request.method() === 'POST') {
-        messages.push(request.postDataJSON() as { text: string });
-        return route.fulfill({ json: { delivered: true, mechanism: 'codex-queue', confirmed: false } });
-      }
-      return route.fallback();
-    });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
-    const drawer = page.locator('[data-component="terminal-drawer"]');
-    await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
-    const message = drawer.getByRole('button', { name: 'Message AI Session' });
-    await expect(message).toBeVisible();
-    await expect(message).toBeInViewport({ ratio: 1 });
-    await page.screenshot({ path: `target/visual-captures/hs2-nn6exp-message-action-${width}.png` });
-    page.once('dialog', (dialog) => void dialog.accept('Continue this ticket'));
-    await message.click();
-    await expect.poll(() => messages).toEqual([{ text: 'Continue this ticket' }]);
-    await expect(page.locator('.app-toast').getByText('Message delivered to the AI session.')).toBeVisible();
+test('omits the removed terminal message action across viewport transitions (HS2-JVSFES)', async ({ page }) => {
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await mockProject(page);
+  const messages: Array<{ text: string }> = [];
+  await page.route('**/*', (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (path.endsWith('/connections') && request.method() === 'GET')
+      return route.fulfill({
+        json: [
+          {
+            id: 'codex-main',
+            tool: 'codex',
+            project: '/work/demo',
+            role: 'main',
+            busy: false,
+            actions: ['message'],
+          },
+        ],
+      });
+    if (path.endsWith('/connections/codex-main/message') && request.method() === 'POST') {
+      messages.push(request.postDataJSON() as { text: string });
+      return route.fulfill({ json: { delivered: true, mechanism: 'codex-queue', confirmed: false } });
+    }
+    return route.fallback();
   });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
+  let dialogs = 0;
+  page.on('dialog', (dialog) => {
+    dialogs += 1;
+    void dialog.dismiss();
+  });
+  for (const [label, width] of [
+    ['wide', 2048],
+    ['medium', 1024],
+    ['narrow', 390],
+    ['wide-return', 2048],
+  ] as const) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1128 });
+    const shell = page.locator('[data-component="app-shell"]');
+    await expect(shell).toHaveAttribute('data-mobile', String(width < 640));
+    await shell.evaluate(async (node) => {
+      const finite = node
+        .getAnimations({ subtree: true })
+        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().iterations));
+      await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+    });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('button', { name: 'Message AI Session' })).toHaveCount(0);
+    await expect(drawer.locator('[data-action="message-terminal-session"]')).toHaveCount(0);
+    await expect(drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]')).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+    await expect(drawer.getByRole('button', { name: 'New Drawer Item' })).toBeVisible();
+    await page.screenshot({ path: `target/visual-captures/hs2-jvsfes-after-${label}.png` });
+  }
+  expect(dialogs).toBe(0);
+  expect(messages).toEqual([]);
+});
 
 for (const width of [390, 1280] as const)
   test(`keeps the last message visible in a default-height drawer chat with a stuck banner and six-row draft at ${width}px (HS2-SZZGC6)`, async ({

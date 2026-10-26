@@ -463,8 +463,8 @@ one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2)
 ## 13.12 Messaging a live interactive session (session push, HS2-PEJ962)
 
 **Status: Partial**. Shipped: the operation, the OpenCode adapter, the `codex queue` adapter
-(HS2-FKM97G), the Claude inbox-socket adapter (HS2-M15CHN), and terminal-drawer and headless CLI
-message callers (HS2-NN6EXP). Automatic ticket-note delivery is tracked separately (HS2-25TP3N).
+(HS2-FKM97G), the Claude inbox-socket adapter (HS2-M15CHN), and the headless CLI
+message caller (HS2-NN6EXP). The drawer message button was removed after UX review (HS2-JVSFES). Automatic ticket-note delivery is tracked separately (HS2-25TP3N).
 
 Hot Sheet can push a message into an _interactive_ AI session that one of its terminals
 launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or

@@ -993,11 +993,11 @@ or a tool UI command through that mechanism's adapter. OpenCode declares `openco
 with no section (Antigravity) reports the capability as unsupported. Details and the OpenCode
 protocol are in [13](13-drive-transport-interface.md) §13.12.
 
-The terminal drawer offers **Message AI Session** when the selected terminal's live connection
-advertises `message`. It checks the connection again before delivery and reports unavailable or
-unreachable sessions. The headless equivalent is
-`hotsheet-cli terminal message <terminal-id> --text "Your message"` against the local server
-(HS2-NN6EXP). Both callers use the same `POST /connections/{id}/message` operation.
+Use `hotsheet-cli terminal message <terminal-id> --text "Your message"` against the local
+server to message a capable session (HS2-NN6EXP). It uses the authenticated
+`POST /connections/{id}/message` operation and reports unavailable or unreachable sessions.
+The terminal drawer's Message AI Session button and browser-native prompt were removed after
+UX review (HS2-JVSFES); CLI messaging, Drive-to-session routing, and the transport remain available.
 
 ## 5.5 Drive / trigger (send a command to a target connection)
 

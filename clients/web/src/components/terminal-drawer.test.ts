@@ -41,7 +41,7 @@ const render = (selectedId: string = 'grid') =>
     }),
   );
 describe('TerminalDrawer', () => {
-  it('offers session messaging only on a selected terminal with server capability', () => {
+  it('HS2-JVSFES omits the removed message action even on a capable selected terminal', () => {
     expect(render('one')).not.toContain('Message AI Session');
     const markup = String(
       TerminalDrawer({
@@ -55,8 +55,8 @@ describe('TerminalDrawer', () => {
         selectedId: 'one',
       }),
     );
-    expect(markup).toContain('aria-label="Message AI Session"');
-    expect(markup).toContain('data-action="message-terminal-session"');
+    expect(markup).not.toContain('Message AI Session');
+    expect(markup).not.toContain('message-terminal-session');
     expect(markup).toContain('data-terminal-id="one"');
   });
   it('keeps the grid tab fixed while the shared tab strip overflows', () => {
