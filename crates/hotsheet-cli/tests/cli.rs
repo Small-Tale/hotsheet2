@@ -874,9 +874,103 @@ fn hs2_afsf4x_permission_discard_requires_explicit_confirmation() {
     fixture("assert-source-empty");
 }
 
+/// The listener polls accept, but each connected HTTP request is read synchronously.
+fn read_permission_discard_request(
+    stream: std::net::TcpStream,
+) -> std::io::Result<(std::io::BufReader<std::net::TcpStream>, String, Vec<u8>)> {
+    use std::io::{BufRead, Read};
+    // HS2-013E3P: macOS can inherit the listener's nonblocking mode. BufReader needs
+    // blocking reads while a connected client is still sending headers or its body.
+    stream.set_nonblocking(false)?;
+    // The existing fixture already bounds accept by 30 seconds; bound stalled request bytes too.
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
+    let mut reader = std::io::BufReader::new(stream);
+    let mut line = String::new();
+    if reader.read_line(&mut line)? == 0 {
+        return Err(std::io::ErrorKind::UnexpectedEof.into());
+    }
+    let request = line.trim_end().to_string();
+    let mut length = 0;
+    let mut secret = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            return Err(std::io::ErrorKind::UnexpectedEof.into());
+        }
+        if line == "\r\n" {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("content-length:") {
+            length = value.trim().parse().unwrap();
+        }
+        if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+            secret = value.trim().to_owned();
+        }
+    }
+    let mut received = vec![0; length];
+    reader.read_exact(&mut received)?;
+    assert_eq!(secret, "synthetic-secret");
+    Ok((reader, request, received))
+}
+
+#[test]
+fn hs2_013e3p_mock_reads_delayed_request_headers_and_body_from_nonblocking_accept() {
+    use std::io::Write;
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::Duration;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    // Force the inherited macOS socket state on every platform, before any request bytes exist.
+    stream.set_nonblocking(true).unwrap();
+    assert_eq!(
+        stream.peek(&mut [0]).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    let (tx, rx) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        tx.send(read_permission_discard_request(stream).map(|(_, request, body)| (request, body)))
+            .unwrap();
+    });
+    // Channel deadlines deliberately withhold bytes; they are not readiness sleeps or read retries.
+    for fragment in [
+        b"POST /synthetic HTTP/1.1\r\n".as_slice(),
+        b"X-Hotsheet-Secret: synthetic-secret\r\nContent-Length: 4\r\n\r\n[",
+        b"42]",
+    ] {
+        assert!(
+            matches!(
+                rx.recv_timeout(Duration::from_millis(100)),
+                Err(RecvTimeoutError::Timeout)
+            ),
+            "mock must wait for the next request fragment instead of returning WouldBlock"
+        );
+        client.write_all(fragment).unwrap();
+    }
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+        ("POST /synthetic HTTP/1.1".into(), b"[42]".to_vec())
+    );
+    reader.join().unwrap();
+}
+
+#[test]
+fn hs2_013e3p_mock_rejects_eof_before_request_headers_or_complete_body() {
+    use std::io::Write;
+    for bytes in [b"".as_slice(), b"GET /synthetic HTTP/1.1\r\n", b"POST /synthetic HTTP/1.1\r\nX-Hotsheet-Secret: synthetic-secret\r\nContent-Length: 4\r\n\r\n["] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        client.write_all(bytes).unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        assert_eq!(read_permission_discard_request(stream).unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+    }
+}
+
 #[test]
 fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
-    use std::io::{BufRead, BufReader, Read, Write};
+    use std::io::Write;
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let project = root.path().join("project");
@@ -945,29 +1039,7 @@ fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
                     Err(error) => panic!("accept failed: {error}"),
                 }
             };
-            let mut reader = BufReader::new(stream);
-            let mut line = String::new();
-            reader.read_line(&mut line).unwrap();
-            let request = line.trim_end().to_string();
-            let mut length = 0;
-            let mut secret = String::new();
-            loop {
-                line.clear();
-                reader.read_line(&mut line).unwrap();
-                if line == "\r\n" {
-                    break;
-                }
-                let lower = line.to_ascii_lowercase();
-                if let Some(value) = lower.strip_prefix("content-length:") {
-                    length = value.trim().parse().unwrap();
-                }
-                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
-                    secret = value.trim().to_owned();
-                }
-            }
-            let mut received = vec![0; length];
-            reader.read_exact(&mut received).unwrap();
-            assert_eq!(secret, "synthetic-secret");
+            let (mut reader, request, _) = read_permission_discard_request(stream).unwrap();
             write!(
                 reader.get_mut(),
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
