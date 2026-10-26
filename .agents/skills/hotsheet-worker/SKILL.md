@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 40 -->
+<!-- hotsheet-skill-version: 41 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -101,6 +101,16 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    including new notes, before each action. If someone else owns its live claim, do
    not edit it. Renew before the lease expires and before lengthy work. Record phase
    transitions and activity as the project instructions require.
+   **Record each phase the moment it starts, even for `T0` docs or test-only
+   work** (HS2-5EGBTH): run `hotsheet-cli edit <slug> --started-phase working`
+   before the first edit, and `--started-phase initial_testing` before any lint,
+   policy, type or test gate. Go back to `working` when a gate failure sends you back
+   to edit, and set `initial_testing` again before rerunning the gates. Hand off
+   from `initial_testing`; the integrator records `integrating`. Claiming a Not
+   Started ticket only enters `analyzing`, and a claim never advances the phase. The
+   live claim signals active work, so never infer from a ticket's status or phase
+   that tests ran. Never backfill or rewrite a missed transition. Record
+   the missed transition in a note instead.
 3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
    work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
    Run the required local gates and inspect the diff. For code changes, stage named

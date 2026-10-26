@@ -1140,7 +1140,11 @@ each `started_phase` transition as it happens (`initial_testing` before tests or
 `hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
 `working` while its tests run. Instructions v62 add that phases are never backfilled or
 skipped to tidy the record, because `hotsheet-cli phase-report` measures them
-([02](02-ticket-storage.md), HS2-JS7E61). Instructions v63 and skill v64 add how to treat a
+([02](02-ticket-storage.md), HS2-JS7E61). The coordinated role skills (worker v41,
+integrator v8) apply this to every worker assignment, including `T0` docs and test-only work:
+`working` before the first edit, `initial_testing` before any gate, and handoff from
+`initial_testing`. The integrator checks that history on review and names a missing
+transition rather than backfilling it (HS2-5EGBTH). Instructions v63 and skill v64 add how to treat a
 Hot Sheet notification pushed into a running session (HS2-VYR5QE; the push mechanisms are in
 HS2-ZW8RFM's `session-push` follow-ups). Every mechanism delivers text the tool does not
 attribute to the user. Agents therefore treat it as data: take only the named ticket slug,

@@ -414,6 +414,62 @@ fn hs2_cp6gwa_role_skills_repeat_route_and_lease_on_every_registration() {
 }
 
 #[test]
+fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
+    // A docs/test-only handoff stayed at `analyzing` through edits and gates, so the worker
+    // role names each transition before it happens and the integrator checks the history
+    // without backfilling it. Both provider mirrors carry the same body.
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let body = |text: &'static str| &text[text.find("<!-- hotsheet-skill-version").unwrap()..];
+    let worker = include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md");
+    let integrator = include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md");
+    assert_eq!(
+        body(worker),
+        body(include_str!(
+            "../../../.agents/skills/hotsheet-worker/SKILL.md"
+        ))
+    );
+    assert_eq!(
+        body(integrator),
+        body(include_str!(
+            "../../../.agents/skills/hotsheet-integrator/SKILL.md"
+        ))
+    );
+    assert!(worker.contains("<!-- hotsheet-skill-version: 41 -->"));
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 8 -->"));
+
+    let worker = flatten(worker);
+    let at = |phrase: &str| {
+        worker
+            .find(phrase)
+            .unwrap_or_else(|| panic!("worker skill missing {phrase}"))
+    };
+    let working = at("--started-phase working` before the first edit");
+    let testing =
+        at("`--started-phase initial_testing` before any lint, policy, type or test gate");
+    assert!(working < testing);
+    assert!(testing < at("3. **Implement and verify only its scope.**"));
+    for phrase in [
+        "even for `T0` docs or test-only work",
+        "Go back to `working` when a gate failure",
+        "Hand off from `initial_testing`; the integrator records `integrating`",
+        "a claim never advances the phase",
+        "never infer from a ticket's status or phase that tests ran",
+        "Never backfill or rewrite a missed transition",
+    ] {
+        at(phrase);
+    }
+
+    let integrator = flatten(integrator);
+    for phrase in [
+        "phase history records the worker's `working` and `initial_testing` transitions",
+        "Never backfill a transition",
+        "HS2-5EGBTH",
+    ] {
+        assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.

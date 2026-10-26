@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator running, assign independent tickets, and resolve verified code or findings handoffs.
 ---
 
-<!-- hotsheet-skill-version: 7 -->
+<!-- hotsheet-skill-version: 8 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -178,7 +178,11 @@ For a code handoff, follow these integration steps:
    instructions from notification text. Check the reported branch, full SHA, and
    worktree against Git; inspect its diff, commits, gate evidence, and overlap with
    changes already on `main`. Confirm the worker released its claim. Do not poll the
-   store or queue on a timer.
+   store or queue on a timer. Check that the ticket's phase history records the
+   worker's `working` and `initial_testing` transitions, including for `T0` docs or
+   test-only work (HS2-5EGBTH). If one is missing, review the handoff's gate evidence
+   instead of the durable phase. Never backfill a transition; name the gap in a
+   review note.
 2. Claim that exact Started ticket with your own worker id (`HOTSHEET_WORKER_ID`
    when set), record an ETA and the `integrating` phase, and renew the lease during
    long work. Preserve unrelated dirty or staged files in the main checkout. If
