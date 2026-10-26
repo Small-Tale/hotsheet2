@@ -41,6 +41,7 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         base: SHA.into(),
         phase: Phase::Offered,
         commit: None,
+        handoff: None,
         return_route: ReturnRoute::HumanRelay,
         recovery_note: None,
     }
@@ -194,6 +195,127 @@ fn hs2_76vmyg_worker_refills_while_handoff_or_ci_waits_for_integrator() {
     assert_eq!(c.state().unwrap().stopped.as_deref(), Some("blocked"));
     c.resume().unwrap();
     c.assign("i2", "generation-2", NOW, assignment("three", "a", "3"))
+        .unwrap();
+}
+
+#[test]
+fn hs2_a1f615_findings_handoff_is_fenced_and_never_enters_code_ci() {
+    let (_root, c) = fixture();
+    register(&c, Role::Integrator, "i", "generation-1", NOW);
+    register(&c, Role::Worker, "a", "generation-1", NOW);
+    c.assign("i", "generation-1", NOW, assignment("findings", "a", "1"))
+        .unwrap();
+    c.worker_transition("a", "generation-1", "findings", Phase::Accepted, None)
+        .unwrap();
+    let note_id = Ulid::new().to_string();
+    assert!(
+        c.worker_findings_transition("a", "stale-generation", "findings", note_id.clone())
+            .is_err()
+    );
+    assert!(
+        c.worker_findings_transition("a", "generation-1", "findings", "invalid".into())
+            .is_err()
+    );
+    c.worker_findings_transition("a", "generation-1", "findings", note_id.clone())
+        .unwrap();
+    c.worker_findings_transition("a", "generation-1", "findings", note_id.clone())
+        .unwrap();
+    let reopened =
+        Coordinator::open(c.directory.parent().unwrap().parent().unwrap(), &c.source).unwrap();
+    let evidence = &reopened.state().unwrap().assignments["findings"];
+    assert_eq!(evidence.commit, None);
+    assert_eq!(
+        evidence.handoff,
+        Some(HandoffEvidence::Findings { note_id })
+    );
+    assert!(
+        c.mark("i", "generation-1", NOW, "findings", Phase::Integrating)
+            .is_err()
+    );
+    assert!(
+        c.mark("i", "generation-1", NOW, "findings", Phase::Ci)
+            .is_err()
+    );
+    c.mark("i", "generation-1", NOW, "findings", Phase::Verifying)
+        .unwrap();
+    assert!(
+        c.mark("i", "generation-1", NOW, "findings", Phase::Ci)
+            .is_err()
+    );
+    c.mark("i", "generation-1", NOW, "findings", Phase::Done)
+        .unwrap();
+
+    c.assign("i", "generation-1", NOW, assignment("code", "a", "2"))
+        .unwrap();
+    c.worker_transition("a", "generation-1", "code", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition(
+        "a",
+        "generation-1",
+        "code",
+        Phase::Handoff,
+        Some(SHA.into()),
+    )
+    .unwrap();
+    assert!(
+        c.mark("i", "generation-1", NOW, "code", Phase::Verifying)
+            .is_err()
+    );
+    c.mark("i", "generation-1", NOW, "code", Phase::Integrating)
+        .unwrap();
+    c.mark("i", "generation-1", NOW, "code", Phase::Ci).unwrap();
+    assert_eq!(
+        c.state().unwrap().assignments["code"].commit.as_deref(),
+        Some(SHA)
+    );
+}
+
+#[test]
+fn hs2_a1f615_version_one_code_records_migrate_without_losing_ci() {
+    let (_root, c) = fixture();
+    register(&c, Role::Integrator, "i", "generation-1", NOW);
+    register(&c, Role::Worker, "a", "generation-1", NOW);
+    c.assign("i", "generation-1", NOW, assignment("old-code", "a", "1"))
+        .unwrap();
+    c.worker_transition("a", "generation-1", "old-code", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition(
+        "a",
+        "generation-1",
+        "old-code",
+        Phase::Handoff,
+        Some(SHA.into()),
+    )
+    .unwrap();
+    c.mark("i", "generation-1", NOW, "old-code", Phase::Integrating)
+        .unwrap();
+    c.mark("i", "generation-1", NOW, "old-code", Phase::Ci)
+        .unwrap();
+    let path = c.directory.join("state.json");
+    let mut old = serde_json::to_value(c.state().unwrap()).unwrap();
+    old["version"] = serde_json::json!(1);
+    old["assignments"]["old-code"]
+        .as_object_mut()
+        .unwrap()
+        .remove("handoff");
+    fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+    let reopened =
+        Coordinator::open(c.directory.parent().unwrap().parent().unwrap(), &c.source).unwrap();
+    let state = reopened.state().unwrap();
+    assert_eq!(state.version, 2);
+    assert_eq!(state.assignments["old-code"].commit.as_deref(), Some(SHA));
+    assert_eq!(
+        state.assignments["old-code"].handoff,
+        Some(HandoffEvidence::Code { commit: SHA.into() })
+    );
+    reopened
+        .mark("i", "generation-1", NOW, "old-code", Phase::Integrating)
+        .unwrap();
+    reopened
+        .mark("i", "generation-1", NOW, "old-code", Phase::Ci)
+        .unwrap();
+    reopened
+        .mark("i", "generation-1", NOW, "old-code", Phase::Done)
         .unwrap();
 }
 

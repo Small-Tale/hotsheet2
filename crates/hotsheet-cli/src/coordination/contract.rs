@@ -53,10 +53,20 @@ pub enum Phase {
     Offered,
     Accepted,
     Handoff,
+    Verifying,
     Integrating,
     Ci,
     Done,
     Blocked,
+}
+
+/// Durable handoff proof. A findings note is scoped by its assignment's qualified
+/// ticket and is checked again before the integrator completes it (HS2-A1F615).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum HandoffEvidence {
+    Code { commit: String },
+    Findings { note_id: String },
 }
 
 impl Phase {
@@ -79,7 +89,11 @@ pub struct Assignment {
     pub slug: String,
     pub base: String,
     pub phase: Phase,
+    /// Kept for version-one records and older code-handoff readers. Version two
+    /// stores the typed outcome in `handoff` as well.
     pub commit: Option<String>,
+    #[serde(default)]
+    pub handoff: Option<HandoffEvidence>,
     pub return_route: ReturnRoute,
     #[serde(default)]
     pub recovery_note: Option<String>,
@@ -108,7 +122,7 @@ pub struct State {
 impl State {
     pub fn new(project_id: String, source_id: String) -> Self {
         Self {
-            version: 1,
+            version: 2,
             project_id,
             source_id,
             revision: 0,

@@ -1,8 +1,9 @@
 ---
 name: hotsheet-worker
-description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified worktree commits to the main-branch integrator.
+description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 ---
-<!-- hotsheet-skill-version: 37 -->
+
+<!-- hotsheet-skill-version: 38 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -21,6 +22,14 @@ installation method, then repeat the capability check. Do not install globally o
 restart the user's host from a worker. Preserve a genuine exact assignment while
 resolving this capability blocker; do not guess another ticket.
 
+Before any live pool open that would upgrade schema-one state, the integrator
+must stop old waiters and switch every pool member to the verified schema-two
+artifact. Even `status` and `setup` immediately migrate schema-one state on
+`Coordinator::open`;
+older executables then refuse that pool. `coordination --help` alone does not
+prove schema-two support. When upgrading, workers wait for the integrator to
+coordinate this switch before running any pool command (HS2-A1F615).
+
 Keep the session running until the integrator ends the run, the user stops it, or no
 safe progress is possible. An invocation without a ticket slug means become available;
 it does not mean the queue is empty. Either the worker or integrator may start first.
@@ -37,7 +46,7 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    ask the integrator to publish its exact structured assignment; remain available.
    Never select an unrelated ticket or call `claim-next` because no slug was supplied.
 3. Run `coordination --project <main> next --role worker --id <worker>
-   --session <generation> --route <return-route>` with the same `-C` source. This
+--session <generation> --route <return-route>` with the same `-C` source. This
    registers availability and blocks on filesystem events for this worker's exact
    generation-bound assignment. Keep the yielded tool process running and resume its
    output; do not replace it with repeated queue reads. Availability lease renewal
@@ -49,8 +58,10 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    acknowledgement is not a ticket claim; the CLI verifies the local source's live
    claim. Unsupported provider verification fails explicitly (HS2-3ETJ26).
 5. After the durable handoff and claim release, run `coordination worker --phase
-   handoff --assignment <id> --id <worker> --session <generation> --commit <full-sha>`.
-   It checks the local ticket's released claim and matching handoff note. Send only the
+handoff --assignment <id> --id <worker> --session <generation> --commit <full-sha>`
+   for code, or use `--findings-note <note-id>` for a no-code findings handoff.
+   These are mutually exclusive. The CLI checks the exact local ticket's released
+   claim and matching durable handoff note. Send only the
    ticket-slug cue, then return to `next`. Create a NEW ticket worktree from each new
    assignment's current shipping SHA; preserve prior handoff worktrees for integration.
    Do not wait for a previous ticket's remote CI before becoming available again.
@@ -77,25 +88,34 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    files or an existing dirty worktree, tell the integrator and wait for a different
    assignment.
 2. **Claim exactly that ticket** with `hotsheet-cli claim <slug> --worker <id> --eta
-   <duration>` or the equivalent Hot Sheet MCP operation. Use `HOTSHEET_WORKER_ID` when
+<duration>` or the equivalent Hot Sheet MCP operation. Use `HOTSHEET_WORKER_ID` when
    set; otherwise choose one stable session-specific id. Read the whole ticket,
    including new notes, before each action. If someone else owns its live claim, do
    not edit it. Renew before the lease expires and before lengthy work. Record phase
    transitions and activity as the project instructions require.
 3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
    work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
-   Run the required local gates and inspect the diff. Stage named paths and commit the
-   verified change on the worker branch with the ticket slug in the subject. Do not
+   Run the required local gates and inspect the diff. For code changes, stage named
+   paths and commit the verified change on the worker branch with the ticket slug in
+   the subject. For a findings-only task, record the evidence in a regular ticket
+   note and do not create an empty commit. Do not
    merge or push the worker branch or `main` as part of this handoff.
-4. **Hand off without completing.** Add a regular ticket note headed `## Integration
-   handoff` with the branch name, full commit SHA, worktree location labeled as
+4. **Hand off without completing.** Add a regular ticket note for code headed `## Integration
+handoff` with the branch name, full commit SHA, worktree location labeled as
    machine-local, gate results, unresolved risks, and any follow-up slugs. State that
-   the ticket remains Started pending integration. Release the claim immediately and
+   the ticket remains Started pending integration. For findings, add a regular note
+   headed `## Findings handoff` with the verified result, evidence, limitations, and
+   follow-up slugs. Capture that note's id and state that the ticket remains Started
+   pending integrator verification. Release the claim immediately and
    record any structured mailbox handoff, then send only the ticket slug through the assigned return route below. The integrator
-   reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal. Do not
+   reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal for code;
+   for findings it verifies the note and completes without code integration or CI. Do not
    mark the ticket Completed or Verified from a worker worktree.
 
 ## Reviewed handoff corrections
+
+Structured returns cover code handoffs; findings-only returns are tracked by
+HS2-AEBJYN.
 
 A review note alone is not a new assignment. Preserve the original branch, worktree
 and full commit; wait for the integrator's `review-return` and a NEW structured

@@ -3,7 +3,7 @@
 #[path = "support/coordination.rs"]
 mod support;
 
-use hotsheet_model::Timestamp;
+use hotsheet_model::{NoteKind, Timestamp};
 use hotsheet_ticketing::ops;
 use std::fs;
 use support::{Fixture, git};
@@ -174,6 +174,480 @@ fn hs2_76vmyg_worker_first_handoff_survives_absence_then_refills_from_new_main()
         "verified synthetic change\n"
     );
     assert!(!f.cli(&["show", &first.slug]).contains("claimed_by:"));
+}
+
+#[test]
+fn hs2_a1f615_findings_handoff_refills_while_code_ci_is_pending() {
+    let f = Fixture::new();
+    let code = f.ticket();
+    let findings = f.ticket();
+    f.run(&[
+        "register",
+        "--role",
+        "integrator",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+    ]);
+    f.run(&[
+        "register",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+    ]);
+    let base = git(&f.project, &["rev-parse", "HEAD"]);
+    f.assign("code", &code, &base, "root");
+    f.cli(&["claim", &code.slug, "--worker", "worker", "--eta", "10m"]);
+    f.run(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "code",
+        "--phase",
+        "accepted",
+    ]);
+    let checkout = f.root.path().join("code-worker");
+    git(
+        &f.project,
+        &[
+            "worktree",
+            "add",
+            "-qb",
+            "code-worker",
+            checkout.to_str().unwrap(),
+            &base,
+        ],
+    );
+    fs::write(checkout.join("code.txt"), "synthetic code\n").unwrap();
+    git(&checkout, &["add", "code.txt"]);
+    git(
+        &checkout,
+        &["commit", "-qm", "HS-SYNTHETIC Record code fixture"],
+    );
+    let commit = git(&checkout, &["rev-parse", "HEAD"]);
+    f.cli(&[
+        "edit",
+        &code.slug,
+        "--note",
+        &format!("## Integration handoff\nSynthetic commit {commit}"),
+    ]);
+    f.cli(&["release", &code.slug, "--worker", "worker"]);
+    f.run(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "code",
+        "--phase",
+        "handoff",
+        "--commit",
+        &commit,
+    ]);
+    f.run(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "code",
+        "--phase",
+        "integrating",
+    ]);
+    git(&f.project, &["cherry-pick", &commit]);
+    f.run(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "code",
+        "--phase",
+        "ci",
+    ]);
+    let mut waiting = f.waiting(&[
+        "next",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+    ]);
+    let new_base = git(&f.project, &["rev-parse", "HEAD"]);
+    f.assign("findings", &findings, &new_base, "root");
+    assert_eq!(
+        waiting
+            .result()
+            .state
+            .active_assignment("worker")
+            .unwrap()
+            .base,
+        new_base
+    );
+    f.cli(&[
+        "claim",
+        &findings.slug,
+        "--worker",
+        "worker",
+        "--eta",
+        "10m",
+    ]);
+    f.run(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "findings",
+        "--phase",
+        "accepted",
+    ]);
+    f.cli(&[
+        "edit",
+        &findings.slug,
+        "--note",
+        "## Findings handoff\nSynthetic verification evidence.",
+    ]);
+    f.cli(&[
+        "edit",
+        &code.slug,
+        "--note",
+        "## Findings handoff\nEvidence for a different synthetic ticket.",
+    ]);
+    let wrong_note_id = f
+        .store
+        .read_ticket(&code.id)
+        .unwrap()
+        .notes
+        .last()
+        .unwrap()
+        .id
+        .to_string();
+    let note_id = f
+        .store
+        .read_ticket(&findings.id)
+        .unwrap()
+        .notes
+        .last()
+        .unwrap()
+        .id
+        .to_string();
+    f.cli(&[
+        "edit",
+        &findings.slug,
+        "--note-kind",
+        "activity",
+        "--note-summary",
+        "Synthetic activity evidence",
+        "--note",
+        "## Findings handoff\nSynthetic activity evidence.",
+    ]);
+    let activity_note_id = f
+        .store
+        .read_ticket(&findings.id)
+        .unwrap()
+        .notes
+        .last()
+        .unwrap()
+        .id
+        .to_string();
+    let handoff = f.coord(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "findings",
+        "--phase",
+        "handoff",
+        "--findings-note",
+        &note_id,
+    ]);
+    assert!(
+        !f.command(&handoff.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "a live worker claim cannot be bypassed"
+    );
+    f.cli(&["release", &findings.slug, "--worker", "worker"]);
+    let wrong_handoff = f.coord(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "findings",
+        "--phase",
+        "handoff",
+        "--findings-note",
+        &wrong_note_id,
+    ]);
+    assert!(
+        !f.command(&wrong_handoff.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "a note on another ticket cannot satisfy this handoff"
+    );
+    let activity_handoff = f.coord(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "findings",
+        "--phase",
+        "handoff",
+        "--findings-note",
+        &activity_note_id,
+    ]);
+    assert!(
+        !f.command(
+            &activity_handoff
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+        )
+        .output()
+        .unwrap()
+        .status
+        .success(),
+        "an activity note cannot satisfy a findings handoff"
+    );
+    let handed = f.run(&[
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "worker-session",
+        "--assignment",
+        "findings",
+        "--phase",
+        "handoff",
+        "--findings-note",
+        &note_id,
+    ]);
+    assert_eq!(handed.state.version, 2);
+    assert!(handed.state.assignments["findings"].commit.is_none());
+    assert_eq!(
+        handed.state.assignments["code"].phase,
+        hotsheet_cli::coordination::Phase::Ci
+    );
+    let integrating = f.coord(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "integrating",
+    ]);
+    assert!(
+        !f.command(&integrating.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let verifying = f.coord(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "verifying",
+    ]);
+    assert!(
+        !f.command(&verifying.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    f.cli(&[
+        "claim",
+        &findings.slug,
+        "--worker",
+        "integrator",
+        "--eta",
+        "10m",
+    ]);
+    let set_findings_kind = |kind| {
+        let mut ticket = f.store.read_ticket(&findings.id).unwrap();
+        ticket
+            .notes
+            .iter_mut()
+            .find(|note| note.id.to_string() == note_id)
+            .unwrap()
+            .kind = kind;
+        f.store.write_ticket(&ticket).unwrap();
+    };
+    set_findings_kind(NoteKind::Activity);
+    assert!(
+        !f.command(&verifying.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "verification must recheck the referenced note kind"
+    );
+    set_findings_kind(NoteKind::Regular);
+    f.run(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "verifying",
+    ]);
+    f.cli(&["release", &findings.slug, "--worker", "integrator"]);
+    assert!(
+        !f.command(&verifying.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "verification replay requires a live integrator claim after release"
+    );
+    f.cli(&[
+        "claim",
+        &findings.slug,
+        "--worker",
+        "replacement",
+        "--eta",
+        "10m",
+    ]);
+    assert!(
+        !f.command(&verifying.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "verification replay rejects a replacement claim holder"
+    );
+    f.cli(&["release", &findings.slug, "--worker", "replacement"]);
+    f.cli(&[
+        "claim",
+        &findings.slug,
+        "--worker",
+        "integrator",
+        "--eta",
+        "10m",
+    ]);
+    let mut expired = f.store.read_ticket(&findings.id).unwrap();
+    expired.claim_lease_expires_at = Some(Timestamp::from_datetime(
+        time::OffsetDateTime::now_utc() - time::Duration::minutes(1),
+    ));
+    f.store.write_ticket(&expired).unwrap();
+    assert!(
+        !f.command(&verifying.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "verification replay rejects an expired integrator claim"
+    );
+    f.cli(&[
+        "claim",
+        &findings.slug,
+        "--worker",
+        "integrator",
+        "--eta",
+        "10m",
+    ]);
+    f.run(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "verifying",
+    ]);
+    let done = f.coord(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "done",
+    ]);
+    assert!(
+        !f.command(&done.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    f.cli(&[
+        "edit",
+        &findings.slug,
+        "--status",
+        "completed",
+        "--note",
+        "Synthetic findings verified.",
+    ]);
+    set_findings_kind(NoteKind::Activity);
+    assert!(
+        !f.command(&done.iter().map(String::as_str).collect::<Vec<_>>())
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "completion must recheck the referenced note kind"
+    );
+    set_findings_kind(NoteKind::Regular);
+    let completed = f.run(&[
+        "mark",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--assignment",
+        "findings",
+        "--phase",
+        "done",
+    ]);
+    assert_eq!(
+        completed.state.assignments["findings"].phase,
+        hotsheet_cli::coordination::Phase::Done
+    );
+    assert_eq!(
+        completed.state.assignments["code"].phase,
+        hotsheet_cli::coordination::Phase::Ci
+    );
+    assert_eq!(git(&f.project, &["rev-parse", "HEAD"]), new_base);
 }
 
 #[test]

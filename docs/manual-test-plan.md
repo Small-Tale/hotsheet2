@@ -31,6 +31,14 @@ worker without a slug, then the Codex integrator; repeat in the reverse order. V
 availability appears, an exact structured assignment wakes only its intended worker,
 the actual ticket claim is held before code changes, and handoff/release returns the
 worker to a second fresh worktree without waiting for the first ticket's CI.
+Assign a findings-only synthetic ticket while that first code ticket remains in CI.
+Have the worker record a regular `## Findings handoff` note with evidence, release
+its claim, and hand off the note id. Confirm the integrator verifies the exact note,
+claims and completes the ticket, and resolves the mailbox without a code commit,
+push, or CI phase. Stop and resume during `verifying`, then confirm the same note
+and session-fenced transition can finish safely (HS2-A1F615).
+Confirm a released, expired, or replacement-owner integrator claim cannot replay
+`verifying`, including a lease that expired earlier in the same second, and an activity note with a findings heading cannot serve as evidence.
 
 Stop and resume the integrator while a handoff is pending; verify it discovers the
 durable commit even if the prompt cue was lost or unconfirmed. End an idle worker,

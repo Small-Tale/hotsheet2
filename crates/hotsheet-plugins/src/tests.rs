@@ -157,13 +157,69 @@ fn hs2_w3tkx9_worker_skills_require_integration_handoff() {
         claude.replace("allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n", "");
     assert_eq!(codex, claude_portable, "worker contracts must stay in sync");
     for skill in [codex, claude] {
-        assert!(skill.contains("hotsheet-cli claim <slug>"));
-        assert!(skill.contains("## Integration\n   handoff"));
-        assert!(skill.contains("full commit SHA"));
-        assert!(skill.contains("Release the claim immediately"));
-        assert!(skill.contains("Do not\n   mark the ticket Completed or Verified"));
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(text.contains("hotsheet-cli claim <slug>"));
+        assert!(text.contains("## Integration handoff"));
+        assert!(text.contains("full commit SHA"));
+        assert!(text.contains("Release the claim immediately"));
+        assert!(text.contains("Do not mark the ticket Completed or Verified"));
         assert!(!skill.contains("hotsheet-cli claim-next"));
         assert!(!skill.contains("--status completed"));
+    }
+}
+
+#[test]
+fn hs2_a1f615_role_skills_distinguish_findings_from_code_handoffs() {
+    for worker in [
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+    ] {
+        for invariant in [
+            "--findings-note <note-id>",
+            "## Findings handoff",
+            "do not create an empty commit",
+            "pending integrator verification",
+        ] {
+            assert!(worker.contains(invariant), "worker missing {invariant}");
+        }
+    }
+    for integrator in [
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+    ] {
+        for invariant in [
+            "--phase verifying",
+            "## Findings handoff",
+            "without code integration or CI",
+            "There is no Git merge, push, or remote CI",
+        ] {
+            assert!(
+                integrator.contains(invariant),
+                "integrator missing {invariant}"
+            );
+        }
+    }
+}
+
+#[test]
+fn hs2_a1f615_role_skills_require_coordinated_upgrade_before_any_live_open() {
+    for skill in [
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for invariant in [
+            "Before any live pool open",
+            "stop old waiters",
+            "switch every pool member",
+            "`status` and `setup` immediately migrate",
+            "older executables then refuse",
+        ] {
+            assert!(text.contains(invariant), "skill missing {invariant}");
+        }
+        assert!(!text.contains("this operation does not migrate the pool schema"));
     }
 }
 

@@ -85,7 +85,7 @@ fn hs2_65etrj_review_return_corrected_handoff_and_single_actual_integration() {
         &review.to_string(),
         "--inspected",
     ]);
-    assert_eq!(returned.state.version, 1);
+    assert_eq!(returned.state.version, 2);
     assert_eq!(returned.state.assignments["original"].phase, Phase::Blocked);
     assert_eq!(
         returned.state.assignments["original"].commit.as_deref(),

@@ -2024,8 +2024,15 @@ idempotently creates versioned local state under the code Git common directory's
 code project, not a ticket provider. The pool persists and validates the canonical
 selected-source identity. A different `-C` source cannot silently join the same pool.
 Its schema uses qualified `(connection_id, native_id)` references, session generations,
-operation ids, availability deadlines, return-route identifiers, and handoff commits;
+operation ids, availability deadlines, return-route identifiers, and typed handoff
+evidence (a code commit or findings note id);
 it stores no session credentials or ticket content.
+The first `Coordinator::open` with a schema-two executable immediately migrates
+version-one state, including pending code CI, and persists schema two. This also
+happens for `status` and `setup`, before any findings handoff. Older executables
+then refuse the upgraded state. Stop old waiters and switch all members to the
+verified schema-two artifact before any live pool open; checking
+`coordination --help` alone does not prove this capability (HS2-A1F615).
 
 Use the same prefix, with `--project` before the subcommand:
 
@@ -2036,8 +2043,8 @@ Use the same prefix, with `--project` before the subcommand:
 | `next --role integrator --id <id> --session <generation> --after <cursor>`                                                                                                                                 | Reconcile durable state, then block until a semantic local event changes it. Omit the cursor for an initial snapshot.                                                              |
 | `status`                                                                                                                                                                                                   | Read worker availability, qualified reservations, retained handoffs, integration/CI phases, and selected-source queue facts.                                                       |
 | `assign --id <integrator> --session <generation> --worker <id> --worker-session <worker-generation> --operation <unique-id> --connection <source> --native-id <native-id> --slug <slug> --base <full-sha>` | Reserve one exact assignment after the integrator's scope review. A retried operation id returns the same reservation.                                                             |
-| `worker --id <id> --session <generation> --assignment <id> --phase <phase> [--commit <full-sha>]`                                                                                                          | Acknowledge the real claim, durable handoff/release, or blocker. This is not itself a ticket claim.                                                                                |
-| `mark --id <integrator> --session <generation> --assignment <id> --phase <phase>`                                                                                                                          | Record serialized integration, pending CI, or resolution after ticket completion. Multiple CI records may coexist.                                                                 |
+| `worker --id <id> --session <generation> --assignment <id> --phase <phase> [--commit <full-sha> \| --findings-note <note-id>]`                                                                             | Acknowledge the real claim, durable code or findings handoff/release, or blocker. This is not itself a ticket claim.                                                               |
+| `mark --id <integrator> --session <generation> --assignment <id> --phase <phase>`                                                                                                                          | Record code integration/CI or findings verification, then resolution after ticket completion. Multiple code CI records may coexist.                                                |
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                 | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
 | `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                           | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                        | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
@@ -2046,23 +2053,32 @@ Use the same prefix, with `--project` before the subcommand:
 The local default-source CLI checks eligibility before offering an assignment,
 requires the assigned worker's live ticket claim before `accepted`, and requires
 explicit claim release plus an `Integration handoff` note naming the full commit
-before `handoff`. Existing ticket claims remain authoritative. A mailbox phase does
+before a code `handoff`. For findings, the worker uses `--findings-note` with the id
+of a nonempty `NoteKind::Regular` `## Findings handoff` note on that exact qualified
+ticket and releases its claim first. The integrator must hold the exact live ticket
+claim to mark or replay `verifying`; it compares the full timestamp, including
+fractional seconds, and rechecks the note kind and evidence.
+The ticket must be Completed or Verified before `done`. Findings never enter
+`integrating` or `ci` and require no empty commit,
+push, or remote CI. Existing ticket claims remain authoritative. A mailbox phase does
 not complete a ticket. Availability expiry never reallocates an in-progress ticket:
 the integrator must inspect its artifacts and record a recovery note first. Old
 session generations cannot acknowledge replacement assignments.
 
-Reviewed handoffs can be explicitly returned for in-scope corrections (HS2-65ETRJ).
+Reviewed code handoffs can be explicitly returned for in-scope corrections (HS2-65ETRJ).
 The live exact integrator adds a regular `## Review return` note to the assigned
 ticket, naming the assignment id and full reviewed commit as whitespace-separated
 tokens and documenting preserved artifacts and corrections, then releases any claim.
 `review-return` checks the exact provider-qualified ticket and absence of a live
-claim under its mutation lock, preserving the original commit in schema-1 Blocked
-state with review evidence. An identical return replays without changing a later
+claim under its mutation lock, preserving the original commit and typed code
+evidence in Blocked state with review evidence. An identical return replays without changing a later
 assignment or claim; conflicting evidence is rejected. A new `assign` operation id
 reserves corrections from the current shipping base. The old operation remains
 Blocked, cannot integrate or become Done, and never completes the ticket. Integrating,
-CI and ordinary blocked records cannot be returned. No mailbox schema upgrade is
-required; participants dispatching corrections need the updated CLI capability.
+CI and ordinary blocked records cannot be returned. This transition adds no record
+fields; the schema-two startup migration above still applies before the command
+opens a pool. Participants need the updated CLI capability. Findings-only return
+support is tracked by HS2-AEBJYN.
 
 `next` subscribes to filesystem events before reading snapshots, so either startup
 order and reconnect after a lost cue reconcile durable state. Queue edits, source

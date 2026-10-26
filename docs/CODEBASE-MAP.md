@@ -868,12 +868,16 @@ from its launch checkout/source.
 
 Local continuous worker coordination (HS2-76VMYG) lives in
 `crates/hotsheet-cli/src/coordination/`: `contract.rs` owns the provider-qualified
-session/assignment schema, `mod.rs` the atomic local state transitions,
-`review_return.rs` preserves rejected handoffs and enables structured correction
-assignments without a schema change (HS2-65ETRJ),
+session/assignment schema and typed code/findings evidence (HS2-A1F615), `mod.rs`
+the atomic local state transitions and immediate version-one code-record migration
+on any `Coordinator::open` (all pool members switch artifacts before a live open),
+`review_return.rs` preserves rejected code handoffs and enables structured correction
+assignments using existing record fields (HS2-65ETRJ),
 `snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
 and known lease deadlines. `dispatch/coordination.rs` exposes idempotent setup,
-registration, exact dispatch/acknowledgement, recovery, and terminal outcomes through
+registration, exact dispatch/acknowledgement, findings-note validation with
+full-precision claim authority, recovery,
+and terminal outcomes through
 `hotsheet-cli coordination`. The shared code Git common directory stores the local
 registry; it is separate from ticket-provider identity. Existing ticket claims remain
 authoritative. `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI

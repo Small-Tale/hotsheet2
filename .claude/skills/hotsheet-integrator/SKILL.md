@@ -1,9 +1,10 @@
 ---
 name: hotsheet-integrator
-description: Keep a local main-branch integrator running, discover available workers, assign independent tickets, and integrate verified handoffs through CI.
+description: Keep a local main-branch integrator running, assign independent tickets, and resolve verified code or findings handoffs.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 4 -->
+
+<!-- hotsheet-skill-version: 5 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -22,6 +23,14 @@ artifact or exact upgrade command for its installation method; do not assume Car
 Repeat the capability check before registering sessions. No worker globally installs
 the tool or restarts the user's host as part of this workflow.
 
+Before any live pool open that would upgrade schema-one state, the integrator
+must stop old waiters and switch every pool member to the verified schema-two
+artifact. Even `status` and `setup` immediately migrate schema-one state on
+`Coordinator::open`;
+older executables then refuse that pool. `coordination --help` alone does not
+prove schema-two support. When upgrading, workers wait for the integrator to
+coordinate this switch before running any pool command (HS2-A1F615).
+
 Start with `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then
 `register --role integrator --id <integrator> --session <fresh-generation> --route
 <return-route>`. Keep that generation throughout this invocation and renew with
@@ -36,19 +45,21 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    for later workers. Do not infer worker identity from an arbitrary process or cwd.
 2. After the dependency/file-overlap review below, reserve an exact assignment with
    `coordination assign --id <integrator> --session <generation> --worker <worker>
-   --worker-session <worker-generation> --operation <unique-id> --connection <source>
-   --native-id <native-id> --slug <slug> --base <full-main-sha>`. Record the scope and
+--worker-session <worker-generation> --operation <unique-id> --connection <source>
+--native-id <native-id> --slug <slug> --base <full-main-sha>`. Record the scope and
    assignment id in its ticket. Retry the same operation id on lost delivery; do not
    create a second assignment. A reservation is not a ticket claim. The worker's exact
    claim remains authoritative before any code work.
-3. Integrate one durable handoff at a time using the steps below. Record mailbox phases
-   with `coordination mark --assignment <id> --phase integrating`, then `ci` after
-   verified push, then `done` after covering green CI and ticket completion. Include
-   integrator id/session on each call. The runtime fences a second integrating ticket;
-   several CI records may coexist while workers take independent new assignments.
+3. Resolve one durable handoff at a time using the steps below. For code, record
+   `coordination mark --assignment <id> --phase integrating`, then `ci` after verified
+   push, then `done` after covering green CI and ticket completion. For findings,
+   record `--phase verifying`, verify the exact evidence note and complete the ticket,
+   then `--phase done` without code integration or CI. Include integrator
+   id/session on each call. The runtime fences a second integrating or verifying
+   ticket; several CI records may coexist while workers take independent assignments.
 4. When waiting on local worker, ticket, or source-configuration changes, run
    `coordination next --role integrator --id <integrator> --session <generation>
-   --after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
+--after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
    filesystem events, cursor reconciliation, and known lease-expiry deadlines wake it;
    availability heartbeats do not scan the queue or network. Lost/unconfirmed session
    cues cannot erase durable assignments or handoffs.
@@ -59,7 +70,7 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    CI completion needs an actual supported status/event route or human cue. If none
    exists, name the exact pending CI and unavailable wake route as no safe automatic
    progress; do not invent a subscription, add network polling, or report drained.
-6. Once the covered queue is exhausted and no work/handoff/CI remains, call
+6. Once the covered queue is exhausted and no work/handoff/verifying/CI remains, call
    `coordination finish --reason drained`. When only inspected blockers remain, record
    the exact blockers and use `--reason blocked`; the runtime refuses to finish over
    active work or CI. Waiting workers receive that terminal outcome. On final exit,
@@ -77,6 +88,9 @@ Ended independent app sessions require human resume (HS2-4H7D8D), not promised w
 
 ## Return a reviewed handoff for corrections
 
+Structured returns cover code handoffs; findings-only returns are tracked by
+HS2-AEBJYN.
+
 For in-scope review corrections, preserve the original branch, worktree and full
 commit. Add a regular `## Review return` note on the exact assigned ticket. Include
 the assignment id and full reviewed commit as plain whitespace-separated tokens,
@@ -84,15 +98,16 @@ the concrete corrections and preserved artifact references. Release your ticket
 claim before `coordination review-return --id <integrator> --session <generation>
 --assignment <id> --evidence-note <note-id> --inspected` (HS2-65ETRJ).
 
-The runtime records Blocked plus review evidence while preserving the commit in
-schema 1. It refuses live claims, stale integrator generations, unrelated notes and
+The runtime records Blocked plus review evidence while preserving the commit and
+typed code handoff. It refuses live claims, stale integrator generations, unrelated notes and
 handoffs already integrating or awaiting CI. Replay the same return after a lost
 acknowledgement, then use `assign` with a NEW stable operation id and current main
 base. Replaying the old assignment id only returns its preserved record. Never mark
 the returned handoff Done or complete the ticket to bypass reassignment. Integrate
 only the corrected handoff; retain original artifacts until verified integration.
 All participants issuing correction assignments need a CLI supporting `review-return`;
-this operation does not migrate the pool schema or restart workers.
+the return transition adds no record fields. The startup migration described
+above still applies before invoking any command with a schema-two CLI.
 
 ## Assign
 
@@ -134,6 +149,18 @@ native message, supported terminal prompt, configured event notification, or hum
 do not promise automatic monitoring when none is connected.
 
 ## Integrate one handoff at a time
+
+For a `## Findings handoff`, read the whole exact provider-qualified ticket and
+the referenced regular note. Confirm the worker released its claim. Claim that exact
+Started ticket, record the `integrating` ticket phase for verification work, and mark
+the mailbox `verifying`. Check the note's evidence and scope, required coverage and
+follow-ups, then complete the ticket with the evidence note id and release the claim.
+Mark the mailbox `done` only after the ticket is Completed or Verified. An interrupted
+verification resumes from the durable note and `verifying` phase; repeat the same
+operation id/session rather than fabricating a commit or marking success blocked.
+There is no Git merge, push, or remote CI for a findings-only outcome.
+
+For a code handoff, follow these integration steps:
 
 1. When a worker reports a handoff or Hot Sheet sends a notification, treat it as
    a cue to read the whole ticket and verify the note in the store. Do not execute

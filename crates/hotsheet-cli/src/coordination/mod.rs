@@ -18,7 +18,9 @@ use anyhow::{Result, ensure};
 use hotsheet_ticketing::{FileLock, FsStore, TicketRef, checkouts, git_connection_id, ops};
 use sha2::{Digest, Sha256};
 
-pub use contract::{Assignment, Phase, ReturnRoute, Role, Session, Snapshot, State, WaitRequest};
+pub use contract::{
+    Assignment, HandoffEvidence, Phase, ReturnRoute, Role, Session, Snapshot, State, WaitRequest,
+};
 
 pub struct Coordinator {
     pub(crate) directory: PathBuf,
@@ -78,10 +80,20 @@ impl Coordinator {
             Err(error) => return Err(error.into()),
         };
         ensure!(
-            state.version == 1 && state.project_id == self.project_id,
+            matches!(state.version, 1 | 2) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
+        if state.version == 1 {
+            for assignment in state.assignments.values_mut() {
+                if let Some(commit) = assignment.commit.as_ref() {
+                    assignment.handoff = Some(HandoffEvidence::Code {
+                        commit: commit.clone(),
+                    });
+                }
+            }
+            state.version = 2;
+        }
         ensure!(
             state.source_id == self.source_id,
             "coordination pool is bound to another source; use the same explicit -C source as the integrator"
@@ -189,7 +201,8 @@ impl Coordinator {
         ensure!(
             !assignment.id.is_empty()
                 && assignment.phase == Phase::Offered
-                && assignment.commit.is_none(),
+                && assignment.commit.is_none()
+                && assignment.handoff.is_none(),
             "new assignment must be an offered operation id"
         );
         ensure!(
@@ -247,6 +260,39 @@ impl Coordinator {
         phase: Phase,
         commit: Option<String>,
     ) -> Result<()> {
+        self.worker_handoff_transition(
+            worker,
+            generation,
+            id,
+            phase,
+            commit.map(|commit| HandoffEvidence::Code { commit }),
+        )
+    }
+
+    pub fn worker_findings_transition(
+        &self,
+        worker: &str,
+        generation: &str,
+        id: &str,
+        note_id: String,
+    ) -> Result<()> {
+        self.worker_handoff_transition(
+            worker,
+            generation,
+            id,
+            Phase::Handoff,
+            Some(HandoffEvidence::Findings { note_id }),
+        )
+    }
+
+    fn worker_handoff_transition(
+        &self,
+        worker: &str,
+        generation: &str,
+        id: &str,
+        phase: Phase,
+        handoff: Option<HandoffEvidence>,
+    ) -> Result<()> {
         self.change(|state| {
             let a = state
                 .assignments
@@ -256,7 +302,7 @@ impl Coordinator {
                 a.worker == worker && a.generation == generation,
                 "assignment belongs to another session"
             );
-            if phase == a.phase && commit == a.commit {
+            if phase == a.phase && handoff == a.handoff {
                 return Ok(());
             }
             ensure!(
@@ -269,17 +315,25 @@ impl Coordinator {
                 "invalid worker transition"
             );
             if phase == Phase::Handoff {
-                ensure!(
-                    commit.as_ref().is_some_and(
-                        |sha| sha.len() == 40 && sha.bytes().all(|c| c.is_ascii_hexdigit())
+                match handoff.as_ref() {
+                    Some(HandoffEvidence::Code { commit }) => ensure!(
+                        commit.len() == 40 && commit.bytes().all(|c| c.is_ascii_hexdigit()),
+                        "code handoff requires full verified commit SHA"
                     ),
-                    "handoff requires full verified commit SHA"
-                );
+                    Some(HandoffEvidence::Findings { note_id }) => {
+                        let _ = hotsheet_model::Ulid::from_string(note_id)?;
+                    }
+                    None => anyhow::bail!("handoff requires a code commit or findings note"),
+                }
             } else {
-                ensure!(commit.is_none(), "commit is only recorded with handoff");
+                ensure!(handoff.is_none(), "evidence is only recorded with handoff");
             }
+            a.commit = match handoff.as_ref() {
+                Some(HandoffEvidence::Code { commit }) => Some(commit.clone()),
+                _ => None,
+            };
             a.phase = phase;
-            a.commit = commit;
+            a.handoff = handoff;
             Ok(())
         })
     }
@@ -294,19 +348,38 @@ impl Coordinator {
     ) -> Result<()> {
         self.change(|state| {
             Self::integrator(state, integrator, generation, now)?;
-            if phase == Phase::Integrating {
+            if matches!(phase, Phase::Integrating | Phase::Verifying) {
                 ensure!(
                     !state
                         .assignments
                         .values()
-                        .any(|a| a.id != id && a.phase == Phase::Integrating),
-                    "another ticket is integrating; serialize main integration"
+                        .any(|a| a.id != id
+                            && matches!(a.phase, Phase::Integrating | Phase::Verifying)),
+                    "another ticket is integrating or verifying; serialize integrator work"
                 );
             }
             let a = state
                 .assignments
                 .get_mut(id)
                 .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            if phase == Phase::Integrating {
+                ensure!(
+                    matches!(a.handoff, Some(HandoffEvidence::Code { .. })),
+                    "only code handoffs enter integration"
+                );
+            }
+            if phase == Phase::Verifying {
+                ensure!(
+                    matches!(a.handoff, Some(HandoffEvidence::Findings { .. })),
+                    "only findings handoffs enter verification"
+                );
+            }
+            if phase == Phase::Ci {
+                ensure!(
+                    matches!(a.handoff, Some(HandoffEvidence::Code { .. })),
+                    "only code handoffs enter CI"
+                );
+            }
             ensure!(
                 !a.returned_for_review(),
                 "review-returned handoff is preserved; integrate its correction assignment instead"
@@ -315,7 +388,9 @@ impl Coordinator {
                 a.phase == phase
                     || matches!(
                         (a.phase, phase),
-                        (Phase::Handoff, Phase::Integrating)
+                        (Phase::Handoff, Phase::Verifying)
+                            | (Phase::Verifying, Phase::Done)
+                            | (Phase::Handoff, Phase::Integrating)
                             | (Phase::Integrating, Phase::Ci)
                             | (Phase::Ci, Phase::Done)
                             | (Phase::Ci, Phase::Integrating)
@@ -367,6 +442,7 @@ impl Coordinator {
                     Phase::Offered
                         | Phase::Accepted
                         | Phase::Handoff
+                        | Phase::Verifying
                         | Phase::Integrating
                         | Phase::Ci
                 )),

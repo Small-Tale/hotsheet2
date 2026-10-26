@@ -169,8 +169,12 @@ provider-qualified local mailboxes, exact assignment, filesystem-event waits, an
 selected-source queue/claim verification. External-source adapters remain partial
 (HS2-3ETJ26); real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
 An ended independent app turn is not automatically resumed.
-Reviewed handoffs support fenced review-return and a fresh correction assignment,
-with original artifacts preserved in schema 1 (HS2-65ETRJ).
+Reviewed code handoffs support fenced review-return and a fresh correction
+assignment, preserving original artifacts and typed code evidence (HS2-65ETRJ).
+Findings-only correction returns remain tracked by HS2-AEBJYN.
+Typed findings handoffs verify exact regular-note evidence without a code commit
+or CI (HS2-A1F615). Their schema-two CLI migrates an existing pool on first open;
+all pool members switch artifacts together before that open.
 Provider-config publications are atomic and preserve file modes; malformed committed
 config remains an explicit failure, and process-wait tests retain exit diagnostics
 (HS2-GBSPP8).

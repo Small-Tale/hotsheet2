@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use hotsheet_cli::coordination::{Assignment, Coordinator, Phase, ReturnRoute, Role, WaitRequest};
+use hotsheet_cli::coordination::{
+    Assignment, Coordinator, HandoffEvidence, Phase, ReturnRoute, Role, WaitRequest,
+};
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
 
@@ -93,6 +95,9 @@ enum CoordinationCmd {
         phase: Phase,
         #[arg(long)]
         commit: Option<String>,
+        /// Exact durable `## Findings handoff` note id for a no-code handoff.
+        #[arg(long, conflicts_with = "commit")]
+        findings_note: Option<String>,
     },
     /// Record serialized integration, pending CI, completion, or explicit blocked recovery.
     Mark {
@@ -249,6 +254,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     base,
                     phase: Phase::Offered,
                     commit: None,
+                    handoff: None,
                     return_route,
                     recovery_note: None,
                 },
@@ -259,6 +265,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             assignment,
             phase,
             commit,
+            findings_note,
         } => {
             if matches!(phase, Phase::Accepted | Phase::Handoff | Phase::Blocked) {
                 anyhow::ensure!(
@@ -299,18 +306,47 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                         "release the ticket claim before recording mailbox handoff"
                     );
                     if phase == Phase::Handoff {
-                        anyhow::ensure!(
-                            commit.as_ref().is_some_and(|sha| ticket
-                                .notes
-                                .iter()
-                                .any(|n| n.text.contains("## Integration handoff")
-                                    && n.text.contains(sha))),
-                            "durable Integration handoff note must name this full commit before mailbox handoff"
-                        );
+                        if let Some(note_id) = findings_note.as_deref() {
+                            let note_id = hotsheet_model::Ulid::from_string(note_id)?;
+                            anyhow::ensure!(
+                                ticket.notes.iter().any(|note| {
+                                    note.id == note_id
+                                        && note.kind == hotsheet_model::NoteKind::Regular
+                                        && note.text.lines().next() == Some("## Findings handoff")
+                                        && note
+                                            .text
+                                            .lines()
+                                            .skip(1)
+                                            .any(|line| !line.trim().is_empty())
+                                }),
+                                "durable Findings handoff note must exist on this exact ticket with findings"
+                            );
+                            anyhow::ensure!(
+                                ticket.claim_history.last().is_some_and(|event| {
+                                    event.kind == hotsheet_model::ClaimEventKind::Release
+                                        && event.worker == w.id
+                                }),
+                                "findings handoff requires this worker's recorded claim release"
+                            );
+                        } else {
+                            anyhow::ensure!(
+                                commit.as_ref().is_some_and(|sha| ticket
+                                    .notes
+                                    .iter()
+                                    .any(|n| n.text.contains("## Integration handoff")
+                                        && n.text.contains(sha))),
+                                "durable Integration handoff note must name this full commit before mailbox handoff"
+                            );
+                        }
                     }
                 }
             }
-            coordinator.worker_transition(&w.id, &w.session, &assignment, phase, commit)?;
+            if let Some(note_id) = findings_note {
+                anyhow::ensure!(phase == Phase::Handoff, "findings note is only for handoff");
+                coordinator.worker_findings_transition(&w.id, &w.session, &assignment, note_id)?;
+            } else {
+                coordinator.worker_transition(&w.id, &w.session, &assignment, phase, commit)?;
+            }
         }
         CoordinationCmd::Recover {
             integrator: i,
@@ -353,7 +389,56 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             integrator: i,
             assignment,
             phase,
-        } => coordinator.mark(&i.id, &i.session, now, &assignment, phase)?,
+        } => {
+            let state = coordinator.state()?;
+            let a = state
+                .assignments
+                .get(&assignment)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            if matches!(phase, Phase::Verifying | Phase::Done)
+                && let Some(HandoffEvidence::Findings { note_id }) = &a.handoff
+            {
+                anyhow::ensure!(
+                    ctx.path
+                        .join(hotsheet_ticketing::STORE_METADATA_FILE)
+                        .exists(),
+                    "provider findings verification is unsupported for this selected source"
+                );
+                let store = FsStore::open_without_maintenance(&ctx.path)?;
+                anyhow::ensure!(
+                    a.ticket.connection_id == git_connection_id(&store),
+                    "findings verification requires the assignment's exact ticket source"
+                );
+                let ticket = store.read_ticket(&a.ticket.native_id.parse()?)?;
+                let note_id = hotsheet_model::Ulid::from_string(note_id)?;
+                anyhow::ensure!(
+                    ticket.notes.iter().any(|note| {
+                        note.id == note_id
+                            && note.kind == hotsheet_model::NoteKind::Regular
+                            && note.text.lines().next() == Some("## Findings handoff")
+                            && note
+                                .text
+                                .lines()
+                                .skip(1)
+                                .any(|line| !line.trim().is_empty())
+                    }),
+                    "findings note is missing or empty on the assigned ticket"
+                );
+                if phase == Phase::Verifying {
+                    require_findings_claim(&ticket, &i.id, time::OffsetDateTime::now_utc())?;
+                }
+                if phase == Phase::Done {
+                    anyhow::ensure!(
+                        matches!(
+                            ticket.status,
+                            hotsheet_model::Status::Completed | hotsheet_model::Status::Verified
+                        ),
+                        "complete the findings ticket before resolving its mailbox"
+                    );
+                }
+            }
+            coordinator.mark(&i.id, &i.session, now, &assignment, phase)?;
+        }
         CoordinationCmd::ReviewReturn {
             integrator: i,
             assignment,
@@ -385,4 +470,52 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         serde_json::to_string_pretty(&coordinator.snapshot(now)?)?
     );
     Ok(())
+}
+
+fn require_findings_claim(
+    ticket: &hotsheet_model::Ticket,
+    integrator: &str,
+    now: time::OffsetDateTime,
+) -> Result<()> {
+    // HS2-A1F615: ticket leases retain fractional seconds. The mailbox's integer
+    // availability clock must not extend an expired ticket claim into verification.
+    let at = hotsheet_model::Timestamp::from_datetime(now);
+    anyhow::ensure!(
+        ticket.claimed_by.as_deref() == Some(integrator) && !ops::claim_available(ticket, &at),
+        "integrator must claim the exact findings ticket before verification"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hotsheet_model::{Ticket, Timestamp};
+    use time::{Duration, OffsetDateTime};
+
+    #[test]
+    fn hs2_a1f615_findings_claim_preserves_same_second_authority_on_every_replay() {
+        let second = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let at = |milliseconds| second + Duration::milliseconds(milliseconds);
+        let mut ticket = Ticket {
+            claimed_by: Some("integrator".into()),
+            claim_lease_expires_at: Some(Timestamp::from_datetime(at(200))),
+            ..Ticket::default()
+        };
+        for _ in 0..2 {
+            assert!(require_findings_claim(&ticket, "integrator", at(100)).is_ok());
+            assert!(require_findings_claim(&ticket, "integrator", at(200)).is_err());
+            assert!(require_findings_claim(&ticket, "integrator", at(800)).is_err());
+        }
+        ticket.claim_lease_expires_at = Some(Timestamp::from_datetime(at(900)));
+        assert!(require_findings_claim(&ticket, "integrator", at(800)).is_ok());
+        ticket.claimed_by = Some("replacement".into());
+        assert!(require_findings_claim(&ticket, "integrator", at(800)).is_err());
+        assert!(require_findings_claim(&ticket, "replacement", at(800)).is_ok());
+        ticket.claimed_by = None;
+        assert!(require_findings_claim(&ticket, "integrator", at(800)).is_err());
+        ticket.claimed_by = Some("integrator".into());
+        ticket.claim_lease_expires_at = None;
+        assert!(require_findings_claim(&ticket, "integrator", at(800)).is_err());
+    }
 }
