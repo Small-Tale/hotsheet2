@@ -137,7 +137,14 @@ async fn main() -> Result<()> {
         );
         return Ok(());
     }
-    let test_owner = test_owner_pid()?;
+    // HS2-B14HYW: stop/revision subprocesses can inherit the local host's "host"
+    // sentinel. Only startup consumes an owner PID; control commands keep their
+    // existing behavior without weakening the guard before any server/broker startup.
+    let test_owner = if cli.revision_status || (cli.stop && cli.terminal_broker_process.is_none()) {
+        None
+    } else {
+        test_owner_pid()?
+    };
     ensure_fixture_capability(test_owner.is_some(), isolated_vault)?;
     // HS2-R8S894: real-server integration binaries opt into the test vault;
     // the CLI migration subprocess keeps the OS credential store.

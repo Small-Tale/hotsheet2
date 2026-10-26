@@ -8,6 +8,90 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[cfg(unix)]
+#[test]
+fn hs2_b14hyw_control_commands_ignore_startup_owner_sentinel() {
+    let fixture = tempfile::tempdir().unwrap();
+    let home = fixture.path().join("home");
+    let store = fixture.path().join("store");
+    std::fs::create_dir(&store).unwrap();
+    let store = store.canonicalize().unwrap();
+    let server = assert_cmd::cargo::cargo_bin("hotsheet-cli")
+        .with_file_name(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+
+    // Startup must still reject this invalid PID before creating state or reading
+    // credentials. Read-only revision inspection must not consume startup ownership.
+    Command::new(&server)
+        .arg("-C")
+        .arg(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", "host")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid digit found in string"));
+    assert!(!home.exists());
+    // The broker branch precedes stop: combined internal flags must still take
+    // the startup guard, rather than accidentally treating a broker as stop-only.
+    let socket = fixture.path().join("broker.sock");
+    Command::new(&server)
+        .args(["--stop", "--terminal-broker-process"])
+        .arg(&socket)
+        .args(["--terminal-broker-project", "fixture-project"])
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", "host")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid digit found in string"));
+    assert!(!socket.exists());
+    assert!(!home.exists());
+    let revision = Command::new(&server)
+        .arg("--revision-status")
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", "host")
+        .output()
+        .unwrap();
+    assert!(revision.status.success(), "{revision:?}");
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(&revision.stdout).unwrap()["build_revision"]
+            .is_string()
+    );
+
+    let mut stop = Command::cargo_bin("hotsheet-cli").unwrap();
+    stop.arg("serve")
+        .arg("-C")
+        .arg(&store)
+        .arg("--stop")
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", "host");
+    stop.assert()
+        .success()
+        .stdout(predicate::str::contains("no running server"));
+
+    // A synthetic live pinned registration exercises the same real CLI/server
+    // dispatch as local-host.e2e without launching a credential-using server.
+    let instances = home.join("instances");
+    std::fs::create_dir_all(&instances).unwrap();
+    let project = hotsheet_index::hash_bytes(store.to_string_lossy().as_bytes());
+    let instance = instances.join(format!("{}.json", &project[..16]));
+    let registration = serde_json::to_vec(&serde_json::json!({
+        "pid": std::process::id(), "url": "http://127.0.0.1:1", "secret": "fixture-only",
+        "store_path": store, "index_path": "unused", "started_at": "2026-01-01T00:00:00Z",
+        "launcher": "local-host-snapshot", "build_revision": "fixture"
+    }))
+    .unwrap();
+    std::fs::write(&instance, &registration).unwrap();
+    for _ in 0..2 {
+        stop.assert().failure().stderr(
+            predicate::str::contains("refusing to stop")
+                .and(predicate::str::contains("launcher=local-host-snapshot"))
+                .and(predicate::str::contains("--force")),
+        );
+        assert_eq!(std::fs::read(&instance).unwrap(), registration);
+    }
+    std::fs::remove_file(&instance).unwrap();
+    stop.assert().success();
+}
+
 #[test]
 fn hs2_gdcmxe_processes_lists_machine_local_session_provenance() {
     use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
