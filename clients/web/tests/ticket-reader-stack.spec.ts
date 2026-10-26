@@ -629,11 +629,15 @@ test('manages attachments in a link-opened reader through its owning project (HS
   await expect(linked.getByText('added-from-link.png').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-w8vemp-linked-attachments-wide.png' });
   // Rename and remove through the attachment menu, against the frame's ticket.
-  page.once('dialog', (dialog) => void dialog.accept('renamed-from-link.png'));
   await linked
     .locator('[data-component="ticket-attachment-item"][data-attachment-name="linked.png"]')
     .click({ button: 'right' });
   await linked.locator('[data-context-menu="attachment"] [data-item-id="rename"]').click();
+  // HS2-QRP14P: filename rename is inline (HS2-WMZ6Z5); finish it to exercise the owning-project PATCH.
+  const filename = linked.getByRole('textbox', { name: 'Filename for linked.png', exact: true });
+  await expect(filename).toBeFocused();
+  await filename.fill('renamed-from-link.png');
+  await filename.blur();
   await expect
     .poll(() => writes.at(-1))
     .toMatchObject({ method: 'PATCH', body: { filename: 'renamed-from-link.png' } });
