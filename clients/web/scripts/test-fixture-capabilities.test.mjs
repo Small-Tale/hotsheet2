@@ -61,4 +61,22 @@ describe('HS2-SFVWN5 unattended credential boundary', () => {
     expect(stable).toContain('hotsheet-stable-fixture-home-');
     expect(read('../../../crates/hotsheet-cli/tests/cli.rs')).toContain('c["isolated_native_credentials"].as_bool()');
   });
+
+  it('HS2-Q97FR7 documents the same isolated build the fixture refusal names', () => {
+    const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+    const command =
+      'cargo build -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault';
+    const flat = (text) => text.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+    expect(flat(read('./test-fixture-capabilities.mjs'))).toContain(command);
+    const docs = read('../../../docs/12-code-organization-and-testing.md'),
+      start = docs.indexOf('### Real ticket-server browser regression'),
+      section = docs.slice(start, docs.indexOf('\n### ', start + 1));
+    expect(start).toBeGreaterThan(-1);
+    expect(flat(section)).toContain(command);
+    // Every server or CLI build this section tells a person to run carries the isolation feature.
+    for (const build of flat(section).match(/cargo build [^`\n]*/g) ?? [])
+      expect(build).toContain('--features hotsheet-aitools/test-permission-vault');
+    expect(section).toContain('--test-fixture-capabilities');
+    expect(section).toContain('desktop:test:native');
+  });
 });

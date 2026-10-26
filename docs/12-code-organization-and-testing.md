@@ -1034,12 +1034,26 @@ which uses real captured runner output and spawns real processes; CI runs it in 
 ### Real ticket-server browser regression
 
 `npm run test:e2e` in `clients/web` builds the CLI and server before Playwright. Focused
-`npx playwright test` runs can reuse those binaries after `cargo build -p hotsheet-cli
--p hotsheet-server --bins` at the repository root. `tests/real-ticket-server.ts` creates an
-isolated store, checkout registry, ephemeral loopback server, and process cleanup for
+`npx playwright test` runs can reuse those binaries after this build at the repository root:
+
+```sh
+cargo build -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault
+```
+
+The feature compiles the isolated permission vault and synthetic native credentials, so
+unattended browser fixtures never reach the macOS Keychain (HS2-SFVWN5). A default build
+does not have them, and a temporary `HOTSHEET_HOME` does not isolate native credentials.
+`tests/real-ticket-server.ts` therefore checks each binary's `--test-fixture-capabilities`
+before it creates any fixture state: the server must report `isolated_permission_vault` and
+`isolated_native_credentials`, and the CLI must report `isolated_native_credentials`. A
+default or older artifact is refused with the build command above. The harness then creates
+an isolated store, checkout registry, ephemeral loopback server, and process cleanup for
 browser flows that must prove real storage/classification/index behavior. Optional
-`HOTSHEET_TEST_CLI_BIN` and `HOTSHEET_TEST_SERVER_BIN` paths select frozen verification
-binaries when other worktrees share the build cache.
+`HOTSHEET_TEST_CLI_BIN` and `HOTSHEET_TEST_SERVER_BIN` paths select frozen verified
+artifacts: copies of binaries built with the same feature, kept outside a shared `target/`
+so another worktree's rebuild cannot replace them during a run. They pass the same
+capability check. Tests that intentionally use real native credentials stay explicit opt-ins
+(`desktop:test:native`).
 
 ### Local Playwright parallelism and timeouts
 
