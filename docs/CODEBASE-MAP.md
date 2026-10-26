@@ -1,5 +1,9 @@
 # Codebase Map
 
+Web browser fixture builds share `clients/web/package.json`'s `test:fixtures` command
+(CLI/server/terminal bins with explicit synthetic credential support). Both `test:e2e`
+and the required WebKit job use it before real-server cases (HS2-63ZK8W).
+
 The AI-read orientation doc: where things are, how to build/test, and where to look
 for X. Keep in sync in the same change that adds a file/dir, a command, a schema
 field, or a setting. Requirements status lives in [README.md](README.md); the field

@@ -1065,8 +1065,11 @@ which uses real captured runner output and spawns real processes; CI runs it in 
 
 ### Real ticket-server browser regression
 
-`npm run test:e2e` in `clients/web` builds the CLI and server before Playwright. Focused
-`npx playwright test` runs can reuse those binaries after this build at the repository root:
+`npm run test:e2e` in `clients/web` calls the shared `npm run test:fixtures` prerequisite
+to build isolated CLI, server and terminal fixture binaries before Playwright (HS2-63ZK8W).
+The required WebKit job installs pinned Rust/native build dependencies and runs that same
+prerequisite in a separate step before the unchanged `npm run test:ci:webkit` command.
+Focused `npx playwright test` runs can reuse those binaries after this build at the repository root:
 
 ```sh
 cargo build -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault

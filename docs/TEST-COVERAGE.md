@@ -5,6 +5,11 @@ checks exclusion of `src-tauri/target` while preserving adjacent native source a
 nested `target` source directories. Existing `scripts/stable-dev.e2e.test.mjs` real-process
 checks retain startup snapshots, shutdown, no-HMR and lazy dependency behavior.
 
+HS2-63ZK8W pins the shared isolated fixture build and required WebKit job's Rust/native
+prerequisites/build-before-test ordering in `scripts/test-fixture-capabilities.test.mjs`.
+The unchanged `npm run test:ci:webkit` route covers all five selected cases, including
+the three real-server prompt replacements and both existing popup flows.
+
 HS2-RFJ1GN compaction recovery transitions are covered by the
 `hs2_rfj1gn_*` tests in `crates/hotsheet-ticketing/src/repository_compaction.rs`:
 guarded purge/queued commit/activation, a sync waiting behind rewrite admission,

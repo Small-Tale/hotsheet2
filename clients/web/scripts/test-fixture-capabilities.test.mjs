@@ -5,6 +5,25 @@ import { describe, expect, it } from 'vitest';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 describe('HS2-SFVWN5 unattended credential boundary', () => {
+  it('HS2-63ZK8W builds the canonical isolated fixtures before the required WebKit cases', () => {
+    const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+    const scripts = JSON.parse(read('../package.json')).scripts;
+    const build = scripts['test:fixtures'];
+    expect(build).toContain('cargo build --manifest-path ../../Cargo.toml');
+    for (const name of ['hotsheet-cli', 'hotsheet-server', 'hotsheet-terminals']) expect(build).toContain(`-p ${name}`);
+    expect(build).toContain('--bins --features hotsheet-aitools/test-permission-vault');
+    expect(scripts['test:e2e']).toBe('npm run test:fixtures && playwright test');
+    const workflow = read('../../../.github/workflows/ci.yml');
+    const job = workflow.match(/ {2}webkit-popup:[\s\S]*?(?=\n {2}windows-credential-store:)/)?.[0] ?? '';
+    expect(job).toContain('rustup show');
+    expect(job).toContain('actions/cache@v4');
+    expect(job).toContain("hashFiles('**/Cargo.lock')");
+    expect(job).toContain('libdav1d-dev meson ninja-build cmake nasm');
+    expect(job.match(/run: npm run test:fixtures/g)).toHaveLength(1);
+    expect(job.indexOf('run: npm run test:fixtures')).toBeLessThan(job.indexOf('run: npm run test:ci:webkit'));
+    expect(job).toMatch(/timeout-minutes: 5\n\s+run: npm run test:ci:webkit/);
+  });
+
   it('checks the CLI native capability without assuming permission-vault activation', () => {
     expect(() =>
       assertFixtureCli('fixture', () => ({ status: 0, stdout: '{"isolated_native_credentials":true}' })),
@@ -38,7 +57,7 @@ describe('HS2-SFVWN5 unattended credential boundary', () => {
     for (const name of [
       'desktop:test',
       'stress:scale',
-      'test:e2e',
+      'test:fixtures',
       'test:real-world-performance',
       'profile:pty:real',
       'profile:worker:real',
