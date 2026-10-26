@@ -12,8 +12,10 @@ use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
+use hotsheet_process_journal::{ExitReason, ProcessJournal, ProcessRecord, Purpose};
 use hotsheet_server::lifecycle::InstanceInfo;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
+use notify::{RecursiveMode, Watcher};
 use serde_json::json;
 
 /// A drivable AI tool on the fixture `PATH` whose probe hangs during startup discovery.
@@ -21,6 +23,8 @@ use serde_json::json;
 enum SlowTool {
     /// `opencode`: every invocation, including `--version`, hangs (HS2-NPBZJ9).
     Opencode,
+    /// The child cannot emit its marker before the parent kills it (HS2-0WN2P5).
+    OpencodeBeforeMarker,
     /// `codex`: `--version` answers, then the model-catalog `app-server` hangs (HS2-F6S04C).
     CodexAppServer,
 }
@@ -28,7 +32,7 @@ enum SlowTool {
 impl SlowTool {
     fn name(self) -> &'static str {
         match self {
-            Self::Opencode => "opencode",
+            Self::Opencode | Self::OpencodeBeforeMarker => "opencode",
             Self::CodexAppServer => "codex",
         }
     }
@@ -37,6 +41,9 @@ impl SlowTool {
     fn script(self) -> &'static str {
         match self {
             Self::Opencode => "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n",
+            Self::OpencodeBeforeMarker => {
+                "#!/bin/sh\nread token < \"$0.gate\"\necho $$ >> \"$0.calls\"\nexec sleep 30\n"
+            }
             Self::CodexAppServer => {
                 "#!/bin/sh\ncase \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
                  app-server) echo $$ >> \"$0.calls\"; exec sleep 30 ;;\nesac\n"
@@ -106,6 +113,15 @@ impl Server {
             fs::write(&tool, slow_tool.script()).unwrap();
             fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
                 .unwrap();
+            if matches!(slow_tool, SlowTool::OpencodeBeforeMarker) {
+                use std::os::unix::ffi::OsStrExt;
+                let gate =
+                    std::ffi::CString::new(tool.with_extension("gate").as_os_str().as_bytes())
+                        .unwrap();
+                // SAFETY: gate is a valid NUL-terminated fixture path. No writer is
+                // opened, so the shell blocks before its calls marker, without a timer.
+                assert_eq!(unsafe { libc::mkfifo(gate.as_ptr(), 0o600) }, 0);
+            }
             format!("{}:/usr/bin:/bin", tools.display())
         } else {
             "/usr/bin:/bin".to_string()
@@ -179,6 +195,46 @@ impl Server {
                 self.log()
             );
             std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// HS2-0WN2P5: spawn/kill is a parent fact; a short deadline may expire before
+    /// the shell ever writes its first marker. Subscribe before reading so a completed
+    /// startup probe or a concurrent journal update is observed without a fixed delay.
+    fn killed_probe(&self) -> ProcessRecord {
+        let home = self._fixture.path().join("home");
+        let journal = ProcessJournal::at(&home);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watcher = notify::recommended_watcher(move |event| {
+            let _ = tx.send(event);
+        })
+        .unwrap();
+        watcher.watch(&home, RecursiveMode::Recursive).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Some(record) = journal.list().unwrap().into_iter().find(|record| {
+                record.supervisor_pid == self.child.id()
+                    && record.purpose == Purpose::AiProbe
+                    && record.exit_reason == Some(ExitReason::Killed)
+            }) {
+                return record;
+            }
+            loop {
+                let event: notify::Event = rx
+                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                    .unwrap_or_else(|error| panic!("probe was not killed: {error}: {}", self.log()))
+                    .unwrap();
+                if event.need_rescan()
+                    || matches!(
+                        event.kind,
+                        notify::EventKind::Create(_)
+                            | notify::EventKind::Modify(_)
+                            | notify::EventKind::Remove(_)
+                    )
+                {
+                    break;
+                }
+            }
         }
     }
 
@@ -675,15 +731,25 @@ fn timed_request(
 
 #[test]
 fn a_hanging_tool_probe_is_killed_at_its_deadline_so_discovery_never_queues_behind_it() {
+    assert_hanging_discovery_is_bounded(SlowTool::Opencode);
+}
+
+#[test]
+fn hs2_0wn2p5_deadline_observation_does_not_require_the_child_entry_marker() {
+    assert_hanging_discovery_is_bounded(SlowTool::OpencodeBeforeMarker);
+}
+
+fn assert_hanging_discovery_is_bounded(tool: SlowTool) {
     // HS2-BH3M53: a hung `opencode --version` used to hold the shared catalog lock forever,
     // so every later discovery (`/ai-tools`, `/ai-settings`, terminal-launch validation)
     // queued behind it. Each probe now has a deadline: the hung child is killed, the tool
     // falls back to its manifest catalog, and later requests answer within that bound.
-    let mut server = Server::start_with_slow_discovery(5_000, 500);
+    let mut server = Server::start_with_slow_tool(5_000, 500, tool);
     let info = server.ready();
-    let warmup = server.slow_tool_pids();
+    let warmup = server.killed_probe();
+    assert!(warmup.ended_ms.unwrap() >= warmup.started_ms + 500);
     // The startup warmup's probe is killed at its deadline, not left running.
-    assert_processes_gone(&warmup, &server);
+    assert_processes_gone(&[warmup.pid as i32], &server);
     let bound = Duration::from_secs(4);
     for path in ["/ai-tools?refresh=true", "/ai-tools", "/ai-settings"] {
         let (status, elapsed) = timed_request(&info, "GET", path, None);
@@ -723,7 +789,30 @@ fn a_hanging_tool_probe_is_killed_at_its_deadline_so_discovery_never_queues_behi
     server.sigterm();
     assert!(server.exits_within(Duration::from_secs(5)).success());
     server.assert_registration_released();
-    assert_processes_gone(&server.slow_tool_pids(), &server);
+    let probes = ProcessJournal::at(server._fixture.path().join("home"))
+        .list()
+        .unwrap();
+    let probes: Vec<_> = probes
+        .into_iter()
+        .filter(|record| record.purpose == Purpose::AiProbe)
+        .collect();
+    assert!(!probes.is_empty());
+    for record in &probes {
+        assert_eq!(record.exit_reason, Some(ExitReason::Killed));
+    }
+    assert_processes_gone(
+        &probes
+            .iter()
+            .map(|record| record.pid as i32)
+            .collect::<Vec<_>>(),
+        &server,
+    );
+    if matches!(tool, SlowTool::OpencodeBeforeMarker) {
+        assert!(
+            !server.slow_tool_calls().exists(),
+            "the gated child must never have emitted its entry marker"
+        );
+    }
 }
 
 /// The web client samples a remote server's clock from the `Date` header of the
