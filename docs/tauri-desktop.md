@@ -26,6 +26,12 @@ current machine's Node executable and release Rust binaries into Tauri sidecars,
 so build separately for Apple Silicon and Intel. Do not commit the generated
 `src-tauri/binaries/`, `src-tauri/resources/`, or `src-tauri/target/` contents.
 
+If the signing variables are `op://` references in the repository-root `.env`,
+install and sign in to the 1Password CLI, then run `npm run op:desktop:build`
+from `clients/web`. The shortcut resolves those references only for the build
+process and invokes `desktop:build`. `APPLE_API_KEY_PATH` must resolve to a
+filesystem path to a readable `.p8` key, not the key's contents.
+
 An unsigned local app can trigger a macOS Keychain approval for the server's
 credential master when opening a project with a ticket store. Use a development
 signing identity for repeatable local verification, and use Developer ID signing
