@@ -25,6 +25,12 @@ repository root. `npm run desktop:dev` starts the Vite client for iteration;
 current machine's Node executable and release Rust binaries into Tauri sidecars,
 so build separately for Apple Silicon and Intel. Do not commit the generated
 `src-tauri/binaries/`, `src-tauri/resources/`, or `src-tauri/target/` contents.
+The Node sidecar must be a standalone executable; the build rejects a Node
+installation that links to package-manager libraries. The 1Password shortcut
+selects Node from the configured login shell. For a direct build, set
+`HOTSHEET_DESKTOP_NODE` to a standalone Node executable when npm uses another
+installation. The signed Node sidecar uses the macOS JIT entitlement in
+`src-tauri/Entitlements.plist` so V8 can start under the hardened runtime.
 The staged migrator contains its installed production packages only; development
 tools such as esbuild, Rollup, and fsevents must not enter the signed app.
 

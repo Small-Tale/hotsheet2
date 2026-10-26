@@ -10,7 +10,7 @@
     "prod": "npm run build && npm run build:host && node dist-host/local-host.js",
     "desktop:prepare": "npm run build && npm run build:host && cargo build --manifest-path ../../Cargo.toml --release -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp --bins && node scripts/prepare-desktop.mjs",
     "desktop:build": "npm run desktop:prepare && cargo build --manifest-path src-tauri/Cargo.toml --release -j 1 && tauri bundle --bundles app",
-    "op:desktop:build": "op run --env-file ../../.env -- zsh -ic 'npm run desktop:build'",
+    "op:desktop:build": "op run --env-file ../../.env -- zsh -ic 'HOTSHEET_DESKTOP_NODE=\"$(command -v node)\" npm run desktop:build'",
     "desktop:dev": "tauri dev",
     "desktop:test": "node scripts/desktop-host-smoke.mjs",
     "server:rebuild:release": "cd ../.. && cargo build --release -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp && cargo install --path crates/hotsheet-cli --force && cargo install --path crates/hotsheet-mcp --force && ./target/release/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
+import { assertStandaloneNode } from './desktop-node-runtime.mjs';
 import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 
 const web = fileURLToPath(new URL('..', import.meta.url));
@@ -28,13 +29,15 @@ function copyExecutable(source, destination) {
 if (!existsSync(resolve(migrator, 'node_modules/@electric-sql/pglite')))
   throw new Error('Build the migrator first with `npm ci` from migrator/.');
 if (!triple) throw new Error('The first Hot Sheet desktop package supports macOS arm64 and x64.');
+const nodeRuntime = process.env.HOTSHEET_DESKTOP_NODE || process.execPath;
+assertStandaloneNode(nodeRuntime);
 
 rmSync(resources, { recursive: true, force: true });
 rmSync(binaries, { recursive: true, force: true });
 mkdirSync(binaries, { recursive: true });
 mkdirSync(resolve(resources, 'dist-host'), { recursive: true });
 mkdirSync(resolve(resources, 'migrator'), { recursive: true });
-copyExecutable(process.execPath, resolve(binaries, `node-${triple}`));
+copyExecutable(nodeRuntime, resolve(binaries, `node-${triple}`));
 for (const name of ['hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate', 'hotsheet-mcp'])
   copyExecutable(resolve(root, 'target/release', name), resolve(binaries, `${name}-${triple}`));
 cpSync(resolve(web, 'dist'), resolve(resources, 'dist'), { recursive: true });
