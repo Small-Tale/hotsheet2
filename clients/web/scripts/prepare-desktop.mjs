@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
+import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 
 const web = fileURLToPath(new URL('..', import.meta.url));
 const root = resolve(web, '../..');
@@ -42,7 +43,7 @@ cpSync(resolve(web, 'dist'), resolve(resources, 'dist'), { recursive: true });
 cpSync(resolve(root, 'plugins'), resolve(resources, 'plugins'), { recursive: true });
 cpSync(resolve(migrator, 'src'), resolve(resources, 'migrator/src'), { recursive: true });
 copyFileSync(resolve(migrator, 'package.json'), resolve(resources, 'migrator/package.json'));
-cpSync(resolve(migrator, 'node_modules'), resolve(resources, 'migrator/node_modules'), { recursive: true });
+stageMigratorDependencies(migrator, resolve(resources, 'migrator'));
 await build({
   entryPoints: [resolve(web, 'src/local-host.ts')],
   outfile: resolve(resources, 'dist-host/local-host.mjs'),

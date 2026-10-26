@@ -25,6 +25,8 @@ repository root. `npm run desktop:dev` starts the Vite client for iteration;
 current machine's Node executable and release Rust binaries into Tauri sidecars,
 so build separately for Apple Silicon and Intel. Do not commit the generated
 `src-tauri/binaries/`, `src-tauri/resources/`, or `src-tauri/target/` contents.
+The staged migrator contains its installed production packages only; development
+tools such as esbuild, Rollup, and fsevents must not enter the signed app.
 
 If the signing variables are `op://` references in the repository-root `.env`,
 install and sign in to the 1Password CLI, then run `npm run op:desktop:build`
