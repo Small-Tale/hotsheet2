@@ -147,7 +147,7 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
   test('the Not working note stays at 16px when focused', async ({ page }) => {
     await page.goto('/ux-demo?component=not-working-dialog');
     const note = page.locator('textarea[name="not-working-note"]').first();
-    await page.locator('[data-action="open-not-working-demo"]').tap();
+    await page.getByRole('button', { name: 'Open Not Working Dialog', exact: true }).tap();
     await expect(note).toBeVisible();
     await note.tap();
     expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
@@ -449,7 +449,7 @@ test.describe('desktop', () => {
   });
   test('keeps the compact Not working note with a mouse (HS2-JDXSND)', async ({ page }) => {
     await page.goto('/ux-demo?component=not-working-dialog');
-    await page.locator('[data-action="open-not-working-demo"]').click();
+    await page.getByRole('button', { name: 'Open Not Working Dialog', exact: true }).click();
     const note = page.locator('textarea[name="not-working-note"]').first();
     await expect(note).toBeVisible();
     expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBe(14);
