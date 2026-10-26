@@ -8,10 +8,17 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { CircleAlert, HardDrive, OctagonAlert, TriangleAlert } from 'lucide';
 
-import type { CompactionPlan, RepositorySizeEntry, RepositorySizeLevel, RepositorySizeReport } from '../api';
+import type {
+  CompactionPlan,
+  CompactionResult,
+  RepositorySizeEntry,
+  RepositorySizeLevel,
+  RepositorySizeReport,
+} from '../api';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 
 /** What the repository size section shows (HS2-QF44T7). */
@@ -22,7 +29,13 @@ export type CompactionPreviewState =
   | { status: 'idle' }
   | { status: 'loading'; source: string }
   | { status: 'error'; source: string; message: string }
-  | { status: 'ready'; source: string; plan: CompactionPlan };
+  | {
+      status: 'ready';
+      source: string;
+      plan: CompactionPlan;
+      execution?:
+        { status: 'running' } | { status: 'error'; message: string } | { status: 'success'; result: CompactionResult };
+    };
 
 const SIZE_UNITS = ['B', 'kB', 'MB', 'GB', 'TB'] as const;
 
@@ -179,6 +192,7 @@ function CompactionPreview({ state, checkout }: { state: CompactionPreviewState;
     return <StateBanner tone="warning" title="Compaction preview unavailable." detail={state.message} />;
   const { plan, source } = state;
   const command = `hotsheet-cli checkout compact '${source.replaceAll("'", "'\\''")}' '${checkout.replaceAll("'", "'\\''")}'`;
+  const required = `rewrite ${plan.branch} ${plan.fingerprint}`;
   return (
     <section class="repository-size__compaction" aria-label={`${source} Compaction Preview`} data-state="ready">
       <List gap="xs">
@@ -190,21 +204,64 @@ function CompactionPreview({ state, checkout }: { state: CompactionPreviewState;
           history. Attached candidates are on tickets at least {plan.min_age_days} days old; oversized means at least{' '}
           {formatBytes(plan.oversized_bytes)}.
         </Text>
-        {plan.candidates.slice(0, 20).map((item) => (
+        {plan.candidates.map((item) => (
           <Text variant="p" flush data-key={`compaction:${item.path}`}>
             {item.reason === 'orphaned' ? 'Removed attachment' : item.ticket_slug}: {item.filename} (
             {formatBytes(item.bytes)}, {item.reason})
           </Text>
         ))}
-        {plan.candidates.length > 20 && (
-          <Text variant="p" tone="quiet" flush>
-            Showing 20 candidates. Review the full plan in the CLI before execution.
-          </Text>
+        <Text variant="p" tone="quiet" flush>
+          This rewrites the ticket store's Git history and force-pushes the selected branch. Save a complete mirror
+          backup outside the ticket store. Every collaborator must preserve local work and re-clone or reset afterward.
+        </Text>
+        {plan.candidates.length === 0 ? (
+          <StateBanner tone="info" title="No attachments are eligible for compaction." />
+        ) : state.execution?.status === 'success' ? (
+          <List gap="xs">
+            <StateBanner
+              tone="success"
+              title="Compaction pushed to origin."
+              detail={`${state.execution.result.candidates_removed} attachments removed; ${formatBytes(state.execution.result.git_bytes_before)} to ${formatBytes(state.execution.result.git_bytes_after)} of Git data.`}
+            />
+            <Text variant="p" flush>
+              Backup: <code>{state.execution.result.backup}</code>
+            </Text>
+            <Text variant="p" flush>
+              New head: <code>{state.execution.result.new_head}</code>
+            </Text>
+            {state.execution.result.recovery.map((step) => (
+              <Text variant="p" flush>
+                {step}
+              </Text>
+            ))}
+            <Text variant="p" flush>
+              After restoring this checkout to origin, run <code>{command} --recover</code> to clear its write guard.
+            </Text>
+          </List>
+        ) : (
+          <form {...PROJECT_LIFECYCLE_ACTIONS.executeRepositoryCompaction.attrs} data-source={source}>
+            <List gap="xs">
+              <TextField name="backup" label="New Mirror Backup Path" required />
+              <Text variant="p" flush wrap="anywhere">
+                Type <code>{required}</code> to confirm this exact plan.
+              </Text>
+              <TextField name="confirm" label="Exact Confirmation" required />
+              {state.execution?.status === 'error' && (
+                <StateBanner
+                  tone="danger"
+                  copyLayout="stacked"
+                  title="Verify the compaction outcome before retrying."
+                  detail={`${state.execution.message} Check the remote head and mirror backup. If the store needs recovery, preserve local work, restore the checkout to origin, then use the CLI --recover command.`}
+                />
+              )}
+              <Button type="submit" tone="danger" disabled={state.execution?.status === 'running'}>
+                {state.execution?.status === 'running' ? 'Compacting…' : 'Back Up and Rewrite History'}
+              </Button>
+            </List>
+          </form>
         )}
         <Text variant="p" tone="quiet" flush>
-          Preview and execute in the CLI: <code>{command}</code>. The opt-in rewrite requires a new mirror backup path
-          and the exact confirmation printed by that command. Every collaborator must re-clone or reset the ticket store
-          afterward.
+          Headless path: <code>{command}</code>.
         </Text>
       </List>
     </section>

@@ -10626,6 +10626,79 @@ async fn repository_compaction_previews_only_old_closed_git_attachments() {
     assert_eq!(preview["candidates"][0]["reason"], "oversized");
     assert!(preview.get("remote").is_none());
     assert_eq!(store.list_tickets().unwrap()[0].attachments.len(), 1);
+    let backup = registry_home.path().join("compact-backup.git");
+    let execute = |confirm: String| {
+        serde_json::json!({
+            "source": source,
+            "head": preview["head"],
+            "branch": preview["branch"],
+            "fingerprint": preview["fingerprint"],
+            "min_age_days": 30,
+            "oversized_bytes": 10,
+            "backup": backup,
+            "confirm": confirm,
+        })
+        .to_string()
+    };
+    let execute_uri = "/checkouts/compact/repository/compaction";
+    let denied_execute = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(execute_uri)
+                .header("content-type", "application/json")
+                .body(Body::from(execute("wrong".into())))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied_execute.status(), StatusCode::UNAUTHORIZED);
+    let refused = app
+        .clone()
+        .oneshot(authed("POST", execute_uri, Some(&execute("wrong".into()))))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    assert!(!backup.exists());
+    let confirmation = format!(
+        "rewrite {} {}",
+        preview["branch"].as_str().unwrap(),
+        preview["fingerprint"].as_str().unwrap()
+    );
+    let result = app
+        .clone()
+        .oneshot(authed("POST", execute_uri, Some(&execute(confirmation))))
+        .await
+        .unwrap();
+    assert_eq!(result.status(), StatusCode::OK);
+    let result = body_json(result).await;
+    assert!(backup.exists());
+    assert_ne!(result["old_head"], result["new_head"]);
+    assert!(hotsheet_ticketing::repository_compaction::recovery_required(store_dir.path()));
+    assert_eq!(
+        hotsheet_ticketing::git::command_in(store_dir.path())
+            .args(["ls-remote", "origin", "refs/heads/main"])
+            .output()
+            .unwrap()
+            .stdout
+            .split(|byte| *byte == b'\t')
+            .next()
+            .unwrap(),
+        result["new_head"].as_str().unwrap().as_bytes()
+    );
+    let restart = app
+        .clone()
+        .oneshot(authed("POST", "/lifecycle/restart", None))
+        .await
+        .unwrap();
+    assert_eq!(restart.status(), StatusCode::ACCEPTED);
+    let quiescing = app
+        .clone()
+        .oneshot(authed("POST", execute_uri, Some(&execute("wrong".into()))))
+        .await
+        .unwrap();
+    assert_eq!(quiescing.status(), StatusCode::CONFLICT);
     assert_eq!(
         app.clone()
             .oneshot(authed(

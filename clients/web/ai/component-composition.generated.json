@@ -4175,7 +4175,7 @@
       "id": "repository-size",
       "name": "RepositorySize",
       "kind": "component",
-      "purpose": "A project's repository size and a read-only preview of old duplicate or oversized attachments in a dedicated Git ticket store.",
+      "purpose": "A project's repository size, full attachment-compaction preview, confirmed execution, and recovery guidance for a dedicated Git ticket store (HS2-RFJ1GN).",
       "publicExports": [
         {
           "name": "RepositorySize"

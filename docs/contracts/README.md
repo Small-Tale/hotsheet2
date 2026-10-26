@@ -2,7 +2,7 @@
 
 `v1/openapi.yaml` describes the server-owned HTTP surface. The JSON Schemas in the
 same directory describe each `/ws/sync` text frame and the `/ws/poll` response.
-The OpenAPI file inventories all 165 current server router paths and their HTTP methods,
+The OpenAPI file inventories all 167 current server router paths and their HTTP methods,
 with request and response DTO schemas, status codes, query parameters, and media
 types (HS2-11BVBS). Run `npm run contract:sync` from `clients/web` after changing
 the router. A newly discovered operation is marked `route-only` until its wire

@@ -19,6 +19,7 @@ import {
   parseCommandDefinition,
   parseCommandRun,
   parseCompactionPlan,
+  parseCompactionResult,
   parseCorruptTicket,
   parseCustomView,
   parseDuplicateBacklinks,
@@ -461,6 +462,15 @@ export interface CompactionPlan {
   }>;
   reclaimable_payload_bytes: number;
   fingerprint: string;
+}
+export interface CompactionResult {
+  old_head: string;
+  new_head: string;
+  backup: string;
+  candidates_removed: number;
+  git_bytes_before: number;
+  git_bytes_after: number;
+  recovery: string[];
 }
 /** A note's recorded author: the acting role and an optional stable id (HS2-32QDZ3). */
 export interface NoteActor {
@@ -1459,6 +1469,26 @@ export class Api {
       parseCompactionPlan,
       `/checkouts/${encodeURIComponent(checkout)}/repository/compaction?${new URLSearchParams({ source, min_age_days: String(minAgeDays), oversized_bytes: String(oversizedBytes) })}`,
     );
+  executeCheckoutRepositoryCompaction = (
+    checkout: string,
+    source: string,
+    plan: CompactionPlan,
+    backup: string,
+    confirm: string,
+  ) =>
+    this.parsed(parseCompactionResult, `/checkouts/${encodeURIComponent(checkout)}/repository/compaction`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source,
+        head: plan.head,
+        branch: plan.branch,
+        fingerprint: plan.fingerprint,
+        min_age_days: plan.min_age_days,
+        oversized_bytes: plan.oversized_bytes,
+        backup,
+        confirm,
+      }),
+    });
   checkoutGuidance = (checkout: string) =>
     this.parsed(parseGuidanceOverview, `/checkouts/${encodeURIComponent(checkout)}/guidance`);
   reviewCheckoutGuidanceBatch = (checkout: string, requests: GuidanceBatchSource[]) =>

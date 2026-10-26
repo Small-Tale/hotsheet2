@@ -3,7 +3,7 @@
 //! A plan never edits a ticket or repository. Its fingerprint binds the selected payloads
 //! to the current Git head so execution can reject stale previews.
 
-use crate::store::{FsStore, StoreError};
+use crate::store::{FsStore, StoreError, lock_git_transaction, lock_history_sync};
 use hotsheet_model::{AttachmentActorRole, Note, NoteActor, NoteKind, Status, Timestamp, Ulid};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -82,6 +82,76 @@ pub struct CompactionResult {
     pub git_bytes_before: u64,
     pub git_bytes_after: u64,
     pub recovery: Vec<String>,
+}
+
+/// The original checkout must not resume writing after its remote history was
+/// replaced. Keep this guard in Git's private directory so it survives a server
+/// restart without making the working tree dirty (HS2-RFJ1GN).
+pub fn recovery_marker_path(root: &Path) -> Result<PathBuf, CompactionError> {
+    let path = git(
+        root,
+        &[
+            "rev-parse",
+            "--git-path",
+            "hotsheet-compaction-recovery.json",
+        ],
+    )?;
+    let path = PathBuf::from(path);
+    Ok(if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    })
+}
+
+pub fn recovery_required(root: &Path) -> bool {
+    match recovery_marker_path(root) {
+        Ok(path) => path.exists(),
+        // If a Git checkout cannot resolve its private marker, do not let it
+        // resume writes or sync on a potentially stale branch (HS2-RFJ1GN).
+        Err(_) => root.join(".git").exists(),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RecoveryMarker {
+    schema_version: u32,
+    old_head: String,
+    branch: String,
+    fingerprint: String,
+    backup: PathBuf,
+}
+
+/// Clear the write/sync guard only after the local checkout has been restored to
+/// the exact remote head (or the rewrite failed before changing origin). The
+/// mirror backup is retained for the human to remove later (HS2-RFJ1GN).
+pub fn recover_store(root: &Path) -> Result<(), CompactionError> {
+    let _history = lock_history_sync(root)?;
+    let _git = lock_git_transaction(root)?;
+    let path = recovery_marker_path(root)?;
+    let marker: RecoveryMarker = serde_json::from_slice(&fs::read(&path)?)
+        .map_err(|error| CompactionError::Invalid(format!("invalid recovery marker: {error}")))?;
+    if marker.schema_version != 1 {
+        return Err(CompactionError::Invalid(
+            "recovery marker has an unsupported version".into(),
+        ));
+    }
+    let branch = git(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])?;
+    let local = git(root, &["rev-parse", "HEAD"])?;
+    let remote = git(
+        root,
+        &["ls-remote", "origin", &format!("refs/heads/{branch}")],
+    )?;
+    if branch != marker.branch
+        || remote.split_whitespace().next() != Some(local.as_str())
+        || !git(root, &["status", "--porcelain", "--untracked-files=normal"])?.is_empty()
+    {
+        return Err(CompactionError::Invalid(
+            "recovery requires a clean checkout on the recorded branch at the exact origin head; preserve local work, then re-clone or reset to origin before retrying".into(),
+        ));
+    }
+    fs::remove_file(path)?;
+    Ok(())
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<String, CompactionError> {
@@ -625,6 +695,20 @@ pub fn execute_store(
     backup: &Path,
     confirmation: &str,
 ) -> Result<CompactionResult, CompactionError> {
+    let _history = lock_history_sync(store.root())?;
+    store.with_ticket_transaction(|| {
+        let _git = lock_git_transaction(store.root())?;
+        execute_store_locked(store, now, plan, backup, confirmation)
+    })
+}
+
+fn execute_store_locked(
+    store: &FsStore,
+    now: OffsetDateTime,
+    plan: &CompactionPlan,
+    backup: &Path,
+    confirmation: &str,
+) -> Result<CompactionResult, CompactionError> {
     let current = plan_store(store, now, plan.min_age_days, plan.oversized_bytes)?;
     if current != *plan || current.candidates.is_empty() {
         return Err(CompactionError::Invalid(
@@ -714,6 +798,31 @@ pub fn execute_store(
             "backup and rewrite directories must be outside the ticket store".into(),
         ));
     }
+    let marker = recovery_marker_path(root)?;
+    let marker_contents = RecoveryMarker {
+        schema_version: 1,
+        old_head: current.head.clone(),
+        branch: current.branch.clone(),
+        fingerprint: current.fingerprint.clone(),
+        backup: backup.to_path_buf(),
+    };
+    let mut marker_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&marker)
+        .map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                CompactionError::Invalid(
+                    "this checkout already needs compaction recovery; verify the remote and restore it before another rewrite".into(),
+                )
+            } else {
+                CompactionError::Io(error)
+            }
+        })?;
+    serde_json::to_writer_pretty(&mut marker_file, &marker_contents)
+        .map_err(|error| CompactionError::Invalid(error.to_string()))?;
+    marker_file.write_all(b"\n")?;
+    marker_file.sync_all()?;
     let mut paths_file = tempfile::NamedTempFile::new_in(backup_parent)?;
     write_filter_paths(paths_file.as_file_mut(), &current.candidates)?;
     let paths_file_arg = paths_file.path().to_string_lossy().into_owned();
@@ -822,7 +931,7 @@ pub fn execute_store(
         recovery: vec![
             "Keep the mirror backup until every collaborator confirms the replacement branch.".into(),
             "Each collaborator must re-clone the ticket repository or reset their ticket-store checkout to the rewritten origin branch after preserving local work.".into(),
-            "The original local store is deliberately left unchanged; do not push it again. Re-clone it before further ticket writes.".into(),
+            "The original local store is deliberately left unchanged; do not push it again. After restoring it to the rewritten origin head, run `hotsheet-cli checkout compact <source> <project> --recover` before further ticket writes.".into(),
         ],
     })
 }
@@ -831,6 +940,14 @@ pub fn execute_store(
 mod tests {
     use super::*;
     use crate::store::StoreMetadata;
+
+    #[test]
+    fn hs2_rfj1gn_unresolvable_git_marker_fails_closed() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(!recovery_required(root.path()));
+        fs::write(root.path().join(".git"), "gitdir: missing\n").unwrap();
+        assert!(recovery_required(root.path()));
+    }
     use hotsheet_model::Ticket;
 
     fn git_ok(root: &Path, args: &[&str]) {
@@ -917,6 +1034,112 @@ mod tests {
             historical_blobs: Vec::new(),
             removed_in_commit: None,
         }
+    }
+
+    fn write_test_recovery_marker(store: &FsStore) {
+        let marker = RecoveryMarker {
+            schema_version: 1,
+            old_head: git(store.root(), &["rev-parse", "HEAD"]).unwrap(),
+            branch: "main".into(),
+            fingerprint: String::new(),
+            backup: store.root().with_extension("backup.git"),
+        };
+        fs::write(
+            recovery_marker_path(store.root()).unwrap(),
+            serde_json::to_vec(&marker).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn hs2_rfj1gn_guard_blocks_purge_queued_commit_and_activation() {
+        let (_dir, store, now) = fixture();
+        let mut ticket = store.list_tickets().unwrap().remove(0);
+        ticket.status = Status::Deleted;
+        store.write_ticket_committing(&ticket).unwrap();
+        let ticket_path = store.ticket_path(&ticket.id);
+        let before = fs::read(&ticket_path).unwrap();
+        assert_eq!(
+            crate::ops::trash_due_for_purge(&store, &Timestamp::from(now), 0)
+                .unwrap()
+                .len(),
+            1
+        );
+        let head = git(store.root(), &["rev-parse", "HEAD"]).unwrap();
+        write_test_recovery_marker(&store);
+        assert!(crate::ops::purge_trash(&store, &Timestamp::from(now), 0).is_err());
+        assert_eq!(fs::read(ticket_path).unwrap(), before);
+        assert!(store.attachment_dir(&ticket.id).exists());
+        let pending = store.root().join("pending.txt");
+        fs::write(&pending, "synthetic queued mutation").unwrap();
+        assert!(matches!(
+            store.autocommit_paths("pending mutation", &[pending]),
+            Err(StoreError::CompactionRecoveryRequired)
+        ));
+        assert!(matches!(
+            store.activate_current_format(),
+            Err(StoreError::CompactionRecoveryRequired)
+        ));
+        assert_eq!(git(store.root(), &["rev-parse", "HEAD"]).unwrap(), head);
+    }
+
+    #[test]
+    fn hs2_rfj1gn_waiting_sync_rechecks_marker_before_any_commit() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let (_dir, store, _now) = fixture();
+        let head = git(store.root(), &["rev-parse", "HEAD"]).unwrap();
+        let held = lock_history_sync(store.root()).unwrap();
+        let (started, start) = mpsc::channel();
+        let (finished, result) = mpsc::channel();
+        let root = store.root().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            finished.send(crate::sync::sync_once(&root)).unwrap();
+        });
+        start.recv().unwrap();
+        assert!(result.recv_timeout(Duration::from_millis(200)).is_err());
+        fs::write(
+            store.root().join("pending.txt"),
+            "synthetic pending mutation",
+        )
+        .unwrap();
+        write_test_recovery_marker(&store);
+        drop(held);
+        assert_eq!(
+            result.recv_timeout(Duration::from_secs(5)).unwrap(),
+            crate::sync::SyncReport::Offline
+        );
+        worker.join().unwrap();
+        assert_eq!(git(store.root(), &["rev-parse", "HEAD"]).unwrap(), head);
+    }
+
+    #[test]
+    fn hs2_rfj1gn_recovery_waits_for_active_rewrite_exclusion() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let (_dir, store, _now) = fixture();
+        let held = lock_history_sync(store.root()).unwrap();
+        write_test_recovery_marker(&store);
+        let (started, start) = mpsc::channel();
+        let (finished, result) = mpsc::channel();
+        let root = store.root().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            finished.send(recover_store(&root)).unwrap();
+        });
+        start.recv().unwrap();
+        assert!(result.recv_timeout(Duration::from_millis(200)).is_err());
+        assert!(recovery_required(store.root()));
+        drop(held);
+        result
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        worker.join().unwrap();
+        assert!(!recovery_required(store.root()));
     }
 
     #[test]
@@ -1211,6 +1434,21 @@ mod tests {
         .unwrap();
         assert_eq!(result.candidates_removed, 2);
         assert_ne!(result.old_head, result.new_head);
+        assert!(recovery_required(store.root()));
+        assert!(matches!(
+            store.with_ticket_transaction(|| Ok::<_, StoreError>(())),
+            Err(StoreError::CompactionRecoveryRequired)
+        ));
+        let reopened = FsStore::open_without_maintenance(store.root()).unwrap();
+        assert!(matches!(
+            reopened.with_ticket_transaction(|| Ok::<_, StoreError>(())),
+            Err(StoreError::CompactionRecoveryRequired)
+        ));
+        assert_eq!(
+            crate::sync::sync_once(store.root()),
+            crate::sync::SyncReport::Offline
+        );
+        assert!(recover_store(store.root()).is_err());
         assert_eq!(
             git(store.root(), &["rev-parse", "HEAD"]).unwrap(),
             result.old_head
@@ -1247,6 +1485,13 @@ mod tests {
             assert!(!objects.contains(&candidate.path));
         }
         assert!(objects.contains("a.png"));
+        git_ok(store.root(), &["fetch", "-q", "origin"]);
+        git_ok(store.root(), &["reset", "--hard", "origin/main"]);
+        recover_store(store.root()).unwrap();
+        assert!(!recovery_required(store.root()));
+        store
+            .with_ticket_transaction(|| Ok::<_, StoreError>(()))
+            .unwrap();
     }
 
     #[test]

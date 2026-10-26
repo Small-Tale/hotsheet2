@@ -1156,6 +1156,16 @@ pub fn purge_trash(
     now: &Timestamp,
     retention_days: i64,
 ) -> Result<Vec<Ticket>, OpError> {
+    // Deletion itself must be rejected before any file is removed from a stale
+    // checkout; guarding the later autocommit would be too late (HS2-RFJ1GN).
+    store.with_ticket_transaction(|| purge_trash_locked(store, now, retention_days))
+}
+
+fn purge_trash_locked(
+    store: &FsStore,
+    now: &Timestamp,
+    retention_days: i64,
+) -> Result<Vec<Ticket>, OpError> {
     let mut purged = Vec::new();
     let mut paths = Vec::new();
     for ticket in trash_due_for_purge(store, now, retention_days)? {

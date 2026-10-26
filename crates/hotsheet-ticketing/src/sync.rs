@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use crate::store::lock_git_transaction;
+use crate::store::{lock_git_transaction, lock_history_sync};
 
 /// The outcome of one [`sync_once`] cycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,8 +35,20 @@ pub enum SyncReport {
 
 /// Run one sync cycle for the store at `store_path`.
 pub fn sync_once(store_path: &Path) -> SyncReport {
+    // HS2-RFJ1GN: never replay an old local branch after compaction replaced origin.
+    if crate::repository_compaction::recovery_required(store_path) {
+        return SyncReport::Offline;
+    }
     if !has_remote(store_path) {
         return SyncReport::NoRemote;
+    }
+    // A sync that already passed its entry check must finish before a rewrite
+    // starts; one waiting behind a rewrite must see its recovery guard (HS2-RFJ1GN).
+    let Ok(_history) = lock_history_sync(store_path) else {
+        return SyncReport::Offline;
+    };
+    if crate::repository_compaction::recovery_required(store_path) {
+        return SyncReport::Offline;
     }
     // Belt-and-suspenders: commit any stray working-tree changes so the tree is clean for a
     // rebase (Hot Sheet edits already auto-commit, but an external edit may not have).

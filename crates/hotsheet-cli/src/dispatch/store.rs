@@ -910,6 +910,7 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             oversized_bytes,
             json,
             execute,
+            recover,
             backup,
             confirm,
         } => {
@@ -923,6 +924,13 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             let root = PathBuf::from(&source.locator);
             if root.canonicalize()? == Path::new(&checkout.root).canonicalize()? {
                 bail!("cannot rewrite a ticket store that is also the code repository");
+            }
+            if recover {
+                hotsheet_ticketing::repository_compaction::recover_store(&root)?;
+                println!(
+                    "The store is clean and matches origin; compaction recovery guard cleared. Keep the mirror backup until every collaborator confirms recovery."
+                );
+                return Ok(());
             }
             let store = FsStore::open_without_maintenance(&root)?;
             let now = time::OffsetDateTime::now_utc();
@@ -1180,6 +1188,9 @@ pub(crate) enum CheckoutCmd {
         json: bool,
         #[arg(long)]
         execute: bool,
+        /// Verify the checkout now matches origin, then clear its compaction write guard.
+        #[arg(long, conflicts_with = "execute")]
+        recover: bool,
         /// New path for a complete bare mirror backup.
         #[arg(long)]
         backup: Option<PathBuf>,

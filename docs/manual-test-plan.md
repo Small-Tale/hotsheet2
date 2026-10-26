@@ -14,6 +14,15 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Multi-collaborator attachment compaction recovery (HS2-RFJ1GN)
+
+On disposable dedicated Git ticket stores with a shared bare remote and synthetic
+attachments, have two machines or processes hold separate checkouts. Execute
+compaction from project statistics on one, then confirm the second cannot push its
+stale branch. Have each collaborator preserve local work, restore to the exact remote
+head, run `hotsheet checkout compact <source> <project> --recover`, and resume writes.
+Keep the mirror backup until both confirm recovery. No real shared store is rewritten.
+
 ### Launched-agent sandbox recovery (HS2-DVZXSD)
 
 Launch Claude Code and Codex for a project whose ticket store is the sibling

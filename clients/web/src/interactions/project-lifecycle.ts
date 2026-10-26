@@ -45,6 +45,7 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly chooseProjectPath: (button: Element) => Promise<void>;
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
   readonly previewRepositoryCompaction: (source: string) => Promise<void>;
+  readonly executeRepositoryCompaction: (form: HTMLFormElement) => Promise<void>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -83,6 +84,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     chooseProjectPath,
     recoverUnhealthyProjectServer,
     previewRepositoryCompaction,
+    executeRepositoryCompaction,
   } = dependencies;
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.addProject.selector, () => {
@@ -249,6 +251,17 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
       (_event, target) => {
         const source = data(target).source;
         if (source) void previewRepositoryCompaction(source);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'submit',
+      PROJECT_LIFECYCLE_ACTIONS.executeRepositoryCompaction.selector,
+      (event, target) => {
+        event.preventDefault();
+        if (target instanceof HTMLFormElement) void executeRepositoryCompaction(target);
       },
     ),
   );

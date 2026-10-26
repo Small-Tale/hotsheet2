@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-RFJ1GN compaction recovery transitions are covered by the
+`hs2_rfj1gn_*` tests in `crates/hotsheet-ticketing/src/repository_compaction.rs`:
+guarded purge/queued commit/activation, a sync waiting behind rewrite admission,
+recovery waiting for execution, and restart/write refusal until exact-origin recovery.
+The real project-statistics browser flow covers exact confirmation, pending, rejected,
+successful, and recovery states, with text-line bounds at narrow width and visual captures.
+
 The first macOS Tauri bundle (HS2-5R706Q) is covered by
 `clients/web/scripts/desktop-host-smoke.mjs`, which serves the staged app
 through the packaged Node bridge and checks owner-pipe shutdown. The release
@@ -1326,7 +1333,9 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit and real Git flow: `crates/hotsheet-ticketing/src/repository_compaction.rs` covers eligibility, duplicate/oversize reasons, dirty and embedded-store rejection, confirmation, disposable-clone rewrite, mirror backup, preserved original, and leased bare-remote push. CI installs a pinned `git-filter-repo` for the rewrite test.
 - Large-plan path safety (HS2-M0VTRA): the same module tests a 20,000-candidate paths file larger than the process argument limit through `git-filter-repo --dry-run`, plus a real disposable-clone rewrite of filenames containing a line break and the `==>` directive marker. The temporary path list is removed after execution.
 - Historical orphans (HS2-JRT1ZP): the same module inventories deleted attachment paths with bounded Git history records and blob identities, including multiple versions and unusual filenames; excludes current and unrelated paths; records blob/deletion provenance in a retained manifest; and verifies the disposable rewrite against a bare remote and mirror backup. The CLI compaction integration test checks orphan details in the JSON preview, the web RepositorySize unit test checks the orphan preview row, and the shipped project-statistics browser test checks that row at wide, medium, narrow, and restored-wide sizes.
-- End to end: `crates/hotsheet-cli/tests/cli.rs # checkout_compact_previews_and_requires_exact_execution_confirmation` checks the headless plan and consent path; `crates/hotsheet-server/tests/http.rs # repository_compaction_previews_only_old_closed_git_attachments` checks the authenticated route and no mutation; `clients/web/tests/providers.spec.ts # project statistics previews ticket-store compaction without rewriting attachments` checks the shipped composition; `clients/web/tests/ux-demo.spec.ts # RepositorySize demo exposes compaction preview, loading, and unavailable states` checks catalog variants at wide and narrow widths.
+- Execution and recovery (HS2-RFJ1GN): the core test proves the private recovery marker blocks stale writes and sync after the remote rewrite, refuses premature clearing, and permits a clean checkout restored to the exact origin head. The authenticated server HTTP test covers denied execution, exact confirmation, mirror backup, force-push result, and a guarded original checkout. The shipped browser flow covers exact confirmation, server refusal, success result, and recovery guidance after wide, medium, phone, and restored-wide preview checks. The CLI `--recover` verifies the restored checkout before clearing its guard.
+- Manual: `docs/manual-test-plan.md # Multi-collaborator attachment compaction recovery` covers two separately held checkouts against one disposable shared remote.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # checkout_compact_previews_and_requires_exact_execution_confirmation` checks the headless plan and consent path; `crates/hotsheet-server/tests/http.rs # repository_compaction_previews_only_old_closed_git_attachments` checks authenticated preview and execution; `clients/web/tests/providers.spec.ts # project statistics previews and executes ticket-store compaction` checks the shipped composition and execution states; `clients/web/tests/ux-demo.spec.ts # RepositorySize demo exposes compaction preview, loading, and unavailable states` checks catalog variants at wide and narrow widths.
 
 ### Remembered permission owner (HS2-7T5GPN)
 

@@ -27,6 +27,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   dismissSourceStaleNotice: action('dismiss-source-stale-notice'),
   dismissRepositorySizeWarning: action('dismiss-repository-size-warning'),
   previewRepositoryCompaction: action('preview-repository-compaction'),
+  executeRepositoryCompaction: action('execute-repository-compaction'),
   dismissHs1Cleanup: action('dismiss-hs1-cleanup'),
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
   submitGitSourceRelink: action('submit-git-source-relink'),

@@ -1511,7 +1511,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     GitHub's limits. It composes `ListHeader`, `ValueTable`, `Badge`, and a warning or
     danger `StateBanner`. Its `/ux-demo` entry exposes these states: within limits, over
     the soft limit, over the hard limit, unsupported and unmeasured sources (including a
-    store that shares the code repository), loading, and error.
+    store that shares the code repository), loading, and error. Dedicated Git stores
+    also expose full attachment-compaction review, exact confirmation, pending/error
+    feedback, force-push result, and collaborator recovery guidance (HS2-RFJ1GN).
   - `ConfidenceBadge` — **built** (`components/confidence-badge.tsx`, HS2-A0Q6G6): the
     banded AI completion confidence. The `compact` pill is used on note cards and ticket
     list/board summaries; `labeled` is used in the inspector/reader header. Its own

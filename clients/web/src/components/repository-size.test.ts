@@ -173,11 +173,39 @@ describe('RepositorySize (HS2-QF44T7)', () => {
     expect(markup.match(/Preview Attachment Compaction/gu)).toHaveLength(1);
     expect(markup).toContain('HS-ONE: old.png (12 MB, oversized)');
     expect(markup).toContain('12 MB of attachment payload history');
-    expect(markup).toContain('requires a new mirror backup path');
+    expect(markup).toContain('New Mirror Backup Path');
+    expect(markup).toContain(`rewrite main ${'c'.repeat(64)}`);
+    expect(markup).toContain('Back Up and Rewrite History');
     expect(parseCompactionPlan(plan)).toBe(plan);
     expect(() => parseCompactionPlan({ ...plan, candidates: [{ ...plan.candidates[0], reason: 'unknown' }] })).toThrow(
       ServerResponseShapeError,
     );
+    const completed = String(
+      RepositorySize({
+        state: { status: 'ready', report: report([code, store]) },
+        compaction: {
+          status: 'ready',
+          source: 'abc123',
+          plan,
+          execution: {
+            status: 'success',
+            result: {
+              old_head: 'a'.repeat(40),
+              new_head: 'd'.repeat(40),
+              backup: '/tmp/backup.git',
+              candidates_removed: 1,
+              git_bytes_before: 20_000_000,
+              git_bytes_after: 8_000_000,
+              recovery: ['Restore collaborators to origin.'],
+            },
+          },
+        },
+      }),
+    );
+    expect(completed).toContain('Compaction pushed to origin.');
+    expect(completed).toContain('Restore collaborators to origin.');
+    expect(completed).toContain('--recover');
+    expect(completed).not.toContain('Back Up and Rewrite History');
   });
 
   it('previews a deleted historical attachment without a current ticket label (HS2-JRT1ZP)', () => {

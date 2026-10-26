@@ -4349,6 +4349,42 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
         .stdout(predicate::str::contains("Deleted history:"))
         .stdout(predicate::str::contains("Git LFS"))
         .stdout(predicate::str::contains("--execute --backup"));
+    let confirmation = format!(
+        "rewrite {} {}",
+        plan["branch"].as_str().unwrap(),
+        plan["fingerprint"].as_str().unwrap()
+    );
+    cli()
+        .args([
+            "checkout",
+            "compact",
+            &source,
+            "compact",
+            "--min-age-days",
+            "30",
+            "--oversized-bytes",
+            "10",
+            "--execute",
+            "--backup",
+        ])
+        .arg(&backup)
+        .args(["--confirm", &confirmation])
+        .assert()
+        .success();
+    cli()
+        .args(["checkout", "compact", &source, "compact", "--recover"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "recovery requires a clean checkout",
+        ));
+    git(&store_root, &["fetch", "-q", "origin"]);
+    git(&store_root, &["reset", "--hard", "origin/main"]);
+    cli()
+        .args(["checkout", "compact", &source, "compact", "--recover"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("recovery guard cleared"));
 }
 
 #[test]

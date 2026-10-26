@@ -4240,6 +4240,12 @@ completion summary) shows its completion-confidence calibration:
 - **States:** loading, error, and "Nothing to Measure" use Kerf `EmptyState` /
   `StateBanner`. Sizes use decimal units (`5 GB`), matching GitHub and the CLI.
 - **Freshness:** measured once each time the statistics view opens; it never polls.
+- **Attachment compaction (HS2-RFJ1GN):** a dedicated Git ticket store can preview every
+  old duplicate, oversized, or orphaned payload candidate. The operator enters a new
+  mirror backup path and the exact `rewrite <branch> <fingerprint>` confirmation. During
+  execution, the form shows a pending state; errors stay beside it. Success shows the
+  pushed head, backup location, size change, and collaborator recovery steps. The CLI
+  remains available for headless operation.
 - **Project shell warning (HS2-P1GYWH):** the client also requests the report once when a
   project is first shown in a session. While the report's level is `warning` or `critical`,
   the project shell shows `RepositorySizeBanner`, a warning-toned `ShellBanner` naming the

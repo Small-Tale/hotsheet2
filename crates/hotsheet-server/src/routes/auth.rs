@@ -61,7 +61,12 @@ pub(crate) async fn require_secret(
         Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     );
     let is_restart = req.uri().path() == "/lifecycle/restart";
-    let _mutation = if is_mutation && !is_restart {
+    // HS2-RFJ1GN: compaction closes admission itself, then checks quiescence. Counting
+    // its own request as an active mutation would make that check always fail.
+    let is_compaction = req.method() == Method::POST
+        && req.uri().path().starts_with("/checkouts/")
+        && req.uri().path().ends_with("/repository/compaction");
+    let _mutation = if is_mutation && !is_restart && !is_compaction {
         Some(state.begin_mutation().ok_or_else(|| {
             ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,

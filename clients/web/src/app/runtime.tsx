@@ -358,6 +358,8 @@ export async function startHotSheetWebClient() {
   async function previewRepositoryCompaction(source: string) {
     const target = projects.peek().find((item) => item.id === statsProjectId.peek());
     if (!target) return;
+    const previous = compactionByProject.peek()[target.id] as CompactionPreviewState | undefined;
+    if (previous?.status === 'ready' && previous.execution?.status === 'running') return;
     const generation = (compactionRequests.get(target.id) ?? 0) + 1;
     compactionRequests.set(target.id, generation);
     compactionByProject.value = {
@@ -373,6 +375,53 @@ export async function startHotSheetWebClient() {
     }
     if (compactionRequests.get(target.id) === generation)
       compactionByProject.value = { ...compactionByProject.peek(), [target.id]: next };
+  }
+  async function executeRepositoryCompaction(form: HTMLFormElement) {
+    const target = projects.peek().find((item) => item.id === statsProjectId.peek());
+    const source = form.dataset.source;
+    if (!target || !source) return;
+    const current = compactionByProject.peek()[target.id] as CompactionPreviewState | undefined;
+    if (current?.status !== 'ready' || current.source !== source || current.execution?.status === 'running') return;
+    const fields = new FormData(form);
+    const backupValue = fields.get('backup');
+    const confirmValue = fields.get('confirm');
+    const backup = typeof backupValue === 'string' ? backupValue.trim() : '';
+    const confirm = typeof confirmValue === 'string' ? confirmValue : '';
+    if (!backup || confirm !== `rewrite ${current.plan.branch} ${current.plan.fingerprint}`) {
+      compactionByProject.value = {
+        ...compactionByProject.peek(),
+        [target.id]: {
+          ...current,
+          execution: { status: 'error', message: 'Enter a new backup path and the exact confirmation shown above.' },
+        },
+      };
+      return;
+    }
+    compactionByProject.value = {
+      ...compactionByProject.peek(),
+      [target.id]: { ...current, execution: { status: 'running' } },
+    };
+    try {
+      const result = await new Api(target.apiPath).executeCheckoutRepositoryCompaction(
+        target.id,
+        source,
+        current.plan,
+        backup,
+        confirm,
+      );
+      compactionByProject.value = {
+        ...compactionByProject.peek(),
+        [target.id]: { ...current, execution: { status: 'success', result } },
+      };
+    } catch (error) {
+      compactionByProject.value = {
+        ...compactionByProject.peek(),
+        [target.id]: {
+          ...current,
+          execution: { status: 'error', message: error instanceof Error ? error.message : String(error) },
+        },
+      };
+    }
   }
   /** Load a project's calibration report, keeping the last report visible while refreshing. */
   async function loadConfidenceReport(target: Project) {
@@ -4772,6 +4821,7 @@ export async function startHotSheetWebClient() {
     chooseProjectPath,
     recoverUnhealthyProjectServer,
     previewRepositoryCompaction,
+    executeRepositoryCompaction,
     repository,
     repositoryView,
     repositoryDetailActive: repositoryController.repositoryDetailActive,

@@ -21,6 +21,7 @@ use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{FsStore, ProviderConfigRegistry, TicketQuery};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
+use std::sync::atomic::Ordering;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RegisterCheckoutBody {
@@ -623,6 +624,109 @@ pub(crate) async fn checkout_repository_compaction(
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
     .map(Json)
     .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ExecuteCompactionBody {
+    source: String,
+    head: String,
+    branch: String,
+    fingerprint: String,
+    min_age_days: u64,
+    oversized_bytes: u64,
+    backup: std::path::PathBuf,
+    confirm: String,
+}
+
+/// Execute the reviewed plan through the same engine as the headless CLI. Admission
+/// closes before checking quiescence so no server mutation or sync can race the
+/// history rewrite (HS2-RFJ1GN). The core's recovery marker keeps this source
+/// read-only after admission reopens, including across a server restart.
+pub(crate) async fn execute_checkout_repository_compaction(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<ExecuteCompactionBody>,
+) -> Result<Json<hotsheet_ticketing::repository_compaction::CompactionResult>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let source = checkout
+        .source(&body.source)
+        .filter(|source| source.provider == "git")
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "source is not a linked Git ticket store",
+            )
+        })?;
+    let root = std::path::PathBuf::from(&source.locator);
+    if root.canonicalize().ok() == std::path::PathBuf::from(&checkout.root).canonicalize().ok() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "ticket store shares the code repository",
+        ));
+    }
+    if state
+        .lifecycle
+        .quiescing
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "server is already quiescing",
+        ));
+    }
+    let report = state.quiescence_report();
+    if !report.quiescent {
+        state.lifecycle.quiescing.store(false, Ordering::Release);
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "server has active work; finish it before attachment compaction",
+        ));
+    }
+    // Keep admission closed even if the HTTP client disconnects while Git is
+    // still rewriting in the blocking task (HS2-RFJ1GN).
+    struct ResetAdmission(std::sync::Arc<crate::LifecycleControl>);
+    impl Drop for ResetAdmission {
+        fn drop(&mut self) {
+            self.0.quiescing.store(false, Ordering::Release);
+        }
+    }
+    let lifecycle = state.lifecycle.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let _admission = ResetAdmission(lifecycle);
+        let store = FsStore::open_without_maintenance(&root).map_err(|error| error.to_string())?;
+        let plan = hotsheet_ticketing::repository_compaction::plan_store(
+            &store,
+            time::OffsetDateTime::now_utc(),
+            body.min_age_days,
+            body.oversized_bytes,
+        )
+        .map_err(|error| error.to_string())?;
+        if plan.head != body.head
+            || plan.branch != body.branch
+            || plan.fingerprint != body.fingerprint
+        {
+            return Err("compaction preview changed; refresh and review the full plan".into());
+        }
+        // The shared engine acquires sync/rewrite, ticket, and Git locks in order
+        // and revalidates this plan while holding them (HS2-RFJ1GN).
+        hotsheet_ticketing::repository_compaction::execute_store(
+            &store,
+            time::OffsetDateTime::now_utc(),
+            &plan,
+            &body.backup,
+            &body.confirm,
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await;
+    result
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
 }
 
 pub(crate) async fn initialize_checkout_repository(

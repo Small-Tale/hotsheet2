@@ -270,10 +270,15 @@ and 20,000 blob identities; exceeding a bound fails the preview. Orphaned candid
 include each historical Git blob id and size plus the deletion commit. Their `sha256`
 field is empty because no current payload remains to hash. The fingerprint binds all
 candidates to the current branch head. The default oversized threshold is 10 MB. The
-UI shows a short preview; use CLI JSON to review the full list.
+UI and CLI JSON show the full candidate list.
 
-Execution is deliberately an explicit headless operation. Install `git-filter-repo`, choose
-a new backup path outside the store, and copy the exact confirmation printed by the CLI:
+Execution is available from project statistics or the authoritative headless CLI. Install
+`git-filter-repo`, choose a new backup path outside the store, and enter the exact
+confirmation shown with the plan. The UI posts the reviewed head, branch, fingerprint,
+and thresholds to `POST /checkouts/{id}/repository/compaction`; the authenticated server
+closes mutation admission, verifies that active work has drained, recomputes the plan,
+and invokes the same engine. It returns the force-push result and recovery instructions.
+The CLI equivalent is:
 
 ```sh
 hotsheet checkout compact <connection-id> <project> --min-age-days 90 --oversized-bytes 10000000 --execute --backup <new-backup.git> --confirm 'rewrite <branch> <fingerprint>'
@@ -293,6 +298,16 @@ The original checkout is deliberately left untouched and stale. Preserve its loc
 re-clone or reset it to the rewritten branch; every collaborator must do the same before
 another ticket write or push. Keep the backup until recovery is confirmed. A working-tree
 attachment deletion alone cannot reclaim old Git objects.
+The original store carries a private Git recovery marker before the rewrite starts. It
+blocks further ticket writes and sync, including after server restart or a failed rewrite.
+Queued autocommits, format activation, and Trash deletion also honor the guard.
+Sync, rewrite execution, and recovery share a Git-private exclusion lock so an
+already-running CLI sync cannot replay stale history and recovery cannot clear an
+active rewrite's marker. Normal sync does not hold the local Git transaction lock
+across network calls (HS2-RFJ1GN).
+After preserving local work and restoring the checkout to a clean copy of the exact origin
+head, run `hotsheet checkout compact <connection-id> <project> --recover` to verify the
+checkout and clear the guard. Keep the mirror backup until collaborators confirm recovery.
 
 For future images and other large media, install Git LFS in every collaborator's ticket
 store environment, run `git lfs install`, then `git lfs track '*.png' '*.jpg' '*.webp' '*.mp4'`

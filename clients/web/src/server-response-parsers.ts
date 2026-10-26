@@ -11,6 +11,7 @@ import type {
   CommandDefinition,
   CommandRun,
   CompactionPlan,
+  CompactionResult,
   CorruptTicket,
   CustomView,
   DuplicateBacklinkResponse,
@@ -650,6 +651,15 @@ export const parseCompactionPlan = shape<CompactionPlan>('compaction plan', {
   candidates: listOf(compactionCandidate.check),
   reclaimable_payload_bytes: isNumber,
   fingerprint: isString,
+});
+export const parseCompactionResult = shape<CompactionResult>('compaction result', {
+  old_head: isString,
+  new_head: isString,
+  backup: isString,
+  candidates_removed: isNumber,
+  git_bytes_before: isNumber,
+  git_bytes_after: isNumber,
+  recovery: listOf(isString),
 });
 
 export const parseCorruptTicket = shape<CorruptTicket>(

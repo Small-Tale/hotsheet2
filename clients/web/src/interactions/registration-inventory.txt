@@ -19,6 +19,7 @@ project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-project-
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-codex-hooks-notice"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-server-build-notice"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="preview-repository-compaction"]'
+project-lifecycle	delegate	document.body	'submit'	'[data-action="execute-repository-compaction"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-repository-size-warning"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-source-stale-notice"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-hs1-cleanup"]'

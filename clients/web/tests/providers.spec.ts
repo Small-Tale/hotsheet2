@@ -32521,7 +32521,7 @@ test('warns in the project shell while a repository is over a GitHub size limit 
   await expect(panel).toHaveAttribute('data-level', 'critical');
 });
 
-test('project statistics previews ticket-store compaction without rewriting attachments (HS2-T2Q7KM, HS2-JRT1ZP)', async ({
+test('project statistics previews and executes ticket-store compaction (HS2-T2Q7KM, HS2-JRT1ZP, HS2-RFJ1GN)', async ({
   page,
 }) => {
   await mockProject(page);
@@ -32594,7 +32594,7 @@ test('project statistics previews ticket-store compaction without rewriting atta
   await panel.getByRole('button', { name: 'Preview Attachment Compaction' }).click();
   await expect(panel).toContainText('HS-OLD: old-capture.png (18.4 MB, oversized)');
   await expect(panel).toContainText('Removed attachment: removed-history.png (2.2 MB, orphaned)');
-  await expect(panel).toContainText('requires a new mirror backup path');
+  await expect(panel).toContainText('New Mirror Backup Path');
   expect(requests).toBe(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 768 });
@@ -32607,6 +32607,18 @@ test('project statistics previews ticket-store compaction without rewriting atta
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
   ).toBeLessThanOrEqual(0);
+  // HS2-RFJ1GN: page-level overflow can pass while the exact confirmation is clipped.
+  const confirmationCode = panel.locator('code').filter({ hasText: `rewrite main ${'c'.repeat(64)}` });
+  expect(
+    await confirmationCode.evaluate((code) => {
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      const bounds = code.closest('p')!.getBoundingClientRect();
+      return [...range.getClientRects()].every(
+        (line) => line.left >= bounds.left - 1 && line.right <= bounds.right + 1,
+      );
+    }),
+  ).toBe(true);
   await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -32618,6 +32630,75 @@ test('project statistics previews ticket-store compaction without rewriting atta
   await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
   // HS2-12HS8Y: a returned-wide full-page capture can omit glyphs while the viewport remains readable.
   await page.screenshot({ path: 'target/visual-captures/hs2-jrt1zp-preview-wide-return.png' });
+  let executions = 0;
+  let releaseFirst: (() => void) | undefined;
+  const firstResponse = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  await page.route('**/checkouts/demo-checkout/repository/compaction', async (route) => {
+    executions += 1;
+    const body = route.request().postDataJSON();
+    expect(body).toMatchObject({
+      source: 'abc123',
+      branch: 'main',
+      fingerprint: 'c'.repeat(64),
+      backup: '/tmp/compact-backup.git',
+    });
+    if (executions === 1) {
+      await firstResponse;
+      return route.fulfill({ status: 409, json: { error: 'another writer is active' } });
+    }
+    return route.fulfill({
+      json: {
+        old_head: 'a'.repeat(40),
+        new_head: 'f'.repeat(40),
+        backup: '/tmp/compact-backup.git',
+        candidates_removed: 2,
+        git_bytes_before: 50_000_000,
+        git_bytes_after: 20_000_000,
+        recovery: ['Every collaborator must re-clone the ticket repository.'],
+      },
+    });
+  });
+  await panel.getByRole('textbox', { name: 'New Mirror Backup Path' }).fill('/tmp/compact-backup.git');
+  await panel.getByRole('textbox', { name: 'Exact Confirmation' }).fill('wrong');
+  await panel.getByRole('button', { name: 'Back Up and Rewrite History' }).click();
+  await expect(panel).toContainText('Enter a new backup path and the exact confirmation');
+  expect(executions).toBe(0);
+  await panel.getByRole('textbox', { name: 'New Mirror Backup Path' }).fill('/tmp/compact-backup.git');
+  await panel.getByRole('textbox', { name: 'Exact Confirmation' }).fill(`rewrite main ${'c'.repeat(64)}`);
+  await panel.getByRole('button', { name: 'Back Up and Rewrite History' }).click();
+  await expect(panel).toContainText('Compacting…');
+  releaseFirst?.();
+  await expect(panel).toContainText('another writer is active');
+  expect(
+    await panel.getByText(/another writer is active Check the remote head/u).evaluate((detail) => {
+      const range = document.createRange();
+      range.selectNodeContents(detail);
+      const bounds = detail.closest('[role="status"]')!.getBoundingClientRect();
+      return [...range.getClientRects()].every(
+        (line) => line.left >= bounds.left - 1 && line.right <= bounds.right + 1,
+      );
+    }),
+  ).toBe(true);
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-rfj1gn-compaction-error-wide.png' });
+  await panel.getByRole('textbox', { name: 'New Mirror Backup Path' }).fill('/tmp/compact-backup.git');
+  await panel.getByRole('textbox', { name: 'Exact Confirmation' }).fill(`rewrite main ${'c'.repeat(64)}`);
+  await panel.getByRole('button', { name: 'Back Up and Rewrite History' }).click();
+  await expect(panel).toContainText('Compaction pushed to origin');
+  await expect(panel).toContainText('Every collaborator must re-clone');
+  await expect(panel).toContainText('--recover');
+  expect(executions).toBe(2);
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-rfj1gn-compaction-success-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel).toContainText('Compaction pushed to origin');
+  await panel.locator('.repository-size__compaction').scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-rfj1gn-compaction-success-phone.png' });
 });
 
 test('a server size-limit crossing event brings up the repository size banner without polling (HS2-KKFEY5)', async ({

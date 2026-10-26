@@ -200,6 +200,10 @@ pub enum StoreError {
         "store format activation required: schema {found} must be explicitly migrated to {target} before writing; stop older Hot Sheet 2 processes, announce the compatibility break, then run `hotsheet-cli activate-format --acknowledge-pre-release-breakage`"
     )]
     FormatActivationRequired { found: u32, target: u32 },
+    #[error(
+        "ticket store is awaiting history-rewrite recovery; preserve local work, re-clone or reset to origin, then run `hotsheet-cli checkout compact <source> <project> --recover` before writing again"
+    )]
+    CompactionRecoveryRequired,
     #[error("parsing ticket {path}: {source}")]
     Parse { path: PathBuf, source: ParseError },
     #[error(
@@ -458,6 +462,7 @@ impl FsStore {
         &self,
         operation: impl FnOnce() -> Result<T, E>,
     ) -> Result<T, E> {
+        self.ensure_compaction_recovered().map_err(E::from)?;
         self.ensure_managed_gitignore().map_err(E::from)?;
         let path = self.root.join(NOTE_MUTATION_LOCK_FILE);
         let file = fs::OpenOptions::new()
@@ -479,6 +484,7 @@ impl FsStore {
                 source,
             })
             .map_err(E::from)?;
+        self.ensure_compaction_recovered().map_err(E::from)?;
         // Commits produced inside the transaction run after the store-wide lock is
         // released (HS2-0DH8ZS): a git commit can take hundreds of milliseconds on a large
         // store (seconds under index contention), and holding the mutation lock across it
@@ -645,6 +651,7 @@ impl FsStore {
     }
 
     fn ensure_current_writer_format(&self) -> Result<(), StoreError> {
+        self.ensure_compaction_recovered()?;
         let metadata = self.metadata()?;
         if metadata.schema_version > STORE_SCHEMA_VERSION {
             return Err(StoreError::UnsupportedStoreSchema {
@@ -669,9 +676,17 @@ impl FsStore {
         })
     }
 
+    fn ensure_compaction_recovered(&self) -> Result<(), StoreError> {
+        if crate::repository_compaction::recovery_required(&self.root) {
+            return Err(StoreError::CompactionRecoveryRequired);
+        }
+        Ok(())
+    }
+
     /// Explicitly activate the current pre-release format after the caller has
     /// announced the compatibility boundary and stopped older writers.
     pub fn activate_current_format(&self) -> Result<(), StoreError> {
+        self.ensure_compaction_recovered()?;
         let mut metadata = self.metadata()?;
         if metadata.schema_version > STORE_SCHEMA_VERSION {
             return Err(StoreError::UnsupportedStoreSchema {
@@ -813,6 +828,8 @@ impl FsStore {
         message: &str,
         paths: Option<&[PathBuf]>,
     ) -> Result<bool, StoreError> {
+        // Queued jobs may have waited behind a history rewrite (HS2-RFJ1GN).
+        self.ensure_compaction_recovered()?;
         self.ensure_managed_gitignore()?;
         // An unborn repository has no baseline tree: its first mutation must also commit
         // the store metadata/attributes. Once HEAD exists, path-scoped commits are safe.
@@ -2136,6 +2153,16 @@ pub fn flush_background_commits() {
 /// replace each other's index. Blocks until the lock is free; the OS releases it when the
 /// holder exits.
 pub(crate) fn lock_git_transaction(root: &Path) -> Result<FileLock, StoreError> {
+    lock_git_coordination(root, "hotsheet-autocommit.lock")
+}
+
+/// Exclude history rewrite/recovery from a whole sync cycle without holding the
+/// local Git transaction lock across normal sync network I/O (HS2-RFJ1GN).
+pub(crate) fn lock_history_sync(root: &Path) -> Result<FileLock, StoreError> {
+    lock_git_coordination(root, "hotsheet-history-sync.lock")
+}
+
+fn lock_git_coordination(root: &Path, filename: &str) -> Result<FileLock, StoreError> {
     let out = crate::git::command()
         .arg("-C")
         .arg(root)
@@ -2157,7 +2184,7 @@ pub(crate) fn lock_git_transaction(root: &Path) -> Result<FileLock, StoreError> 
         path: git_dir,
         source,
     })?;
-    let path = git_dir.join("hotsheet-autocommit.lock");
+    let path = git_dir.join(filename);
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -2165,12 +2192,12 @@ pub(crate) fn lock_git_transaction(root: &Path) -> Result<FileLock, StoreError> 
         .truncate(false)
         .open(&path)
         .map_err(|source| StoreError::IoAt {
-            operation: "opening autocommit lock",
+            operation: "opening Git coordination lock",
             path: path.clone(),
             source,
         })?;
     FileLock::acquire(file).map_err(|source| StoreError::IoAt {
-        operation: "locking autocommit transaction",
+        operation: "locking Git coordination transaction",
         path,
         source,
     })

@@ -3117,6 +3117,45 @@ paths:
         required: true
         schema:
           type: string
+    post:
+      operationId: execute_checkout_repository_compaction
+      responses:
+        '200':
+          description: The rewritten origin head, mirror backup, size change, and recovery steps.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompactionResult'
+        '400':
+          description: The plan, confirmation, backup, or repository state is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The checkout does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The server has active work or is already quiescing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Execution failed; verify origin and the backup before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteCompaction'
   /checkouts/{reference}/repository/init:
     post:
       operationId: initialize_checkout_repository
@@ -14724,6 +14763,22 @@ components:
           enum:
             - duplicate
             - oversized
+            - orphaned
+        historical_blobs:
+          type: array
+          items:
+            type: object
+            required:
+              - oid
+              - bytes
+            properties:
+              oid:
+                type: string
+              bytes:
+                type: integer
+            additionalProperties: false
+        removed_in_commit:
+          type: string
       additionalProperties: false
     CompactionPlan:
       type: object
@@ -14752,6 +14807,63 @@ components:
           type: integer
         fingerprint:
           type: string
+      additionalProperties: false
+    ExecuteCompaction:
+      type: object
+      required:
+        - source
+        - head
+        - branch
+        - fingerprint
+        - min_age_days
+        - oversized_bytes
+        - backup
+        - confirm
+      properties:
+        source:
+          type: string
+        head:
+          type: string
+        branch:
+          type: string
+        fingerprint:
+          type: string
+        min_age_days:
+          type: integer
+        oversized_bytes:
+          type: integer
+        backup:
+          type: string
+        confirm:
+          type: string
+      additionalProperties: false
+    CompactionResult:
+      type: object
+      required:
+        - old_head
+        - new_head
+        - backup
+        - candidates_removed
+        - git_bytes_before
+        - git_bytes_after
+        - recovery
+      properties:
+        old_head:
+          type: string
+        new_head:
+          type: string
+        backup:
+          type: string
+        candidates_removed:
+          type: integer
+        git_bytes_before:
+          type: integer
+        git_bytes_after:
+          type: integer
+        recovery:
+          type: array
+          items:
+            type: string
       additionalProperties: false
     UsageEvent:
       type: object
