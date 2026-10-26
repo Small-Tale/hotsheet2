@@ -639,6 +639,15 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   Manager roundtrip is ignored by default and runs only through explicit
   `cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored`
   on the dedicated disposable Windows CI runner.
+- **Native Windows coordination (HS2-9TD8Q5):** the Windows Credential Manager job
+  explicitly runs `cargo test -p hotsheet-ticketing --test file_lock_process` and
+  `cargo test -p hotsheet-cli --test coordination --test coordination_portable`.
+  These synthetic process tests exercise busy/nonblocking locks, release on abrupt
+  process exit, duplicate wait refusal, filesystem wake/reconnect, retained handoff,
+  and refill while earlier CI is pending. Pipe/channel readiness and native child
+  process handles avoid Unix signal assumptions and fixed readiness delays. Native
+  Windows evidence requires the actual Windows job to pass; a macOS run or the
+  credential-adapter tests alone do not establish it.
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.

@@ -868,7 +868,12 @@ registration, exact dispatch/acknowledgement, recovery, and terminal outcomes th
 `hotsheet-cli coordination`. The shared code Git common directory stores the local
 registry; it is separate from ticket-provider identity. Existing ticket claims remain
 authoritative. `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
-processes and real synthetic worktrees. Role instructions are canonical in
+processes and real synthetic worktrees. Portable recovery/handoff coverage is in
+`crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and
+process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.
+The native Windows CI job executes these coordination/lock targets explicitly
+(HS2-9TD8Q5); native execution is not inferred from credential coverage.
+Role instructions are canonical in
 `.claude/skills/hotsheet-{integrator,worker}/` with `.agents/skills/` mirrors.
 Source adapters beyond the selected local queue are explicit unsupported operations
 (HS2-3ETJ26); remote CI/app wake requires an actual supported route, not polling.

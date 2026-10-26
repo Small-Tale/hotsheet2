@@ -102,6 +102,17 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-aitools --test antigravity_discovery
 
+      # HS2-9TD8Q5: compilation/credentials do not establish native lock/event behavior.
+      - name: Exercise nonblocking locks and process-exit release on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-ticketing --test file_lock_process
+
+      - name: Exercise native coordination waits reconnect and handoff on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-cli --test coordination --test coordination_portable
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
