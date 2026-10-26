@@ -655,7 +655,10 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   These synthetic process tests exercise busy/nonblocking locks, release on abrupt
   process exit, duplicate wait refusal, filesystem wake/reconnect, retained handoff,
   and refill while earlier CI is pending. Pipe/channel readiness and native child
-  process handles avoid Unix signal assumptions and fixed readiness delays. Native
+  process handles avoid Unix signal assumptions and fixed readiness delays. Each
+  synthetic repository sets `core.autocrlf=false` locally so worktree and cherry-pick
+  byte assertions retain LF regardless of the developer or Windows runner defaults.
+  Native
   Windows evidence requires the actual Windows job to pass; a macOS run or the
   credential-adapter tests alone do not establish it.
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo

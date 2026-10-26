@@ -24,6 +24,8 @@ impl Fixture {
         let project = root.path().join("project");
         fs::create_dir(&project).unwrap();
         git(&project, &["init", "-q", "-b", "main"]);
+        // HS2-9TD8Q5: preserve fixture bytes through Windows worktree/cherry-pick flows.
+        git(&project, &["config", "core.autocrlf", "false"]);
         fs::write(project.join("synthetic.txt"), "initial\n").unwrap();
         git(&project, &["add", "synthetic.txt"]);
         git(&project, &["commit", "-qm", "synthetic initial commit"]);
