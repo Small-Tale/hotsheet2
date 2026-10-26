@@ -115,6 +115,18 @@ enum CoordinationCmd {
         #[arg(long, required = true)]
         inspected: bool,
     },
+    /// Preserve a reviewed handoff and allow a fresh structured correction assignment.
+    ReviewReturn {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        /// Exact ticket regular Review return note naming assignment and full reviewed SHA.
+        #[arg(long)]
+        evidence_note: String,
+        #[arg(long, required = true)]
+        inspected: bool,
+    },
     /// End only when work/CI are not in flight. Never treat unavailable provider data as empty.
     Finish {
         #[command(flatten)]
@@ -342,6 +354,24 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             assignment,
             phase,
         } => coordinator.mark(&i.id, &i.session, now, &assignment, phase)?,
+        CoordinationCmd::ReviewReturn {
+            integrator: i,
+            assignment,
+            evidence_note,
+            inspected,
+        } => {
+            anyhow::ensure!(
+                inspected,
+                "inspect and preserve the reviewed artifacts first"
+            );
+            coordinator.review_return(
+                &i.id,
+                &i.session,
+                time::OffsetDateTime::now_utc(),
+                &assignment,
+                &evidence_note,
+            )?;
+        }
         CoordinationCmd::Finish {
             integrator: i,
             reason,

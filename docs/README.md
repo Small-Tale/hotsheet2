@@ -169,6 +169,8 @@ provider-qualified local mailboxes, exact assignment, filesystem-event waits, an
 selected-source queue/claim verification. External-source adapters remain partial
 (HS2-3ETJ26); real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
 An ended independent app turn is not automatically resumed.
+Reviewed handoffs support fenced review-return and a fresh correction assignment,
+with original artifacts preserved in schema 1 (HS2-65ETRJ).
 
 **F · Collaboration & distribution**
 

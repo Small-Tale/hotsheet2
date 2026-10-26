@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified worktree commits to the main-branch integrator.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 36 -->
+<!-- hotsheet-skill-version: 37 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -95,6 +95,18 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    record any structured mailbox handoff, then send only the ticket slug through the assigned return route below. The integrator
    reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal. Do not
    mark the ticket Completed or Verified from a worker worktree.
+
+## Reviewed handoff corrections
+
+A review note alone is not a new assignment. Preserve the original branch, worktree
+and full commit; wait for the integrator's `review-return` and a NEW structured
+assignment id for the exact ticket (HS2-65ETRJ). Read its regular `## Review return`
+note, current shipping base and correction scope. Claim the exact ticket, create a
+new ticket worktree, and acknowledge the new assignment with your current session
+generation. A lost return acknowledgement can replay without cancelling your new
+claim. Do not reopen the old mailbox handoff or pretend the ticket is complete.
+The corrected handoff identifies its new verified commit and preserved original
+artifacts. Release its claim and return that new assignment through the usual flow.
 
 ## Return route
 

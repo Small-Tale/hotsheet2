@@ -2,6 +2,9 @@
 //! Assignment is a reservation, not a ticket claim or permission to integrate.
 
 pub mod contract;
+mod review_return;
+#[cfg(test)]
+mod review_return_tests;
 mod snapshot;
 #[cfg(test)]
 mod tests;
@@ -224,7 +227,9 @@ impl Coordinator {
                 !state
                     .assignments
                     .values()
-                    .any(|a| a.ticket == assignment.ticket && a.phase.pending()),
+                    .any(|a| a.ticket == assignment.ticket
+                        && a.phase.pending()
+                        && !a.returned_for_review()),
                 "ticket already assigned or awaiting integration/CI"
             );
             state
@@ -302,6 +307,10 @@ impl Coordinator {
                 .assignments
                 .get_mut(id)
                 .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            ensure!(
+                !a.returned_for_review(),
+                "review-returned handoff is preserved; integrate its correction assignment instead"
+            );
             ensure!(
                 a.phase == phase
                     || matches!(

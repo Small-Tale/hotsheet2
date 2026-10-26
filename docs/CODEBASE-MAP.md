@@ -860,6 +860,8 @@ from its launch checkout/source.
 Local continuous worker coordination (HS2-76VMYG) lives in
 `crates/hotsheet-cli/src/coordination/`: `contract.rs` owns the provider-qualified
 session/assignment schema, `mod.rs` the atomic local state transitions,
+`review_return.rs` preserves rejected handoffs and enables structured correction
+assignments without a schema change (HS2-65ETRJ),
 `snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
 and known lease deadlines. `dispatch/coordination.rs` exposes idempotent setup,
 registration, exact dispatch/acknowledgement, recovery, and terminal outcomes through

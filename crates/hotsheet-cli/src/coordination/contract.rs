@@ -85,6 +85,13 @@ pub struct Assignment {
     pub recovery_note: Option<String>,
 }
 
+impl Assignment {
+    /// HS2-65ETRJ: schema-1 review return preserves the handoff and fences its integration.
+    pub fn returned_for_review(&self) -> bool {
+        self.phase == Phase::Blocked && self.commit.is_some() && self.recovery_note.is_some()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State {
     pub version: u32,

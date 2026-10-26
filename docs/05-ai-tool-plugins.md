@@ -2039,6 +2039,7 @@ Use the same prefix, with `--project` before the subcommand:
 | `worker --id <id> --session <generation> --assignment <id> --phase <phase> [--commit <full-sha>]`                                                                                                          | Acknowledge the real claim, durable handoff/release, or blocker. This is not itself a ticket claim.                                                                                |
 | `mark --id <integrator> --session <generation> --assignment <id> --phase <phase>`                                                                                                                          | Record serialized integration, pending CI, or resolution after ticket completion. Multiple CI records may coexist.                                                                 |
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                 | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
+| `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                           | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                        | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                     | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
@@ -2049,6 +2050,19 @@ before `handoff`. Existing ticket claims remain authoritative. A mailbox phase d
 not complete a ticket. Availability expiry never reallocates an in-progress ticket:
 the integrator must inspect its artifacts and record a recovery note first. Old
 session generations cannot acknowledge replacement assignments.
+
+Reviewed handoffs can be explicitly returned for in-scope corrections (HS2-65ETRJ).
+The live exact integrator adds a regular `## Review return` note to the assigned
+ticket, naming the assignment id and full reviewed commit as whitespace-separated
+tokens and documenting preserved artifacts and corrections, then releases any claim.
+`review-return` checks the exact provider-qualified ticket and absence of a live
+claim under its mutation lock, preserving the original commit in schema-1 Blocked
+state with review evidence. An identical return replays without changing a later
+assignment or claim; conflicting evidence is rejected. A new `assign` operation id
+reserves corrections from the current shipping base. The old operation remains
+Blocked, cannot integrate or become Done, and never completes the ticket. Integrating,
+CI and ordinary blocked records cannot be returned. No mailbox schema upgrade is
+required; participants dispatching corrections need the updated CLI capability.
 
 `next` subscribes to filesystem events before reading snapshots, so either startup
 order and reconnect after a lost cue reconcile durable state. Queue edits, source

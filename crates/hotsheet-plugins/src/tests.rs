@@ -239,6 +239,29 @@ fn hs2_j81y9w_role_skills_require_addressed_handoff_delivery() {
 }
 
 #[test]
+fn hs2_65etrj_role_skills_require_structured_corrections_and_preserved_handoffs() {
+    for skill in [
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for phrase in [
+            "HS2-65ETRJ",
+            "review-return",
+            "## Review return",
+            "NEW",
+            "assignment",
+            "claim",
+            "preserv",
+        ] {
+            assert!(text.contains(phrase), "missing {phrase}");
+        }
+    }
+}
+
+#[test]
 fn hs2_76vmyg_role_skills_keep_local_sessions_running_between_tickets() {
     for skill in [
         include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),

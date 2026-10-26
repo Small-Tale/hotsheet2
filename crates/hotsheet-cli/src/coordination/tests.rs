@@ -5,7 +5,7 @@ use hotsheet_ticketing::{NewTicket, StoreMetadata};
 const NOW: i64 = 1_800_000_000;
 const SHA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-fn fixture() -> (tempfile::TempDir, Coordinator) {
+pub(super) fn fixture() -> (tempfile::TempDir, Coordinator) {
     let root = tempfile::tempdir().unwrap();
     let project = root.path().join("project");
     fs::create_dir(&project).unwrap();
@@ -23,12 +23,12 @@ fn fixture() -> (tempfile::TempDir, Coordinator) {
     (root, coordinator)
 }
 
-fn register(c: &Coordinator, role: Role, id: &str, generation: &str, now: i64) {
+pub(super) fn register(c: &Coordinator, role: Role, id: &str, generation: &str, now: i64) {
     c.register(role, id, generation, now, 120, ReturnRoute::HumanRelay)
         .unwrap();
 }
 
-fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
+pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
     Assignment {
         id: id.into(),
         worker: worker.into(),

@@ -2,7 +2,7 @@
 name: hotsheet-integrator
 description: Keep a local main-branch integrator running, discover available workers, assign independent tickets, and integrate verified handoffs through CI.
 ---
-<!-- hotsheet-skill-version: 3 -->
+<!-- hotsheet-skill-version: 4 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -73,6 +73,25 @@ worktree, and commit; add a durable inspection note. Only then use `coordination
 This fences the old reservation as blocked. Resolve it explicitly with mailbox `done`
 before a replacement assignment; that mailbox state does not complete the ticket.
 Ended independent app sessions require human resume (HS2-4H7D8D), not promised wake.
+
+## Return a reviewed handoff for corrections
+
+For in-scope review corrections, preserve the original branch, worktree and full
+commit. Add a regular `## Review return` note on the exact assigned ticket. Include
+the assignment id and full reviewed commit as plain whitespace-separated tokens,
+the concrete corrections and preserved artifact references. Release your ticket
+claim before `coordination review-return --id <integrator> --session <generation>
+--assignment <id> --evidence-note <note-id> --inspected` (HS2-65ETRJ).
+
+The runtime records Blocked plus review evidence while preserving the commit in
+schema 1. It refuses live claims, stale integrator generations, unrelated notes and
+handoffs already integrating or awaiting CI. Replay the same return after a lost
+acknowledgement, then use `assign` with a NEW stable operation id and current main
+base. Replaying the old assignment id only returns its preserved record. Never mark
+the returned handoff Done or complete the ticket to bypass reassignment. Integrate
+only the corrected handoff; retain original artifacts until verified integration.
+All participants issuing correction assignments need a CLI supporting `review-return`;
+this operation does not migrate the pool schema or restart workers.
 
 ## Assign
 
