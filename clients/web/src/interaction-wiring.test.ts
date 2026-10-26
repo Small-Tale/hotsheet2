@@ -180,12 +180,17 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(40);
+    expect(main.split('\n')).toHaveLength(44);
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
     expect(main).toContain('installDocumentScrollRestore(window);');
     expect(main).toContain('const { appRoot } = await startHotSheetWebClient();');
+    // HS2-RKZKX7: hydrate desktop state before application defaults inspect localStorage.
+    expect(main).toContain("if ('__HOTSHEET_DESKTOP_STORAGE__' in window) await initializeDesktopStorage();");
+    expect(main.indexOf('await initializeDesktopStorage()')).toBeLessThan(
+      main.indexOf('await startHotSheetWebClient()'),
+    );
     // The single page-lifetime scroll-divider instance lives at the entry (HS2-TF76Z2).
     expect(main).toContain('void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });');
     expect(runtime).not.toContain('wireScrollDividers(');

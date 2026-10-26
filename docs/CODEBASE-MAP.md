@@ -28,7 +28,12 @@ The macOS Tauri host is under `clients/web/src-tauri/` (HS2-5R706Q). Its separat
 Cargo workspace builds the native window, while `clients/web/scripts/prepare-desktop.mjs`
 stages production web assets, Node, the Rust executables, plugins, and migrator
 resources for bundling. `npm run desktop:build` packages the `.app`, and
-`npm run desktop:test` checks the staged bridge startup and shutdown. See the
+`npm run desktop:test` checks the staged bridge startup and shutdown.
+`src/desktop-storage-contract.ts` validates the desktop preference transport;
+`src/desktop-storage-bridge.ts` stores private atomic per-key records, and
+`src/desktop-storage.ts` restores localStorage before runtime startup across
+ephemeral desktop origins (HS2-RKZKX7). `npm run desktop:storage:test` exercises
+the rebuilt production client and bridge in Chromium and WebKit. See the
 [desktop signing guide](tauri-desktop.md) for prerequisites and validation.
 
 Reusable guidance is maintained in `Small-Tale/ai-playbook`. Local provenance lives in

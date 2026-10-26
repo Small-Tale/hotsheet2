@@ -13,6 +13,7 @@
     "op:desktop:build": "op run --env-file ../../.env -- zsh -ic 'HOTSHEET_DESKTOP_NODE=\"$(command -v node)\" npm run desktop:build'",
     "desktop:dev": "tauri dev",
     "desktop:test": "node scripts/desktop-host-smoke.mjs",
+    "desktop:storage:test": "npm run build && npm run build:host && node scripts/desktop-storage-smoke.mjs",
     "server:rebuild:release": "cd ../.. && cargo build --release -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp && cargo install --path crates/hotsheet-cli --force && cargo install --path crates/hotsheet-mcp --force && ./target/release/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
     "sign:setup:macos": "bash ../../scripts/setup-macos-dev-signing.sh",
     "prod:rebuild-lan": "npm run server:rebuild:release -- --force && npm run prod -- --host 0.0.0.0",

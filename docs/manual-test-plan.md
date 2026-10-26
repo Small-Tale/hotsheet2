@@ -6,7 +6,13 @@ Launch a fresh signed copy, approve the first Keychain access if requested,
 open and create a synthetic Git ticket project, then resize the actual app
 window wide → medium → narrow → wide. Verify the server remains registered
 after the window closes, the temporary client discovery entry disappears,
-and a reopened window reconnects. Validate codesign, notarization, and
+and a reopened window reconnects. For HS2-RKZKX7, change General's Show loading
+activity setting, quit the native application, relaunch twice, and confirm both
+project tabs and the setting return even when the bridge port changes. Repeat
+with a second isolated app-data profile and confirm profiles do not import each
+other's preferences. Previously abandoned random-port origins may need a one-time
+project reopen; unsent attachment blobs are tracked by HS2-791W19.
+Validate codesign, notarization, and
 Gatekeeper with [the desktop guide](tauri-desktop.md).
 
 Only behavior that cannot yet be exercised reliably in automated CI belongs here.

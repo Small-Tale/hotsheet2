@@ -21,7 +21,11 @@ fn required(root: &Path, relative: &str) -> Result<PathBuf, Box<dyn Error>> {
     Ok(path)
 }
 
-fn launch_bridge(root: &Path, binaries: &Path) -> Result<(Child, tauri::Url), Box<dyn Error>> {
+fn launch_bridge(
+    root: &Path,
+    binaries: &Path,
+    storage: &Path,
+) -> Result<(Child, tauri::Url), Box<dyn Error>> {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let ready = std::env::temp_dir().join(format!(
         "hotsheet-desktop-{}-{nonce}.json",
@@ -33,6 +37,7 @@ fn launch_bridge(root: &Path, binaries: &Path) -> Result<(Child, tauri::Url), Bo
         .arg(script)
         .args(["--host", "127.0.0.1", "--port", "0"])
         .env("HOTSHEET_REPO_ROOT", root)
+        .env("HOTSHEET_DESKTOP_STORAGE_DIRECTORY", storage)
         .env(
             "HOTSHEET_SERVER_BIN",
             required(binaries, "hotsheet-server")?,
@@ -109,11 +114,20 @@ pub fn run() {
                 let binaries = executable
                     .parent()
                     .ok_or("Hot Sheet executable has no parent directory")?;
-                let (child, url) = launch_bridge(&root, binaries)?;
+                let storage = match std::env::var_os("HOTSHEET_DESKTOP_STORAGE_DIRECTORY") {
+                    Some(directory) => PathBuf::from(directory),
+                    None => app.path().app_data_dir()?.join("browser-preferences-v1"),
+                };
+                let (child, url) = launch_bridge(&root, binaries, &storage)?;
                 app.manage(BridgeChild(Mutex::new(child)));
                 url
             };
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url));
+            if !cfg!(debug_assertions) {
+                window =
+                    window.initialization_script("window.__HOTSHEET_DESKTOP_STORAGE__ = true;");
+            }
+            window
                 .title("Hot Sheet 2")
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(360.0, 560.0)

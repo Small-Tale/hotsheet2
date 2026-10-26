@@ -13,6 +13,16 @@ through the packaged Node bridge and checks owner-pipe shutdown. The release
 bundle builds with `npm run desktop:build`; signed notarization and native
 window capture remain manual checks in [the desktop guide](tauri-desktop.md).
 
+HS2-RKZKX7 covers desktop preference hydration, mutation ordering, removal/clear,
+legacy import, failed-write retry, corrupt records, same-origin/size/namespace
+validation (including multibyte JSON), private atomic files, stale close-time
+revision rejection, later pagehide writes, per-key failure isolation, and independent/concurrent bridges in
+`clients/web/src/desktop-storage.test.ts` and `desktop-storage-bridge.test.ts`.
+`clients/web/scripts/desktop-storage-smoke.mjs` runs the rebuilt production frontend
+and bridge in Chromium/WebKit across different ports and reloads; signed native
+window relaunch remains manual. IndexedDB attachment persistence is HS2-791W19;
+large close-time flushes beyond the keepalive budget are HS2-E0H7S0.
+
 HS2-BNGHKM checks repeated test-owner death, fallback broker exit, and registration
 cleanup in `crates/hotsheet-server/tests/graceful_shutdown.rs`. The dedicated broker
 binary has the same exit check in `crates/hotsheet-terminals/tests/process_journal_broker.rs`;

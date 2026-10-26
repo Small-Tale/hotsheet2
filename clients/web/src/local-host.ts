@@ -31,6 +31,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 
 import { spawnSync } from './child-process';
 import { localClientUrl, publishClientUrl } from './client-discovery';
+import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
@@ -235,12 +236,17 @@ function cacheControl(value: string): MiddlewareHandler {
 const DEVELOPMENT_ONLY = /^\/ux-demo(?:[/?]|$)/;
 
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
-export function createLocalHostApp(distRoot: string, bridge: Hono = createDevApp(true)): Hono {
+export function createLocalHostApp(
+  distRoot: string,
+  bridge: Hono = createDevApp(true),
+  desktopStorageDirectory = process.env.HOTSHEET_DESKTOP_STORAGE_DIRECTORY,
+): Hono {
   const app = new Hono();
   app.use('*', async (context, next) => {
     if (DEVELOPMENT_ONLY.test(context.req.path)) return context.notFound();
     await next();
   });
+  if (desktopStorageDirectory) app.route('/', desktopStorageBridge(desktopStorageDirectory));
   app.route('/', bridge);
   // Hashed build assets never change for a given URL; the application document always revalidates.
   app.use('/assets/*', cacheControl('public, max-age=31536000, immutable'));

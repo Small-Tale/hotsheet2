@@ -7,6 +7,25 @@ only on an ephemeral loopback port, keeps the server credential outside web
 content, and exits when the app closes. The standalone Rust server and its work
 continue after the window closes.
 
+Desktop projects and device preferences survive changes to the ephemeral bridge
+port (HS2-RKZKX7). Before the client starts, the release shell restores Hot Sheet's
+localStorage keys from private per-key records in the native app-data directory
+under `browser-preferences-v1`, then saves subsequent changes through its local
+bridge. An explicit `HOTSHEET_DESKTOP_STORAGE_DIRECTORY` overrides that directory
+for isolated native verification; use an absolute path and an isolated
+`HOTSHEET_HOME` with a synthetic application identifier. Separate app-data directories remain isolated; simultaneous bridges save
+unrelated keys independently. Ordinary browser and development sessions retain
+their existing origin-scoped storage. Credentials remain owned by the server.
+
+Values visible in an older origin are imported when no desktop record exists.
+WebKit origins abandoned by earlier random-port launches cannot be enumerated
+from JavaScript, so previously forgotten projects may need to be reopened once.
+IndexedDB draft attachment blobs remain origin-scoped pending HS2-791W19.
+Small close-time writes use ordered keepalive retries; large or aggregate writes
+beyond the browser keepalive budget need a native flush handshake (HS2-E0H7S0).
+`npm run desktop:storage:test` checks the rebuilt production client and bridge
+across fresh origins and reloads in Chromium and WebKit using synthetic projects.
+
 ## Build locally
 
 Install Xcode command line tools, Rust, and Node 22. From the repository root,
