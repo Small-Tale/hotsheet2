@@ -25,11 +25,12 @@ import { type TicketStatus } from '../components/status-badge';
 import { type InspectorTab, type TicketInspectorProps } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
-import { type NotWorkingTarget, type PendingEvidence, type Project } from '../interactions/types';
+import { type NotWorkingTarget, type Project } from '../interactions/types';
 import { type ProjectTicketSources } from '../new-ticket-source';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
+import type { StoredPendingAttachment } from '../workspace-session';
 
 /** Live application bindings createInspectorSurface reads (HS2-K0VC2C). */
 export interface InspectorSurfaceDependencies {
@@ -162,21 +163,23 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
   function notWorkingSurfaceProps(
     target: NotWorkingTarget,
     note: string,
-    files: PendingEvidence[],
+    files: StoredPendingAttachment[],
     submitting: boolean,
     submissionError: string,
+    recoveryBlocked = false,
   ): Parameters<typeof NotWorkingSurface>[0] {
     const capabilities = target.slug ? capabilitiesFor(target.connectionId) : undefined;
     return {
       slug: target.slug || 'ticket',
       mode: target.mode,
-      open: Boolean(target.slug),
+      open: Boolean(target.slug) && !submitting,
       note,
       attachments: files,
       notesEnabled: capabilities?.notes ?? true,
       attachmentsEnabled: capabilities?.attachments ?? true,
       submitting,
       error: submissionError,
+      recoveryBlocked,
     };
   }
   function attachmentItems(ticket: FullTicket, current: Project) {

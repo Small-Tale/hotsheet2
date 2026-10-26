@@ -22,7 +22,7 @@ machine-local provider and permission-vault envelopes after verified legacy migr
 
 **Shipped desktop preference persistence:** the packaged Tauri app restores projects and
 device settings across ephemeral bridge ports from private native app-data records
-(HS2-RKZKX7); draft attachment blobs remain tracked by HS2-791W19. See the
+(HS2-RKZKX7), including staged draft attachment bytes (HS2-791W19). See the
 [desktop guide](tauri-desktop.md).
 
 > Status legend used throughout: **Decided** (recommendation made, ready to

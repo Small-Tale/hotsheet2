@@ -20,11 +20,33 @@ their existing origin-scoped storage. Credentials remain owned by the server.
 Values visible in an older origin are imported when no desktop record exists.
 WebKit origins abandoned by earlier random-port launches cannot be enumerated
 from JavaScript, so previously forgotten projects may need to be reopened once.
-IndexedDB draft attachment blobs remain origin-scoped pending HS2-791W19.
+Staged ticket-composer and Not working attachment bytes also survive the port change
+(HS2-791W19). The desktop client sends them to the bridge, which stores each one as a single
+private `<sha256 key>.draft` record under `draft-files-v1` in the same directory: a 4-byte
+metadata length, the metadata JSON, then the bytes. A save writes a temporary and renames it
+over the record, so a reader gets the complete old record or the complete new one, never old
+metadata with new bytes. The directory is 0700 and records are 0600. Saves must declare a
+`Content-Length` (browsers always do for a File) and are refused with 411 otherwise, so every
+accepted save joins its key's queue on arrival and a later removal cannot be overtaken. Uploads
+keep the server's 100 MiB attachment limit. Keys stay scoped by draft kind, project, and draft
+file id; removing, discarding, or submitting a draft deletes its record.
+
+A failed recovery copy never silently drops a staged file. If a save fails (for example a full
+disk), the file stays attached with its bytes in memory, the composer or Not working dialog
+shows a recovery warning that names the affected files, and the next change retries the save.
+The warning clears only when every current recovery failure is resolved. If one copy is missing or cannot be read at relaunch, the others restore, the dialog says how many
+could not, and their removable references stay in the draft for the next reopen. Create and
+Submit remain disabled, including direct form submissions, until every unsaved or unrestored
+file recovers or is explicitly removed. Cancel discards the current draft. Successful submission
+cleans only the submitted origin references; delayed staging, restore, close-animation or
+submission responses cannot overwrite a later project draft or Not working target. Ordinary browser sessions keep these bytes in origin-scoped IndexedDB with
+the same per-file failure handling. Files staged by an earlier build in a now-abandoned
+origin's IndexedDB cannot be recovered.
 Small close-time writes use ordered keepalive retries; large or aggregate writes
 beyond the browser keepalive budget need a native flush handshake (HS2-E0H7S0).
 `npm run desktop:storage:test` checks the rebuilt production client and bridge
-across fresh origins and reloads in Chromium and WebKit using synthetic projects.
+across fresh origins and reloads in Chromium and WebKit using synthetic projects and
+synthetic draft attachment bytes.
 
 ## Build locally
 

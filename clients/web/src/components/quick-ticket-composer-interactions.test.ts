@@ -83,21 +83,34 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     expect(bindings.submit).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses to hide while submitting and resets only an expanded composer after hiding', () => {
+  it('refuses to hide while submitting and resets a user-dismissed expanded composer', () => {
     const popup = {};
-    const hide = cancelable({ target: popup });
+    expanded = true;
     submitting = true;
+    const hide = cancelable({ target: popup });
     handler('capture:wa-hide', 'quick-ticket-composer')(hide, popup);
+    expect(hide.preventDefault).toHaveBeenCalledTimes(1);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
+    expect(bindings.dismissed).not.toHaveBeenCalled();
     submitting = false;
     handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: popup }), popup);
-    handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: {} }), popup);
-    expect(hide.preventDefault).toHaveBeenCalledTimes(1);
-    const afterHide = handler('capture:wa-after-hide', 'quick-ticket-composer');
-    afterHide({ target: popup }, popup);
-    expanded = true;
-    afterHide({ target: {} }, popup);
-    afterHide({ target: popup }, popup);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: {} }, popup);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
     expect(bindings.dismissed).toHaveBeenCalledTimes(1);
+  });
+
+  it('HS2-791W19 ignores an older programmatic hide or a hide followed by a new show', () => {
+    bindings.dismissed.mockClear();
+    const popup = {};
+    expanded = false;
+    handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: popup }), popup);
+    expanded = true;
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
+    expect(bindings.dismissed).not.toHaveBeenCalled();
+    handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: popup }), popup);
+    handler('capture:wa-show', 'quick-ticket-composer')({ target: popup }, popup);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
+    expect(bindings.dismissed).not.toHaveBeenCalled();
   });
 
   it('stages files the Kerf trigger and drop zone report, ignoring other pickers and empty picks', () => {

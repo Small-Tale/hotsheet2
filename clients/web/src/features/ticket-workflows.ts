@@ -32,7 +32,9 @@ import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
 import { copyWithSelection } from '../copy-text';
 import { createDebouncedAutosave, createFocusLossAutosave, type DebouncedAutosave } from '../debounced-autosave';
+import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
+import { finishDraftSubmission } from '../draft-submission-state';
 import { presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
@@ -117,7 +119,7 @@ import {
 } from '../ticket-views';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
-import { deleteDraftFiles, saveDraftFile } from '../workspace-session';
+import type { StoredPendingAttachment } from '../workspace-session';
 
 interface TicketWorkflowMutableState {
   blockedReasonDraftBase: string;
@@ -189,6 +191,9 @@ export interface TicketWorkflowDependencies {
   notWorkingTarget: Signal<NotWorkingTarget>;
   notWorkingNote: Signal<string>;
   notWorkingFiles: Signal<PendingEvidence[]>;
+  /** References whose recovery copy could not be read; kept until submitted or discarded (HS2-791W19). */
+  notWorkingUnrestoredFiles: Signal<StoredPendingAttachment[]>;
+  notWorkingScreening: Signal<boolean>;
   notWorkingSubmitting: Signal<boolean>;
   notWorkingError: Signal<string>;
   composerExpanded: Signal<boolean>;
@@ -201,6 +206,7 @@ export interface TicketWorkflowDependencies {
   /** The source each project last created a ticket in, in memory only (HS2-NZMJBJ). */
   lastTicketSourceByProject: Signal<Record<string, string>>;
   composerAttachments: Signal<PendingEvidence[]>;
+  composerUnrestoredAttachments: Signal<StoredPendingAttachment[]>;
   composerAttachmentMessage: Signal<string>;
   composerAttachmentError: Signal<boolean>;
   composerScreening: Signal<boolean>;
@@ -316,6 +322,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     notWorkingTarget,
     notWorkingNote,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
+    notWorkingScreening,
     notWorkingSubmitting,
     notWorkingError,
     composerExpanded,
@@ -326,6 +334,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerAttachmentMessage,
     composerAttachmentError,
     composerScreening,
@@ -377,8 +386,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const MAX_CONCURRENT_EDIT_RETRIES = 4;
   let ticketCloseSearchGeneration = 0,
     ticketCloseSearchTimer: number | undefined,
-    composerAttachmentEpoch = 0;
+    composerAttachmentEpoch = 0,
+    notWorkingAttachmentEpoch = 0;
   const activeComposerScreenings = new Set<symbol>();
+  const activeNotWorkingScreenings = new Set<symbol>();
   /** Recently viewed ticket details rendered without a loading view on reopen (HS2-4Q04Z9). */
   const detailCache = createTicketDetailCache();
   interface DraftSlot {
@@ -1910,19 +1921,31 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     });
   }
   function closeNotWorking(clearStored = true) {
-    const ids = notWorkingFiles.value.map((item) => item.id),
+    notWorkingAttachmentEpoch += 1;
+    const ids = [...notWorkingFiles.value, ...notWorkingUnrestoredFiles.value].map((item) => item.id),
       scope = draftScope('not-working', notWorkingTarget.value.projectId);
+    activeNotWorkingScreenings.clear();
+    notWorkingScreening.value = false;
     notWorkingTarget.value = CLOSED_NOT_WORKING_TARGET;
     notWorkingNote.value = '';
     notWorkingFiles.value = [];
+    notWorkingUnrestoredFiles.value = [];
     notWorkingSubmitting.value = false;
     notWorkingError.value = '';
-    if (clearStored) void deleteDraftFiles(scope, ids);
+    if (clearStored) void draftFiles.remove(scope, ids).catch(() => undefined);
     scheduleProjectSessionPersistence();
   }
   function presentNotWorkingDialog() {
+    const target = notWorkingTarget.value,
+      epoch = notWorkingAttachmentEpoch;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        if (
+          epoch !== notWorkingAttachmentEpoch ||
+          notWorkingTarget.value !== target ||
+          project()?.id !== target.projectId
+        )
+          return;
         const dialog = document.querySelector<Control>('[data-component="not-working-dialog"]'),
           // The host is the one exposed dialog; Web Awesome 3.14 would also label the shadow dialog.
           native = dialog ? quietWebAwesomeNativeDialog(dialog) : null;
@@ -1934,6 +1957,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function openNotWorking(ticket: WireTicketRow, mode: NotWorkingTarget['mode'] = 'not-working') {
     const current = project();
     if (!current) return;
+    notWorkingAttachmentEpoch += 1;
     notWorkingTarget.value = {
       projectId: current.id,
       apiPath: current.apiPath,
@@ -1942,8 +1966,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       connectionId: ticket.connection_id,
       mode,
     };
+    activeNotWorkingScreenings.clear();
+    notWorkingScreening.value = false;
     notWorkingNote.value = '';
     notWorkingFiles.value = [];
+    notWorkingUnrestoredFiles.value = [];
     notWorkingSubmitting.value = false;
     notWorkingError.value = '';
     scheduleProjectSessionPersistence();
@@ -2132,26 +2159,44 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     await openTicketLinkMatch([...unique.values()][0]);
   }
   async function addNotWorkingFiles(files: FileList | File[]) {
-    const target = notWorkingTarget.value;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    if (!target || !(capabilitiesFor(target.connectionId)?.attachments ?? true)) return;
-    const screened = await screenAttachmentFiles(Array.from(files)),
-      pending = screened.readable.map((file) => ({ id: browserRandomId(), name: file.name, file }));
-    notWorkingFiles.value = [...notWorkingFiles.value, ...pending];
-    await Promise.all(
-      pending.map((item) => saveDraftFile(draftScope('not-working', target.projectId), item.id, item.file)),
-    ).catch(() => undefined);
-    notWorkingError.value = describeUnreadableAttachments(screened.unreadable);
-    scheduleProjectSessionPersistence();
-    presentNotWorkingDialog();
+    const target = notWorkingTarget.value,
+      epoch = notWorkingAttachmentEpoch,
+      screening = Symbol();
+    if (
+      !target.slug ||
+      project()?.id !== target.projectId ||
+      !(capabilitiesFor(target.connectionId)?.attachments ?? true)
+    )
+      return;
+    const active = () =>
+      epoch === notWorkingAttachmentEpoch && notWorkingTarget.value === target && project()?.id === target.projectId;
+    activeNotWorkingScreenings.add(screening);
+    notWorkingScreening.value = true;
+    try {
+      const screened = await screenAttachmentFiles(Array.from(files));
+      if (!active()) return;
+      const pending = screened.readable.map((file) => ({ id: browserRandomId(), name: file.name, file }));
+      notWorkingFiles.value = [...notWorkingFiles.value, ...pending];
+      await draftFiles.stage(draftScope('not-working', target.projectId), pending);
+      if (!active()) return;
+      notWorkingError.value = describeUnreadableAttachments(screened.unreadable);
+      scheduleProjectSessionPersistence();
+      presentNotWorkingDialog();
+    } finally {
+      activeNotWorkingScreenings.delete(screening);
+      if (active()) notWorkingScreening.value = activeNotWorkingScreenings.size > 0;
+    }
   }
   function openTicketComposer(trigger?: HTMLElement) {
     if (composerExpanded.value) return;
     if (trigger && document.activeElement !== trigger) trigger.focus({ preventScroll: true });
+    const epoch = ++composerAttachmentEpoch,
+      projectId = project()?.id;
     composerExpanded.value = true;
     scheduleProjectSessionPersistence();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        if (epoch !== composerAttachmentEpoch || project()?.id !== projectId) return;
         showQuickTicketComposer(document);
         focusQuickTicketComposerTitle(document);
       }),
@@ -2180,7 +2225,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     );
   }
   function resetTicketComposer(clearStored = true) {
-    const ids = composerAttachments.value.map((item) => item.id),
+    const ids = [...composerAttachments.value, ...composerUnrestoredAttachments.value].map((item) => item.id),
       scope = draftScope('composer');
     composerAttachmentEpoch += 1;
     activeComposerScreenings.clear();
@@ -2192,16 +2237,17 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerUpNext.value = false;
     composerSource.value = undefined;
     composerAttachments.value = [];
+    composerUnrestoredAttachments.value = [];
     composerAttachmentMessage.value = '';
     composerAttachmentError.value = false;
-    if (clearStored) void deleteDraftFiles(scope, ids);
+    if (clearStored) void draftFiles.remove(scope, ids).catch(() => undefined);
     scheduleProjectSessionPersistence();
   }
   async function addNewTicketFiles(files: FileList | File[]) {
     const origin = project(),
-      epoch = composerAttachmentEpoch,
       screening = Symbol();
     openTicketComposer();
+    const epoch = composerAttachmentEpoch;
     if (!origin || !canStageNewTicketAttachments()) {
       composerAttachmentMessage.value = 'The selected ticket source cannot create tickets with attachments.';
       composerAttachmentError.value = true;
@@ -2216,14 +2262,17 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       if (composerAttachmentEpoch !== epoch || project()?.id !== origin.id) return;
       const pending = screened.readable.map((file) => ({ id: browserRandomId(), name: file.name, file }));
       composerAttachments.value = [...composerAttachments.value, ...pending];
-      await Promise.all(
-        pending.map((item) => saveDraftFile(draftScope('composer', origin.id), item.id, item.file)),
-      ).catch(() => undefined);
+      await draftFiles.stage(draftScope('composer', origin.id), pending);
+      if (composerAttachmentEpoch !== epoch || project()?.id !== origin.id) return;
       const warning = describeUnreadableAttachments(screened.unreadable);
       composerAttachmentMessage.value = warning;
       composerAttachmentError.value = Boolean(warning);
       scheduleProjectSessionPersistence();
-      requestAnimationFrame(() => requestAnimationFrame(() => focusQuickTicketComposerTitle(document)));
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (composerAttachmentEpoch === epoch && project()?.id === origin.id) focusQuickTicketComposerTitle(document);
+        }),
+      );
     } finally {
       activeComposerScreenings.delete(screening);
       if (composerAttachmentEpoch === epoch && project()?.id === origin.id)
@@ -2251,11 +2300,32 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       composerAttachmentError.value = true;
       return;
     }
+    if (
+      draftFiles.state(
+        draftScope('composer', origin.id),
+        composerAttachments.value,
+        composerUnrestoredAttachments.value,
+      ).blocked
+    )
+      return;
+    const epoch = composerAttachmentEpoch,
+      submitted = [...composerAttachments.value],
+      scope = draftScope('composer', origin.id),
+      snapshot = {
+        open: composerExpanded.value,
+        title: composerTitle.value,
+        details: composerDetails.value,
+        category: composerCategory.value,
+        upNext: composerUpNext.value,
+        attachments: submitted.map(({ id, name }) => ({ id, name })),
+      },
+      active = () => composerAttachmentEpoch === epoch && project()?.id === origin.id;
     const client = new Api(origin.apiPath),
-      files = composerAttachments.value.map((item) => item.file),
+      files = submitted.map((item) => item.file),
       batch_id = browserRandomId(),
       placement = newTicketCreationPlacement(selectedView.value, composerUpNext.value),
       finishLocalCreation = beginLocalTicketCreation();
+    let completedEpoch: number | undefined;
     composerSubmitting.value = true;
     composerAttachmentMessage.value = files.length
       ? `Creating ticket and adding ${files.length} attachment${files.length === 1 ? '' : 's'}…`
@@ -2269,8 +2339,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             origin.id,
             {
               title,
-              details: composerDetails.value,
-              category: composerCategory.value,
+              details: snapshot.details,
+              category: snapshot.category,
               ...placement,
             },
             source,
@@ -2302,8 +2372,24 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           return updated;
         },
         (created) => {
+          finishDraftSubmission(localStorage, origin.id, { kind: 'composer', draft: snapshot });
+          if (!active()) {
+            void draftFiles
+              .remove(
+                scope,
+                submitted.map((item) => item.id),
+              )
+              .catch(() => undefined);
+            if (project()?.id === origin.id) {
+              const ids = new Set(submitted.map((item) => item.id));
+              composerAttachments.value = composerAttachments.value.filter((item) => !ids.has(item.id));
+              composerUnrestoredAttachments.value = composerUnrestoredAttachments.value.filter(
+                (item) => !ids.has(item.id),
+              );
+            }
+            return;
+          }
           resetTicketComposer();
-          if (project()?.id !== origin.id) return;
           cancelTicketDrafts();
           tickets.value = prependCreatedTicketRow(tickets.value, created);
           publishOptimisticTicketRows(origin.id);
@@ -2316,7 +2402,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           revealTicketInspector();
           presentTicket(created);
           beginDetailsEdit();
+          completedEpoch = composerAttachmentEpoch;
           afterComposerFocusRestore(() => {
+            if (completedEpoch !== composerAttachmentEpoch || project()?.id !== origin.id) return;
             const source = activeTicketSurface().querySelector<HTMLElement>('[name="markdown-source"]'),
               active = document.activeElement; // Only claim focus for the details editor if the user has not already focused another control (e.g. opened the priority select) — otherwise this delayed focus steals it and closes their popup (HS2-43F14D).
             if (
@@ -2331,7 +2419,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         },
       );
       const failure = describeNewTicketAttachmentFailures(result.failed);
-      if (project()?.id !== origin.id) return;
+      if (completedEpoch !== composerAttachmentEpoch || project()?.id !== origin.id || composerExpanded.value) return;
       if (selectedTicket.value?.id === result.ticket.id)
         selectedTicket.value = { ...selectedTicket.value, attachments: result.ticket.attachments };
       if (failure) {
@@ -2340,6 +2428,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         error.value = failure;
       }
     } catch (reason) {
+      if (!active()) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       composerAttachmentMessage.value = `Ticket creation failed: ${message}`;
       composerAttachmentError.value = true;
@@ -2351,7 +2440,17 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
 
   async function submitNotWorking() {
     const target = notWorkingTarget.value;
-    if (!target.slug || notWorkingSubmitting.value) return;
+    if (
+      !target.slug ||
+      notWorkingSubmitting.value ||
+      notWorkingScreening.value ||
+      draftFiles.state(
+        draftScope('not-working', target.projectId),
+        notWorkingFiles.value,
+        notWorkingUnrestoredFiles.value,
+      ).blocked
+    )
+      return;
     const owning = projects.value.find((item) => item.id === target.projectId);
     if (!owning) {
       notWorkingError.value = 'The project is no longer open.';
@@ -2361,10 +2460,20 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       capabilities = capabilitiesFor(target.connectionId),
       note = (capabilities?.notes ?? true) ? notWorkingNote.value : '',
       files = [...notWorkingFiles.value],
-      scope = draftScope('not-working', target.projectId);
+      epoch = ++notWorkingAttachmentEpoch,
+      scope = draftScope('not-working', target.projectId),
+      snapshot = {
+        ticketId: target.ticketId,
+        slug: target.slug,
+        connectionId: target.connectionId,
+        mode: target.mode,
+        note: notWorkingNote.value,
+        attachments: files.map(({ id, name }) => ({ id, name })),
+      },
+      active = () =>
+        notWorkingAttachmentEpoch === epoch && project()?.id === target.projectId && notWorkingTarget.value === target;
     notWorkingSubmitting.value = true;
     notWorkingError.value = '';
-    notWorkingTarget.value = CLOSED_NOT_WORKING_TARGET;
     try {
       const current = (await client.checkoutTicket(target.projectId, `${target.connectionId}:${target.ticketId}`))
         .ticket;
@@ -2383,7 +2492,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           },
         },
       );
-      if (project()?.id === owning.id) {
+      if (active()) {
         setProjectTicketRows(
           owning.id,
           projectTabTicketRows(owning.id).map((row) => (row.id === full.id ? ticketRowFromFull(row, full) : row)),
@@ -2392,15 +2501,21 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         state.ticketSelectionAnchor = target.slug;
         presentTicket(full);
       }
-      notWorkingNote.value = '';
-      notWorkingFiles.value = [];
-      notWorkingSubmitting.value = false;
-      void deleteDraftFiles(
-        scope,
-        files.map((item) => item.id),
-      );
-      scheduleProjectSessionPersistence();
+      finishDraftSubmission(localStorage, target.projectId, { kind: 'not-working', draft: snapshot });
+      void draftFiles
+        .remove(
+          scope,
+          files.map((item) => item.id),
+        )
+        .catch(() => undefined);
+      if (active()) closeNotWorking(false);
+      else if (project()?.id === target.projectId && notWorkingTarget.value.ticketId === target.ticketId) {
+        const ids = new Set(files.map((item) => item.id));
+        notWorkingFiles.value = notWorkingFiles.value.filter((item) => !ids.has(item.id));
+        notWorkingUnrestoredFiles.value = notWorkingUnrestoredFiles.value.filter((item) => !ids.has(item.id));
+      }
     } catch (reason) {
+      if (!active()) return;
       notWorkingTarget.value = target;
       notWorkingNote.value = note;
       notWorkingFiles.value = files;
@@ -2412,6 +2527,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
 
   return {
+    attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,
     flushTicketDrafts,

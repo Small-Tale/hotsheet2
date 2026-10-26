@@ -32,7 +32,13 @@ resources for bundling. `npm run desktop:build` packages the `.app`, and
 `src/desktop-storage-contract.ts` validates the desktop preference transport;
 `src/desktop-storage-bridge.ts` stores private atomic per-key records, and
 `src/desktop-storage.ts` restores localStorage before runtime startup across
-ephemeral desktop origins (HS2-RKZKX7). `npm run desktop:storage:test` exercises
+ephemeral desktop origins (HS2-RKZKX7). The same bridge keeps staged draft attachment
+bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
+`workspace-session.ts` draft files there instead of IndexedDB on desktop, and
+`src/draft-file-recovery.ts` derives blocking recovery state from failed saves and unreadable
+references; `src/draft-submission-state.ts` cleans submitted origin references while preserving
+later draft text and references (HS2-791W19).
+`npm run desktop:storage:test` exercises
 the rebuilt production client and bridge in Chromium and WebKit. See the
 [desktop signing guide](tauri-desktop.md) for prerequisites and validation.
 

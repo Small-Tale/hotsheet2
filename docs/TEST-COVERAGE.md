@@ -20,8 +20,31 @@ revision rejection, later pagehide writes, per-key failure isolation, and indepe
 `clients/web/src/desktop-storage.test.ts` and `desktop-storage-bridge.test.ts`.
 `clients/web/scripts/desktop-storage-smoke.mjs` runs the rebuilt production frontend
 and bridge in Chromium/WebKit across different ports and reloads; signed native
-window relaunch remains manual. IndexedDB attachment persistence is HS2-791W19;
-large close-time flushes beyond the keepalive budget are HS2-E0H7S0.
+window relaunch remains manual. Large close-time flushes beyond the keepalive budget are
+HS2-E0H7S0.
+
+HS2-791W19 covers desktop draft attachment bytes. `clients/web/src/desktop-draft-files-bridge.test.ts`
+covers exact binary and Unicode-name round trips across recreated bridges, one private atomic
+record, project/kind/root isolation, removal, a removal sent during a held-stream save, 411 for
+unknown-length or chunked saves, a fault injected at the commit point keeping the complete
+previous record, an aborted upload behind a slower save, origin/key/metadata/size rejection,
+and truncated or corrupt record refusal. `draft-file-recovery.test.ts` covers in-memory
+retention, retry, coalescing, removal during pending or in-flight saves, per-file load failure,
+whole-store failure, and recovery state derived from all current references across healthy edits,
+scopes, retry and explicit removal. `draft-submission-state.test.ts` covers origin-only cleanup
+and preservation of newer text, references and report targets. `desktop-draft-files.test.ts` covers the transport,
+desktop-versus-browser routing, and one failed read among two. Through the real composer,
+`clients/web/tests/desktop-draft-files.spec.ts` stages, relaunches on another origin, restores,
+removes, and creates a ticket whose stored bytes match. It also keeps an unreadable reference
+across a later session save and restores it on the next relaunch, and keeps a file whose save
+failed, retries it, and restores it after relaunch. Both shipped parents block button and direct
+form submission for unrestored references until recovery or explicit removal. Held success/failure
+responses preserve a later project draft/report; held restore and staging responses cannot
+resurrect an old same-project surface after cancel/reopen. The shared composer interaction
+regression pins delayed hide/show ordering so an old close animation cannot reset a later draft. Each restored state is captured at wide,
+medium, narrow, and wide again. `desktop-storage-smoke.mjs` recovers bytes across ports in
+Chromium and WebKit through the production bridge. The packaged app relaunch is in the
+manual plan.
 
 HS2-BNGHKM checks repeated test-owner death, fallback broker exit, and registration
 cleanup in `crates/hotsheet-server/tests/graceful_shutdown.rs`. The dedicated broker

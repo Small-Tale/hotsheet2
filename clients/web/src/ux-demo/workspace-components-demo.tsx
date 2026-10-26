@@ -135,6 +135,7 @@ export const composerSources = [
 export const composerAttachments = signal<readonly { id: string; name: string }[]>([]);
 /** Whether the demo project has several writable sources (the Select) or one (plain text). */
 export const composerMultipleSources = signal(true);
+const composerRecoveryBlocked = signal(false);
 /** The demo's in-memory "most recently used" source, which the next composer preselects. */
 export const composerSource = signal<string>(composerSources[0].value);
 /** The source picked in the open composer; creating remembers it, cancelling forgets it. */
@@ -490,7 +491,11 @@ export function WorkspaceHeaderDemo() {
 /** Restore the canonical composer settings and sync the live controls (HS2-X1SM48). */
 export function resetQuickTicketComposerDemo(root?: ParentNode): void {
   composerMultipleSources.value = true;
-  if (root) syncSettingsControls(root, 'quick-ticket-composer', { values: { 'composer-source-count': 'several' } });
+  composerRecoveryBlocked.value = false;
+  if (root)
+    syncSettingsControls(root, 'quick-ticket-composer', {
+      values: { 'composer-source-count': 'several', 'composer-recovery': 'ready' },
+    });
 }
 
 export function QuickTicketComposerSettings() {
@@ -503,6 +508,15 @@ export function QuickTicketComposerSettings() {
         choices={[
           { value: 'one', label: 'One (Plain Text)' },
           { value: 'several', label: 'Several (Source Select)' },
+        ]}
+      />
+      <Select
+        name="composer-recovery"
+        label="Attachment Recovery"
+        value={composerRecoveryBlocked.value ? 'blocked' : 'ready'}
+        choices={[
+          { value: 'ready', label: 'Ready' },
+          { value: 'blocked', label: 'Recovery Failed' },
         ]}
       />
       <Button type="button" action={'reset-settings'}>
@@ -528,7 +542,17 @@ export function QuickTicketComposerDemo() {
           sourceIsDefault={demoComposerSource().value === composerSources[0].value}
           sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
           source={demoComposerSource().value}
-          attachments={composerAttachments.value}
+          attachments={[
+            ...composerAttachments.value,
+            ...(composerRecoveryBlocked.value ? [{ id: 'unrestored-demo', name: 'unrestored-diagnostic.txt' }] : []),
+          ]}
+          recoveryBlocked={composerRecoveryBlocked.value}
+          attachmentError={composerRecoveryBlocked.value}
+          attachmentMessage={
+            composerRecoveryBlocked.value
+              ? 'Could not restore unrestored-diagnostic.txt. Recover or remove it before creating the ticket.'
+              : ''
+          }
           attachmentsEnabled={demoComposerSource().attachments}
         />
         <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
@@ -932,6 +956,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         composerDetails.value = '';
         composerUpNext.value = false;
         composerSourcePick.value = undefined;
+        composerRecoveryBlocked.value = false;
         composerAttachments.value = [];
         recordCollectionEvent('Ticket creation cancelled');
       },
@@ -957,13 +982,16 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         ];
       },
       removeAttachment: (id) => {
+        if (id === 'unrestored-demo') composerRecoveryBlocked.value = false;
         composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
       },
       clearAttachments: () => {
+        composerRecoveryBlocked.value = false;
         composerAttachments.value = [];
         recordCollectionEvent('Staged attachments removed');
       },
       submit: () => {
+        if (composerRecoveryBlocked.value) return;
         if (!createDemoTicket())
           recordCollectionEvent(
             composerTitle.value.trim()
@@ -1008,6 +1036,11 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
       if (selectedId.value === 'ticket-reader') readerTab.value = tab;
       else inspectorTab.value = tab;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="quick-ticket-composer"] [name="composer-recovery"]', (_event, target) => {
+      composerRecoveryBlocked.value = (target as FormControl).value === 'blocked';
     }),
   );
   // The right rail's standard toggle (HS2-QQW6CT) both hides and shows the inspector.

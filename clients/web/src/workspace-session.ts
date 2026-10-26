@@ -1,4 +1,5 @@
 import type { InspectorTab } from './components/ticket-inspector';
+import { deleteDesktopDraftFile, loadDesktopDraftFile, saveDesktopDraftFile } from './desktop-draft-files';
 import type { InlineFeedbackReply } from './feedback-replies';
 import type { TicketView } from './ticket-views';
 
@@ -196,22 +197,47 @@ function database(): Promise<IDBDatabase> {
     };
   });
 }
+/** The packaged desktop shell's bridge owns draft bytes; browsers keep origin-scoped IndexedDB. */
+function desktopDraftFiles() {
+  return typeof window !== 'undefined' && '__HOTSHEET_DESKTOP_STORAGE__' in window;
+}
 export async function saveDraftFile(scope: string, id: string, file: File) {
+  if (desktopDraftFiles()) {
+    await saveDesktopDraftFile(`${scope}:${id}`, file);
+    return;
+  }
   const db = await database();
   await transaction(db, 'readwrite', (store) => {
     store.put({ blob: file, name: file.name, type: file.type, lastModified: file.lastModified }, `${scope}:${id}`);
   });
   db.close();
 }
+export interface StoredDraftFile {
+  id: string;
+  name: string;
+  file: File;
+}
+/**
+ * Load each staged file independently (HS2-791W19): `files` were found, absent copies are
+ * dropped, and `failed` references could not be read now and must be kept for another try.
+ */
 export async function loadDraftFiles(
   scope: string,
   items: readonly StoredPendingAttachment[],
-): Promise<Array<{ id: string; name: string; file: File }>> {
-  const db = await database();
-  const loaded = await Promise.all(
-    items.map(async (item) => {
+): Promise<{ files: StoredDraftFile[]; failed: StoredPendingAttachment[] }> {
+  if (!items.length) return { files: [], failed: [] };
+  let read: (item: StoredPendingAttachment) => Promise<StoredDraftFile | undefined>, db: IDBDatabase | undefined;
+  if (desktopDraftFiles())
+    read = async (item) => {
+      const file = await loadDesktopDraftFile(`${scope}:${item.id}`);
+      return file ? { id: item.id, name: file.name, file } : undefined;
+    };
+  else {
+    const opened = await database();
+    db = opened;
+    read = async (item) => {
       const value = await requestValue<{ blob: Blob; name: string; type: string; lastModified: number }>(
-        db.transaction(STORE).objectStore(STORE).get(`${scope}:${item.id}`),
+        opened.transaction(STORE).objectStore(STORE).get(`${scope}:${item.id}`),
       );
       return value
         ? {
@@ -220,13 +246,24 @@ export async function loadDraftFiles(
             file: new File([value.blob], value.name, { type: value.type, lastModified: value.lastModified }),
           }
         : undefined;
-    }),
-  );
-  db.close();
-  return loaded.filter((item): item is { id: string; name: string; file: File } => Boolean(item));
+    };
+  }
+  const results = await Promise.allSettled(items.map(read));
+  db?.close();
+  const files: StoredDraftFile[] = [],
+    failed: StoredPendingAttachment[] = [];
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') failed.push(items[index]);
+    else if (result.value) files.push(result.value);
+  });
+  return { files, failed };
 }
 export async function deleteDraftFiles(scope: string, ids: readonly string[]) {
   if (!ids.length) return;
+  if (desktopDraftFiles()) {
+    await Promise.all(ids.map((id) => deleteDesktopDraftFile(`${scope}:${id}`)));
+    return;
+  }
   const db = await database();
   await transaction(db, 'readwrite', (store) => {
     for (const id of ids) store.delete(`${scope}:${id}`);

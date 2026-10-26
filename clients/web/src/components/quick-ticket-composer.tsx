@@ -43,6 +43,8 @@ export interface QuickTicketComposerProps {
   attachmentMessage?: string;
   attachmentError?: boolean;
   busy?: boolean;
+  /** Unresolved recovery copies must be recovered or explicitly removed before Create. */
+  recoveryBlocked?: boolean;
   submitting?: boolean;
 }
 
@@ -141,6 +143,7 @@ export function QuickTicketComposer({
   attachmentMessage = '',
   attachmentError = false,
   busy = false,
+  recoveryBlocked = false,
   submitting = false,
 }: QuickTicketComposerProps) {
   // Files staged for a source that takes attachments stay listed after switching to one that does
@@ -331,7 +334,7 @@ export function QuickTicketComposer({
               <Button
                 type="submit"
                 emphasis="primary"
-                disabled={!canCreate || strandedAttachments || busy || submitting}
+                disabled={!canCreate || strandedAttachments || busy || submitting || recoveryBlocked}
               >
                 {submitting ? 'Creating…' : 'Create ticket'}
               </Button>

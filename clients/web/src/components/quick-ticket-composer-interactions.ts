@@ -48,14 +48,26 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
       bindings.expand(target as HTMLElement);
     }),
   );
+  let dismissAfterHide = false;
+  lifetime.add(
+    delegateCapture(root, 'wa-show', COMPOSER, (event, target) => {
+      if (event.target === target) dismissAfterHide = false;
+    }),
+  );
   lifetime.add(
     delegateCapture(root, 'wa-hide', COMPOSER, (event, target) => {
-      if (event.target === target && !bindings.canHide()) event.preventDefault();
+      if (event.target !== target) return;
+      dismissAfterHide = bindings.expanded() && bindings.canHide();
+      if (!bindings.canHide()) event.preventDefault();
     }),
   );
   lifetime.add(
     delegateCapture(root, 'wa-after-hide', COMPOSER, (event, target) => {
-      if (event.target === target && bindings.expanded()) bindings.dismissed();
+      if (event.target !== target) return;
+      // A previous project's closing animation must not discard a later draft (HS2-791W19).
+      const dismiss = dismissAfterHide;
+      dismissAfterHide = false;
+      if (dismiss && bindings.expanded()) bindings.dismissed();
     }),
   );
   lifetime.add(

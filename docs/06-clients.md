@@ -2464,6 +2464,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   while successful creation moves focus into the new ticket's Details editor. Relaunch
   restores saved draft fields and staged evidence but starts the composer closed, preventing
   remembered projects from racing modal show/hide while the initial project set loads.
+  Browsers keep staged file bytes in origin-scoped IndexedDB; the packaged desktop app keeps
+  them in private native app-data records so a relaunch on a new bridge port restores them
+  too ([desktop guide](tauri-desktop.md), HS2-791W19). A staged file whose recovery copy fails
+  to save stays attached and is retried on the next change; one that cannot be read on restore
+  keeps its reference for the next reopen. The existing attachment warning reports both.
   Its expanded first row keeps the title beside the
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width

@@ -16,6 +16,7 @@ export const notWorkingDemoOpen = signal(false),
     { id: 'diagnostic', name: 'diagnostic screenshot with a deliberately long filename.png' },
   ]),
   notWorkingDemoEvent = signal('');
+const notWorkingDemoRecovery = signal(false);
 
 // Keep the dialog mounted and drive its `open` property, exactly like the real app's
 // NotWorkingSurface. wa-dialog opens modally on the open property transitioning false->true;
@@ -26,11 +27,20 @@ export function NotWorkingDialogDemo() {
     <>
       <CatalogExample align="glyph" label="Interactive">
         <Button action={'open-not-working-demo'}>Open Not Working Dialog</Button>
+        <Button action={'open-not-working-demo'} rootAttributes={{ 'data-recovery-failure': 'true' }}>
+          Open Recovery Failure
+        </Button>
         <NotWorkingDialog
           slug="HS2-DEMO"
           open={notWorkingDemoOpen.value}
           note={notWorkingDemoNote.value}
           attachments={notWorkingDemoFiles.value}
+          recoveryBlocked={notWorkingDemoRecovery.value && notWorkingDemoFiles.value.length > 0}
+          error={
+            notWorkingDemoRecovery.value && notWorkingDemoFiles.value.length > 0
+              ? 'Could not restore the staged evidence. Recover or remove it before submitting.'
+              : ''
+          }
         />
       </CatalogExample>
       <DemoEvent>{notWorkingDemoEvent.value}</DemoEvent>
@@ -49,7 +59,11 @@ export function PendingAttachmentPickerDemo() {
 function wireNotWorkingDialogDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.openNotWorkingDemo.selector, () => {
+    delegate(root, 'click', DEMO_ACTIONS.openNotWorkingDemo.selector, (_event, target) => {
+      notWorkingDemoRecovery.value = (target as HTMLElement).dataset.recoveryFailure === 'true';
+      notWorkingDemoFiles.value = [
+        { id: 'diagnostic', name: 'diagnostic screenshot with a deliberately long filename.png' },
+      ];
       notWorkingDemoOpen.value = true;
       notWorkingDemoEvent.value = '';
       queueMicrotask(() => root.querySelector<HTMLTextAreaElement>('[name="not-working-note"]')?.focus());
@@ -107,6 +121,7 @@ function wireNotWorkingDialogDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'submit', DEMO_ACTIONS.submitNotWorking.selector, (event) => {
       event.preventDefault();
+      if (notWorkingDemoRecovery.value && notWorkingDemoFiles.value.length > 0) return;
       notWorkingDemoEvent.value = 'Ticket returned to Not Started and added to Up Next.';
       notWorkingDemoOpen.value = false;
     }),
@@ -114,6 +129,7 @@ function wireNotWorkingDialogDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.cancelNotWorking.selector, () => {
       notWorkingDemoOpen.value = false;
+      notWorkingDemoRecovery.value = false;
       notWorkingDemoEvent.value = 'Report cancelled.';
     }),
   );

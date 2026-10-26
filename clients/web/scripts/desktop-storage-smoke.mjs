@@ -76,8 +76,42 @@ try {
       const afterClose = await context.newPage();
       await afterClose.goto(first);
       await afterClose.waitForFunction(() => localStorage.getItem('hotsheet.show-loading-activity') === 'false');
+      // HS2-791W19: staged draft attachment bytes survive the next launch's origin, then clean up.
+      const draftKey = encodeURIComponent('composer:synthetic-project:draft-one');
+      await afterClose.evaluate(async (key) => {
+        const response = await fetch(`/__hotsheet/desktop-draft-files?key=${key}`, {
+          method: 'PUT',
+          headers: {
+            'X-Hotsheet-Draft-Name': encodeURIComponent('synthetic proof.bin'),
+            'X-Hotsheet-Draft-Type': 'application%2Foctet-stream',
+            'X-Hotsheet-Draft-Modified': '1700000000000',
+          },
+          body: new File([new Uint8Array([0, 255, 1, 128])], 'synthetic proof.bin'),
+        });
+        if (response.status !== 204) throw new Error(`draft save returned ${response.status}`);
+      }, draftKey);
+      const relaunched = await context.newPage();
+      await relaunched.goto(second);
+      const recovered = await relaunched.evaluate(async (key) => {
+        const response = await fetch(`/__hotsheet/desktop-draft-files?key=${key}`);
+        return {
+          status: response.status,
+          name: decodeURIComponent(response.headers.get('X-Hotsheet-Draft-Name') ?? ''),
+          bytes: [...new Uint8Array(await response.arrayBuffer())],
+          removed: (await fetch(`/__hotsheet/desktop-draft-files?key=${key}`, { method: 'DELETE' })).status,
+          after: (await fetch(`/__hotsheet/desktop-draft-files?key=${key}`)).status,
+        };
+      }, draftKey);
+      assert.deepEqual(recovered, {
+        status: 200,
+        name: 'synthetic proof.bin',
+        bytes: [0, 255, 1, 128],
+        removed: 204,
+        after: 404,
+      });
       await context.close();
       console.log(`${engine.name()}: production bootstrap restored preferences/projects across ports and reload`);
+      console.log(`${engine.name()}: production bridge restored draft attachment bytes across ports and removed them`);
     } finally {
       await browser.close();
     }

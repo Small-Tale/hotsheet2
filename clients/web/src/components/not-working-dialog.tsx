@@ -19,6 +19,8 @@ export interface NotWorkingDialogProps {
   notesEnabled?: boolean;
   attachmentsEnabled?: boolean;
   submitting?: boolean;
+  /** Recovery failure keeps submission blocked until recovery or explicit removal. */
+  recoveryBlocked?: boolean;
   error?: string;
 }
 
@@ -31,6 +33,7 @@ export function NotWorkingDialog({
   notesEnabled = true,
   attachmentsEnabled = true,
   submitting = false,
+  recoveryBlocked = false,
   error = '',
 }: NotWorkingDialogProps) {
   const empty = (!notesEnabled || note.trim().length === 0) && attachments.length === 0;
@@ -93,7 +96,7 @@ export function NotWorkingDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" tone={'danger'} disabled={submitting || empty}>
+            <Button type="submit" tone={'danger'} disabled={submitting || empty || recoveryBlocked}>
               {submitting ? 'Submitting…' : submitLabel}
             </Button>
           </Row>

@@ -56,6 +56,7 @@ import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog'
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { syncConversationScroll } from '../conversation-scroll';
+import { draftFiles } from '../draft-file-recovery';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
 import type { RenderMetrics } from '../render-metrics';
@@ -70,6 +71,7 @@ import {
 import { type TicketView } from '../ticket-views';
 import type { TrackedSizeObserver } from '../tracked-size-observer';
 import { syncVideoPosters } from '../video-posters';
+import type { StoredPendingAttachment } from '../workspace-session';
 
 /** Live application bindings createHotSheetApp reads (HS2-K0VC2C). */
 export interface HotSheetAppDependencies {
@@ -95,6 +97,7 @@ export interface HotSheetAppDependencies {
   composerAttachmentError: Signal<boolean>;
   composerAttachmentMessage: Signal<string>;
   composerAttachments: Signal<PendingEvidence[]>;
+  composerUnrestoredAttachments: Signal<StoredPendingAttachment[]>;
   composerCategory: Signal<string>;
   composerDetails: Signal<string>;
   composerExpanded: Signal<boolean>;
@@ -123,14 +126,17 @@ export interface HotSheetAppDependencies {
   newTicketSource: () => TicketSourceChoice | undefined;
   notWorkingError: Signal<string>;
   notWorkingFiles: Signal<PendingEvidence[]>;
+  notWorkingUnrestoredFiles: Signal<StoredPendingAttachment[]>;
+  notWorkingScreening: Signal<boolean>;
   notWorkingNote: Signal<string>;
   notWorkingSubmitting: Signal<boolean>;
   notWorkingSurfaceProps: (
     target: NotWorkingTarget,
     note: string,
-    files: PendingEvidence[],
+    files: StoredPendingAttachment[],
     submitting: boolean,
     submissionError: string,
+    recoveryBlocked?: boolean,
   ) => Parameters<typeof NotWorkingSurface>[0];
   notWorkingTarget: Signal<NotWorkingTarget>;
   permissionRevision: Signal<number>;
@@ -226,6 +232,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     composerAttachmentError,
     composerAttachmentMessage,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerCategory,
     composerDetails,
     composerExpanded,
@@ -254,6 +261,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     newTicketSource,
     notWorkingError,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
+    notWorkingScreening,
     notWorkingNote,
     notWorkingSubmitting,
     notWorkingSurfaceProps,
@@ -395,6 +404,16 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
       showCornerLoading =
         bulkUpdateProgress.value !== undefined ||
         (loading.value && (!project() || tickets.value.length > 0 || corruptTickets.value.length > 0));
+    const composerRecovery = draftFiles.state(
+        `composer:${project()?.id ?? ''}`,
+        composerAttachments.value,
+        composerUnrestoredAttachments.value,
+      ),
+      notWorkingRecovery = draftFiles.state(
+        `not-working:${target.projectId}`,
+        notWorkingFiles.value,
+        notWorkingUnrestoredFiles.value,
+      );
     return (
       <>
         <HotSheetShell />
@@ -512,11 +531,12 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           }))}
           source={composerTarget?.connectionId}
           canCreate={composerTarget?.capabilities.create ?? provider?.capabilities.create ?? true}
-          attachments={composerAttachments.value}
+          attachments={composerRecovery.attachments}
           attachmentsEnabled={canStageNewTicketAttachments()}
-          attachmentMessage={composerAttachmentMessage.value}
-          attachmentError={composerAttachmentError.value}
+          attachmentMessage={[composerRecovery.message, composerAttachmentMessage.value].filter(Boolean).join(' ')}
+          attachmentError={composerRecovery.blocked || composerAttachmentError.value}
           busy={composerScreening.value}
+          recoveryBlocked={composerRecovery.blocked}
           submitting={composerSubmitting.value}
         />
         {target.slug && (
@@ -524,9 +544,10 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
             {...notWorkingSurfaceProps(
               target,
               notWorkingNote.value,
-              notWorkingFiles.value,
+              notWorkingRecovery.attachments,
               notWorkingSubmitting.value,
-              notWorkingError.value,
+              [notWorkingRecovery.message, notWorkingError.value].filter(Boolean).join(' '),
+              notWorkingRecovery.blocked || notWorkingScreening.value,
             )}
           />
         )}

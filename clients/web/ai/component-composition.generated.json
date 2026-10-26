@@ -2659,7 +2659,7 @@
       "id": "not-working-dialog",
       "name": "NotWorkingDialog",
       "kind": "component",
-      "purpose": "Completed-ticket verification failure report with notes and evidence.",
+      "purpose": "Completed-ticket verification failure report with notes, removable evidence and blocked submission until attachment recovery resolves (HS2-791W19).",
       "publicExports": [
         {
           "name": "NotWorkingDialog"
@@ -4026,7 +4026,7 @@
       "id": "quick-ticket-composer",
       "name": "QuickTicketComposer",
       "kind": "component",
-      "purpose": "Compact ticket creation with a clear warning when the destination differs from the project default.",
+      "purpose": "Compact ticket creation with destination warnings and blocked submission until attachment recovery resolves (HS2-791W19).",
       "publicExports": [
         {
           "name": "QuickTicketComposer"

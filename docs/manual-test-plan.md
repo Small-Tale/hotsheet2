@@ -11,7 +11,9 @@ activity setting, quit the native application, relaunch twice, and confirm both
 project tabs and the setting return even when the bridge port changes. Repeat
 with a second isolated app-data profile and confirm profiles do not import each
 other's preferences. Previously abandoned random-port origins may need a one-time
-project reopen; unsent attachment blobs are tracked by HS2-791W19.
+project reopen. For HS2-791W19, stage a synthetic file in New ticket and another in
+Not working, quit, relaunch, and confirm both files return with their contents; remove
+one, create the ticket, and confirm the app-data `draft-files-v1` directory empties.
 Validate codesign, notarization, and
 Gatekeeper with [the desktop guide](tauri-desktop.md).
 

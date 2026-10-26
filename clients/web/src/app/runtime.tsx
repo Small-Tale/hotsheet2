@@ -91,6 +91,7 @@ import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
+import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createBoardColumnPaging } from '../features/board-column-paging';
@@ -236,10 +237,10 @@ import {
 } from '../workspace-preferences';
 import {
   activeProjectRoot,
-  loadDraftFiles,
   loadProjectWorkspaceSession,
   saveActiveProjectRoot,
   saveProjectWorkspaceSession,
+  type StoredPendingAttachment,
 } from '../workspace-session';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import { wireTicketRailToolbarVisibility, wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
@@ -657,6 +658,9 @@ export async function startHotSheetWebClient() {
   const notWorkingTarget = signal<NotWorkingTarget>(CLOSED_NOT_WORKING_TARGET),
     notWorkingNote = signal(''),
     notWorkingFiles = signal<PendingEvidence[]>([]),
+    // Staged references whose recovery copy could not be read yet; saved again, never dropped (HS2-791W19).
+    notWorkingUnrestoredFiles = signal<StoredPendingAttachment[]>([]),
+    notWorkingScreening = signal(false),
     notWorkingSubmitting = signal(false),
     notWorkingError = signal('');
   let ticketSelectionAnchor: string | undefined;
@@ -851,12 +855,14 @@ export async function startHotSheetWebClient() {
     sidebarVisible = signal(storedWorkspacePreferences.sidebarVisible),
     inspectorVisible = signal(storedWorkspacePreferences.inspectorVisible);
   const composerAttachments = signal<PendingEvidence[]>([]),
+    composerUnrestoredAttachments = signal<StoredPendingAttachment[]>([]),
     composerAttachmentMessage = signal(''),
     composerAttachmentError = signal(false),
     composerScreening = signal(false),
     composerSubmitting = signal(false);
   let projectSessionTimer: number | undefined,
     restoringProjectSession = false,
+    projectSessionDirtyDuringRestore = false,
     projectSessionInteractionVersion = 0;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
@@ -2260,13 +2266,14 @@ export async function startHotSheetWebClient() {
       return;
     }
     const current = project();
-    if (!current || restoringProjectSession) return;
+    if (!current) return;
     const feedbackNote = selectedTicket.value?.notes.find(
       (note) =>
         note.id === readerEditingNoteId.value && (note.kind === 'feedback_needed' || note.kind === 'feedback_draft'),
     );
     saveActiveProjectRoot(localStorage, current.root);
-    saveProjectWorkspaceSession(localStorage, current.id, {
+    retryUnsavedDraftFiles();
+    const snapshot = {
       selectedView: selectedView.value,
       selectedTicketSlugs: [...selectedTicketSlugs.value],
       searchOpen: searchOpen.value,
@@ -2279,7 +2286,10 @@ export async function startHotSheetWebClient() {
         details: composerDetails.value,
         category: composerCategory.value,
         upNext: composerUpNext.value,
-        attachments: composerAttachments.value.map(({ id, name }) => ({ id, name })),
+        attachments: [
+          ...composerAttachments.value.map(({ id, name }) => ({ id, name })),
+          ...composerUnrestoredAttachments.value,
+        ],
       },
       composingNote: composingNote.value,
       newNoteDraft: newNoteDraft.value,
@@ -2294,10 +2304,31 @@ export async function startHotSheetWebClient() {
             connectionId: notWorkingTarget.value.connectionId,
             mode: notWorkingTarget.value.mode,
             note: notWorkingNote.value,
-            attachments: notWorkingFiles.value.map(({ id, name }) => ({ id, name })),
+            attachments: [
+              ...notWorkingFiles.value.map(({ id, name }) => ({ id, name })),
+              ...notWorkingUnrestoredFiles.value,
+            ],
           }
         : undefined,
-    });
+    };
+    // Explicit pagehide/activation saves preserve current draft metadata while GET is held,
+    // without replacing other session fields that have not hydrated yet (HS2-791W19).
+    const previous = restoringProjectSession ? loadProjectWorkspaceSession(localStorage, current.id) : undefined;
+    saveProjectWorkspaceSession(
+      localStorage,
+      current.id,
+      previous
+        ? {
+            ...previous,
+            composer: snapshot.composer,
+            notWorking: snapshot.notWorking,
+          }
+        : snapshot,
+    );
+  }
+  /** Background retry changes the recovery owner's reactive state (HS2-791W19). */
+  function retryUnsavedDraftFiles() {
+    void draftFiles.retry();
   }
   function cacheActiveProjectProjection() {
     const id = selectedProjectId.value;
@@ -2331,9 +2362,15 @@ export async function startHotSheetWebClient() {
     const finishTiming = beginInteractionTiming('project-change', { project: next });
     // Publish any typing still held by the old project's search projection before saving its session.
     flushWorkspaceSearch();
+    // Retire an older restore before parking this surface. Its seeded references remain saveable
+    // even while a GET is held, and its later continuation cannot publish into the next project.
+    projectSessionRestoreRun += 1;
+    restoringProjectSession = false;
+    projectSessionDirtyDuringRestore = false;
     persistProjectSessionNow();
     cacheActiveProjectProjection();
     resetTicketComposer(false);
+    closeNotWorking(false);
     resetProgressiveTicketRendering();
     resetBoardColumnPages();
     const rows = ticketRowsByProject.value[next],
@@ -2349,6 +2386,27 @@ export async function startHotSheetWebClient() {
     batch(() => {
       selectedProjectRestoreRoot.value = '';
       selectedProjectId.value = drawerActivation.projectId;
+      // Keep saved references present before refresh/GET completes (HS2-791W19). Opening or
+      // leaving this project during restore must not replace them with an empty draft.
+      if (stored) {
+        composerTitle.value = stored.composer.title;
+        composerDetails.value = stored.composer.details;
+        composerCategory.value = stored.composer.category;
+        composerUpNext.value = stored.composer.upNext;
+        composerUnrestoredAttachments.value = [...stored.composer.attachments];
+        if (stored.notWorking) {
+          notWorkingTarget.value = {
+            projectId: next,
+            apiPath: nextProject.apiPath,
+            ticketId: stored.notWorking.ticketId,
+            slug: stored.notWorking.slug,
+            connectionId: stored.notWorking.connectionId,
+            mode: stored.notWorking.mode ?? 'not-working',
+          };
+          notWorkingNote.value = stored.notWorking.note;
+          notWorkingUnrestoredFiles.value = [...stored.notWorking.attachments];
+        }
+      }
       terminalDrawerSelected.value = drawerActivation.selectedId;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
       tickets.value = rows ?? [];
@@ -2469,7 +2527,10 @@ export async function startHotSheetWebClient() {
     if (includeTerminals) observeTerminalDrawer();
   }
   function scheduleProjectSessionPersistence() {
-    if (restoringProjectSession) return;
+    if (restoringProjectSession) {
+      projectSessionDirtyDuringRestore = true;
+      return;
+    }
     projectSessionInteractionVersion += 1;
     if (projectSessionTimer !== undefined) window.clearTimeout(projectSessionTimer);
     projectSessionTimer = window.setTimeout(() => {
@@ -2492,6 +2553,9 @@ export async function startHotSheetWebClient() {
     if (active()) searchAllTickets.value = false;
     if (!stored || !active()) return;
     const run = ++projectSessionRestoreRun,
+      epochs = attachmentEpochs(),
+      originalReportTarget = notWorkingTarget.value,
+      sameReport = () => notWorkingTarget.value === originalReportTarget && !notWorkingSubmitting.value,
       restoreComposerOpen =
         stored.composer.open &&
         initialProjectRestoreComplete &&
@@ -2514,15 +2578,34 @@ export async function startHotSheetWebClient() {
         composerDetails.value = stored.composer.details;
         composerCategory.value = stored.composer.category;
         composerUpNext.value = stored.composer.upNext;
-        const attachments = await loadDraftFiles(draftScope('composer', current.id), stored.composer.attachments).catch(
-          () => [],
-        );
-        if (!active()) return;
-        composerAttachments.value = attachments;
-        if (restoreComposerOpen) {
-          showQuickTicketComposer(document);
+      }
+      const previousFiles = composerAttachments.value,
+        previousUnrestored = composerUnrestoredAttachments.value,
+        refs = composerOpenedByUser ? [...previousFiles, ...previousUnrestored] : stored.composer.attachments,
+        restored = await draftFiles.restore(draftScope('composer', current.id), refs);
+      if (!active() || run !== projectSessionRestoreRun) return;
+      if (
+        attachmentEpochs().composer === epochs.composer &&
+        composerAttachments.value === previousFiles &&
+        composerUnrestoredAttachments.value === previousUnrestored
+      ) {
+        composerAttachments.value = restored.files;
+        composerUnrestoredAttachments.value = restored.unrestored;
+        if (!composerOpenedByUser && restoreComposerOpen) {
           composerExpanded.value = true;
-          requestAnimationFrame(() => requestAnimationFrame(() => focusQuickTicketComposerTitle(document)));
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              if (
+                !active() ||
+                run !== projectSessionRestoreRun ||
+                attachmentEpochs().composer !== epochs.composer ||
+                !composerExpanded.value
+              )
+                return;
+              showQuickTicketComposer(document);
+              focusQuickTicketComposerTitle(document);
+            }),
+          );
         }
       }
       const live = new Set(tickets.value.map((ticket) => ticket.slug)),
@@ -2547,29 +2630,60 @@ export async function startHotSheetWebClient() {
       );
       readerEditingNoteId.value = feedbackNote?.id;
       readerNoteDraft.value = feedbackNote ? stored.feedbackDraft : '';
-      if (stored.notWorking) {
+      if (
+        stored.notWorking &&
+        attachmentEpochs().notWorking === epochs.notWorking &&
+        sameReport() &&
+        (!originalReportTarget.slug ||
+          (originalReportTarget.ticketId === stored.notWorking.ticketId &&
+            originalReportTarget.connectionId === stored.notWorking.connectionId &&
+            originalReportTarget.mode === (stored.notWorking.mode ?? 'not-working')))
+      ) {
         const row = tickets.value.find((ticket) => ticket.id === stored.notWorking!.ticketId);
         if (row) {
-          const files = await loadDraftFiles(
+          const previousFiles = notWorkingFiles.value,
+            previousUnrestored = notWorkingUnrestoredFiles.value;
+          const restored = await draftFiles.restore(
             draftScope('not-working', current.id),
-            stored.notWorking.attachments,
-          ).catch(() => []);
-          if (!active()) return;
-          notWorkingTarget.value = {
-            projectId: current.id,
-            apiPath: current.apiPath,
-            ticketId: row.id,
-            slug: row.slug,
-            connectionId: row.connection_id,
-            mode: stored.notWorking.mode ?? 'not-working',
-          };
-          notWorkingNote.value = stored.notWorking.note;
-          notWorkingFiles.value = files;
+            originalReportTarget.slug ? [...previousFiles, ...previousUnrestored] : stored.notWorking.attachments,
+          );
+          if (
+            !active() ||
+            run !== projectSessionRestoreRun ||
+            attachmentEpochs().notWorking !== epochs.notWorking ||
+            !sameReport() ||
+            notWorkingFiles.value !== previousFiles ||
+            notWorkingUnrestoredFiles.value !== previousUnrestored
+          )
+            return;
+          if (!originalReportTarget.slug) {
+            notWorkingTarget.value = {
+              projectId: current.id,
+              apiPath: current.apiPath,
+              ticketId: row.id,
+              slug: row.slug,
+              connectionId: row.connection_id,
+              mode: stored.notWorking.mode ?? 'not-working',
+            };
+            notWorkingNote.value = stored.notWorking.note;
+          }
+          notWorkingFiles.value = restored.files;
+          notWorkingUnrestoredFiles.value = restored.unrestored;
         }
       }
       if (searchQuery.value.trim()) void refreshTicketSearch();
     } finally {
-      if (run === projectSessionRestoreRun) restoringProjectSession = false;
+      if (run === projectSessionRestoreRun) {
+        restoringProjectSession = false;
+        const dirty = projectSessionDirtyDuringRestore;
+        projectSessionDirtyDuringRestore = false;
+        if (
+          dirty ||
+          attachmentEpochs().composer !== epochs.composer ||
+          attachmentEpochs().notWorking !== epochs.notWorking
+        )
+          scheduleProjectSessionPersistence();
+      }
     }
   }
   // Mobile single-column layout (HS2-ZK51WP). Below the desktop size floor the sidebar and inspector
@@ -3561,6 +3675,7 @@ export async function startHotSheetWebClient() {
     loadRepositorySize,
   });
   const {
+    attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
     updateSelected,
@@ -3744,6 +3859,8 @@ export async function startHotSheetWebClient() {
     notWorkingTarget,
     notWorkingNote,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
+    notWorkingScreening,
     notWorkingSubmitting,
     notWorkingError,
     composerExpanded,
@@ -3754,6 +3871,7 @@ export async function startHotSheetWebClient() {
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerAttachmentMessage,
     composerAttachmentError,
     composerScreening,
@@ -4510,6 +4628,7 @@ export async function startHotSheetWebClient() {
     composerAttachmentError,
     composerAttachmentMessage,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerCategory,
     composerDetails,
     composerExpanded,
@@ -4538,7 +4657,9 @@ export async function startHotSheetWebClient() {
     newTicketSource,
     notWorkingError,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
     notWorkingNote,
+    notWorkingScreening,
     notWorkingSubmitting,
     notWorkingSurfaceProps,
     notWorkingTarget,
@@ -4947,6 +5068,7 @@ export async function startHotSheetWebClient() {
     draftScope,
     notWorkingTarget,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
     submitNotWorking,
     closeNotWorking,
     notWorkingSubmitting,
@@ -5156,6 +5278,7 @@ export async function startHotSheetWebClient() {
     composerSource,
     addNewTicketFiles,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerAttachmentMessage,
     composerAttachmentError,
     submitNewTicket,

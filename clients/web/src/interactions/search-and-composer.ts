@@ -16,13 +16,14 @@ import {
 } from '../components/workspace-header';
 import { wireWorkspaceHeaderActions } from '../components/workspace-header-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { draftFiles } from '../draft-file-recovery';
 import { type InlineSearchToken } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
-import { deleteDraftFiles } from '../workspace-session';
+import type { StoredPendingAttachment } from '../workspace-session';
 import { insertSearchSyntax, wireTicketSearchFields } from './ticket-search-field';
 import { type PendingEvidence, type Project } from './types';
 
@@ -72,6 +73,7 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly addNewTicketFiles: (files: FileList | File[]) => Promise<void>;
   readonly draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   readonly composerAttachments: Signal<PendingEvidence[]>;
+  readonly composerUnrestoredAttachments: Signal<StoredPendingAttachment[]>;
   readonly composerAttachmentMessage: Signal<string>;
   readonly composerAttachmentError: Signal<boolean>;
   draggedTickets: { slugs: string[]; source: Project } | undefined;
@@ -122,6 +124,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     addNewTicketFiles,
     draftScope,
     composerAttachments,
+    composerUnrestoredAttachments,
     composerAttachmentMessage,
     composerAttachmentError,
     submitNewTicket,
@@ -366,16 +369,18 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
         void addNewTicketFiles(files);
       },
       removeAttachment: (id) => {
-        if (id) void deleteDraftFiles(draftScope('composer'), [id]);
+        if (id) void draftFiles.remove(draftScope('composer'), [id]).catch(() => undefined);
         composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+        composerUnrestoredAttachments.value = composerUnrestoredAttachments.value.filter((item) => item.id !== id);
         resetComposerAttachmentMessage();
         scheduleProjectSessionPersistence();
       },
       clearAttachments: () => {
         // Drops every file staged for a source that cannot take attachments (HS2-8HHHK3).
-        const ids = composerAttachments.value.map((item) => item.id);
-        if (ids.length) void deleteDraftFiles(draftScope('composer'), ids);
+        const ids = [...composerAttachments.value, ...composerUnrestoredAttachments.value].map((item) => item.id);
+        if (ids.length) void draftFiles.remove(draftScope('composer'), ids).catch(() => undefined);
         composerAttachments.value = [];
+        composerUnrestoredAttachments.value = [];
         resetComposerAttachmentMessage();
         scheduleProjectSessionPersistence();
       },

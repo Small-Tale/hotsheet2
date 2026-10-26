@@ -11,13 +11,14 @@ import { isPlainTicketReselection, selectAllTickets } from '../components/ticket
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput } from '../debounced-autosave';
+import { draftFiles } from '../draft-file-recovery';
 import { routeFilePicker } from '../file-picker-routes';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { duplicateTargetKey } from '../ticket-close';
-import { deleteDraftFiles } from '../workspace-session';
+import type { StoredPendingAttachment } from '../workspace-session';
 import { data } from './dom';
 import { type Control, type NotWorkingTarget, type PendingEvidence } from './types';
 
@@ -70,6 +71,7 @@ export interface TicketSelectionInteractionsDependencies {
   readonly draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   readonly notWorkingTarget: Signal<NotWorkingTarget>;
   readonly notWorkingFiles: Signal<PendingEvidence[]>;
+  readonly notWorkingUnrestoredFiles: Signal<StoredPendingAttachment[]>;
   readonly submitNotWorking: () => Promise<void>;
   readonly closeNotWorking: (clearStored?: boolean) => void;
   readonly notWorkingSubmitting: Signal<boolean>;
@@ -120,6 +122,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     draftScope,
     notWorkingTarget,
     notWorkingFiles,
+    notWorkingUnrestoredFiles,
     submitNotWorking,
     closeNotWorking,
     notWorkingSubmitting,
@@ -432,8 +435,12 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.selector, (_event, target) => {
       const id = data(target).pendingAttachmentId;
-      if (id) void deleteDraftFiles(draftScope('not-working', notWorkingTarget.value.projectId), [id]);
+      if (id)
+        void draftFiles
+          .remove(draftScope('not-working', notWorkingTarget.value.projectId), [id])
+          .catch(() => undefined);
       notWorkingFiles.value = notWorkingFiles.value.filter((item) => item.id !== id);
+      notWorkingUnrestoredFiles.value = notWorkingUnrestoredFiles.value.filter((item) => item.id !== id);
       scheduleProjectSessionPersistence();
     }),
   );
