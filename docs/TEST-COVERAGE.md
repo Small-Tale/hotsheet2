@@ -46,6 +46,15 @@ medium, narrow, and wide again. `desktop-storage-smoke.mjs` recovers bytes acros
 Chromium and WebKit through the production bridge. The packaged app relaunch is in the
 manual plan.
 
+HS2-P36R6N pins settled project-sidebar capture readiness in
+`clients/web/tests/project-sidebar-layout.ts`: expected collapsed state plus resting content
+geometry, including the desktop restore frame, precede a capture. Checking for running
+animations alone can finish before the resize render starts. The real desktop fixture's
+`project-sidebar-responsive.spec.ts` covers Create and Not Working at 1280/900/390/1280,
+preserving the open draft, cancellation/reopening, and desktop collapse/restore controls, in both color
+schemes and Chromium/WebKit. No persistent sidebar layout defect was observed; this fixes
+test observation and retains the application's existing responsive motion.
+
 HS2-BNGHKM checks repeated test-owner death, fallback broker exit, and registration
 cleanup in `crates/hotsheet-server/tests/graceful_shutdown.rs`. The dedicated broker
 binary has the same exit check in `crates/hotsheet-terminals/tests/process_journal_broker.rs`;

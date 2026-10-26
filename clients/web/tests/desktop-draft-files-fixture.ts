@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 
 import type { FullTicket } from '../src/api';
 import { DESKTOP_DRAFT_FILES_DIRECTORY, desktopStorageBridge } from '../src/desktop-storage-bridge';
+import { expectProjectSidebarLayout } from './project-sidebar-layout';
 import { realTicketServer } from './real-ticket-server';
 
 // HS2-791W19: the packaged desktop app serves each launch from a new ephemeral loopback origin.
@@ -281,6 +282,7 @@ export async function captureWidths(page: Page, state: string, surface = dialog(
     ['wide-again', 1280],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
+    await expectProjectSidebarLayout(page, width >= 1024);
     // Review the settled layout, not a rail still sliding after the resize.
     await page.waitForFunction(() =>
       document
