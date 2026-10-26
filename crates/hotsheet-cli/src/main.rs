@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 mod dispatch;
 
+use dispatch::coordination::CoordinationArgs;
 use dispatch::providers::{
     AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
 };
@@ -70,6 +71,8 @@ impl Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Coordinate independent local integrator/worker sessions with durable exact assignments.
+    Coordination(CoordinationArgs),
     /// Initialize a git-backed store here, or create and link a standalone one.
     Init {
         /// Display prefix for ticket slugs (e.g. HS → HS-7F3K9Q).

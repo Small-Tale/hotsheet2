@@ -1080,6 +1080,7 @@ dependencies = [
  "hotsheet-ticketing",
  "hotsheet-tls",
  "libc",
+ "notify",
  "predicates",
  "regex",
  "rpassword",

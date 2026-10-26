@@ -164,6 +164,12 @@ is shipped for eligible new native events (HS2-WZ986Q, HS2-38SAET):
 rewriting raw usage. Existing aggregate-only events lack safe cache categories and
 stay unpriced (HS2-WMWRHZ).
 
+Local continuous integrator/worker sessions (HS2-76VMYG) have durable,
+provider-qualified local mailboxes, exact assignment, filesystem-event waits, and
+selected-source queue/claim verification. External-source adapters remain partial
+(HS2-3ETJ26); real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
+An ended independent app turn is not automatically resumed.
+
 **F · Collaboration & distribution**
 
 | Doc                                                                      | Topic                                                                                                                                                                        | Status                                                                                     |

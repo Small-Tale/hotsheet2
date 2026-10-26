@@ -18,7 +18,7 @@ impl FileLock {
 
     /// Take the lock only when nobody holds it right now; `Ok(None)` means it is busy.
     #[cfg(unix)]
-    pub(crate) fn try_acquire(file: File) -> io::Result<Option<Self>> {
+    pub fn try_acquire(file: File) -> io::Result<Option<Self>> {
         use std::os::fd::AsRawFd;
 
         // SAFETY: flock only borrows this live file descriptor for the duration of the call.
@@ -27,6 +27,38 @@ impl FileLock {
         }
         let error = io::Error::last_os_error();
         if error.kind() == io::ErrorKind::WouldBlock {
+            Ok(None)
+        } else {
+            Err(error)
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn try_acquire(file: File) -> io::Result<Option<Self>> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION;
+        use windows_sys::Win32::Storage::FileSystem::{
+            LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
+        };
+        // SAFETY: an all-zero OVERLAPPED initializes a synchronous byte-range lock.
+        let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED =
+            unsafe { std::mem::zeroed() };
+        // SAFETY: the live handle and initialized out-parameter cover this synchronous lock.
+        if unsafe {
+            LockFileEx(
+                file.as_raw_handle(),
+                LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0,
+                u32::MAX,
+                u32::MAX,
+                &mut overlapped,
+            )
+        } != 0
+        {
+            return Ok(Some(Self { file }));
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) {
             Ok(None)
         } else {
             Err(error)

@@ -1988,6 +1988,82 @@ separate work in HS2-25TP3N; this workflow does not poll the queue on a timer.
 `crates/hotsheet-plugins/src/tests.rs # hs2_j81y9w_role_skills_require_addressed_handoff_delivery`
 pins the route choices, fallback, and note-before-release-before-cue ordering.
 
+### 5.9.1 Continuous local integrator/worker sessions (HS2-76VMYG)
+
+The repository-local role skills keep an active agent session running between exact
+assignments. Either role can start first. A worker invoked without a slug announces
+availability and waits; it does not claim an arbitrary queue item or infer that Up
+Next is empty. The integrator discovers waiting workers and retained handoffs,
+reviews dependency/file overlap, assigns one exact ticket per worker, and serializes
+main integration. Workers return to availability after durable handoff and claim
+release while earlier tickets may remain in CI. Tentative multi-ticket planning and
+a graphical worker board are separate work; this runtime has one active assignment
+per worker.
+
+Both skills preflight `hotsheet-cli coordination --help` on the selected executable.
+An older installed CLI is a capability blocker, not an empty queue. The integrator
+supplies a verified updated executable. In an HS2 source checkout an isolated
+`cargo build -p hotsheet-cli` yields `<build-checkout>/target/debug/hotsheet-cli`;
+other code projects use their installation method's maintained artifact/upgrade
+command. Workers neither assume those projects are Cargo workspaces nor install
+globally or restart the running host.
+
+`hotsheet-cli -C <shared-source> coordination --project <shipping-checkout> setup`
+idempotently creates versioned local state under the code Git common directory's
+`hotsheet-coordination/`. All code worktrees share that directory; it identifies the
+code project, not a ticket provider. The pool persists and validates the canonical
+selected-source identity. A different `-C` source cannot silently join the same pool.
+Its schema uses qualified `(connection_id, native_id)` references, session generations,
+operation ids, availability deadlines, return-route identifiers, and handoff commits;
+it stores no session credentials or ticket content.
+
+Use the same prefix, with `--project` before the subcommand:
+
+| Command                                                                                                                                                                                                    | Effect                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `register --role <role> --id <id> --session <generation> --route <return-route>`                                                                                                                           | Announce or renew availability for this live invocation; route recipients must be verified as described above.                                                                     |
+| `next --role worker --id <id> --session <generation>`                                                                                                                                                      | Announce availability and block until this exact generation has an assignment or the run ends.                                                                                     |
+| `next --role integrator --id <id> --session <generation> --after <cursor>`                                                                                                                                 | Reconcile durable state, then block until a semantic local event changes it. Omit the cursor for an initial snapshot.                                                              |
+| `status`                                                                                                                                                                                                   | Read worker availability, qualified reservations, retained handoffs, integration/CI phases, and selected-source queue facts.                                                       |
+| `assign --id <integrator> --session <generation> --worker <id> --worker-session <worker-generation> --operation <unique-id> --connection <source> --native-id <native-id> --slug <slug> --base <full-sha>` | Reserve one exact assignment after the integrator's scope review. A retried operation id returns the same reservation.                                                             |
+| `worker --id <id> --session <generation> --assignment <id> --phase <phase> [--commit <full-sha>]`                                                                                                          | Acknowledge the real claim, durable handoff/release, or blocker. This is not itself a ticket claim.                                                                                |
+| `mark --id <integrator> --session <generation> --assignment <id> --phase <phase>`                                                                                                                          | Record serialized integration, pending CI, or resolution after ticket completion. Multiple CI records may coexist.                                                                 |
+| `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                 | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
+| `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                        | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
+| `leave --role <role> --id <id> --session <generation>`                                                                                                                                                     | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
+
+The local default-source CLI checks eligibility before offering an assignment,
+requires the assigned worker's live ticket claim before `accepted`, and requires
+explicit claim release plus an `Integration handoff` note naming the full commit
+before `handoff`. Existing ticket claims remain authoritative. A mailbox phase does
+not complete a ticket. Availability expiry never reallocates an in-progress ticket:
+the integrator must inspect its artifacts and record a recovery note first. Old
+session generations cannot acknowledge replacement assignments.
+
+`next` subscribes to filesystem events before reading snapshots, so either startup
+order and reconnect after a lost cue reconcile durable state. Queue edits, source
+configuration changes, and known claim-expiry deadlines wake it; overflow/rescan
+events force reconciliation. Availability lease deadlines renew only the local
+registry, without queue scans or network requests. Semantic cursors ignore those
+heartbeats. A duplicate live wait for the same worker/session is rejected by an OS
+file lock, which is released even on process death. An active yielded CLI wait is
+kept running; an ended Codex Work/app turn is not resurrected (HS2-4H7D8D).
+
+Queue observation and claim/handoff verification initially support the selected local
+Git source. `local_queue: null` means an unsupported provider query path, never empty;
+enabled additional sources appear in `uncovered_sources` and prevent `drained`.
+HS2-3ETJ26 owns provider-native query, claim-verification, and genuine event adapters.
+This workflow adds no timer network polling. Remote CI completion needs an actual
+supported status/event route or human cue; without one the integrator reports the
+specific pending CI and unavailable wake route instead of reporting exhaustion.
+
+Rust transition tests and real separate CLI-process tests cover startup in both
+orders, duplicate dispatch/waits, fenced generations, stale recovery, source scope,
+claim expiry, lost cues, handoff during integrator absence, worktree integration, and
+refill while CI remains pending. These synthetic process tests are not a real AI
+session pilot. HS2-AJ7FJY separately records real Codex/Claude evidence and remaining
+continuous-loop acceptance; no automatic app-session wake is claimed.
+
 ## 5.10 Testability — injected adapters + the fake agent
 
 > **Load-bearing rule** (maintainer, 2026-08-19): adding a tool to HS1 was a manual

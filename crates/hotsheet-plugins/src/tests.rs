@@ -239,6 +239,51 @@ fn hs2_j81y9w_role_skills_require_addressed_handoff_delivery() {
 }
 
 #[test]
+fn hs2_76vmyg_role_skills_keep_local_sessions_running_between_tickets() {
+    for skill in [
+        include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+        include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for phrase in [
+            "An invocation without a ticket slug means become available",
+            "it does not mean the queue is empty",
+            "genuine `## Worker assignment` notes addressed to this worker/session",
+            "--role worker --id <worker>",
+            "Keep the yielded tool process running",
+            "acknowledgement is not a ticket claim",
+            "Create a NEW ticket worktree",
+            "Do not wait for a previous ticket's remote CI",
+            "coordination leave --role worker",
+            "hotsheet-cli coordination --help",
+            "<build-checkout>/target/debug/hotsheet-cli",
+        ] {
+            assert!(text.contains(phrase), "worker missing {phrase}");
+        }
+    }
+    for skill in [
+        include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+        include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+    ] {
+        let text = skill.split_whitespace().collect::<Vec<_>>().join(" ");
+        for phrase in [
+            "Workers may have started first",
+            "--worker-session <worker-generation>",
+            "--after <last-snapshot-cursor>",
+            "uncovered_sources",
+            "CI completion needs an actual supported status/event route",
+            "coordination finish --reason drained",
+            "never triggers automatic reassignment",
+            "--evidence-note <note-id> --inspected",
+            "hotsheet-cli coordination --help",
+            "<build-checkout>/target/debug/hotsheet-cli",
+        ] {
+            assert!(text.contains(phrase), "integrator missing {phrase}");
+        }
+    }
+}
+
+#[test]
 fn every_builtin_tells_ais_to_release_claims_whenever_they_stop() {
     // HS2-M3F0MS: AIs that stop part-way through a ticket must not leave a live claim behind,
     // so the instructions and the worklist skill both make release the rule on every exit path.

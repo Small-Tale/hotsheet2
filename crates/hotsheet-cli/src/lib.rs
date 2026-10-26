@@ -12,6 +12,7 @@
 //! should carry (`docs/07-migration.md` §7.2).
 
 pub mod broken_pipe;
+pub mod coordination;
 pub mod external_launch;
 pub mod import;
 mod import_completion;

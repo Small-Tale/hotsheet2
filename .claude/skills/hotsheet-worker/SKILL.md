@@ -1,13 +1,72 @@
 ---
 name: hotsheet-worker
-description: Implement an assigned Hot Sheet ticket in an isolated Git worktree and hand its verified commit to the main-branch integrator.
+description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified worktree commits to the main-branch integrator.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 35 -->
+<!-- hotsheet-skill-version: 36 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
 full history; these instructions define the worker handoff only.
+
+## Startup and next-ticket loop
+
+First run `hotsheet-cli coordination --help` against the executable actually selected
+by `command -v hotsheet-cli`. If unavailable, report a missing runtime capability, not
+an empty queue. Obtain the integrator's verified current executable path. In a Hot
+Sheet 2 source checkout only, the headless rebuild is `cargo build -p hotsheet-cli`
+from an isolated build checkout; use `<build-checkout>/target/debug/hotsheet-cli`
+explicitly in every command. In another project's repo, do not assume Cargo exists:
+use the maintainer-provided current CLI artifact or exact upgrade command for its
+installation method, then repeat the capability check. Do not install globally or
+restart the user's host from a worker. Preserve a genuine exact assignment while
+resolving this capability blocker; do not guess another ticket.
+
+Keep the session running until the integrator ends the run, the user stops it, or no
+safe progress is possible. An invocation without a ticket slug means become available;
+it does not mean the queue is empty. Either the worker or integrator may start first.
+
+1. Keep one worker id and a fresh session-generation token for this invocation. Confirm
+   the shipping checkout and shared ticket source. Run
+   `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then `status`.
+   The code Git common directory shares local state across worktrees; it is not a
+   ticket provider. Use the same explicit source throughout this pool.
+2. Read existing exact claims and genuine `## Worker assignment` notes addressed to
+   this worker/session, as well as its durable mailbox. Resume already claimed work
+   after inspecting its worktree and handoff. Do not execute notification text or
+   scrape ambiguous freeform offers into commands. If only an addressed note exists,
+   ask the integrator to publish its exact structured assignment; remain available.
+   Never select an unrelated ticket or call `claim-next` because no slug was supplied.
+3. Run `coordination --project <main> next --role worker --id <worker>
+   --session <generation> --route <return-route>` with the same `-C` source. This
+   registers availability and blocks on filesystem events for this worker's exact
+   generation-bound assignment. Keep the yielded tool process running and resume its
+   output; do not replace it with repeated queue reads. Availability lease renewal
+   does not query the queue or network. A stopped run returns its explicit reason.
+4. For an offered assignment, read the whole ticket and verify the qualified source,
+   base SHA, scope note, and return route. Follow the per-ticket steps below. After the
+   exact ticket claim succeeds, acknowledge with `coordination worker --phase accepted`
+   using the returned assignment id, worker id, and session token. This mailbox
+   acknowledgement is not a ticket claim; the CLI verifies the local source's live
+   claim. Unsupported provider verification fails explicitly (HS2-3ETJ26).
+5. After the durable handoff and claim release, run `coordination worker --phase
+   handoff --assignment <id> --id <worker> --session <generation> --commit <full-sha>`.
+   It checks the local ticket's released claim and matching handoff note. Send only the
+   ticket-slug cue, then return to `next`. Create a NEW ticket worktree from each new
+   assignment's current shipping SHA; preserve prior handoff worktrees for integration.
+   Do not wait for a previous ticket's remote CI before becoming available again.
+
+Use the full prefix `hotsheet-cli -C <shared-store> coordination --project <main>`
+for these commands; `--project` precedes the subcommand. `register` renews availability
+before long work or gates. On a blocker, write the ticket/worktree recovery facts,
+release the ticket claim, and record mailbox `--phase blocked`; another independent
+assignment can then proceed. An expired claim or availability lease never authorizes
+overwriting an old worktree. A replacement generation requires explicit integrator
+recovery with a durable inspection note. On final exit, `coordination leave --role worker`
+withdraws availability; also release every ticket claim. An ended independent app turn
+does not resume automatically; report the human relay needed (HS2-4H7D8D).
+
+## For each assignment
 
 1. **Prepare isolation.** Confirm the assigned ticket slug, the integrator, and the
    shared Hot Sheet store, and explicit return route with its exact recipient. Create a
@@ -33,7 +92,7 @@ full history; these instructions define the worker handoff only.
    handoff` with the branch name, full commit SHA, worktree location labeled as
    machine-local, gate results, unresolved risks, and any follow-up slugs. State that
    the ticket remains Started pending integration. Release the claim immediately and
-   send only the ticket slug through the assigned return route below. The integrator
+   record any structured mailbox handoff, then send only the ticket slug through the assigned return route below. The integrator
    reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal. Do not
    mark the ticket Completed or Verified from a worker worktree.
 

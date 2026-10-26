@@ -6,6 +6,7 @@
 //! only its own variants.
 
 pub(crate) mod claims;
+pub(crate) mod coordination;
 pub(crate) mod providers;
 pub(crate) mod server;
 pub(crate) mod setup;
@@ -37,12 +38,14 @@ enum Group {
     Claims,
     Server,
     Setup,
+    Coordination,
 }
 
 impl Cmd {
     fn group(&self) -> Group {
         use Cmd::*;
         match self {
+            Coordination(_) => Group::Coordination,
             Init { .. }
             | Bootstrap { .. }
             | Link { .. }
@@ -149,6 +152,7 @@ impl Cmd {
         !matches!(
             self,
             Cmd::Init { .. }
+                | Cmd::Coordination(_)
                 | Cmd::Bootstrap { .. }
                 | Cmd::Link { .. }
                 | Cmd::Checkout { .. }
@@ -185,6 +189,7 @@ pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Group::Claims => claims::run(cmd, ctx),
         Group::Server => server::run(cmd, ctx),
         Group::Setup => setup::run(cmd, ctx),
+        Group::Coordination => coordination::run(cmd, ctx),
     }
 }
 

@@ -845,6 +845,20 @@ and uses the server's `POST /connections/{id}/message` operation. Server termina
 in `crates/hotsheet-server/src/routes/terminals/launch.rs` resolves each connection's project
 from its launch checkout/source.
 
+Local continuous worker coordination (HS2-76VMYG) lives in
+`crates/hotsheet-cli/src/coordination/`: `contract.rs` owns the provider-qualified
+session/assignment schema, `mod.rs` the atomic local state transitions,
+`snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
+and known lease deadlines. `dispatch/coordination.rs` exposes idempotent setup,
+registration, exact dispatch/acknowledgement, recovery, and terminal outcomes through
+`hotsheet-cli coordination`. The shared code Git common directory stores the local
+registry; it is separate from ticket-provider identity. Existing ticket claims remain
+authoritative. `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
+processes and real synthetic worktrees. Role instructions are canonical in
+`.claude/skills/hotsheet-{integrator,worker}/` with `.agents/skills/` mirrors.
+Source adapters beyond the selected local queue are explicit unsupported operations
+(HS2-3ETJ26); remote CI/app wake requires an actual supported route, not polling.
+
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home.
 `clients/web/src/dev-signing.ts` applies an explicitly configured, stable macOS development

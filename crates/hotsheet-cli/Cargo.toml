@@ -35,6 +35,7 @@ tempfile.workspace = true
 ureq.workspace = true
 rpassword.workspace = true
 regex.workspace = true
+notify.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

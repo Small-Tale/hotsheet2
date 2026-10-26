@@ -22,6 +22,22 @@ When automation lands, remove the manual-only step and record it below.
 
 ### Independent integrator handoff routes (HS2-J81Y9W, HS2-AJ7FJY)
 
+For continuous-loop acceptance (HS2-76VMYG), preflight the actual CLI's `coordination
+--help` and use the integrator's verified current executable if the installed CLI
+is older. On one disposable code project/shared synthetic source, start a Claude
+worker without a slug, then the Codex integrator; repeat in the reverse order. Verify
+availability appears, an exact structured assignment wakes only its intended worker,
+the actual ticket claim is held before code changes, and handoff/release returns the
+worker to a second fresh worktree without waiting for the first ticket's CI.
+
+Stop and resume the integrator while a handoff is pending; verify it discovers the
+durable commit even if the prompt cue was lost or unconfirmed. End an idle worker,
+observe stale availability, and confirm no in-progress ticket is silently reassigned.
+Record an inspection note before explicit recovery. Distinguish blockers, active
+claims (including outside Up Next), pending CI, uncovered sources, and true exhaustion.
+Verify a stopped run wakes active CLI waits and each final exit withdraws availability.
+Do not claim an ended independent app turn automatically resumes.
+
 Use disposable code worktrees, a shared synthetic ticket store, and separate Codex
 and Claude sessions. In each assignment, name the exact integrator recipient and
 return route. For a Hot Sheet terminal route, verify its live connection advertises

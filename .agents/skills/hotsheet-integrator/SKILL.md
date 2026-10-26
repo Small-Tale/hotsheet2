@@ -1,13 +1,78 @@
 ---
 name: hotsheet-integrator
-description: Coordinate parallel Hot Sheet workers from main, integrate their ticket branches, verify CI, and complete tickets.
+description: Keep a local main-branch integrator running, discover available workers, assign independent tickets, and integrate verified handoffs through CI.
 ---
-<!-- hotsheet-skill-version: 2 -->
+<!-- hotsheet-skill-version: 3 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
 `$hotsheet-worker` in separate Git worktrees. Follow `AGENTS.md` for the project's
 claim, phase, test, commit, push, and completion rules.
+
+## Continuous local session
+
+Preflight `hotsheet-cli coordination --help` using the executable selected by
+`command -v hotsheet-cli`. If missing, identify that runtime capability blocker and
+give workers a verified current executable path; do not call their queue empty.
+In a Hot Sheet 2 source checkout only, rebuild with `cargo build -p hotsheet-cli` in
+an isolated build checkout and use `<build-checkout>/target/debug/hotsheet-cli`
+explicitly. In another project's repo, use the maintainer-provided current CLI
+artifact or exact upgrade command for its installation method; do not assume Cargo.
+Repeat the capability check before registering sessions. No worker globally installs
+the tool or restarts the user's host as part of this workflow.
+
+Start with `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then
+`register --role integrator --id <integrator> --session <fresh-generation> --route
+<return-route>`. Keep that generation throughout this invocation and renew with
+`register` before long gates. The code Git common directory stores the durable local
+mailboxes shared by all worktrees; ticket identities remain provider-qualified.
+This is one explicit source scope, not a declaration that every linked source was read.
+
+Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
+
+1. Discover live available workers and pending handoff/integration/CI records. Workers
+   may have started first. If work is ready but no worker has joined, stay available
+   for later workers. Do not infer worker identity from an arbitrary process or cwd.
+2. After the dependency/file-overlap review below, reserve an exact assignment with
+   `coordination assign --id <integrator> --session <generation> --worker <worker>
+   --worker-session <worker-generation> --operation <unique-id> --connection <source>
+   --native-id <native-id> --slug <slug> --base <full-main-sha>`. Record the scope and
+   assignment id in its ticket. Retry the same operation id on lost delivery; do not
+   create a second assignment. A reservation is not a ticket claim. The worker's exact
+   claim remains authoritative before any code work.
+3. Integrate one durable handoff at a time using the steps below. Record mailbox phases
+   with `coordination mark --assignment <id> --phase integrating`, then `ci` after
+   verified push, then `done` after covering green CI and ticket completion. Include
+   integrator id/session on each call. The runtime fences a second integrating ticket;
+   several CI records may coexist while workers take independent new assignments.
+4. When waiting on local worker, ticket, or source-configuration changes, run
+   `coordination next --role integrator --id <integrator> --session <generation>
+   --after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
+   filesystem events, cursor reconciliation, and known lease-expiry deadlines wake it;
+   availability heartbeats do not scan the queue or network. Lost/unconfirmed session
+   cues cannot erase durable assignments or handoffs.
+5. Distinguish an empty actionable queue from blocked tickets, live claims, preserved
+   worker artifacts, pending handoffs, and pending CI. `local_queue` covers only the
+   selected local source. `uncovered_sources` or unsupported provider reads require
+   their actual provider query/event capability; never call them empty (HS2-3ETJ26).
+   CI completion needs an actual supported status/event route or human cue. If none
+   exists, name the exact pending CI and unavailable wake route as no safe automatic
+   progress; do not invent a subscription, add network polling, or report drained.
+6. Once the covered queue is exhausted and no work/handoff/CI remains, call
+   `coordination finish --reason drained`. When only inspected blockers remain, record
+   the exact blockers and use `--reason blocked`; the runtime refuses to finish over
+   active work or CI. Waiting workers receive that terminal outcome. On final exit,
+   use `coordination leave --role integrator`, including id/session, and release claims.
+   A later explicit invocation can `setup --resume`; it preserves unfinished records.
+
+Use the prefix `hotsheet-cli -C <shared-store> coordination --project <main>` for all
+commands; `--project` precedes the subcommand. A stale worker or expired ticket lease
+never triggers automatic reassignment. Inspect and preserve its ticket, branch,
+worktree, and commit; add a durable inspection note. Only then use `coordination recover
+--assignment <id> --evidence-note <note-id> --inspected` with integrator id/session.
+This fences the old reservation as blocked. Resolve it explicitly with mailbox `done`
+before a replacement assignment; that mailbox state does not complete the ticket.
+Ended independent app sessions require human resume (HS2-4H7D8D), not promised wake.
 
 ## Assign
 
