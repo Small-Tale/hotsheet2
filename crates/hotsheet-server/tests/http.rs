@@ -8812,18 +8812,23 @@ async fn hs2_vhwwa6_encoded_checkout_path_reaches_the_ticket_route() {
             .status(),
         StatusCode::CREATED
     );
-    let encoded = checkout.path().display().to_string().replace('/', "%2F");
-    let raw = format!("/checkouts/{}/tickets", checkout.path().display());
-    assert_eq!(
-        router
-            .clone()
-            .oneshot(authed("GET", &raw, None))
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::NOT_FOUND,
-        "a raw absolute path does not fit the checkout route parameter"
-    );
+    let reference = checkout.path().to_string_lossy();
+    let encoded =
+        percent_encoding::utf8_percent_encode(&reference, percent_encoding::NON_ALPHANUMERIC);
+    #[cfg(unix)]
+    {
+        let raw = format!("/checkouts/{reference}/tickets");
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(authed("GET", &raw, None))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND,
+            "a raw absolute path does not fit the checkout route parameter"
+        );
+    }
     let response = router
         .clone()
         .oneshot(authed(

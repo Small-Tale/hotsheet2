@@ -59,6 +59,7 @@ rusqlite.workspace = true
 image.workspace = true
 webp-animation.workspace = true
 png.workspace = true
+percent-encoding.workspace = true
 hotsheet-mcp.workspace = true
 libc.workspace = true
 tower.workspace = true

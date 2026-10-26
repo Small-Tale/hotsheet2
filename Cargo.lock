@@ -1216,6 +1216,7 @@ dependencies = [
  "image",
  "libc",
  "notify",
+ "percent-encoding",
  "png",
  "rusqlite",
  "rustls",
