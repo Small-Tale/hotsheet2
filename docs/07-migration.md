@@ -165,6 +165,8 @@ For each ticket:
   close timestamp and clearing `up_next` for every inactive status ([02](02-ticket-storage.md) §2.6a).
 - Before writing a ticket with attachments, atomically record its expected attachment
   list in `hotsheet-hs1-import-pending/<ticket-ulid>.json` in the destination store.
+  A checkout marked for compaction recovery rejects import before any checkpoint,
+  ticket, or settings write, including exports with no tickets (HS2-YCEQNT).
   Write the ticket, copy attachments to `attachments/<id>/`, and checkpoint each
   verified attachment identity. A failed read or write leaves this checkpoint intact.
   Retrying the same export repairs unfinished copies while retaining current ticket

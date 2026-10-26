@@ -494,7 +494,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/setup.rs           #   `hotsheet-cli setup <tool>` and read-only diagnosis planner: thin wrappers over hotsheet_plugins setup (adds the enabled-plugin filter from Settings)
       src/dispatch/setup_diagnose.rs # read-only CLI diagnosis: plugin plan, settings/worklist/registry path preview, MCP availability, and live terminal reports
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
-      src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
+      src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/git_env_isolation.rs # real hotsheet-cli under hook-style GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE aimed at a sentinel repo: init/new/edit/sync touch only the store (HS2-RRD417)

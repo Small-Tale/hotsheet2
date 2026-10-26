@@ -191,24 +191,28 @@ impl PendingImport {
     }
 
     fn write(&self, store: &FsStore, id: &Ulid) -> Result<()> {
-        let directory = store.root().join(PENDING_IMPORT_DIRECTORY);
-        std::fs::create_dir_all(&directory)?;
-        let mut staged = tempfile::NamedTempFile::new_in(&directory)?;
-        serde_json::to_writer_pretty(&mut staged, self)?;
-        staged.write_all(b"\n")?;
-        staged.as_file().sync_all()?;
-        staged.persist(directory.join(format!("{id}.json")))?;
-        Ok(())
+        store.with_ticket_transaction(|| {
+            let directory = store.root().join(PENDING_IMPORT_DIRECTORY);
+            std::fs::create_dir_all(&directory)?;
+            let mut staged = tempfile::NamedTempFile::new_in(&directory)?;
+            serde_json::to_writer_pretty(&mut staged, self)?;
+            staged.write_all(b"\n")?;
+            staged.as_file().sync_all()?;
+            staged.persist(directory.join(format!("{id}.json")))?;
+            Ok(())
+        })
     }
 
     fn remove(store: &FsStore, id: &Ulid) -> Result<()> {
-        std::fs::remove_file(
-            store
-                .root()
-                .join(PENDING_IMPORT_DIRECTORY)
-                .join(format!("{id}.json")),
-        )?;
-        Ok(())
+        store.with_ticket_transaction(|| {
+            std::fs::remove_file(
+                store
+                    .root()
+                    .join(PENDING_IMPORT_DIRECTORY)
+                    .join(format!("{id}.json")),
+            )?;
+            Ok(())
+        })
     }
 }
 
@@ -238,6 +242,9 @@ pub fn import_with_progress(
     observe: crate::migration_progress::ProgressObserver<'_>,
 ) -> Result<ImportSummary> {
     use crate::migration_progress::MigrationProgress;
+    // Import writes checkpoints and settings even when there are no ticket writes.
+    // Admit the workflow before either path can mutate a stale checkout (HS2-YCEQNT).
+    store.with_ticket_transaction(|| Ok::<(), StoreError>(()))?;
     let total = export.tickets.len() as u64;
     observe(MigrationProgress::measured(
         "import_tickets",
@@ -317,7 +324,7 @@ pub fn import_with_progress(
         ));
     }
     observe(MigrationProgress::phase("import_settings"));
-    import_settings(store, export)?;
+    store.with_ticket_transaction(|| import_settings(store, export))?;
     Ok(summary)
 }
 
@@ -932,6 +939,13 @@ mod tests {
         (dir, store)
     }
 
+    fn mark_compaction_recovery_required(store: &FsStore) {
+        crate::git_init(store.root());
+        let marker =
+            hotsheet_ticketing::repository_compaction::recovery_marker_path(store.root()).unwrap();
+        std::fs::write(marker, b"{}\n").unwrap();
+    }
+
     fn export_json() -> ExportFile {
         let json = r#"{
           "exportVersion": 1,
@@ -973,6 +987,60 @@ mod tests {
             })
             .collect();
         export
+    }
+
+    #[test]
+    fn hs2_yceqnt_rejects_attachment_import_before_checkpoint_or_ticket_write() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        mark_compaction_recovery_required(&store);
+
+        let error = import(&store, &attachment_export(), staging.path()).unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<StoreError>(),
+            Some(StoreError::CompactionRecoveryRequired)
+        ));
+        assert!(!store.root().join(PENDING_IMPORT_DIRECTORY).exists());
+        assert!(store.list_tickets().unwrap().is_empty());
+    }
+
+    #[test]
+    fn hs2_yceqnt_rechecks_admission_before_late_checkpoint_and_settings_writes() {
+        let (_dir, store) = temp_store();
+        let staging = tempfile::tempdir().unwrap();
+        crate::git_init(store.root());
+        let error =
+            import_with_progress(&store, &attachment_export(), staging.path(), &mut |event| {
+                if event.phase == "import_tickets" {
+                    mark_compaction_recovery_required(&store);
+                }
+            })
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<StoreError>(),
+            Some(StoreError::CompactionRecoveryRequired)
+        ));
+        assert!(!store.root().join(PENDING_IMPORT_DIRECTORY).exists());
+        assert!(store.list_tickets().unwrap().is_empty());
+
+        let (_dir, store) = temp_store();
+        crate::git_init(store.root());
+        let mut export = export_json();
+        export.tickets.clear();
+        export
+            .settings
+            .insert("theme".into(), Value::String("dark".into()));
+        let error = import_with_progress(&store, &export, staging.path(), &mut |event| {
+            if event.phase == "import_settings" {
+                mark_compaction_recovery_required(&store);
+            }
+        })
+        .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<StoreError>(),
+            Some(StoreError::CompactionRecoveryRequired)
+        ));
+        assert!(!store.root().join("hotsheet-settings.json").exists());
     }
 
     #[test]
