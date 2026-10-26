@@ -42,8 +42,33 @@ cleans only the submitted origin references; delayed staging, restore, close-ani
 submission responses cannot overwrite a later project draft or Not working target. Ordinary browser sessions keep these bytes in origin-scoped IndexedDB with
 the same per-file failure handling. Files staged by an earlier build in a now-abandoned
 origin's IndexedDB cannot be recovered.
-Small close-time writes use ordered keepalive retries; large or aggregate writes
-beyond the browser keepalive budget need a native flush handshake (HS2-E0H7S0).
+Controlled desktop window close and application quit first capture the current local
+recovery state and drain pending preference/draft strings through ordinary requests
+(HS2-E0H7S0). The window and its bridge remain alive until the exact current request
+is acknowledged successfully. Editor capture is synchronous and independent of server
+saves: the latest queued, in-flight or failed edit retains its scheduled destination
+and merge base. A local quota/unavailable-storage failure prevents successful close;
+a durable recovery copy permits close even while an older server save remains held.
+Linked-reader copies restore when the same qualified ticket/field is reopened.
+Native recovery may carry an optional validated `pendingIntent.predecessor`: only
+when the observed server value exactly matches that older submitted value may the
+newest edit rebase over it, including an explicit revert to the original base.
+Unrelated remote changes still use the ordinary merge/conflict policy. Identical
+pagehide copies retain this evidence; legacy records and ordinary equal-base
+clearing retain their behavior. Older clients do not interpret this native intent
+marker and cannot guarantee recovery of such pending/reverted edits.
+Successful server saves clean up only their captured qualified recovery destination.
+Details and note Markdown compare exactly, including whitespace; only fields whose
+submitted values are normalized use trimmed equality. An older save cannot clear a
+new selection's copy or a newer whitespace-only Markdown edit during native drain.
+Repeated close/quit requests coalesce. A failed capture,
+write, acknowledgement, or 30-second deadline leaves the app open and reports that
+local changes could not be saved; resolve the failure and try closing again. Old
+acknowledgements cannot finish a newer attempt. The native acknowledgement is scoped
+to the main webview and this launch's exact loopback origin. No broad remote IPC
+capability is enabled. Browser pagehide still uses ordered small keepalive retries.
+This controlled-close handshake does not guarantee recovery after an OS crash or
+force termination, and does not change attachment-file ownership or collection.
 `npm run desktop:storage:test` checks the rebuilt production client and bridge
 across fresh origins and reloads in Chromium and WebKit using synthetic projects and
 synthetic draft attachment bytes.

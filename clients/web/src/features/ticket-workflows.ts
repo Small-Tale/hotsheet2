@@ -31,7 +31,12 @@ import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
 import { copyWithSelection } from '../copy-text';
-import { createDebouncedAutosave, createFocusLossAutosave, type DebouncedAutosave } from '../debounced-autosave';
+import {
+  createDebouncedAutosave,
+  createFocusLossAutosave,
+  type FocusLossAutosave,
+  type InFlightRecovery,
+} from '../debounced-autosave';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { finishDraftSubmission } from '../draft-submission-state';
@@ -74,8 +79,11 @@ import {
 } from '../ticket-close';
 import { createTicketDetailCache, sameTicketRevision } from '../ticket-detail-cache';
 import {
+  captureTicketDraft,
   clearTicketDraft,
   loadTicketDraft,
+  prepareCommittedDraftCleanup,
+  reconcileStoredTicketDraft,
   saveTicketDraft,
   type TicketDraftField,
   ticketDraftKey,
@@ -84,7 +92,6 @@ import {
   isTicketConcurrencyConflict,
   noteEditPatch,
   rebaseDraftValue,
-  reconcileActiveDraft,
   reconcileTicketPatch,
   type TicketFieldConflict,
   ticketFieldLabel,
@@ -492,6 +499,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const current = project(),
       ticket = tickets.value.find((item) => item.slug === slug);
     if (!current || !ticket) return false;
+    // HS2-E0H7S0: queued/retried origin writes cannot rebase another selection's editor recovery.
+    const ownsDrafts = () => project()?.id === current.id && selectedTicket.value?.qualified_id === ticket.qualified_id;
     const interaction = Object.hasOwn(patch, 'up_next')
         ? 'ticket-up-next-change'
         : Object.hasOwn(patch, 'status')
@@ -532,7 +541,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           Object.keys(patch).length > 0 &&
           Object.keys(patch).every((field) => queuedFields.has(field)),
         );
-        const rebased = useQueue ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
+        const rebased = useQueue || !ownsDrafts() ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
         if (rebased.conflict) {
           if (mutationGenerations.get(slug) === generation) {
             tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, base) : item));
@@ -622,7 +631,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               });
               return false;
             }
-            recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
+            if (ownsDrafts()) recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
             if (Object.keys(reconciled.retry).length === 0) updated = remote;
             else {
               base = remote;
@@ -646,7 +655,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, updated) : item));
         publishOptimisticTicketRows(current.id);
         if (selectedTicket.value?.slug === slug) selectedTicket.value = updated;
-        recordCommittedDraftBases(recorded);
+        if (ownsDrafts()) recordCommittedDraftBases(recorded);
         error.value = updated.warnings?.join('\n') ?? '';
         reportMutationTiming({
           slug,
@@ -736,13 +745,30 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       key = selectedDraftKey(field, noteId);
     if (storage && key) saveTicketDraft(storage, key, { base, draft });
   }
-  /** Drop the recovery copy once the value it holds is committed; a newer copy typed meanwhile stays. */
-  function clearCommittedDraft(field: TicketDraftField, committed: string, noteId?: string) {
-    const storage = draftStorage(),
-      key = selectedDraftKey(field, noteId);
-    if (!storage || !key) return;
-    const stored = loadTicketDraft(storage, key);
-    if (!stored || stored.draft.trim() === committed.trim()) clearTicketDraft(storage, key);
+  function prepareSelectedDraft(
+    field: TicketDraftField,
+    base: string,
+    draft: string,
+    noteId?: string,
+    previous?: InFlightRecovery<string>,
+  ) {
+    const key = selectedDraftKey(field, noteId),
+      predecessor =
+        key !== undefined && previous?.destination === key
+          ? field === 'title' || field === 'blocked_reason'
+            ? previous.value.trim()
+            : previous.value
+          : undefined;
+    return {
+      destination: key,
+      capture: () => {
+        captureTicketDraft(draftStorage(), key, {
+          base,
+          draft,
+          ...(predecessor !== undefined && predecessor !== draft ? { pendingIntent: { predecessor } } : {}),
+        });
+      },
+    };
   }
   /**
    * The recovery copy for a field the user is about to edit, rebased onto the field's current value:
@@ -759,20 +785,18 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       key = selectedDraftKey(field, noteId);
     if (!storage || !key) return undefined;
     const stored = loadTicketDraft(storage, key);
-    if (!stored || stored.draft === stored.base || stored.draft === current) {
+    if (!stored || (stored.draft === stored.base && !stored.pendingIntent) || stored.draft === current) {
       if (stored) clearTicketDraft(storage, key);
       return undefined;
     }
-    const next = reconcileActiveDraft(stored.base, stored.draft, current);
+    const next = reconcileStoredTicketDraft(stored, current);
     if (next.kind === 'conflict') {
       clearTicketDraft(storage, key);
       showToast('An unsaved edit could not be merged with a newer version of this ticket and was discarded.');
       return undefined;
     }
     showToast('Restored an unsaved edit.');
-    return next.kind === 'unchanged'
-      ? { draft: stored.draft, base: stored.base }
-      : { draft: next.draft, base: next.base };
+    return { draft: next.draft, base: next.base };
   }
   const savingDraft =
     <T>(
@@ -782,8 +806,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       noteId?: (value: T) => string | undefined,
     ) =>
     async (value: T) => {
+      const clearCommitted = prepareCommittedDraftCleanup(
+        draftStorage(),
+        selectedDraftKey(field, noteId?.(value)),
+        field,
+        text(value),
+      );
       const saved = await save(value);
-      if (saved) clearCommittedDraft(field, text(value), noteId?.(value));
+      if (saved) clearCommitted();
       return saved;
     };
   const plain = (value: string) => value,
@@ -794,6 +824,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: (value) => {
         persistSelectedDraft('details', state.detailsDraftBase, value);
       },
+      prepareRecovery: (value, predecessor) =>
+        prepareSelectedDraft('details', state.detailsDraftBase, value, undefined, predecessor),
     },
   );
   const readerDetailsAutosave = createFocusLossAutosave(
@@ -802,6 +834,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: (value) => {
         persistSelectedDraft('details', state.readerDetailsDraftBase, value);
       },
+      prepareRecovery: (value, predecessor) =>
+        prepareSelectedDraft('details', state.readerDetailsDraftBase, value, undefined, predecessor),
     },
   );
   const noteAutosave = createFocusLossAutosave(
@@ -815,6 +849,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: ({ id, value }) => {
         persistSelectedDraft('note', state.noteDraftBase, value, id);
       },
+      prepareRecovery: ({ id, value }, predecessor) =>
+        prepareSelectedDraft(
+          'note',
+          state.noteDraftBase,
+          value,
+          id,
+          predecessor?.value.id === id
+            ? { destination: predecessor.destination, value: predecessor.value.value }
+            : undefined,
+        ),
     },
   );
   const readerNoteAutosave = createFocusLossAutosave(
@@ -828,6 +872,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: ({ id, value }) => {
         persistSelectedDraft('note', state.readerNoteDraftBase, value, id);
       },
+      prepareRecovery: ({ id, value }, predecessor) =>
+        prepareSelectedDraft(
+          'note',
+          state.readerNoteDraftBase,
+          value,
+          id,
+          predecessor?.value.id === id
+            ? { destination: predecessor.destination, value: predecessor.value.value }
+            : undefined,
+        ),
     },
   );
   const blockedReasonAutosave = createFocusLossAutosave(
@@ -836,6 +890,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: (value) => {
         persistSelectedDraft('blocked_reason', state.blockedReasonDraftBase, value);
       },
+      prepareRecovery: (value, predecessor) =>
+        prepareSelectedDraft('blocked_reason', state.blockedReasonDraftBase, value, undefined, predecessor),
     },
   );
   const readerBlockedReasonAutosave = createFocusLossAutosave(
@@ -844,6 +900,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: (value) => {
         persistSelectedDraft('blocked_reason', state.readerBlockedReasonDraftBase, value);
       },
+      prepareRecovery: (value, predecessor) =>
+        prepareSelectedDraft('blocked_reason', state.readerBlockedReasonDraftBase, value, undefined, predecessor),
     },
   );
   const titleAutosave = createFocusLossAutosave(
@@ -852,6 +910,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       persist: (value) => {
         persistSelectedDraft('title', state.titleDraftBase, value);
       },
+      prepareRecovery: (value, predecessor) =>
+        prepareSelectedDraft('title', state.titleDraftBase, value, undefined, predecessor),
     },
   );
   const tagsAutosave = createDebouncedAutosave((value: string[]) => updateSelectedTracked({ tags: value }));
@@ -922,24 +982,78 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const linkedReaderAutosaves = new Map<
     string,
     {
-      details: DebouncedAutosave<string>;
-      note: DebouncedAutosave<{ id: string; value: string }>;
-      blocked: DebouncedAutosave<string>;
+      details: FocusLossAutosave<string>;
+      note: FocusLossAutosave<{ id: string; value: string }>;
+      blocked: FocusLossAutosave<string>;
       respond: (value: string, requestId?: string) => Promise<boolean>;
     }
   >();
   function linkedReaderSaves(id: string) {
     let saves = linkedReaderAutosaves.get(id);
     if (!saves) {
+      const capture = (
+        field: TicketDraftField,
+        draft: string,
+        noteId?: string,
+        previous?: InFlightRecovery<string>,
+      ) => {
+        const frame = linkedReaderStack.value.find((item) => item.id === id);
+        if (!frame)
+          return {
+            destination: undefined,
+            capture: () => {
+              throw new Error('Local recovery destination is unavailable.');
+            },
+          };
+        const base =
+          field === 'details'
+            ? frame.edit.detailsBase
+            : field === 'blocked_reason'
+              ? frame.edit.blockedReasonBase
+              : frame.edit.noteBase;
+        const key = ticketDraftKey(frame.projectId, frame.ticket.qualified_id, field, noteId),
+          predecessor =
+            previous?.destination === key
+              ? field === 'blocked_reason'
+                ? previous.value.trim()
+                : previous.value
+              : undefined;
+        return {
+          destination: key,
+          capture: () => {
+            captureTicketDraft(draftStorage(), key, {
+              base,
+              draft,
+              ...(predecessor !== undefined && predecessor !== draft ? { pendingIntent: { predecessor } } : {}),
+            });
+          },
+        };
+      };
       saves = {
-        details: createFocusLossAutosave((value) => updateLinkedReader(id, { details: value })),
-        note: createFocusLossAutosave(({ id: noteId, value }) =>
-          updateLinkedReader(
-            id,
-            noteEditPatch(linkedReaderStack.value.find((frame) => frame.id === id)?.ticket, noteId, value),
-          ),
+        details: createFocusLossAutosave((value) => updateLinkedReader(id, { details: value }), {
+          prepareRecovery: (value, predecessor) => capture('details', value, undefined, predecessor),
+        }),
+        note: createFocusLossAutosave(
+          ({ id: noteId, value }) =>
+            updateLinkedReader(
+              id,
+              noteEditPatch(linkedReaderStack.value.find((frame) => frame.id === id)?.ticket, noteId, value),
+            ),
+          {
+            prepareRecovery: ({ id: noteId, value }, predecessor) =>
+              capture(
+                'note',
+                value,
+                noteId,
+                predecessor?.value.id === noteId
+                  ? { destination: predecessor.destination, value: predecessor.value.value }
+                  : undefined,
+              ),
+          },
         ),
-        blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null })),
+        blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null }), {
+          prepareRecovery: (value, predecessor) => capture('blocked_reason', value, undefined, predecessor),
+        }),
         respond: (value, requestId) =>
           updateLinkedReader(id, {
             note: value,
@@ -1832,6 +1946,24 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       ...[...linkedReaderAutosaves.keys()].map((frameId) => flushLinkedReader(frameId)),
     ]).then((results) => results.every(Boolean));
   }
+  function captureTicketDraftRecovery() {
+    flushDraftInputs();
+    for (const save of [
+      detailsAutosave,
+      readerDetailsAutosave,
+      noteAutosave,
+      readerNoteAutosave,
+      blockedReasonAutosave,
+      readerBlockedReasonAutosave,
+      titleAutosave,
+    ])
+      save.captureRecovery();
+    for (const saves of linkedReaderAutosaves.values()) {
+      saves.details.captureRecovery();
+      saves.note.captureRecovery();
+      saves.blocked.captureRecovery();
+    }
+  }
   function cancelTicketDrafts() {
     state.detailsEditGeneration += 1;
     state.readerDetailsEditGeneration += 1;
@@ -2531,6 +2663,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     applyTicketPatch,
     restoreTicketDraft,
     flushTicketDrafts,
+    captureTicketDraftRecovery,
     updateSelected,
     history,
     updateSelectedTracked,

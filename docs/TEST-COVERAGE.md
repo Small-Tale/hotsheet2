@@ -36,8 +36,28 @@ revision rejection, later pagehide writes, per-key failure isolation, and indepe
 `clients/web/src/desktop-storage.test.ts` and `desktop-storage-bridge.test.ts`.
 `clients/web/scripts/desktop-storage-smoke.mjs` runs the rebuilt production frontend
 and bridge in Chromium/WebKit across different ports and reloads; signed native
-window relaunch remains manual. Large close-time flushes beyond the keepalive budget are
-HS2-E0H7S0.
+window relaunch remains manual. HS2-E0H7S0 adds large controlled-close queue draining,
+capture failure, ordinary preference progress, repeated requests, cancellation/retry and
+stale frontend completion coverage in `desktop-storage.test.ts` and `desktop-close.test.ts`.
+`tests/desktop-native-close.spec.ts` drives the real composer with held and failed large
+Unicode writes and recovery after relaunch; its IPC adapter is explicitly a browser mock.
+Native `src-tauri/src/close_lifecycle.rs` tests pin exact main-window/webview/origin authority,
+missing-window startup, duplicate close/quit, failure/deadline retry and stale acknowledgements.
+Actual isolated native API event evidence and literal OS/titlebar limitations are recorded
+in HS2-E0H7S0/HS2-Y4KA47; signed distribution and OS GUI actions remain manual.
+The E0 correction adds explicit strict local capture before ACK, independently of server
+flush completion. `debounced-autosave.test.ts` covers owned destination/version, active
+older save, failed copy/retry, cancel/replacement/success/refill; `ticket-draft-store.test.ts`
+distinguishes strict capture from tolerant ordinary browser persistence. Real-parent
+`desktop-native-close.spec.ts` covers inspector/workspace-reader/linked-reader held saves,
+selective local quota, retry ACK before old response, and fresh-origin draft reopening.
+HS2-R6QW4C separately tracks baseline linked-reader ordinary-browser crash recovery.
+`desktop-native-recovery-cleanup.spec.ts` covers a held older details/note save
+finishing during native drain after newer exact whitespace capture, and equal-text
+recovery for another selected ticket. Draft-store and label units pin pre-await
+qualified destination cleanup, cross-project identity and field-specific normalization.
+The real Markdown 409 case verifies failure preserves the new owner's draft;
+HS2-9S8CV1 separately tracks recognition/retry of the slug-bearing conflict message.
 
 HS2-791W19 covers desktop draft attachment bytes. `clients/web/src/desktop-draft-files-bridge.test.ts`
 covers exact binary and Unicode-name round trips across recreated bridges, one private atomic

@@ -2,7 +2,14 @@ import type { Signal } from 'kerfjs';
 
 import type { AttachmentMetadata } from './api';
 import { AUTOSAVE_DELAY_MS, createFocusLossAutosave } from './debounced-autosave';
-import { clearTicketDraft, loadTicketDraft, saveTicketDraft } from './ticket-draft-store';
+import {
+  captureTicketDraft,
+  clearTicketDraft,
+  loadTicketDraft,
+  prepareCommittedDraftCleanup,
+  reconcileStoredTicketDraft,
+  saveTicketDraft,
+} from './ticket-draft-store';
 import { reconcileActiveDraft } from './ticket-field-reconciliation';
 
 /**
@@ -123,6 +130,7 @@ export interface AttachmentLabelEditor {
   finish(field: Element): Promise<boolean>;
   /** Page hide or an explicit save: write any unsaved draft now. */
   flush(): Promise<boolean>;
+  captureRecovery(): void;
 }
 
 const defaultStorage = (): DraftStorage | undefined => (typeof localStorage === 'undefined' ? undefined : localStorage);
@@ -152,7 +160,8 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
         clearTicketDraft(copy.store, copy.key);
     };
   async function commit(edit: AttachmentLabelEditing): Promise<boolean> {
-    const draft = edit.draft ?? edit.original,
+    const copy = copyOf(edit.key),
+      draft = edit.draft ?? edit.original,
       base = edit.base ?? edit.original,
       theirs = currentLabel(edit),
       next = reconcileActiveDraft(base, draft, theirs),
@@ -162,12 +171,30 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
       dropCopy(edit.key);
       return true;
     }
-    const saved = await save(edit, label);
-    if (saved) dropCopy(edit.key, label);
+    const clearCommitted = prepareCommittedDraftCleanup(copy?.store, copy?.key, 'attachment_label', label),
+      saved = await save(edit, label);
+    if (saved) clearCommitted();
     return saved;
   }
   const autosave = createFocusLossAutosave(commit, {
     delay: options.delay ?? AUTOSAVE_DELAY_MS,
+    prepareRecovery: (edit, previous) => {
+      const key = draftKey(edit.key);
+      return {
+        destination: key,
+        capture: () => {
+          captureTicketDraft(storage(), key, {
+            base: edit.base ?? edit.original,
+            draft: edit.draft ?? edit.original,
+            ...(key !== undefined &&
+            previous?.destination === key &&
+            (previous.value.draft ?? previous.value.original) !== (edit.draft ?? edit.original)
+              ? { pendingIntent: { predecessor: (previous.value.draft ?? previous.value.original).trim() } }
+              : {}),
+          });
+        },
+      };
+    },
     persist: (edit) => {
       const copy = copyOf(edit.key);
       if (copy)
@@ -187,18 +214,17 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
       const copy = copyOf(edit.key),
         stored = copy && loadTicketDraft(copy.store, copy.key);
       if (!copy || !stored) return input;
-      if (stored.draft === stored.base || stored.draft === edit.original) {
+      if ((stored.draft === stored.base && !stored.pendingIntent) || stored.draft === edit.original) {
         clearTicketDraft(copy.store, copy.key);
         return input;
       }
-      const next = reconcileActiveDraft(stored.base, stored.draft, edit.original);
+      const next = reconcileStoredTicketDraft(stored, edit.original);
       if (next.kind === 'conflict') {
         clearTicketDraft(copy.store, copy.key);
         notify?.('An unsaved label edit could not be merged with a newer label and was discarded.');
         return input;
       }
-      const restored =
-        next.kind === 'unchanged' ? { draft: stored.draft, base: stored.base } : { draft: next.draft, base: next.base };
+      const restored = { draft: next.draft, base: next.base };
       editing.value = { ...edit, ...restored };
       input.value = restored.draft;
       autosave.schedule(editing.value);
@@ -227,5 +253,8 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
       return saved;
     },
     flush: () => autosave.flush(),
+    captureRecovery: () => {
+      autosave.captureRecovery();
+    },
   };
 }

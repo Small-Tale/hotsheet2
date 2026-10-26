@@ -41,6 +41,7 @@ import { attachmentBatchPurpose } from '../components/ticket-attachments';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { copyText } from '../copy-text';
 import { AUTOSAVE_DELAY_MS } from '../debounced-autosave';
+import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import {
   clampAnnotationCoordinate,
   drawGalleryAnnotation,
@@ -351,6 +352,15 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     void filenameEditor.finish();
   };
   document.defaultView?.addEventListener('pagehide', flushLabelOnHide, { signal: lifetime.signal });
+  if (document.defaultView)
+    listenForDesktopRecovery(
+      document.defaultView,
+      () => {
+        labelEditor.captureRecovery();
+        filenameEditor.captureRecovery();
+      },
+      { signal: lifetime.signal },
+    );
   document.addEventListener(
     'visibilitychange',
     () => {

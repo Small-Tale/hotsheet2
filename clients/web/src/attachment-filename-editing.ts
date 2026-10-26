@@ -1,8 +1,13 @@
 import type { Signal } from 'kerfjs';
 
 import { createFocusLossAutosave } from './debounced-autosave';
-import { clearTicketDraft, loadTicketDraft, saveTicketDraft } from './ticket-draft-store';
-import { reconcileActiveDraft } from './ticket-field-reconciliation';
+import {
+  captureTicketDraft,
+  clearTicketDraft,
+  loadTicketDraft,
+  reconcileStoredTicketDraft,
+  saveTicketDraft,
+} from './ticket-draft-store';
 
 export interface AttachmentFilenameEditing {
   scope: string;
@@ -44,6 +49,15 @@ export function createAttachmentFilenameEditor(
       }
     },
     {
+      prepareRecovery(edit) {
+        const key = destination?.key;
+        return {
+          destination: key,
+          capture: () => {
+            captureTicketDraft(storage(), key, { base: edit.original, draft: edit.draft });
+          },
+        };
+      },
       persist(edit) {
         const store = storage();
         if (store && destination) saveTicketDraft(store, destination.key, { base: edit.original, draft: edit.draft });
@@ -65,7 +79,7 @@ export function createAttachmentFilenameEditor(
       destination = { key, save };
       const store = storage(),
         copy = store && loadTicketDraft(store, key);
-      const restored = copy ? reconcileActiveDraft(copy.base, copy.draft, edit.original) : undefined;
+      const restored = copy ? reconcileStoredTicketDraft(copy, edit.original) : undefined;
       const draft = restored?.draft ?? edit.original;
       const message =
         restored?.kind === 'conflict'
@@ -93,6 +107,9 @@ export function createAttachmentFilenameEditor(
       // A failed write has no queued value: explicitly retry the preserved draft on the next finish.
       if (editing.value && !editing.value.saving) autosave.schedule(editing.value);
       return autosave.flush();
+    },
+    captureRecovery() {
+      autosave.captureRecovery();
     },
     dispose() {
       autosave.cancel();

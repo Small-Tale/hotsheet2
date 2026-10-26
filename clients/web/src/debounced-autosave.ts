@@ -60,7 +60,23 @@ export function createDebouncedAutosave<T>(
 export interface FocusLossAutosaveOptions<T> {
   /** Keep a local recovery copy of the latest value; runs debounced while the user types. */
   persist?: (value: T) => void;
+  /** Strict local-only capture for controlled native close; failures must remain observable. */
+  prepareRecovery?: (value: T, inFlight?: InFlightRecovery<T>) => PreparedRecovery;
   delay?: number;
+}
+
+export interface PreparedRecovery {
+  destination: string | undefined;
+  capture(): void;
+}
+
+export interface InFlightRecovery<T> {
+  destination: string | undefined;
+  value: T;
+}
+
+export interface FocusLossAutosave<T> extends DebouncedAutosave<T> {
+  captureRecovery(): void;
 }
 
 /**
@@ -72,12 +88,15 @@ export interface FocusLossAutosaveOptions<T> {
  */
 export function createFocusLossAutosave<T>(
   save: (value: T) => Promise<boolean>,
-  { persist, delay = AUTOSAVE_DELAY_MS }: FocusLossAutosaveOptions<T> = {},
-): DebouncedAutosave<T> {
+  { persist, prepareRecovery, delay = AUTOSAVE_DELAY_MS }: FocusLossAutosaveOptions<T> = {},
+): FocusLossAutosave<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queued: T | undefined;
   let hasQueuedValue = false;
   let active: Promise<boolean> | undefined;
+  // HS2-E0H7S0: independent of the server queue, including active/failed saves.
+  let recovery: Partial<PreparedRecovery> | undefined;
+  let inFlight: InFlightRecovery<T> | undefined;
 
   const persistNow = () => {
     if (timer) clearTimeout(timer);
@@ -92,30 +111,44 @@ export function createFocusLossAutosave<T>(
     if (!hasQueuedValue) return true;
     persistNow();
     const value = queued as T;
+    const captured = recovery;
     queued = undefined;
     hasQueuedValue = false;
     const current = save(value);
     active = current;
+    const saving = { value, destination: captured?.destination };
+    inFlight = saving;
     try {
-      return await current;
+      const saved = await current;
+      if (saved && recovery === captured) recovery = undefined;
+      return saved;
     } finally {
       if (active === current) active = undefined;
+      if (inFlight === saving) inFlight = undefined;
     }
   };
 
   return {
     schedule(value) {
+      recovery = prepareRecovery?.(value, inFlight) ?? {};
       queued = value;
       hasQueuedValue = true;
       if (timer) clearTimeout(timer);
       timer = setTimeout(persistNow, delay);
     },
     flush,
+    captureRecovery() {
+      if (!recovery) return;
+      if (!recovery.capture) throw new Error('Local recovery capture is unavailable.');
+      recovery.capture();
+    },
     cancel() {
       if (timer) clearTimeout(timer);
       timer = undefined;
       queued = undefined;
       hasQueuedValue = false;
+      recovery = undefined;
+      inFlight = undefined; // a cancelled owner cannot supply predecessor authority to a replacement
     },
     pending: () => hasQueuedValue || active !== undefined,
   };

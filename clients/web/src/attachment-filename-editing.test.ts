@@ -18,11 +18,38 @@ function setup() {
   const editing = signal<AttachmentFilenameEditing | undefined>(undefined);
   const editor = createAttachmentFilenameEditor(editing, () => storage);
   const edit = { scope: 'reader-a', ticketKey: 'git:a', id: 'file-a', original: 'original.txt' };
-  return { editor, editing, stored, edit };
+  return { editor, editing, stored, storage, edit };
 }
 afterEach(() => vi.useRealTimers());
 
 describe('inline attachment filename editing (HS2-WMZ6Z5)', () => {
+  it('HS2-E0H7S0 strictly captures the owned filename and retains it after quota for retry/reset', () => {
+    vi.useFakeTimers();
+    const h = setup(),
+      save = vi.fn<() => Promise<void>>();
+    h.editor.begin(h.edit, 'owned', save);
+    h.editor.input('latest.txt');
+    const original = h.storage.setItem.bind(h.storage),
+      failure = vi.spyOn(h.storage, 'setItem').mockImplementation(() => {
+        throw new Error('Synthetic quota');
+      });
+    expect(() => {
+      h.editor.captureRecovery();
+    }).toThrow('Synthetic quota');
+    expect(h.editing.value?.draft).toBe('latest.txt');
+    expect(save).not.toHaveBeenCalled();
+    failure.mockImplementation(original);
+    h.editor.captureRecovery();
+    expect(JSON.parse(h.stored.get('owned') ?? '{}')).toMatchObject({ base: 'original.txt', draft: 'latest.txt' });
+    h.editor.cancel();
+    h.editor.captureRecovery();
+    expect(h.stored.size).toBe(0);
+    h.editor.begin({ ...h.edit, id: 'other' }, 'replacement', save);
+    h.editor.input('after-reset.txt');
+    h.editor.captureRecovery();
+    expect(JSON.parse(h.stored.get('replacement') ?? '{}')).toMatchObject({ draft: 'after-reset.txt' });
+    h.editor.dispose();
+  });
   it('retains conflicting recovery and a rapid switch draft without issuing a server write', async () => {
     vi.useFakeTimers();
     const h = setup(),

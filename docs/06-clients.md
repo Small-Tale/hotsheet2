@@ -213,6 +213,17 @@ preview/download, server directory browser) are separate design work.
 
 ## 6.3 Web client and Tauri desktop host
 
+- **Durable controlled desktop close.** Before closing a native window or quitting,
+  capture local recovery and await every pending desktop preference/draft-string
+  revision, including large Unicode values above the browser keepalive budget
+  (HS2-E0H7S0). Preserve the window/bridge until the current request succeeds;
+  coalesce repeated requests and reject stale or foreign acknowledgements.
+  Capture/write failures or the bounded deadline leave the app open with a retry
+  notice. Capture the latest editor value with its qualified destination and edit-start
+  merge base even when an older server save is held; failure to create this local copy
+  must prevent success acknowledgement. A durable recovery copy does not require a
+  successful ordinary server save. Crash and force-termination guarantees remain outside this contract.
+
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before
   adding its Tauri host. A `/ux-demo` route renders the real production components
   against deterministic mock service adapters for isolated and composed UX review. Its

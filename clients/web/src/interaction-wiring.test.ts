@@ -25,6 +25,28 @@ const main = read('./main.tsx');
 const runtime = read('./app/runtime.tsx');
 const interactionBindings = read('./app/interaction-bindings.ts');
 const applicationWiring = read('./app/wire-interactions.ts');
+
+it('HS2-E0H7S0 native capture uses explicit local recovery rather than discarded server flush promises', () => {
+  const capture = runtime.slice(
+    runtime.indexOf('listenForDesktopRecovery(window,'),
+    runtime.indexOf(
+      "document.addEventListener('visibilitychange'",
+      runtime.indexOf('listenForDesktopRecovery(window,'),
+    ),
+  );
+  expect(capture).toContain('captureTicketDraftRecovery()');
+  expect(capture).not.toContain('flushTicketDrafts()');
+  const attachments = read('./interactions/attachments-and-gallery.ts');
+  const attachmentCapture = attachments.slice(
+    attachments.indexOf('listenForDesktopRecovery('),
+    attachments.indexOf('document.addEventListener(', attachments.indexOf('listenForDesktopRecovery(')),
+  );
+  expect(attachmentCapture).toContain('labelEditor.captureRecovery()');
+  expect(attachmentCapture).toContain('filenameEditor.captureRecovery()');
+  expect(attachments).toContain('void filenameEditor.finish()'); // ordinary pagehide remains intact
+  expect(read('./features/ticket-workflows.ts')).toContain('previous?.destination === key');
+  expect(read('./attachment-label-editing.ts')).toContain('previous?.destination === key');
+});
 /**
  * Every shared attr-spec table, so a `TABLE.key.selector` argument resolves to the literal
  * selector string it registers and the inventory keeps proving byte-identical selectors.
@@ -180,14 +202,18 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(44);
+    expect(main.split('\n')).toHaveLength(46); // HS2-E0H7S0: install native close after parent readiness.
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
     expect(main).toContain('installDocumentScrollRestore(window);');
     expect(main).toContain('const { appRoot } = await startHotSheetWebClient();');
     // HS2-RKZKX7: hydrate desktop state before application defaults inspect localStorage.
-    expect(main).toContain("if ('__HOTSHEET_DESKTOP_STORAGE__' in window) await initializeDesktopStorage();");
+    expect(main).toContain("'__HOTSHEET_DESKTOP_STORAGE__' in window ? await initializeDesktopStorage() : undefined");
+    // HS2-E0H7S0: native close callback becomes ready only after the real parent's recovery listeners.
+    expect(main.indexOf('installDesktopClose(desktopStorage)')).toBeGreaterThan(
+      main.indexOf('await startHotSheetWebClient()'),
+    );
     expect(main.indexOf('await initializeDesktopStorage()')).toBeLessThan(
       main.indexOf('await startHotSheetWebClient()'),
     );

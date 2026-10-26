@@ -25,7 +25,8 @@ use controlled application inputs rather than unsupported browser prompts (HS2-W
 
 **Shipped desktop preference persistence:** the packaged Tauri app restores projects and
 device settings across ephemeral bridge ports from private native app-data records
-(HS2-RKZKX7), including staged draft attachment bytes (HS2-791W19). See the
+(HS2-RKZKX7), including staged draft attachment bytes (HS2-791W19) and an explicit
+controlled-close flush for large pending draft strings (HS2-E0H7S0). See the
 [desktop guide](tauri-desktop.md).
 
 > Status legend used throughout: **Decided** (recommendation made, ready to

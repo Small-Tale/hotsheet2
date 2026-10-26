@@ -155,6 +155,35 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
     vi.useRealTimers();
   });
 
+  it('HS2-E0H7S0 old label completion clears its captured destination rather than a replacement owner', async () => {
+    const editing = signal<AttachmentLabelEditing | undefined>(undefined),
+      storage = memoryStorage();
+    let owner = 'project-a:git:1',
+      release!: (saved: boolean) => void;
+    const editor = createAttachmentLabelEditor({
+        editing,
+        storage: () => storage,
+        draftKey: (batch) => `${owner}:${batch}`,
+        currentLabel: () => 'base',
+        describe: () => ({}),
+        save: () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      }),
+      batch = editableBatch('same-batch', 'base');
+    editor.begin(batch.title);
+    batch.input.value = 'submitted';
+    editor.input(batch.input);
+    const pending = editor.flush();
+    owner = 'project-b:git:1';
+    storage.setItem(`${owner}:same-batch`, JSON.stringify({ base: 'different base', draft: 'submitted' }));
+    release(true);
+    await pending;
+    expect(storage.getItem('project-a:git:1:same-batch')).toBeNull();
+    expect(JSON.parse(storage.getItem(`${owner}:same-batch`) ?? '{}')).toMatchObject({ draft: 'submitted' });
+  });
+
   function harness(stored = '') {
     const editing = signal<AttachmentLabelEditing | undefined>(undefined),
       storage = memoryStorage(),
@@ -194,6 +223,35 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
       },
     };
   }
+
+  it('HS2-E0H7S0 captures a latest label synchronously and exposes quota until retry', () => {
+    const h = harness('Before'),
+      batch = editableBatch('owned', 'Before');
+    h.editor.begin(batch.title);
+    h.type(batch.input, 'Latest label');
+    const original = h.storage.setItem,
+      failure = vi.spyOn(h.storage, 'setItem').mockImplementation(() => {
+        throw new Error('Synthetic quota');
+      });
+    expect(() => {
+      h.editor.captureRecovery();
+    }).toThrow('Synthetic quota');
+    expect(h.editing.value?.draft).toBe('Latest label');
+    expect(h.saves).toEqual([]);
+    failure.mockImplementation(original);
+    h.editor.captureRecovery();
+    expect(JSON.parse(h.storage.getItem('draft:owned') ?? '{}')).toMatchObject({
+      base: 'Before',
+      draft: 'Latest label',
+    });
+    h.editor.escape(batch.input);
+    h.editor.captureRecovery();
+    expect(h.storage.getItem('draft:owned')).toBeNull();
+    h.type(batch.input, 'After reset');
+    h.editor.captureRecovery();
+    expect(JSON.parse(h.storage.getItem('draft:owned') ?? '{}')).toMatchObject({ draft: 'After reset' });
+    h.editor.escape(batch.input);
+  });
 
   it('coalesces rapid typing into one debounced recovery copy and one write on blur', async () => {
     const h = harness('Before'),

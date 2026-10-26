@@ -40,7 +40,10 @@ resources for bundling. `npm run desktop:build` packages the `.app`, and
 `src/desktop-storage-contract.ts` validates the desktop preference transport;
 `src/desktop-storage-bridge.ts` stores private atomic per-key records, and
 `src/desktop-storage.ts` restores localStorage before runtime startup across
-ephemeral desktop origins (HS2-RKZKX7). The same bridge keeps staged draft attachment
+ephemeral desktop origins (HS2-RKZKX7). `src/desktop-close.ts` captures parent recovery
+through `desktop-recovery-flush.ts` and drains ordinary writes before the native shell's
+exact-request IPC acknowledgement; `src-tauri/src/close_lifecycle.rs` fences close/quit,
+retry, timeout and stale acknowledgements (HS2-E0H7S0). The same bridge keeps staged draft attachment
 bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
 `workspace-session.ts` draft files there instead of IndexedDB on desktop, and
 `src/browser-draft-file-contract.ts` validates browser IndexedDB recovery records: the existing

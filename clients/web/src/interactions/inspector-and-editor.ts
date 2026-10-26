@@ -666,16 +666,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     if (note.kind === 'feedback_needed') beginFeedbackPromptEdit(id);
     if (frame) {
       if (!frame.capabilities.note_edit) return;
+      const restored = restoreTicketDraft('note', note.text, id);
       replaceLinkedReaderFrame(frame.id, (current) => ({
         ...current,
         edit: {
           ...current.edit,
           editingNoteId: id,
-          noteDraft: note.text,
-          noteBase: note.text,
+          noteDraft: restored?.draft ?? note.text,
+          noteBase: restored?.base ?? note.text,
           noteGeneration: current.edit.noteGeneration + 1,
         },
       }));
+      if (restored) linkedReaderSaves(frame.id).note.schedule({ id, value: restored.draft });
       queueMicrotask(() =>
         document
           .querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="note-body"][data-note-id="${id}"]`)
@@ -1224,16 +1226,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   function beginBlockedReasonEdit(reader = false, frame?: TicketReaderFrame) {
     if (frame) {
       if (!frame.capabilities.update) return;
+      const restored = restoreTicketDraft('blocked_reason', frame.ticket.blocked_reason ?? '');
       replaceLinkedReaderFrame(frame.id, (current) => ({
         ...current,
         edit: {
           ...current.edit,
           blockedReasonEditing: true,
-          blockedReasonDraft: current.ticket.blocked_reason ?? '',
-          blockedReasonBase: current.ticket.blocked_reason ?? '',
+          blockedReasonDraft: restored?.draft ?? current.ticket.blocked_reason ?? '',
+          blockedReasonBase: restored?.base ?? current.ticket.blocked_reason ?? '',
           blockedReasonGeneration: current.edit.blockedReasonGeneration + 1,
         },
       }));
+      if (restored) linkedReaderSaves(frame.id).blocked.schedule(restored.draft);
       queueMicrotask(() =>
         document.querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="blocked-reason"]`)?.focus(),
       );

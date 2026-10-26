@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-flush-complete"
+description = "Enables the desktop_flush_complete command without any pre-configured scope."
+commands.allow = ["desktop_flush_complete"]
+
+[[permission]]
+identifier = "deny-desktop-flush-complete"
+description = "Denies the desktop_flush_complete command without any pre-configured scope."
+commands.deny = ["desktop_flush_complete"]

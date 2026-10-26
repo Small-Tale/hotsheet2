@@ -93,6 +93,7 @@ import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
+import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
@@ -3698,6 +3699,7 @@ export async function startHotSheetWebClient() {
     attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
+    captureTicketDraftRecovery,
     updateSelected,
     history,
     updateSelectedTracked,
@@ -4840,16 +4842,18 @@ export async function startHotSheetWebClient() {
   function beginDetailsEdit(reader = false, frame?: TicketReaderFrame) {
     if (frame) {
       if (!frame.capabilities.update) return;
+      const restored = restoreTicketDraft('details', frame.ticket.details);
       replaceLinkedReaderFrame(frame.id, (current) => ({
         ...current,
         edit: {
           ...current.edit,
           detailsMode: 'write',
-          detailsDraft: current.ticket.details,
-          detailsBase: current.ticket.details,
+          detailsDraft: restored?.draft ?? current.ticket.details,
+          detailsBase: restored?.base ?? current.ticket.details,
           detailsGeneration: current.edit.detailsGeneration + 1,
         },
       }));
+      if (restored) linkedReaderSaves(frame.id).details.schedule(restored.draft);
       queueMicrotask(() =>
         document.querySelector<HTMLElement>(`[data-reader-frame-id="${frame.id}"] [name="markdown-source"]`)?.focus(),
       );
@@ -5594,6 +5598,13 @@ export async function startHotSheetWebClient() {
     flushCommandAutosaves();
   };
   window.addEventListener('pagehide', flushOnHide);
+  // HS2-E0H7S0: native shutdown captures recovery before awaiting durable bridge writes.
+  listenForDesktopRecovery(window, () => {
+    flushProjectSessionPersistence();
+    conversationPersistence.flush();
+    captureTicketDraftRecovery();
+    flushCommandAutosaves();
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushOnHide();
   });

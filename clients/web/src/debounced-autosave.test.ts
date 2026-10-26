@@ -66,6 +66,136 @@ describe('debounced autosave', () => {
 });
 
 describe('createFocusLossAutosave (HS2-RE1PS6)', () => {
+  it('HS2-E0H7S0 binds predecessor authority to an exact destination even when another owner has the same text', async () => {
+    vi.useFakeTimers();
+    let owner = 'project-a:git:1:details',
+      release!: (saved: boolean) => void;
+    const copies: { destination: string; draft: string; predecessor?: string }[] = [],
+      autosave = createFocusLossAutosave<string>(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+        {
+          prepareRecovery: (draft, previous) => {
+            const destination = owner;
+            return {
+              destination,
+              capture: () => {
+                copies.push({
+                  destination,
+                  draft,
+                  ...(previous?.destination === destination ? { predecessor: previous.value } : {}),
+                });
+              },
+            };
+          },
+        },
+      );
+    autosave.schedule('same submitted text');
+    const pending = autosave.flush();
+    owner = 'project-b:git:1:details';
+    autosave.schedule('new draft');
+    owner = 'project-a:git:1:details';
+    autosave.captureRecovery();
+    expect(copies).toEqual([{ destination: 'project-b:git:1:details', draft: 'new draft' }]);
+    autosave.schedule('new draft');
+    autosave.captureRecovery();
+    expect(copies.at(-1)).toEqual({ destination: owner, draft: 'new draft', predecessor: 'same submitted text' });
+    release(true);
+    await pending;
+    autosave.captureRecovery();
+    expect(copies.at(-1)?.draft).toBe('new draft');
+    autosave.cancel();
+  });
+  it('HS2-E0H7S0 captures the latest owned copy behind an active save without awaiting the server', async () => {
+    vi.useFakeTimers();
+    let release!: (saved: boolean) => void;
+    const first = new Promise<boolean>((resolve) => {
+        release = resolve;
+      }),
+      save = vi.fn<(value: string) => Promise<boolean>>().mockReturnValueOnce(first).mockResolvedValue(false),
+      copies: string[] = [];
+    let owner = 'first';
+    const autosave = createFocusLossAutosave(save, {
+      prepareRecovery: (value) => {
+        const capturedOwner = owner;
+        return {
+          destination: capturedOwner,
+          capture: () => {
+            copies.push(`${capturedOwner}:${value}`);
+          },
+        };
+      },
+    });
+    autosave.schedule('old');
+    const pending = autosave.flush();
+    autosave.schedule('new');
+    owner = 'other';
+    autosave.captureRecovery();
+    expect(copies).toEqual(['first:new']);
+    expect(save).toHaveBeenCalledExactlyOnceWith('old');
+    release(true);
+    await pending;
+    autosave.captureRecovery();
+    expect(copies).toEqual(['first:new', 'first:new']);
+    await autosave.flush(); // failed server save still needs local recovery
+    autosave.captureRecovery();
+    expect(copies.at(-1)).toBe('first:new');
+    autosave.cancel();
+    autosave.captureRecovery();
+    autosave.schedule('refill');
+    autosave.captureRecovery();
+    expect(copies.at(-1)).toBe('other:refill');
+    autosave.cancel();
+  });
+
+  it('HS2-E0H7S0 retries a failed strict copy and fences cancel/replacement from stale server success', async () => {
+    vi.useFakeTimers();
+    let fail = true,
+      release!: (saved: boolean) => void;
+    const predecessors: (string | undefined)[] = [],
+      copies: string[] = [],
+      autosave = createFocusLossAutosave<string>(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+        {
+          prepareRecovery: (value, predecessor) => {
+            predecessors.push(predecessor?.value);
+            return {
+              destination: 'owned',
+              capture: () => {
+                if (fail) throw new Error('Synthetic quota');
+                copies.push(value);
+              },
+            };
+          },
+        },
+      );
+    autosave.schedule('first');
+    const pending = autosave.flush();
+    expect(() => {
+      autosave.captureRecovery();
+    }).toThrow('Synthetic quota');
+    autosave.cancel();
+    autosave.schedule('replacement');
+    expect(predecessors).toEqual([undefined, undefined]);
+    release(true);
+    await pending;
+    fail = false;
+    autosave.captureRecovery();
+    expect(copies).toEqual(['replacement']);
+    autosave.cancel();
+    autosave.schedule('saved');
+    const success = autosave.flush();
+    release(true);
+    await success;
+    autosave.captureRecovery();
+    expect(copies).toEqual(['replacement']);
+  });
+
   it('persists locally while typing and saves to the server only on flush', async () => {
     vi.useFakeTimers();
     const persisted: string[] = [],

@@ -17,6 +17,16 @@ one, create the ticket, and confirm the app-data `draft-files-v1` directory empt
 Validate codesign, notarization, and
 Gatekeeper with [the desktop guide](tauri-desktop.md).
 
+For HS2-E0H7S0 / HS2-Y4KA47, use an isolated native profile and synthetic Unicode
+composer text exceeding 64 KiB. With a storage write held, close the actual titlebar
+window and separately use the OS Quit menu: the app and bridge must remain alive
+until the newest captured revision is durable. Repeat close/quit while waiting;
+release the write and relaunch on a different bridge port to verify exact text.
+Repeat with a failed write: the notice must leave the app open and editable, ordinary
+preferences must still save, and a later close must retry the retained draft. Native
+public-API event harnesses supplement this manual OS/titlebar check; they do not prove
+signed packaging, accessibility interaction, or OS menu/Apple-event delivery.
+
 Only behavior that cannot yet be exercised reliably in automated CI belongs here.
 When automation lands, remove the manual-only step and record it below.
 

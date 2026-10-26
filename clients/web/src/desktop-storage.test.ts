@@ -169,4 +169,58 @@ describe('desktop browser storage (HS2-RKZKX7)', () => {
       expect(host.localStorage.getItem('hotsheet.layout')).toBe('board');
     }
   });
+
+  it('HS2-E0H7S0 drains large later recovery revisions behind a held old write before native close', async () => {
+    const host = browser(),
+      { saved, fetcher } = transport(),
+      persistence = await initializeDesktopStorage(host, fetcher),
+      ordinary = fetcher.getMockImplementation()!;
+    let release!: () => void;
+    fetcher.mockImplementationOnce(
+      (url, options) =>
+        new Promise<Response>((resolve) => {
+          release = () => void ordinary(url, options).then(resolve);
+        }),
+    );
+    host.localStorage.setItem('hotsheet.draft', '界'.repeat(24000));
+    host.events.addEventListener('pagehide', () => {
+      host.localStorage.setItem('hotsheet.draft', '界'.repeat(32000));
+    });
+    host.events.dispatchEvent(new Event('pagehide'));
+    let closed = false;
+    const close = persistence.flushForNativeClose().then(() => {
+      closed = true;
+    });
+    expect(fetcher.mock.calls).toHaveLength(2);
+    expect(closed).toBe(false);
+    release();
+    await close;
+    expect(saved.get('hotsheet.draft')).toBe('界'.repeat(32000));
+    expect(fetcher.mock.calls.at(-1)?.[1]?.keepalive).toBe(false);
+    const count = fetcher.mock.calls.length;
+    host.localStorage.setItem('hotsheet.draft', '界'.repeat(32000));
+    await persistence.flush();
+    expect(fetcher.mock.calls).toHaveLength(count + 1); // ordinary repeat writes retain their existing semantics
+    persistence.dispose();
+  });
+
+  it('HS2-E0H7S0 preserves ordinary repeated setting writes when retrying a retained failure', async () => {
+    const host = browser(),
+      { saved, fetcher } = transport(),
+      persistence = await initializeDesktopStorage(host, fetcher),
+      report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fetcher.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    host.localStorage.setItem('hotsheet.layout', 'board');
+    await expect(persistence.flush()).rejects.toThrow('Could not save');
+    host.localStorage.setItem('hotsheet.layout', 'board');
+    await persistence.flush();
+    expect(saved.get('hotsheet.layout')).toBe('board');
+    const revisions = fetcher.mock.calls.slice(1).map(([, options]) => {
+      if (typeof options?.body !== 'string') throw new Error('Expected JSON string body.');
+      return (JSON.parse(options.body) as { revision: number }).revision;
+    });
+    expect(revisions).toEqual([1, 2]);
+    report.mockRestore();
+    persistence.dispose();
+  });
 });

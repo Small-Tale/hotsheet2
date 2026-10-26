@@ -30,7 +30,8 @@ export async function initializeDesktopStorage(
       pending.set(key, { value: storage.getItem(key), revision: ++revision });
   }
   let running: Promise<void> | undefined,
-    closeRequested = false;
+    closeRequested = false,
+    nativeClosing = 0;
   const closeSent = new Map<string, number>();
   async function persist(key: string, mutation: { value: string | null; revision: number }, closing = false) {
     const body = JSON.stringify({ key, ...mutation, clientId }),
@@ -41,7 +42,7 @@ export async function initializeDesktopStorage(
       headers: { 'Content-Type': 'application/json' },
       body,
       // The browser's keepalive budget is 64 KiB; larger drafts use an ordinary request.
-      keepalive,
+      keepalive: !nativeClosing && keepalive,
     });
     if (!result.ok) throw new Error('Could not save desktop preferences.');
     if (pending.get(key) === mutation) pending.delete(key);
@@ -71,7 +72,7 @@ export async function initializeDesktopStorage(
     console.error('Could not save desktop preferences. Pending changes will be retried.');
   };
   const save = () => {
-    if (closeRequested) {
+    if (closeRequested && !nativeClosing) {
       for (const [key, mutation] of pending) {
         if (closeSent.get(key) === mutation.revision) continue;
         closeSent.set(key, mutation.revision);
@@ -122,6 +123,18 @@ export async function initializeDesktopStorage(
   await flush().catch(reportFailure);
   return {
     flush,
+    async flushForNativeClose() {
+      // HS2-E0H7S0: keep the native window/bridge alive until ordinary requests drain,
+      // including revisions produced while an older request is in flight.
+      nativeClosing++;
+      try {
+        do {
+          await flush();
+        } while (pending.size);
+      } finally {
+        nativeClosing--;
+      }
+    },
     dispose() {
       prototype.setItem = originalSet;
       prototype.removeItem = originalRemove;

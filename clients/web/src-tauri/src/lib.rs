@@ -9,9 +9,91 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+mod close_lifecycle;
+use close_lifecycle::{CloseLifecycle, caller_allowed};
 
 struct BridgeChild(Mutex<Child>);
+struct DesktopClose {
+    origin: String,
+    lifecycle: Mutex<CloseLifecycle>,
+}
+
+#[tauri::command]
+fn desktop_flush_complete(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DesktopClose>,
+    request: String,
+    success: bool,
+) -> Result<(), String> {
+    // The dynamic ACL also admits only this launch's exact origin and main webview.
+    // Recheck the actual caller before mutating the close generation (HS2-E0H7S0).
+    let webview: &tauri::Webview = window.as_ref();
+    let actual_origin = window
+        .url()
+        .map_err(|_| "Could not validate desktop caller.")?
+        .origin()
+        .ascii_serialization();
+    if !caller_allowed(
+        webview.window().label(),
+        webview.label(),
+        &actual_origin,
+        &state.origin,
+    ) {
+        return Err("Invalid desktop close caller.".into());
+    }
+    let exit = state
+        .lifecycle
+        .lock()
+        .map_err(|_| "Could not validate desktop close request.")?
+        .acknowledge(&request, success)?;
+    if exit {
+        app.exit(0);
+    }
+    Ok(())
+}
+
+fn request_desktop_close(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<DesktopClose>() else {
+        return;
+    };
+    // HS2-E0H7S0: boot/missing-window requests must not occupy a generation forever.
+    let window = app.get_webview_window("main");
+    let Ok(mut lifecycle) = state.lifecycle.lock() else {
+        return;
+    };
+    let Some(request) = lifecycle.begin(window.is_some()) else {
+        return;
+    };
+    drop(lifecycle);
+    let Some(window) = window else {
+        return;
+    };
+    let token = serde_json::to_string(&request).expect("close token is a string");
+    // Listener-not-ready fails closed under the same bounded deadline as a stalled PUT.
+    let _ = window.eval(format!("window.__HOTSHEET_DESKTOP_CLOSE__?.({token});"));
+    let app = app.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(30));
+        let Some(state) = app.try_state::<DesktopClose>() else {
+            return;
+        };
+        let Ok(mut lifecycle) = state.lifecycle.lock() else {
+            return;
+        };
+        if !lifecycle.cancel(&request) {
+            return;
+        }
+        drop(lifecycle);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval(format!(
+                "if (window.__HOTSHEET_DESKTOP_CLOSE_CANCEL__) {{ window.__HOTSHEET_DESKTOP_CLOSE_CANCEL__({token}); }} else {{ alert('Local changes could not be saved. Hot Sheet will stay open. Try closing again.'); }}"
+            ));
+        }
+    });
+}
 
 fn required(root: &Path, relative: &str) -> Result<PathBuf, Box<dyn Error>> {
     let path = root.join(relative);
@@ -105,6 +187,7 @@ fn stop_bridge(child: &Mutex<Child>) {
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![desktop_flush_complete])
         .setup(|app| {
             let url = if cfg!(debug_assertions) {
                 tauri::Url::parse("http://127.0.0.1:4175/")?
@@ -120,6 +203,22 @@ pub fn run() {
                 };
                 let (child, url) = launch_bridge(&root, binaries, &storage)?;
                 app.manage(BridgeChild(Mutex::new(child)));
+                let origin = url.origin().ascii_serialization();
+                app.add_capability(
+                    serde_json::json!({
+                        "identifier": "desktop-local-close",
+                        "windows": ["main"],
+                        "webviews": ["main"],
+                        "local": false,
+                        "remote": { "urls": [format!("{origin}/*")] },
+                        "permissions": ["allow-desktop-flush-complete"]
+                    })
+                    .to_string(),
+                )?;
+                app.manage(DesktopClose {
+                    origin,
+                    lifecycle: Mutex::new(CloseLifecycle::default()),
+                });
                 url
             };
             let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url));
@@ -137,6 +236,30 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build Hot Sheet desktop app");
     app.run(|app, event| {
+        match &event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" && app.try_state::<DesktopClose>().is_some() => {
+                api.prevent_close();
+                request_desktop_close(app);
+            }
+            RunEvent::ExitRequested { api, .. } => {
+                if let Some(state) = app.try_state::<DesktopClose>() {
+                    let allowed = state
+                        .lifecycle
+                        .lock()
+                        .map(|gate| gate.allowed())
+                        .unwrap_or(false);
+                    if !allowed {
+                        api.prevent_exit();
+                        request_desktop_close(app);
+                    }
+                }
+            }
+            _ => {}
+        }
         if let RunEvent::Exit = event {
             if let Some(child) = app.try_state::<BridgeChild>() {
                 stop_bridge(&child.0);
