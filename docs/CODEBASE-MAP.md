@@ -904,7 +904,10 @@ full-precision claim authority, recovery,
 and terminal outcomes through
 `hotsheet-cli coordination`. The shared code Git common directory stores the local
 registry; it is separate from ticket-provider identity. Existing ticket claims remain
-authoritative. `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
+authoritative. Private `dispatch/coordination_claims.rs` checks assignment eligibility,
+worker acceptance and recovery using fresh full-precision timestamps after ticket reads;
+integer mailbox availability/wake deadlines remain advisory (HS2-35R7M3).
+`crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
 processes and real synthetic worktrees. Portable recovery/handoff coverage is in
 `crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and
 process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.

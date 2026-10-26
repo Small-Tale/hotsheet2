@@ -10,6 +10,12 @@ prerequisites/build-before-test ordering in `scripts/test-fixture-capabilities.t
 The unchanged `npm run test:ci:webkit` route covers all five selected cases, including
 the three real-server prompt replacements and both existing popup flows.
 
+HS2-35R7M3 covers full-precision assignment, acceptance and recovery authority in private
+`dispatch/coordination_claims.rs` guard tests (same-second live/equality/expired, nanosecond
+boundaries, replay, renewal, replacement, release and other claims). Real separate-process
+`crates/hotsheet-cli/tests/coordination_claim_precision.rs` verifies shipped CLI wiring and
+retains explicit-release, schema and recovery-evidence fences without timing races.
+
 HS2-RFJ1GN compaction recovery transitions are covered by the
 `hs2_rfj1gn_*` tests in `crates/hotsheet-ticketing/src/repository_compaction.rs`:
 guarded purge/queued commit/activation, a sync waiting behind rewrite admission,

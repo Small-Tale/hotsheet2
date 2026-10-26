@@ -2063,7 +2063,13 @@ public CLI defaults and the state schema are unchanged.
 The local default-source CLI checks eligibility before offering an assignment,
 requires the assigned worker's live ticket claim before `accepted`, and requires
 explicit claim release plus an `Integration handoff` note naming the full commit
-before a code `handoff`. For findings, the worker uses `--findings-note` with the id
+before a code `handoff`. Assignment eligibility (including a worker's other claims),
+acceptance and every acceptance replay, and stale recovery compare fresh full-precision
+ticket timestamps after the relevant ticket reads (HS2-35R7M3). A claim expiring at
+or before that instant is available; its fractional remainder is never extended by
+the separate integer mailbox availability/wake clock. Expiry alone still does not
+satisfy the explicit release required by handoff or blocked reporting.
+For findings, the worker uses `--findings-note` with the id
 of a nonempty `NoteKind::Regular` `## Findings handoff` note on that exact qualified
 ticket and releases its claim first. The integrator must hold the exact live ticket
 claim to mark or replay `verifying`; it compares the full timestamp, including

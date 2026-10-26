@@ -13,6 +13,9 @@ use hotsheet_ticketing::{FsStore, git_connection_id, ops};
 use super::{Ctx, misrouted};
 use crate::Cmd;
 
+#[path = "coordination_claims.rs"]
+mod claims;
+
 #[derive(Debug, Args)]
 pub(crate) struct CoordinationArgs {
     /// Shipping checkout; all worker worktrees share its Git common directory.
@@ -212,26 +215,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             if !state.assignments.contains_key(&operation) {
                 {
                     let t = store.read_ticket(&native_id.parse()?)?;
-                    let at = hotsheet_model::Timestamp::from_datetime(
-                        time::OffsetDateTime::from_unix_timestamp(now)?,
-                    );
-                    anyhow::ensure!(
-                        !store
-                            .list_tickets()?
-                            .iter()
-                            .any(|t| t.claimed_by.as_deref() == Some(worker.as_str())
-                                && !ops::claim_available(t, &at)),
-                        "worker already holds a live ticket claim; finish or release it before another assignment"
-                    );
-                    anyhow::ensure!(
-                        t.up_next
-                            && ops::is_open(&t)
-                            && t.blocked_reason
-                                .as_ref()
-                                .is_none_or(|r| r.trim().is_empty())
-                            && ops::claim_available(&t, &at),
-                        "ticket is not eligible for a new assignment; inspect status, blockers and live claim"
-                    );
+                    let tickets = store.list_tickets()?;
+                    claims::assignable(&t, &tickets, &worker, time::OffsetDateTime::now_utc())?;
                 }
             }
             let return_route = coordinator
@@ -287,21 +272,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     coordinator.unsupported_source(&a.ticket.connection_id)?
                 );
                 let ticket = store.read_ticket(&a.ticket.native_id.parse()?)?;
-                let at = hotsheet_model::Timestamp::from_datetime(
-                    time::OffsetDateTime::from_unix_timestamp(now)?,
-                );
                 if phase == Phase::Accepted {
-                    anyhow::ensure!(
-                        !store.list_tickets()?.iter().any(|t| t.id != ticket.id
-                            && t.claimed_by.as_deref() == Some(w.id.as_str())
-                            && !ops::claim_available(t, &at)),
-                        "worker holds another live ticket claim"
-                    );
-                    anyhow::ensure!(
-                        ticket.claimed_by.as_deref() == Some(w.id.as_str())
-                            && !ops::claim_available(&ticket, &at),
-                        "claim this exact ticket with the assigned worker before acknowledging acceptance"
-                    );
+                    let tickets = store.list_tickets()?;
+                    claims::accepted(&ticket, &tickets, &w.id, time::OffsetDateTime::now_utc())?;
                 } else {
                     anyhow::ensure!(
                         ticket.claimed_by.is_none(),
@@ -375,13 +348,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 coordinator.unsupported_source(&a.ticket.connection_id)?
             );
             let t = store.read_ticket(&a.ticket.native_id.parse()?)?;
-            let at = hotsheet_model::Timestamp::from_datetime(
-                time::OffsetDateTime::from_unix_timestamp(now)?,
-            );
-            anyhow::ensure!(
-                ops::claim_available(&t, &at),
-                "a live ticket claim prevents recovery"
-            );
+            claims::recoverable(&t, time::OffsetDateTime::now_utc())?;
             anyhow::ensure!(
                 t.notes.iter().any(|n| n.id.to_string() == evidence_note),
                 "inspection note must exist on this exact ticket"

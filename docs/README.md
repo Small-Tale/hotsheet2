@@ -175,6 +175,8 @@ selected-source queue/claim verification. External-source adapters remain partia
 are shipped independently (HS2-FG7ZMF); they do not enable external assignments or drained.
 Real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
 An ended independent app turn is not automatically resumed.
+Assignment, worker acceptance and stale recovery use full-precision ticket claim clocks;
+mailbox availability and wake deadlines retain their separate integer clock (HS2-35R7M3).
 Reviewed code handoffs support fenced review-return and a fresh correction
 assignment, preserving original artifacts and typed code evidence (HS2-65ETRJ).
 Findings review returns preserve original note evidence from Handoff or released-claim
