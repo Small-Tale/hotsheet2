@@ -16,6 +16,42 @@ impl Drop for BrokerChild {
 }
 
 #[tokio::test]
+async fn hs2_bnghkm_dedicated_test_broker_exits_with_its_runner() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    let socket = home.path().join("broker.sock");
+    let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
+    let mut broker = BrokerChild(
+        Command::new(env!("CARGO_BIN_EXE_hotsheet-terminal-broker"))
+            .arg(&socket)
+            .arg("test-project")
+            .env("HOTSHEET_TEST_SERVER_OWNER_PID", owner.id().to_string())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !socket.exists() && Instant::now() < deadline {
+        assert!(
+            broker.0.try_wait().unwrap().is_none(),
+            "broker exited before binding"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(socket.exists(), "broker did not bind");
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while broker.0.try_wait().unwrap().is_none() && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(broker.0.try_wait().unwrap().unwrap().success());
+    assert!(!socket.exists(), "broker left its socket behind");
+}
+
+#[tokio::test]
 async fn hs2_gdcmxe_broker_pty_records_launcher_and_session() {
     let home = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
     std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();

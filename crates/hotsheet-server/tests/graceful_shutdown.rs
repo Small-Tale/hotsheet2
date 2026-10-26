@@ -6,6 +6,7 @@
 use std::fs;
 use std::io::Write;
 use std::net::TcpStream;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -36,14 +37,21 @@ impl Server {
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
     ) -> Self {
-        Self::start_inner(drain_ms, watch_stdin, stdin, output, None)
+        Self::start_inner(drain_ms, watch_stdin, stdin, output, None, None)
     }
 
     /// Start with a drivable AI tool on `PATH` whose every invocation hangs, so the
     /// startup AI catalog warmup is still running when the stop arrives (HS2-NPBZJ9).
     /// `probe_timeout_ms` sets the server's per-probe deadline (HS2-BH3M53).
     fn start_with_slow_discovery(drain_ms: u64, probe_timeout_ms: u64) -> Self {
-        Self::start_inner(drain_ms, true, Stdio::piped(), None, Some(probe_timeout_ms))
+        Self::start_inner(
+            drain_ms,
+            true,
+            Stdio::piped(),
+            None,
+            Some(probe_timeout_ms),
+            None,
+        )
     }
 
     fn start_inner(
@@ -52,6 +60,7 @@ impl Server {
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
         slow_discovery: Option<u64>,
+        test_owner_pid: Option<u32>,
     ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
         // Keep locally installed AI tools out of startup catalog discovery; a slow-discovery
@@ -83,6 +92,7 @@ impl Server {
             .args(["--no-terminal-broker", "--shutdown-drain-ms"])
             .arg(drain_ms.to_string())
             .env("HOTSHEET_HOME", &home)
+            .envs(test_owner_pid.map(|pid| ("HOTSHEET_TEST_SERVER_OWNER_PID", pid.to_string())))
             .env("PATH", path)
             .args(slow_discovery.map(|ms| format!("--ai-probe-timeout-ms={ms}")))
             // Piped and held by the fixture: the server stops if this test process dies
@@ -204,6 +214,65 @@ impl Drop for Server {
         unsafe { libc::kill(-(self.child.id() as i32), libc::SIGKILL) };
         let _ = self.child.wait();
     }
+}
+
+#[test]
+fn hs2_bnghkm_interrupted_test_owner_reaps_repeated_detached_servers() {
+    for _ in 0..3 {
+        let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
+        let mut server =
+            Server::start_inner(250, false, Stdio::null(), None, None, Some(owner.id()));
+        let _ = server.ready();
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        assert!(server.exits_within(Duration::from_secs(5)).success());
+        server.assert_registration_released();
+    }
+}
+
+#[test]
+fn hs2_bnghkm_interrupted_test_owner_reaps_detached_broker() {
+    let fixture = tempfile::tempdir_in("/tmp").unwrap();
+    fs::set_permissions(fixture.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let socket = fixture.path().join("broker.sock");
+    let log = fixture.path().join("broker.log");
+    let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
+    let mut broker = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        .arg("--terminal-broker-process")
+        .arg(&socket)
+        .args(["--terminal-broker-project", "test-project"])
+        .env("HOTSHEET_TEST_SERVER_OWNER_PID", owner.id().to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(fs::File::create(&log).unwrap())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !socket.exists() && Instant::now() < deadline {
+        assert!(
+            broker.try_wait().unwrap().is_none(),
+            "broker exited before binding: {}",
+            fs::read_to_string(&log).unwrap_or_default()
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        socket.exists(),
+        "broker did not bind: {}",
+        fs::read_to_string(&log).unwrap_or_default()
+    );
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = broker.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(Instant::now() < deadline, "test broker outlived its owner");
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(!socket.exists(), "test broker left its socket behind");
 }
 
 /// Open a request whose body never finishes arriving, so its handler stays in flight and

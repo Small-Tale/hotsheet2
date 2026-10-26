@@ -64,6 +64,10 @@ impl TemporaryLaunchHost {
         let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
         command
             .env("HOTSHEET_HOME", &self.home)
+            .env(
+                "HOTSHEET_TEST_SERVER_OWNER_PID",
+                std::process::id().to_string(),
+            )
             .env("CODEX_HOME", self.home.join("codex-home"))
             .env("CLAUDE_CONFIG_DIR", self.home.join("claude-home"));
         command

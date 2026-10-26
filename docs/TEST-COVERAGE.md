@@ -6,6 +6,11 @@ through the packaged Node bridge and checks owner-pipe shutdown. The release
 bundle builds with `npm run desktop:build`; signed notarization and native
 window capture remain manual checks in [the desktop guide](tauri-desktop.md).
 
+HS2-BNGHKM checks repeated test-owner death, fallback broker exit, and registration
+cleanup in `crates/hotsheet-server/tests/graceful_shutdown.rs`. The dedicated broker
+binary has the same exit check in `crates/hotsheet-terminals/tests/process_journal_broker.rs`;
+CLI and browser fixtures set the owner PID for detached bootstrap servers.
+
 HS2-GDCMXE covers machine-local child-process provenance in
 `hotsheet-process-journal` unit tests (launch, exit, PID reuse, unresolved crash
 recovery, corrupt record and retention), `hotsheet-terminals` PTY and real broker

@@ -399,6 +399,9 @@ async fn main() -> Result<()> {
     if cli.exit_on_stdin_eof {
         stop_on_stdin_eof(state.clone());
     }
+    if let Some(owner_pid) = test_owner_pid()? {
+        stop_when_test_owner_exits(state.clone(), owner_pid);
+    }
 
     // Register a discovery instance file for EVERY hosted store (the primary + any from
     // stores.json), all pointing at this one machine server — the topology-A reconciliation
@@ -556,6 +559,54 @@ fn stop_on_stdin_eof(state: AppState) {
         shutdown_log("shutdown: stdin closed (owner exited); stopping");
     });
 }
+
+/// Detached test bootstrap servers cannot use stdin ownership: the short-lived CLI
+/// launcher closes its stdin before the test runner does (HS2-BNGHKM). Only fixtures
+/// explicitly setting this variable get an owner; normal detached hosts remain persistent.
+#[cfg(unix)]
+fn test_owner_pid() -> Result<Option<i32>> {
+    match std::env::var("HOTSHEET_TEST_SERVER_OWNER_PID") {
+        Ok(value) => {
+            let pid: i32 = value.parse()?;
+            anyhow::ensure!(
+                pid > 1 && pid != std::process::id() as i32,
+                "invalid test server owner pid"
+            );
+            Ok(Some(pid))
+        }
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(not(unix))]
+fn test_owner_pid() -> Result<Option<i32>> {
+    Ok(None)
+}
+
+#[cfg(unix)]
+fn stop_when_test_owner_exits(state: AppState, owner_pid: i32) {
+    std::thread::spawn(move || {
+        loop {
+            // A fixture's runner can be SIGKILLed, so Drop and signal handlers cannot help.
+            // Check often enough that a reused PID is unlikely before the next observation.
+            if !test_owner_alive(owner_pid) {
+                state.begin_stopping();
+                shutdown_log("shutdown: test server owner exited; stopping");
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    });
+}
+
+#[cfg(unix)]
+fn test_owner_alive(owner_pid: i32) -> bool {
+    (unsafe { libc::kill(owner_pid, 0) }) == 0
+}
+
+#[cfg(not(unix))]
+fn stop_when_test_owner_exits(_state: AppState, _owner_pid: i32) {}
 
 /// Install the stderr diagnostics subscriber (HS2-PD8NJ6). `RUST_LOG` overrides the
 /// default `info` filter; stdout stays reserved for the startup contract lines.

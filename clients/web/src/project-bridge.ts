@@ -1236,6 +1236,12 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
             cwd: repoRoot,
             detached: true,
             stdio: ['ignore', 'ignore', log],
+            // Browser fixtures pass a sentinel; the host owns its detached test server
+            // and broker until this exact host exits (HS2-BNGHKM).
+            env:
+              process.env.HOTSHEET_TEST_SERVER_OWNER_PID === 'host'
+                ? { ...process.env, HOTSHEET_TEST_SERVER_OWNER_PID: String(process.pid) }
+                : process.env,
           });
           child.once('error', reject);
           child.once('spawn', () => {

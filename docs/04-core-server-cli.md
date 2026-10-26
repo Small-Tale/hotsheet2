@@ -586,6 +586,17 @@ The flag is safe even when the dead owner also held the server's stdout and stde
 shutdown diagnostics never panic on a broken pipe, and the reader begins stopping
 before it logs anything.
 
+Detached bootstrap servers launched by tests cannot use stdin ownership because the
+short-lived CLI launcher closes stdin first. Those fixtures set
+`HOTSHEET_TEST_SERVER_OWNER_PID` to their runner PID (HS2-BNGHKM). The server checks
+that owner every 250 ms and begins the same bounded stop if it exits, including when
+the runner is killed before teardown. A detached test broker using the same owner
+also exits and removes its socket. Ordinary detached and pinned production hosts
+do not set this test-only variable and retain their normal lifetime.
+Browser fixtures set the value to `host`; their bridge resolves it to the current
+host PID before launching the server, so each fixture's server and broker exit when
+that host stops even if the larger test runner continues.
+
 **Diagnostics (HS2-PD8NJ6).** Server stdout carries only the startup contract lines
 (URL, `secret:`, `index:`, hosting summaries). Every other diagnostic is a `tracing`
 event written to stderr by the binary's `fmt` subscriber, at `info` level by default;

@@ -52,13 +52,32 @@ async function waitForHost(url, child, output) {
   throw new Error(`Timed out waiting for ${url}.\n${output()}`);
 }
 
-/** Live processes whose command line mentions `home` (the test's isolated HOTSHEET_HOME). */
+/** Live fixture processes, including the broker whose socket lives under /tmp. */
 async function processesUsing(home) {
+  const bootstrap = resolve(home, 'server-bootstrap.hs2');
+  const projectId = createHash('sha256')
+    .update(await realpath(bootstrap).catch(() => bootstrap))
+    .digest('hex')
+    .slice(0, 16);
   const { stdout } = await run('ps', ['-Ao', 'pid=,command=']);
   return stdout
     .split('\n')
-    .filter((line) => line.includes(home))
+    .filter(
+      (line) =>
+        line.includes(home) ||
+        (line.includes(` ${projectId}`) &&
+          (line.includes('--terminal-broker-process') || line.includes('hotsheet-terminal-broker'))),
+    )
     .map((line) => line.trim());
+}
+
+function signalTestProcess(pid, signal) {
+  if (pid <= 1) return;
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if (error?.code !== 'ESRCH') throw error;
+  }
 }
 
 /**
@@ -67,20 +86,41 @@ async function processesUsing(home) {
  */
 async function stopMachineServer(home) {
   // Forced: the pinned production host owns this server, and an ordinary stop refuses it (HS2-9AWEX5).
-  await run(
+  const stop = await run(
     workingTreeBinaries.HOTSHEET_CLI_BIN,
     ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop', '--force'],
     { env: { ...process.env, HOTSHEET_HOME: home } },
-  ).catch(() => undefined);
+  ).catch((error) => error);
   const deadline = Date.now() + 10_000;
   while ((await processesUsing(home)).length > 0 && Date.now() < deadline)
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  const survivors = await processesUsing(home);
+  if (survivors.length > 0) {
+    for (const line of survivors) {
+      const pid = Number(line.match(/^\d+/)?.[0]);
+      signalTestProcess(pid, 'SIGTERM');
+    }
+    const forceDeadline = Date.now() + 5_000;
+    while ((await processesUsing(home)).length > 0 && Date.now() < forceDeadline)
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    for (const line of await processesUsing(home)) {
+      const pid = Number(line.match(/^\d+/)?.[0]);
+      signalTestProcess(pid, 'SIGKILL');
+    }
+    const killDeadline = Date.now() + 5_000;
+    while ((await processesUsing(home)).length > 0 && Date.now() < killDeadline)
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  const remaining = await processesUsing(home);
+  if (remaining.length > 0)
+    throw new Error(`Test machine server cleanup failed: ${remaining.join('; ')}; stop: ${String(stop)}`);
 }
 
 // Build the production bundles in an isolated directory without the test runner's Vite mode.
 const productionEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST') && name !== 'NODE_ENV' && name !== 'TEST'),
 );
+productionEnvironment.HOTSHEET_TEST_SERVER_OWNER_PID = 'host';
 
 // Exercise the working tree's server, not a possibly stale release build the host would prefer.
 const workingTreeBinaries = {
@@ -479,7 +519,7 @@ it.concurrent('keeps the pinned host on its own machine server across dev hosts 
     devPort = await availablePort(),
     pinnedOrigin = `http://127.0.0.1:${pinnedPort}`,
     devOrigin = `http://127.0.0.1:${devPort}`,
-    env = { ...process.env, HOTSHEET_HOME: home };
+    env = { ...process.env, HOTSHEET_HOME: home, HOTSHEET_TEST_SERVER_OWNER_PID: 'host' };
   let log = '',
     pinned,
     dev,
@@ -528,6 +568,7 @@ it.concurrent('keeps the pinned host on its own machine server across dev hosts 
       ...process.env,
       ...devBinaries,
       HOTSHEET_HOME: home,
+      HOTSHEET_TEST_SERVER_OWNER_PID: 'host',
       HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
     };
     delete devEnvironment.HOT_SHEET_BUILD_REVISION;

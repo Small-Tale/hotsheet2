@@ -124,7 +124,7 @@ it.concurrent('starts an HS1 import job from the cache snapshot with the checkou
   await mkdir(resolve(project, '.hotsheet/db'), { recursive: true });
   await writeFile(resolve(project, '.hotsheet/db/PG_VERSION'), '17\n');
   const port = await availablePort();
-  const environment = { ...process.env, HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp, HOTSHEET_HOME: home };
+  const environment = { ...process.env, HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp, HOTSHEET_HOME: home, HOTSHEET_TEST_SERVER_OWNER_PID: 'host' };
   // The bridge must find the checkout's migrator on its own, as a developer's `npm run dev` does,
   // and a pinned build revision belongs to the production host, not this launcher.
   delete environment.HOTSHEET_MIGRATE_BIN;

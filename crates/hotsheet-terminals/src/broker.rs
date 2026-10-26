@@ -273,14 +273,57 @@ pub async fn run_broker_process(
 ) -> std::io::Result<()> {
     let socket = socket.as_ref();
     let (listener, _ownership) = crate::broker_socket::bind(socket)?;
-    serve_broker_with_idle(
+    let serve = serve_broker_with_idle(
         listener,
         project,
         Arc::new(TerminalManager::new()),
         Some(DEFAULT_IDLE_GRACE),
-    )
-    .await;
+    );
+    if let Some(owner_pid) = test_server_owner_pid()? {
+        tokio::select! {
+            () = serve => {},
+            () = wait_for_test_server_owner_exit(owner_pid) => {},
+        }
+    } else {
+        serve.await;
+    }
     Ok(())
+}
+
+/// Test-launched brokers inherit the runner's owner PID from their detached server
+/// (HS2-BNGHKM). Production brokers keep their normal idle/terminal lifetime.
+#[cfg(unix)]
+fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
+    match std::env::var("HOTSHEET_TEST_SERVER_OWNER_PID") {
+        Ok(value) => {
+            let pid = value
+                .parse::<i32>()
+                .map_err(|_| std::io::ErrorKind::InvalidInput)?;
+            if pid <= 1 || pid == std::process::id() as i32 {
+                return Err(std::io::ErrorKind::InvalidInput.into());
+            }
+            Ok(Some(pid))
+        }
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(_) => Err(std::io::ErrorKind::InvalidInput.into()),
+    }
+}
+
+#[cfg(not(unix))]
+fn test_server_owner_pid() -> std::io::Result<Option<i32>> {
+    Ok(None)
+}
+
+#[cfg(unix)]
+async fn wait_for_test_server_owner_exit(owner_pid: i32) {
+    while (unsafe { libc::kill(owner_pid, 0) }) == 0 {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_test_server_owner_exit(_owner_pid: i32) {
+    std::future::pending::<()>().await;
 }
 
 /// Serve with an optional shutdown-when-empty grace period. `None` keeps the historical
