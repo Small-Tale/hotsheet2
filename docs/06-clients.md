@@ -1544,7 +1544,10 @@ preview/download, server directory browser) are separate design work.
 
   - paints entirely from memory, with no ticket loading placeholder;
   - restores its cached AI tool inventory rather than refetching it (only the open Settings → AI
-    page forces an authoritative reload);
+    page forces an authoritative reload). A project whose first AI read has not answered yet
+    joins that pending read when it is reactivated rather than issuing another pair, so a slow
+    discovery cannot fill the browser's per-origin connection pool across A→B→A switches
+    (HS2-XZ3TTH);
   - skips the all-project terminal dashboard reload when that project's terminal group is
     already loaded (terminal create/close still refresh it explicitly);
   - revalidates tickets, commands, shared views, and the single-project settings projection

@@ -15,6 +15,11 @@
 //!   waits behind a running scan), and a memo from an older generation is never served.
 //! - Tools installed or removed outside the server are picked up once the memo expires or
 //!   on the next `refresh=true` request.
+//! - A caller is timed from its *arrival*, not from when it acquires the lock, and the memo
+//!   is stamped when its scan *completes*. A caller that queued behind a running scan is
+//!   answered by that scan even when the scan outlasts the TTL; stamping the scan's start
+//!   instead made every queued caller rescan in turn, about 10 s each with two tools at the
+//!   probe deadline, so each project activation postponed the next (HS2-XZ3TTH).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -53,7 +58,9 @@ impl Default for AiToolDiscoveryConfig {
 
 /// One completed discovery and the conditions it was produced under.
 struct DiscoveryMemo {
-    scanned_at: Instant,
+    /// When the scan completed: the TTL runs from here, and a caller that arrived before
+    /// this instant is answered by this scan.
+    completed_at: Instant,
     generation: u64,
     tools: Vec<AiToolDescriptor>,
 }
@@ -66,27 +73,30 @@ pub struct AiToolDiscoveryCache {
 }
 
 impl AiToolDiscoveryCache {
-    /// Return the memoized discovery when it is younger than `ttl`, was scanned under the
-    /// current invalidation `generation`, and `refresh` is not requested; otherwise run
-    /// `scan` against the model catalogs and remember its result as of `now`.
+    /// Return the memoized discovery when a caller that `arrived` at that instant is no more
+    /// than `ttl` behind its completion (a caller that arrived while it was scanning is
+    /// always answered by it), it was scanned under the current invalidation `generation`,
+    /// and `refresh` is not requested. Otherwise run `scan` against the model catalogs and
+    /// remember its result as of `completed()`, read once the scan returns.
     pub(crate) fn discover(
         &mut self,
-        now: Instant,
+        arrived: Instant,
         generation: u64,
         ttl: Duration,
         refresh: bool,
         scan: impl FnOnce(&mut ModelCatalogCache, bool) -> Vec<AiToolDescriptor>,
+        completed: impl FnOnce() -> Instant,
     ) -> Vec<AiToolDescriptor> {
         if !refresh
             && let Some(memo) = &self.memo
             && memo.generation == generation
-            && now.saturating_duration_since(memo.scanned_at) < ttl
+            && arrived.saturating_duration_since(memo.completed_at) < ttl
         {
             return memo.tools.clone();
         }
         let tools = scan(&mut self.catalogs, refresh);
         self.memo = Some(DiscoveryMemo {
-            scanned_at: now,
+            completed_at: completed(),
             generation,
             tools: tools.clone(),
         });
@@ -130,6 +140,7 @@ mod tests {
                     scans.push(refresh);
                     vec![tool(id)]
                 },
+                || now,
             )
             .into_iter()
             .map(|tool| tool.id)
@@ -206,15 +217,29 @@ mod tests {
         let mut cache = AiToolDiscoveryCache::default();
         let start = Instant::now();
         let mut runs = 0;
-        let empty = cache.discover(start, 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
-            runs += 1;
-            Vec::new()
-        });
+        let empty = cache.discover(
+            start,
+            0,
+            AI_TOOL_DISCOVERY_TTL,
+            false,
+            |_, _| {
+                runs += 1;
+                Vec::new()
+            },
+            || start,
+        );
         assert!(empty.is_empty());
-        let still_empty = cache.discover(start, 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
-            runs += 1;
-            vec![tool("late")]
-        });
+        let still_empty = cache.discover(
+            start,
+            0,
+            AI_TOOL_DISCOVERY_TTL,
+            false,
+            |_, _| {
+                runs += 1;
+                vec![tool("late")]
+            },
+            || start,
+        );
         assert!(still_empty.is_empty());
         let refilled = cache.discover(
             start + AI_TOOL_DISCOVERY_TTL,
@@ -225,6 +250,7 @@ mod tests {
                 runs += 1;
                 vec![tool("late")]
             },
+            || start + AI_TOOL_DISCOVERY_TTL,
         );
         assert_eq!(refilled.len(), 1);
         assert_eq!(runs, 2);
@@ -251,11 +277,18 @@ mod tests {
                 std::thread::spawn(move || {
                     barrier.wait();
                     let mut cache = cache.lock_or_recover();
-                    cache.discover(now, 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
-                        scans.fetch_add(1, Ordering::SeqCst);
-                        std::thread::sleep(Duration::from_millis(50));
-                        vec![tool("shared")]
-                    })
+                    cache.discover(
+                        now,
+                        0,
+                        AI_TOOL_DISCOVERY_TTL,
+                        false,
+                        |_, _| {
+                            scans.fetch_add(1, Ordering::SeqCst);
+                            std::thread::sleep(Duration::from_millis(50));
+                            vec![tool("shared")]
+                        },
+                        || now,
+                    )
                 })
             })
             .collect::<Vec<_>>();
@@ -265,6 +298,74 @@ mod tests {
             assert_eq!(tools[0].id, "shared");
         }
         assert_eq!(scans.load(Ordering::SeqCst), 1);
+    }
+
+    /// HS2-XZ3TTH: a scan that outlasts the TTL (each probe ending at its deadline) answers
+    /// every caller that arrived while it ran, and the TTL counts from its completion. A
+    /// caller under a newer generation, or asking for a refresh, still rescans.
+    #[test]
+    fn hs2_xz3tth_a_scan_longer_than_the_ttl_answers_callers_that_arrived_during_it() {
+        /// One discovery that arrived at `arrived` and, if it scans, completes at `completed`.
+        fn run(
+            cache: &mut AiToolDiscoveryCache,
+            runs: &mut Vec<String>,
+            (arrived, completed): (Instant, Instant),
+            generation: u64,
+            refresh: bool,
+            id: &str,
+        ) -> Vec<String> {
+            cache
+                .discover(
+                    arrived,
+                    generation,
+                    AI_TOOL_DISCOVERY_TTL,
+                    refresh,
+                    |_, _| {
+                        runs.push(id.to_string());
+                        vec![tool(id)]
+                    },
+                    || completed,
+                )
+                .into_iter()
+                .map(|tool| tool.id)
+                .collect()
+        }
+        let mut cache = AiToolDiscoveryCache::default();
+        let mut runs = Vec::new();
+        let start = Instant::now();
+        let finished = start + 2 * AI_TOOL_DISCOVERY_TTL;
+        let at = |instant: Instant| (instant, instant);
+        let slow = run(&mut cache, &mut runs, (start, finished), 0, false, "slow");
+        assert_eq!(slow, ["slow"]);
+        // Queued behind the scan, 15 s after the first arrival: served by it, no rescan.
+        let queued = start + AI_TOOL_DISCOVERY_TTL + Duration::from_secs(5);
+        assert_eq!(
+            run(&mut cache, &mut runs, at(queued), 0, false, "x"),
+            ["slow"]
+        );
+        // Arrived exactly as the scan completed, and just inside the TTL after it.
+        assert_eq!(
+            run(&mut cache, &mut runs, at(finished), 0, false, "x"),
+            ["slow"]
+        );
+        let inside = finished + AI_TOOL_DISCOVERY_TTL - Duration::from_millis(1);
+        assert_eq!(
+            run(&mut cache, &mut runs, at(inside), 0, false, "x"),
+            ["slow"]
+        );
+        assert_eq!(runs, ["slow"]);
+        // A plugin change during the scan bumped the generation: that caller rescans.
+        let next = run(&mut cache, &mut runs, (queued, finished), 1, false, "next");
+        assert_eq!(next, ["next"]);
+        // An explicit refresh always rescans, and a full TTL after completion is stale.
+        let fresh = run(&mut cache, &mut runs, (queued, finished), 1, true, "fresh");
+        assert_eq!(fresh, ["fresh"]);
+        let stale = finished + AI_TOOL_DISCOVERY_TTL;
+        assert_eq!(
+            run(&mut cache, &mut runs, at(stale), 1, false, "late"),
+            ["late"]
+        );
+        assert_eq!(runs, ["slow", "next", "fresh", "late"]);
     }
 
     #[test]

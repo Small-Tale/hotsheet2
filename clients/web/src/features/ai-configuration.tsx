@@ -70,6 +70,10 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
   // Bumped by forgetAiConfiguration so a request that was in flight when its project closed or was
   // evicted cannot re-populate the cache afterwards.
   const aiConfigurationEpochs = new Map<string, number>();
+  // The ordinary (non-refresh) read still in flight for each project. Returning to a project whose read
+  // has not answered joins it instead of issuing another pair: a slow AI-tool discovery otherwise leaves
+  // A→B→A holding six requests, the browser's whole per-origin connection pool (HS2-XZ3TTH).
+  const aiConfigurationReads = new Map<string, Promise<void>>();
 
   function aiToolLabel(tool: string) {
     return (
@@ -408,8 +412,22 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     return selection;
   }
 
-  async function refreshAiConfiguration(current = project(), refresh = false) {
-    if (!current) return;
+  function refreshAiConfiguration(current = project(), refresh = false): Promise<void> {
+    if (!current) return Promise.resolve();
+    if (refresh) return loadAiConfiguration(current, true);
+    const pending = aiConfigurationReads.get(current.id);
+    if (pending) {
+      aiSettingsLoading.value = true;
+      return pending;
+    }
+    const read = loadAiConfiguration(current, false).finally(() => {
+      if (aiConfigurationReads.get(current.id) === read) aiConfigurationReads.delete(current.id);
+    });
+    aiConfigurationReads.set(current.id, read);
+    return read;
+  }
+
+  async function loadAiConfiguration(current: Project, refresh: boolean) {
     aiSettingsLoading.value = true;
     const epoch = aiConfigurationEpochs.get(current.id) ?? 0;
     try {
@@ -458,6 +476,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
   /** Drop a project's cached AI configuration (closed or evicted from the warm-project LRU). */
   function forgetAiConfiguration(projectId: string) {
     aiConfigurationByProject.delete(projectId);
+    aiConfigurationReads.delete(projectId);
     aiConfigurationEpochs.set(projectId, (aiConfigurationEpochs.get(projectId) ?? 0) + 1);
   }
 

@@ -1274,7 +1274,13 @@ provider changes. The server also memoizes a complete discovery for 10 s inside 
 catalog lock, so `/ai-tools`, `/ai-settings`, and terminal-launch validation share one scan
 and concurrent callers coalesce onto it; `refresh=true` bypasses and repopulates the memo,
 and `POST /setup/{tool}` (or replacing the plugin roots) invalidates it. Tools installed
-outside the server appear once the memo expires or on the next refresh (HS2-QV8B7R). `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
+outside the server appear once the memo expires or on the next refresh (HS2-QV8B7R). A caller is
+timed from its arrival rather than from when it gets the lock, and the memo is stamped when
+its scan completes. A request that queued behind a running scan is therefore answered by that
+scan even when the scan outlasts the TTL, and the TTL counts from completion. Before this, each
+queued request rescanned in turn: with two tools at the 5 s probe deadline, an A→B→A
+activation's six AI reads answered after 10, 20, ... 60 s instead of all at about 10 s
+(HS2-XZ3TTH). `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
 [--model <id>] [--effort <level>]` provide headless parity for the machine-local defaults
 exposed by `/ai-tools` and `/ai-settings`; `ai-settings set-provider --tool <id> [--model <id>]
 [--effort <level>]` saves one provider's own default model and effort without changing the

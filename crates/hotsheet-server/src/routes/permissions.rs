@@ -659,12 +659,15 @@ pub(crate) fn discovered_ai_tools(
         &state.plugin_dirs,
         state.store.root(),
         refresh,
+        std::time::Instant::now(),
     )
 }
 
 /// Blocking AI-tool discovery through the short-lived memo (HS2-QV8B7R). The generation is
 /// read under the catalog lock, so callers that queued behind a scan reuse its result
 /// unless an invalidation landed after it started.
+/// `arrived` is when the caller asked, read before it queues on the lock, so a caller that
+/// waited behind a running scan is answered by it rather than rescanning (HS2-XZ3TTH).
 fn discover_ai_tools_memoized(
     catalogs: &Mutex<ai_tool_discovery::AiToolDiscoveryCache>,
     generation: &AtomicU64,
@@ -672,15 +675,17 @@ fn discover_ai_tools_memoized(
     plugin_dirs: &[std::path::PathBuf],
     root: &FsPath,
     refresh: bool,
+    arrived: std::time::Instant,
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
     let mut cache = catalogs.lock_or_recover();
     let generation = generation.load(Ordering::Acquire);
     cache.discover(
-        std::time::Instant::now(),
+        arrived,
         generation,
         config.ttl,
         refresh,
         |catalogs, refresh| (config.scanner)(plugin_dirs, root, catalogs, refresh),
+        std::time::Instant::now,
     )
 }
 
@@ -716,6 +721,7 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
     let config = state.ai_tool_discovery.clone();
     let plugin_dirs = state.plugin_dirs.clone();
     let root = state.store.root().to_path_buf();
+    let arrived = std::time::Instant::now();
     // A detached thread, not the blocking pool (HS2-NPBZJ9): the scan runs installed tools'
     // `--version`/catalog subprocesses with no deadline of their own, and the runtime waits
     // for every `spawn_blocking` task when it drops. A probe that hangs past a stop (or past
@@ -731,6 +737,7 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
                 &plugin_dirs,
                 &root,
                 refresh,
+                arrived,
             ));
         });
     if spawned.is_err() {

@@ -1426,6 +1426,79 @@ async fn lists_ci_fixture(router: &axum::Router, uri: &str) -> bool {
         .any(|tool| tool["id"] == "ci-fixture")
 }
 
+/// HS2-XZ3TTH: requests that queue behind a scan longer than the memo TTL share that one
+/// scan. Before, each queued request found the memo already stale on taking the lock and
+/// rescanned in turn, so an A→B→A activation's six AI reads took about 10, 20, ... 60 s
+/// against two tools at the probe deadline. The injected scan is held well past a short
+/// TTL to emulate those probes; it reads no real AI tool.
+#[tokio::test]
+async fn hs2_xz3tth_requests_queued_behind_a_slow_scan_share_it() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+    let (_dir, state) = state();
+    let scans = Arc::new(AtomicUsize::new(0));
+    let (entered_tx, mut entered_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let release_rx = Mutex::new(release_rx);
+    let scan_count = scans.clone();
+    let ttl = Duration::from_millis(200);
+    let router = app(state
+        .with_machine_home(_dir.path().join("machine-home"))
+        .with_ai_tool_discovery(ttl, move |_, _, _, _| {
+            if scan_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                let _ = entered_tx.send(());
+                // Bounded so a failed run never leaves the thread parked forever.
+                let _ = release_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(30));
+            }
+            // One synthetic tool: `/ai-settings` answers 404 for an empty inventory.
+            vec![hotsheet_plugins::AiToolDescriptor {
+                id: "fixture".into(),
+                display_name: "Fixture".into(),
+                ..Default::default()
+            }]
+        }));
+    let request = |uri: &'static str| {
+        let router = router.clone();
+        tokio::spawn(async move { router.oneshot(authed("GET", uri, None)).await.unwrap() })
+    };
+    let first = request("/ai-tools");
+    entered_rx
+        .recv()
+        .await
+        .expect("the first request never scanned");
+    let queued = [
+        "/ai-settings",
+        "/ai-tools",
+        "/ai-settings",
+        "/ai-tools",
+        "/ai-settings",
+    ]
+    .map(request);
+    // The held scan outlasts the TTL by construction; the queued requests arrive meanwhile.
+    tokio::time::sleep(ttl * 3).await;
+    release_tx.send(()).unwrap();
+    for response in std::iter::once(first).chain(queued) {
+        assert_eq!(response.await.unwrap().status(), StatusCode::OK);
+    }
+    assert_eq!(
+        scans.load(Ordering::SeqCst),
+        1,
+        "every request that queued behind the held scan was answered by it"
+    );
+    // The TTL now counts from the scan's completion: a later request still rescans.
+    tokio::time::sleep(ttl * 2).await;
+    let later = router
+        .clone()
+        .oneshot(authed("GET", "/ai-tools", None))
+        .await
+        .unwrap();
+    assert_eq!(later.status(), StatusCode::OK);
+    assert_eq!(scans.load(Ordering::SeqCst), 2);
+}
+
 /// HS2-QV8B7R: AI-tool discovery is memoized briefly, so `/ai-tools` and `/ai-settings`
 /// share one scan. The fixture plugin's manifest is read on every scan, which makes
 /// the memo observable: removing the plugin is invisible until `refresh=true` rescans,

@@ -1941,6 +1941,72 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(calls);
   });
 
+  it("joins a project's pending AI read on A→B→A instead of issuing another pair (HS2-XZ3TTH)", async () => {
+    const state = chatOwners(),
+      heldTools = deferred<Response>();
+    let failSettings = false;
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url !== 'string') throw new Error('Expected string URL');
+      if (url === '/api/a/ai-tools' && fetchMock.mock.calls.filter(([item]) => item === url).length === 1)
+        return heldTools.promise;
+      const owner = url.includes('/api/b/') ? 'b' : 'a';
+      if (url.includes('ai-tools')) return json([{ id: `${owner}-tool`, display_name: `${owner} tool`, models: [] }]);
+      if (failSettings) return new Response(JSON.stringify({ error: 'settings unavailable' }), { status: 500 });
+      return json({ tool: `${owner}-tool` });
+    });
+    const activate = (id: string) => {
+      state.active.value = project(id);
+      state.selectedProjectId.value = id;
+    };
+    const aiCalls = (id: string) =>
+      fetchMock.mock.calls.filter(([url]) => typeof url === 'string' && url.startsWith(`/api/${id}/ai-`)).length;
+
+    const first = state.ai.refreshAiConfiguration();
+    activate('b');
+    expect(state.ai.restoreAiConfiguration(project('b'))).toBe(false);
+    await state.ai.refreshAiConfiguration();
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
+    activate('a');
+    expect(state.ai.restoreAiConfiguration(project('a'))).toBe(false);
+    // Returning to A, and a repeated call, join A's held read: still one tools/settings pair.
+    const returned = state.ai.refreshAiConfiguration();
+    const repeated = state.ai.refreshAiConfiguration();
+    expect(aiCalls('a')).toBe(2);
+    expect(state.ai.aiSettingsLoading.value).toBe(true);
+    heldTools.resolve(json([{ id: 'a-tool', display_name: 'a tool', models: [] }]));
+    await Promise.all([first, returned, repeated]);
+    expect(state.ai.aiDefaults.value.tool).toBe('a-tool');
+    expect(state.ai.aiConfigurationProjectId).toBe('a');
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
+
+    // Settled reads are not reused: the next ordinary read asks again.
+    await state.ai.refreshAiConfiguration();
+    expect(aiCalls('a')).toBe(4);
+    // An explicit refresh never joins an ordinary read in flight.
+    const ordinary = state.ai.refreshAiConfiguration();
+    const explicit = state.ai.refreshAiConfiguration(undefined, true);
+    await Promise.all([ordinary, explicit]);
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/a/ai-tools?refresh=true')).toBe(true);
+    expect(aiCalls('a')).toBe(8);
+
+    // Forgetting a project drops its pending read: a later read is a new pair, and a failure
+    // in a joined read reports through the ordinary error path, then the next read refills.
+    const forgotten = state.ai.refreshAiConfiguration();
+    state.ai.forgetAiConfiguration('a');
+    failSettings = true;
+    const fresh = state.ai.refreshAiConfiguration();
+    const joined = state.ai.refreshAiConfiguration();
+    await Promise.all([forgotten, fresh, joined]);
+    expect(aiCalls('a')).toBe(12);
+    expect(state.ai.aiSettingsMessage.value).toContain('settings unavailable');
+    expect(state.ai.aiSettingsLoading.value).toBe(false);
+    failSettings = false;
+    await state.ai.refreshAiConfiguration();
+    expect(aiCalls('a')).toBe(14);
+    expect(state.ai.aiSettingsMessage.value).toBe('');
+    expect(state.ai.aiConfigurationProjectId).toBe('a');
+  });
+
   it('keeps a late answer warm for its own project but drops it after the project is forgotten', async () => {
     const state = chatOwners(),
       lateA = deferred<Response>(),
