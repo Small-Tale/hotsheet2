@@ -2369,105 +2369,110 @@ export async function startHotSheetWebClient() {
   function activateOpenProject(next: string): { project: Project; generation: number; cached: boolean } | undefined {
     const nextProject = projects.value.find((item) => item.id === next);
     if (!nextProject) return;
-    if (next !== selectedProjectId.value) parkProjectViewports(selectedProjectId.value);
-    projectTabRefresh.activate(next);
     const finishTiming = beginInteractionTiming('project-change', { project: next });
-    // Publish any typing still held by the old project's search projection before saving its session.
-    flushWorkspaceSearch();
-    // Retire an older restore before parking this surface. Its seeded references remain saveable
-    // even while a GET is held, and its later continuation cannot publish into the next project.
-    projectSessionRestoreRun += 1;
-    restoringProjectSession = false;
-    projectSessionDirtyDuringRestore = false;
-    persistProjectSessionNow();
-    cacheActiveProjectProjection();
-    resetTicketComposer(false);
-    closeNotWorking(false);
-    resetProgressiveTicketRendering();
-    resetBoardColumnPages();
-    const rows = ticketRowsByProject.value[next],
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      cached = rows !== undefined,
-      projection = projectProjectionById.value[next],
-      stored = loadProjectWorkspaceSession(localStorage, next),
-      generation = ++projectActivationGeneration,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      live = new Set(rows?.map((ticket) => ticket.slug) ?? []),
-      selection = stored?.selectedTicketSlugs.filter((slug) => live.has(slug)) ?? [],
-      drawerActivation = terminalDrawerActivation(localStorage, next);
-    // Resetting the old surface scheduled persistence. Keep this parked open intent while the
-    // new activation refreshes, rather than saving its temporary closed placeholder (HS2-40JX5Q).
-    composerRestoreIntent.capture(next, generation, attachmentEpochs().composer, stored?.composer.open);
-    batch(() => {
-      selectedProjectRestoreRoot.value = '';
-      selectedProjectId.value = drawerActivation.projectId;
-      // Keep saved references present before refresh/GET completes (HS2-791W19). Opening or
-      // leaving this project during restore must not replace them with an empty draft.
-      if (stored) {
-        composerTitle.value = stored.composer.title;
-        composerDetails.value = stored.composer.details;
-        composerCategory.value = stored.composer.category;
-        composerUpNext.value = stored.composer.upNext;
-        composerUnrestoredAttachments.value = [...stored.composer.attachments];
-        if (stored.notWorking) {
-          notWorkingTarget.value = {
-            projectId: next,
-            apiPath: nextProject.apiPath,
-            ticketId: stored.notWorking.ticketId,
-            slug: stored.notWorking.slug,
-            connectionId: stored.notWorking.connectionId,
-            mode: stored.notWorking.mode ?? 'not-working',
-          };
-          notWorkingNote.value = stored.notWorking.note;
-          notWorkingUnrestoredFiles.value = [...stored.notWorking.attachments];
-        }
-      }
-      terminalDrawerSelected.value = drawerActivation.selectedId;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      tickets.value = rows ?? [];
-      const position = ticketCursorsByProject.value[next];
-      ticketNextCursor.value = position?.cursor;
-      // Without the issuing query the cached cursor is unusable; an empty query also forces the next view
-      // refresh to reload page one instead of trusting a query it never fetched (HS2-38MPMC).
-      ticketPageQuery.value = position?.query ?? {};
-      boardColumnPages.value = boardPagesByProject.value[next] ?? {};
-      ticketCollectionState.value = undefined;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      corruptTickets.value = projection?.corruptTickets ?? [];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      repository.value = projection?.repository ?? null;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      repositoryError.value = projection?.repositoryError ?? '';
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      commandDefinitions.value = projection?.commandDefinitions ?? [];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      commandRuns.value = projection?.commandRuns ?? [];
-      commandSettingsEditingId.value = undefined;
-      selectedView.value =
+    // Each reset, restore and clock write below would otherwise render the whole app on its own; one
+    // batch paints a warm switch in a single pass within the 100 ms interaction budget (HS2-1FTH54).
+    const activation = batch(() => {
+      if (next !== selectedProjectId.value) parkProjectViewports(selectedProjectId.value);
+      projectTabRefresh.activate(next);
+      // Publish any typing still held by the old project's search projection before saving its session.
+      flushWorkspaceSearch();
+      // Retire an older restore before parking this surface. Its seeded references remain saveable
+      // even while a GET is held, and its later continuation cannot publish into the next project.
+      projectSessionRestoreRun += 1;
+      restoringProjectSession = false;
+      projectSessionDirtyDuringRestore = false;
+      persistProjectSessionNow();
+      cacheActiveProjectProjection();
+      resetTicketComposer(false);
+      closeNotWorking(false);
+      resetProgressiveTicketRendering();
+      resetBoardColumnPages();
+      const rows = ticketRowsByProject.value[next],
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-        stored?.selectedView === 'errors' && !projection?.corruptTickets.length
-          ? 'all'
-          : (stored?.selectedView ?? 'all');
-      searchOpen.value = stored?.searchOpen ?? false;
-      searchQuery.value = stored?.searchQuery ?? '';
-      // The editor is shared across projects; restore it in the same frame as the project state.
-      // Waiting for refreshActivatedProject leaves the previous project's text visible in the new one.
-      replaceTicketSearch(workspaceSearchModel, stored?.searchQuery ?? '');
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      searchMatchKeys.value = projection?.searchMatchKeys;
-      selectedCorruptKey.value = undefined;
-      selectedTicket.value = null;
-      selectedTicketSlugs.value = selection;
-      ticketSelectionAnchor = selection[0];
-      error.value = '';
-      loading.value = !cached;
+        cached = rows !== undefined,
+        projection = projectProjectionById.value[next],
+        stored = loadProjectWorkspaceSession(localStorage, next),
+        generation = ++projectActivationGeneration,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        live = new Set(rows?.map((ticket) => ticket.slug) ?? []),
+        selection = stored?.selectedTicketSlugs.filter((slug) => live.has(slug)) ?? [],
+        drawerActivation = terminalDrawerActivation(localStorage, next);
+      // Resetting the old surface scheduled persistence. Keep this parked open intent while the
+      // new activation refreshes, rather than saving its temporary closed placeholder (HS2-40JX5Q).
+      composerRestoreIntent.capture(next, generation, attachmentEpochs().composer, stored?.composer.open);
+      batch(() => {
+        selectedProjectRestoreRoot.value = '';
+        selectedProjectId.value = drawerActivation.projectId;
+        // Keep saved references present before refresh/GET completes (HS2-791W19). Opening or
+        // leaving this project during restore must not replace them with an empty draft.
+        if (stored) {
+          composerTitle.value = stored.composer.title;
+          composerDetails.value = stored.composer.details;
+          composerCategory.value = stored.composer.category;
+          composerUpNext.value = stored.composer.upNext;
+          composerUnrestoredAttachments.value = [...stored.composer.attachments];
+          if (stored.notWorking) {
+            notWorkingTarget.value = {
+              projectId: next,
+              apiPath: nextProject.apiPath,
+              ticketId: stored.notWorking.ticketId,
+              slug: stored.notWorking.slug,
+              connectionId: stored.notWorking.connectionId,
+              mode: stored.notWorking.mode ?? 'not-working',
+            };
+            notWorkingNote.value = stored.notWorking.note;
+            notWorkingUnrestoredFiles.value = [...stored.notWorking.attachments];
+          }
+        }
+        terminalDrawerSelected.value = drawerActivation.selectedId;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        tickets.value = rows ?? [];
+        const position = ticketCursorsByProject.value[next];
+        ticketNextCursor.value = position?.cursor;
+        // Without the issuing query the cached cursor is unusable; an empty query also forces the next view
+        // refresh to reload page one instead of trusting a query it never fetched (HS2-38MPMC).
+        ticketPageQuery.value = position?.query ?? {};
+        boardColumnPages.value = boardPagesByProject.value[next] ?? {};
+        ticketCollectionState.value = undefined;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        corruptTickets.value = projection?.corruptTickets ?? [];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        repository.value = projection?.repository ?? null;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        repositoryError.value = projection?.repositoryError ?? '';
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        commandDefinitions.value = projection?.commandDefinitions ?? [];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        commandRuns.value = projection?.commandRuns ?? [];
+        commandSettingsEditingId.value = undefined;
+        selectedView.value =
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          stored?.selectedView === 'errors' && !projection?.corruptTickets.length
+            ? 'all'
+            : (stored?.selectedView ?? 'all');
+        searchOpen.value = stored?.searchOpen ?? false;
+        searchQuery.value = stored?.searchQuery ?? '';
+        // The editor is shared across projects; restore it in the same frame as the project state.
+        // Waiting for refreshActivatedProject leaves the previous project's text visible in the new one.
+        replaceTicketSearch(workspaceSearchModel, stored?.searchQuery ?? '');
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        searchMatchKeys.value = projection?.searchMatchKeys;
+        selectedCorruptKey.value = undefined;
+        selectedTicket.value = null;
+        selectedTicketSlugs.value = selection;
+        ticketSelectionAnchor = selection[0];
+        error.value = '';
+        loading.value = !cached;
+      });
+      markProjectWarm(next);
+      aiConfigurationController.restoreAiConfiguration(nextProject);
+      scheduleClaimLeaseExpiry();
+      saveActiveProjectRoot(localStorage, nextProject.root);
+      return { project: nextProject, generation, cached };
     });
-    markProjectWarm(next);
-    aiConfigurationController.restoreAiConfiguration(nextProject);
-    scheduleClaimLeaseExpiry();
-    saveActiveProjectRoot(localStorage, nextProject.root);
     finishTiming();
-    return { project: nextProject, generation, cached };
+    return activation;
   }
   /** Mark a project most recently used and drop the resident projection of any LRU-evicted project. */
   function markProjectWarm(id: string) {

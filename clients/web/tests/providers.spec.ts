@@ -29180,20 +29180,28 @@ test('switches already-open projects from cache within one frame and rejects sta
     '2 Up Next tickets, 1 active ticket',
   );
   await expect(projectTabs.filter({ hasText: 'other' }).locator('.project-tab__activity-ring')).toBeVisible();
-  const switchWithinFrame = async (name: string) =>
-    page.evaluate(async (label) => {
+  // A warm switch renders the app once: separately rendered resets and restores cost several frames on a
+  // slower runner, so the pass count is pinned independently of the machine's speed (HS2-1FTH54).
+  const switchWithinFrame = async (name: string) => {
+    const { elapsed, passes } = await page.evaluate(async (label) => {
       const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
         (item) => item.querySelector('.kui-tab-bar-item__name')?.textContent === label,
       )!;
+      const metrics = (window as InstrumentedWindow).__hotsheetRenderMetrics!;
+      metrics.reset();
       const start = performance.now();
       tab.click();
+      const rendered = metrics.snapshot().passes;
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => {
           resolve();
         }),
       );
-      return performance.now() - start;
+      return { elapsed: performance.now() - start, passes: rendered };
     }, name);
+    expect(passes).toBe(1);
+    return elapsed;
+  };
   const observeRefreshPaintOrder = () =>
     page.evaluate(() => {
       const state = window as typeof window & {

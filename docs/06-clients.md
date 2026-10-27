@@ -1494,7 +1494,10 @@ preview/download, server directory browser) are separate design work.
   Switching to an already-open project is a local projection change, not a loading gate. The
   tab click atomically restores that project's most recent ticket rows, repository summary,
   corrupt-ticket diagnostics, and command state from memory within the next frame, without
-  showing the global loading indicator. An authoritative refresh follows in the background,
+  showing the global loading indicator. Resetting the outgoing project's surfaces and restoring
+  the incoming project's state, AI configuration, and claim clocks form one reactive transition
+  that renders the application once, so the switch stays within the 100 ms interaction budget
+  on a slower machine (HS2-1FTH54). An authoritative refresh follows in the background,
   but is not started until a task after that first browser paint, so request setup cannot
   delay the cached projection becoming visible. Project activation also resets the progressive
   ticket-row boundary, preventing a previously expanded large project from rebuilding every
