@@ -831,6 +831,7 @@ fn hs2_yhynj6_an_integrator_expiring_during_base_validation_cannot_publish_share
     assert_eq!(state.integration.unwrap().shared, [COVERAGE]);
 }
 
+#[cfg(unix)]
 fn output_of(f: &Fixture, args: &[String]) -> std::process::Output {
     f.command(&args.iter().map(String::as_str).collect::<Vec<_>>())
         .output()
