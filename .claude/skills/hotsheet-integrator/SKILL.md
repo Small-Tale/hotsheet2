@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator running, assign independent tic
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 9 -->
+<!-- hotsheet-skill-version: 10 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -75,6 +75,7 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    registration changes; a conflicting explicit route is refused. Name the evidence
    note id and chosen recipient in the regular `## Worker assignment` note. Never
    change the integrator's global registration merely to route one worker.
+
 3. Resolve one durable handoff at a time using the steps below. For code, record
    `coordination mark --assignment <id> --phase integrating`, then `ci` after verified
    push, then `done` after covering green CI and ticket completion. For findings,
@@ -84,8 +85,8 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    ticket; several CI records may coexist while workers take independent assignments.
 4. When waiting on local worker, ticket, or source-configuration changes, run
    `coordination next --role integrator --id <integrator> --session <generation>
-   --route <return-route> --lease-seconds <lease-seconds>
-   --after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
+--route <return-route> --lease-seconds <lease-seconds>
+--after <last-snapshot-cursor>`. Keep the yielded tool process running. Genuine
    filesystem events, cursor reconciliation, and known lease-expiry deadlines wake it;
    availability heartbeats do not scan the queue or network. Lost/unconfirmed session
    cues cannot erase durable assignments or handoffs.
@@ -204,7 +205,10 @@ For a code handoff, follow these integration steps:
    worker's `working` and `initial_testing` transitions, including for `T0` docs or
    test-only work (HS2-5EGBTH). If one is missing, review the handoff's gate evidence
    instead of the durable phase. Never backfill a transition; name the gap in a
-   review note.
+   review note. Compare claim-history deadlines with the worker's gate and commit
+   evidence (HS2-MFYYJ9); availability heartbeats do not extend a ticket claim.
+   Preserve any expired interval and request exact authority evidence instead of
+   backfilling or inferring that a later same-worker renewal covered the gap.
 2. Claim that exact Started ticket with your own worker id (`HOTSHEET_WORKER_ID`
    when set), record an ETA and the `integrating` phase, and renew the lease during
    long work. Preserve unrelated dirty or staged files in the main checkout. If

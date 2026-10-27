@@ -5,6 +5,7 @@
 //! new subcommand fails to compile until it is routed; each group module then matches
 //! only its own variants.
 
+mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
 pub(crate) mod providers;
@@ -104,7 +105,11 @@ impl Cmd {
             | ProviderMove { .. }
             | Key { .. }
             | Account { .. } => Group::Providers,
-            ClaimNext { .. } | Claim { .. } | Release { .. } | Renew { .. } => Group::Claims,
+            ClaimNext { .. } | Claim { .. } | Release { .. } | Renew { .. } | ClaimRun { .. } => {
+                Group::Claims
+            }
+            #[cfg(windows)]
+            ClaimRunChild { .. } => Group::Claims,
             Commands { .. }
             | Terminal { .. }
             | Lifecycle { .. }
@@ -132,6 +137,10 @@ impl Cmd {
     /// Whether `-C` is resolved through `$HOTSHEET_STORE` / a `.hotsheet2/store` link
     /// (HS2-5CXKZ0). `init`/`link` and friends operate on the literal path instead.
     pub(crate) fn resolves_store_path(&self) -> bool {
+        #[cfg(windows)]
+        if matches!(self, Cmd::ClaimRunChild { .. }) {
+            return false;
+        }
         !matches!(
             self,
             Cmd::Init { .. }
@@ -149,9 +158,14 @@ impl Cmd {
 
     /// Whether a successful run refreshes the registered checkouts' worklists.
     pub(crate) fn refreshes_worklists(&self) -> bool {
+        #[cfg(windows)]
+        if matches!(self, Cmd::ClaimRunChild { .. }) {
+            return false;
+        }
         !matches!(
             self,
-            Cmd::Init { .. }
+            Cmd::ClaimRun { .. }
+                | Cmd::Init { .. }
                 | Cmd::Coordination(_)
                 | Cmd::Bootstrap { .. }
                 | Cmd::Link { .. }

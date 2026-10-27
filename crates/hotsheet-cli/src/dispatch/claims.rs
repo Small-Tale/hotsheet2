@@ -1,14 +1,19 @@
 //! Live ticket claim leases: claim, claim-next, renew, and release.
 
+use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::thread;
+use std::time::Duration as StdDuration;
 
-use anyhow::Result;
-use hotsheet_model::Timestamp;
+use anyhow::{Context, Result, bail, ensure};
+use hotsheet_model::{ClaimEventKind, Ticket, Timestamp, Ulid};
 use hotsheet_ticketing::{FsStore, metrics, ops};
 use time::{Duration, OffsetDateTime};
 
 use crate::{Cmd, now_ts, resolve};
 
+use super::claim_process::GuardedChild;
 use super::{Ctx, misrouted};
 
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
@@ -51,8 +56,189 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             lease_minutes,
             eta,
         } => cmd_renew(path, &id, &worker, lease_minutes, eta.as_deref()),
+        Cmd::ClaimRun {
+            id,
+            worker,
+            lease_seconds,
+            command,
+        } => cmd_claim_run(path, &id, &worker, lease_seconds, &command),
+        #[cfg(windows)]
+        Cmd::ClaimRunChild { command } => super::claim_process::run_child(&command),
         _ => misrouted("claims"),
     }
+}
+
+/// Guard one owned process tree with the exact live claim attempt (HS2-MFYYJ9).
+fn cmd_claim_run(
+    path: &PathBuf,
+    id: &str,
+    worker: &str,
+    lease_seconds: u64,
+    command: &[OsString],
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let now = Timestamp::from_datetime(OffsetDateTime::now_utc());
+    ensure!(
+        ticket.claimed_by.as_deref() == Some(worker) && !ops::claim_available(&ticket, &now),
+        "exact live ticket claim required before running a command"
+    );
+    let attempt = ticket
+        .claim_history
+        .iter()
+        .rev()
+        .find(|event| event.kind == ClaimEventKind::Claim)
+        .filter(|event| event.worker == worker)
+        .map(|event| event.id)
+        .context(
+            "live claim has no exact attempt event; inspect and reacquire before continuing",
+        )?;
+    // Preflight can wait for the lock: no requested command has started yet.
+    let mut held = renew_attempt(&store, &ticket.id, worker, &attempt, lease_seconds)
+        .context("claim guard preflight renewal failed")?;
+    let mut child = GuardedChild::spawn(command)?;
+    // HS2-MFYYJ9 native Windows fixture: let the helper open its event only
+    // after this call has returned, reproducing the event lifetime race.
+    #[cfg(debug_assertions)]
+    if let Ok(marker) = std::env::var("HOTSHEET_TEST_CLAIM_RUN_PARENT_READY_PATH") {
+        std::fs::write(marker, b"spawn returned")
+            .context("could not mark guarded parent spawn return")?;
+    }
+    let margin = Duration::seconds((lease_seconds / 3).clamp(1, 60) as i64);
+    let mut pending: Option<Receiver<Result<Ticket, ops::OpError>>> = None;
+    loop {
+        if let Some(receiver) = pending.as_ref() {
+            match receiver.try_recv() {
+                Ok(result) => {
+                    pending = None;
+                    held = match result {
+                        Ok(renewed) => renewed,
+                        Err(error) => {
+                            child
+                                .stop()
+                                .context("could not stop guarded process tree")?;
+                            return Err(error).context("claim guard renewal failed; tree stopped");
+                        }
+                    };
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    child
+                        .stop()
+                        .context("could not stop guarded process tree")?;
+                    bail!("claim guard renewal worker ended without a result; tree stopped");
+                }
+            }
+        }
+        let now = OffsetDateTime::now_utc();
+        let expiry = lease_deadline(&held)?;
+        if now >= expiry {
+            child
+                .stop()
+                .context("could not stop guarded process tree")?;
+            bail!("claim lease deadline passed before renewal completed; tree stopped");
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // A shell can exit while a grandchild still retains stdio and writes.
+                // Stop that tree before any blocking final authority check.
+                child
+                    .stop()
+                    .context("could not stop guarded process tree")?;
+                if !status.success() {
+                    bail!("guarded command failed with {status}; claim authority is not inferred");
+                }
+                if let Some(receiver) = pending.take() {
+                    held = await_renewal(receiver, expiry)
+                        .context("scheduled renewal did not complete before lease deadline")?;
+                }
+                let final_check = spawn_renew(&store, ticket.id, worker, attempt, lease_seconds);
+                await_renewal(final_check, lease_deadline(&held)?)
+                    .context("claim guard final authority check failed")?;
+                return Ok(());
+            }
+            Ok(None) => {}
+            Err(error) => {
+                child
+                    .stop()
+                    .context("could not stop guarded process tree")?;
+                return Err(error).context("could not observe guarded command");
+            }
+        }
+        let renew_at = expiry - margin;
+        if now >= renew_at && pending.is_none() {
+            pending = Some(spawn_renew(
+                &store,
+                ticket.id,
+                worker,
+                attempt,
+                lease_seconds,
+            ));
+        }
+        let wake_at = if now < renew_at { renew_at } else { expiry };
+        let until = (wake_at - now).whole_milliseconds().max(1) as u64;
+        thread::sleep(StdDuration::from_millis(until.min(250)));
+    }
+}
+
+fn lease_deadline(ticket: &Ticket) -> Result<OffsetDateTime> {
+    ticket
+        .claim_lease_expires_at
+        .as_ref()
+        .and_then(Timestamp::instant)
+        .context("renewal did not return a valid lease deadline")
+}
+
+fn renew_attempt(
+    store: &FsStore,
+    id: &Ulid,
+    worker: &str,
+    attempt: &Ulid,
+    lease_seconds: u64,
+) -> Result<Ticket, ops::OpError> {
+    ops::renew_live_attempt_with_clock(store, id, worker, attempt, || {
+        let now = OffsetDateTime::now_utc();
+        (
+            Timestamp::from_datetime(now),
+            Timestamp::from_datetime(now + Duration::seconds(lease_seconds as i64)),
+        )
+    })
+}
+
+fn spawn_renew(
+    store: &FsStore,
+    id: Ulid,
+    worker: &str,
+    attempt: Ulid,
+    lease_seconds: u64,
+) -> Receiver<Result<Ticket, ops::OpError>> {
+    let (sender, receiver) = mpsc::channel();
+    let store = store.clone();
+    let worker = worker.to_owned();
+    thread::spawn(move || {
+        let _ = sender.send(renew_attempt(&store, &id, &worker, &attempt, lease_seconds));
+    });
+    receiver
+}
+
+fn await_renewal(
+    receiver: Receiver<Result<Ticket, ops::OpError>>,
+    expiry: OffsetDateTime,
+) -> Result<Ticket> {
+    let now = OffsetDateTime::now_utc();
+    ensure!(
+        now < expiry,
+        "claim lease deadline passed while renewal waited"
+    );
+    let until = (expiry - now).whole_milliseconds().max(1) as u64;
+    let ticket = receiver
+        .recv_timeout(StdDuration::from_millis(until))
+        .context("claim lease deadline passed while renewal waited")??;
+    ensure!(
+        OffsetDateTime::now_utc() < lease_deadline(&ticket)?,
+        "renewal completed with an expired lease"
+    );
+    Ok(ticket)
 }
 
 pub(crate) fn cmd_claim_next(

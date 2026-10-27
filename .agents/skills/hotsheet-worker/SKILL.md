@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 42 -->
+<!-- hotsheet-skill-version: 43 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -38,7 +38,7 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    `<return-route>`, and one availability `<lease-seconds>` (10 to 3600; long gates
    want the longest) for this invocation. Confirm the shipping checkout and shared
    ticket source. Run `hotsheet-cli -C <shared-store> coordination --project <main>
-   setup`, then `status`.
+setup`, then `status`.
    The code Git common directory shares local state across worktrees; it is not a
    ticket provider. Use the same explicit source throughout this pool.
 2. Read existing exact claims and genuine `## Worker assignment` notes addressed to
@@ -48,7 +48,7 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    ask the integrator to publish its exact structured assignment; remain available.
    Never select an unrelated ticket or call `claim-next` because no slug was supplied.
 3. Run `coordination --project <main> next --role worker --id <worker>
-   --session <generation> --route <return-route> --lease-seconds <lease-seconds>`
+--session <generation> --route <return-route> --lease-seconds <lease-seconds>`
    with the same `-C` source, on the first wait and on every later wait or
    reconnect. `next` re-registers the session from its own flags; it does not
    inherit the registered route or lease, and omitted flags fall back to the CLI
@@ -106,6 +106,21 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    including new notes, before each action. If someone else owns its live claim, do
    not edit it. Renew before the lease expires and before lengthy work. Record phase
    transitions and activity as the project instructions require.
+   For a long build, test, or commit, check `hotsheet-cli claim-run --help` on the
+   selected executable. When supported, run the command as `hotsheet-cli -C
+<shared-store> claim-run <slug> --worker <id> -- <command> [args...]`
+   (HS2-MFYYJ9). The guard renews this exact live claim attempt from its local
+   deadline, stops a child on failed renewal, and returns success only after a final
+   authority check. Do not continue after a failed child or guard. On older CLIs,
+   keep the yielded gate process running, inspect the ticket's actual lease deadline,
+   and synchronously renew before it passes while resuming the process; repeat for
+   long gates. Availability `register` or `next` never renews a ticket claim.
+   Immediately before commit and before the durable handoff/release, verify the
+   exact ticket's live owner and deadline and run synchronous `renew`. If renewal
+   fails, or the deadline already passed on an older CLI, stop edits, commit and
+   handoff. Read claim history for another owner or attempt; reacquire this exact
+   ticket with `claim` only when no intervening owner holds it, then recheck the
+   new attempt before continuing. Never backfill an expired interval.
    **Record each phase the moment it starts, even for `T0` docs or test-only
    work** (HS2-5EGBTH): run `hotsheet-cli edit <slug> --started-phase working`
    before the first edit, and `--started-phase initial_testing` before any lint,

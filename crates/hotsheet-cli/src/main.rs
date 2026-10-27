@@ -761,6 +761,25 @@ enum Cmd {
         #[arg(long)]
         eta: Option<String>,
     },
+    /// Run a local command while renewing one exact live ticket claim (HS2-MFYYJ9).
+    ClaimRun {
+        id: String,
+        #[arg(long)]
+        worker: String,
+        /// Lease duration for guarded renewals; seconds permit short synthetic tests.
+        #[arg(long, default_value_t = 1800, value_parser = clap::value_parser!(u64).range(2..=3600))]
+        lease_seconds: u64,
+        /// Command and arguments after `--`.
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<std::ffi::OsString>,
+    },
+    /// Internal gated child used to join a Windows Job Object before work starts.
+    #[cfg(windows)]
+    #[command(hide = true)]
+    ClaimRunChild {
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<std::ffi::OsString>,
+    },
     /// Drive a real AI tool for this project (the headless "play"): launch/inject a turn
     /// and stream it. Applies HS2-103 launch safety. No server or client required.
     Trigger(TriggerArgs),
@@ -902,7 +921,13 @@ fn main() -> Result<()> {
     if cli.test_fixture_credentials {
         hotsheet_ticketing::secrets::enable_test_credentials()?;
     }
-    hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
+    #[cfg(windows)]
+    let guarded_helper = matches!(&cli.command, Cmd::ClaimRunChild { .. });
+    #[cfg(not(windows))]
+    let guarded_helper = false;
+    if !guarded_helper {
+        hotsheet_aitools::probe::configure_process_journal(hotsheet_plugins::hotsheet_home());
+    }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
     // `.hotsheet2/store` link walked up from cwd — so a standalone store is found without -C

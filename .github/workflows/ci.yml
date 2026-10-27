@@ -138,6 +138,12 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-cli --test coordination --test coordination_portable
 
+      # HS2-MFYYJ9: exercise the Job Object tree and late helper event open on native Windows.
+      - name: Exercise guarded claim process trees on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-cli --test claim_run
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest

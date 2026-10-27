@@ -434,8 +434,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 42 -->"));
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 9 -->"));
+    assert!(worker.contains("<!-- hotsheet-skill-version: 43 -->"));
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 10 -->"));
 
     let worker = flatten(worker);
     let at = |phrase: &str| {
@@ -464,6 +464,36 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         "phase history records the worker's `working` and `initial_testing` transitions",
         "Never backfill a transition",
         "HS2-5EGBTH",
+    ] {
+        assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+}
+
+#[test]
+fn hs2_mfyyj9_role_skills_guard_long_work_and_preserve_claim_history() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let worker = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-worker/SKILL.md"
+    ));
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    for phrase in [
+        "claim-run --help",
+        "exact live claim attempt",
+        "local deadline",
+        "Availability `register` or `next` never renews a ticket claim",
+        "Immediately before commit and before the durable handoff/release",
+        "no intervening owner holds it",
+        "Never backfill an expired interval",
+    ] {
+        assert!(worker.contains(phrase), "worker missing {phrase}");
+    }
+    for phrase in [
+        "Compare claim-history deadlines",
+        "availability heartbeats do not extend a ticket claim",
+        "Preserve any expired interval",
+        "later same-worker renewal",
     ] {
         assert!(integrator.contains(phrase), "integrator missing {phrase}");
     }

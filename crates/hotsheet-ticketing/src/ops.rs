@@ -2612,6 +2612,37 @@ pub fn renew_with_eta(
     worker: &str,
     eta: Option<Timestamp>,
 ) -> Result<Ticket, OpError> {
+    renew_with_eta_fenced(store, id, || (now, lease_expires), worker, eta, None)
+}
+
+/// Renew only the same live claim attempt. A guard must not extend a replacement
+/// attempt, even when it uses the same worker id. The clock runs *inside* the
+/// transaction after its lock is acquired, so contention cannot revive an expired
+/// lease with a stale pre-lock timestamp (HS2-MFYYJ9).
+pub fn renew_live_attempt_with_clock<F>(
+    store: &FsStore,
+    id: &Ulid,
+    worker: &str,
+    attempt: &Ulid,
+    clock: F,
+) -> Result<Ticket, OpError>
+where
+    F: FnOnce() -> (Timestamp, Timestamp),
+{
+    renew_with_eta_fenced(store, id, clock, worker, None, Some(attempt))
+}
+
+fn renew_with_eta_fenced<F>(
+    store: &FsStore,
+    id: &Ulid,
+    clock: F,
+    worker: &str,
+    eta: Option<Timestamp>,
+    attempt: Option<&Ulid>,
+) -> Result<Ticket, OpError>
+where
+    F: FnOnce() -> (Timestamp, Timestamp),
+{
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         match &t.claimed_by {
@@ -2624,6 +2655,31 @@ pub fn renew_with_eta(
                 });
             }
             None => return Err(OpError::NotClaimed(t.slug.clone())),
+        }
+        let (now, lease_expires) = clock();
+        if claim_available(&t, &now) {
+            return Err(OpError::ClaimUnavailable {
+                slug: t.slug,
+                reason: "lease expired; inspect claim history and claim the exact ticket again",
+            });
+        }
+        if lease_expires.chronological_cmp(&now) != Some(Ordering::Greater) {
+            return Err(OpError::ClaimUnavailable {
+                slug: t.slug,
+                reason: "new lease must end after the renewal time",
+            });
+        }
+        if attempt.is_some_and(|expected| {
+            t.claim_history
+                .iter()
+                .rev()
+                .find(|event| event.kind == ClaimEventKind::Claim)
+                .is_none_or(|event| &event.id != expected || event.worker != worker)
+        }) {
+            return Err(OpError::ClaimUnavailable {
+                slug: t.slug,
+                reason: "claim attempt changed; inspect ownership before continuing",
+            });
         }
         t.claim_lease_expires_at = Some(lease_expires.clone());
         if let Some(eta) = eta {

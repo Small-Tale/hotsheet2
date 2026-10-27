@@ -1121,6 +1121,27 @@ deadline; a `release` ends it at that event's time, while an absent release ends
 last claim/renew `lease_expires_at`. A later claim starts a distinct interval, so expiry,
 handoff, and repeated acquisitions remain exactly derivable without a background expiry job.
 
+**Guarded long work (HS2-MFYYJ9).** `renew` succeeds only while the same worker's
+claim is still live; an expired lease requires a new exact `claim`, which records a
+new attempt rather than filling the expired interval. A worker with a live claim
+may run `hotsheet-cli -C <store> claim-run <slug> --worker <id> -- <command>
+[args...]` when its CLI supports the optional command. It renews the specific
+claim attempt before starting the local command, again from the persisted lease
+deadline while the command runs, and once more before reporting success. The
+supervisor watches the lease deadline while a renewal waits for the ticket lock;
+authority time is sampled inside that transaction after the lock is acquired. A
+failed renewal, expired deadline, changed attempt or owner, or failed command
+returns an error. The guard stops its owned process tree, including descendants
+that inherited standard streams, before a blocking final check or on authority
+loss. Unix uses a new process group; Windows starts the requested command only
+after a gated helper joins an owned Job Object; the parent retains the start event
+until the helper has opened it (HS2-MFYYJ9). It does not make a command's own side
+effects transactional. Older CLIs require the worker to observe the live deadline
+and renew synchronously before it passes during long gates, then check and renew
+again before commit and handoff. Worker availability leases do not extend ticket
+claims. Integrators compare claim-history deadlines with gate and commit evidence
+and preserve any historical gap.
+
 **Claim ETA (HS2-DQQ0AX).** A worker may attach its estimated completion time to the live
 claim: `claim`, `claim-next`, and `renew` accept `--eta` (CLI), `eta` (MCP and the
 `/claim-next`, `/tickets/{id}/claim`, and `/tickets/{id}/renew` bodies) as a duration from
@@ -1140,8 +1161,8 @@ each `started_phase` transition as it happens (`initial_testing` before tests or
 `hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
 `working` while its tests run. Instructions v62 add that phases are never backfilled or
 skipped to tidy the record, because `hotsheet-cli phase-report` measures them
-([02](02-ticket-storage.md), HS2-JS7E61). The coordinated role skills (worker v41,
-integrator v8) apply this to every worker assignment, including `T0` docs and test-only work:
+([02](02-ticket-storage.md), HS2-JS7E61). The coordinated role skills (worker v43,
+integrator v10) apply this to every worker assignment, including `T0` docs and test-only work:
 `working` before the first edit, `initial_testing` before any gate, and handoff from
 `initial_testing`. The integrator checks that history on review and names a missing
 transition rather than backfilling it (HS2-5EGBTH). Instructions v63 and skill v64 add how to treat a
