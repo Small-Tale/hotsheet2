@@ -26,7 +26,7 @@ fi
 cargo fmt --all --check
 cargo lint
 cargo nextest run --all-features --status-level leak
-zsh -ic 'node --test scripts/instruction-policy.test.mjs scripts/sync-ai-playbook.test.mjs scripts/check-test-coverage.test.mjs scripts/check-test-quarantine.test.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs'
+zsh -ic 'node --test scripts/instruction-policy.test.mjs scripts/sync-ai-playbook.test.mjs scripts/check-test-coverage.test.mjs scripts/check-test-quarantine.test.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/throughput-baseline.test.mjs'
 zsh -ic 'node scripts/check-test-coverage.mjs'
 zsh -ic 'node scripts/check-test-quarantine.mjs'
 (
