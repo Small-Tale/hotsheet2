@@ -2803,7 +2803,12 @@ work.
 
 The web client now implements the permission portion of that floor for Claude and
 Codex. Every open project has a replay-safe long poll; a `permission_asked` event
-triggers one fetch of that project's authenticated permission and connection state. A
+triggers one fetch of that project's authenticated permission and connection state. That
+list is machine-wide, so each project keeps only the requests whose identity names it: its
+checkout permission identity (`checkout:<id>`), id, root, or store, from the request or its
+connection. A project tab's bell counts only those requests, so a request pending in one
+project, selected or not, badges that tab alone (HS2-H8TDMP). A request that names no open
+project still reaches every project (HS2-VA5MGY). A
 replayable `permission_resolved` event triggers the same reconciliation, so decisions made
 by another client or transport become history entries instead of silently disappearing;
 empty-action generic requests such as `ToolSearch` follow the same lifecycle. That

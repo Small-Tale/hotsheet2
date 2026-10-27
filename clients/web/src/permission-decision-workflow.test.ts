@@ -156,6 +156,30 @@ describe('permission decision workflow (HS2-GGJ57M)', () => {
     expect(inbox.pending()).toEqual([]);
   });
 
+  it('counts a machine-wide checkout request only toward its own project (HS2-H8TDMP)', async () => {
+    const { inbox, load, workflow } = setup();
+    const pending = (projectId: string) => inbox.pending().filter((item) => item.projectId === projectId).length;
+    const asked = (id: number, checkout: string): WirePermissionRequest => ({
+      ...request(id, `action ${id}`),
+      project: `checkout:${checkout}`,
+    });
+    // Every project reads the same server-wide /permissions list.
+    load.mockResolvedValue({ requests: [asked(1, 'a')], connections: [] });
+    await workflow.refreshPermissions();
+    expect(inbox.pending().map((item) => item.key)).toEqual(['a:1']);
+    expect([pending('a'), pending('b')]).toEqual([1, 0]);
+    load.mockResolvedValue({ requests: [asked(1, 'a'), asked(2, 'b'), asked(3, 'b')], connections: [] });
+    await workflow.refreshPermissions();
+    expect([pending('a'), pending('b')]).toEqual([1, 2]);
+    // Clearing one project's request leaves the other's count, and a new request counts again.
+    load.mockResolvedValue({ requests: [asked(2, 'b'), asked(3, 'b')], connections: [] });
+    await workflow.refreshPermissions();
+    expect([pending('a'), pending('b')]).toEqual([0, 2]);
+    load.mockResolvedValue({ requests: [asked(2, 'b'), asked(3, 'b'), asked(4, 'a')], connections: [] });
+    await workflow.refreshPermissions();
+    expect(inbox.pending().map((item) => item.key)).toEqual(['b:2', 'b:3', 'a:4']);
+  });
+
   it('rejects an out-of-order snapshot after an optimistic decision and refreshes again', async () => {
     const { projects, inbox, load, workflow, send } = setup();
     inbox.reconcile(projects.value[0], [request(1)], []);

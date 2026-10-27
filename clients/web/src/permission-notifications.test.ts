@@ -229,6 +229,17 @@ describe('permission notifications', () => {
     expect(permissionBelongsToProject({ ...request, project: '/p.hs2' }, connections, projects, 'p')).toBe(true);
     expect(permissionBelongsToProject(request, connections, projects, 'p')).toBe(true);
   });
+  it('attributes a checkout permission identity to that checkout only (HS2-H8TDMP)', () => {
+    const projects = [project, { id: 'q', name: 'Other', root: '/q', apiPath: '/q' }],
+      viaConnection = [{ id: 'c', tool: 'Claude', project: 'checkout:q', role: 'main' as const, busy: true }];
+    const asked = { ...request, project: 'checkout:p' };
+    expect(permissionBelongsToProject(asked, [], projects, 'p')).toBe(true);
+    expect(permissionBelongsToProject(asked, [], projects, 'q')).toBe(false);
+    expect(permissionBelongsToProject({ ...request, project: undefined }, viaConnection, projects, 'q')).toBe(true);
+    expect(permissionBelongsToProject({ ...request, project: undefined }, viaConnection, projects, 'p')).toBe(false);
+    // An identity naming no open checkout keeps the existing unattributed fallback.
+    expect(permissionBelongsToProject({ ...request, project: 'checkout:closed' }, [], projects, 'p')).toBe(true);
+  });
 });
 
 describe('chat-scoped answers and identical-request groups (HS2-JNHAYB)', () => {

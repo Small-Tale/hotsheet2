@@ -132,8 +132,14 @@ export function permissionBelongsToProject(
 ): boolean {
   const identity = request.project || connections.find((item) => item.id === request.connection)?.project;
   if (!identity) return true;
+  // Terminal and hook asks carry the checkout permission identity; without it a request that names its
+  // checkout would match no project and badge every project tab (HS2-H8TDMP).
   const owner = projects.find(
-    (item) => item.id === identity || item.root === identity || item.stores?.includes(identity),
+    (item) =>
+      item.id === identity ||
+      identity === `checkout:${item.id}` ||
+      item.root === identity ||
+      item.stores?.includes(identity),
   );
   return !owner || owner.id === currentId;
 }
