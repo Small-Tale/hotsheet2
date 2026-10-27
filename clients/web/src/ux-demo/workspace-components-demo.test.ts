@@ -194,7 +194,9 @@ describe('connected workspace demo state', () => {
 
   it('focuses the live title control after every composer expansion', () => {
     const focus = vi.fn();
-    const root = { querySelector: () => ({ focus }) } as unknown as ParentNode;
+    const root = {
+      querySelector: () => ({ focus, closest: () => null, ownerDocument: { activeElement: null } }),
+    } as unknown as ParentNode;
     expect(focusQuickTicketComposerTitle(root)).toBe(true);
     expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
     expect(focusQuickTicketComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);

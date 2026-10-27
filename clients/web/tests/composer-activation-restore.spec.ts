@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import {
+  captureWidths,
   createAndExpectStored,
   desktopApp,
   dialog,
@@ -88,6 +89,83 @@ test.describe('composer activation restoration (HS2-40JX5Q)', () => {
         await app.stop();
       }
     });
+
+  test('HS2-2QR67T keeps an immediate Details edit when deferred attachment focus completes after reset', async ({
+    context,
+    baseURL,
+    browserName,
+  }) => {
+    const app = await desktopApp(context, baseURL!);
+    let refresh: ReturnType<typeof app.pauseApi> | undefined;
+    try {
+      const page = await app.launch();
+      await openNewTicket(page, true);
+      await dialog(page).getByRole('textbox', { name: 'Ticket Title' }).fill('Synthetic parked original');
+      await app.addProject(page);
+      refresh = app.pauseApi((method, path) => method === 'GET' && path === '/commands');
+      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await refresh.started;
+      await expect(dialog(page)).toBeHidden();
+      await openNewTicket(page);
+      await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(dialog(page)).toBeHidden();
+      await openNewTicket(page);
+      const title = dialog(page).getByRole('textbox', { name: 'Ticket Title' }),
+        details = dialog(page).getByRole('textbox', { name: 'Details' });
+      await expect(title).toBeFocused();
+      await title.fill('Synthetic newer replacement');
+      // Hold actual frame callbacks while staging finishes. The next field's explicit focus and
+      // real keyboard input must remain authoritative when those delayed callbacks resume.
+      await page.evaluate(() => {
+        const nativeFrame = window.requestAnimationFrame.bind(window),
+          queued: FrameRequestCallback[] = [];
+        window.requestAnimationFrame = (callback) => {
+          queued.push(callback);
+          document.body.dataset.hs2DeferredFrames = String(queued.length);
+          return queued.length;
+        };
+        window.addEventListener(
+          'hs2-release-composer-frames',
+          () => {
+            window.requestAnimationFrame = nativeFrame;
+            for (const callback of queued) nativeFrame(callback);
+          },
+          { once: true },
+        );
+      });
+      const saved = responded(page, 'PUT');
+      await stage(page, [{ name: 'newer-replacement.bin', bytes: [4, 2] }]);
+      await saved;
+      await expect.poll(() => page.evaluate(() => Number(document.body.dataset.hs2DeferredFrames))).toBeGreaterThan(0);
+      await details.focus();
+      await page.keyboard.type('After the older refresh');
+      await expect(details).toBeFocused();
+      const finished = commandsResponse(page, app.server.checkoutId);
+      refresh.release();
+      await finished;
+      await page.evaluate(async () => {
+        window.dispatchEvent(new Event('hs2-release-composer-frames'));
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          ),
+        );
+      });
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('name'))).toBe('new-ticket-details');
+      await expect(details).toBeFocused();
+      await page.keyboard.type(' and the next edit');
+      await expect(title).toHaveValue('Synthetic newer replacement');
+      await expect(details).toHaveValue('After the older refresh and the next edit');
+      await expect(dialog(page).getByText('newer-replacement.bin', { exact: true })).toBeVisible();
+      if (process.env.HOTSHEET_2QR_FOCUS_QA === '1') await captureWidths(page, `2qr67t-focus-${browserName}`);
+      await createAndExpectStored(page, app, { 'newer-replacement.bin': [4, 2] });
+    } finally {
+      refresh?.release();
+      await app.stop();
+    }
+  });
 
   for (const outcome of ['switch', 'reset'] as const)
     for (const fails of [false, true])

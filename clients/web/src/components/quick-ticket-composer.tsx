@@ -86,6 +86,10 @@ export function showQuickTicketComposer(root: ParentNode): boolean {
 export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
   if (!input) return false;
+  const composer = input.closest('[data-component="quick-ticket-composer"]'),
+    active = input.ownerDocument.activeElement;
+  // Deferred open/restore/staging frames must not override a newer field choice (HS2-2QR67T).
+  if (active && active !== input && composer?.contains(active)) return false;
   input.focus({ preventScroll: true });
   return true;
 }

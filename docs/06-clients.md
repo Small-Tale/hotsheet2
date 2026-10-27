@@ -2527,6 +2527,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   Returning to an opened project restores its parked composer after refresh, including a
   delayed refresh. Session writes preserve that pending open intent; a newer open, cancel,
   or reset supersedes the parked surface (HS2-40JX5Q).
+  Deferred composer opening, restoration, and attachment-staging callbacks focus the title only
+  when another composer control does not already own focus. A later Details or metadata edit
+  keeps its focus and keystrokes; closing/resetting and opening again can focus the new title
+  normally (HS2-2QR67T).
   Browsers keep staged file bytes in origin-scoped IndexedDB. The existing `blob` field stores
   ArrayBuffer bytes with filename, MIME type, modification time and size, avoiding WebKit's
   Blob/File write failure on insecure LAN origins (HS2-2HF3H4). Existing Blob/File records remain

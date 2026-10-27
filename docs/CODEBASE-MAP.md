@@ -79,6 +79,8 @@ later draft text and references (HS2-791W19).
 `src/composer-restore-intent.ts` keeps parked composer modality across activation refresh
 and persistence timers, fenced by the project, activation generation and existing surface
 epoch; `app/runtime.tsx` applies it to snapshots and restoration (HS2-40JX5Q).
+`components/quick-ticket-composer.tsx` owns the deferred title-focus helper shared by open,
+restore, and staging; it preserves a newer focus choice inside the composer (HS2-2QR67T).
 `npm run desktop:storage:test` exercises
 the rebuilt production client and bridge in Chromium and WebKit. See the
 [desktop signing guide](tauri-desktop.md) for prerequisites and validation.

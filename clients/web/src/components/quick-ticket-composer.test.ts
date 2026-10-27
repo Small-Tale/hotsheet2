@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import {
+  focusQuickTicketComposerTitle,
   QuickTicketComposer,
   QuickTicketLauncher,
   showQuickTicketComposer,
@@ -16,6 +17,40 @@ describe('QuickTicketComposer', () => {
     expect(markup).toContain('Follow-up to HS2-SOURCE');
     expect(markup).toContain('data-action="create-ticket-form"');
   });
+  it('HS2-2QR67T preserves a newer composer focus intent and focuses each newly opened title', () => {
+    const focused: string[] = [],
+      details = {},
+      category = {},
+      launcher = {},
+      document = { activeElement: launcher as object | null },
+      composer = { contains: (element: object) => element === details || element === category },
+      title = {
+        ownerDocument: document,
+        closest: () => composer,
+        focus: (options: FocusOptions) => {
+          expect(options).toEqual({ preventScroll: true });
+          focused.push('title');
+          document.activeElement = title;
+        },
+      },
+      root = { querySelector: () => title } as unknown as ParentNode;
+    expect(focusQuickTicketComposerTitle(root)).toBe(true);
+    expect(document.activeElement).toBe(title);
+    for (const control of [details, category]) {
+      document.activeElement = control;
+      expect(focusQuickTicketComposerTitle(root)).toBe(false);
+      expect(document.activeElement).toBe(control);
+    }
+    // Closing/resetting returns focus to the launcher. A later opening can focus its title again.
+    document.activeElement = launcher;
+    expect(focusQuickTicketComposerTitle(root)).toBe(true);
+    expect(focusQuickTicketComposerTitle(root)).toBe(true);
+    document.activeElement = null;
+    expect(focusQuickTicketComposerTitle(root)).toBe(true);
+    expect(focused).toHaveLength(4);
+    expect(focusQuickTicketComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
+  });
+
   it('gives the title the available width while keeping category compact', () => {
     const css = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
