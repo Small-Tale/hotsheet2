@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use super::authority::{normalized_scope, scopes_overlap};
+use super::scope::{normalized_scope, scopes_overlap};
 use super::tests::{NOW, SHA, assignment, fixture, register};
 use super::*;
 use contract::WaitRequest;
@@ -27,7 +27,7 @@ fn dispatcher_pool() -> (tempfile::TempDir, Coordinator) {
     c.set_authority("root", "root-1", NOW, Authority::Dispatcher, true)
         .unwrap();
     register(&c, Role::Dispatcher, "dispatcher", "dispatch-1", NOW);
-    c.publish("root", "root-1", NOW, SHA, Vec::new(), &[])
+    c.publish("root", "root-1", &|| NOW, SHA, Vec::new(), &[], &[], false)
         .unwrap();
     (root, c)
 }
@@ -103,7 +103,7 @@ fn hs2_twzw7x_legacy_authority_refuses_every_dispatcher_feature() {
         .contains("assignment authority is the integrator")
     );
     assert!(
-        error(c.publish("root", "root-1", NOW, SHA, Vec::new(), &[]))
+        error(c.publish("root", "root-1", &|| NOW, SHA, Vec::new(), &[], &[], false))
             .contains("require dispatcher authority")
     );
     assert!(
@@ -245,10 +245,12 @@ fn hs2_twzw7x_dispatcher_reads_the_published_base_blockers_and_scopes() {
     c.publish(
         "root",
         "root-1",
-        NOW,
+        &|| NOW,
         SHA,
         vec![blocked],
         &["crates/server/".into()],
+        &[],
+        false,
     )
     .unwrap();
     let mut wrong_base = scoped("op-1", "one", "1", &["src"]);
@@ -325,11 +327,29 @@ fn hs2_twzw7x_a_replaced_integrator_generation_must_republish() {
     );
     // The old generation can no longer publish; the replacement can.
     assert!(
-        error(c.publish("root", "root-1", NOW + 200, SHA, Vec::new(), &[]))
-            .contains("exact integrator")
+        error(c.publish(
+            "root",
+            "root-1",
+            &|| NOW + 200,
+            SHA,
+            Vec::new(),
+            &[],
+            &[],
+            false
+        ))
+        .contains("exact integrator")
     );
-    c.publish("root", "root-2", NOW + 200, OTHER_SHA, Vec::new(), &[])
-        .unwrap();
+    c.publish(
+        "root",
+        "root-2",
+        &|| NOW + 200,
+        OTHER_SHA,
+        Vec::new(),
+        &[],
+        &[],
+        false,
+    )
+    .unwrap();
     let mut a = scoped("op", "worker", "1", &["a"]);
     a.base = OTHER_SHA.into();
     c.assign("dispatcher", "dispatch-1", NOW + 200, a).unwrap();
@@ -422,7 +442,8 @@ fn hs2_twzw7x_newer_schemas_and_smuggled_fields_are_refused() {
     raw["authority"] = "dispatcher".into();
     fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
     assert!(error(c.state()).contains("enabling dispatcher authority"));
-    raw["version"] = 5.into();
+    // Schema five is the newest this executable reads (HS2-YHYNJ6); six is refused.
+    raw["version"] = 6.into();
     fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
     let project = root.path().join("project");
     let store = root.path().join("store");
@@ -459,7 +480,7 @@ fn hs2_twzw7x_dispatch_blockers_name_each_missing_role_and_fact() {
         ]
     );
     register(&c, Role::Dispatcher, "dispatcher", "dispatch-1", NOW);
-    c.publish("root", "root-1", NOW, SHA, Vec::new(), &[])
+    c.publish("root", "root-1", &|| NOW, SHA, Vec::new(), &[], &[], false)
         .unwrap();
     worker(&c, "worker", NOW);
     assert!(blockers(NOW).is_empty());

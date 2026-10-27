@@ -7,6 +7,7 @@
 
 use serde::Serialize;
 
+use super::scope::{entry, normalized_scope, normalized_shared, scopes_overlap};
 use super::*;
 use contract::{Authority, IntegrationReport};
 
@@ -16,56 +17,36 @@ pub struct Capabilities {
     pub schemas_read: &'static [u32],
     pub schema_written_with_integrator_authority: u32,
     pub schema_written_with_dispatcher_authority: u32,
+    /// Integrator-reviewed shared documents and section scopes (HS2-YHYNJ6).
+    pub schema_written_with_shared_sections: u32,
+    pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
 }
 
 pub const CAPABILITIES: Capabilities = Capabilities {
-    schemas_read: &[1, 2, 3, 4],
+    schemas_read: &[1, 2, 3, 4, 5],
     schema_written_with_integrator_authority: 3,
     schema_written_with_dispatcher_authority: 4,
+    schema_written_with_shared_sections: 5,
+    scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],
 };
 
-/// Repository-relative scope paths as normalized component lists, joined with `/`.
-pub(super) fn normalized_scope(scope: &[String]) -> Result<Vec<String>> {
-    let mut normalized = Vec::with_capacity(scope.len());
-    for raw in scope {
-        let path = raw.replace('\\', "/");
-        ensure!(
-            !path.starts_with('/') && !path.contains(':'),
-            "scope paths must be repository-relative: {raw}"
-        );
-        let components: Vec<&str> = path
-            .split('/')
-            .filter(|part| !part.is_empty() && *part != ".")
-            .collect();
-        ensure!(
-            !components.is_empty() && !components.contains(&".."),
-            "scope path must name a file or directory inside the repository: {raw}"
-        );
-        normalized.push(components.join("/"));
-    }
-    normalized.sort();
-    normalized.dedup();
-    Ok(normalized)
-}
-
-/// Two scopes overlap when one path is the other or contains it.
-pub(super) fn scopes_overlap(left: &str, right: &str) -> bool {
-    let contains = |outer: &str, inner: &str| {
-        inner == outer
-            || inner
-                .strip_prefix(outer)
-                .is_some_and(|rest| rest.starts_with('/'))
-    };
-    contains(left, right) || contains(right, left)
-}
-
 impl Coordinator {
-    /// Schema three must stay exactly what a schema-three artifact writes.
+    /// Schema three must stay exactly what a schema-three artifact writes, and schema four
+    /// exactly what a schema-four artifact can read without dropping shared sections.
     pub(super) fn schema_fence(state: &State) -> Result<()> {
+        if state.version < 5 {
+            let sectioned = |scopes: &[String]| scopes.iter().any(|s| s.contains('#'));
+            ensure!(
+                state.integration.as_ref().is_none_or(|report| {
+                    report.shared.is_empty() && !sectioned(&report.in_flight)
+                }) && !state.assignments.values().any(|a| sectioned(&a.scope)),
+                "shared sections require schema five; publish them with --all-participants-upgraded first"
+            );
+        }
         if state.version < 4 {
             ensure!(
                 state.authority == Authority::Integrator
@@ -141,6 +122,13 @@ impl Coordinator {
             "dispatcher assignments must declare their repository path scope"
         );
         for path in &assignment.scope {
+            let declared = entry(path);
+            ensure!(
+                declared.section.is_none()
+                    || report.shared.iter().any(|shared| shared == declared.path),
+                "scope {path} names a section of {}, which the integrator has not published as a reviewed shared document",
+                declared.path
+            );
             if let Some(held) = report
                 .in_flight
                 .iter()
@@ -177,16 +165,22 @@ impl Coordinator {
         Ok(report)
     }
 
-    /// Publish the safe base, blocked tickets and in-flight scopes the dispatcher must
-    /// read before reserving work. Replaces the previous report atomically.
+    /// Publish the safe base, blocked tickets, in-flight scopes and reviewed shared documents
+    /// the dispatcher must read before reserving work. Replaces the previous report
+    /// atomically. The first shared document persists schema five, which every schema-four
+    /// artifact refuses, so the caller asserts every participant was upgraded (HS2-YHYNJ6).
+    /// `clock` is read only inside the state lock.
+    #[allow(clippy::too_many_arguments)] // HS2-YHYNJ6: one atomic report, every field explicit.
     pub fn publish(
         &self,
         integrator: &str,
         generation: &str,
-        now: i64,
+        clock: &dyn Fn() -> i64,
         base: &str,
         blocked: Vec<TicketRef>,
         in_flight: &[String],
+        shared: &[String],
+        all_participants_upgraded: bool,
     ) -> Result<()> {
         ensure!(
             base.len() == 40 && base.bytes().all(|c| c.is_ascii_hexdigit()),
@@ -199,18 +193,37 @@ impl Coordinator {
             "blocked tickets must be qualified connection:native references"
         );
         let in_flight = normalized_scope(in_flight)?;
+        let shared = normalized_shared(shared)?;
+        for held in &in_flight {
+            let held = entry(held);
+            ensure!(
+                held.section.is_none() || shared.iter().any(|path| path == held.path),
+                "in-flight section of {} requires publishing it as a shared document",
+                held.path
+            );
+        }
         self.change(|state| {
-            Self::integrator(state, integrator, generation, now)?;
+            // Sampled at the serialized boundary, after any blocking validation and lock
+            // wait, so an integrator that expired meanwhile cannot publish (HS2-YHYNJ6).
+            Self::integrator(state, integrator, generation, clock())?;
             ensure!(
                 state.version >= 4,
                 "integration reports require dispatcher authority (schema four)"
             );
+            if !shared.is_empty() && state.version < 5 {
+                ensure!(
+                    all_participants_upgraded,
+                    "stop old waiters and switch every participant to a schema-five artifact, then pass --all-participants-upgraded"
+                );
+                state.version = 5;
+            }
             state.integration = Some(IntegrationReport {
                 integrator: integrator.into(),
                 generation: generation.into(),
                 base: base.into(),
                 blocked,
                 in_flight,
+                shared,
             });
             Ok(())
         })

@@ -10,6 +10,9 @@ mod findings_review_return_tests;
 mod review_return;
 #[cfg(test)]
 mod review_return_tests;
+pub mod scope;
+#[cfg(test)]
+mod scope_tests;
 mod snapshot;
 mod source_support;
 #[cfg(test)]
@@ -106,9 +109,10 @@ impl Coordinator {
             Err(error) => return Err(error.into()),
         };
         // HS2-TWZW7X: schema four is read and written only once the live integrator has
-        // explicitly enabled dispatcher authority; anything newer is refused.
+        // explicitly enabled dispatcher authority; schema five only once it has published
+        // reviewed shared documents (HS2-YHYNJ6); anything newer is refused.
         ensure!(
-            matches!(state.version, 1..=4) && state.project_id == self.project_id,
+            matches!(state.version, 1..=5) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -312,7 +316,7 @@ impl Coordinator {
             !assignment.ticket.connection_id.is_empty() && !assignment.ticket.native_id.is_empty(),
             "qualified ticket reference required"
         );
-        let scope = authority::normalized_scope(&assignment.scope)?;
+        let scope = scope::normalized_scope(&assignment.scope)?;
         let assignment = Assignment {
             scope,
             ..assignment

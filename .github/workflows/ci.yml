@@ -136,7 +136,7 @@ jobs:
       - name: Exercise native coordination waits reconnect and handoff on Windows
         env:
           CC: cl
-        run: cargo test -p hotsheet-cli --test coordination --test coordination_portable --test coordination_dispatcher
+        run: cargo test -p hotsheet-cli --test coordination --test coordination_portable --test coordination_dispatcher --test coordination_shared_scope
 
       # HS2-MFYYJ9: exercise the Job Object tree and late helper event open on native Windows.
       - name: Exercise guarded claim process trees on Windows

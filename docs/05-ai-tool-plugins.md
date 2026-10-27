@@ -2199,7 +2199,7 @@ generation; after an integrator replacement the dispatcher is refused until the 
 generation republishes. In dispatcher mode `assign` additionally requires, under the state
 lock: the published base; a ticket outside the blocked list; at least one declared `--scope`
 path that overlaps neither an in-flight scope nor any pending (not Done, not review-returned)
-assignment's scope, comparing whole path components; and every `blocked_by` dependency
+assignment's scope, comparing whole path components (or reviewed sections, below); and every `blocked_by` dependency
 closed in the selected source. The existing eligibility, claim, worker-generation,
 stopped-run and unsupported-source checks still apply. Every reservation check runs at one
 serialized boundary: under the selected source's ticket transaction and then the
@@ -2242,17 +2242,75 @@ integrator runs `authority --mode dispatcher --all-participants-upgraded`, which
 schema four. Schema-three artifacts refuse a schema-four pool without rewriting it, so two
 assignment authorities or mixed-version mutators cannot coexist. `authority --mode
 integrator` returns assignment to the integrator only when no dispatcher session is live; it
-stays schema four and never downgrades. Version five or newer is refused. Candidate builds
+stays schema four and never downgrades. Version six or newer is refused. Candidate builds
 are exercised only on disposable, independently initialized projects and stores: a linked
 worktree shares the live checkout's Git common directory and therefore its pool.
 
-| Command                                                                                                                     | Effect                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `capabilities`                                                                                                              | Print readable schemas, written schemas, roles and assignment authorities without opening the pool. |
-| `authority --id <integrator> --session <generation> --mode <integrator\|dispatcher> [--all-participants-upgraded]`          | Switch assignment authority as the exact live integrator (see rollout).                             |
-| `publish --id <integrator> --session <generation> --base <full-sha> [--blocked <connection:native>]… [--in-flight <path>]…` | Replace the integration report the dispatcher reads before each reservation (schema four).          |
-| `register`/`next`/`leave --role dispatcher …`                                                                               | Announce, wait as, or withdraw the single dispatcher generation.                                    |
-| `assign … --scope <path>…`                                                                                                  | As the authority holder; dispatcher reservations must declare non-overlapping scopes.               |
+| Command                                                                                                                                                                      | Effect                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `capabilities`                                                                                                                                                               | Print readable schemas, written schemas, roles and assignment authorities without opening the pool.              |
+| `authority --id <integrator> --session <generation> --mode <integrator\|dispatcher> [--all-participants-upgraded]`                                                           | Switch assignment authority as the exact live integrator (see rollout).                                          |
+| `publish --id <integrator> --session <generation> --base <full-sha> [--blocked <connection:native>]… [--in-flight <path>]… [--shared <file>]… [--all-participants-upgraded]` | Replace the integration report the dispatcher reads before each reservation (schema four; five with `--shared`). |
+| `register`/`next`/`leave --role dispatcher …`                                                                                                                                | Announce, wait as, or withdraw the single dispatcher generation.                                                 |
+| `assign … --scope <path>[#row:<id>\|#heading:<slug>]…`                                                                                                                       | As the authority holder; dispatcher reservations must declare non-overlapping scopes.                            |
+
+#### Reviewed shared sections (HS2-YHYNJ6)
+
+Every ticket updates related documentation, so a whole-path scope makes unrelated work
+collide on shared documents. In the measured corpus all five released handoffs (HS2-TWZW7X,
+HS2-MFYYJ9, HS2-DEVEYE, HS2-VBFSZJ, HS2-G3JVSR) changed `docs/TEST-COVERAGE.md`, so at most
+one could be pending at a time. Every one of their documentation edits stayed inside keyed
+sections, often several per document (HS2-TWZW7X touched three headings of this one).
+Sharing the coverage document by section raises the corpus limit to two;
+also sharing the codebase map, the documentation index and `docs/04`–`06` raises it to
+three. The rest are genuine conflicts: shared code between HS2-MFYYJ9, HS2-DEVEYE and
+HS2-VBFSZJ, and one codebase-map section edited by both HS2-MFYYJ9 and HS2-DEVEYE.
+
+- **Reviewed documents.** `publish --shared <file>` lists documents the integrator has
+  reviewed as section-addressable; each must be a file at the published base. A worker
+  never chooses sharing. The first shared document persists schema five, and only with
+  `--all-participants-upgraded`, so schema-four executables refuse the pool instead of
+  dropping the review. Schema four and older pools must carry no shared or section data.
+- **Section scopes.** A scope entry is a path, or `path#row:<id>` (a Markdown table row
+  whose first cell is that lowercase id) or `path#heading:<slug>` (a heading with its
+  non-row lines, slugged to lowercase hyphenated words). Fenced code is content. Any other
+  `#` form is refused, which also closes a gap where a free-form fragment escaped the
+  whole-file overlap.
+- **Overlap.** A directory overlaps everything beneath it and a whole file overlaps every
+  section of it. Two entries for the same file are disjoint only when both name different
+  sections. Section scopes, whether reserved by the dispatcher or reported in flight by the
+  integrator, require that document in the current report. Withdrawing a review keeps held
+  sections pending but refuses new section reservations of that document.
+- **Truthful handoffs.** A dispatcher-scoped code handoff is checked against the commit
+  before any state is written. The assignment base must be an ancestor of the commit, and
+  every path changed from base to commit (renames counted on both sides) needs a covering
+  whole-path entry or, for a shared document, declared sections. Changes to undeclared
+  sections, to text before the first heading, to a duplicated key, or adding or removing a
+  sectioned document are refused. So is moving unchanged headings: every heading kept on
+  both sides must keep its order, level and parent (the nearest preceding heading of a
+  lower level), so a reorder, a level change, or a new heading inserted above existing
+  children fails closed even when no block's text changed. New headings that reparent
+  nothing, such as a new sibling or a section appended at the end, stay confined to their
+  own keys. Whole trailing blank lines (empty, or spaces and tabs only) only separate
+  sections; every byte of a section's last nonblank line, including trailing spaces, tabs
+  and non-breaking spaces, is content. Findings handoffs carry no commit.
+- **Reviewed scope changes.** There is no bypass for a scope that turns out too narrow. The
+  worker records `--phase blocked` with a note naming the needed scope; the integrator
+  reviews it and marks that operation Done, which releases its scope; the dispatcher then
+  reserves a new operation under the same rules.
+- **Integration.** Two sections inserted at the same line (HS2-DEVEYE and HS2-VBFSZJ in the
+  corpus) still conflict textually when cherry-picked. The serial integrator keeps both
+  blocks, and the merged document touches exactly the union of the declared sections.
+  Table rows are keyed by their id alone: row order, and which table a row sits in, are
+  deliberately not part of any section's content.
+- **Fresh publication authority.** `publish` checks the exact live integrator generation
+  with a clock read inside the state lock, after the shared documents are validated against
+  Git, so an integrator whose lease lapses meanwhile cannot publish a review or persist
+  schema five.
+
+The real-process tests prove this contract with separate CLI processes in disposable
+repositories; they are not the connected multi-session AI pilot, which HS2-K1QNGC owns, and
+no live pool is upgraded here.
 
 Tentative next plans (HS2-XCMAVT) and the worker read model (HS2-DBECD0) consume this
 authority when built; role skill wording and installation are HS2-7E5R4A, the live

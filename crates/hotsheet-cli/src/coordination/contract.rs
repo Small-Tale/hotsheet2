@@ -46,6 +46,9 @@ pub struct IntegrationReport {
     /// Repository-relative path scopes held by serial integration or review work.
     #[serde(default)]
     pub in_flight: Vec<String>,
+    /// Documents the integrator reviewed as section-addressable; schema five (HS2-YHYNJ6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

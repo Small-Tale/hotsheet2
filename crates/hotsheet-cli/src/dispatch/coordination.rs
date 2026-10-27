@@ -115,9 +115,18 @@ enum CoordinationCmd {
         /// Qualified `connection:native` ticket the dispatcher must not assign; repeatable.
         #[arg(long)]
         blocked: Vec<String>,
-        /// Repository-relative path scope held by integration or review; repeatable.
+        /// Repository-relative path scope held by integration or review; repeatable. A
+        /// `path#row:<id>` or `path#heading:<slug>` section requires that path in `--shared`.
         #[arg(long)]
         in_flight: Vec<String>,
+        /// Document reviewed as section-addressable, so dispatcher scopes may name distinct
+        /// sections of it; repeatable. Must be a file at `--base` (HS2-YHYNJ6).
+        #[arg(long)]
+        shared: Vec<String>,
+        /// Confirms every participant was switched to a schema-five executable before the
+        /// first shared document persists schema five.
+        #[arg(long)]
+        all_participants_upgraded: bool,
     },
     /// Switch assignment authority. Only the exact live integrator may run it; enabling the
     /// dispatcher persists schema four, which fences every schema-three executable.
@@ -217,7 +226,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             base,
             blocked,
             in_flight,
+            shared,
+            all_participants_upgraded,
         } => {
+            for path in &shared {
+                anyhow::ensure!(
+                    git_blob(&args.project, &base, path)?.is_some(),
+                    "shared document {path} is not a file at the published base {base}"
+                );
+            }
             let blocked = blocked
                 .iter()
                 .map(|raw| {
@@ -230,7 +247,17 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            coordinator.publish(&i.id, &i.session, now, &base, blocked, &in_flight)?;
+            // Sampled at the serialized boundary, after the Git reads above (HS2-YHYNJ6).
+            coordinator.publish(
+                &i.id,
+                &i.session,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
+                &base,
+                blocked,
+                &in_flight,
+                &shared,
+                all_participants_upgraded,
+            )?;
         }
         CoordinationCmd::Authority {
             integrator: i,
@@ -436,6 +463,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                                         && n.text.contains(sha))),
                                 "durable Integration handoff note must name this full commit before mailbox handoff"
                             );
+                            if let Some(sha) = commit.as_deref()
+                                && !a.scope.is_empty()
+                            {
+                                review_commit_scope(&args.project, &a.base, sha, &a.scope)?;
+                            }
                         }
                     }
                 }
@@ -644,6 +676,70 @@ fn require_findings_claim(
         "integrator must claim the exact findings ticket before verification"
     );
     Ok(())
+}
+
+fn git_output(project: &std::path::Path, args: &[&str]) -> Result<std::process::Output> {
+    Ok(hotsheet_ticketing::git::launch("git")
+        .arg("-C")
+        .arg(project)
+        .args(args)
+        .output()?)
+}
+
+/// A file's content at `rev`, or `None` where that revision has no file at `path`.
+fn git_blob(project: &std::path::Path, rev: &str, path: &str) -> Result<Option<String>> {
+    let spec = format!("{rev}:{path}");
+    let kind = git_output(project, &["cat-file", "-t", &spec])?;
+    if !kind.status.success() || kind.stdout.trim_ascii() != b"blob" {
+        return Ok(None);
+    }
+    let blob = git_output(project, &["cat-file", "blob", &spec])?;
+    anyhow::ensure!(blob.status.success(), "could not read {spec}");
+    Ok(Some(String::from_utf8(blob.stdout)?))
+}
+
+/// A dispatcher-scoped code handoff must descend from its assignment base and change only
+/// what its scope declares, sections included (HS2-YHYNJ6).
+fn review_commit_scope(
+    project: &std::path::Path,
+    base: &str,
+    commit: &str,
+    scope: &[String],
+) -> Result<()> {
+    let ancestor = git_output(project, &["merge-base", "--is-ancestor", base, commit])?;
+    anyhow::ensure!(
+        ancestor.status.success(),
+        "handoff commit {commit} does not descend from the assignment base {base}"
+    );
+    let diff = git_output(
+        project,
+        &["diff", "--name-only", "-z", "--no-renames", base, commit],
+    )?;
+    anyhow::ensure!(
+        diff.status.success(),
+        "could not diff {base}..{commit}: {}",
+        String::from_utf8_lossy(&diff.stderr)
+    );
+    let mut changed = Vec::new();
+    for path in String::from_utf8(diff.stdout)?
+        .split('\0')
+        .filter(|p| !p.is_empty())
+    {
+        let (before, after) = if hotsheet_cli::coordination::scope::sectioned(scope, path) {
+            (
+                git_blob(project, base, path)?,
+                git_blob(project, commit, path)?,
+            )
+        } else {
+            (None, None)
+        };
+        changed.push(hotsheet_cli::coordination::scope::ChangedPath {
+            path: path.to_owned(),
+            before,
+            after,
+        });
+    }
+    hotsheet_cli::coordination::scope::review_handoff(scope, &changed)
 }
 
 #[cfg(test)]

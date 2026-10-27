@@ -375,9 +375,10 @@ fn hs2_aebjyn_schema_two_migration_preserves_findings_code_ci_and_returned_evide
     assert_eq!(c.state().unwrap().assignments["code"].phase, Phase::Ci);
     // Unknown versions fail without rewriting the pool; the prior 1/2 runtimes likewise
     // reject this pool's new version instead of applying their old Blocked→Done semantics.
-    // Schema four is dispatcher authority (HS2-TWZW7X), so five is the next unknown.
+    // Schema four is dispatcher authority (HS2-TWZW7X) and five reviewed shared sections
+    // (HS2-YHYNJ6), so six is the next unknown.
     let mut future = migrated;
-    future.version = 5;
+    future.version = 6;
     let bytes = serde_json::to_vec(&future).unwrap();
     fs::write(&path, &bytes).unwrap();
     assert!(Coordinator::open(&root.path().join("project"), &c.source).is_err());

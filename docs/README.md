@@ -183,7 +183,9 @@ are shipped independently (HS2-FG7ZMF); they do not enable external assignments 
 An optional dispatcher can own assignment while the integrator keeps review, integration
 and CI, behind an explicit schema-four authority switch that fences older artifacts
 (HS2-TWZW7X); the runtime and headless CLI are shipped, the live rollout is HS2-K1QNGC and
-role-skill wording HS2-7E5R4A.
+role-skill wording HS2-7E5R4A. Integrator-reviewed shared documents let independent work
+declare distinct sections behind a schema-five fence, and code handoffs are checked against
+their declared scope (HS2-YHYNJ6).
 Real Codex/Claude continuous-loop acceptance is tracked in HS2-AJ7FJY.
 An ended independent app turn is not automatically resumed.
 Assignment, worker acceptance and stale recovery use full-precision ticket claim clocks;

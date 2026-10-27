@@ -913,7 +913,10 @@ and known lease deadlines. `authority.rs` owns the single assignment authority
 (integrator or dispatcher), the integrator's published integration report, dispatcher
 scope/base/blocker rules, the schema-three write fence and schema-four switch, and the
 non-opening `capabilities` report (HS2-TWZW7X); `authority_tests.rs` pins its transitions
-and `tests/coordination_dispatcher.rs` its real multi-process boundaries. `source_support.rs` produces additive, registry-only per-source
+and `tests/coordination_dispatcher.rs` its real multi-process boundaries. `scope.rs` owns the
+scope grammar, reviewed shared-section overlap, keyed Markdown sections and the code-handoff
+scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
+`tests/coordination_shared_scope.rs` pin them. `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
 zero external requests and exact unchanged state on rejected foreign transitions.
