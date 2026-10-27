@@ -442,7 +442,81 @@ impl From<&Ticket> for TicketRow {
     }
 }
 
+/// A provider ticket as the shared list row (HS2-DXD7DZ), so a compact provider list has
+/// the same keys as a compact store list: no notes, attachments or claim history. The
+/// provider's own qualified identity is kept as-is.
+impl From<&ApiTicket> for TicketRow {
+    fn from(t: &ApiTicket) -> Self {
+        TicketRow {
+            connection_id: t.connection_id.clone(),
+            native_id: t.native_id.clone(),
+            qualified_id: t.qualified_id.clone(),
+            id: t.id.clone(),
+            slug: t.slug.clone(),
+            title: t.title.clone(),
+            details: t.details.clone(),
+            category: Some(t.category.clone()),
+            priority: Some(enum_str(&t.priority)),
+            status: Some(enum_str(&t.status)),
+            started_phase: t.started_phase.as_ref().map(enum_str),
+            up_next: t.up_next,
+            feedback_needed: t.feedback_needed,
+            needs_review: t.needs_review,
+            tags: t.tags.clone(),
+            blocked_by: t.blocked_by.clone(),
+            blocked_reason: t.blocked_reason.clone(),
+            created_at: Some(t.created_at.clone()),
+            updated_at: Some(t.updated_at.clone()),
+            completed_at: t.completed_at.clone(),
+            verified_at: t.verified_at.clone(),
+            closed_at: t.closed_at.clone(),
+            close_reason: t.close_reason.as_ref().map(enum_str),
+            duplicate_of: t.duplicate_of.clone(),
+            claimed_by: t.claimed_by.clone(),
+            claim_lease_expires_at: t.claim_lease_expires_at.clone(),
+            claim_eta_at: t.claim_eta_at.clone(),
+            claim_started_at: t.claim_started_at.clone(),
+            started_phase_since: t.started_phase_since.clone(),
+            started_phase_estimate_ms: t.started_phase_estimate_ms,
+            worker_label: t.worker_label.clone(),
+            legacy_number: t.legacy_number.clone(),
+            claim_count: t.claim_count,
+            latest_confidence: t.latest_confidence,
+            auto_context: t.auto_context.clone(),
+        }
+    }
+}
+
+/// A provider list response (HS2-DXD7DZ): full tickets by default, the shared compact row
+/// when `compact` is requested, then the optional `fields` allow-list over that shape.
+pub fn provider_list_rows(
+    tickets: &[ApiTicket],
+    compact: bool,
+    fields: &[String],
+) -> Vec<serde_json::Value> {
+    let mut rows: Vec<serde_json::Value> = tickets
+        .iter()
+        .map(|ticket| {
+            if compact {
+                serde_json::to_value(TicketRow::compact_from_api(ticket))
+            } else {
+                serde_json::to_value(ticket)
+            }
+            .unwrap_or(serde_json::Value::Null)
+        })
+        .collect();
+    project_fields(&mut rows, fields);
+    rows
+}
+
 impl TicketRow {
+    /// [`TicketRow::compact`] for a provider ticket (HS2-DXD7DZ).
+    pub fn compact_from_api(t: &ApiTicket) -> Self {
+        let mut row = TicketRow::from(t);
+        row.details.clear();
+        row
+    }
+
     pub fn set_connection(&mut self, connection_id: &str) {
         self.connection_id = connection_id.to_string();
         self.native_id.clone_from(&self.id);
@@ -722,6 +796,40 @@ mod tests {
             keys,
             vec!["slug"],
             "only slug remains — the unknown key added nothing"
+        );
+    }
+
+    /// HS2-DXD7DZ: a compact provider row has exactly the compact store row's keys and
+    /// keeps the provider's qualified identity; the full shape is the default.
+    #[test]
+    fn hs2_dxd7dz_provider_list_rows_match_the_compact_store_row() {
+        let ticket = ticket();
+        let api = ApiTicket::from_provider(&ticket, "github-main", None);
+        let store_row = serde_json::to_value(TicketRow::compact(&ticket)).unwrap();
+        let rows = provider_list_rows(std::slice::from_ref(&api), true, &[]);
+        let key_set = |value: &serde_json::Value| {
+            value
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        assert_eq!(key_set(&rows[0]), key_set(&store_row));
+        assert_eq!(rows[0]["qualified_id"], api.qualified_id);
+        assert_eq!(rows[0]["status"], store_row["status"]);
+
+        let full = provider_list_rows(std::slice::from_ref(&api), false, &[]);
+        assert_eq!(full[0], serde_json::to_value(&api).unwrap());
+        let projected = provider_list_rows(
+            std::slice::from_ref(&api),
+            true,
+            &["title".into(), "notes".into()],
+        );
+        assert_eq!(
+            key_set(&projected[0]),
+            ["slug".to_owned(), "title".to_owned()].into(),
+            "fields select from the compact row, which has no notes"
         );
     }
 

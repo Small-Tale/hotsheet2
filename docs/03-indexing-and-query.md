@@ -307,6 +307,20 @@ query(filter, sort, text?, paging) -> TicketRow[]
   `TicketRow`, so server + MCP share one projection (`wire::project_fields`, HS2-GY3GWT).
   The MCP shim additionally drops from pretty- to **compact JSON** once a result crosses
   ~8 KB, so a big list dump doesn't spend the caller's tokens on indentation.
+- **provider-qualified lists (HS2-DXD7DZ):** `GET /providers/{connection_id}/tickets`
+  returns full provider tickets (body, notes, attachments, claim history) by default,
+  which is the shape the web client reads. An explicit `compact=true` returns the shared
+  compact `TicketRow` instead (the same keys as a compact store row, with the provider's
+  own qualified identity), and `fields` selects from whichever shape was chosen. MCP
+  `hotsheet_query` with `connection` sends `compact=true` unless the caller passes
+  `compact`, so the tool's compact default holds for every target. `compact=false` and
+  `hotsheet_get` remain the deliberate full reads. The serverless MCP backend answers its
+  own Git connection's list with the same projection and refuses any other connection
+  with 409. Its filters match the server's, including the inclusive lexical
+  `created_*`, `updated_*`, `completed_*` and `verified_*` bounds, which pass through
+  unvalidated on both backends. On 27 synthetic tickets with 11 notes and one attachment each, the
+  five-field projection through the real MCP binary dropped from 506,457 to 3,979
+  characters (41 to 5 keys), and the median call from 78 ms to 15 ms.
 - **limit:** an optional `limit` caps the number of rows returned (applied after
   sort, as a SQL `LIMIT` in the index and a truncate in the serverless scan). It is a
   hard cap, never a silent default — a caller asks for it explicitly.

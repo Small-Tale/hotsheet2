@@ -1,7 +1,9 @@
 //! Provider ticket routes: read, create, update, feedback, not-working reports, close, assign, and copy/move (HS2-YMG48C).
 
 use crate::api_error::{ActorReq, ApiError, parse_actor};
-use crate::dto::{AiFeedbackReq, CloseReq, CreateReq, DuplicateOfReq, ListParams, UpdateReq};
+use crate::dto::{
+    AiFeedbackReq, CloseReq, CreateReq, DuplicateOfReq, ListParams, UpdateReq, parse_fields,
+};
 use crate::multistore::StoreEntry;
 use crate::routes::checkout_tickets::resolve_project_ticket_ref;
 use crate::routes::providers::{
@@ -22,13 +24,21 @@ use hotsheet_ticketing::{
 use serde::Deserialize;
 use std::time::{Duration, Instant};
 
+/// Full provider tickets by default (the web client's shape). An explicit `compact=true`
+/// returns the shared compact row and `fields` keeps only the named keys, so a queue
+/// discovery read through a qualified connection is as lean as a store list (HS2-DXD7DZ).
 pub(crate) async fn list_provider_tickets(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<ApiTicket>>, ApiError> {
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    let compact = params.compact == Some(true);
+    let fields = parse_fields(&params.fields);
     let query = params.into_query(state.store.root())?;
-    provider_read_query(&state, &connection_id, &query).map(Json)
+    let tickets = provider_read_query(&state, &connection_id, &query)?;
+    Ok(Json(hotsheet_ticketing::wire::provider_list_rows(
+        &tickets, compact, &fields,
+    )))
 }
 
 pub(crate) async fn get_provider_ticket(

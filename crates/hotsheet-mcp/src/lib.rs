@@ -707,9 +707,17 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 .get(&checkout_route(args, "/phase-report"), &range)
                 .map_err(be_msg)
         }
-        "hotsheet_query" => backend
-            .get(&checkout_route(args, "/tickets"), &query_pairs(args))
-            .map_err(be_msg),
+        "hotsheet_query" => {
+            let mut query = query_pairs(args);
+            // HS2-DXD7DZ: a provider list returns full tickets unless asked otherwise, so a
+            // qualified-connection query sends this tool's documented compact default.
+            if has_connection(args) && !query.iter().any(|(key, _)| key == "compact") {
+                query.push(("compact".into(), "true".into()));
+            }
+            backend
+                .get(&checkout_route(args, "/tickets"), &query)
+                .map_err(be_msg)
+        }
         "hotsheet_get" => backend
             .get(
                 &checkout_route(args, &format!("/tickets/{}", arg_str(args, "id")?)),
@@ -1005,6 +1013,12 @@ fn with_completion_phase_reminder(mut response: Value, completes: bool) -> Value
         }
     }
     response
+}
+
+fn has_connection(args: &Value) -> bool {
+    args.get("connection")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.is_empty())
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
@@ -1579,6 +1593,39 @@ mod core_backend {
                     .resolve(&decode_checkout_reference(reference)?)
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
+            }
+            if let Some(connection) = path
+                .strip_prefix("/providers/")
+                .and_then(|rest| rest.strip_suffix("/tickets"))
+            {
+                // HS2-DXD7DZ: the local connection's list is this store's list, with the
+                // same compact/fields projection; any other connection needs a server.
+                if connection != hotsheet_ticketing::git_connection_id(&self.store) {
+                    return Err(BackendError {
+                        status: Some(409),
+                        message: format!(
+                            "provider connection '{connection}' is not available in the serverless MCP backend"
+                        ),
+                    });
+                }
+                if wants_compact(query) {
+                    return self.get("/tickets", query);
+                }
+                // `compact=false` is the server's full provider ticket, notes included.
+                let mut q = build_query(query, self.store.root())?;
+                let bound =
+                    ops::StoreReadBound::new(q.limit).map_err(|e| bad_request(e.to_string()))?;
+                q.limit = Some(bound.fetch_limit());
+                let mut vals = ops::query(&self.store, &q)
+                    .map_err(store_err)?
+                    .iter()
+                    .map(|ticket| self.api(ticket))
+                    .collect::<Result<Vec<_>, _>>()?;
+                bound
+                    .finish(&mut vals)
+                    .map_err(|e| bad_request(e.to_string()))?;
+                hotsheet_ticketing::wire::project_fields(&mut vals, &query_fields(query));
+                return Ok(Value::Array(vals));
             }
             if path == "/tickets" {
                 // The bounded-response contract for an unpaged store list (HS2-3JEFQT).
@@ -2567,6 +2614,16 @@ mod core_backend {
             blocked: get("blocked").map(|v| v == "true"),
             min_confidence: confidence_bound(get("min_confidence"), "min_confidence")?,
             max_confidence: confidence_bound(get("max_confidence"), "max_confidence")?,
+            // Inclusive lexical RFC 3339 bounds, passed through unvalidated exactly as the
+            // server's `ListParams` does, so both backends match the same rows (HS2-DXD7DZ).
+            created_after: get("created_after").map(str::to_string),
+            created_before: get("created_before").map(str::to_string),
+            updated_after: get("updated_after").map(str::to_string),
+            updated_before: get("updated_before").map(str::to_string),
+            completed_after: get("completed_after").map(str::to_string),
+            completed_before: get("completed_before").map(str::to_string),
+            verified_after: get("verified_after").map(str::to_string),
+            verified_before: get("verified_before").map(str::to_string),
             sort,
             limit: match get("limit") {
                 Some(s) => Some(
@@ -5357,6 +5414,111 @@ mod tests {
         assert_eq!(
             full.as_array().unwrap()[0]["details"],
             "a long markdown body here"
+        );
+    }
+
+    /// HS2-DXD7DZ: a qualified-connection query reaches a provider list, whose HTTP
+    /// default is the full ticket, so the shim sends the tool's compact default and passes
+    /// an explicit `compact` and the `fields` allow-list through unchanged.
+    #[test]
+    fn hs2_dxd7dz_connection_query_forwards_compact_default_and_fields() {
+        let backend = FakeBackend::default();
+        for arguments in [
+            json!({"connection":"git-local","fields":"slug,title,status,priority,up_next"}),
+            json!({"connection":"git-local","compact":false}),
+            json!({"connection":"git-local","compact":true,"limit":2}),
+            json!({"checkout":"code-project"}),
+        ] {
+            call(&backend, "hotsheet_query", arguments);
+        }
+        let calls = backend.calls.borrow();
+        assert_eq!(
+            calls[0],
+            r#"GET /providers/git-local/tickets [("fields", "slug,title,status,priority,up_next"), ("compact", "true")]"#
+        );
+        assert_eq!(
+            calls[1],
+            r#"GET /providers/git-local/tickets [("compact", "false")]"#
+        );
+        assert_eq!(
+            calls[2],
+            r#"GET /providers/git-local/tickets [("limit", "2"), ("compact", "true")]"#
+        );
+        // A checkout list already defaults to compact rows on both backends.
+        assert_eq!(calls[3], "GET /checkouts/code-project/tickets []");
+    }
+
+    /// HS2-DXD7DZ: the serverless backend answers its own connection's list with the same
+    /// projection as the server, and refuses another connection explicitly.
+    #[test]
+    fn hs2_dxd7dz_serverless_local_connection_query_projects_like_the_server() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "projected", "details": "a long markdown body here" }),
+        );
+        let id = created["id"].as_str().unwrap();
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note": "a synthetic note" }),
+        );
+        let connection = created["connection_id"].as_str().unwrap().to_owned();
+
+        let projected = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "connection": connection, "fields": "slug,title,status,priority,up_next" }),
+        );
+        let keys: std::collections::BTreeSet<&str> = projected[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            ["priority", "slug", "status", "title", "up_next"].into()
+        );
+
+        let compact = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "connection": connection }),
+        );
+        let row = compact[0].as_object().unwrap();
+        for omitted in ["details", "notes", "attachments", "claim_history"] {
+            assert!(!row.contains_key(omitted), "compact row omits {omitted}");
+        }
+        assert_eq!(row["qualified_id"], format!("{connection}:{id}"));
+
+        let full = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "connection": connection, "compact": false }),
+        );
+        assert_eq!(full[0]["details"], "a long markdown body here");
+        assert!(
+            full[0]["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| note["text"] == "a synthetic note"),
+            "a full row keeps its notes"
+        );
+
+        let other = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "connection": "github-elsewhere" }),
+        );
+        assert!(
+            other["error"]
+                .as_str()
+                .unwrap()
+                .contains("not available in the serverless MCP backend"),
+            "{other}"
         );
     }
 

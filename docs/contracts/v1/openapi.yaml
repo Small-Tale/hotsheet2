@@ -110,15 +110,28 @@ paths:
       - $ref: '#/components/parameters/Connection'
     get:
       operationId: listProviderTickets
+      parameters:
+        - name: compact
+          in: query
+          description: true returns compact ticket rows without body, notes, attachments, or claim history (HS2-DXD7DZ).
+          schema:
+            type: boolean
+        - name: fields
+          in: query
+          description: Comma-separated allow-list of row keys to keep; slug is always kept.
+          schema:
+            type: string
       responses:
         '200':
-          description: Full provider tickets.
+          description: Full provider tickets by default; compact or projected rows when requested.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Ticket'
+                  anyOf:
+                    - $ref: '#/components/schemas/Ticket'
+                    - $ref: '#/components/schemas/TicketRow'
     post:
       operationId: createProviderTicket
       requestBody:
@@ -10762,10 +10775,9 @@ components:
           type: string
         code:
           type: string
-          description: >-
-            Stable machine-readable failure kind. Every 409 for a stale `expected_token` carries
-            `ticket_changed`, whatever ticket or issue its message names; clients branch on it, not on
-            the message (HS2-9S8CV1).
+          description:
+            Stable machine-readable failure kind. Every 409 for a stale `expected_token` carries `ticket_changed`,
+            whatever ticket or issue its message names; clients branch on it, not on the message (HS2-9S8CV1).
       additionalProperties: false
     CreateTicket:
       type: object
