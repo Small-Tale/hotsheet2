@@ -182,6 +182,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: named leak diagnostics, capped failure excerpts, full log path (HS2-CP63FG, HS2-ET5FF1; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
+  scripts/windows-crt-directives.mjs # Windows CI dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
   scripts/{check,push,install-git-hooks}.sh # Local root gate, gate-before-push command, and hook setup (HS2-CD3D2T; tests: git-hooks.test.mjs)
   .githooks/{pre-commit,pre-push} # Staged whitespace/format check and cached root gate for direct pushes (HS2-CD3D2T)
   scripts/playwright-retries.mjs # browser-full job summary + warnings for Playwright tests that passed only on a retry (HS2-8YHY6V; tests: playwright-retries.test.mjs + fixtures/playwright-retries/)

@@ -144,6 +144,20 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-cli --test claim_run
 
+      # HS2-1R2RGQ: name the archive members requesting MSVCRTD (LNK4098) for HS2-PN8D9F.
+      # Diagnostic only; it runs after every native build above and changes no flags.
+      - name: Report native CRT directives on Windows
+        if: ${{ !cancelled() }}
+        run: node scripts/windows-crt-directives.mjs --target target --output target/crt-directives/report.json
+
+      - name: Upload the native CRT directive report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-crt-directives
+          path: target/crt-directives/report.json
+          if-no-files-found: error
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
@@ -215,7 +229,7 @@ jobs:
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
-        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs

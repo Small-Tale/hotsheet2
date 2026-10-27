@@ -659,6 +659,24 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   Manager roundtrip is ignored by default and runs only through explicit
   `cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored`
   on the dedicated disposable Windows CI runner.
+- **Native CRT directive evidence (HS2-1R2RGQ):** after every native step, the
+  Windows Credential Manager job runs `node scripts/windows-crt-directives.mjs`, even when
+  an earlier step failed. It runs `dumpbin /ARCHIVEMEMBERS /DIRECTIVES` over bounded cached candidates:
+  build-script `.lib` outputs under `target/debug/build/*/out`, the selected vcpkg
+  `x64-windows-static-md` dav1d archives (release and debug), and native `-sys` crate rlibs.
+  It reports candidate archive members requesting `MSVCRT`, `MSVCRTD`, `LIBCMT` or `LIBCMTD`,
+  plus its `RuntimeLibrary` mismatch tag, using relative artifact identities, counts and
+  timing. Cached outputs can include obsolete build hashes: this is not the current linked
+  Cargo graph. Current-link membership must be confirmed with native link evidence before
+  naming the active warning owner. The report explicitly records that link confirmation is
+  absent, and includes validated GitHub source SHA/run id/attempt when available; unavailable
+  provenance is listed explicitly. Only the intended report file is cleared before probing,
+  then a fresh started/completed/failed report replaces it, including missing-tool/no-input
+  failures, so a cached earlier report cannot be uploaded as this run. The JSON report is uploaded as the `windows-crt-directives` artifact. A
+  missing `dumpbin`, an empty artifact set, or every artifact being unreadable fails the
+  step explicitly. This step diagnoses the LNK4098 `MSVCRTD` warnings for HS2-PN8D9F; it
+  changes no CRT, linker or warning setting. Whether candidates request `MSVCRTD` or not, the
+  next native step is `LINK /VERBOSE:LIB` on one affected link.
 - **Native Windows coordination (HS2-9TD8Q5):** the Windows Credential Manager job
   explicitly runs `cargo test -p hotsheet-ticketing --test file_lock_process` and
   `cargo test -p hotsheet-cli --test coordination --test coordination_portable`.
