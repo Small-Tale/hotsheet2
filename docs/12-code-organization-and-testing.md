@@ -1120,6 +1120,15 @@ capability check. Tests that intentionally use real native credentials stay expl
 
 ### Local Playwright parallelism and timeouts
 
+Responsive inspector captures wait for the shipped rail's new `data-presentation`
+and intended collapsed state before clicking Show Ticket Inspector. Desktop return
+also waits for the restored open preference. `setViewportSize` completing or an empty
+animation list alone does not establish those states (HS2-ZV9M6R, HS2-3HJP95).
+The separately named controlled-delivery regression holds one actual resize event
+until the first real readiness read, then invokes the registered application callbacks
+and verifies a positive delivery count. It changes no product state or attributes;
+the ordinary uninstrumented real-server flow remains required in both engines.
+
 Every Playwright worker drives a browser against the one Vite dev server, so the suite is
 CPU-bound on a single machine. Locally, `playwright.config.ts` starts from half the cores and gives
 back one worker per core of existing load beyond that half, down to three workers

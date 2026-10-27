@@ -1,5 +1,10 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import {
+  controlInspectorResizeDelivery,
+  expectPendingInspectorResize,
+  releaseInspectorResizeDelivery,
+} from './inspector-resize-delivery';
 import { realTicketServer } from './real-ticket-server';
 
 // HS2-9S8CV1: a real Markdown checkout 409 names the ticket in its message (`ticket '<slug>' changed
@@ -315,10 +320,9 @@ test('retries a real 409 from a linked reader through the same typed recognition
   }
 });
 
-test('keeps the real-409 conflict and saved outcomes readable from wide to narrow and back (HS2-9S8CV1)', async ({
-  page,
-}) => {
+async function exerciseResponsiveConflict(page: Page, controlledResize: boolean) {
   test.setTimeout(180_000);
+  if (controlledResize) await controlInspectorResizeDelivery(page);
   const server = await realTicketServer();
   const widths = [
       ['wide', 1440, 900],
@@ -329,10 +333,23 @@ test('keeps the real-409 conflict and saved outcomes readable from wide to narro
     capture = async (state: string, subject: () => Locator) => {
       const rail = page.locator('#app-right-rail');
       for (const [label, width, height] of widths) {
+        const controlled = controlledResize && state === 'conflict' && label === 'narrow';
+        if (controlled) await page.evaluate(() => window.dispatchEvent(new Event('hs2-zv9m6r-arm-resize')));
         await page.setViewportSize({ width, height });
-        // Phones collapse the inspector into an overlay; open it to inspect the outcome there.
-        if ((await rail.getAttribute('data-collapsed')) === 'true')
+        if (controlled) await expectPendingInspectorResize(page);
+        const readRail = async (name: string) => {
+          const value = await rail.getAttribute(name);
+          if (controlled) await releaseInspectorResizeDelivery(page);
+          return value;
+        };
+        // HS2-ZV9M6R/HS2-3HJP95: resize delivery can follow setViewportSize.
+        // Observe the new presentation before its collapse state; desktop return
+        // also restores the saved rail preference in a later animation frame.
+        await expect.poll(() => readRail('data-presentation')).toBe(width < 1024 ? 'overlay' : 'inline');
+        if (width < 1024) {
+          await expect(rail).toHaveAttribute('data-collapsed', 'true');
           await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+        }
         await expect(rail).toHaveAttribute('data-collapsed', 'false');
         // Rails slide after a breakpoint change; wait until no finite animation is still running.
         await expect
@@ -358,7 +375,8 @@ test('keeps the real-409 conflict and saved outcomes readable from wide to narro
           await expect
             .poll(() => page.locator('#app-left-rail').evaluate((node) => node.getBoundingClientRect().left))
             .toBe(0);
-        await page.screenshot({ path: `target/visual-captures/hs2-9s8cv1-${state}-${label}.png` });
+        const captureSlug = controlledResize ? 'hs2-zv9m6r-controlled' : 'hs2-zv9m6r';
+        await page.screenshot({ path: `target/visual-captures/${captureSlug}-${state}-${label}.png` });
       }
     };
   try {
@@ -389,7 +407,19 @@ test('keeps the real-409 conflict and saved outcomes readable from wide to narro
     await expect(saved).toHaveValue('Intro by me and the AI\nMiddle');
     await expect(page.locator('.app-error')).toHaveCount(0);
   } finally {
+    if (controlledResize)
+      await page.evaluate(() => window.dispatchEvent(new Event('hs2-zv9m6r-restore-resize'))).catch(() => undefined);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
+}
+
+test('keeps the real-409 conflict and saved outcomes readable from wide to narrow and back (HS2-9S8CV1)', async ({
+  page,
+}) => {
+  await exerciseResponsiveConflict(page, false);
+});
+
+test('delivers a pending real resize before opening the inspector (HS2-ZV9M6R)', async ({ page }) => {
+  await exerciseResponsiveConflict(page, true);
 });

@@ -1,5 +1,9 @@
 # Codebase Map
 
+`clients/web/tests/inspector-resize-delivery.ts` controls one actual resize-listener
+delivery in the real concurrency parent regression, with explicit callback release
+and restoration; it never assigns product rail state (HS2-ZV9M6R).
+
 Web browser fixture builds share `clients/web/package.json`'s `test:fixtures` command
 (CLI/server/terminal bins with explicit synthetic credential support). Both `test:e2e`
 and the required WebKit job use it before real-server cases (HS2-63ZK8W).
