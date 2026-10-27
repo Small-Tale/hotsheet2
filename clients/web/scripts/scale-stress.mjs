@@ -632,7 +632,9 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
         () => page.getByRole('heading', { name: view }).waitFor(),
       );
     }
-    await page.waitForTimeout(300);
+    // HS2-N9X6D5: count late redundant collection requests over a bounded window.
+    const redundantRequestObservationMs = 300;
+    await page.waitForTimeout(redundantRequestObservationMs);
     scenarios.view_switch_refresh_requests = viewSwitchRefreshRequests;
     const first = page.locator('[data-component="ticket-list-row"]').first();
     const slug = await first.getAttribute('data-ticket-slug');

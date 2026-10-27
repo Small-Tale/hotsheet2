@@ -140,7 +140,6 @@ async function profileMode(browser, origin, projects, worker) {
   await page.getByRole('tab', { name: second.name }).waitFor();
   await page.getByRole('tab', { name: first.name }).click();
   await page.locator(`[data-ticket-slug="${first.seedSlug}"]`).waitFor();
-  await page.waitForTimeout(1_500);
   const heapBefore = await collectedHeap(page);
 
   // Delivery lag: write through the real server, then time until the visible project renders it.
@@ -162,20 +161,23 @@ async function profileMode(browser, origin, projects, worker) {
     window.__workerProfile.events = [];
   });
   let streaming = true;
+  let lastVisibleChurnSlug;
   const churn = (async () => {
     for (let index = 0; streaming; index += 1) {
       await createTicket(second, `Churn ${index}`);
-      await createTicket(first, `Churn ${index}`);
+      lastVisibleChurnSlug = (await createTicket(first, `Churn ${index}`)).slug;
     }
   })();
+  // HS2-N9X6D5: 150 ms between clicks defines the measured interaction cadence.
+  const clickCadenceMs = 150;
   for (let index = 0; index < Number(args.clicks); index += 1) {
     await page.getByRole('tab', { name: (index % 2 ? first : second).name }).click();
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(clickCadenceMs);
   }
   streaming = false;
   await churn;
   await page.getByRole('tab', { name: first.name }).click();
-  await page.waitForTimeout(2_000);
+  await page.locator(`[data-ticket-slug="${lastVisibleChurnSlug}"]`).waitFor();
   const clicks = await page.evaluate(() => window.__workerProfile.events);
   const heapAfter = await collectedHeap(page);
   const sockets = await page.evaluate(() => window.__workerProfile.sockets);

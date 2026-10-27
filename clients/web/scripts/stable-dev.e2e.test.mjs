@@ -145,6 +145,17 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
   }
 }, 45_000);
 
+// HS2-N9X6D5: the import job's banner is the page's own evidence that the job reached the UI. A fast
+// synthetic import may still be running or may already have finished; either is a valid rendered state.
+const importJobStates = ['running', 'succeeded', 'failed', 'interrupted'];
+async function renderedImportJob(page) {
+  const banner = page.locator('[data-component="hs1-job-banner"]');
+  await banner.waitFor({ state: 'visible', timeout: 30_000 });
+  const status = await banner.getAttribute('data-status');
+  expect(importJobStates).toContain(status);
+  return { status, attempt: await banner.getAttribute('data-attempt'), text: await banner.innerText() };
+}
+
 // HS2-KFKE8W: the real stable host serves a snapshot copied under a cache directory. A migration
 // job's lock binary used to resolve relative to that snapshot, so every HS1 import died with
 // `spawn …/target/debug/hotsheet-migrate ENOENT` before the migrator ever ran.
@@ -199,15 +210,26 @@ it.concurrent(
       const importButton = wide.getByRole('button', { name: 'Import project' });
       await importButton.waitFor({ state: 'visible', timeout: 30_000 });
       await wide.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-dialog-wide.png') });
-      await importButton.click();
-      await wide.waitForTimeout(1_500);
+      const [importResponse] = await Promise.all([
+        wide.waitForResponse(
+          (response) => response.request().method() === 'POST' && response.url().includes('/migration-jobs'),
+        ),
+        importButton.click(),
+      ]);
+      expect(importResponse.status()).toBe(202);
+      // HS2-N9X6D5: 202 only means the bridge accepted the job; wait for the page to render the job's state.
+      const wideJob = await renderedImportJob(wide);
+      expect(wideJob.text).not.toMatch(/ENOENT|Library\/Caches/);
       expect(await wide.locator('body').innerText()).not.toMatch(/ENOENT|Library\/Caches/);
       await wide.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-started-wide.png') });
       await wide.close();
       const narrow = await browser.newPage({ viewport: { width: 390, height: 844 } });
       await narrow.goto(`http://127.0.0.1:${port}/?project=${encodeURIComponent(project)}`);
       await narrow.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible', timeout: 30_000 });
-      await narrow.waitForTimeout(500);
+      // The reopened page rejoins the same job; a generic app control alone does not prove that.
+      const narrowJob = await renderedImportJob(narrow);
+      expect(narrowJob.attempt).toBe(wideJob.attempt);
+      expect(narrowJob.text).not.toMatch(/ENOENT|Library\/Caches/);
       expect(await narrow.locator('body').innerText()).not.toMatch(/ENOENT|Library\/Caches/);
       await narrow.screenshot({
         path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-started-narrow.png'),
@@ -347,11 +369,10 @@ it('does not reload when a later route first imports another dependency', async 
     console.log(`stable-dev first load: ${requests.length} requests, ${rawPackageScripts.length} raw package scripts`);
     expect(rawPackageScripts).toEqual([]);
     await page.goto(`http://127.0.0.1:${port}/ux-demo`);
-    await page.waitForTimeout(1_000);
+    await page.waitForLoadState('networkidle');
     expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('2');
     // Pre-bundled packages still run as one module graph: the catalog renders and registers its
     // Web Awesome elements with no page errors.
-    await page.waitForLoadState('networkidle');
     expect(await page.evaluate(() => Boolean(customElements.get('wa-button')))).toBe(true);
     expect(pageErrors).toEqual([]);
     expect(output()).not.toContain('new dependencies optimized');
@@ -405,7 +426,10 @@ it.concurrent(
       page.on('websocket', (socket) => sockets.push(socket.url()));
       page.on('console', (message) => consoleMessages.push(message.text()));
       await page.goto(`${origin}/`);
-      await page.waitForTimeout(500);
+      await page.locator('#app').waitFor();
+      // HS2-N9X6D5: absence of a late reconnect needs a bounded observation window.
+      const reconnectObservationMs = 500;
+      await page.waitForTimeout(reconnectObservationMs);
       expect(await page.locator('#app').count()).toBe(1);
       expect(requested.filter((url) => url.includes('/@vite/client'))).toEqual([`${origin}/@vite/client`]);
       expect(sockets.filter((url) => url.includes('vite-hmr'))).toEqual([]);
@@ -462,7 +486,6 @@ it.concurrent(
         sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
       });
       await page.goto(`http://127.0.0.1:${port}/`);
-      await page.waitForTimeout(250);
       expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
       // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
       // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
@@ -470,7 +493,9 @@ it.concurrent(
         "import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())",
       );
       expect(runtimeExports).toContain('mountTerminalViewportRuntime');
-      await page.waitForTimeout(1_000);
+      // HS2-N9X6D5: a lazy import can schedule a late reload, so observe its absence.
+      const lateReloadObservationMs = 1_000;
+      await page.waitForTimeout(lateReloadObservationMs);
       // A re-optimize would have full-reloaded the document, resetting/incrementing this counter.
       expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
       expect(output()).not.toContain('new dependencies optimized');

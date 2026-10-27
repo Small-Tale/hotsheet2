@@ -7,6 +7,25 @@ import { describe, expect, it } from 'vitest';
 import packageJson from '../package.json';
 
 describe('web ESLint policy', () => {
+  it('HS2-N9X6D5 keeps browser fixture timers for measured windows and cadence only', () => {
+    const read = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
+    const stable = read('stable-dev.e2e.test.mjs');
+    const scale = read('scale-stress.mjs');
+    const profile = read('change-stream-worker-profile.mjs');
+    expect(stable.match(/\.waitForTimeout\(/g)).toHaveLength(2);
+    expect(stable).toContain('waitForTimeout(reconnectObservationMs)');
+    expect(stable).toContain('waitForTimeout(lateReloadObservationMs)');
+    expect(stable).toContain("response.url().includes('/migration-jobs')");
+    // A 202 or a generic app control is not migration readiness: both pages wait for the rendered job banner.
+    expect(stable.match(/await renderedImportJob\((?:wide|narrow)\)/g)).toHaveLength(2);
+    expect(stable).toContain('[data-component="hs1-job-banner"]');
+    expect(scale.match(/\.waitForTimeout\(/g)).toHaveLength(1);
+    expect(scale).toContain('waitForTimeout(redundantRequestObservationMs)');
+    expect(profile.match(/\.waitForTimeout\(/g)).toHaveLength(1);
+    expect(profile).toContain('waitForTimeout(clickCadenceMs)');
+    expect(profile).toContain('lastVisibleChurnSlug');
+  });
+
   const webRoot = join(import.meta.dirname, '..');
   const eslint = new ESLint({ cwd: webRoot });
   const scripts = readdirSync(join(webRoot, 'scripts'))
