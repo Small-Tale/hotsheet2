@@ -17,3 +17,13 @@ describe('Playwright output isolation (HS2-ZJJ4K6)', () => {
     expect(existsSync(new URL('../target/visual-captures/claude-501/', import.meta.url))).toBe(true);
   });
 });
+
+describe('Playwright web server ownership (HS2-BJ00D1)', () => {
+  it('waits on its own server identity and never reuses another run’s server', () => {
+    const server = Array.isArray(config.webServer) ? config.webServer[0] : config.webServer;
+    expect(server?.reuseExistingServer).toBe(false);
+    const id = server?.env?.HOTSHEET_WEB_TEST_SERVER_ID;
+    expect(id).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(server?.url).toBe(`${config.use?.baseURL}/__hotsheet-test-server/${id}`);
+  });
+});

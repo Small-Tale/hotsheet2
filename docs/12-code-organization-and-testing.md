@@ -1194,6 +1194,38 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   evidence. HS2-26PHYJ tracks a controlled, path-checked snapshot experiment once
   machine load permits; HS2-29RAR3 tracks an artifact-safe upstream Rust cache release.
 
+### 12.7.10 Concurrent browser runs (HS2-BJ00D1)
+
+Every Playwright run in `clients/web` starts its own Vite dev server on
+`HOTSHEET_WEB_TEST_PORT` (default 4176), with `reuseExistingServer: false` and a fresh
+Vite cache directory. Workers that verify in separate worktrees at the same time give each run
+a distinct port:
+
+```sh
+cd <worktree>/clients/web
+HOTSHEET_WEB_TEST_PORT=<unused port> npx playwright test <specs> --retries=0
+# or: HOTSHEET_WEB_TEST_PORT=<unused port> node ../../scripts/test-quiet.mjs web-e2e -- <specs>
+```
+
+Each run also passes its own random `HOTSHEET_WEB_TEST_SERVER_ID` to its Vite child and waits
+on `/__hotsheet-test-server/<id>`. Only that run's server answers 200 there, and any other
+server, including one with no id, answers 404. Before this check, a run that lost the port race
+to another run's starting server tested that server's worktree and lost its connection when the
+other run ended (`ERR_CONNECTION_REFUSED`).
+
+A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
+`Process from config.webServer was not able to start`. Choose another port and rerun the whole
+affected set. A `--last-failed` pass after such a refusal is not a clean run. Runs never stop
+another worker's or the user's server.
+
+`scripts/playwright-server-identity.e2e.test.mjs` proves this with two real Vite servers:
+
+- each answers only its own identity
+- a second server on the same port exits
+- stopping one leaves the other serving
+
+`src/playwright-config.test.ts` pins the readiness URL and `reuseExistingServer: false`.
+
 ## 12.8 Cross-references
 
 - Core / server / CLI split: [04-core-server-cli.md](04-core-server-cli.md)

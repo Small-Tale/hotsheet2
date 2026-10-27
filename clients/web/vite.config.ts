@@ -82,6 +82,34 @@ export function stableDevClientStripPlugin(environment: NodeJS.ProcessEnv = proc
   };
 }
 
+/** Path prefix whose only successful answer is a browser-test server's own identity (HS2-BJ00D1). */
+export const TEST_SERVER_IDENTITY_PATH = '/__hotsheet-test-server/';
+
+/**
+ * Playwright's readiness check only asks whether its URL answers. When two concurrent runs share a
+ * port, the later run's Vite cannot bind, yet another run's server answers the shared URL, so the later
+ * run tests the other worktree's source and loses its server when that run ends (HS2-BJ00D1). Each run
+ * passes its own `HOTSHEET_WEB_TEST_SERVER_ID` and waits on this path, which answers 200 only for that
+ * id: a foreign or id-less server returns 404, so the colliding run refuses instead of borrowing it.
+ */
+export function testServerIdentityPlugin(environment: NodeJS.ProcessEnv = process.env): Plugin {
+  return {
+    name: 'hotsheet-test-server-identity',
+    configureServer(server) {
+      const own = environment.HOTSHEET_WEB_TEST_SERVER_ID;
+      server.middlewares.use((request, response, next) => {
+        const path = request.url?.split('?', 1)[0] ?? '';
+        if (!path.startsWith(TEST_SERVER_IDENTITY_PATH)) {
+          next();
+          return;
+        }
+        response.statusCode = own && path === `${TEST_SERVER_IDENTITY_PATH}${own}` ? 200 : 404;
+        response.end();
+      });
+    },
+  };
+}
+
 export function clientDiscoveryPlugin(): Plugin {
   return {
     name: 'hotsheet-client-discovery',
@@ -108,6 +136,8 @@ export default defineConfig(({ command, isSsrBuild }) => ({
   plugins:
     command === 'serve'
       ? [
+          // First, so no later middleware or SPA fallback can answer a foreign identity (HS2-BJ00D1).
+          testServerIdentityPlugin(),
           clientDiscoveryPlugin(),
           // Serves `__ux-review/project.json` so the UX demo catalog can offer Kerf's Capture region link
           // (HS2-41YZSB); registered before the Hono dev server so its middleware answers first.

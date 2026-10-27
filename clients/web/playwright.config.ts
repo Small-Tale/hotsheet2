@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, getPriority, loadavg, setPriority, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,9 @@ lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 isolateAiToolProbes();
 
 const port = Number(process.env.HOTSHEET_WEB_TEST_PORT ?? 4176);
+// Readiness must prove this run's own Vite answers, never another worktree's server on the same port
+// (HS2-BJ00D1); concurrent runs still choose distinct ports with HOTSHEET_WEB_TEST_PORT.
+const serverId = randomUUID();
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));
 // Legacy visual captures remain easy to inspect, with portable package-relative paths.
 // These are separate from Playwright's rotated output and safe alongside Kerf doctor scans.
@@ -48,9 +52,9 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   webServer: {
     command: `npm run dev:hot -- --port ${port}`,
-    url: `http://127.0.0.1:${port}/ux-demo`,
+    url: `http://127.0.0.1:${port}/__hotsheet-test-server/${serverId}`,
     reuseExistingServer: false,
-    env: { HOTSHEET_VITE_CACHE_DIR: viteCacheDir, HOTSHEET_WEB_STABLE_DEV: '1' },
+    env: { HOTSHEET_VITE_CACHE_DIR: viteCacheDir, HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: serverId },
   },
   use: { baseURL: `http://127.0.0.1:${port}` },
 });
