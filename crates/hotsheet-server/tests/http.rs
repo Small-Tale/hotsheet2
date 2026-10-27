@@ -18267,9 +18267,135 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
     ));
 }
 
+struct DiscardPeerRequest {
+    reader: std::io::BufReader<std::net::TcpStream>,
+    request: String,
+    secret: String,
+    body: Vec<u8>,
+}
+
+fn read_discard_peer_request(stream: std::net::TcpStream) -> std::io::Result<DiscardPeerRequest> {
+    use std::io::{BufRead, Read};
+    // HS2-92GBG1: accepted sockets may inherit nonblocking mode on macOS. Match
+    // the fixture's existing accept budget for stalled request bytes as well.
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(15)))?;
+    let mut reader = std::io::BufReader::new(stream);
+    let mut request = String::new();
+    if reader.read_line(&mut request)? == 0 {
+        return Err(std::io::ErrorKind::UnexpectedEof.into());
+    }
+    let (mut length, mut secret) = (0, String::new());
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            return Err(std::io::ErrorKind::UnexpectedEof.into());
+        }
+        if line == "\r\n" {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("content-length:") {
+            length = value
+                .trim()
+                .parse()
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        }
+        if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+            secret = value.trim().to_owned();
+        }
+    }
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body)?;
+    Ok(DiscardPeerRequest {
+        reader,
+        request,
+        secret,
+        body,
+    })
+}
+
+#[test]
+fn hs2_92gbg1_peer_reads_fragmented_request_from_nonblocking_socket() {
+    use std::io::Write;
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::Duration;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    stream.set_nonblocking(true).unwrap();
+    assert_eq!(
+        stream.peek(&mut [0]).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    let (tx, rx) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        tx.send(
+            read_discard_peer_request(stream)
+                .map(|value| (value.request, value.secret, value.body)),
+        )
+        .unwrap();
+    });
+    // These channel deadlines deliberately withhold fragments, rather than wait for readiness.
+    for bytes in [
+        b"POST /synthetic HTTP/1.1\r\n".as_slice(),
+        b"X-Hotsheet-Secret: synthetic-peer-secret\r\nContent-Length: 4\r\n\r\n[",
+        b"42]",
+    ] {
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_millis(100)),
+            Err(RecvTimeoutError::Timeout)
+        ));
+        client.write_all(bytes).unwrap();
+    }
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+        (
+            "POST /synthetic HTTP/1.1\r\n".into(),
+            "synthetic-peer-secret".into(),
+            b"[42]".to_vec()
+        )
+    );
+    server.join().unwrap();
+}
+
+#[test]
+fn hs2_92gbg1_peer_rejects_early_eof_without_spinning() {
+    use std::io::Write;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    for bytes in [
+        b"".as_slice(),
+        b"POST /synthetic HTTP/1.1\r\n",
+        b"POST /synthetic HTTP/1.1\r\nContent-Length: 4\r\n\r\n[",
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        client.write_all(bytes).unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            tx.send(
+                read_discard_peer_request(stream)
+                    .err()
+                    .map(|error| error.kind()),
+            )
+            .unwrap();
+        });
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5))
+                .expect("EOF must not spin"),
+            Some(std::io::ErrorKind::UnexpectedEof)
+        );
+        server.join().unwrap();
+    }
+}
+
 #[tokio::test]
 async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_grants() {
-    use std::io::{BufRead, BufReader, Read, Write};
+    use std::io::Write;
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
@@ -18385,27 +18511,12 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
                     Err(error) => panic!("accept failed: {error}"),
                 }
             };
-            let mut reader = BufReader::new(stream);
-            let mut request = String::new();
-            reader.read_line(&mut request).unwrap();
-            let (mut length, mut secret) = (0, String::new());
-            let mut line = String::new();
-            loop {
-                line.clear();
-                reader.read_line(&mut line).unwrap();
-                if line == "\r\n" {
-                    break;
-                }
-                let lower = line.to_ascii_lowercase();
-                if let Some(value) = lower.strip_prefix("content-length:") {
-                    length = value.trim().parse().unwrap();
-                }
-                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
-                    secret = value.trim().to_owned();
-                }
-            }
-            let mut body = vec![0; length];
-            reader.read_exact(&mut body).unwrap();
+            let DiscardPeerRequest {
+                mut reader,
+                request,
+                secret,
+                body,
+            } = read_discard_peer_request(stream).unwrap();
             let response = serde_json::json!({"hosted": hosted}).to_string();
             write!(
                 reader.get_mut(),

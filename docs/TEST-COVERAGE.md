@@ -1426,6 +1426,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 ### Explicit legacy permission discard (HS2-AFSF4X)
 
+The server peer fixture explicitly normalizes accepted sockets to blocking reads
+and bounds stalled bytes by its existing 15-second accept budget (HS2-92GBG1).
+Natural helper regressions force nonblocking mode before fragmented request/header/body
+delivery and reject EOF before each complete request stage; the authenticated shared-source
+discard flow remains covered by its existing real-router test.
+
 - Behavior: a verified linked Git source exposes only an answer count. Explicit confirmation deletes that source's old answers for every linked project; it preserves unrelated vault namespaces and checkout answers, withdraws cached grants, and retries idempotently. Missing or damaged vaults fail closed.
 - Unit: `crates/hotsheet-aitools/src/permission.rs # hs2_afsf4x_discards_only_source_scoped_legacy_answers_and_retries_safely`.
 - End to end: `crates/hotsheet-cli/tests/cli.rs # hs2_afsf4x_permission_discard_requires_explicit_confirmation` on Linux (a separately built macOS CLI can trigger an interactive Keychain authorization prompt in headless tests); `crates/hotsheet-server/tests/http.rs # hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_grants`; `clients/web/tests/providers.spec.ts # discards legacy permission answers with confirmation` at wide and phone widths; `clients/web/tests/ux-demo.spec.ts # keeps the legacy-answer discard closed until requested` checks its modal.
