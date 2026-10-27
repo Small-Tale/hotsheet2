@@ -906,7 +906,8 @@ capability/limitation diagnostics without adapter or secret resolution (HS2-FG7Z
 zero external requests and exact unchanged state on rejected foreign transitions.
 `dispatch/coordination.rs` exposes idempotent setup,
 registration, exact dispatch/acknowledgement, findings-note validation with
-full-precision claim authority, recovery,
+full-precision claim authority, optional per-assignment route-evidence validation
+without changing the integrator registration or schema (HS2-HM9FRV), recovery,
 and terminal outcomes through
 `hotsheet-cli coordination`. The shared code Git common directory stores the local
 registry; it is separate from ticket-provider identity. Existing ticket claims remain
@@ -914,7 +915,8 @@ authoritative. Private `dispatch/coordination_claims.rs` checks assignment eligi
 worker acceptance and recovery using fresh full-precision timestamps after ticket reads;
 integer mailbox availability/wake deadlines remain advisory (HS2-35R7M3).
 `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
-processes and real synthetic worktrees. Portable recovery/handoff coverage is in
+processes and real synthetic worktrees; `tests/coordination_routes.rs` covers mixed
+per-assignment routes, evidence, replay and fences (HS2-HM9FRV). Portable recovery/handoff coverage is in
 `crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and
 process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.
 The native Windows CI job executes these coordination/lock targets explicitly

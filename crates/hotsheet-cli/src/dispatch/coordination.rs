@@ -9,6 +9,7 @@ use hotsheet_cli::coordination::{
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
+use serde::Deserialize;
 
 use super::{Ctx, misrouted};
 use crate::Cmd;
@@ -87,6 +88,12 @@ enum CoordinationCmd {
         slug: String,
         #[arg(long)]
         base: String,
+        /// Exact route for this operation. Omit to use the integrator's registered route.
+        #[arg(long, requires = "route_evidence_note")]
+        return_route: Option<ReturnRoute>,
+        /// Regular note on this ticket with exact addressed route evidence.
+        #[arg(long, requires = "return_route")]
+        route_evidence_note: Option<String>,
     },
     /// Record exact claim acceptance, verified durable handoff/release, or a blocked report.
     Worker {
@@ -198,6 +205,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             native_id,
             slug,
             base,
+            return_route: route_override,
+            route_evidence_note,
         } => {
             let state = coordinator.state()?;
             anyhow::ensure!(
@@ -212,18 +221,36 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 "provider dispatch verification is unsupported for this connection (HS2-3ETJ26); {}",
                 coordinator.unsupported_source(&connection)?
             );
-            if !state.assignments.contains_key(&operation) {
-                {
-                    let t = store.read_ticket(&native_id.parse()?)?;
-                    let tickets = store.list_tickets()?;
-                    claims::assignable(&t, &tickets, &worker, time::OffsetDateTime::now_utc())?;
-                }
+            let existing = state.assignments.get(&operation);
+            let ticket = store.read_ticket(&native_id.parse()?)?;
+            if existing.is_none() {
+                let tickets = store.list_tickets()?;
+                claims::assignable(&ticket, &tickets, &worker, time::OffsetDateTime::now_utc())?;
             }
-            let return_route = coordinator
-                .state()?
+            if let (Some(route), Some(note_id)) = (&route_override, &route_evidence_note) {
+                verify_addressed_route(
+                    &ticket,
+                    note_id,
+                    &operation,
+                    &worker,
+                    &worker_session,
+                    route,
+                    &i.id,
+                )?;
+            }
+            let default_route = state
                 .integrator
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("register integrator first"))?
-                .return_route;
+                .return_route
+                .clone();
+            // A retry without an override keeps the original operation's route even
+            // when the integrator has since registered a different default (HS2-HM9FRV).
+            let return_route = route_override.unwrap_or_else(|| {
+                existing
+                    .map(|assignment| assignment.return_route.clone())
+                    .unwrap_or(default_route)
+            });
             coordinator.assign(
                 &i.id,
                 &i.session,
@@ -453,6 +480,51 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     println!(
         "{}",
         serde_json::to_string_pretty(&coordinator.snapshot(now)?)?
+    );
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddressedRouteEvidence {
+    operation: String,
+    worker: String,
+    generation: String,
+    route: String,
+}
+
+fn verify_addressed_route(
+    ticket: &hotsheet_model::Ticket,
+    note_id: &str,
+    operation: &str,
+    worker: &str,
+    generation: &str,
+    route: &ReturnRoute,
+    integrator: &str,
+) -> Result<()> {
+    let id = hotsheet_model::Ulid::from_string(note_id)?;
+    let note = ticket
+        .notes
+        .iter()
+        .find(|note| note.id == id)
+        .ok_or_else(|| anyhow::anyhow!("route evidence note is absent from this exact ticket"))?;
+    anyhow::ensure!(
+        note.kind == hotsheet_model::NoteKind::Regular
+            && note.actor.as_ref().and_then(|actor| actor.id.as_deref()) == Some(integrator),
+        "route evidence must be a regular note authored by the exact integrator"
+    );
+    let body = note
+        .text
+        .strip_prefix("## Assignment return route\n")
+        .ok_or_else(|| anyhow::anyhow!("route evidence must start with the exact heading"))?;
+    let evidence: AddressedRouteEvidence = serde_json::from_str(body.trim())?;
+    let addressed_route: ReturnRoute = evidence.route.parse().map_err(anyhow::Error::msg)?;
+    anyhow::ensure!(
+        evidence.operation == operation
+            && evidence.worker == worker
+            && evidence.generation == generation
+            && addressed_route == *route,
+        "route evidence must address this exact operation, worker, generation and route"
     );
     Ok(())
 }

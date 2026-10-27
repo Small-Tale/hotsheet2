@@ -173,7 +173,10 @@ stay unpriced (HS2-WMWRHZ).
 
 Local continuous integrator/worker sessions (HS2-76VMYG) have durable,
 provider-qualified local mailboxes, exact assignment, filesystem-event waits, and
-selected-source queue/claim verification. External-source adapters remain partial
+selected-source queue/claim verification. Per-assignment route overrides with exact
+addressed note evidence are shipped for mixed native, terminal, and human worker
+returns (HS2-HM9FRV); omitted overrides retain the registered default and replays
+retain their original route. External-source adapters remain partial
 (HS2-3ETJ26), blocked on native claim evidence (HS2-BPKM76) and authenticated events/setup
 (HS2-SGQ183). Registry-only source support diagnostics and honest external watch capability
 are shipped independently (HS2-FG7ZMF); they do not enable external assignments or drained.

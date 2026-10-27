@@ -434,8 +434,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 41 -->"));
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 8 -->"));
+    assert!(worker.contains("<!-- hotsheet-skill-version: 42 -->"));
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 9 -->"));
 
     let worker = flatten(worker);
     let at = |phrase: &str| {
@@ -466,6 +466,35 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         "HS2-5EGBTH",
     ] {
         assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+}
+
+#[test]
+fn hs2_hm9frv_role_skills_pin_optional_addressed_assignment_routes() {
+    let flatten = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let worker = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-worker/SKILL.md"
+    ));
+    let integrator = flatten(include_str!(
+        "../../../.claude/skills/hotsheet-integrator/SKILL.md"
+    ));
+    for phrase in [
+        "--return-route",
+        "--route-evidence-note",
+        "## Assignment return route",
+        "Omit both flags for the registered integrator-route default",
+        "a conflicting explicit route is refused",
+        "Never change the integrator's global registration",
+    ] {
+        assert!(integrator.contains(phrase), "integrator missing {phrase}");
+    }
+    for phrase in [
+        "optional route-evidence note",
+        "operation, worker, generation, and recipient",
+        "Native parent delivery is available only in",
+        "Do not infer reachability from a process, cwd or receipt",
+    ] {
+        assert!(worker.contains(phrase), "worker missing {phrase}");
     }
 }
 

@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 41 -->
+<!-- hotsheet-skill-version: 42 -->
 
 Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
 push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
@@ -58,8 +58,13 @@ it does not mean the queue is empty. Either the worker or integrator may start f
    output; do not replace it with repeated queue reads. Availability lease renewal
    does not query the queue or network. A stopped run returns its explicit reason.
 4. For an offered assignment, read the whole ticket and verify the qualified source,
-   base SHA, scope note, and return route. Follow the per-ticket steps below. After the
-   exact ticket claim succeeds, acknowledge with `coordination worker --phase accepted`
+   base SHA, scope note, and return route. Follow the per-ticket steps below. Read the
+   optional route-evidence note named in the `## Worker assignment` note, if one
+   exists, and verify its operation, worker, generation, and recipient match this
+   structured assignment (HS2-HM9FRV). Native parent delivery is available only in
+   the same agent tree; an unrelated external session must use a verified terminal
+   recipient or human relay. Do not infer reachability from a process, cwd or receipt.
+   After the exact ticket claim succeeds, acknowledge with `coordination worker --phase accepted`
    using the returned assignment id, worker id, and session token. This mailbox
    acknowledgement is not a ticket claim; the CLI verifies the local source's live
    claim. Unsupported provider verification fails explicitly (HS2-3ETJ26).

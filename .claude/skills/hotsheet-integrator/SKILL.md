@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator running, assign independent tic
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 8 -->
+<!-- hotsheet-skill-version: 9 -->
 
 Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
 integration, push, CI follow-through, and completion. Workers use
@@ -54,6 +54,27 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    assignment id in its ticket. Retry the same operation id on lost delivery; do not
    create a second assignment. A reservation is not a ticket claim. The worker's exact
    claim remains authoritative before any code work.
+   For a different route on one assignment, first verify `coordination assign --help`
+   on the selected CLI supports `--return-route` and `--route-evidence-note` (HS2-HM9FRV).
+   Add a separate regular note on the exact ticket, authored with
+   `--actor-id <integrator>`, whose whole body is the heading and JSON below. Pass its
+   id with both optional flags; the CLI rejects a note for another operation, worker,
+   generation, route, ticket, or author. Check a native recipient is in this tool's
+   agent tree, or that `GET /connections` advertises `message` for the exact terminal
+   session; use `human` when no supported recipient exists. The note records the
+   checked address; it cannot itself prove transport availability.
+
+   ```text
+   ## Assignment return route
+
+   {"operation":"<unique-id>","worker":"<worker>","generation":"<worker-generation>","route":"native:<agent-id>"}
+   ```
+
+   Omit both flags for the registered integrator-route default and on older CLIs.
+   A retry without an override keeps the original operation's route even after
+   registration changes; a conflicting explicit route is refused. Name the evidence
+   note id and chosen recipient in the regular `## Worker assignment` note. Never
+   change the integrator's global registration merely to route one worker.
 3. Resolve one durable handoff at a time using the steps below. For code, record
    `coordination mark --assignment <id> --phase integrating`, then `ci` after verified
    push, then `done` after covering green CI and ticket completion. For findings,

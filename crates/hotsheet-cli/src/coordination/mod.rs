@@ -227,7 +227,9 @@ impl Coordinator {
                     existing.worker == assignment.worker
                         && existing.generation == assignment.generation
                         && existing.ticket == assignment.ticket
-                        && existing.base == assignment.base,
+                        && existing.slug == assignment.slug
+                        && existing.base == assignment.base
+                        && existing.return_route == assignment.return_route,
                     "operation id already refers to a different assignment"
                 );
                 return Ok(existing.clone());
