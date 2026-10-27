@@ -1,0 +1,16 @@
+{
+  "name": "hotsheet2-repository-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository-level developer tooling for Hot Sheet 2: gitgist commit drafting and the pinned Rulesync instruction generator (HS2-VA97HW).",
+  "license": "MIT",
+  "author": "Small Tale Inc.",
+  "scripts": {
+    "commit:msg": "gitgist --staged --commit-message",
+    "commit:msg:offline": "gitgist --staged --no-ai"
+  },
+  "devDependencies": {
+    "gitgist": "1.2.0",
+    "rulesync": "38.0.0"
+  }
+}

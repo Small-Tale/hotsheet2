@@ -212,6 +212,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/throughput-baseline.mjs # Read-only integrator/worker throughput spans from coordination, claims, notes, Git and main CI (HS2-34PWSK; tests: throughput-baseline.test.mjs; report: docs/27-integrator-throughput-baseline.md)
   scripts/{check,push,install-git-hooks}.sh # Local root gate, gate-before-push command, and hook setup (HS2-CD3D2T; tests: git-hooks.test.mjs)
   .githooks/{pre-commit,pre-push} # Staged whitespace/format check and cached root gate for direct pushes (HS2-CD3D2T)
+  package.json, gitgist.config.json # Root repository tooling: pinned gitgist and Rulesync 38.0.0; commit:msg / commit:msg:offline drafting; provider, fallback, and generated-file exclusions (HS2-VA97HW; tests: scripts/gitgist-tooling.test.mjs)
+  scripts/check-rulesync-generation.mjs # AGENTS.md must equal the pinned Rulesync regeneration of guidance/rulesync/project-selection.json + the local rule; CI runs --fetch (HS2-VA97HW; tests: check-rulesync-generation.test.mjs)
   scripts/playwright-retries.mjs # browser-full job summary + warnings for Playwright tests that passed only on a retry (HS2-8YHY6V; tests: playwright-retries.test.mjs + fixtures/playwright-retries/)
   scripts/check-test-quarantine.mjs # CI check: flaky-test quarantine markers match docs/test-quarantine.md rows (HS2-3PX1E4)
   .config/nextest.toml       # nextest profile: JUnit report at target/nextest/default/junit.xml for test-profile (HS2-3PX1E4)

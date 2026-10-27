@@ -1,0 +1,17 @@
+{
+  "provider": "claude-cli",
+  "fallbackProvider": "codex",
+  "linkCommits": true,
+  "exclude": [
+    "AGENTS.md",
+    ".agents/skills/*",
+    "plugins/*/instructions.md",
+    "plugins/shared/ticket-driven-work.md",
+    "plugins/shared/testing-philosophy.md",
+    "plugins/shared/requirements-documentation.md",
+    "plugins/shared/visual-qa.md",
+    "clients/web/ai/component-catalog-extension.json",
+    "clients/web/ai/component-composition.generated.json",
+    "docs/design/exports/*"
+  ]
+}

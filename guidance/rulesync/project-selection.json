@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/Small-Tale/ai-playbook.git",
+  "commit": "02b66e656098ed5de7d2b042f37b862a8a057482",
+  "rules": [
+    "hotsheet-ticket-driven-work",
+    "hotsheet-testing-philosophy",
+    "hotsheet-requirements-documentation",
+    "hotsheet-visual-qa",
+    "hotsheet-workflow",
+    "conventions-as-code",
+    "test-operations",
+    "ui-composition",
+    "ui-evaluation",
+    "customer-data-hygiene",
+    "web-client-organization",
+    "typescript-lint-and-format",
+    "rust-lint-and-format",
+    "playwright-operations",
+    "kerf-ui-usage",
+    "kerf-ui-upgrades",
+    "kerf-ui-catalog-demos",
+    "git-commit-and-push",
+    "release-scripts",
+    "gitgist-release-notes",
+    "deployment-scripts",
+    "kerf-ui-interaction-defaults"
+  ]
+}

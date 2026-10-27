@@ -836,6 +836,32 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   gate requires `cargo-nextest`, `git-filter-repo`, and installed npm packages.
   Permission integration tests use an in-memory vault under the test-only dependency
   feature, so the same full Rust suite runs on macOS and Linux (`HS2-R8S894`).
+- **Commit drafting (HS2-VA97HW):** the root `package.json` pins `gitgist` exactly
+  (install with `npm ci` at the repository root). `npm run commit:msg` drafts from the
+  staged diff with the signed-in `claude` CLI and retries the signed-in `codex` CLI, with
+  no API key; `npm run commit:msg:offline` lists the staged files deterministically
+  without any provider, because gitgist refuses `--commit-message` with `--no-ai`. The
+  author rewrites either draft to the slug-first subject. `gitgist.config.json` holds the
+  provider, fallback, commit links, and generated-file exclusions, whose reasons live in
+  the local Rulesync rule. `scripts/gitgist-tooling.test.mjs` pins the version, lock,
+  entry points, and config keys, checks the exclusion table against the config, and runs
+  the real entry points in an independently initialized synthetic repository with fake
+  provider CLIs that record every call. Release notes stay with `HS2-7MGYJQ`.
+- **Instruction regeneration (HS2-VA97HW):** `AGENTS.md` is Rulesync output, never hand-edited.
+  `guidance/rulesync/project-selection.json` names the selected rules at the pinned ai-playbook
+  commit, which is the same commit as `guidance/ai-playbook.lock.json`. The root `package.json`
+  pins Rulesync 38.0.0. `node scripts/check-rulesync-generation.mjs --fetch`, or `--source <checkout>`:
+  - lays out the same `.rulesync/rules/.curated/`, local rule and `agentsmd` config that
+    `hotsheet-cli guidance apply` writes, in a temporary project;
+  - runs the pinned generator there;
+  - requires byte equality with the committed file, and otherwise names the first differing line.
+
+  CI runs it. `scripts/check-rulesync-generation.test.mjs` runs the real generator offline over
+  synthetic rules and proves that an unrelated hand edit, a dropped rule and a changed local rule
+  all fail. Temporary Git, generator and fake-provider fixture children clear repository-local
+  Git hook variables through the shared `withoutGitRepositoryEnv` helper. The real child-flow
+  regression preserves an owned caller repository's index, configuration and HEAD.
+
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
   `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin
   **conformance test** (HS2-64), the CLI

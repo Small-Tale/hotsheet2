@@ -232,6 +232,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             clients/web/package-lock.json
             migrator/package-lock.json
             spikes/kerf-webawesome/package-lock.json
@@ -246,6 +247,14 @@ jobs:
 
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
         run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
+
+      - name: Verify pinned gitgist commit drafting
+        run: |
+          npm ci
+          node --test scripts/gitgist-tooling.test.mjs scripts/check-rulesync-generation.test.mjs
+      # AGENTS.md must equal the pinned Rulesync regeneration from the pinned ai-playbook commit (HS2-VA97HW).
+      - name: Verify AGENTS.md equals the Rulesync regeneration
+        run: node scripts/check-rulesync-generation.mjs --fetch
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs
