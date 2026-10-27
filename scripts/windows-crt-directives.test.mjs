@@ -11,6 +11,7 @@ import {
   crtRequests,
   identity,
   main,
+  memberIdentity,
   parseDirectives,
   summarize,
 } from './windows-crt-directives.mjs';
@@ -88,6 +89,16 @@ test('HS2-1R2RGQ reports only relative artifact identities', () => {
   assert.equal(identity('D:\\elsewhere\\private\\thing.obj', roots), 'thing.obj');
   assert.equal(identity('sqlite3.o/', roots), 'sqlite3.o');
   assert.equal(identity('C:\\work\\target\\', roots), 'target');
+});
+
+test('HS2-9E879K preserves complete private member identity before display sanitization', () => {
+  const first = memberIdentity('/0     C:\\build\\a\\thread.obj');
+  assert.match(first.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(first.version, 1);
+  assert.deepEqual(first, memberIdentity('c:/BUILD/a/obj/../THREAD.OBJ'));
+  assert.notDeepEqual(first, memberIdentity('C:/build/b/thread.obj'));
+  assert.notDeepEqual(first, memberIdentity('thread.obj'));
+  assert.doesNotMatch(JSON.stringify(first), /build|thread|C:/);
 });
 
 test('HS2-1R2RGQ bounds cached candidates to native outputs and the selected vcpkg triplet', () => {
@@ -206,6 +217,8 @@ test('HS2-1R2RGQ reports requesting members and fails when every artifact is unr
     const report = JSON.parse(readFileSync(join(repo, 'target/crt-directives/report.json'), 'utf8'));
     assert.equal(report.ticket, 'HS2-1R2RGQ');
     assert.equal(report.scanned, 1);
+    assert.deepEqual(report.requesters.MSVCRTD[0].memberIdentity, memberIdentity(parseDirectives(ARCHIVE)[0].member));
+    assert.deepEqual(report.results[0].requests[0].memberIdentity, report.requesters.MSVCRTD[0].memberIdentity);
     assert.doesNotMatch(JSON.stringify(report), new RegExp(repo.replaceAll('\\', '\\\\')), 'no machine-local paths');
     const unreadable = main({
       argv: ['--repo', repo],
@@ -243,7 +256,10 @@ test('HS2-1R2RGQ wires the diagnostic after every native Windows step without ma
     positions,
     'the diagnostic runs last',
   );
-  const diagnostic = job.slice(job.indexOf('Report native CRT directives on Windows'));
+  // Only this diagnostic's own two steps; the later HS2-9E879K correlation pins its own steps.
+  const start = job.indexOf('Report native CRT directives on Windows'),
+    next = job.indexOf('Correlate CRT candidates with one current affected link');
+  const diagnostic = job.slice(start, next > start ? next : undefined);
   assert.equal(diagnostic.match(/if: \$\{\{ !cancelled\(\) \}\}/g)?.length, 2);
   assert.match(diagnostic, /if-no-files-found: error/);
   assert.doesNotMatch(workflow, /NODEFAULTLIB/i);

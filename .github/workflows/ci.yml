@@ -158,6 +158,22 @@ jobs:
           path: target/crt-directives/report.json
           if-no-files-found: error
 
+      # HS2-9E879K: relink one affected test with the linker's /VERBOSE output and correlate the archive
+      # members it selects with the HS2-1R2RGQ candidates. Diagnostic only; no CRT or link flag changes.
+      - name: Correlate CRT candidates with one current affected link
+        if: ${{ !cancelled() }}
+        env:
+          CC: cl
+        run: node scripts/windows-crt-link-correlation.mjs --target target --directives target/crt-directives/report.json --output target/crt-directives/link-correlation.json
+
+      - name: Upload the CRT link correlation report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-crt-link-correlation
+          path: target/crt-directives/link-correlation.json
+          if-no-files-found: error
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
@@ -229,7 +245,7 @@ jobs:
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
-        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/throughput-baseline.test.mjs
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs

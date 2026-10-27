@@ -5,8 +5,9 @@
 // and fails explicitly when its tool or its inputs are missing rather than reporting a clean scan.
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** The MSVC C runtime import and static libraries whose mixing produces LNK4098. */
@@ -81,6 +82,20 @@ export function identity(path, roots) {
   return basename(normalized);
 }
 
+/** Complete member spelling, never its privacy-reduced display basename (HS2-9E879K). */
+export function memberIdentity(member) {
+  const canonical = posix
+    .normalize(
+      member
+        .replace(/^\/\d+\s+/, '')
+        .trim()
+        .replaceAll('\\', '/'),
+    )
+    .replace(/\/$/, '')
+    .toLowerCase();
+  return { version: 1, sha256: createHash('sha256').update(canonical).digest('hex') };
+}
+
 function walk(directory, accept, found = [], depth = 0) {
   if (depth > 8 || !existsSync(directory)) return found;
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -135,6 +150,7 @@ export function summarize(results) {
           artifact: result.artifact,
           kind: result.kind,
           member: member.member,
+          ...(member.memberIdentity ? { memberIdentity: member.memberIdentity } : {}),
           runtimeLibrary: member.runtimeLibrary,
         });
       }
@@ -220,6 +236,7 @@ function run({ argv, env, dumpbin }) {
       return { artifact, kind, bytes: statSync(path).size, error: scan.error?.code ?? `exit ${scan.status}` };
     const requests = crtRequests(parseDirectives(scan.stdout, path)).map((request) => ({
       ...request,
+      memberIdentity: memberIdentity(request.member),
       member: identity(request.member, roots),
     }));
     return { artifact, kind, bytes: statSync(path).size, requests };

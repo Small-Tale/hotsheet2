@@ -677,6 +677,53 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   step explicitly. This step diagnoses the LNK4098 `MSVCRTD` warnings for HS2-PN8D9F; it
   changes no CRT, linker or warning setting. Whether candidates request `MSVCRTD` or not, the
   next native step is `LINK /VERBOSE:LIB` on one affected link.
+- **Current-link CRT correlation (HS2-9E879K):** after the directive report, the same job runs
+  `node scripts/windows-crt-link-correlation.mjs`. It relinks only one affected target,
+  `cargo rustc -p hotsheet-ticketing --test file_lock_process -- -C link-arg=/VERBOSE -W linker_messages`.
+  Only that unit's fingerprint changes, so no dependency or cache entry is rebuilt or deleted.
+  Plain `/VERBOSE` is used because `/VERBOSE:LIB` lists only the libraries searched, not the
+  `Loaded <archive>(<member>)` selections. The script reads the linker output from rustc's
+  `linker_messages` diagnostics in Cargo's JSON stream and records:
+  - the libraries searched, the members loaded per archive, the `/DEFAULTLIB` libraries processed,
+    and the LNK4098 emissions;
+  - the join of the loaded members with the HS2-1R2RGQ candidates, matched `exact`, `basename` or
+    `ambiguous`. A bare archive name is attributed to the `Searching` block that loaded it, and two
+    cached archives sharing a file name stay `ambiguous`.
+
+  `currentLinkConfirmed` requires complete validated source SHA, run id and attempt matching the
+  directive report, plus that same link emitting an `MSVCRTD` LNK4098 and loading an exact normalized
+  archive/member match for an `MSVCRTD` requester. Archive identity must retain a recognized
+  `target/`, `vcpkg/` or `repo/` root; outside-root basename sanitization cannot establish identity.
+  Case, separators and dot segments are normalized. Unique basename and ambiguous matches remain
+  advisory, never positive confirmation. Stale, missing, malformed or explicitly unavailable
+  provenance fails before cargo runs, replacing any earlier positive report. Both local and CI
+  root Node gates run the ticket-named regression suite and its registration guard.
+  Cargo package ids are opaque: an offline `cargo metadata --no-deps --format-version=1 --offline`
+  lookup resolves the exact requested package and test target before the one relink. Missing or
+  nonunique metadata produces a fresh explicit failure. Confirmation requires a matching
+  `compiler-artifact` with `fresh: false` in that invocation and one attributed linker diagnostic
+  containing both the warning and selected member. Diagnostics from other packages, targets or
+  sources, cached artifacts, missing attribution and multiple possible confirming diagnostics cannot
+  establish a current link. Separate compiler diagnostics are never pooled for confirmation.
+  `candidateMatches` summarizes all captured Cargo linker output as advisory. Only the bounded
+  `currentLinkMatches` list identifies members supporting a positive fresh same-diagnostic result;
+  it is empty when that authority is unavailable. A cached target is explicitly unconfirmed; the
+  verbose rustc arguments alone do not guarantee a fresh relink on every repeated invocation.
+  The directive producer retains the existing sanitized member display and adds
+  `memberIdentity: {version: 1, sha256: "<64 lowercase hex digits>"}` to each scanned request and
+  summarized requester. The digest uses the complete member spelling before privacy reduction,
+  removing the archive offset prefix and normalizing separators, dot segments and case. The consumer
+  hashes the full selected member before sanitizing its display. An exact match requires both digests;
+  exact match records also retain the allowlisted digest so the two reports can be audited without a raw path;
+  distinct directories with the same member basename stay distinct. Legacy, absent or malformed
+  identities remain advisory. No raw member path, Cargo package id or target source path is persisted.
+  The report is identifier and metric only,
+  with relative identities, bounded lists with totals and validated run provenance, and no raw
+  linker log. It follows the same fresh lifecycle: an explicit failure for a missing, unreadable or
+  incomplete directive report, an unstartable `cargo`, or no verbose linker output. It is uploaded
+  as the `windows-crt-link-correlation` artifact. It names candidates for HS2-PN8D9F; it is not a
+  CRT fix or a warning-free result.
+
 - **Native Windows coordination (HS2-9TD8Q5):** the Windows Credential Manager job
   explicitly runs `cargo test -p hotsheet-ticketing --test file_lock_process` and
   `cargo test -p hotsheet-cli --test coordination --test coordination_portable`.
