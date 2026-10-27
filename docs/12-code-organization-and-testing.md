@@ -635,6 +635,16 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   The feature is debug-only; a test-owner environment value never enables a backend
   or changes normal release/native credential behavior. A later default-feature build
   can replace the sibling server, so repeat the matching fixture build before tests.
+- **Desktop fixture byte transport (HS2-ZMVQR4):** the desktop draft fixture's owned
+  Hono listener forwards project API requests to its isolated real ticket server with the
+  original raw body, metadata and explicit fixture authentication. Keep its held-response
+  gates, injected failures and bodyless HTTP statuses intact. Playwright's WebKit routed
+  request exposed no File post data in the measured flow, so `route.fetch` forwarded zero
+  bytes despite the browser File and recovery bridge both holding the expected bytes.
+  Do not reconstruct fixture upload bytes from expected test data. Direct Create and
+  recovery-relaunch regressions assert exact real stored binary/Unicode-name bytes;
+  the shared fixture's full parent suites run in Chromium and WebKit. This is a fixture
+  transport correction, not evidence of a production browser File or recovery defect.
 - **Unattended credential fixtures (HS2-SFVWN5):** automated tests never require an
   interactive OS credential prompt. The explicit debug-only
   `hotsheet-aitools/test-permission-vault` artifact includes both the permission vault

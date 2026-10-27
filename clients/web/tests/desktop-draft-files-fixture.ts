@@ -44,7 +44,8 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
     fault: Fault = () => false,
     bridgeGate: (method: string, key: string) => Promise<void> = () => Promise.resolve(),
     apiGate: (method: string, path: string) => Promise<void> = () => Promise.resolve(),
-    apiFault: (method: string, path: string) => boolean = () => false;
+    apiFault: (method: string, path: string) => boolean = () => false,
+    stopping = false;
   function pause(
     set: (gate: (method: string, key: string) => Promise<void>) => void,
     matches: (method: string, key: string) => boolean,
@@ -96,6 +97,40 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
       await bridgeGate(request.method, key);
       return response;
     }
+    // HS2-ZMVQR4: WebKit's routed request omits File post data, so route.fetch would
+    // manufacture an empty upload. Keep the browser-to-server body on real HTTP, just
+    // like the recovery bridge, while retaining this fixture's owned faults and gates.
+    if (url.pathname.startsWith('/__hotsheet/project-api/')) {
+      const path = url.pathname.replace(/^\/__hotsheet\/project-api\/[^/]+/u, '');
+      if (apiFault(request.method, path)) {
+        await apiGate(request.method, path);
+        return context.json({ error: 'Synthetic operation rejected.' }, 500);
+      }
+      try {
+        const headers = new Headers(request.headers);
+        headers.set('X-Hotsheet-Secret', server.secret);
+        headers.delete('host');
+        headers.delete('content-length');
+        const response = await fetch(`${server.url}${path}${url.search}`, {
+          method: request.method,
+          headers,
+          ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.arrayBuffer() }),
+        });
+        await apiGate(request.method, path);
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.delete('content-encoding');
+        responseHeaders.delete('content-length');
+        const body = await response.arrayBuffer();
+        return new Response(request.method === 'HEAD' || [204, 205, 304].includes(response.status) ? null : body, {
+          status: response.status,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        // Only owned teardown may abandon an upstream request. Keep genuine proxy failures visible.
+        if (!stopping) throw error;
+        return context.body(null, 503);
+      }
+    }
     const upstream = await fetch(new URL(url.pathname + url.search, baseURL), {
       method: request.method,
       ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.arrayBuffer() }),
@@ -122,25 +157,6 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
       status: 201,
       json: openedProjects.find((project) => project.root === root) ?? openedProjects[0],
     });
-  });
-  await context.route('**/__hotsheet/project-api/**', async (route) => {
-    const incoming = new URL(route.request().url()),
-      path = incoming.pathname.replace(/^\/__hotsheet\/project-api\/[^/]+/u, '');
-    try {
-      if (apiFault(route.request().method(), path)) {
-        await apiGate(route.request().method(), path);
-        await route.fulfill({ status: 500, json: { error: 'Synthetic operation rejected.' } });
-        return;
-      }
-      const response = await route.fetch({
-        url: `${server.url}${path}${incoming.search}`,
-        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-      });
-      await apiGate(route.request().method(), path);
-      await route.fulfill({ response });
-    } catch {
-      await route.abort().catch(() => undefined);
-    }
   });
   let launches = 0;
   return {
@@ -215,6 +231,7 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
       );
     },
     async stop() {
+      stopping = true;
       listener.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
         listener.close((reason) => {
