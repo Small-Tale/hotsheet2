@@ -39,10 +39,20 @@ impl ApiError {
     pub(crate) fn ticket_changed(message: impl Into<String>) -> Self {
         Self::new(StatusCode::CONFLICT, message).with_code(TICKET_CHANGED_CODE)
     }
+    /// A queued provider batch on a connection without durable write-behind: 409 with
+    /// [`WRITE_BEHIND_UNAVAILABLE_CODE`] (HS2-DEVEYE). The message stays human-readable.
+    pub(crate) fn write_behind_unavailable(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, message).with_code(WRITE_BEHIND_UNAVAILABLE_CODE)
+    }
 }
 
 /// The `code` of every expected-token 409, whatever its message names (HS2-9S8CV1).
 pub(crate) const TICKET_CHANGED_CODE: &str = "ticket_changed";
+
+/// The `code` of the 409 refusing a queued provider batch on a connection without durable
+/// write-behind; clients fall back to the synchronous edit path on it, never on its text
+/// (HS2-DEVEYE).
+pub(crate) const WRITE_BEHIND_UNAVAILABLE_CODE: &str = "write_behind_unavailable";
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {

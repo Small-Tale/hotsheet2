@@ -1154,3 +1154,40 @@ async fn restart_with_pending_and_mid_send_entries_resumes_in_order_without_loss
     assert_eq!(*fake.title.lock().unwrap(), "Pending two");
     assert_eq!(put_count(&fake), 2);
 }
+
+// ---- HS2-DEVEYE: typed write-behind-unavailable refusal ----
+
+#[tokio::test]
+async fn write_behind_unavailable_refusal_carries_a_typed_code_hs2_deveye() {
+    // A Jira connection without a durable outbox refuses the queued batch with 409 plus a
+    // stable code; clients branch on the code, not the human-readable message.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_ticket_provider(Arc::new(provider(Arc::new(FakeJira::default()))));
+    let (status, body) = queue(&app(state), json!([edit("op-1", "Queued")])).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "write_behind_unavailable", "{body}");
+    assert!(body["error"].as_str().is_some_and(|text| !text.is_empty()));
+}
+
+#[tokio::test]
+async fn unrelated_queued_conflict_has_no_write_behind_unavailable_code_hs2_deveye() {
+    // Another 409 on the same route (an operation id reused for a different ticket) must not
+    // look like the unavailable refusal, or the client would silently switch edit paths.
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let server = app(outbox_state(dir.path(), &fake));
+    let (status, body) = queue(&server, json!([edit("op-1", "First")])).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let (status, body) = queue(
+        &server,
+        json!([{"operation_id":"op-1","native_id":"ENG-10","patch":{"title":"Other"}}]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_ne!(body["code"], "write_behind_unavailable", "{body}");
+    assert!(body.get("code").is_none(), "{body}");
+}

@@ -193,3 +193,14 @@ export const TICKET_CHANGED_CODE = 'ticket_changed';
 export function isTicketConcurrencyConflict(reason: unknown): boolean {
   return reason instanceof ApiHttpError && reason.status === 409 && reason.code === TICKET_CHANGED_CODE;
 }
+
+/** The server's `code` on the 409 refusing a queued provider batch without durable write-behind (HS2-DEVEYE). */
+export const WRITE_BEHIND_UNAVAILABLE_CODE = 'write_behind_unavailable';
+
+/**
+ * The connection has no durable queued edits, so the edit takes its synchronous path instead. Recognized by the
+ * typed `code`, never the message: any other 409 stays a refusal and a wording change cannot stop the fallback.
+ */
+export function isWriteBehindUnavailable(reason: unknown): boolean {
+  return reason instanceof ApiHttpError && reason.status === 409 && reason.code === WRITE_BEHIND_UNAVAILABLE_CODE;
+}

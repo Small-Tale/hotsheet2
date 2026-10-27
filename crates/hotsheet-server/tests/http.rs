@@ -11047,8 +11047,12 @@ async fn expected_token_conflicts_carry_the_ticket_changed_code_on_every_write_r
         ))
         .await
         .unwrap();
+    // An unrelated 409 never carries the retryable code; this refusal has its own (HS2-DEVEYE).
     assert_eq!(unrelated.status(), StatusCode::CONFLICT);
-    assert!(body_json(unrelated).await.get("code").is_none());
+    assert_eq!(
+        body_json(unrelated).await["code"],
+        "write_behind_unavailable"
+    );
 }
 
 #[tokio::test]

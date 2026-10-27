@@ -575,7 +575,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/hosting.rs         #   AppState store hosting: host_store/unhost sweep, repository watchers, instance registration, configured-store startup
       src/activity_capture.rs #  AppState::record_activity + optional deterministic activity distillation (and its tests)
       src/events.rs          #   ChangeEvent/EventLog long-poll ring + AppState::emit/changed_many_in/removed_in, IndexRepairs queue shared with watchers: retried on the next write and on a bounded watcher backoff (HS2-JD7TK0, HS2-5BAEX9)
-      src/api_error.rs       #   ApiError ({ "error": ..., "code"? }) and its From conversions; `ticket_changed` code on stale expected tokens (HS2-9S8CV1)
+      src/api_error.rs       #   ApiError ({ "error": ..., "code"? }) and its From conversions; `ticket_changed` code on stale expected tokens (HS2-9S8CV1); `write_behind_unavailable` code on the queued-batch refusal without a durable outbox (HS2-DEVEYE)
       src/dto.rs             #   request/response DTOs
       src/watcher.rs         #   filesystem + repository watcher (WatchHandle, handle_path_change)
       src/worklist_refresh.rs #  WorklistRefresher: one debounced, coalescing background worker for every checkout worklist regeneration (writes, watcher, project open), off the request path (HS2-Z99TJN)

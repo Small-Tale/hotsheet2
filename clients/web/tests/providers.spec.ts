@@ -12237,6 +12237,247 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
   await expect(sync).toContainText('Local edit discarded');
 });
 
+for (const refusal of [
+  {
+    name: 'typed write-behind refusal',
+    body: { error: 'queued edits are off here', code: 'write_behind_unavailable' },
+  },
+  { name: 'unrelated unavailable 409', body: { error: 'source unavailable for this connection' } },
+] as const)
+  test(`takes the synchronous edit path only on the ${refusal.name} (HS2-DEVEYE)`, async ({ page }) => {
+    await mockProject(page);
+    const typed = 'code' in refusal.body;
+    const external = {
+      ...row,
+      id: 'PROJ-8',
+      native_id: 'PROJ-8',
+      qualified_id: 'jira-1:PROJ-8',
+      connection_id: 'jira-1',
+      slug: 'JIRA-8',
+      title: 'Synthetic queued fallback',
+    };
+    const externalFull = { ...full, ...external };
+    let queuedAttempts = 0,
+      savedTitle = external.title;
+    const syncPatches: Record<string, unknown>[] = [];
+    await page.route('**/providers', (route) =>
+      route.fulfill({
+        json: [
+          {
+            connection_id: 'jira-1',
+            provider: 'jira',
+            display_name: 'Jira',
+            locator: 'https://jira.test',
+            default: true,
+            capabilities: { update: true, write_behind: true },
+          },
+        ],
+      }),
+    );
+    await page.route('**/providers/jira-1/outbox**', (route) => route.fulfill({ json: [] }));
+    // The server's real {error, code} refusal shape: the message wording is deliberately different.
+    await page.route('**/providers/jira-1/tickets/queued', (route) => {
+      queuedAttempts += 1;
+      return route.fulfill({ status: 409, json: refusal.body });
+    });
+    await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+      const path = decodeURIComponent(new URL(route.request().url()).pathname);
+      if (path.endsWith('/tickets'))
+        return route.fulfill({
+          json: {
+            items: [{ ...external, title: savedTitle }],
+            counts: {
+              total: 1,
+              queued: 1,
+              backlog: 0,
+              archive: 0,
+              trash: 0,
+              open: 1,
+              up_next: 1,
+              active: 0,
+              started: 1,
+              completed_today: 0,
+            },
+          },
+        });
+      if (path.endsWith('/tickets/jira-1:PROJ-8')) {
+        if (route.request().method() === 'PATCH') {
+          const patch = route.request().postDataJSON() as Record<string, unknown>;
+          syncPatches.push(patch);
+          if (typeof patch.title === 'string') savedTitle = patch.title;
+        }
+        const ticket = { ...externalFull, title: savedTitle };
+        return route.fulfill({ json: ticket });
+      }
+      return route.fallback();
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-8"]').click();
+    const inspector = page.locator('#app-right-rail');
+    await inspector.getByRole('heading', { name: 'Synthetic queued fallback' }).dblclick();
+    const titleInput = inspector.getByRole('textbox', { name: 'Ticket Title' });
+    await titleInput.fill('Edited through the fallback');
+    await titleInput.blur();
+    await expect.poll(() => queuedAttempts).toBe(1);
+    if (typed) {
+      await expect.poll(() => syncPatches.length).toBe(1);
+      expect(syncPatches[0]).toMatchObject({ title: 'Edited through the fallback' });
+      await expect(page.locator('[data-ticket-slug="JIRA-8"]').first()).toContainText('Edited through the fallback');
+    } else {
+      // An unrelated 409 is a refusal: the edit never silently switches to the synchronous path.
+      await expect(page.getByText('source unavailable for this connection').first()).toBeVisible();
+      expect(syncPatches).toHaveLength(0);
+    }
+  });
+
+for (const refusal of [
+  {
+    name: 'typed write-behind refusal',
+    body: { error: 'queued edits are off here', code: 'write_behind_unavailable' },
+  },
+  { name: 'unrelated unavailable 409', body: { error: 'source unavailable for this connection' } },
+] as const)
+  test(`bulk priority edits take the synchronous path only on the ${refusal.name} (HS2-DEVEYE)`, async ({ page }) => {
+    await mockProject(page);
+    const typed = 'code' in refusal.body;
+    const ids = ['PROJ-21', 'PROJ-22'];
+    const priorities = new Map(ids.map((id) => [id, 'default']));
+    const ticketFor = (id: string) => ({
+      ...full,
+      ...row,
+      id,
+      native_id: id,
+      qualified_id: `jira-1:${id}`,
+      connection_id: 'jira-1',
+      slug: `JIRA-${id.slice(5)}`,
+      title: `Synthetic bulk ${id}`,
+      priority: priorities.get(id),
+    });
+    let refuseQueue = true;
+    const queuedBatches: string[][] = [],
+      syncPatches: { id: string; body: Record<string, unknown> }[] = [];
+    let atomicBatches = 0;
+    await page.route('**/providers', (route) =>
+      route.fulfill({
+        json: [
+          {
+            connection_id: 'jira-1',
+            provider: 'jira',
+            display_name: 'Jira',
+            locator: 'https://jira.test',
+            default: true,
+            capabilities: { update: true, write_behind: true },
+          },
+        ],
+      }),
+    );
+    await page.route('**/providers/jira-1/outbox**', (route) => route.fulfill({ json: [] }));
+    await page.route('**/providers/jira-1/tickets/queued', (route) => {
+      const request = route.request().postDataJSON() as {
+        operations: { operation_id: string; native_id: string; patch: { priority?: string } }[];
+      };
+      queuedBatches.push(request.operations.map((operation) => operation.native_id));
+      // The server's real {error, code} refusal shape, with deliberately different wording.
+      if (refuseQueue) return route.fulfill({ status: 409, json: refusal.body });
+      for (const operation of request.operations)
+        if (operation.patch.priority) priorities.set(operation.native_id, operation.patch.priority);
+      return route.fulfill({
+        status: 202,
+        json: request.operations.map((operation) => ({
+          operation_id: operation.operation_id,
+          state: 'queued',
+          ticket: { ...ticketFor(operation.native_id), pending_operation_ids: [operation.operation_id] },
+        })),
+      });
+    });
+    await page.route('**/checkouts/demo-checkout/batch', (route) => {
+      atomicBatches += 1;
+      return route.fulfill({ status: 500, json: { error: 'unexpected atomic batch' } });
+    });
+    await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+      const path = decodeURIComponent(new URL(route.request().url()).pathname);
+      if (path.endsWith('/tickets'))
+        return route.fulfill({
+          json: {
+            items: ids.map(ticketFor),
+            counts: {
+              total: 2,
+              queued: 2,
+              backlog: 0,
+              archive: 0,
+              trash: 0,
+              open: 2,
+              up_next: 2,
+              active: 0,
+              started: 2,
+              completed_today: 0,
+            },
+          },
+        });
+      const id = ids.find((candidate) => path.endsWith(`/tickets/jira-1:${candidate}`));
+      if (!id) return route.fallback();
+      if (route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        syncPatches.push({ id: `jira-1:${id}`, body });
+        if (typeof body.priority === 'string') priorities.set(id, body.priority);
+      }
+      return route.fulfill({ json: ticketFor(id) });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const rows = ids.map((id) =>
+      page.locator(`[data-component="summary-row"][data-ticket-slug="JIRA-${id.slice(5)}"]`),
+    );
+    const changePriority = async (value: string) => {
+      await rows[0].click({ button: 'right' });
+      const menu = page.locator('[data-context-menu="ticket"]');
+      await menu.locator('.kui-popup-menu__item', { hasText: 'Change priority' }).hover();
+      await menu.locator(`[data-context-field="priority"][data-context-value="${value}"]`).click();
+    };
+    const expectPriority = async (value: string) => {
+      for (const ticketRow of rows) await expect(ticketRow.getByLabel(`${value} priority`)).toBeVisible();
+    };
+    await rows[0].click();
+    await rows[1].click({ modifiers: ['Meta'] });
+    await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
+    await changePriority('high');
+    await expect.poll(() => queuedBatches).toEqual([ids]);
+    const alert = page.locator('[data-component="app-error"]');
+    if (typed) {
+      // The typed refusal falls back to one synchronous write per qualified ticket; both rows reconcile.
+      await expect
+        .poll(() => syncPatches.map((patch) => patch.id).sort())
+        .toEqual(['jira-1:PROJ-21', 'jira-1:PROJ-22']);
+      for (const patch of syncPatches) expect(patch.body).toMatchObject({ priority: 'high' });
+      await expectPriority('high');
+      await expect(alert).toHaveCount(0);
+    } else {
+      // An unrelated 409 is a refusal: no fallback writes, the optimistic rows roll back, and the
+      // failure is visible while the selection is kept for another try.
+      await expect(alert).toContainText('source unavailable for this connection');
+      await expectPriority('default');
+      expect(syncPatches).toHaveLength(0);
+      await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
+      await alert.getByRole('button', { name: 'Dismiss Error' }).click();
+      await expect(alert).toHaveCount(0);
+    }
+    expect(atomicBatches).toBe(0);
+
+    // A further action after the outcome starts clean: the queue now accepts the batch.
+    refuseQueue = false;
+    const syncBefore = syncPatches.length;
+    await changePriority('low');
+    await expect.poll(() => queuedBatches).toEqual([ids, ids]);
+    await expectPriority('low');
+    await expect(alert).toHaveCount(0);
+    expect(syncPatches).toHaveLength(syncBefore);
+    expect(atomicBatches).toBe(0);
+  });
+
 test('omits separators below every right-sidebar toolbar state', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

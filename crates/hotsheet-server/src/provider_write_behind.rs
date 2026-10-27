@@ -163,8 +163,7 @@ pub(super) async fn queue_jira_updates(
 ) -> Result<(StatusCode, Json<Vec<QueuedProviderResult>>), ApiError> {
     let provider = provider_for(&state, &connection_id)?;
     if !provider.descriptor().capabilities.write_behind || state.jira_outbox.is_none() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
+        return Err(ApiError::write_behind_unavailable(
             "durable queued edits are unavailable for this provider connection",
         ));
     }

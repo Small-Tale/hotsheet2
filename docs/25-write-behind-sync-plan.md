@@ -184,7 +184,10 @@ before search, sorting, and cursor selection. Summary counts do not change for
 these fields. A pending read uses a complete native Jira list to preserve search
 and order; this opt-in path's full-list cost must be measured before broader
 rollout. Native PATCH routes retain their existing
-synchronous behavior. Phase 3 still owns dispatch, confirmation, conflict handling,
+synchronous behavior. A connection without a durable outbox refuses the queued
+batch with 409 and the typed `code: "write_behind_unavailable"`; clients take the
+synchronous path only on that code, never on the message, and treat every other
+409 as a refusal (HS2-DEVEYE). Phase 3 still owns dispatch, confirmation, conflict handling,
 retry/attention states, events, and the pending-state UI.
 
 The pending overlay's paged read now walks 100-issue native pages and retains only

@@ -4,6 +4,7 @@ import { ApiHttpError, type FullTicket } from './api';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit } from './feedback-prompt-edits';
 import {
   isTicketConcurrencyConflict,
+  isWriteBehindUnavailable,
   noteEditPatch,
   rebaseDraftValue,
   reconcileActiveDraft,
@@ -11,6 +12,7 @@ import {
   reconcileTicketPatch,
   TICKET_CHANGED_CODE,
   ticketFieldText,
+  WRITE_BEHIND_UNAVAILABLE_CODE,
 } from './ticket-field-reconciliation';
 
 const ticket = (changes: Partial<FullTicket> = {}): FullTicket => ({
@@ -230,6 +232,21 @@ describe('field-aware ticket reconciliation', () => {
     expect(rebaseDraftValue('a', 'mine', 'theirs')).toEqual({ kind: 'conflict' });
     expect(ticketFieldText(ticket(), 'note', 'N1')).toBe('Base note');
     expect(ticketFieldText(ticket({ blocked_reason: null as unknown as string }), 'blocked_reason')).toBe('');
+  });
+
+  it('falls back from durable queued edits only on the typed write-behind refusal (HS2-DEVEYE)', () => {
+    const text = 'durable queued edits are unavailable for this provider connection';
+    expect(isWriteBehindUnavailable(new ApiHttpError(text, 409, WRITE_BEHIND_UNAVAILABLE_CODE))).toBe(true);
+    // Reworded text with the code still falls back; the text alone or another status never does.
+    expect(isWriteBehindUnavailable(new ApiHttpError('queue off', 409, WRITE_BEHIND_UNAVAILABLE_CODE))).toBe(true);
+    expect(isWriteBehindUnavailable(new ApiHttpError(text, 409))).toBe(false);
+    expect(isWriteBehindUnavailable(new ApiHttpError('source unavailable', 409))).toBe(false);
+    expect(isWriteBehindUnavailable(new ApiHttpError(text, 503, WRITE_BEHIND_UNAVAILABLE_CODE))).toBe(false);
+    expect(isWriteBehindUnavailable(new ApiHttpError(text, 409, TICKET_CHANGED_CODE))).toBe(false);
+    expect(isWriteBehindUnavailable(new Error(text))).toBe(false);
+    expect(isWriteBehindUnavailable(text)).toBe(false);
+    // The two typed 409s stay disjoint: a write-behind refusal never enters the concurrency retry.
+    expect(isTicketConcurrencyConflict(new ApiHttpError(text, 409, WRITE_BEHIND_UNAVAILABLE_CODE))).toBe(false);
   });
 
   it('recognizes only the typed concurrency failure', () => {

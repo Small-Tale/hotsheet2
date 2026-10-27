@@ -90,6 +90,7 @@ import {
 } from '../ticket-draft-store';
 import {
   isTicketConcurrencyConflict,
+  isWriteBehindUnavailable,
   noteEditPatch,
   rebaseDraftValue,
   reconcileTicketPatch,
@@ -583,7 +584,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                   ])
                 )[0]?.ticket;
               } catch (reason) {
-                if (reason instanceof ApiHttpError && reason.status === 409 && reason.message.includes('unavailable')) {
+                if (isWriteBehindUnavailable(reason)) {
                   useQueue = false;
                 } else if (!(reason instanceof ApiHttpError)) {
                   const accepted = (
@@ -1195,7 +1196,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           updated.push(...result.map((item) => item.ticket));
           queuedBatch = true;
         } catch (reason) {
-          if (reason instanceof ApiHttpError && reason.status === 409 && reason.message.includes('unavailable')) {
+          if (isWriteBehindUnavailable(reason)) {
             // A server without the opt-in flag keeps its synchronous path.
           } else if (!(reason instanceof ApiHttpError)) {
             const admitted = (await client.providerOutbox(queueConnection).catch(() => [])).map(
