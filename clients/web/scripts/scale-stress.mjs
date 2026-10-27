@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
-import { chromium } from '@playwright/test';
 import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+
+import { chromium } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from './repository-env.mjs';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';

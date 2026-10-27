@@ -39,6 +39,6 @@ export const GIT_REPOSITORY_ENV_VARS = Object.freeze([
  */
 export function withoutGitRepositoryEnv(env) {
   const clean = { ...env };
-  for (const name of GIT_REPOSITORY_ENV_VARS) delete clean[name];
+  for (const name of GIT_REPOSITORY_ENV_VARS) Reflect.deleteProperty(clean, name);
   return clean;
 }

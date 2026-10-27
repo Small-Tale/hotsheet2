@@ -1,11 +1,36 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
 
 import packageJson from '../package.json';
 
 describe('web ESLint policy', () => {
+  it('HS2-HK6KMT lints Node scripts and rejects a real invalid script', async () => {
+    const webRoot = join(import.meta.dirname, '..');
+    const eslint = new ESLint({ cwd: webRoot });
+    const productionScript = join(webRoot, 'scripts/stable-dev.mjs');
+    const scriptTest = join(webRoot, 'scripts/stable-dev.test.mjs');
+
+    expect(await eslint.isPathIgnored(productionScript)).toBe(false);
+    expect(await eslint.isPathIgnored(scriptTest)).toBe(false);
+    expect(await eslint.isPathIgnored(join(webRoot, 'eslint.config.mjs'))).toBe(false);
+
+    const scripts = readdirSync(join(webRoot, 'scripts'))
+      .filter((name) => /\.(?:mjs|mts)$/.test(name))
+      .map((name) => join(webRoot, 'scripts', name));
+    const included = [...scripts, join(webRoot, 'eslint.config.mjs')];
+    const realResults = await eslint.lintFiles(included);
+    expect(realResults.map((result) => result.filePath).sort()).toEqual(included.sort());
+    expect(realResults.every((result) => result.errorCount === 0 && result.warningCount === 0)).toBe(true);
+
+    const [invalid] = await eslint.lintText('const value = missingReference;\n', {
+      filePath: join(webRoot, 'scripts/hs2-hk6kmt-invalid.mjs'),
+    });
+    expect(invalid.messages.map((message) => message.ruleId)).toContain('no-undef');
+  });
+
   it('HS2-6ABCVC keeps the four Kerf packages on one exact version', () => {
     const versions = [
       packageJson.dependencies.kerfjs,

@@ -13,6 +13,9 @@ evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 `clients/web/scripts/stable-dev.mjs` snapshots web source while excluding top-level
 generated output and the exact native `src-tauri/target` build subtree; adjacent native
 source and unrelated nested `target` source directories remain included (HS2-R7T9XB).
+`clients/web/eslint.config.mjs` includes web Node scripts and itself in an untyped
+ESLint path; `clients/web/src/eslint-policy.test.ts` pins that route with real and
+invalid synthetic script checks (HS2-HK6KMT).
 
 `clients/web/src/guidance-search-model.ts` owns Project guidance's toolbar token
 grammar and rule matching (HS2-6ZA2RN). The shared toolbar renders its separate

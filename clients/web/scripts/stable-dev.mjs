@@ -1,8 +1,8 @@
+import { spawn } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const excludedTopLevel = new Set(['coverage', 'dist', 'node_modules', 'playwright-report', 'target', 'test-results']);

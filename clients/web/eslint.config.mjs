@@ -4,6 +4,7 @@ import importX from 'eslint-plugin-import-x';
 import kerfjs from 'eslint-plugin-kerfjs';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import tsdoc from 'eslint-plugin-tsdoc';
+import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -16,8 +17,6 @@ export default tseslint.config(
       'node_modules/**',
       'test-results/**',
       'playwright-report/**',
-      'scripts/**',
-      'eslint.config.mjs',
     ],
   },
   {
@@ -164,5 +163,28 @@ export default tseslint.config(
       '@typescript-eslint/no-deprecated': 'off',
       '@typescript-eslint/require-await': 'off',
     },
+  },
+  {
+    // HS2-HK6KMT: Node scripts and this config are linted without a TypeScript project.
+    files: ['scripts/**/*.{mjs,mts}', 'eslint.config.mjs'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: globals.node,
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      'tsdoc/syntax': 'off', // HS2-HK6KMT: untyped Node scripts use JSDoc type annotations, not TSDoc.
+    },
+  },
+  {
+    // Browser callbacks in these Node-driven fixtures execute inside Playwright (HS2-HK6KMT).
+    files: [
+      'scripts/change-stream-worker-profile.mjs',
+      'scripts/desktop-storage-smoke.mjs',
+      'scripts/local-host.e2e.test.mjs',
+      'scripts/stable-dev.e2e.test.mjs',
+    ],
+    languageOptions: { globals: globals.browser },
   },
 );

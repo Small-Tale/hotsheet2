@@ -2,8 +2,8 @@ import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
-  mkdtempSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -15,13 +15,13 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { BINARY_SUITES, NOT_BINARY_SUITES, launchesTestBinaries } from './vitest-binary-suites.mjs';
+import { BINARY_SUITES, launchesTestBinaries, NOT_BINARY_SUITES } from './vitest-binary-suites.mjs';
 import {
-  BUILD_INPUTS,
-  TEST_BINARIES,
   binariesAreFresh,
+  BUILD_INPUTS,
   buildDecision,
   newestInputMtime,
+  TEST_BINARIES,
 } from './vitest-build-binaries.mjs';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

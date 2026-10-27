@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
+
 import { assertStandaloneNode } from './desktop-node-runtime.mjs';
 import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { lowerPlaywrightPriority, localPlaywrightWorkers, playwrightNiceness } from './playwright-workers.mjs';
+import { localPlaywrightWorkers, lowerPlaywrightPriority, playwrightNiceness } from './playwright-workers.mjs';
 
 describe('local Playwright worker count (HS2-MHPHZB)', () => {
   it('uses half the cores on an idle machine', () => {

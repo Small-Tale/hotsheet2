@@ -136,6 +136,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   error (`no-warning-comments`), and `@stylistic/max-len` rejects code lines over 200
   characters outside strings, templates, regexes, URLs, and comments, so minified one-line
   blocks cannot return (HS2-PR1BST).
+- Web `scripts/*.mjs`, `scripts/*.mts`, and `eslint.config.mjs` run through the normal
+  warning-free ESLint command with an explicit untyped Node configuration. Browser
+  globals are limited to the scripts that execute Playwright page callbacks. The
+  `HS2-HK6KMT` policy test checks real script inclusion and rejection of an invalid
+  synthetic script through the same configuration.
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
