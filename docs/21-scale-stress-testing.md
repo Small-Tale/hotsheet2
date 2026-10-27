@@ -48,6 +48,12 @@ generated checkout, store, indexes, isolated Hot Sheet home, and browser/server 
 deleted after the run. `--keep` retains that temporary workspace for profiling or manual
 inspection; remove it when finished. The harness never configures or contacts a remote.
 
+The Chromium scenario recognizes readiness by the hooks the shipped UI renders: a ticket row's
+`select-ticket-row` interaction and, after a row is opened, the loaded right-rail inspector
+header carrying that ticket's slug. Component-name selectors went stale when rows became Kerf
+summary rows and the inspector moved into the rail, which left every web tier waiting for a
+first row that had already rendered (HS2-G3JVSR); a unit test pins both hooks to the source.
+
 For comparable results, record the report's host metadata, run on an otherwise quiet
 machine, use the same build profile, and compare the same milestone. By default this is an
 exploratory capacity test, not a stable timing assertion. The opt-in

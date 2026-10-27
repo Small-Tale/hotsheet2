@@ -22,6 +22,15 @@ const target = resolve(repoRoot, process.env.CARGO_TARGET_DIR ?? 'target');
 const cli = resolve(target, 'debug/hotsheet-cli');
 const server = resolve(target, 'debug/hotsheet-server');
 const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+// HS2-G3JVSR: the rendered ticket row's own interaction hook. Rows became Kerf summary rows (HS2-9Y3V3T), so a
+// component-name selector silently stopped matching and the web scenario waited forever for its first row.
+export const TICKET_ROW_SELECTOR = '[data-action="select-ticket-row"]';
+// The workspace inspector is composed into the right rail as panel parts (HS2-QQW6CT); its loaded header carries
+// the selected ticket's slug identity (the slug text itself sits in the rail toolbar, outside the header). The
+// standalone `ticket-inspector` root renders only in the reader and terminal rail.
+export function ticketInspectorHeaderSelector(slug) {
+  return `[data-component="ticket-inspector-header"][data-ticket-slug="${slug}"]:not([data-content-loading])`;
+}
 
 export function parseScaleCounts(value) {
   const counts = String(value)
@@ -618,7 +627,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     const loadStarted = performance.now();
     await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.getByRole('heading', { name: 'Queue' }).waitFor();
-    await page.locator('[data-component="ticket-list-row"]').first().waitFor();
+    await page.locator(TICKET_ROW_SELECTOR).first().waitFor();
     scenarios.initial_load = { wall_ms: Math.round(performance.now() - loadStarted) };
     let viewSwitchRefreshRequests = 0;
     page.on('request', (request) => {
@@ -636,11 +645,11 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     const redundantRequestObservationMs = 300;
     await page.waitForTimeout(redundantRequestObservationMs);
     scenarios.view_switch_refresh_requests = viewSwitchRefreshRequests;
-    const first = page.locator('[data-component="ticket-list-row"]').first();
+    const first = page.locator(TICKET_ROW_SELECTOR).first();
     const slug = await first.getAttribute('data-ticket-slug');
     scenarios.view_ticket = await measuredUiAction(
       () => first.click(),
-      () => page.locator('[data-component="ticket-inspector"]').getByText(slug, { exact: true }).waitFor(),
+      () => page.locator(ticketInspectorHeaderSelector(slug)).waitFor(),
     );
     if (!allowMutations) {
       scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
@@ -658,9 +667,9 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
         await page.getByRole('textbox', { name: 'Ticket Title' }).fill(title);
         await page.getByRole('button', { name: 'Create ticket' }).click();
       },
-      () => page.locator('[data-component="ticket-list-row"]', { hasText: title }).waitFor(),
+      () => page.locator(TICKET_ROW_SELECTOR, { hasText: title }).waitFor(),
     );
-    const created = page.locator('[data-component="ticket-list-row"]', { hasText: title });
+    const created = page.locator(TICKET_ROW_SELECTOR, { hasText: title });
     const upNext = created.getByRole('button', { name: /Up Next/ });
     const response = page.waitForResponse(
       (item) => item.request().method() === 'PATCH' && item.url().includes('/tickets/'),

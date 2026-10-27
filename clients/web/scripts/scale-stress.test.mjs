@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it, vi } from 'vitest';
 
+import { TICKET_SELECTION_ACTIONS } from '../src/interaction-attrs/ticket-selection';
 import {
   assertCliMutationBudgets,
   assertCliReadBudgets,
@@ -9,9 +12,30 @@ import {
   parseArguments,
   parseScaleCounts,
   syntheticTicket,
+  TICKET_ROW_SELECTOR,
+  ticketInspectorHeaderSelector,
 } from './scale-stress.mjs';
 
 describe('scale stress harness', () => {
+  it('HS2-G3JVSR waits for the hook the production ticket row renders', () => {
+    // The web scenario's first-row wait, row click and created-row wait all use this selector.
+    expect(TICKET_ROW_SELECTOR).toBe(TICKET_SELECTION_ACTIONS.selectTicketRow.selector);
+  });
+
+  it('HS2-G3JVSR waits for the loaded right-rail inspector header the app renders', () => {
+    const inspector = readFileSync(new URL('../src/components/ticket-inspector.tsx', import.meta.url), 'utf8');
+    // The header carries the selected ticket's slug identity and marks content that is still loading; the slug's
+    // text sits in the rail toolbar, so the harness waits on the header's identity rather than its text.
+    expect(inspector).toMatch(
+      /data-component="ticket-inspector-header" \{\.\.\.identity\} \{\.\.\.loadingAttributes\}/,
+    );
+    expect(inspector).toContain("'data-ticket-slug': slug");
+    expect(inspector).toContain("'data-content-loading': 'true'");
+    expect(ticketInspectorHeaderSelector('ST-00000003')).toBe(
+      '[data-component="ticket-inspector-header"][data-ticket-slug="ST-00000003"]:not([data-content-loading])',
+    );
+  });
+
   it('normalizes incremental scale milestones', () => {
     expect(parseScaleCounts('100000, 10000,100000')).toEqual([10_000, 100_000]);
     expect(() => parseScaleCounts('10000,nope')).toThrow('Invalid --counts');
