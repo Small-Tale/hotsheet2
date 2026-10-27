@@ -140,7 +140,9 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   warning-free ESLint command with an explicit untyped Node configuration. Browser
   globals are limited to the scripts that execute Playwright page callbacks. The
   `HS2-HK6KMT` policy test checks real script inclusion and rejection of an invalid
-  synthetic script through the same configuration.
+  synthetic script through the same configuration. Shared asynchronous configuration
+  loading belongs to the scoped setup hook (HS2-RY22P6); every real input and invalid
+  source still runs its complete proof under the default per-test budget (HS2-2SPPTQ).
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command

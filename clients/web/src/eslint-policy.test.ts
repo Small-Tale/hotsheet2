@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import packageJson from '../package.json';
 
@@ -26,25 +26,32 @@ describe('web ESLint policy', () => {
     expect(profile).toContain('lastVisibleChurnSlug');
   });
 
-  const webRoot = join(import.meta.dirname, '..');
-  const eslint = new ESLint({ cwd: webRoot });
-  const scripts = readdirSync(join(webRoot, 'scripts'))
-    .filter((name) => /\.(?:mjs|mts)$/.test(name))
-    .map((name) => `scripts/${name}`);
-  // HS2-2SPPTQ: preserve every real lint input without aggregating their work into one timed case.
-  it.each([...scripts, 'eslint.config.mjs'])('HS2-2SPPTQ preserves HS2-HK6KMT lint coverage for %s', async (name) => {
-    const filePath = join(webRoot, name);
-    expect(await eslint.isPathIgnored(filePath)).toBe(false);
-    const realResults = await eslint.lintFiles([filePath]);
-    expect(realResults.map((result) => result.filePath)).toEqual([filePath]);
-    expect(realResults.every((result) => result.errorCount === 0 && result.warningCount === 0)).toBe(true);
-  });
-
-  it('HS2-2SPPTQ preserves HS2-HK6KMT rejection through the actual Node lint route', async () => {
-    const [invalid] = await eslint.lintText('const value = missingReference;\n', {
-      filePath: join(webRoot, 'scripts/hs2-hk6kmt-invalid.mjs'),
+  describe('HS2-RY22P6 shares configuration setup across actual Node lint proofs', () => {
+    const webRoot = join(import.meta.dirname, '..');
+    const eslint = new ESLint({ cwd: webRoot });
+    const scripts = readdirSync(join(webRoot, 'scripts'))
+      .filter((name) => /\.(?:mjs|mts)$/.test(name))
+      .map((name) => `scripts/${name}`);
+    beforeAll(async () => {
+      // Config/plugin loading is shared setup, not the first file's lint work (HS2-RY22P6).
+      // Keep the default hook budget and every per-input proof; no lint result is cached here.
+      await eslint.calculateConfigForFile(join(webRoot, 'eslint.config.mjs'));
     });
-    expect(invalid.messages.map((message) => message.ruleId)).toContain('no-undef');
+    // HS2-2SPPTQ: preserve every real lint input without aggregating their work into one timed case.
+    it.each([...scripts, 'eslint.config.mjs'])('HS2-2SPPTQ preserves HS2-HK6KMT lint coverage for %s', async (name) => {
+      const filePath = join(webRoot, name);
+      expect(await eslint.isPathIgnored(filePath)).toBe(false);
+      const realResults = await eslint.lintFiles([filePath]);
+      expect(realResults.map((result) => result.filePath)).toEqual([filePath]);
+      expect(realResults.every((result) => result.errorCount === 0 && result.warningCount === 0)).toBe(true);
+    });
+
+    it('HS2-2SPPTQ preserves HS2-HK6KMT rejection through the actual Node lint route', async () => {
+      const [invalid] = await eslint.lintText('const value = missingReference;\n', {
+        filePath: join(webRoot, 'scripts/hs2-hk6kmt-invalid.mjs'),
+      });
+      expect(invalid.messages.map((message) => message.ruleId)).toContain('no-undef');
+    });
   });
 
   it('HS2-6ABCVC keeps the four Kerf packages on one exact version', () => {
