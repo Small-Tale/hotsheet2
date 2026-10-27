@@ -867,7 +867,10 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
     const patch = request.postDataJSON() as Record<string, unknown>;
     patches.push(patch);
     if (patch.expected_token !== token)
-      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
     if (typeof patch.details === 'string') details = patch.details;
     token = `committed-${patches.length}`;
     return route.fulfill({ json: ticketJson() });

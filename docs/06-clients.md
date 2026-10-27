@@ -667,7 +667,10 @@ preview/download, server directory browser) are separate design work.
   silently overwrites a concurrent edit to the same field. Whole-ticket concurrency
   token failures use the same comparison: unrelated field drift is rebased and retried
   against the fresh token, up to four times, so token churn from an actively working AI
-  (lease renewals, notes) cannot roll an edit back. Linked (stacked) ticket readers use the
+  (lease renewals, notes) cannot roll an edit back. The client recognizes such a failure
+  only by the 409's typed `code: "ticket_changed"`, which every expected-token refusal
+  carries whether its message names a Markdown ticket's slug or a provider issue
+  (HS2-9S8CV1); any other 409 is shown as a failure and never retried. Linked (stacked) ticket readers use the
   same merge-and-retry path. Single-ticket edits are
   serialized per ticket: each edit bases off the previous edit's committed concurrency
   token, so a user's own rapid sequential edits (e.g. setting a priority then the

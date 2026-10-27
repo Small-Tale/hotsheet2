@@ -1,6 +1,6 @@
 import { browserRandomId } from './browser-id';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
-import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
+import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import type { PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
@@ -1193,6 +1193,8 @@ export class ApiHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The failure body's stable `code`, for callers that branch on the kind of failure (HS2-9S8CV1). */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -1257,8 +1259,10 @@ export class Api {
     try {
       response = await fetch(`${this.origin}${path}`, { ...init, headers });
       if (observed) headersAt = performance.now();
-      if (!response.ok)
-        throw new ApiHttpError(errorMessageOf(await responseJson(response)) ?? `${response.status}`, response.status);
+      if (!response.ok) {
+        const failure = await responseJson(response);
+        throw new ApiHttpError(errorMessageOf(failure) ?? `${response.status}`, response.status, errorCodeOf(failure));
+      }
       onResponse?.(response);
       return response.status === 204 ? undefined : await responseJsonBody(response);
     } finally {

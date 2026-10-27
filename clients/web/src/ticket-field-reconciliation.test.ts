@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FullTicket } from './api';
+import { ApiHttpError, type FullTicket } from './api';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit } from './feedback-prompt-edits';
 import {
   isTicketConcurrencyConflict,
@@ -9,6 +9,7 @@ import {
   reconcileActiveDraft,
   reconcileReaderNoteDraft,
   reconcileTicketPatch,
+  TICKET_CHANGED_CODE,
   ticketFieldText,
 } from './ticket-field-reconciliation';
 
@@ -232,7 +233,24 @@ describe('field-aware ticket reconciliation', () => {
   });
 
   it('recognizes only the typed concurrency failure', () => {
-    expect(isTicketConcurrencyConflict(new Error('ticket changed since it was read'))).toBe(true);
+    // HS2-9S8CV1: the real Markdown checkout message names the ticket; providers say "issue".
+    for (const message of [
+      "ticket 'HS2-ABC123' changed since it was read",
+      'ticket 01ABC changed since it was read',
+      "provider conflict for 'github:7': issue changed since it was read",
+      'ticket changed since it was read',
+    ])
+      expect(isTicketConcurrencyConflict(new ApiHttpError(message, 409, TICKET_CHANGED_CODE))).toBe(true);
+    // The text alone, another status, or another 409 never enters the retry.
+    expect(isTicketConcurrencyConflict(new ApiHttpError('ticket changed since it was read', 409))).toBe(false);
+    expect(isTicketConcurrencyConflict(new ApiHttpError('changed', 412, TICKET_CHANGED_CODE))).toBe(false);
+    expect(
+      isTicketConcurrencyConflict(
+        new ApiHttpError('durable queued edits are unavailable for this provider connection', 409),
+      ),
+    ).toBe(false);
+    expect(isTicketConcurrencyConflict(new ApiHttpError('checkout links an unhosted git source', 409))).toBe(false);
+    expect(isTicketConcurrencyConflict(new Error('ticket changed since it was read'))).toBe(false);
     expect(isTicketConcurrencyConflict(new Error('offline'))).toBe(false);
     expect(isTicketConcurrencyConflict('ticket changed since it was read')).toBe(false);
   });

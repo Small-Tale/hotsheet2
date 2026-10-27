@@ -318,6 +318,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/terminal-clipboard.spec.ts # Phone terminal copy/paste flows, denied/unavailable fallback, desktop absence (HS2-FRB545)
     tests/touch-field-font.spec.ts # Touch screens keep native text fields at 16px+ so iOS never zooms on focus; desktop stays compact (HS2-8JPRRC); walks every UX demo for editable fields under 16px (HS2-JDXSND); walks interaction-only fields of the composed app on a touch phone and tablet (HS2-R2H1BA); walks populated settings editors, the git source form, and saved-view/terminal renames (HS2-NYGR2Q) plus AI tools, non-git provider forms, and the repository remote field (HS2-ME1XBC) on a touch phone and tablet
     tests/mobile-project-fixture.ts # openDemoProject(page, ...): shared mocked one-project app fixture for mobile-layout and touch-field-font specs
+    tests/ticket-concurrency-retry.spec.ts # Real rebuilt-server stale-token 409s: typed `ticket_changed` retry, held inactive-owner retry beside a newer draft, true conflict, bounded refusals, linked reader, wide/medium/narrow/wide conflict and saved captures (HS2-9S8CV1)
     tests/shell-composition.spec.ts # AppShell/ProjectTabBar/terminal grid and drawer configured through props, not cross-component CSS (HS2-DR549A)
     src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup, live scrollback transitions, and successful refill with idempotent teardown
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
@@ -537,7 +538,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/hosting.rs         #   AppState store hosting: host_store/unhost sweep, repository watchers, instance registration, configured-store startup
       src/activity_capture.rs #  AppState::record_activity + optional deterministic activity distillation (and its tests)
       src/events.rs          #   ChangeEvent/EventLog long-poll ring + AppState::emit/changed_many_in/removed_in, IndexRepairs queue shared with watchers: retried on the next write and on a bounded watcher backoff (HS2-JD7TK0, HS2-5BAEX9)
-      src/api_error.rs       #   ApiError ({ "error": ... }) and its From conversions
+      src/api_error.rs       #   ApiError ({ "error": ..., "code"? }) and its From conversions; `ticket_changed` code on stale expected tokens (HS2-9S8CV1)
       src/dto.rs             #   request/response DTOs
       src/watcher.rs         #   filesystem + repository watcher (WatchHandle, handle_path_change)
       src/worklist_refresh.rs #  WorklistRefresher: one debounced, coalescing background worker for every checkout worklist regeneration (writes, watcher, project open), off the request path (HS2-Z99TJN)

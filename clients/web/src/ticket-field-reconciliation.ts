@@ -1,4 +1,4 @@
-import type { FullTicket } from './api';
+import { ApiHttpError, type FullTicket } from './api';
 import { isFeedbackPromptEdit } from './feedback-prompt-edits';
 import { mergeSet, mergeText } from './text-merge';
 import type { TicketPatch } from './ticket-operations';
@@ -182,6 +182,14 @@ export function ticketFieldLabel(field: string): string {
   return field === 'note' ? 'Note' : (labels[field] ?? field);
 }
 
+/** The server's `code` on every stale `expected_token` 409, whatever ticket its message names (HS2-9S8CV1). */
+export const TICKET_CHANGED_CODE = 'ticket_changed';
+
+/**
+ * A stale `expected_token`, the one failure the editors rebase and retry (HS2-A4XCXE). Recognized by the
+ * typed `code`, never the message: a Markdown checkout names the ticket inside it and provider adapters
+ * word it as an issue (HS2-9S8CV1). Every other 409 is a refusal.
+ */
 export function isTicketConcurrencyConflict(reason: unknown): boolean {
-  return reason instanceof Error && reason.message.toLocaleLowerCase().includes('ticket changed since it was read');
+  return reason instanceof ApiHttpError && reason.status === 409 && reason.code === TICKET_CHANGED_CODE;
 }

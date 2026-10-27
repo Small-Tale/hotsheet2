@@ -34,7 +34,15 @@ impl ApiError {
     pub(crate) fn not_found(id: &str) -> Self {
         Self::new(StatusCode::NOT_FOUND, format!("no ticket matching '{id}'"))
     }
+    /// A stale `expected_token`: 409 with [`TICKET_CHANGED_CODE`], the one conflict a client may
+    /// resolve by re-reading and retrying (HS2-9S8CV1). The message stays human-readable.
+    pub(crate) fn ticket_changed(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, message).with_code(TICKET_CHANGED_CODE)
+    }
 }
+
+/// The `code` of every expected-token 409, whatever its message names (HS2-9S8CV1).
+pub(crate) const TICKET_CHANGED_CODE: &str = "ticket_changed";
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {

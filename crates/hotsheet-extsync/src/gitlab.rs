@@ -709,7 +709,7 @@ impl TicketProvider for GitLabProvider {
         {
             return Err(ProviderError::Conflict {
                 ticket: format!("{}:{native_id}", self.config.connection_id),
-                message: "issue changed since it was read".into(),
+                message: hotsheet_ticketing::provider::ISSUE_CHANGED_SINCE_READ.into(),
             });
         }
         timing.token_check = token_started.elapsed();

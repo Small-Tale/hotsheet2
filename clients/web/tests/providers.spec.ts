@@ -18151,7 +18151,10 @@ test('merges unrelated external ticket fields and offers an editable merge for t
     const patch = request.postDataJSON() as Record<string, unknown>;
     patches.push(patch);
     if (patch.expected_token !== liveFull.concurrency_token)
-      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
     liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
     liveRows = liveRows.map((item) =>
       item.id === '01' ? { ...item, ...patch, updated_at: '2026-09-02T03:00:00Z' } : item,
@@ -18263,10 +18266,16 @@ test('merges a concurrent remote edit and rides out token churn without losing t
     if (churn > 0) {
       churn -= 1;
       liveFull = { ...liveFull, concurrency_token: `churn-${churn}` };
-      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
     }
     if (patch.expected_token !== liveFull.concurrency_token)
-      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
     liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
@@ -18325,7 +18334,10 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
     const patch = request.postDataJSON() as Record<string, unknown>;
     patches.push(patch);
     if (patch.expected_token !== liveFull.concurrency_token)
-      return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
     liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });

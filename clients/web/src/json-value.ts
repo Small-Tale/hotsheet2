@@ -41,6 +41,11 @@ export function errorMessageOf(body: unknown): string | undefined {
   return isRecord(body) && typeof body.error === 'string' && body.error ? body.error : undefined;
 }
 
+/** The stable machine-readable `code` of a failure body, or undefined (HS2-9S8CV1). */
+export function errorCodeOf(body: unknown): string | undefined {
+  return isRecord(body) && typeof body.code === 'string' && body.code ? body.code : undefined;
+}
+
 /** Every string entry of a JSON array, or an empty list for any other value. */
 export function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];

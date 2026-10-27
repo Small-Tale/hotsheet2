@@ -735,6 +735,62 @@ pub(crate) async fn copy_provider_attachment(
     Ok((StatusCode::CREATED, Json(copied)))
 }
 
-pub(crate) fn provider_transfer_error(error: impl std::fmt::Display) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, error.to_string())
+pub(crate) fn provider_transfer_error(error: impl std::fmt::Display + 'static) -> ApiError {
+    let stale = (&error as &dyn std::any::Any)
+        .downcast_ref::<hotsheet_ticketing::ProviderError>()
+        .is_some_and(hotsheet_ticketing::ProviderError::is_changed_since_read);
+    if stale {
+        ApiError::ticket_changed(error.to_string())
+    } else {
+        ApiError::new(StatusCode::CONFLICT, error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api_error::TICKET_CHANGED_CODE;
+    use axum::response::IntoResponse;
+    use hotsheet_ticketing::ProviderError;
+    use hotsheet_ticketing::provider::{ISSUE_CHANGED_SINCE_READ, TICKET_CHANGED_SINCE_READ};
+
+    async fn rendered(error: ApiError) -> (StatusCode, serde_json::Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn only_stale_provider_tokens_carry_the_ticket_changed_code() {
+        // HS2-9S8CV1: every provider's expected-token wording gets the typed code; other
+        // conflicts, and non-provider errors that happen to share the text, stay code-free.
+        for (ticket, message) in [
+            ("01M5", TICKET_CHANGED_SINCE_READ),
+            ("github:7", ISSUE_CHANGED_SINCE_READ),
+        ] {
+            let (status, body) = rendered(provider_transfer_error(ProviderError::Conflict {
+                ticket: ticket.into(),
+                message: message.into(),
+            }))
+            .await;
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert_eq!(body["code"], TICKET_CHANGED_CODE);
+            assert_eq!(
+                body["error"],
+                format!("provider conflict for '{ticket}': {message}")
+            );
+        }
+        let (status, body) = rendered(provider_transfer_error(ProviderError::Conflict {
+            ticket: "github:7".into(),
+            message: "attachment changed during crop upload".into(),
+        }))
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert!(body.get("code").is_none(), "{body}");
+        let (_, text) = rendered(provider_transfer_error(TICKET_CHANGED_SINCE_READ)).await;
+        assert!(text.get("code").is_none(), "{text}");
+    }
 }

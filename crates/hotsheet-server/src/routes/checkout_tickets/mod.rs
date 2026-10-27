@@ -639,10 +639,10 @@ pub(crate) async fn batch_update_checkout_tickets(
             .as_deref()
             .is_some_and(|token| token != ticket.updated_at.as_str())
         {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                format!("ticket {} changed since it was read", item.id),
-            ));
+            return Err(ApiError::ticket_changed(format!(
+                "ticket {} changed since it was read",
+                item.id
+            )));
         }
         resolved.push((entry, ticket.id.to_string(), item));
     }

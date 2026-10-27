@@ -99,7 +99,10 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
       // Token is checked/advanced on arrival (like the real server commit) so a stale concurrent write conflicts.
       if (body.expected_token && body.expected_token !== token) {
         conflicts += 1;
-        return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+        return route.fulfill({
+          status: 409,
+          json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+        });
       }
       if (body.priority !== undefined) priority = body.priority;
       tokenSeq += 1;
@@ -215,7 +218,10 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
     if (/\/tickets\/01$/.test(path) && method === 'PATCH') {
       const body = request.postDataJSON() as { expected_token?: string };
       if (body.expected_token !== 'T1')
-        return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+        return route.fulfill({
+          status: 409,
+          json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+        });
       return route.fulfill({ json: remote() });
     }
     // First detail GET (selection) sees T0/default; later GETs (the conflict-path remote fetch) see T1/urgent.
@@ -334,7 +340,10 @@ test('typing never writes to the server and one blur saves the whole edit withou
       const body = request.postDataJSON() as { details?: string; expected_token?: string };
       if (body.expected_token && body.expected_token !== token) {
         conflicts += 1;
-        return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+        return route.fulfill({
+          status: 409,
+          json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+        });
       }
       if (body.details !== undefined) {
         details = body.details;
@@ -605,7 +614,10 @@ for (const keepTyping of [true, false])
         // The first save is held open so the attachment refresh can read the ticket before it commits.
         if (patches.length === 0) await new Promise<void>((resolve) => (releasePatch = resolve));
         if (body.expected_token && body.expected_token !== token)
-          return route.fulfill({ status: 409, json: { error: 'ticket changed since it was read' } });
+          return route.fulfill({
+            status: 409,
+            json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+          });
         if (body.details !== undefined) {
           details = body.details;
           patches.push(body.details);

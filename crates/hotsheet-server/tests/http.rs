@@ -10885,6 +10885,254 @@ async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_o
 }
 
 #[tokio::test]
+async fn expected_token_conflicts_carry_the_ticket_changed_code_on_every_write_route() {
+    // HS2-9S8CV1: the real Markdown checkout 409 names the ticket in its message, so clients
+    // branch on the stable `code`, never the text. Any other 409 stays code-free.
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"stale","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/stale/tickets",
+                Some(r#"{"title":"Stale token"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let qualified_id = created["qualified_id"].as_str().unwrap().to_owned();
+    let slug = created["slug"].as_str().unwrap().to_owned();
+    let native_id = created["id"].as_str().unwrap().to_owned();
+    let connection = qualified_id.split_once(':').unwrap().0.to_owned();
+    let stale = r#"{"details":"mine","expected_token":"stale"}"#;
+    let refusals = [
+        ("PATCH", format!("/checkouts/stale/tickets/{qualified_id}"), stale.to_owned()),
+        ("PATCH", format!("/tickets/{native_id}"), stale.to_owned()),
+        (
+            "POST",
+            "/checkouts/stale/batch".to_owned(),
+            serde_json::json!({"updates":[{"id":qualified_id,"category":"bug","expected_token":"stale"}]})
+                .to_string(),
+        ),
+        ("PATCH", format!("/providers/{connection}/tickets/{native_id}"), stale.to_owned()),
+    ];
+    for (method, path, body) in refusals {
+        let response = app
+            .clone()
+            .oneshot(authed(method, &path, Some(&body)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT, "{method} {path}");
+        let error = body_json(response).await;
+        assert_eq!(error["code"], "ticket_changed", "{method} {path}: {error}");
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("changed since it was read"),
+            "{error}"
+        );
+    }
+    let single = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/stale/tickets/{qualified_id}"),
+                Some(stale),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    // The actual Markdown shape that defeated the old contiguous-text match.
+    assert_eq!(
+        single["error"],
+        format!("ticket '{slug}' changed since it was read")
+    );
+    let unchanged = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/stale/tickets/{qualified_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(unchanged["details"], "", "a stale write never applies");
+    let fresh = serde_json::json!({
+        "details": "mine",
+        "expected_token": unchanged["concurrency_token"],
+    });
+    let saved = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/stale/tickets/{qualified_id}"),
+            Some(&fresh.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(body_json(saved).await["details"], "mine");
+
+    let unrelated = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/providers/{connection}/tickets/queued"),
+            Some(r#"{"operations":[]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unrelated.status(), StatusCode::CONFLICT);
+    assert!(body_json(unrelated).await.get("code").is_none());
+}
+
+#[tokio::test]
+async fn ai_feedback_stale_tokens_carry_ticket_changed_and_other_refusals_stay_distinct() {
+    // HS2-9S8CV1: the AI-feedback branch has its own expected-token check on both the checkout
+    // (`do_rate_ai_feedback`) and provider (`rate_ai_content`) routes. A stale token is the typed,
+    // retryable refusal and never applies; a malformed target, a missing rater, or withdrawing a
+    // rating that does not exist stay 400s without the code.
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"rate","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/rate/tickets",
+                Some(r#"{"title":"Rated ticket"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let qualified_id = created["qualified_id"].as_str().unwrap().to_owned();
+    let native_id = created["id"].as_str().unwrap().to_owned();
+    let connection = qualified_id.split_once(':').unwrap().0.to_owned();
+    let routes = [
+        format!("/checkouts/rate/tickets/{qualified_id}"),
+        format!("/providers/{connection}/tickets/{native_id}"),
+    ];
+    let rate = |target: &str, rating: serde_json::Value, token: &serde_json::Value| {
+        serde_json::json!({
+            "ai_feedback": {"target": target, "rating": rating},
+            "actor": {"role": "human", "id": "rater-a"},
+            "expected_token": token,
+        })
+        .to_string()
+    };
+    let current = || async {
+        body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/rate/tickets/{qualified_id}"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await
+    };
+    let stale = serde_json::json!("stale");
+    for (index, route) in routes.iter().enumerate() {
+        let target = format!("activity:run-{index}");
+        let refused = app
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                route,
+                Some(&rate(&target, "helpful".into(), &stale)),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::CONFLICT, "{route}");
+        let error = body_json(refused).await;
+        assert_eq!(error["code"], "ticket_changed", "{route}: {error}");
+        let before = current().await;
+        assert!(
+            before["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|note| note["ai_feedback"]["target"] != target.as_str()),
+            "a stale rating never applies on {route}"
+        );
+
+        let token = before["concurrency_token"].clone();
+        let rated = app
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                route,
+                Some(&rate(&target, "helpful".into(), &token)),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rated.status(), StatusCode::OK, "{route}");
+        let rated = body_json(rated).await;
+        assert!(
+            rated["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| note["ai_feedback"]["target"] == target.as_str()
+                    && note["ai_feedback"]["rating"] == "helpful"),
+            "{rated}"
+        );
+
+        let token = current().await["concurrency_token"].clone();
+        let distinct = [
+            rate("activity:", "helpful".into(), &token),
+            rate("note:has space", "helpful".into(), &token),
+            rate("activity:never-rated", serde_json::Value::Null, &token),
+            serde_json::json!({
+                "ai_feedback": {"target": "activity:no-rater", "rating": "helpful"},
+                "expected_token": token,
+            })
+            .to_string(),
+        ];
+        for body in distinct {
+            let response = app
+                .clone()
+                .oneshot(authed("PATCH", route, Some(&body)))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{route} {body}");
+            let error = body_json(response).await;
+            assert!(error.get("code").is_none(), "{route} {body}: {error}");
+        }
+        assert_eq!(
+            current().await["concurrency_token"],
+            token,
+            "refused ratings never write on {route}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn checkout_batch_queues_one_path_scoped_commit_for_its_ticket_writes() {
     let (store, state) = state();
     let git = |args: &[&str]| {

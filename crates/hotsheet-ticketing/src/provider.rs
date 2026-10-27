@@ -937,6 +937,23 @@ pub enum ProviderError {
     InvalidNativeId { provider: &'static str, id: String },
 }
 
+/// The `Conflict` message for a ticket whose `expected_token` no longer matches (HS2-9S8CV1).
+pub const TICKET_CHANGED_SINCE_READ: &str = "ticket changed since it was read";
+/// The same expected-token mismatch, worded for a remote provider's issue (HS2-9S8CV1).
+pub const ISSUE_CHANGED_SINCE_READ: &str = "issue changed since it was read";
+
+impl ProviderError {
+    /// A stale `expected_token`, which a client may resolve by re-reading and retrying; every
+    /// other conflict is a refusal (HS2-9S8CV1).
+    pub fn is_changed_since_read(&self) -> bool {
+        matches!(
+            self,
+            Self::Conflict { message, .. }
+                if message == TICKET_CHANGED_SINCE_READ || message == ISSUE_CHANGED_SINCE_READ
+        )
+    }
+}
+
 /// Synchronous domain boundary; async network adapters are wrapped at the host edge.
 pub trait TicketProvider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
@@ -1423,7 +1440,7 @@ impl TicketProvider for GitProvider {
         if expected_token.is_some_and(|token| token != ticket.updated_at.as_str()) {
             return Err(ProviderError::Conflict {
                 ticket: ticket.slug,
-                message: "ticket changed since it was read".into(),
+                message: TICKET_CHANGED_SINCE_READ.into(),
             });
         }
         let updated = ops::rate_ai_content(
@@ -1527,7 +1544,7 @@ impl TicketProvider for GitProvider {
         {
             return Err(ProviderError::Conflict {
                 ticket: native_id.into(),
-                message: "ticket changed since it was read".into(),
+                message: TICKET_CHANGED_SINCE_READ.into(),
             });
         }
         let blocked_by = patch
@@ -1673,7 +1690,7 @@ impl TicketProvider for GitProvider {
             {
                 return Err(ProviderError::Conflict {
                     ticket: native_id.into(),
-                    message: "ticket changed since it was read".into(),
+                    message: TICKET_CHANGED_SINCE_READ.into(),
                 });
             }
             if report.evidence.iter().any(|item| {
@@ -2674,6 +2691,24 @@ mod tests {
             Ok((rows[..1].to_vec(), Some("page:0".into())))
         });
         assert!(matches!(stuck, Err(ProviderError::Conflict { .. })));
+    }
+
+    #[test]
+    fn only_expected_token_conflicts_are_changed_since_read() {
+        // HS2-9S8CV1: clients retry these and refuse every other conflict.
+        let conflict = |message: &str| ProviderError::Conflict {
+            ticket: "HS2-1".into(),
+            message: message.into(),
+        };
+        assert!(conflict(TICKET_CHANGED_SINCE_READ).is_changed_since_read());
+        assert!(conflict(ISSUE_CHANGED_SINCE_READ).is_changed_since_read());
+        assert!(!conflict("attachment changed during crop upload").is_changed_since_read());
+        assert!(!conflict("response_to must name a feedback note").is_changed_since_read());
+        let not_found = ProviderError::NotFound {
+            connection_id: "git".into(),
+            native_id: TICKET_CHANGED_SINCE_READ.into(),
+        };
+        assert!(!not_found.is_changed_since_read());
     }
 
     #[test]

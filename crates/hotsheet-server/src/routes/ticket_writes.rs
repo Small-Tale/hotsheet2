@@ -134,10 +134,10 @@ pub(crate) fn do_update_with_ticket(
         .as_deref()
         .is_some_and(|token| token != ticket.updated_at.as_str())
     {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("ticket '{}' changed since it was read", ticket.slug),
-        ));
+        return Err(ApiError::ticket_changed(format!(
+            "ticket '{}' changed since it was read",
+            ticket.slug
+        )));
     }
     if req.note_id.is_some() {
         ops::validate_note_kind_edit(req.note_kind)?;

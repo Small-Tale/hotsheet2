@@ -153,9 +153,8 @@ pub(crate) fn do_rate_ai_feedback(
     let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     if expected_token.is_some_and(|expected| expected != ticket.updated_at.as_str()) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "ticket changed since it was read",
+        return Err(ApiError::ticket_changed(
+            hotsheet_ticketing::provider::TICKET_CHANGED_SINCE_READ,
         ));
     }
     let updated = ops::rate_ai_content(

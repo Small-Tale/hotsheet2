@@ -10762,6 +10762,10 @@ components:
           type: string
         code:
           type: string
+          description: >-
+            Stable machine-readable failure kind. Every 409 for a stale `expected_token` carries
+            `ticket_changed`, whatever ticket or issue its message names; clients branch on it, not on
+            the message (HS2-9S8CV1).
       additionalProperties: false
     CreateTicket:
       type: object
