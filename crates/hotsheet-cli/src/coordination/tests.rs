@@ -2,8 +2,8 @@ use super::*;
 use hotsheet_model::{Timestamp, Ulid};
 use hotsheet_ticketing::{NewTicket, StoreMetadata};
 
-const NOW: i64 = 1_800_000_000;
-const SHA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+pub(super) const NOW: i64 = 1_800_000_000;
+pub(super) const SHA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 pub(super) fn fixture() -> (tempfile::TempDir, Coordinator) {
     let root = tempfile::tempdir().unwrap();
@@ -44,6 +44,7 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         handoff: None,
         return_route: ReturnRoute::HumanRelay,
         recovery_note: None,
+        scope: Vec::new(),
     }
 }
 

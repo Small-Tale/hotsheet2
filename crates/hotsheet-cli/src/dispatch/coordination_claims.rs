@@ -31,6 +31,22 @@ pub(super) fn assignable(
     Ok(())
 }
 
+/// A dispatcher reserves a ticket only once every `blocked_by` dependency is closed
+/// (HS2-TWZW7X). A dependency missing from this source is unknown, not satisfied.
+pub(super) fn dependencies_closed(ticket: &Ticket, tickets: &[Ticket]) -> Result<()> {
+    for dependency in &ticket.blocked_by {
+        let closed = tickets
+            .iter()
+            .find(|t| t.id == *dependency)
+            .is_some_and(|t| !ops::is_open(t));
+        ensure!(
+            closed,
+            "ticket depends on {dependency}, which is open or not in this source"
+        );
+    }
+    Ok(())
+}
+
 pub(super) fn accepted(
     ticket: &Ticket,
     tickets: &[Ticket],

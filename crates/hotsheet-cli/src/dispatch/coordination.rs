@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
-    Assignment, Coordinator, HandoffEvidence, Phase, ReturnRoute, Role, WaitRequest,
+    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, Phase, ReservationCheck,
+    ReturnRoute, Role, WaitRequest,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -69,7 +70,12 @@ enum CoordinationCmd {
         #[arg(long)]
         after: Option<String>,
     },
+    /// Report the pool schemas, roles and assignment authorities this executable supports,
+    /// without opening (and so without migrating) the pool.
+    Capabilities,
     /// Reserve an exact eligible ticket for an available worker; inspect scope/claims first.
+    /// Run by the role holding assignment authority: the integrator in legacy mode, otherwise
+    /// the dispatcher (HS2-TWZW7X).
     Assign {
         #[command(flatten)]
         integrator: Identity,
@@ -94,6 +100,35 @@ enum CoordinationCmd {
         /// Regular note on this ticket with exact addressed route evidence.
         #[arg(long, requires = "return_route")]
         route_evidence_note: Option<String>,
+        /// Repository-relative path this assignment may change; repeat for each path.
+        /// Required with dispatcher authority, which refuses overlapping scopes.
+        #[arg(long)]
+        scope: Vec<String>,
+    },
+    /// Publish the integrator's safe shipping base, blocked tickets and in-flight path scopes,
+    /// which the dispatcher reads before each reservation (schema four).
+    Publish {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        base: String,
+        /// Qualified `connection:native` ticket the dispatcher must not assign; repeatable.
+        #[arg(long)]
+        blocked: Vec<String>,
+        /// Repository-relative path scope held by integration or review; repeatable.
+        #[arg(long)]
+        in_flight: Vec<String>,
+    },
+    /// Switch assignment authority. Only the exact live integrator may run it; enabling the
+    /// dispatcher persists schema four, which fences every schema-three executable.
+    Authority {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long, value_enum)]
+        mode: Authority,
+        /// Confirms every participant was stopped and switched to a schema-four executable.
+        #[arg(long)]
+        all_participants_upgraded: bool,
     },
     /// Record exact claim acceptance, verified durable handoff/release, or a blocked report.
     Worker {
@@ -162,6 +197,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let Cmd::Coordination(args) = cmd else {
         misrouted("coordination")
     };
+    if matches!(args.command, CoordinationCmd::Capabilities) {
+        // Opening even for `status` may migrate an older pool; this preflight never opens it.
+        println!("{}", serde_json::to_string_pretty(&CAPABILITIES)?);
+        return Ok(());
+    }
     let coordinator = Coordinator::open(&args.project, &ctx.path)?;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     match args.command {
@@ -171,6 +211,32 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             }
         }
         CoordinationCmd::Status => {}
+        CoordinationCmd::Capabilities => unreachable!("handled before opening the pool"),
+        CoordinationCmd::Publish {
+            integrator: i,
+            base,
+            blocked,
+            in_flight,
+        } => {
+            let blocked = blocked
+                .iter()
+                .map(|raw| {
+                    let (connection_id, native_id) = raw.split_once(':').ok_or_else(|| {
+                        anyhow::anyhow!("blocked ticket must be connection:native, got {raw}")
+                    })?;
+                    Ok(TicketRef {
+                        connection_id: connection_id.into(),
+                        native_id: native_id.into(),
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            coordinator.publish(&i.id, &i.session, now, &base, blocked, &in_flight)?;
+        }
+        CoordinationCmd::Authority {
+            integrator: i,
+            mode,
+            all_participants_upgraded,
+        } => coordinator.set_authority(&i.id, &i.session, now, mode, all_participants_upgraded)?,
         CoordinationCmd::Register(r) => {
             coordinator.register(
                 r.role,
@@ -207,6 +273,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             base,
             return_route: route_override,
             route_evidence_note,
+            scope,
         } => {
             let state = coordinator.state()?;
             anyhow::ensure!(
@@ -222,22 +289,50 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 coordinator.unsupported_source(&connection)?
             );
             let existing = state.assignments.get(&operation);
-            let ticket = store.read_ticket(&native_id.parse()?)?;
-            if existing.is_none() {
-                let tickets = store.list_tickets()?;
-                claims::assignable(&ticket, &tickets, &worker, time::OffsetDateTime::now_utc())?;
-            }
-            if let (Some(route), Some(note_id)) = (&route_override, &route_evidence_note) {
-                verify_addressed_route(
-                    &ticket,
-                    note_id,
-                    &operation,
-                    &worker,
-                    &worker_session,
-                    route,
-                    &i.id,
-                )?;
-            }
+            let ticket_id: hotsheet_model::Ulid = native_id.parse()?;
+            let (author, checked_worker, checked_generation, checked_operation) = (
+                i.id.clone(),
+                worker.clone(),
+                worker_session.clone(),
+                operation.clone(),
+            );
+            let evidence = route_override.clone().zip(route_evidence_note.clone());
+            // HS2-TWZW7X: eligibility, dependencies and route evidence are checked at the
+            // serialized reservation boundary, after the current authority is verified, from
+            // fresh ticket reads. The evidence author is therefore the active assignment
+            // authority: the dispatcher with dispatcher authority, otherwise the integrator.
+            let check: ReservationCheck<'_> = Box::new(move |current, replayed| {
+                let ticket = store.read_ticket(&ticket_id)?;
+                if replayed.is_none() {
+                    let tickets = store.list_tickets()?;
+                    claims::assignable(
+                        &ticket,
+                        &tickets,
+                        &checked_worker,
+                        time::OffsetDateTime::now_utc(),
+                    )?;
+                    if current.authority == Authority::Dispatcher {
+                        claims::dependencies_closed(&ticket, &tickets)?;
+                    }
+                }
+                if let Some((route, note_id)) = &evidence {
+                    // New operations require evidence authored by the active assignment
+                    // authority. A replay only acknowledges the durable reservation: its
+                    // original evidence still has to address this exact operation, worker,
+                    // generation and route, and the reservation itself must be identical,
+                    // but it need not be re-authored after an authority or identity change.
+                    verify_addressed_route(
+                        &ticket,
+                        note_id,
+                        &checked_operation,
+                        &checked_worker,
+                        &checked_generation,
+                        route,
+                        replayed.is_none().then_some(author.as_str()),
+                    )?;
+                }
+                Ok(())
+            });
             let default_route = state
                 .integrator
                 .as_ref()
@@ -251,10 +346,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     .map(|assignment| assignment.return_route.clone())
                     .unwrap_or(default_route)
             });
-            coordinator.assign(
+            coordinator.assign_verified(
                 &i.id,
                 &i.session,
-                now,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
                 Assignment {
                     id: operation,
                     worker,
@@ -270,7 +365,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     handoff: None,
                     return_route,
                     recovery_note: None,
+                    scope,
                 },
+                check,
             )?;
         }
         CoordinationCmd::Worker {
@@ -500,7 +597,7 @@ fn verify_addressed_route(
     worker: &str,
     generation: &str,
     route: &ReturnRoute,
-    integrator: &str,
+    author: Option<&str>,
 ) -> Result<()> {
     let id = hotsheet_model::Ulid::from_string(note_id)?;
     let note = ticket
@@ -509,10 +606,15 @@ fn verify_addressed_route(
         .find(|note| note.id == id)
         .ok_or_else(|| anyhow::anyhow!("route evidence note is absent from this exact ticket"))?;
     anyhow::ensure!(
-        note.kind == hotsheet_model::NoteKind::Regular
-            && note.actor.as_ref().and_then(|actor| actor.id.as_deref()) == Some(integrator),
-        "route evidence must be a regular note authored by the exact integrator"
+        note.kind == hotsheet_model::NoteKind::Regular,
+        "route evidence must be a regular note"
     );
+    if let Some(author) = author {
+        anyhow::ensure!(
+            note.actor.as_ref().and_then(|actor| actor.id.as_deref()) == Some(author),
+            "route evidence must be a regular note authored by the exact active assignment authority"
+        );
+    }
     let body = note
         .text
         .strip_prefix("## Assignment return route\n")

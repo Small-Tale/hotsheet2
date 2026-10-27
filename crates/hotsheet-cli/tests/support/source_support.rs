@@ -169,6 +169,7 @@ fn hs2_fg7zmf_preserved_foreign_records_cannot_replay_accept_handoff_recover_ver
             handoff: Some(HandoffEvidence::Code { commit: sha.into() }),
             return_route: ReturnRoute::HumanRelay,
             recovery_note: None,
+            scope: Vec::new(),
         },
     );
     let path = f.project.join(".git/hotsheet-coordination/state.json");

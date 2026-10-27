@@ -1,6 +1,9 @@
 //! Durable, same-project local mailboxes and event waits (HS2-76VMYG).
 //! Assignment is a reservation, not a ticket claim or permission to integrate.
 
+mod authority;
+#[cfg(test)]
+mod authority_tests;
 pub mod contract;
 #[cfg(test)]
 mod findings_review_return_tests;
@@ -23,8 +26,10 @@ use anyhow::{Result, ensure};
 use hotsheet_ticketing::{FileLock, FsStore, TicketRef, checkouts, git_connection_id, ops};
 use sha2::{Digest, Sha256};
 
+pub use authority::{CAPABILITIES, Capabilities};
 pub use contract::{
-    Assignment, HandoffEvidence, Phase, ReturnRoute, Role, Session, Snapshot, State, WaitRequest,
+    Assignment, Authority, HandoffEvidence, IntegrationReport, Phase, ReturnRoute, Role, Session,
+    Snapshot, State, WaitRequest,
 };
 
 pub struct Coordinator {
@@ -32,7 +37,19 @@ pub struct Coordinator {
     pub(crate) source: PathBuf,
     project_id: String,
     source_id: String,
+    /// Deterministic interleaving point: runs once after a waiting dispatcher observes
+    /// dispatcher authority and before its atomic registration (HS2-TWZW7X).
+    #[cfg(test)]
+    pub(crate) before_dispatcher_register: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// Readiness signal: runs once a dispatcher wait is subscribed and waiting unregistered,
+    /// so tests never infer that state from elapsed time (HS2-TWZW7X).
+    #[cfg(test)]
+    pub(crate) waiting_unregistered: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
+
+/// Fresh reservation checks run under the ticket transaction and state lock, after the
+/// current assignment authority is verified: the state and any replayed operation.
+pub type ReservationCheck<'a> = Box<dyn FnOnce(&State, Option<&Assignment>) -> Result<()> + 'a>;
 
 impl Coordinator {
     /// Idempotent local setup. The directory is under the shipping checkout's private
@@ -63,6 +80,10 @@ impl Coordinator {
                 "{:x}",
                 Sha256::digest(source.canonicalize()?.to_string_lossy().as_bytes())
             ),
+            #[cfg(test)]
+            before_dispatcher_register: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            waiting_unregistered: std::sync::Mutex::new(None),
         };
         this.change(|_| Ok(()))?;
         Ok(this)
@@ -84,8 +105,10 @@ impl Coordinator {
             }
             Err(error) => return Err(error.into()),
         };
+        // HS2-TWZW7X: schema four is read and written only once the live integrator has
+        // explicitly enabled dispatcher authority; anything newer is refused.
         ensure!(
-            matches!(state.version, 1..=3) && state.project_id == self.project_id,
+            matches!(state.version, 1..=4) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -100,12 +123,14 @@ impl Coordinator {
         }
         // HS2-AEBJYN: schema-two mutators do not fence returned findings from Done.
         // Upgrade before exposing any state so those older mutators refuse this pool.
-        state.version = 3;
+        // A schema-four pool is never lowered (HS2-TWZW7X).
+        state.version = state.version.max(3);
         ensure!(
             state.source_id == self.source_id,
             "coordination pool is bound to another source; use the same explicit -C source as the integrator"
         );
         let result = update(&mut state)?;
+        Self::schema_fence(&state)?;
         if state != before || !path.exists() {
             state.revision += 1;
             let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
@@ -130,6 +155,38 @@ impl Coordinator {
         lease: i64,
         return_route: ReturnRoute,
     ) -> Result<()> {
+        Self::valid_registration(id, generation, lease)?;
+        self.change(|state| {
+            if role == Role::Dispatcher {
+                Self::require_dispatcher_authority(state)?;
+            }
+            Self::register_in(state, role, id, generation, now, lease, return_route)
+        })
+    }
+
+    /// Atomically register unless this is a dispatcher without dispatcher authority, which
+    /// returns `false` without changing state. Duplicate and stale-generation conflicts
+    /// still fail (HS2-TWZW7X).
+    pub fn try_register(
+        &self,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+    ) -> Result<bool> {
+        Self::valid_registration(id, generation, lease)?;
+        self.change(|state| {
+            if role == Role::Dispatcher && Self::require_dispatcher_authority(state).is_err() {
+                return Ok(false);
+            }
+            Self::register_in(state, role, id, generation, now, lease, return_route)?;
+            Ok(true)
+        })
+    }
+
+    fn valid_registration(id: &str, generation: &str, lease: i64) -> Result<()> {
         ensure!(
             !id.trim().is_empty() && id.len() <= 256,
             "invalid session id"
@@ -142,45 +199,57 @@ impl Coordinator {
             (10..=3600).contains(&lease),
             "availability lease must be 10..3600 seconds"
         );
-        self.change(|state| {
-            if role == Role::Worker
-                && let Some(a) = state.active_assignment(id)
-            {
+        Ok(())
+    }
+
+    fn register_in(
+        state: &mut State,
+        role: Role,
+        id: &str,
+        generation: &str,
+        now: i64,
+        lease: i64,
+        return_route: ReturnRoute,
+    ) -> Result<()> {
+        if role == Role::Worker
+            && let Some(a) = state.active_assignment(id)
+        {
+            ensure!(
+                a.generation == generation,
+                "stale assignment requires explicit recovery; do not overwrite its worktree"
+            );
+        }
+        let previous = match role {
+            Role::Integrator => state.integrator.as_ref(),
+            Role::Dispatcher => state.dispatcher.as_ref(),
+            Role::Worker => state.workers.get(id),
+        };
+        if let Some(previous) = previous {
+            ensure!(
+                previous.id == id && previous.generation == generation || !previous.live(now),
+                "another live session holds this role/worker identity"
+            );
+            if role == Role::Worker && previous.generation != generation {
                 ensure!(
-                    a.generation == generation,
+                    state.active_assignment(id).is_none(),
                     "stale assignment requires explicit recovery; do not overwrite its worktree"
                 );
             }
-            let previous = match role {
-                Role::Integrator => state.integrator.as_ref(),
-                Role::Worker => state.workers.get(id),
-            };
-            if let Some(previous) = previous {
-                ensure!(
-                    previous.id == id && previous.generation == generation || !previous.live(now),
-                    "another live session holds this role/worker identity"
-                );
-                if role == Role::Worker && previous.generation != generation {
-                    ensure!(
-                        state.active_assignment(id).is_none(),
-                        "stale assignment requires explicit recovery; do not overwrite its worktree"
-                    );
-                }
+        }
+        let session = Session {
+            id: id.to_string(),
+            generation: generation.to_string(),
+            expires_at: now + lease,
+            return_route,
+        };
+        match role {
+            Role::Integrator => state.integrator = Some(session),
+            Role::Dispatcher => state.dispatcher = Some(session),
+            Role::Worker => {
+                state.workers.insert(id.to_string(), session);
             }
-            let session = Session {
-                id: id.to_string(),
-                generation: generation.to_string(),
-                expires_at: now + lease,
-                return_route,
-            };
-            match role {
-                Role::Integrator => state.integrator = Some(session),
-                Role::Worker => {
-                    state.workers.insert(id.to_string(), session);
-                }
-            }
-            Ok(())
-        })
+        }
+        Ok(())
     }
 
     fn integrator(state: &State, id: &str, generation: &str, now: i64) -> Result<()> {
@@ -194,12 +263,39 @@ impl Coordinator {
         Ok(())
     }
 
+    /// Reserve an exact assignment as the role holding assignment authority: the
+    /// integrator in legacy mode, otherwise the dispatcher (HS2-TWZW7X).
     pub fn assign(
         &self,
-        integrator: &str,
+        authority: &str,
         generation: &str,
         now: i64,
         assignment: Assignment,
+    ) -> Result<Assignment> {
+        self.assign_verified(
+            authority,
+            generation,
+            &|| now,
+            assignment,
+            Box::new(|_, _| Ok(())),
+        )
+    }
+
+    /// Reserve with `check` evaluated at the serialized reservation boundary: under the
+    /// selected source's ticket transaction, then the state lock (the order review returns
+    /// use), after the current authority is verified. A concurrent authority switch,
+    /// dependency reopen, or claim cannot slip between the checks and the reservation.
+    ///
+    /// `clock` is sampled inside that boundary and again after ticket validation, before the
+    /// final authority and worker availability checks. Neither lock contention nor validation
+    /// that outlasts a session can authorize a reservation or replay (HS2-TWZW7X).
+    pub fn assign_verified(
+        &self,
+        authority: &str,
+        generation: &str,
+        clock: &dyn Fn() -> i64,
+        assignment: Assignment,
+        check: ReservationCheck<'_>,
     ) -> Result<Assignment> {
         ensure!(
             assignment.base.len() == 40 && assignment.base.bytes().all(|c| c.is_ascii_hexdigit()),
@@ -216,49 +312,73 @@ impl Coordinator {
             !assignment.ticket.connection_id.is_empty() && !assignment.ticket.native_id.is_empty(),
             "qualified ticket reference required"
         );
-        self.change(|state| {
-            Self::integrator(state, integrator, generation, now)?;
-            ensure!(
-                state.stopped.is_none(),
-                "coordination run is stopped; resume explicitly"
-            );
-            if let Some(existing) = state.assignments.get(&assignment.id) {
+        let scope = authority::normalized_scope(&assignment.scope)?;
+        let assignment = Assignment {
+            scope,
+            ..assignment
+        };
+        let reserve = || {
+            self.change(|state| {
+                let now = clock();
+                Self::assignment_authority(state, authority, generation, now)?;
                 ensure!(
-                    existing.worker == assignment.worker
-                        && existing.generation == assignment.generation
-                        && existing.ticket == assignment.ticket
-                        && existing.slug == assignment.slug
-                        && existing.base == assignment.base
-                        && existing.return_route == assignment.return_route,
-                    "operation id already refers to a different assignment"
+                    state.stopped.is_none(),
+                    "coordination run is stopped; resume explicitly"
                 );
-                return Ok(existing.clone());
-            }
-            ensure!(
+                check(state, state.assignments.get(&assignment.id))?;
+                // Ticket reads may themselves outlast availability while both locks are held.
+                // Replays also require the current authority to remain live at this boundary.
+                let now = clock();
+                Self::assignment_authority(state, authority, generation, now)?;
+                if let Some(existing) = state.assignments.get(&assignment.id) {
+                    ensure!(
+                        existing.worker == assignment.worker
+                            && existing.generation == assignment.generation
+                            && existing.ticket == assignment.ticket
+                            && existing.slug == assignment.slug
+                            && existing.base == assignment.base
+                            && existing.return_route == assignment.return_route
+                            && existing.scope == assignment.scope,
+                        "operation id already refers to a different assignment"
+                    );
+                    return Ok(existing.clone());
+                }
+                Self::dispatch_rules(state, &assignment)?;
+                ensure!(
+                    state
+                        .workers
+                        .get(&assignment.worker)
+                        .is_some_and(|s| s.generation == assignment.generation && s.live(now)),
+                    "worker is not currently available"
+                );
+                ensure!(
+                    state.active_assignment(&assignment.worker).is_none(),
+                    "worker already has an active assignment"
+                );
+                ensure!(
+                    !state
+                        .assignments
+                        .values()
+                        .any(|a| a.ticket == assignment.ticket
+                            && a.phase.pending()
+                            && !a.returned_for_review()),
+                    "ticket already assigned or awaiting integration/CI"
+                );
                 state
-                    .workers
-                    .get(&assignment.worker)
-                    .is_some_and(|s| s.generation == assignment.generation && s.live(now)),
-                "worker is not currently available"
-            );
-            ensure!(
-                state.active_assignment(&assignment.worker).is_none(),
-                "worker already has an active assignment"
-            );
-            ensure!(
-                !state
                     .assignments
-                    .values()
-                    .any(|a| a.ticket == assignment.ticket
-                        && a.phase.pending()
-                        && !a.returned_for_review()),
-                "ticket already assigned or awaiting integration/CI"
-            );
-            state
-                .assignments
-                .insert(assignment.id.clone(), assignment.clone());
-            Ok(assignment)
-        })
+                    .insert(assignment.id.clone(), assignment.clone());
+                Ok(assignment)
+            })
+        };
+        if self
+            .source
+            .join(hotsheet_ticketing::STORE_METADATA_FILE)
+            .exists()
+        {
+            FsStore::open_without_maintenance(&self.source)?.with_ticket_transaction(reserve)
+        } else {
+            reserve()
+        }
     }
 
     pub fn worker_transition(
@@ -517,6 +637,15 @@ impl Coordinator {
                         .is_some_and(|s| s.id == id && s.generation == generation)
                     {
                         state.integrator = None;
+                    }
+                }
+                Role::Dispatcher => {
+                    if state
+                        .dispatcher
+                        .as_ref()
+                        .is_some_and(|s| s.id == id && s.generation == generation)
+                    {
+                        state.dispatcher = None;
                     }
                 }
                 Role::Worker => {

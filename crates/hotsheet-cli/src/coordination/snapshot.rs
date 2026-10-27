@@ -12,6 +12,7 @@ impl Coordinator {
             .map(|s| s.id.clone())
             .collect();
         let live_integrator = state.integrator.as_ref().is_some_and(|s| s.live(now));
+        let live_dispatcher = state.dispatcher.as_ref().is_some_and(|s| s.live(now));
         let mut live_claims = Vec::new();
         let mut selected_connection = None;
         let local_queue = if self
@@ -135,6 +136,8 @@ impl Coordinator {
             "provider_query_required; use provider-specific query/claim/event capabilities"
         }
         .to_owned();
+        let dispatch_blockers =
+            Self::dispatch_blockers(&state, now, &live_workers, local_queue.is_some());
         let cursor = format!(
             "{:x}",
             Sha256::digest(serde_json::to_vec(&(
@@ -150,6 +153,8 @@ impl Coordinator {
             state,
             live_workers,
             live_integrator,
+            live_dispatcher,
+            dispatch_blockers,
             local_queue,
             queue_support,
             uncovered_sources,
@@ -164,6 +169,7 @@ impl Coordinator {
         for session in semantic
             .integrator
             .iter_mut()
+            .chain(semantic.dispatcher.iter_mut())
             .chain(semantic.workers.values_mut())
         {
             session.expires_at = i64::from(session.live(now));

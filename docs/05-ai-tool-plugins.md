@@ -2027,7 +2027,9 @@ pins the route choices, fallback, and note-before-release-before-cue ordering.
 `--return-route <native:...|terminal:...|human>` together with
 `--route-evidence-note <id>`. The integrator first checks that the selected CLI
 supports the flags and writes a regular note on the exact ticket, authored with its
-integrator id. The note starts with `## Assignment return route` and contains JSON
+integrator id. With dispatcher authority (HS2-TWZW7X) the dispatcher, as the active
+assignment authority, authors that evidence for new operations instead; the default
+handoff return route stays the integrator's registered route. The note starts with `## Assignment return route` and contains JSON
 identifying the operation, worker, worker generation, and exact route. Assignment
 checks those fields and the author against the requested reservation. The note is
 durable address evidence; transport reachability still requires checking the exact
@@ -2167,6 +2169,94 @@ host subscription exists; Git retains its implemented watch capability.
 This workflow adds no timer network polling. Remote CI completion needs an actual
 supported status/event route or human cue; without one the integrator reports the
 specific pending CI and unavailable wake route instead of reporting exhaustion.
+
+#### Dispatcher assignment authority (HS2-TWZW7X)
+
+Long review, gates and CI no longer delay refilling workers: an optional dispatcher role
+can own assignment while the integrator keeps integration. Exactly one **assignment
+authority** is in force per pool, recorded as `authority`:
+
+- `integrator` (legacy and default): the integrator assigns, as above. Every pool at
+  schema three or older has this authority. A dispatcher may not register or assign.
+- `dispatcher`: one live dispatcher generation owns `assign`; the integrator's `assign`
+  is refused. The integrator keeps `mark` (integration, verification, CI, done),
+  `review-return`, `recover`, `finish`, push and CI completion. Recovery of an
+  interrupted reservation stays with the integrator in both modes because it inspects
+  the preserved artifacts; expiry never reassigns automatically.
+
+Workers keep their exact atomic ticket claims, and every role uses the same durable,
+source-qualified assignment records, operation-id replay and filesystem-event waits; there
+is no second scheduler store. A duplicate dispatcher generation is refused while the live
+one holds the lease; a replacement may register only after it expires or leaves, and the
+old generation's assignment replays are then fenced. A released handoff frees the worker
+for its next assignment while earlier operations stay Handoff, Integrating or CI; each
+worker holds at most one Offered/Accepted assignment and keeps every historical record.
+
+The integrator publishes an **integration report** with `publish`: the latest safe shipping
+base (full SHA), qualified tickets it blocks from new work, and repository-relative path
+scopes held by serial integration or review. The report records the publishing integrator
+generation; after an integrator replacement the dispatcher is refused until the new
+generation republishes. In dispatcher mode `assign` additionally requires, under the state
+lock: the published base; a ticket outside the blocked list; at least one declared `--scope`
+path that overlaps neither an in-flight scope nor any pending (not Done, not review-returned)
+assignment's scope, comparing whole path components; and every `blocked_by` dependency
+closed in the selected source. The existing eligibility, claim, worker-generation,
+stopped-run and unsupported-source checks still apply. Every reservation check runs at one
+serialized boundary: under the selected source's ticket transaction and then the
+coordination state lock (the order review returns use), after the caller is verified as the
+current assignment authority, from fresh ticket reads. A concurrent authority switch,
+dependency reopen or claim therefore cannot slip between the checks and the reservation.
+Explicit return-route evidence for a new operation must be authored by that active
+assignment authority (the dispatcher here, the integrator in legacy mode) and still name the
+exact operation, worker, worker generation and route. A reserved operation's route is
+immutable across authority changes: replaying it with its full original arguments, including
+the original evidence note, succeeds for whichever authority now holds the role, even after
+an authority switch or a different dispatcher identity takes over, because the replay only
+acknowledges the identical durable reservation. Its evidence must still address that exact
+operation, worker, generation and route, and a different route is a different operation.
+The reservation reads the clock inside that serialized boundary and again after ticket
+validation, before the final authority and worker availability checks. Neither waiting
+behind a held ticket mutation nor slow eligibility reads can authorize a reservation after
+availability expires. A replay also rechecks its current authority after validation.
+
+Either role may start first. A dispatcher `next` on a pool without dispatcher authority does
+not register; it waits on genuine state events and reports why, then registers when the
+integrator enables the authority. That registration is atomic with the authority check: if
+the integrator returns authority in between, the same waiter stays unregistered and keeps
+waiting, while duplicate or stale generations remain conflicts. An unregistered waiter has
+no lease to renew, so only genuine events and real peer or claim deadlines wake it; it never
+spins on an elapsed deadline. Snapshots add `live_dispatcher` and `dispatch_blockers`,
+explicit reasons the dispatcher cannot reserve work now (for example
+`assignment_authority_is_integrator`, `no_live_dispatcher`, `no_integrator_registered`,
+`no_safe_base_published`, `integration_report_from_replaced_generation`,
+`no_available_worker`, `selected_source_queue_unsupported`, `stopped`), never an
+empty-queue inference. Older readers default both fields.
+
+**Schema and rollout.** New fields are additive and omitted at their defaults, so a pool with
+integrator authority keeps being written as schema three, field for field, and a schema-three
+artifact keeps operating it; a schema-four executable never migrates a pool on open.
+`coordination capabilities` reports supported schemas, roles and authorities without opening
+the pool. Rollout: verify the candidate's capabilities; stop every waiter and switch all
+participants to that one artifact (the pool stays schema three); then the exact live
+integrator runs `authority --mode dispatcher --all-participants-upgraded`, which persists
+schema four. Schema-three artifacts refuse a schema-four pool without rewriting it, so two
+assignment authorities or mixed-version mutators cannot coexist. `authority --mode
+integrator` returns assignment to the integrator only when no dispatcher session is live; it
+stays schema four and never downgrades. Version five or newer is refused. Candidate builds
+are exercised only on disposable, independently initialized projects and stores: a linked
+worktree shares the live checkout's Git common directory and therefore its pool.
+
+| Command                                                                                                                     | Effect                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `capabilities`                                                                                                              | Print readable schemas, written schemas, roles and assignment authorities without opening the pool. |
+| `authority --id <integrator> --session <generation> --mode <integrator\|dispatcher> [--all-participants-upgraded]`          | Switch assignment authority as the exact live integrator (see rollout).                             |
+| `publish --id <integrator> --session <generation> --base <full-sha> [--blocked <connection:native>]… [--in-flight <path>]…` | Replace the integration report the dispatcher reads before each reservation (schema four).          |
+| `register`/`next`/`leave --role dispatcher …`                                                                               | Announce, wait as, or withdraw the single dispatcher generation.                                    |
+| `assign … --scope <path>…`                                                                                                  | As the authority holder; dispatcher reservations must declare non-overlapping scopes.               |
+
+Tentative next plans (HS2-XCMAVT) and the worker read model (HS2-DBECD0) consume this
+authority when built; role skill wording and installation are HS2-7E5R4A, the live
+multi-session rollout HS2-K1QNGC.
 
 Rust transition tests and real separate CLI-process tests cover startup in both
 orders, duplicate dispatch/waits, fenced generations, stale recovery, source scope,

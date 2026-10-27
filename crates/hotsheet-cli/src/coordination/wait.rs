@@ -50,7 +50,9 @@ impl Coordinator {
             watcher.watch(&tickets, RecursiveMode::Recursive)?;
         }
         let mut renew_at = now() + request.lease_seconds / 2;
-        self.register(
+        // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
+        // waits on genuine state events without registering, and says why.
+        let mut registered = self.try_register(
             request.role,
             &request.id,
             &request.generation,
@@ -61,29 +63,56 @@ impl Coordinator {
         let mut snapshot_checked_at = now();
         let mut snapshot = self.snapshot(snapshot_checked_at)?;
         let mut state_cursor = Self::state_cursor(&snapshot.state, snapshot_checked_at)?;
-        if ready(request, &snapshot) {
+        // A stopped run reaches every waiter, registered or not.
+        if (registered || snapshot.state.stopped.is_some()) && ready(request, &snapshot) {
             return Ok(snapshot);
         }
-        eprintln!("Waiting on local assignment/ticket events; availability registered.");
+        if registered {
+            eprintln!("Waiting on local assignment/ticket events; availability registered.");
+        } else {
+            eprintln!(
+                "Waiting on local assignment/ticket events; dispatcher not registered: assignment authority is the integrator (schema {}).",
+                snapshot.state.version
+            );
+            #[cfg(test)]
+            if let Some(hook) = self
+                .waiting_unregistered
+                .lock()
+                .expect("test hook lock")
+                .take()
+            {
+                hook();
+            }
+        }
         loop {
             let current = now();
+            // HS2-TWZW7X: only real deadlines wake a wait. An unregistered dispatcher has no
+            // lease to renew, and without peers or claims it blocks on genuine events alone.
             let peer_expiry = snapshot
                 .state
                 .integrator
                 .iter()
+                .chain(snapshot.state.dispatcher.iter())
                 .chain(snapshot.state.workers.values())
                 .filter(|s| s.expires_at > snapshot_checked_at)
                 .map(|s| s.expires_at)
-                .min()
-                .unwrap_or(renew_at);
+                .min();
             let claim_expiry = claim_deadline(request.role, &snapshot, snapshot_checked_at);
-            let deadline = renew_at
-                .min(peer_expiry)
-                .min(claim_expiry.unwrap_or(renew_at));
-            let timeout = Duration::from_secs(u64::try_from((deadline - current).max(0))?);
+            let deadline = [registered.then_some(renew_at), peer_expiry, claim_expiry]
+                .into_iter()
+                .flatten()
+                .min();
             let mut ticket_changed = false;
             let mut relevant_event = false;
-            match receiver.recv_timeout(timeout) {
+            let received = match deadline {
+                Some(deadline) => receiver.recv_timeout(Duration::from_secs(u64::try_from(
+                    (deadline - current).max(0),
+                )?)),
+                None => receiver
+                    .recv()
+                    .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+            };
+            match received {
                 Ok(Ok(event))
                     if event.need_rescan()
                         || matches!(
@@ -115,7 +144,7 @@ impl Coordinator {
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
             let current = now();
-            if current >= renew_at {
+            if registered && current >= renew_at {
                 self.register(
                     request.role,
                     &request.id,
@@ -127,24 +156,49 @@ impl Coordinator {
                 renew_at = current + request.lease_seconds / 2;
             }
             let claim_expired = claim_expiry.is_some_and(|at| current >= at);
-            if !relevant_event && !claim_expired && current < peer_expiry {
+            if !relevant_event && !claim_expired && peer_expiry.is_none_or(|at| current < at) {
                 continue;
             }
-            let state = self.state()?;
+            let mut state = self.state()?;
+            if !registered && Self::require_dispatcher_authority(&state).is_ok() {
+                #[cfg(test)]
+                if let Some(hook) = self
+                    .before_dispatcher_register
+                    .lock()
+                    .expect("test hook lock")
+                    .take()
+                {
+                    hook();
+                }
+                // Atomic: a concurrent return to integrator authority leaves this waiter
+                // unregistered and waiting, rather than ending it with a refusal.
+                registered = self.try_register(
+                    request.role,
+                    &request.id,
+                    &request.generation,
+                    current,
+                    request.lease_seconds,
+                    request.return_route.clone(),
+                )?;
+                renew_at = current + request.lease_seconds / 2;
+                state = self.state()?;
+            }
             // A lease extension changes no semantic state. In particular, it must not
             // cause a timer-driven queue scan in this or another waiting process.
             let next_cursor = Self::state_cursor(&state, current)?;
             if next_cursor != state_cursor
-                || (request.role == Role::Integrator && (ticket_changed || claim_expired))
+                || (request.role != Role::Worker && (ticket_changed || claim_expired))
             {
                 snapshot = self.snapshot(current)?;
                 snapshot_checked_at = current;
                 state_cursor = next_cursor;
-                if ready(request, &snapshot) {
+                if (registered || snapshot.state.stopped.is_some()) && ready(request, &snapshot) {
                     return Ok(snapshot);
                 }
             } else {
+                // Elapsed peer deadlines were reconciled; never reuse them as a wake.
                 snapshot.state = state;
+                snapshot_checked_at = current;
             }
         }
     }
@@ -173,7 +227,7 @@ fn ready(request: &WaitRequest, snapshot: &Snapshot) -> bool {
             .state
             .active_assignment(&request.id)
             .is_some_and(|a| a.generation == request.generation),
-        Role::Integrator => request
+        Role::Integrator | Role::Dispatcher => request
             .after
             .as_ref()
             .is_none_or(|after| after != &snapshot.cursor),

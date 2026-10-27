@@ -10,6 +10,42 @@ use serde::{Deserialize, Serialize};
 pub enum Role {
     Integrator,
     Worker,
+    /// Assignment authority independent of integration (HS2-TWZW7X); schema four only.
+    Dispatcher,
+}
+
+/// Which role may reserve assignments. Exactly one is in force, so two assignment
+/// authorities never coexist (HS2-TWZW7X). Every schema-three or older pool is
+/// `Integrator`; only the live integrator's explicit switch persists `Dispatcher`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Authority {
+    #[default]
+    Integrator,
+    Dispatcher,
+}
+
+impl Authority {
+    fn is_integrator(&self) -> bool {
+        *self == Self::Integrator
+    }
+}
+
+/// The integrator's published integration facts, which the dispatcher reads before every
+/// reservation (HS2-TWZW7X). Stamped with the publishing integrator generation; a replaced
+/// generation must republish before the dispatcher uses it again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrationReport {
+    pub integrator: String,
+    pub generation: String,
+    /// Latest safe shipping base (full SHA) for new worker worktrees.
+    pub base: String,
+    /// Qualified tickets the integrator has blocked from new assignment.
+    #[serde(default)]
+    pub blocked: Vec<TicketRef>,
+    /// Repository-relative path scopes held by serial integration or review work.
+    #[serde(default)]
+    pub in_flight: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +133,10 @@ pub struct Assignment {
     pub return_route: ReturnRoute,
     #[serde(default)]
     pub recovery_note: Option<String>,
+    /// Declared repository-relative path scope (HS2-TWZW7X). Dispatcher reservations must
+    /// declare one; empty for every legacy integrator assignment, so schema three is unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scope: Vec<String>,
 }
 
 impl Assignment {
@@ -119,6 +159,14 @@ pub struct State {
     pub assignments: BTreeMap<String, Assignment>,
     /// Explicit terminal outcome, separate from an empty actionable queue.
     pub stopped: Option<String>,
+    /// Schema-four fields (HS2-TWZW7X). Each is skipped at its default, so a legacy
+    /// integrator-authority pool keeps serializing exactly as schema three.
+    #[serde(default, skip_serializing_if = "Authority::is_integrator")]
+    pub authority: Authority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher: Option<Session>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integration: Option<IntegrationReport>,
 }
 
 impl State {
@@ -132,6 +180,9 @@ impl State {
             workers: BTreeMap::new(),
             assignments: BTreeMap::new(),
             stopped: None,
+            authority: Authority::Integrator,
+            dispatcher: None,
+            integration: None,
         }
     }
 
@@ -159,6 +210,13 @@ pub struct Snapshot {
     pub state: State,
     pub live_workers: Vec<String>,
     pub live_integrator: bool,
+    /// HS2-TWZW7X. Defaults permit reading snapshots from older CLI executables.
+    #[serde(default)]
+    pub live_dispatcher: bool,
+    /// Explicit reasons the assignment authority cannot reserve work now; never an
+    /// empty-queue inference (HS2-TWZW7X).
+    #[serde(default)]
+    pub dispatch_blockers: Vec<String>,
     /// None means that this source requires its provider's query/event path.
     pub local_queue: Option<Vec<QueueEntry>>,
     pub queue_support: String,
@@ -220,7 +278,10 @@ mod snapshot_compatibility_tests {
         let mut encoded = serde_json::to_value(&current).unwrap();
         assert!(!encoded["source_support"].as_array().unwrap().is_empty());
         let old: BeforeSourceSupport = serde_json::from_value(encoded.clone()).unwrap();
-        encoded.as_object_mut().unwrap().remove("source_support");
+        // Additive reports, including HS2-TWZW7X's dispatcher fields, are all an old reader drops.
+        for field in ["source_support", "live_dispatcher", "dispatch_blockers"] {
+            encoded.as_object_mut().unwrap().remove(field);
+        }
         assert_eq!(serde_json::to_value(old).unwrap(), encoded);
         assert_eq!(current.state.version, 3);
     }

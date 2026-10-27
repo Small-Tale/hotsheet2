@@ -902,7 +902,11 @@ on any `Coordinator::open` (all pool members switch artifacts before a live open
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),
 `snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
-and known lease deadlines. `source_support.rs` produces additive, registry-only per-source
+and known lease deadlines. `authority.rs` owns the single assignment authority
+(integrator or dispatcher), the integrator's published integration report, dispatcher
+scope/base/blocker rules, the schema-three write fence and schema-four switch, and the
+non-opening `capabilities` report (HS2-TWZW7X); `authority_tests.rs` pins its transitions
+and `tests/coordination_dispatcher.rs` its real multi-process boundaries. `source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
 zero external requests and exact unchanged state on rejected foreign transitions.
