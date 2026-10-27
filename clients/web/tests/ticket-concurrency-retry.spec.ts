@@ -27,6 +27,8 @@ async function openRealProject(
   page: Page,
   server: Server,
   beforePatch: (attempt: number, path: string) => Promise<void>,
+  afterGet?: (path: string) => void,
+  beforeGetFulfill?: (path: string) => Promise<void>,
 ) {
   const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
     attempts: Attempt[] = [];
@@ -58,7 +60,9 @@ async function openRealProject(
           status: response.status(),
           body: (await response.json()) as Attempt['body'],
         });
+      if (request.method() === 'GET') await beforeGetFulfill?.(decodeURIComponent(path));
       await route.fulfill({ response });
+      if (request.method() === 'GET') afterGet?.(decodeURIComponent(path));
     } catch {
       await route.abort().catch(() => undefined);
     }
@@ -240,39 +244,109 @@ test('surfaces a true same-place conflict from a real 409 without a blind retry 
   }
 });
 
-test('bounds real stale-token retries, then saves the next edit after the churn stops (HS2-9S8CV1)', async ({
+test('bounds real stale-token retries, keeps the failure through refresh, then saves the next edit (HS2-9S8CV1/HS2-4Q44N2)', async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();
   try {
     const ticket = await seed(server, 'Bounded retry', 'Original');
     let churning = true;
-    const attempts = await openRealProject(page, server, async (attempt) => {
-      // Every save loses the race to another writer until the churn stops.
-      if (churning) await server.request(`/tickets/${ticket.id}`, 'PATCH', { note: `Churn ${attempt}` });
+    const gets: string[] = [];
+    const corruptPath = /\/checkouts\/[^/]+\/corrupt-tickets$/u,
+      selectedPath = /\/checkouts\/[^/]+\/tickets\/[^/]+$/u;
+    let holdNextCorrupt = false,
+      corruptHeld = false,
+      corruptGateReleased = false,
+      selectedAfterRelease = false,
+      releaseCorrupt!: () => void;
+    const corruptGate = new Promise<void>((resolve) => {
+      releaseCorrupt = resolve;
     });
+    const attempts = await openRealProject(
+      page,
+      server,
+      async (attempt) => {
+        // Every save loses the race to another writer until the churn stops.
+        if (churning) await server.request(`/tickets/${ticket.id}`, 'PATCH', { note: `Churn ${attempt}` });
+      },
+      (path) => {
+        gets.push(path);
+        if (corruptGateReleased && selectedPath.test(path)) selectedAfterRelease = true;
+      },
+      async (path) => {
+        if (!holdNextCorrupt || !corruptPath.test(path)) return;
+        holdNextCorrupt = false;
+        corruptHeld = true;
+        await corruptGate;
+        corruptGateReleased = true;
+      },
+    );
     const editor = await editDetails(page, ticket.slug, 'Never lands');
-    // A later background refresh replaces the shared error banner (HS2-4Q44N2), so record every message it shows.
-    await page.evaluate(() => {
-      const shown: string[] = [];
-      (window as unknown as { hs2ErrorsShown: string[] }).hs2ErrorsShown = shown;
-      new MutationObserver(() => {
-        const text = document.querySelector('.app-error')?.textContent ?? '';
-        if (text && shown.at(-1) !== text) shown.push(text);
-      }).observe(document.body, { subtree: true, childList: true, characterData: true });
-    });
     await editor.blur();
     // The first attempt plus four bounded retries, every one a real refusal, then the failure is shown. Each
     // attempt is a real write, re-read and refusal, so the whole sequence waits on attempts, not a fixed delay.
     await expect.poll(() => attempts.length, { timeout: 60_000 }).toBe(5);
-    await expect
-      .poll(() => page.evaluate(() => (window as unknown as { hs2ErrorsShown: string[] }).hs2ErrorsShown.join('\n')))
-      .toContain(`ticket '${ticket.slug}' changed since it was read`);
+    const banner = page.locator('.app-error');
+    await expect(banner).toContainText(`ticket '${ticket.slug}' changed since it was read`);
+    const indexPath = /\/checkouts\/[^/]+\/tickets$/u,
+      indexBefore = gets.filter((path) => indexPath.test(path)).length;
+    // A further competing write schedules a background project refresh after the error is already visible.
+    // Hold the sibling corrupt-ticket response: the index GET alone cannot complete the refresh merge.
+    holdNextCorrupt = true;
+    await server.request(`/tickets/${ticket.id}`, 'PATCH', { note: 'After the refused edit' });
+    await expect.poll(() => corruptHeld).toBe(true);
+    await expect.poll(() => gets.filter((path) => indexPath.test(path)).length).toBeGreaterThan(indexBefore);
+    await expect(banner).toContainText(`ticket '${ticket.slug}' changed since it was read`);
+    await expect(editor).toHaveValue('Never lands');
+    // A selected-ticket GET starts only after the complete index/corrupt merge has assigned its error.
+    releaseCorrupt();
+    await expect.poll(() => selectedAfterRelease).toBe(true);
+    await expect(banner).toContainText(`ticket '${ticket.slug}' changed since it was read`);
     expect(attempts).toHaveLength(5);
     for (const attempt of attempts) expectRealStaleRefusal(attempt, ticket.slug);
     expect((await stored(server, ticket)).details).toBe('Original');
     // The refused draft stays in the open editor; once the churn stops, a further edit saves.
+    await expect(editor).toHaveValue('Never lands');
+    for (const [name, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 1024, 800],
+      ['narrow', 390, 844],
+      ['wide-again', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document
+                .getAnimations()
+                .filter(
+                  (animation) =>
+                    animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+                ).length,
+          ),
+        )
+        .toBe(0);
+      if (width >= 1024) {
+        await expect
+          .poll(() => page.locator('#app-left-rail').evaluate((node) => node.getBoundingClientRect().left))
+          .toBe(0);
+        await expect
+          .poll(() =>
+            page.locator('#app-right-rail').evaluate((node) => node.getBoundingClientRect().right <= innerWidth + 1),
+          )
+          .toBe(true);
+      }
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText(`ticket '${ticket.slug}' changed since it was read`);
+      if (process.env.HOTSHEET_CAPTURE_4Q44N2) {
+        await page.screenshot({ path: testInfo.outputPath(`hs2-4q44n2-${name}.png`) });
+        await banner.screenshot({ path: testInfo.outputPath(`hs2-4q44n2-banner-${name}.png`) });
+      }
+    }
+    await banner.getByRole('button', { name: 'Dismiss Error' }).click();
+    await expect(banner).toHaveCount(0);
     await expect(editor).toHaveValue('Never lands');
     churning = false;
     await editor.fill('Lands after reset');
@@ -280,6 +354,9 @@ test('bounds real stale-token retries, then saves the next edit after the churn 
     await expect.poll(async () => (await stored(server, ticket)).details).toBe('Lands after reset');
     await expect.poll(() => attempts.at(-1)?.status).toBe(200);
     await expect(page.locator('#app-right-rail [data-component="ticket-field-conflict"]')).toHaveCount(0);
+    await page.reload();
+    await expect(banner).toHaveCount(0);
+    await expect(page.locator('#app-right-rail')).toContainText('Lands after reset');
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();

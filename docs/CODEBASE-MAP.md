@@ -231,7 +231,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-dashboard.ts # Terminal dashboard snapshot: per-project terminal fetch/merge, AI-connection grace, visibility scopes, drawer tab order (HS2-ZJ67VE)
       board-column-paging.ts # Per-column board paging: refresh spec, bulk status-change refill, one column's Load more (HS2-H2R2JB)
       project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07); createProjectTeardown runs the closeProjectIds orchestration and reader disposal (HS2-BSSWGV)
-      project-refresh.ts # refreshProject: stale-response generation, git-only first paint, authoritative row/count/selection/projection merge (HS2-BSSWGV)
+      project-refresh.ts # refreshProject: stale-response generation, git-only first paint, authoritative row/count/selection/projection merge (HS2-BSSWGV), index/source error ownership separate from mutation errors (HS2-4Q44N2)
       terminal-drawer.ts # Terminal drawer visibility, selection, tab/input focus, serialized terminal/shell/AI-chat creation, closeDrawerTabIds (HS2-BSSWGV)
       settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV)
       sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)

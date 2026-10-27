@@ -100,6 +100,7 @@ export interface NotificationAndLinkInteractionsDependencies {
     surface?: 'preview' | 'dialog',
   ) => Promise<void>;
   readonly error: Signal<string>;
+  readonly refreshError: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
   ticketLinkReturnFocus: HTMLElement | undefined;
@@ -151,6 +152,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     requestDeleteSelectedPermissionRules,
     applySelectedPermissionRules,
     error,
+    refreshError,
     selectedProjectId,
     hideVerifiedByProject,
     selectLinkedTicket,
@@ -728,6 +730,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.dismissAppError.selector, () => {
       error.value = '';
+      refreshError.value = '';
     }),
   );
   lifetime.add(

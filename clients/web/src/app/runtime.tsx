@@ -686,6 +686,7 @@ export async function startHotSheetWebClient() {
   const loading = signal(false),
     bulkUpdateProgress = signal<BulkUpdateProgress | undefined>(undefined),
     error = signal(''),
+    refreshError = signal(''),
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
     // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
     ticketViewMode = signal<SortableWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
@@ -1989,11 +1990,11 @@ export async function startHotSheetWebClient() {
       }
       ticketCollectionState.value = index.ticketsError ? { projectId: current.id, view, status: 'error' } : undefined;
       corruptTickets.value = index.corruptTickets ?? [];
-      error.value = [index.ticketsError, index.corruptTicketsError].filter(Boolean).join(' · ');
+      refreshError.value = [index.ticketsError, index.corruptTicketsError].filter(Boolean).join(' · ');
     } catch (reason) {
       if (active()) {
         ticketCollectionState.value = { projectId: current.id, view, status: 'error' };
-        error.value = reason instanceof Error ? reason.message : String(reason);
+        refreshError.value = reason instanceof Error ? reason.message : String(reason);
       }
     }
   }
@@ -2463,6 +2464,7 @@ export async function startHotSheetWebClient() {
         selectedTicketSlugs.value = selection;
         ticketSelectionAnchor = selection[0];
         error.value = '';
+        refreshError.value = '';
         loading.value = !cached;
       });
       markProjectWarm(next);
@@ -3363,7 +3365,7 @@ export async function startHotSheetWebClient() {
 
   const projectRefresh = createProjectRefresh({
     loading,
-    error,
+    refreshError,
     selectedView,
     tickets,
     ticketRowsByProject,
@@ -4675,6 +4677,7 @@ export async function startHotSheetWebClient() {
     defaultProviders,
     deferContainedListScrollRestore,
     error,
+    refreshError,
     gallerySurface,
     githubAuth,
     HotSheetShell,
@@ -4991,6 +4994,7 @@ export async function startHotSheetWebClient() {
     repositoryDetail,
     showToast,
     error,
+    refreshError,
     codeReview,
     changeEvidenceView,
     changeEvidenceReader,

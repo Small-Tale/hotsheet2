@@ -41,7 +41,8 @@ export interface ProjectRefreshOptions {
 /** Live application bindings the selected-project refresh owner reads and writes (HS2-BSSWGV). */
 export interface ProjectRefreshDependencies {
   loading: Signal<boolean>;
-  error: Signal<string>;
+  /** Index and source failures only; ticket mutations have their own banner owner (HS2-4Q44N2). */
+  refreshError: Signal<string>;
   selectedView: Signal<TicketView>;
   tickets: Signal<WireTicketRow[]>;
   ticketRowsByProject: Signal<Record<string, WireTicketRow[]>>;
@@ -98,7 +99,7 @@ export function sameTicketQuery(left: CheckoutTicketQuery, right: CheckoutTicket
 export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
   const {
     loading,
-    error,
+    refreshError,
     selectedView,
     tickets,
     ticketRowsByProject,
@@ -273,7 +274,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
           commandRuns: commandRuns.value,
         },
       };
-      error.value = [index.ticketsError, index.corruptTicketsError].filter(Boolean).join(' · ');
+      refreshError.value = [index.ticketsError, index.corruptTicketsError].filter(Boolean).join(' · ');
       if (selectedTicket.value && mergedTickets) {
         const previous = selectedTicket.value,
           matching = mergedTickets.find((item) => item.id === previous.id);
@@ -291,7 +292,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
       }
       if (searchActive) void refreshTicketSearch();
     } catch (reason) {
-      if (active()) error.value = reason instanceof Error ? reason.message : String(reason);
+      if (active()) refreshError.value = reason instanceof Error ? reason.message : String(reason);
     } finally {
       if (showLoading && active()) loading.value = false;
     }

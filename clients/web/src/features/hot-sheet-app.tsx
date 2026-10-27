@@ -117,6 +117,7 @@ export interface HotSheetAppDependencies {
   defaultProviders: Signal<Record<string, ProjectTicketSources | undefined>>;
   deferContainedListScrollRestore: boolean;
   error: Signal<string>;
+  refreshError: Signal<string>;
   gallerySurface: () => SafeHtml;
   githubAuth: Signal<GithubAuthState | undefined>;
   HotSheetShell: () => SafeHtml;
@@ -253,6 +254,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     defaultProviders,
     deferContainedListScrollRestore,
     error,
+    refreshError,
     gallerySurface,
     githubAuth,
     HotSheetShell,
@@ -561,7 +563,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <AttachmentContextMenuSurface menu={attachmentMenuSurfaceProps()} />
         <AppTabMenuSurface menu={appTabContextMenu.value} />
         {showCornerLoading && <AppLoadingIndicator progress={bulkUpdateProgress.value} />}
-        {error.value && project() && <AppError message={error.value} />}
+        {(error.value || refreshError.value) && project() && <AppError message={error.value || refreshError.value} />}
       </>
     );
   }

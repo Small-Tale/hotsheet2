@@ -684,6 +684,11 @@ preview/download, server directory browser) are separate design work.
   that begins mid-refresh drops that refresh's results. A read that raced a save therefore
   never lands afterward carrying the user's own older text, which would otherwise look like
   a remote edit and raise a spurious merge prompt (HS2-RE1PS6).
+  Index and source refresh failures have a separate application-banner owner from ticket
+  mutation failures (HS2-4Q44N2). A successful background refresh clears only its own
+  failure; a refused save and its draft remain visible through that refresh until the
+  error is dismissed or a later user action supersedes it. Switching projects clears
+  both banner owners so the former project's error cannot reappear.
   The focused textarea is the live draft: workspace and reader editors publish keystrokes into
   their draft signals at typing pauses (150 ms) instead of re-rendering the workspace on every
   key, and every finish, save, submit, editor switch, refresh merge, ticket switch, and page hide
