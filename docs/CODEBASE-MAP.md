@@ -798,8 +798,9 @@ hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli
   permission isolation capabilities are required. Build-once and quiet tiers request
   the same fixture feature. Native Windows tests are explicit opt-in.
 - **Web client:** from `clients/web`, `npm run lint`, `npm run typecheck`,
-  `npm run test:unit`, `npm run test:e2e` (Playwright against the running client
-  and real server flows), and `npm run build`. CI runs the browser smoke and WebKit
+  `npm run test:unit` (the ESLint policy project runs before parallel unit and binary
+  projects per `vitest.config.ts`, HS2-7KXGMC), `npm run test:e2e` (Playwright against
+  the running client and real server flows), and `npm run build`. CI runs the browser smoke and WebKit
   lanes through `test:ci:browser` and `test:ci:webkit`.
 - **Optional local Rust compile cache:** install `sccache`, then run Cargo with
   `RUSTC_WRAPPER=sccache` (setup and rationale: [12](12-code-organization-and-testing.md)

@@ -29,7 +29,7 @@
     "contract:sync": "node scripts/sync-openapi-routes.mjs",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
-    "test:unit:fast": "vitest run --project unit",
+    "test:unit:fast": "vitest run --project eslint-policy --project unit",
     "test:fixtures": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server -p hotsheet-terminals --bins --features hotsheet-aitools/test-permission-vault",
     "test:e2e": "npm run test:fixtures && playwright test",
     "test:ci:browser": "playwright test tests/providers.spec.ts --workers=2 --grep @ci-smoke",

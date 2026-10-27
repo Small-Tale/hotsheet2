@@ -7,6 +7,17 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import packageJson from '../package.json';
 
 describe('web ESLint policy', () => {
+  it('HS2-7KXGMC schedules the cold policy route before parallel unit work without dropping fast-suite coverage', () => {
+    const config = readFileSync(new URL('../vitest.config.ts', import.meta.url), 'utf8');
+    expect(config).toContain(
+      "name: 'eslint-policy', include: ['src/eslint-policy.test.ts'], sequence: { groupOrder: 0 }",
+    );
+    expect(config).toContain("...BINARY_SUITES, 'src/eslint-policy.test.ts'");
+    expect(config.match(/sequence: \{ groupOrder: 1 \}/g)).toHaveLength(2);
+    expect(packageJson.scripts['test:unit:fast']).toContain('--project eslint-policy --project unit');
+    expect(config).not.toMatch(/\b(?:hookTimeout|testTimeout|maxWorkers)\b/);
+  });
+
   it('HS2-N9X6D5 keeps browser fixture timers for measured windows and cadence only', () => {
     const read = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
     const stable = read('stable-dev.e2e.test.mjs');

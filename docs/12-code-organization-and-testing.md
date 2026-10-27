@@ -141,8 +141,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   globals are limited to the scripts that execute Playwright page callbacks. The
   `HS2-HK6KMT` policy test checks real script inclusion and rejection of an invalid
   synthetic script through the same configuration. Shared asynchronous configuration
-  loading belongs to the scoped setup hook (HS2-RY22P6); every real input and invalid
-  source still runs its complete proof under the default per-test budget (HS2-2SPPTQ).
+  loading belongs to the scoped setup hook (HS2-RY22P6). The ESLint policy runs in an
+  ordered Vitest project before the parallel unit and binary projects so cold plugin
+  loading keeps its default hook budget under CI load (HS2-7KXGMC). Every real input
+  and invalid source still runs its complete proof under the default per-test budget
+  (HS2-2SPPTQ); the fast unit command includes that policy project.
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
@@ -979,11 +982,11 @@ which uses real captured runner output and spawns real processes; CI runs it in 
 ### 12.7.9 Test speed: binary builds, profiling, and quarantine (HS2-3PX1E4)
 
 - **Binary builds only when needed.** `clients/web/vitest.config.ts` splits the suite into
-  a `unit` project and a `binaries` project. The `binaries` project holds the files that
+  `eslint-policy`, `unit`, and `binaries` projects. The `binaries` project holds the files that
   launch real `target/debug` binaries, listed in `clients/web/scripts/vitest-binary-suites.mjs`.
   Only `binaries` carries the cargo-build `globalSetup`, and Vitest runs a project's global
   setup only when that project has files in the run. A targeted run such as
-  `npx vitest run src/foo.test.ts`, or `npm run test:unit:fast` (`--project unit`), never
+  `npx vitest run src/foo.test.ts`, or `npm run test:unit:fast` (`--project eslint-policy --project unit`), never
   starts cargo. When the setup does run, it skips the build if every binary is newer than
   every build input: crates, manifests, the toolchain file, and embedded `plugins/` and
   skill files. `HOTSHEET_VITEST_BUILD=always|skip` overrides that check. The build still
