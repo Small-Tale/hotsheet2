@@ -1643,6 +1643,23 @@ mod core_backend {
                 let t = self.resolve(id)?;
                 return self.api(&t);
             }
+            // A qualified single-ticket read of this backend's own Git store returns the
+            // server's provider-read body; other connections get `send`'s 409 (HS2-G78TZ9).
+            if let Some((connection, id)) =
+                provider_ticket_suffix(path).filter(|(_, id)| !id.contains('/'))
+            {
+                let expected = hotsheet_ticketing::git_connection_id(&self.store);
+                if connection != expected {
+                    return Err(BackendError {
+                        status: Some(409),
+                        message: format!(
+                            "provider connection '{connection}' is not available in the serverless MCP backend"
+                        ),
+                    });
+                }
+                let t = self.resolve(id)?;
+                return Ok(to_value(&ApiTicket::from_provider(&t, &expected, None)));
+            }
             Err(bad_request(format!("unsupported GET {path}")))
         }
 
@@ -4309,6 +4326,70 @@ mod tests {
                 .contains("does not support git-backed Hot Sheet Trash restore"),
             "{result}"
         );
+    }
+
+    /// HS2-G78TZ9: `hotsheet_get` over the backend's own connection reads the store like the
+    /// server's provider route (full body, notes, qualified identity, no computed context);
+    /// a foreign connection is an explicit 409 and an unknown id a 404.
+    #[test]
+    fn hs2_g78tz9_serverless_local_connection_get_reads_the_store() {
+        let (_d, backend) = core();
+        let connection = call(&backend, "hotsheet_providers", json!({}))[0]["connection_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"Qualified read","details":"synthetic body"}),
+        );
+        let id = created["id"].as_str().unwrap().to_owned();
+        let slug = created["slug"].as_str().unwrap().to_owned();
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note":"synthetic note"}),
+        );
+
+        for needle in [&id, &slug] {
+            let got = call(
+                &backend,
+                "hotsheet_get",
+                json!({"connection":connection,"id":needle}),
+            );
+            assert_eq!(got["details"], "synthetic body", "{got}");
+            assert_eq!(got["notes"][0]["text"], "synthetic note");
+            assert_eq!(got["connection_id"], connection);
+            assert_eq!(got["native_id"], id);
+            assert_eq!(got["qualified_id"], format!("{connection}:{id}"));
+            assert_eq!(got["auto_context"], json!([]));
+        }
+
+        let foreign = backend
+            .get(&format!("/providers/github-main/tickets/{id}"), &[])
+            .unwrap_err();
+        assert_eq!(foreign.status, Some(409));
+        assert_eq!(
+            foreign.message,
+            "provider connection 'github-main' is not available in the serverless MCP backend"
+        );
+        let tool = call(
+            &backend,
+            "hotsheet_get",
+            json!({"connection":"github-main","id":id}),
+        );
+        assert!(
+            tool["error"].as_str().unwrap().starts_with("error 409:"),
+            "{tool}"
+        );
+        let missing = backend
+            .get(&format!("/providers/{connection}/tickets/HS-404"), &[])
+            .unwrap_err();
+        assert_eq!(missing.status, Some(404));
+        let nested = backend
+            .get(&format!("/providers/{connection}/tickets/{id}/notes"), &[])
+            .unwrap_err();
+        assert!(nested.message.starts_with("unsupported GET"), "{nested:?}");
     }
 
     #[test]

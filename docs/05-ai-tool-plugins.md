@@ -1871,7 +1871,10 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > it accepts an optional checkout target, while explicit non-git provider connections
 > return a capability error because their deletion lifecycle is provider-owned (HS2-GTNZ2Q).
 > `hotsheet_assign` accepts a provider connection; the serverless backend can target its
-> git connection directly. `hotsheet_delete_note` takes a stable note id and obeys the
+> git connection directly. `hotsheet_get` with that connection reads the store and returns
+> the server's provider-read body (full details, notes, attachments, and the qualified
+> `connection_id:native_id` identity). Any other connection gets an explicit 409, because
+> the serverless backend has no provider host (HS2-G78TZ9). `hotsheet_delete_note` takes a stable note id and obeys the
 > provider's `note_delete` capability. `hotsheet_report_not_working` requires a connection,
 > an explanation and/or `evidence` entries (`filename`, `content_base64`), and optionally
 > `expected_token`. Both backends perform the provider's atomic report operation; the
