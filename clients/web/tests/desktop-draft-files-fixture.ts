@@ -106,6 +106,16 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
         await apiGate(request.method, path);
         return context.json({ error: 'Synthetic operation rejected.' }, 500);
       }
+      // HS2-T9TGKQ: these storage/attachment fixtures have no installed AI tools. Discovering
+      // the developer's real tools can hold all six browser connections across A→B→A and
+      // postpone the real ticket/session refresh. Keep fault injection and held responses
+      // available, and use the server's actual empty-inventory response contracts.
+      if (request.method === 'GET' && (path === '/ai-tools' || path === '/ai-settings')) {
+        await apiGate(request.method, path);
+        return path === '/ai-tools'
+          ? context.json([])
+          : context.json({ error: 'no drivable AI tools are installed' }, 404);
+      }
       try {
         const headers = new Headers(request.headers);
         headers.set('X-Hotsheet-Secret', server.secret);
@@ -160,6 +170,7 @@ export async function desktopApp(context: BrowserContext, baseURL: string) {
   });
   let launches = 0;
   return {
+    origin: appOrigin,
     server,
     failApiWhen(matches: (method: string, path: string) => boolean) {
       apiFault = matches;

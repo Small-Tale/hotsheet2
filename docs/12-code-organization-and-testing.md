@@ -635,6 +635,15 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   The feature is debug-only; a test-owner environment value never enables a backend
   or changes normal release/native credential behavior. A later default-feature build
   can replace the sibling server, so repeat the matching fixture build before tests.
+- **Desktop fixture AI inventory (HS2-T9TGKQ):** attachment/session fixtures use the
+  actual empty-inventory contracts (`GET /ai-tools` → `200 []`, `GET /ai-settings` →
+  `404` with the server's error shape). Held/faulted API responses remain available;
+  ticket, storage and attachment operations still use the isolated real server. This
+  includes an HTTP-only isolation probe: stop the owned synthetic upstream before any
+  page launch or project open, then verify canonical responses and idempotent cleanup.
+  The actual-parent recovery/byte flow remains a separate test. This avoids installed-tool
+  discovery consuming the browser's origin connections during rapid project changes. Production discovery/restore blocking remains HS2-XZ3TTH;
+  fixture isolation does not fix that product risk.
 - **Desktop fixture byte transport (HS2-ZMVQR4):** the desktop draft fixture's owned
   Hono listener forwards project API requests to its isolated real ticket server with the
   original raw body, metadata and explicit fixture authentication. Keep its held-response
