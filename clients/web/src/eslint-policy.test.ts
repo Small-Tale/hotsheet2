@@ -7,24 +7,21 @@ import { describe, expect, it } from 'vitest';
 import packageJson from '../package.json';
 
 describe('web ESLint policy', () => {
-  it('HS2-HK6KMT lints Node scripts and rejects a real invalid script', async () => {
-    const webRoot = join(import.meta.dirname, '..');
-    const eslint = new ESLint({ cwd: webRoot });
-    const productionScript = join(webRoot, 'scripts/stable-dev.mjs');
-    const scriptTest = join(webRoot, 'scripts/stable-dev.test.mjs');
-
-    expect(await eslint.isPathIgnored(productionScript)).toBe(false);
-    expect(await eslint.isPathIgnored(scriptTest)).toBe(false);
-    expect(await eslint.isPathIgnored(join(webRoot, 'eslint.config.mjs'))).toBe(false);
-
-    const scripts = readdirSync(join(webRoot, 'scripts'))
-      .filter((name) => /\.(?:mjs|mts)$/.test(name))
-      .map((name) => join(webRoot, 'scripts', name));
-    const included = [...scripts, join(webRoot, 'eslint.config.mjs')];
-    const realResults = await eslint.lintFiles(included);
-    expect(realResults.map((result) => result.filePath).sort()).toEqual(included.sort());
+  const webRoot = join(import.meta.dirname, '..');
+  const eslint = new ESLint({ cwd: webRoot });
+  const scripts = readdirSync(join(webRoot, 'scripts'))
+    .filter((name) => /\.(?:mjs|mts)$/.test(name))
+    .map((name) => `scripts/${name}`);
+  // HS2-2SPPTQ: preserve every real lint input without aggregating their work into one timed case.
+  it.each([...scripts, 'eslint.config.mjs'])('HS2-2SPPTQ preserves HS2-HK6KMT lint coverage for %s', async (name) => {
+    const filePath = join(webRoot, name);
+    expect(await eslint.isPathIgnored(filePath)).toBe(false);
+    const realResults = await eslint.lintFiles([filePath]);
+    expect(realResults.map((result) => result.filePath)).toEqual([filePath]);
     expect(realResults.every((result) => result.errorCount === 0 && result.warningCount === 0)).toBe(true);
+  });
 
+  it('HS2-2SPPTQ preserves HS2-HK6KMT rejection through the actual Node lint route', async () => {
     const [invalid] = await eslint.lintText('const value = missingReference;\n', {
       filePath: join(webRoot, 'scripts/hs2-hk6kmt-invalid.mjs'),
     });
