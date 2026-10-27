@@ -15,8 +15,11 @@ use hotsheet_ticketing::{FsStore, SortKey, TicketCollection, TicketQuery};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
-/// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 20;
+/// Bump to force a full rebuild on open when the on-disk schema is stale. A change to
+/// a derived column such as `feedback_needed` also bumps it: rows keyed by an unchanged
+/// content hash are never re-derived, and an older process sharing the file would keep
+/// writing the old projection (21: explicit note kinds, HS2-4ZFB8K).
+const SCHEMA_VERSION: i64 = 21;
 
 /// How long an index connection waits for another process's write lock.
 const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);

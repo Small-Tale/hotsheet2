@@ -1471,6 +1471,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: shipped CLI, HTTP and MCP append/correction flows cover invalid input and provider refusal before mutation. `clients/web/tests/providers.spec.ts # HS2-CV5NMC` covers the real server's explicit note, ordinary composer's omitted kind, inferred request, correction/reload, and desktop-to-phone-reader-to-desktop presentation. Reader capability tests refuse unsupported kind edits.
 - Manual: no new manual-only behavior. All writers must be upgraded before relying on explicit intent; this is a documented operational limit, not an old-reader compatibility claim.
 
+### Needs-review marker and details agreement (HS2-4ZFB8K)
+
+- Behavior: the list and column Needs review marker reads the index's cached `feedback_needed`, while details derive it live from the ticket. The index schema is bumped (21) whenever that derivation changes, so a stale row or an older process sharing the file cannot keep an explicit Regular note that mentions the marker flagged after HS2-CV5NMC.
+- Unit: `crates/hotsheet-index/src/tests.rs # explicit_regular_marker_note_is_not_indexed_as_needing_review_hs2_4zfb8k` walks legacy implicit → explicit Regular → explicit request reset → rebuild and asserts row/live agreement; `derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k` pins the derived projection over a synthetic corpus together with `SCHEMA_VERSION`.
+- End to end: `clients/web/tests/providers.spec.ts # HS2-4ZFB8K` drives the real server through the list-to-details flow for an explicit Regular marker note and a legacy implicit request, the kind correction plus reload, and the reset plus reload, with wide/medium/narrow/wide captures.
+- Manual: none new.
+
 ### In-app prompt replacements (HS2-WMZ6Z5)
 
 - Behavior: inline attachment filenames save on blur/Enter, cancel with Escape, retain local recovery and failed drafts; command-group creation has explicit submission and validation; AI customization has whole-dialog cancellation and provider defaults for blank model and Provider Default effort, with declared effort choices and unsupported-model disable. Group-error recovery is fenced by operation generation, project identity, and message revision.

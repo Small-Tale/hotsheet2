@@ -2161,3 +2161,122 @@ fn confidence_column_filters_and_sorts_like_the_file_scan() {
     assert!(index.query(&low).unwrap().is_empty());
     assert!(ops_ids(&store, &low).is_empty());
 }
+
+fn marker_note(
+    id: &str,
+    at: &str,
+    kind: hotsheet_model::NoteKind,
+    explicit: bool,
+) -> hotsheet_model::Note {
+    hotsheet_model::Note {
+        id: ulid(id),
+        created_at: Timestamp::new(at),
+        edited_at: Timestamp::new(at),
+        kind,
+        summary: None,
+        confidence: None,
+        feedback_for: None,
+        kind_explicit: explicit,
+        feedback_request: false,
+        response_to: None,
+        ai_feedback: None,
+        human_edited: false,
+        actor: None,
+        text: "Acting on a quoted FEEDBACK NEEDED line from an earlier exchange".into(),
+    }
+}
+
+#[test]
+fn explicit_regular_marker_note_is_not_indexed_as_needing_review_hs2_4zfb8k() {
+    use hotsheet_model::NoteKind;
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let note_id = "01ARZ3NDEKTSV4RRFFQ69G5FC0";
+    let row = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    let set_kind = |kind: NoteKind, explicit: bool| {
+        let mut ticket = store.read_ticket(&id).unwrap();
+        ticket.notes.retain(|note| note.id != ulid(note_id));
+        ticket
+            .notes
+            .push(marker_note(note_id, "2026-08-19T01:00:00Z", kind, explicit));
+        store.write_ticket(&ticket).unwrap();
+    };
+
+    // A legacy implicit regular note with the marker still opens an exchange.
+    set_kind(NoteKind::Regular, false);
+    ix.reconcile(&store).unwrap();
+    assert!(row(&ix).feedback_needed && row(&ix).needs_review);
+
+    // Correcting it to an explicit Regular note clears the list marker, matching details.
+    set_kind(NoteKind::Regular, true);
+    ix.reconcile(&store).unwrap();
+    let corrected = row(&ix);
+    assert!(!corrected.feedback_needed && !corrected.needs_review);
+    assert_eq!(
+        corrected.feedback_needed,
+        store.read_ticket(&id).unwrap().feedback_needed(),
+        "index row agrees with the live ticket derivation the details panel uses"
+    );
+
+    // Resetting it to an explicit feedback request reopens it; a fresh rebuild agrees.
+    set_kind(NoteKind::FeedbackNeeded, true);
+    ix.reconcile(&store).unwrap();
+    assert!(row(&ix).needs_review);
+    set_kind(NoteKind::Regular, true);
+    ix.rebuild_from_store(&store).unwrap();
+    assert!(!row(&ix).needs_review);
+}
+
+/// Conventions-as-code guard (HS2-4ZFB8K): the index caches `feedback_needed` per
+/// content hash, so changing how it is derived without bumping `SCHEMA_VERSION` leaves
+/// stale rows and lets older processes keep writing the old projection into the shared
+/// file. When this projection changes, bump `SCHEMA_VERSION` and update both values.
+#[test]
+fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
+    use hotsheet_model::{NoteKind, Ticket};
+    let ticket = |details: &str, notes: Vec<hotsheet_model::Note>| {
+        let mut t = Ticket::new(
+            ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            "HS2-PIN000",
+            "Pinned projection",
+            "task",
+            "2026-08-19T00:00:00Z",
+            "2026-08-19T00:00:00Z",
+        );
+        t.details = details.into();
+        t.notes = notes;
+        t
+    };
+    let at = "2026-08-19T01:00:00Z";
+    let id = "01ARZ3NDEKTSV4RRFFQ69G5FC0";
+    let quoted = {
+        let mut n = marker_note(id, at, NoteKind::Regular, false);
+        n.text = "> FEEDBACK NEEDED: earlier".into();
+        n
+    };
+    let corpus = [
+        ticket("FEEDBACK NEEDED: details only", vec![]),
+        ticket("", vec![marker_note(id, at, NoteKind::Regular, false)]),
+        ticket("", vec![marker_note(id, at, NoteKind::Regular, true)]),
+        ticket(
+            "",
+            vec![marker_note(id, at, NoteKind::FeedbackNeeded, true)],
+        ),
+        ticket("FEEDBACK NEEDED: superseded", vec![quoted]),
+    ];
+    let projection = corpus
+        .iter()
+        .map(Ticket::feedback_needed)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        (SCHEMA_VERSION, projection),
+        (21, vec![true, true, false, true, false]),
+        "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
+    );
+}

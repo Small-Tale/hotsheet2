@@ -34345,3 +34345,109 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
     await server.stop();
   }
 });
+
+test('keeps the list Needs review marker aligned with details after a kind correction and reload (HS2-4ZFB8K)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    // Synthetic shape of the report: an explicit Regular note whose prose mentions the marker,
+    // beside a legacy implicit marker note that genuinely opens an exchange.
+    const explicitTicket = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Synthetic explicit regular',
+    });
+    await server.request<FullTicket>(`/tickets/${explicitTicket.id}`, 'PATCH', {
+      note: 'Acting on an earlier FEEDBACK NEEDED line; no decision is pending.',
+      note_kind: 'regular',
+    });
+    const legacyTicket = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic legacy marker' });
+    const legacyPath = `/tickets/${legacyTicket.id}`;
+    const legacy = await server.request<FullTicket>(legacyPath, 'PATCH', {
+      note: 'FEEDBACK NEEDED: choose the synthetic option.',
+    });
+    expect(legacy.feedback_needed).toBe(true);
+    await mockProject(page);
+    for (const [pattern, prefix] of [
+      ['**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', `/checkouts/${server.checkoutId}`],
+      ['**/__hotsheet/project-api/demo-checkout/providers', '/providers'],
+    ] as const) {
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = prefix.startsWith('/checkouts/')
+          ? incoming.pathname.replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', prefix)
+          : prefix;
+        const response = await route.fetch({
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      });
+    }
+    const inspector = page.locator('#app-right-rail');
+    const header = inspector.locator('[data-component="ticket-inspector-header"]');
+    const sidebar = page.locator('#app-left-rail');
+    const leftContent = sidebar.locator(':scope > .kui-workbench__panel-content');
+    const rightContent = inspector.locator(':scope > .kui-workbench__panel-content');
+    const rowMarker = (slug: string) =>
+      page.locator(`[data-ticket-slug="${slug}"]`).first().getByRole('img', { name: 'Needs review' });
+    // The row marker and the details header must tell the same story for each ticket.
+    const expectAgreement = async (slug: string, needsReview: boolean) => {
+      await expect(rowMarker(slug)).toHaveCount(needsReview ? 1 : 0);
+      await page.locator(`[data-ticket-slug="${slug}"]`).first().click();
+      await expect(header).toHaveAttribute('data-needs-review', String(needsReview));
+      await expect(rowMarker(slug)).toHaveCount(needsReview ? 1 : 0);
+    };
+    const openProject = async () => {
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    };
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openProject();
+    await expectAgreement(explicitTicket.slug, false);
+    await expectAgreement(legacyTicket.slug, true);
+
+    const request = legacy.notes.find((note) => note.kind === 'feedback_needed')!;
+    const corrected = await server.request<FullTicket>(legacyPath, 'PATCH', {
+      note_id: request.id,
+      note_kind: 'regular',
+    });
+    expect(corrected.feedback_needed).toBe(false);
+    await page.reload();
+    await expectAgreement(legacyTicket.slug, false);
+    await expectAgreement(explicitTicket.slug, false);
+    await expect(inspector.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath('hs2-4zfb8k-corrected-wide.png') });
+
+    // Resetting the note to an explicit request reopens both presentations together.
+    await server.request<FullTicket>(legacyPath, 'PATCH', { note_id: request.id, note_kind: 'feedback_needed' });
+    await page.reload();
+    await expectAgreement(legacyTicket.slug, true);
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1100],
+      ['narrow', 390],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      // Capture the resting layout, not a frame of the rail collapse/restore motion.
+      const narrow = width < 600;
+      await expect(sidebar).toHaveAttribute('data-collapsed', String(narrow));
+      await expect(inspector).toHaveAttribute('data-collapsed', String(narrow));
+      await expect(leftContent).toHaveCSS('transform', narrow ? /matrix/ : 'none');
+      await expect
+        .poll(async () => {
+          const box = (await rightContent.boundingBox())!;
+          return narrow ? Math.round(box.x) >= width : Math.round(box.x + box.width) <= width;
+        })
+        .toBe(true);
+      await expect(rowMarker(legacyTicket.slug)).toBeInViewport();
+      await expect(rowMarker(explicitTicket.slug)).toHaveCount(0);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+      await page.screenshot({ path: test.info().outputPath(`hs2-4zfb8k-${label}.png`) });
+    }
+  } finally {
+    await server.stop();
+  }
+});
