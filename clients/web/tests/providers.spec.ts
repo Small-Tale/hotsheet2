@@ -30151,12 +30151,12 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await page.screenshot({ path: 'target/visual-captures/hs2-ebgcgw-delay-open-wide.png' });
   await page.keyboard.press('Escape');
   await expect(delay).not.toHaveAttribute('open');
-  // Switching to Auto-deny never keeps an immediate delay: it moves to the shortest deny delay.
+  // Switching to Auto-deny never keeps an immediate delay: it keeps the established 15-second fallback.
   await setValue(action, 'deny');
   await expect.poll(stored).toBe('{"action":"deny","delayMs":15000}');
   await expect(delay).toHaveJSProperty('value', '15000');
   await expect(delay.locator('.kui-select__option[data-value="0"]')).toHaveCount(0);
-  await expect(delay.locator('.kui-select__option').first()).toHaveText('15 seconds');
+  await expect(delay.locator('.kui-select__option').first()).toHaveText('5 seconds');
   // Back to Auto-allow, then edit again after the reset.
   await setValue(action, 'allow');
   await expect(delay.locator('.kui-select__option[data-value="0"]')).toHaveCount(1);

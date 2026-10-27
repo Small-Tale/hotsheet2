@@ -20,6 +20,9 @@ machine-local provider and permission-vault envelopes after verified legacy migr
 (HS2-5A6JNS). Backup, restore, rotation, and explicit legacy cleanup are headless
 `key master-*` commands; see [secure provider keys](04-core-server-cli.md#471-secure-provider-keys).
 
+**Shipped permission automation:** Auto-Allow and Auto-Deny offer a persisted 5-second
+visible-time delay alongside the existing choices (HS2-0XF17D); see [client permissions](06-clients.md).
+
 **Shipped in-app inputs:** filename rename, command-group creation, and customized AI launch
 use controlled application inputs rather than unsupported browser prompts (HS2-WMZ6Z5).
 

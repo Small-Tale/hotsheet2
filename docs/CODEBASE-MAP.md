@@ -353,7 +353,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
-    src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers; identical-request grouping and remembered-rule helpers (HS2-JNHAYB)
+    src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers; identical-request grouping and remembered-rule helpers (HS2-JNHAYB); 5-second Settings and real-server coverage in tests/permission-automation-delay.spec.ts (HS2-0XF17D)
     src/features/permissions.tsx # Popup projection and auto-Allow review continuation (HS2-WZK2QK); controlled remembered-title expansion and reviewed-match editor drafts/save/validation with context resets (HS2-Y8FYVY, HS2-400WZZ)
     src/components/permission-rules-settings.tsx, .css # Settings → Permissions expandable two-line monospace command titles, flowing badges, dedicated reviewed-match dialog, copy, revoke, and session/always duration edits (HS2-CA5MSD, HS2-Y8FYVY, HS2-400WZZ)
     src/permission-rule-editor-focus.ts # Logical opener restoration after editor renders, guarded against changed contexts, new editors, and disposal (HS2-400WZZ)

@@ -163,6 +163,7 @@ describe('permission notifications', () => {
     expect(permissionDelaysFor('deny')).toEqual(PERMISSION_DELAYS.slice(1));
     expect(PERMISSION_DELAYS.map(formatPermissionDelay)).toEqual([
       '0 seconds',
+      '5 seconds',
       '15 seconds',
       '1 minute',
       '2 minutes',
@@ -173,7 +174,7 @@ describe('permission notifications', () => {
     expect(formatPermissionDelay(1_000)).toBe('1 second');
     expect(parsePermissionAutomation({ action: 'allow', delayMs: 0 })).toEqual({ action: 'allow', delayMs: 0 });
     expect(parsePermissionAutomation({ action: 'off', delayMs: 0 })).toEqual({ action: 'off', delayMs: 0 });
-    // Never deny without showing the request: a stored or switched-to deny + 0 s uses the shortest deny delay.
+    // Never deny without showing the request: a stored or switched-to deny + 0 s keeps the established 15-second fallback.
     expect(parsePermissionAutomation({ action: 'deny', delayMs: 0 })).toEqual({ action: 'deny', delayMs: 15_000 });
     expect(allowsImmediately({ action: 'allow', delayMs: 0 })).toBe(true);
     expect(allowsImmediately({ action: 'allow', delayMs: 15_000 })).toBe(false);
@@ -185,6 +186,21 @@ describe('permission notifications', () => {
     expect(timer.isCancelled('p:1')).toBe(true);
     timer.remove('p:1');
     expect(timer.isCancelled('p:1')).toBe(false);
+  });
+  it('restores the 5-second choice for either action and counts visible time only (HS2-0XF17D)', () => {
+    for (const action of ['off', 'allow', 'deny'] as const) {
+      expect(permissionDelaysFor(action)).toContain(5_000);
+      expect(parsePermissionAutomation({ action, delayMs: 5_000 })).toEqual({ action, delayMs: 5_000 });
+    }
+    expect(formatPermissionDelay(5_000)).toBe('5 seconds');
+    const timer = new VisiblePermissionTimer();
+    expect(timer.tick('five', 5_000, 0)).toBe(5_000);
+    timer.hide(2_000);
+    expect(timer.tick('five', 5_000, 20_000)).toBe(3_000);
+    expect(timer.tick('five', 5_000, 22_999)).toBe(1);
+    expect(timer.tick('five', 5_000, 23_000)).toBe(0);
+    timer.remove('five');
+    expect(timer.tick('five', 5_000, 30_000)).toBe(5_000);
   });
   it('rejects malformed and older-than-seven-days persisted history', () => {
     const week = 7 * 24 * 60 * 60 * 1000,

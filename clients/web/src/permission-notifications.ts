@@ -101,9 +101,9 @@ export interface PermissionAutomation {
  * allowed and recorded without ever presenting the popup. It is deliberately not offered for
  * Auto-deny; use {@link permissionDelaysFor} for the delays a given action may choose.
  */
-export const PERMISSION_DELAYS = [0, 15_000, 60_000, 120_000, 300_000, 900_000, 3_600_000] as const;
+export const PERMISSION_DELAYS = [0, 5_000, 15_000, 60_000, 120_000, 300_000, 900_000, 3_600_000] as const;
 export const DEFAULT_PERMISSION_AUTOMATION: PermissionAutomation = { action: 'off', delayMs: 60_000 };
-const SHORTEST_DENY_DELAY = 15_000;
+const IMMEDIATE_DENY_FALLBACK_DELAY = 15_000;
 
 /** The delays the settings form offers for `action`; immediate (0 s) is Auto-allow only. */
 export function permissionDelaysFor(action: PermissionAutomationAction): readonly number[] {
@@ -146,8 +146,8 @@ export function parsePermissionAutomation(raw: unknown): PermissionAutomation {
     ? value.delayMs!
     : 60_000;
   // Immediate (0 s) is Auto-allow only; a deny (for example after switching from Auto-allow 0 s)
-  // falls back to the shortest deny delay rather than denying without showing the request.
-  return { action, delayMs: action === 'deny' && delayMs === 0 ? SHORTEST_DENY_DELAY : delayMs };
+  // keeps the established 15-second fallback rather than denying without showing the request (HS2-0XF17D).
+  return { action, delayMs: action === 'deny' && delayMs === 0 ? IMMEDIATE_DENY_FALLBACK_DELAY : delayMs };
 }
 
 export function parsePermissionHistory(raw: unknown, now = Date.now()): PermissionHistoryItem[] {

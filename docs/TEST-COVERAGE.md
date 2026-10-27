@@ -1323,6 +1323,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `clients/web/tests/providers.spec.ts` covers grouped answers, failed optimistic send, 404 cleanup, immediate auto-allow, cross-project routing, and wide/phone popup states.
 - Manual: Wide and phone grouped-popup captures were inspected; live provider permission behavior remains in the existing terminal verification tickets.
 
+### Five-second permission automation (HS2-0XF17D)
+
+- Behavior: Both automatic actions offer 5 seconds, persisted per project; the 1-minute default and existing 15-second deny/immediate fallback remain unchanged.
+- Unit: `permission-notifications.test.ts` verifies parsing, labels, exact expiry, hidden-time pause/resume, and reset/refill.
+- End to end: `tests/permission-automation-delay.spec.ts` uses real Settings controls, reload, reset and further edits, and an isolated real server request for both automatic outcomes. `providers.spec.ts` retains immediate-approval and action-switch regressions.
+- Visual: Inspected the real Settings delay menu at 1440, 900, 390, and 1440 pixels after resize; the selected 5-second option remains visible and readable.
+
 ### Exact remembered permission review (HS2-CA5MSD)
 
 - Behavior: Authenticated rule reads reveal the exact action, tool, project/chat reach, lifetime, decision, and exact match type. A remembered approval requires a separate preview and confirmation. Settings supports action copy and revoke, and a missing key or invalid encrypted file locks the list and prevents durable automatic answers.
