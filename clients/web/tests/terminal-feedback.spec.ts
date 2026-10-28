@@ -374,7 +374,8 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
         value.viewportRight <= 2 &&
         value.viewportBottom <= 2 &&
         value.scaleSkew < 0.001 &&
-        Math.abs(value.frameAspect - 5 / 3) > 0.1,
+        // The magnified frame now follows the fixed grid aspect (HS2-KR0C0B).
+        Math.abs(value.frameAspect - 5 / 3) < 0.02,
       );
     })
     .toBe(true);
