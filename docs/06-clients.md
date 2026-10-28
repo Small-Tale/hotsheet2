@@ -3170,7 +3170,10 @@ terminal moved into a phone Workspace Grid tile also renders and claims 80×24 r
 shrinking the PTY to the tile's fitted cell count (HS2-7VV2KN).
 Magnified interactive terminals first fit their font
 metrics to the available modal frame while keeping the same 80×24 rows and columns. Magnifying a grid tile
-keeps the 80×24 contract in its larger interactive frame. While
+keeps the 80×24 contract in its larger interactive frame. On desktop that card is the largest
+box the overlay fits at the terminal's 5:3 frame plus its inset ring and footer, with no fixed
+width cap, so the terminal and its text grow with the window instead of letterboxing in a tall
+card; the phone card keeps its full-screen presentation (HS2-KR0C0B). While
 that terminal is magnified, its matching grid card replaces the live preview with a solid
 terminal-background placeholder. A live tile instance moves into the magnified card, scales there,
 then returns to the grid on dismissal without reconnecting. When no live instance exists, the card
