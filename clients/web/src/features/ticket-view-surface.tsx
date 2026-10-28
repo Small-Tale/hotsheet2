@@ -19,6 +19,7 @@ import {
 export interface TicketViewSurfaceDependencies {
   canStageNewTicketAttachments: () => boolean;
   capabilitiesFor: (connectionId: string) => Capabilities;
+  isGitSource: (connectionId: string) => boolean;
   customViewFor: (view: TicketView, projectId?: string) => CustomView | undefined;
   priority: (value?: string) => TicketPriority;
   selectedTicketSlugs: Signal<string[]>;
@@ -36,6 +37,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
   const {
     canStageNewTicketAttachments,
     capabilitiesFor,
+    isGitSource,
     customViewFor,
     priority,
     selectedTicketSlugs,
@@ -98,6 +100,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         closeAction: slugs.length === 1 && Boolean(capabilities?.close && capabilities.close_reasons),
         selectionCount: slugs.length,
         canBulkUpdate: canBulkUpdate(selected, capabilitiesFor),
+        canCreateFollowUp: Boolean(ticket && isGitSource(ticket.connection_id)),
         allInBacklog: selected.length > 0 && selected.every((item) => item.status === 'backlog'),
         allInArchive: selected.length > 0 && selected.every(isArchivedTicket),
         allInTrash: selected.length > 0 && selected.every(isTrashedTicket),

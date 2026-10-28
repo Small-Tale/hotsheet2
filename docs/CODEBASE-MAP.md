@@ -473,6 +473,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/native_id.rs         #   unqualified_native_id: offline GitHub/GitLab issue-number and Jira project-key shape check that gates provider probes for unqualified checkout ids (HS2-FXGKBD)
       src/note_trailer.rs      #   shared comment encoding for external trackers: note-id marker, strict confidence trailer, linked feedback request/response markers, and latest_confidence for comment-only providers (HS2-5YNASC, HS2-W1ENZD)
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
+                            # ticket_ref.rs owns qualified project/source/native ticket references (HS2-2Z11A5)
       src/lib.rs             #   re-exports; SCHEMA_VERSION
       src/enums.rs           #   Priority/Status/CloseReason/NoteKind/ReviewKind
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)

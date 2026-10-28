@@ -131,6 +131,8 @@ enum Cmd {
     },
     /// Create a new ticket.
     New(NewArgs),
+    /// Idempotently repair a source ticket's link to an existing follow-up.
+    LinkFollowUp { source: String, target: String },
     /// List / query tickets with optional filters and sort.
     Ls {
         #[command(flatten)]

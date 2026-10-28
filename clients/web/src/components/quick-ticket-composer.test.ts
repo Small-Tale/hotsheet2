@@ -10,6 +10,12 @@ import {
 } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
+  it('HS2-2Z11A5 identifies a follow-up source in the shared creation dialog', () => {
+    const markup = String(QuickTicketComposer({ expanded: true, followUpSource: 'HS2-SOURCE' }));
+    expect(markup).toContain('Create follow-up to HS2-SOURCE');
+    expect(markup).toContain('Follow-up to HS2-SOURCE');
+    expect(markup).toContain('data-action="create-ticket-form"');
+  });
   it('gives the title the available width while keeping category compact', () => {
     const css = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');

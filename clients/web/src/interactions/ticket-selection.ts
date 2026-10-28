@@ -64,6 +64,7 @@ export interface TicketSelectionInteractionsDependencies {
   readonly closeTicketCloseDialog: () => void;
   ticketLinkReturnFocus: HTMLElement | undefined;
   readonly openDuplicateTarget: (id: string) => Promise<void>;
+  readonly openFollowUpComposer: (ticket: WireTicketRow) => void;
   readonly notWorkingNote: Signal<string>;
   readonly scheduleProjectSessionPersistence: () => void;
   readonly presentNotWorkingDialog: () => void;
@@ -115,6 +116,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     submitTicketClose,
     closeTicketCloseDialog,
     openDuplicateTarget,
+    openFollowUpComposer,
     notWorkingNote,
     scheduleProjectSessionPersistence,
     presentNotWorkingDialog,
@@ -244,6 +246,11 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         if (action === 'Duplicate ticket') {
           copySelection(false);
           void pasteSelection();
+          return;
+        }
+        if (action === 'Create follow-up') {
+          const ticket = menuTicket(menuSlug);
+          if (ticket) openFollowUpComposer(ticket);
           return;
         }
         if (action === 'Move to Backlog') {
@@ -412,6 +419,12 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openDuplicateTarget.selector, (_event, target) => {
       dependencies.ticketLinkReturnFocus = target as HTMLElement;
       void openDuplicateTarget(data(target).targetId ?? data(target).itemId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openFollowUpTarget.selector, (_event, target) => {
+      dependencies.ticketLinkReturnFocus = target as HTMLElement;
+      void openDuplicateTarget(data(target).targetId!);
     }),
   );
   lifetime.add(

@@ -229,6 +229,8 @@ pub(crate) struct CreateReq {
     pub(crate) up_next: Option<bool>,
     /// Blocker tickets (slug or ULID), resolved to ULIDs on create.
     pub(crate) blocked_by: Option<Vec<String>>,
+    /// Qualified source ticket when this creation is an explicit follow-up.
+    pub(crate) follow_up_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

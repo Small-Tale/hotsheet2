@@ -69,6 +69,10 @@ store. A provider must do one of the following, declared per capability:
 
 Clients and automation degrade deliberately based on capabilities. They do not show a
 successful control whose result cannot be persisted by the authoritative provider.
+Explicit follow-up relations (HS2-2Z11A5) use qualified
+`@project/connection:native` identities. A Git source persists its outgoing links;
+external source providers currently report relation writes unsupported. A follow-up
+target may live in any connected source, including an external provider.
 
 ## 16.4 Host contract and capabilities
 

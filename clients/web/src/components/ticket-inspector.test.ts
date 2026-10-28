@@ -271,6 +271,31 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="external-link"');
   });
 
+  it('HS2-2Z11A5 composes follow-up evidence in the live inspector tab', () => {
+    const markup = String(
+      TicketInspector({
+        ...base,
+        activeTab: 'code-review',
+        codeReview: {
+          truncated: false,
+          ranges: [],
+          commits: [],
+          follow_ups: [
+            {
+              target: { project_id: 'project', connection_id: 'git', native_id: 'native' },
+              state: 'resolved',
+              slug: 'HS2-NEXT',
+              title: 'Next work',
+            },
+          ],
+        },
+      }),
+    );
+    expect(markup).toContain('Follow-ups (1)');
+    expect(markup).toContain('data-target-id="@project/git:native"');
+    expect(markup).toContain('HS2-NEXT · Next work');
+  });
+
   it('places the ticket number in the leading toolbar slot for the sidebar and reader (HS2-9MCJ2B, HS2-FZ5HB2)', () => {
     const slugChild = 'class="ticket-inspector__slug"';
     const sidebar = String(TicketInspector({ ...base }));

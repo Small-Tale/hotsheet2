@@ -27,6 +27,7 @@ import {
 import type { CodeReview, CodeReviewTarget, CommitRef, UnmergedSource } from '../api';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { MarkdownPreview } from './markdown-preview';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
@@ -84,6 +85,44 @@ export function TicketCodeReview({
         <Text variant="p" tone="quiet" size="compact" role="status">
           {loadingMessage}
         </Text>
+      )}
+      {!loading && review && Boolean(review.follow_ups?.length) && (
+        <section class="ticket-code-review__follow-ups" aria-label="Follow-Up Tickets">
+          <Text variant="h3" size="compact" flush>
+            Follow-ups ({review.follow_ups?.length})
+          </Text>
+          <ul>
+            {review.follow_ups?.map((item) => {
+              const qualified = `@${item.target.project_id}/${item.target.connection_id}:${item.target.native_id}`;
+              return (
+                <li>
+                  {item.state === 'resolved' ? (
+                    <button
+                      type="button"
+                      {...TICKET_SELECTION_ACTIONS.openFollowUpTarget.attrs}
+                      data-target-id={qualified}
+                    >
+                      <LucideIcon size="s" icon={GitBranch} name="git-branch" />
+                      <span>
+                        {item.slug ?? qualified} · {item.title ?? 'Untitled ticket'}
+                      </span>
+                    </button>
+                  ) : (
+                    <span role="status">
+                      <LucideIcon size="s" icon={CircleHelp} name="circle-help" />
+                      {qualified} ·{' '}
+                      {item.state === 'missing'
+                        ? 'Target missing'
+                        : item.state === 'deleted'
+                          ? 'Target deleted'
+                          : 'Target unavailable'}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
       {!loading && review && review.commits.length === 0 && (
         <EmptyState

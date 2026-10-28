@@ -61,6 +61,7 @@ impl Cmd {
             | PurgeTrash { .. }
             | MergeDriver { .. } => Group::Store,
             New(_)
+            | LinkFollowUp { .. }
             | Ls { .. }
             | Show { .. }
             | Batch { .. }

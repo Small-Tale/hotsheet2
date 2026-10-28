@@ -1,5 +1,12 @@
 # Manual Test Plan
 
+For HS2-2Z11A5, create a synthetic source ticket and use its context action to
+create a follow-up in the shared composer. Inspect Code Review at wide, medium,
+and narrow widths, then return to wide: the count and qualified target link must
+remain readable and open the target. Remove the target in an isolated test store
+and confirm the source still opens with a missing-target diagnostic. Repeat with
+an external source ticket and confirm the unsupported relation write is explicit.
+
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.
 Launch a fresh signed copy, approve the first Keychain access if requested,

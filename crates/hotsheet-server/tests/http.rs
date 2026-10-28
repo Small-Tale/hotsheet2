@@ -11628,6 +11628,169 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .unwrap();
     assert_eq!(launched.status(), StatusCode::NO_CONTENT);
 
+    // HS2-2Z11A5: an explicit creation context writes a qualified source link;
+    // an unresolved target stays diagnostic evidence without blocking Code Review.
+    let failed_create = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/review/tickets",
+            Some(&serde_json::json!({"title": "Rejected follow-up", "status": "verified", "follow_up_to": format!("@review/{qualified_id}")}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert!(failed_create.status().is_client_error());
+    let source_before = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        source_before["follow_ups"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    );
+    let target_response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/review/tickets",
+            Some(
+                &serde_json::json!({
+                    "title": "Follow-up work",
+                    "follow_up_to": format!("@review/{qualified_id}")
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(target_response.status(), StatusCode::CREATED);
+    let target = body_json(target_response).await;
+    let source = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let canonical_project = source["follow_ups"][0]["project_id"].as_str().unwrap();
+    assert!(!canonical_project.is_empty());
+    assert_ne!(canonical_project, "review");
+    assert_eq!(
+        source["follow_ups"][0]["connection_id"],
+        target["connection_id"]
+    );
+    assert_eq!(source["follow_ups"][0]["native_id"], target["native_id"]);
+    for _ in 0..2 {
+        let repair = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/review/follow-up-links",
+                Some(
+                    &serde_json::json!({
+                        "source": format!("@review/{qualified_id}"),
+                        "target": format!("@{canonical_project}/{}", target["qualified_id"].as_str().unwrap())
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(repair.status(), StatusCode::NO_CONTENT);
+    }
+    let after_repair = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(after_repair["follow_ups"].as_array().unwrap().len(), 1);
+
+    let git_store = hotsheet_ticketing::FsStore::open(store.path()).unwrap();
+    hotsheet_ticketing::ops::add_follow_up(
+        &git_store,
+        &hotsheet_model::Ulid::from_string(id).unwrap(),
+        hotsheet_model::ProjectTicketRef {
+            project_id: canonical_project.into(),
+            connection_id: target["connection_id"].as_str().unwrap().into(),
+            native_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+        },
+        hotsheet_model::Timestamp::from("2026-08-19T00:00:00Z"),
+    )
+    .unwrap();
+    let follow_up_review = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}/code-review"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(follow_up_review["follow_ups"].as_array().unwrap().len(), 2);
+    assert_eq!(follow_up_review["follow_ups"][0]["state"], "resolved");
+    assert_eq!(follow_up_review["follow_ups"][1]["state"], "missing");
+    let deleted_target = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!(
+                "/checkouts/review/tickets/{}",
+                target["qualified_id"].as_str().unwrap()
+            ),
+            Some(r#"{"status":"deleted"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted_target.status(), StatusCode::OK);
+    let after_delete = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}/code-review"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(after_delete["follow_ups"][0]["state"], "deleted");
+    assert_eq!(after_delete["follow_ups"][1]["state"], "missing");
+    let source_after_delete = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/review/tickets/{id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        source_after_delete["follow_ups"].as_array().unwrap().len(),
+        2
+    );
+
     std::fs::write(checkout.path().join("code.txt"), "working tree\n").unwrap();
     let unstaged = app
         .clone()

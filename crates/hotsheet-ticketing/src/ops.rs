@@ -11,8 +11,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::str::FromStr;
 
 use hotsheet_model::{
-    ClaimEvent, ClaimEventKind, CloseReason, Confidence, Note, NoteKind, Priority, ReviewRequest,
-    StartedPhase, Status, Ticket, Timestamp, Ulid, derive_slug,
+    ClaimEvent, ClaimEventKind, CloseReason, Confidence, Note, NoteKind, Priority,
+    ProjectTicketRef, ReviewRequest, StartedPhase, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
 
 use crate::store::{FsStore, StoreError};
@@ -693,6 +693,8 @@ pub struct TicketPatch {
     pub up_next: Option<bool>,
     /// Replace the blocker set (already resolved to ULIDs); `Some(vec![])` clears it.
     pub blocked_by: Option<Vec<Ulid>>,
+    /// Replace explicit follow-up targets; absent leaves the relation unchanged.
+    pub follow_ups: Option<Vec<ProjectTicketRef>>,
     /// Absent leaves the reason unchanged; present `None` clears it.
     pub blocked_reason: Option<Option<String>>,
     /// Who is making the change; stamped on the status-transition activity it produces
@@ -735,6 +737,9 @@ pub fn update(
         }
         if let Some(v) = patch.blocked_by {
             t.blocked_by = v;
+        }
+        if let Some(v) = patch.follow_ups {
+            t.follow_ups = v;
         }
         if let Some(v) = patch.blocked_reason {
             t.blocked_reason = v.and_then(|reason| {
@@ -807,6 +812,27 @@ pub fn update(
         }
         store.write_ticket_committing(&t)?;
         Ok(t)
+    })
+}
+
+/// Append a newly created follow-up to its source without losing concurrent links.
+/// Call only after the target creation has succeeded; a failed target create cannot
+/// leave a source relation behind (HS2-2Z11A5).
+pub fn add_follow_up(
+    store: &FsStore,
+    source: &Ulid,
+    target: ProjectTicketRef,
+    now: Timestamp,
+) -> Result<Ticket, StoreError> {
+    store.with_ticket_transaction(|| {
+        let mut ticket = store.read_ticket(source)?;
+        if ticket.follow_ups.contains(&target) {
+            return Ok(ticket);
+        }
+        ticket.follow_ups.push(target);
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
     })
 }
 
@@ -2728,6 +2754,35 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn hs2_2z11a5_follow_up_link_is_idempotent_and_separate_from_blockers() {
+        let (_dir, store) = store();
+        let source = titled(&store, "Source");
+        let target = titled(&store, "Follow-up");
+        let reference = ProjectTicketRef {
+            project_id: "project".into(),
+            connection_id: crate::git_connection_id(&store),
+            native_id: target.id.to_string(),
+        };
+        add_follow_up(
+            &store,
+            &source.id,
+            reference.clone(),
+            ts("2026-10-15T01:00:00Z"),
+        )
+        .unwrap();
+        let repeated = add_follow_up(
+            &store,
+            &source.id,
+            reference.clone(),
+            ts("2026-10-15T02:00:00Z"),
+        )
+        .unwrap();
+        assert_eq!(repeated.follow_ups, vec![reference]);
+        assert!(repeated.blocked_by.is_empty());
+        assert_eq!(repeated.updated_at, ts("2026-10-15T01:00:00Z"));
     }
 
     /// Rewrite a ticket file's `slug:` frontmatter line verbatim.

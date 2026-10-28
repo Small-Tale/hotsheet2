@@ -8,6 +8,66 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[test]
+fn hs2_2z11a5_cli_new_records_a_qualified_follow_up_after_creation() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let project = root.path().join("project");
+    let store_path = root.path().join("tickets.hs2");
+    std::fs::create_dir(&project).unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let checkout = registry
+        .register(&project, None, None, vec![store_path.clone()])
+        .unwrap();
+    let source = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "HS",
+        hotsheet_model::Timestamp::from("2026-10-28T00:00:00Z"),
+        hotsheet_ticketing::NewTicket {
+            title: "Source".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    hs(&store_path)
+        .env("HOTSHEET_HOME", &home)
+        .args([
+            "new",
+            "Next work",
+            "--follow-up-to",
+            &source.slug,
+            "--project",
+            &checkout.id,
+        ])
+        .assert()
+        .success();
+    let linked = store.read_ticket(&source.id).unwrap();
+    assert_eq!(linked.follow_ups.len(), 1);
+    assert_eq!(linked.follow_ups[0].project_id, checkout.id);
+    assert_eq!(
+        linked.follow_ups[0].connection_id,
+        hotsheet_ticketing::git_connection_id(&store)
+    );
+    assert!(hotsheet_model::Ulid::from_string(&linked.follow_ups[0].native_id).is_ok());
+    assert!(linked.blocked_by.is_empty());
+    let target = linked.follow_ups[0].qualified();
+    for _ in 0..2 {
+        hs(&store_path)
+            .env("HOTSHEET_HOME", &home)
+            .args(["link-follow-up", &source.slug, &target])
+            .assert()
+            .success();
+    }
+    assert_eq!(store.read_ticket(&source.id).unwrap().follow_ups.len(), 1);
+}
+
 #[cfg(unix)]
 #[test]
 fn hs2_b14hyw_control_commands_ignore_startup_owner_sentinel() {

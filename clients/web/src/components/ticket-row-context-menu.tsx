@@ -11,6 +11,7 @@ import {
   Clock3,
   Copy,
   Gauge,
+  GitBranch,
   type IconNode,
   RotateCcw,
   Shapes,
@@ -42,6 +43,7 @@ export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{
   { action: 'Add tag', icon: Tag, iconName: 'tag' },
   { action: 'Remove tag', icon: Tags, iconName: 'tags' },
   { action: 'Duplicate ticket', icon: Copy, iconName: 'copy' },
+  { action: 'Create follow-up', icon: GitBranch, iconName: 'git-branch' },
   { action: 'Move to Backlog', icon: Clock3, iconName: 'clock-3' },
   { action: 'Archive ticket', icon: Archive, iconName: 'archive' },
   { action: 'Delete ticket', icon: Trash2, iconName: 'trash-2', danger: true },
@@ -172,6 +174,7 @@ export interface TicketRowContextMenuProps {
   closeAction?: boolean;
   selectionCount?: number;
   canBulkUpdate?: boolean;
+  canCreateFollowUp?: boolean;
   allInBacklog?: boolean;
   allInArchive?: boolean;
   allInTrash?: boolean;
@@ -202,6 +205,7 @@ export function TicketRowContextMenu({
   closeAction = false,
   selectionCount = 1,
   canBulkUpdate = true,
+  canCreateFollowUp = false,
   allInBacklog = false,
   allInArchive = false,
   allInTrash = false,
@@ -260,6 +264,7 @@ export function TicketRowContextMenu({
   entries.push({ kind: 'divider' });
   if (closeAction) entries.push(contextEntry(CLOSE_TICKET_CONTEXT_ACTION), { kind: 'divider' });
   for (const item of TICKET_CONTEXT_ACTIONS.slice(5)) {
+    if (item.action === 'Create follow-up' && (selectionCount !== 1 || !canCreateFollowUp)) continue;
     const alreadyThere =
       (item.action === 'Move to Backlog' && allInBacklog) || (item.action === 'Archive ticket' && allInArchive);
     entries.push(

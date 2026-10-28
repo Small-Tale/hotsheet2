@@ -15,6 +15,7 @@ import type {
   CorruptTicket,
   CustomView,
   DuplicateBacklinkResponse,
+  FollowUpEvidence,
   FullTicket,
   GitHubAuthStart,
   GitHubAuthStatus,
@@ -29,6 +30,7 @@ import type {
   MessageConnectionReceipt,
   PermissionRequest,
   PollResponse,
+  ProjectTicketRef,
   ProviderAccount,
   ProviderConnection,
   ProviderDescriptor,
@@ -536,6 +538,12 @@ export const parseTicket = shape<Ticket>(
   { status: isString, notes: listOf(note.check), attachments: listOf(attachment.check) },
 );
 
+const projectTicketRef = shape<ProjectTicketRef>('project ticket reference', {
+  project_id: isString,
+  connection_id: isString,
+  native_id: isString,
+});
+
 const rowOptional: Record<string, Check> = {
   id: isString,
   title: isString,
@@ -545,6 +553,7 @@ const rowOptional: Record<string, Check> = {
   needs_review: isBoolean,
   tags: isStringArray,
   blocked_by: isStringArray,
+  follow_ups: listOf(projectTicketRef.check),
   claim_count: isNumber,
   notes: listOf(note.check),
 };
@@ -561,6 +570,7 @@ export const parseTicketRow = shape<TicketRow>('ticket row', { slug: isString },
 
 export const parseFullTicket = shape<FullTicket>('ticket', fullTicketRequired, {
   ...rowOptional,
+  follow_up_link_error: isString,
   warnings: isStringArray,
 });
 
@@ -570,6 +580,7 @@ export const parseFullTicket = shape<FullTicket>('ticket', fullTicketRequired, {
  */
 export const parseStoredTicket = shape<FullTicket & { store: string }>('ticket', fullTicketRequired, {
   ...rowOptional,
+  follow_up_link_error: isString,
   store: isString,
   warnings: isStringArray,
 });
@@ -728,10 +739,30 @@ export const parseRepositoryCommitPage = shape<RepositoryPage<CodeReviewCommit>>
   { next_cursor: isNumber },
 );
 
+const followUpEvidence = shape<FollowUpEvidence>(
+  'follow-up evidence',
+  {
+    target: projectTicketRef.check,
+    state: (value) =>
+      value === 'resolved' ||
+      value === 'missing' ||
+      value === 'deleted' ||
+      value === 'unavailable' ||
+      value === 'invalid',
+  },
+  { slug: isString, title: isString, native_url: isString },
+);
+
 export const parseCodeReview = shape<CodeReview>(
   'code review',
   { commits: listOf(commit.check), ranges: listOf(isObject) },
-  { difftool: isString, truncated: isBoolean, summary: isObject, files: listOf(isObject) },
+  {
+    difftool: isString,
+    truncated: isBoolean,
+    summary: isObject,
+    files: listOf(isObject),
+    follow_ups: listOf(followUpEvidence.check),
+  },
 );
 
 const parsePermissionSecretSuggestion = shape<PermissionSecretSuggestion>('permission secret suggestion', {

@@ -949,6 +949,7 @@ pub(crate) async fn get_checkout_code_review(
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let (_, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let slug = ticket.slug;
+    let follow_ups = ticket.follow_ups;
     let classification = checkout
         .settings()
         .get_effective("code_review_file_classes")
@@ -963,7 +964,7 @@ pub(crate) async fn get_checkout_code_review(
         })?
         .unwrap_or_default();
     let root: std::path::PathBuf = checkout.root.into();
-    tokio::task::spawn_blocking(move || {
+    let mut review = tokio::task::spawn_blocking(move || {
         code_review::discover_with_classification(&root, &slug, &classification)
     })
     .await
@@ -973,8 +974,43 @@ pub(crate) async fn get_checkout_code_review(
             format!("code review discovery task failed: {error}"),
         )
     })?
-    .map(Json)
-    .map_err(code_review_api_error)
+    .map_err(code_review_api_error)?;
+    review.follow_ups = follow_ups
+        .into_iter()
+        .map(|target| {
+            let mut evidence = code_review::FollowUpEvidence {
+                target: target.clone(),
+                state: "invalid",
+                slug: None,
+                title: None,
+                native_url: None,
+            };
+            if hotsheet_ticketing::ProjectTicketRef::from_qualified(&target.qualified()).as_ref()
+                != Some(&target)
+            {
+                return evidence;
+            }
+            let id = format!("{}:{}", target.connection_id, target.native_id);
+            match super::checkout_tickets::resolve_checkout_ticket(&state, &target.project_id, &id)
+            {
+                Ok((_, _, resolved))
+                    if resolved.ticket.status == hotsheet_model::Status::Deleted =>
+                {
+                    evidence.state = "deleted";
+                }
+                Ok((_, _, resolved)) => {
+                    evidence.state = "resolved";
+                    evidence.slug = Some(resolved.ticket.slug);
+                    evidence.title = Some(resolved.ticket.title);
+                    evidence.native_url = resolved.ticket.native_url;
+                }
+                Err(error) if error.status == StatusCode::NOT_FOUND => evidence.state = "missing",
+                Err(_) => evidence.state = "unavailable",
+            }
+            evidence
+        })
+        .collect();
+    Ok(Json(review))
 }
 
 pub(crate) async fn open_checkout_code_review(

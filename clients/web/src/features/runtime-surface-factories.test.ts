@@ -34,6 +34,7 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
     const surface = createTicketViewSurface({
       canStageNewTicketAttachments: () => staging,
       capabilitiesFor: () => ({ update: true }) as Capabilities,
+      isGitSource: () => true,
       customViewFor: (view) => (view === 'custom:x' ? { id: 'x', name: 'Mine', query: {} } : undefined) as never,
       priority: (value) => (value ?? 'default') as TicketPriority,
       selectedTicketSlugs: signal([]),
@@ -56,5 +57,28 @@ describe('runtime surface factories (HS2-K0VC2C)', () => {
     });
     staging = true;
     expect(surface.ticketViewActionSpec('all', true)).toMatchObject({ attachmentsEnabled: true });
+  });
+
+  it('HS2-2Z11A5 composes follow-up creation only for Git source rows', () => {
+    const menu = signal({ x: 0, y: 0, ticketSlug: 'EXTERNAL' });
+    const surface = createTicketViewSurface({
+      canStageNewTicketAttachments: () => false,
+      capabilitiesFor: () => ({ update: true }) as Capabilities,
+      isGitSource: (connectionId) => connectionId === 'git',
+      customViewFor: () => undefined,
+      priority: (value) => (value ?? 'default') as TicketPriority,
+      selectedTicketSlugs: signal([]),
+      status: (value) => (value ?? 'not_started') as TicketStatus,
+      ticketCloseDialog: signal(undefined),
+      ticketContextMenu: menu,
+      tickets: signal(
+        [row('EXTERNAL', 'started'), row('GIT', 'started')].map((item) =>
+          item.slug === 'EXTERNAL' ? { ...item, connection_id: 'jira' } : item,
+        ),
+      ),
+    });
+    expect(String(surface.ticketContextMenuSurface())).not.toContain('data-context-action="Create follow-up"');
+    menu.value = { x: 0, y: 0, ticketSlug: 'GIT' };
+    expect(String(surface.ticketContextMenuSurface())).toContain('data-context-action="Create follow-up"');
   });
 });

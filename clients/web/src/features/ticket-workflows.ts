@@ -395,6 +395,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     ticketCloseSearchTimer: number | undefined,
     composerAttachmentEpoch = 0,
     notWorkingAttachmentEpoch = 0;
+  let composerFollowUpTo: { qualified: string; slug: string } | undefined;
   const activeComposerScreenings = new Set<symbol>();
   const activeNotWorkingScreenings = new Set<symbol>();
   /** Recently viewed ticket details rendered without a loading view on reopen (HS2-4Q04Z9). */
@@ -2334,6 +2335,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       }),
     );
   }
+  function openFollowUpComposer(ticket: WireTicketRow) {
+    const current = project();
+    if (!current || composerExpanded.value) return;
+    composerFollowUpTo = {
+      qualified: `@${current.id}/${ticket.qualified_id}`,
+      slug: ticket.slug,
+    };
+    openTicketComposer();
+  }
   /**
    * Run `focus` once the closing composer dialog has handed focus back to its launcher. Web Awesome
    * restores that focus in a task after its hide animation ends, so a fixed delay raced it on a busy
@@ -2368,6 +2378,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerDetails.value = '';
     composerUpNext.value = false;
     composerSource.value = undefined;
+    composerFollowUpTo = undefined;
     composerAttachments.value = [];
     composerUnrestoredAttachments.value = [];
     composerAttachmentMessage.value = '';
@@ -2474,9 +2485,23 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               details: snapshot.details,
               category: snapshot.category,
               ...placement,
+              follow_up_to: composerFollowUpTo?.qualified,
             },
             source,
           );
+          if (created.follow_up_link_error && composerFollowUpTo) {
+            try {
+              await client.linkCheckoutFollowUp(
+                origin.id,
+                composerFollowUpTo.qualified,
+                `@${origin.id}/${created.qualified_id}`,
+              );
+            } catch (reason) {
+              showToast(
+                `${created.slug} was created, but its source link still needs repair: ${reason instanceof Error ? reason.message : String(reason)}`,
+              );
+            }
+          }
           if (source)
             lastTicketSourceByProject.value = rememberNewTicketSource(
               lastTicketSourceByProject.value,
@@ -2720,6 +2745,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     openDuplicateTarget,
     addNotWorkingFiles,
     openTicketComposer,
+    openFollowUpComposer,
+    followUpSource: () => composerFollowUpTo?.slug,
     resetTicketComposer,
     addNewTicketFiles,
     submitNewTicket,

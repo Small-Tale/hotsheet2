@@ -12,6 +12,7 @@ pub mod enums;
 pub mod format;
 pub mod ids;
 pub mod ticket;
+pub mod ticket_ref;
 pub mod timestamp;
 
 pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
@@ -23,6 +24,7 @@ pub use ticket::{
     ClaimEvent, ClaimEventKind, Confidence, ConfidenceError, ExternalLink, ImageCrop,
     MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket, validate_media_annotations,
 };
+pub use ticket_ref::ProjectTicketRef;
 pub use timestamp::Timestamp;
 
 /// Frontmatter format version represented by the guarded `schema:` marker.

@@ -43,6 +43,33 @@ const review: CodeReview = {
 };
 
 describe('TicketCodeReview', () => {
+  it('HS2-2Z11A5 shows qualified follow-up links and missing targets without commits', () => {
+    const markup = String(
+      TicketCodeReview({
+        review: {
+          commits: [],
+          ranges: [],
+          truncated: false,
+          follow_ups: [
+            {
+              target: { project_id: 'project', connection_id: 'source', native_id: 'one' },
+              state: 'resolved',
+              slug: 'HS2-ONE',
+              title: 'Next step',
+            },
+            { target: { project_id: 'project', connection_id: 'source', native_id: 'two' }, state: 'missing' },
+            { target: { project_id: 'project', connection_id: 'source', native_id: 'three' }, state: 'deleted' },
+          ],
+        },
+      }),
+    );
+    expect(markup).toContain('Follow-ups (3)');
+    expect(markup).toContain('data-action="open-follow-up-target"');
+    expect(markup).toContain('data-target-id="@project/source:one"');
+    expect(markup).toContain('HS2-ONE · Next step');
+    expect(markup).toContain('@project/source:two · Target missing');
+    expect(markup).toContain('@project/source:three · Target deleted');
+  });
   it('uses canonical review-region spacing while keeping row and action geometry explicit', () => {
     const markup = String(TicketCodeReview({ review }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');

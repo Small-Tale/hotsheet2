@@ -21,6 +21,7 @@ export const TICKET_SELECTION_ACTIONS = {
   submitTicketClose: action('submit-ticket-close'),
   cancelTicketClose: action('cancel-ticket-close'),
   openDuplicateTarget: action('open-duplicate-target'),
+  openFollowUpTarget: action('open-follow-up-target'),
   confirmBulkDelete: action('confirm-bulk-delete'),
   removeNotWorkingAttachment: action('remove-not-working-attachment'),
   submitNotWorking: action('submit-not-working'),

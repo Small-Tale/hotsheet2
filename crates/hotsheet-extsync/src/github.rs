@@ -677,6 +677,8 @@ impl GitHubProvider {
                 .filter(|label| !is_provider_label(label))
                 .collect(),
             blocked_by: vec![],
+            follow_ups: vec![],
+            follow_up_link_error: None,
             blocked_reason: None,
             created_at: issue.created_at,
             updated_at: issue.updated_at,

@@ -128,6 +128,7 @@ ticket-selection	delegate	document.body	'submit'	'[data-action="submit-ticket-cl
 ticket-selection	delegate	document.body	'click'	'[data-action="cancel-ticket-close"]'
 ticket-selection	delegate	document.body	'kui-request-close'	'[data-dialog-component="ticket-close-dialog"]'
 ticket-selection	delegate	document.body	'click'	'[data-action="open-duplicate-target"]'
+ticket-selection	delegate	document.body	'click'	'[data-action="open-follow-up-target"]'
 ticket-selection	delegate	document.body	'input'	'[name="not-working-note"]'
 ticket-selection	delegate	document.body	'focusout'	'[name="not-working-note"]'
 ticket-selection	delegate	document.body	'click'	'[data-action="remove-not-working-attachment"]'

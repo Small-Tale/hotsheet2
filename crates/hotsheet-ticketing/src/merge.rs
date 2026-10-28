@@ -201,6 +201,7 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     // Sets — 3-way union with base-relative deletes honored.
     m.tags = union3(&base.tags, &ours.tags, &theirs.tags);
     m.blocked_by = union3(&base.blocked_by, &ours.blocked_by, &theirs.blocked_by);
+    m.follow_ups = union3(&base.follow_ups, &ours.follow_ups, &theirs.follow_ups);
     m.assignees = union3(&base.assignees, &ours.assignees, &theirs.assignees);
 
     // Review requests each carry their own ULID (`by`), so — like notes — they **union**:
@@ -374,7 +375,9 @@ fn merge_body(base: &str, ours: &str, theirs: &str) -> BodyMerge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hotsheet_model::{ClaimEventKind, Priority, Status, Ticket, Timestamp, Ulid};
+    use hotsheet_model::{
+        ClaimEventKind, Priority, ProjectTicketRef, Status, Ticket, Timestamp, Ulid,
+    };
 
     fn ulid(s: &str) -> Ulid {
         Ulid::from_string(s).unwrap()
@@ -395,6 +398,25 @@ mod tests {
         t.details = "original body".into();
         t.tags = vec!["a".into(), "b".into()];
         t
+    }
+
+    #[test]
+    fn hs2_2z11a5_concurrent_follow_ups_union_without_duplicates() {
+        let base = base_ticket();
+        let target = |native_id: &str| ProjectTicketRef {
+            project_id: "project".into(),
+            connection_id: "git-source".into(),
+            native_id: native_id.into(),
+        };
+        let mut ours = base.clone();
+        ours.follow_ups = vec![target("one"), target("shared")];
+        let mut theirs = base.clone();
+        theirs.follow_ups = vec![target("two"), target("shared")];
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(merged.follow_ups.len(), 3);
+        assert!(merged.follow_ups.contains(&target("one")));
+        assert!(merged.follow_ups.contains(&target("two")));
+        assert!(merged.follow_ups.contains(&target("shared")));
     }
 
     #[test]

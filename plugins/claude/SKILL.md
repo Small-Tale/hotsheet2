@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 66 -->
+<!-- hotsheet-skill-version: 68 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -60,6 +60,13 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
    leave it only in a comment/TODO/note. Reference every follow-up slug in the current
    ticket's completing note, then continue.
+   When creating a follow-up to the ticket in hand, pass its source context so Hot Sheet
+   records a typed relation: `hotsheet-cli new --follow-up-to <source-slug> --project
+   <checkout-id> ...`, or MCP `hotsheet_create` with `checkout` and qualified
+   `follow_up_to: "@project/connection:native"`. Verify the source's `follow_ups`
+   field after creation; prose references alone do not create the relation (HS2-2Z11A5).
+   If creation reports a target but the source link failed, retry only that link with
+   `hotsheet-cli link-follow-up` or MCP `hotsheet_link_follow_up`; do not create another target.
 5. **Commit at ticket boundaries; push by this repository's rules.** Before closing a
    ticket, run the required gates and review the diff. Give every ticket at least one
    commit, ideally commits unique to that ticket, and include its ticket slug in each

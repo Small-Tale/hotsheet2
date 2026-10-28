@@ -3756,6 +3756,8 @@ export async function startHotSheetWebClient() {
     searchTicketCloseTargets,
     submitTicketClose,
     openDuplicateTarget,
+    openFollowUpComposer,
+    followUpSource,
     addNotWorkingFiles,
     openTicketComposer,
     resetTicketComposer,
@@ -4323,6 +4325,12 @@ export async function startHotSheetWebClient() {
   const { ticketViewTitle, ticketViewActionSpec, ticketContextMenuSurface } = createTicketViewSurface({
     canStageNewTicketAttachments,
     capabilitiesFor,
+    isGitSource: (connectionId) =>
+      Boolean(
+        defaultProviders.value[project()?.id ?? '']?.sources.some(
+          (source) => source.connectionId === connectionId && source.provider === 'git',
+        ),
+      ),
     customViewFor,
     priority,
     selectedTicketSlugs,
@@ -4666,6 +4674,7 @@ export async function startHotSheetWebClient() {
     composerScreening,
     composerSubmitting,
     composerTitle,
+    followUpSource,
     composerUpNext,
     conversationExportDialog,
     conversationOpen,
@@ -5097,6 +5106,7 @@ export async function startHotSheetWebClient() {
     submitTicketClose,
     closeTicketCloseDialog,
     openDuplicateTarget,
+    openFollowUpComposer,
     notWorkingNote,
     scheduleProjectSessionPersistence,
     presentNotWorkingDialog,

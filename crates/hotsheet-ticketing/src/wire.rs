@@ -53,6 +53,12 @@ pub struct ApiTicket {
     pub needs_review: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
+    /// Explicit follow-up targets, including project and provider identity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub follow_ups: Vec<hotsheet_model::ProjectTicketRef>,
+    /// Creation succeeded, but the requested source link still needs an idempotent repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up_link_error: Option<String>,
     pub blocked_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -233,6 +239,8 @@ impl ApiTicket {
             needs_review: t.feedback_needed() || !t.review_requests.is_empty(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
+            follow_ups: t.follow_ups.clone(),
+            follow_up_link_error: None,
             blocked_reason: t.blocked_reason.clone(),
             created_at: t.created_at.as_str().to_string(),
             updated_at: t.updated_at.as_str().to_string(),

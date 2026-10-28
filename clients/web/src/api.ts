@@ -595,6 +595,7 @@ export interface TicketRow {
   needs_review?: boolean;
   tags: string[];
   blocked_by: string[];
+  follow_ups?: ProjectTicketRef[];
   blocked_reason?: string;
   claimed_by?: string;
   claim_lease_expires_at?: string;
@@ -725,6 +726,8 @@ export interface CorruptTicket {
 }
 export interface FullTicket extends TicketRow {
   details: string;
+  /** Target was created, but its source link needs an idempotent repair. */
+  follow_up_link_error?: string;
   blocked_reason?: string;
   notes: Note[];
   /** Derived confidence of a completed/verified ticket: newest scored note of the current cycle. */
@@ -838,6 +841,18 @@ export interface CodeReviewFile {
   change: Exclude<RepositoryFileChange, 'unmerged' | 'untracked'>;
   category: 'docs' | 'tests' | 'source' | 'other';
 }
+export interface ProjectTicketRef {
+  project_id: string;
+  connection_id: string;
+  native_id: string;
+}
+export interface FollowUpEvidence {
+  target: ProjectTicketRef;
+  state: 'resolved' | 'missing' | 'deleted' | 'unavailable' | 'invalid';
+  slug?: string;
+  title?: string;
+  native_url?: string;
+}
 export interface CodeReview {
   commits: CodeReviewCommit[];
   ranges: CodeReviewRange[];
@@ -845,6 +860,7 @@ export interface CodeReview {
   truncated: boolean;
   summary?: CodeReviewSummary;
   files?: CodeReviewFile[];
+  follow_ups?: FollowUpEvidence[];
 }
 export type CodeReviewTarget =
   | { mode: 'commit'; commit: string }
@@ -1602,6 +1618,7 @@ export class Api {
       status?: string;
       up_next?: boolean;
       tags?: string[];
+      follow_up_to?: string;
     },
     /** Target ticket source (connection id); omitted to use the checkout's default source. */
     source?: string,
@@ -1614,6 +1631,11 @@ export class Api {
         body: JSON.stringify(prioritiesToWire(value)),
       },
     );
+  linkCheckoutFollowUp = (checkout: string, source: string, target: string) =>
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/follow-up-links`, {
+      method: 'POST',
+      body: JSON.stringify({ source, target }),
+    });
   updateCheckoutTicket = (checkout: string, id: string, value: Record<string, unknown>) =>
     this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`, {
       method: 'PATCH',

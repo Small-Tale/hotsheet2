@@ -37,6 +37,7 @@ const KNOWN_KEYS: &[&str] = &[
     "up_next",
     "tags",
     "blocked_by",
+    "follow_ups",
     "blocked_reason",
     "created_at",
     "updated_at",
@@ -911,6 +912,11 @@ mod tests {
         t.close_reason = Some(CloseReason::Duplicate);
         t.duplicate_of = Some("@project-a/git-main:01ARZ3NDEKTSV4RRFFQ69G5FC0".into());
         t.blocked_by = vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1")];
+        t.follow_ups = vec![crate::ProjectTicketRef {
+            project_id: "project-a".into(),
+            connection_id: "jira-eng".into(),
+            native_id: "ENG:42".into(),
+        }];
         t.blocked_reason = Some("waiting on the theme refactor".into());
         t.claimed_by = Some("worker-1".into());
         t.claim_lease_expires_at = Some("2026-08-20T09:30:00Z".into());

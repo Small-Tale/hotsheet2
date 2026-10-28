@@ -106,6 +106,7 @@ export interface HotSheetAppDependencies {
   composerScreening: Signal<boolean>;
   composerSubmitting: Signal<boolean>;
   composerTitle: Signal<string>;
+  followUpSource: () => string | undefined;
   composerUpNext: Signal<boolean>;
   conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
   conversationOpen: Signal<boolean>;
@@ -243,6 +244,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     composerScreening,
     composerSubmitting,
     composerTitle,
+    followUpSource,
     composerUpNext,
     conversationExportDialog,
     conversationOpen,
@@ -526,6 +528,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <QuickTicketComposer
           expanded={composerExpanded.value}
           title={composerTitle.value}
+          followUpSource={followUpSource()}
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}

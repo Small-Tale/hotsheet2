@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-2Z11A5 covers typed follow-up identity and file round trips in
+`hotsheet-model`, union merge and idempotent source linking in `hotsheet-ticketing`,
+checkout creation plus Code Review diagnostics in the server HTTP suite,
+partial-success and idempotent link-repair regressions in server, CLI, and MCP,
+qualified CLI/MCP creation in their process tests, and the shared composer and
+Code Review parent composition in the web client.
+
 HS2-R7T9XB's tiny natural-copy regression in `clients/web/scripts/stable-dev.test.mjs`
 checks exclusion of `src-tauri/target` while preserving adjacent native source and unrelated
 nested `target` source directories. Existing `scripts/stable-dev.e2e.test.mjs` real-process

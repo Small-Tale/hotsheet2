@@ -224,8 +224,18 @@ fn base_tools_list() -> Value {
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" }
+                ,"follow_up_to": str_prop("qualified @project/connection:native source ticket; requires checkout")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["title"] }
+        },
+        {
+            "name": "hotsheet_link_follow_up",
+            "description": "Idempotently repair a source link to an already-created follow-up. Never creates another ticket.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("checkout containing the target"),
+                "source": str_prop("qualified @project/connection:native source"),
+                "target": str_prop("qualified @project/connection:native existing target")
+            }, "required": ["checkout", "source", "target"] }
         },
         {
             "name": "hotsheet_update",
@@ -471,6 +481,7 @@ const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_delete_attachment",
     "hotsheet_set_attachment_metadata",
     "hotsheet_create",
+    "hotsheet_link_follow_up",
     "hotsheet_update",
     "hotsheet_close",
     "hotsheet_restore",
@@ -738,6 +749,13 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
+        "hotsheet_link_follow_up" => backend
+            .send(
+                "POST",
+                &checkout_route(args, "/follow-up-links"),
+                &without_many(args, &["checkout"]),
+            )
+            .map_err(be_msg),
         "hotsheet_update" => {
             let id = arg_str(args, "id")?;
             let updated = backend
@@ -1683,6 +1701,12 @@ mod core_backend {
                 return self.send(method, &format!("/tickets/{suffix}"), body);
             }
             if let Some(rest) = path.strip_prefix("/checkouts/") {
+                if let Some(reference) = rest.strip_suffix("/follow-up-links") {
+                    let (checkout, stores) = self.checkout_context(reference)?;
+                    return self
+                        .for_checkout(stores.into_iter().next().unwrap(), checkout)
+                        .send(method, "/follow-up-links", body);
+                }
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
                     let (checkout, stores) = self.checkout_context(checkout)?;
                     if method == "POST" && (suffix.is_empty() || suffix.starts_with('?')) {
@@ -1964,6 +1988,32 @@ mod core_backend {
                     self.api(&updated)
                 }
                 "POST" if path == "/tickets" => {
+                    let follow_up_to = match body.get("follow_up_to") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(value)) => Some(value.as_str()),
+                        Some(_) => return Err(bad_request("follow_up_to must be a string")),
+                    };
+                    let follow_up_source = follow_up_to
+                        .map(|raw| {
+                            let reference = hotsheet_ticketing::ProjectTicketRef::from_qualified(raw)
+                                .ok_or_else(|| bad_request("follow_up_to must be a qualified ticket reference"))?;
+                            if self.checkout.is_none() {
+                                return Err(bad_request("follow_up_to requires a checkout-scoped create"));
+                            }
+                            let (_, source) = self.checkout_registry
+                                .resolve_source(&reference.project_id, &reference.connection_id)
+                                .map_err(|error| bad_request(error.to_string()))?;
+                            if source.provider != "git" {
+                                return Err(bad_request("follow-up relationships are not supported by this source provider"));
+                            }
+                            let source_store = FsStore::open(std::path::Path::new(&source.locator))
+                                .map_err(store_err)?;
+                            let source_ticket = ops::resolve(&source_store, &reference.native_id)
+                                .map_err(store_err)?
+                                .ok_or_else(|| not_found(&reference.qualified()))?;
+                            Ok::<_, BackendError>((source_store, source_ticket.id))
+                        })
+                        .transpose()?;
                     let prefix = self.store.metadata().map_err(store_err)?.ticket_prefix;
                     let blocked_by =
                         ops::resolve_blockers(&self.store, None, &str_vec(body, "blocked_by"))
@@ -1991,7 +2041,68 @@ mod core_backend {
                     };
                     let t = ops::create(&self.store, (self.mint)(), &prefix, (self.now)(), new)
                         .map_err(store_err)?;
-                    self.api(&t)
+                    let mut result = self.api(&t)?;
+                    if let Some((source_store, source_id)) = follow_up_source {
+                        let project_id = self.checkout.as_ref().unwrap().id.clone();
+                        if let Err(error) = ops::add_follow_up(
+                            &source_store,
+                            &source_id,
+                            hotsheet_ticketing::ProjectTicketRef {
+                                project_id,
+                                connection_id: hotsheet_ticketing::git_connection_id(&self.store),
+                                native_id: t.id.to_string(),
+                            },
+                            (self.now)(),
+                        ) {
+                            result["follow_up_link_error"] = serde_json::json!(format!(
+                                "target {} was created, but its source link was not saved: {error}; call hotsheet_link_follow_up with this target",
+                                t.slug
+                            ));
+                        }
+                    }
+                    Ok(result)
+                }
+                "POST" if path == "/follow-up-links" => {
+                    let checkout = self
+                        .checkout
+                        .as_ref()
+                        .ok_or_else(|| bad_request("checkout is required"))?;
+                    let source = hotsheet_ticketing::ProjectTicketRef::from_qualified(
+                        body.get("source")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| bad_request("source is required"))?,
+                    )
+                    .ok_or_else(|| bad_request("source must be qualified"))?;
+                    let target = hotsheet_ticketing::ProjectTicketRef::from_qualified(
+                        body.get("target")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| bad_request("target is required"))?,
+                    )
+                    .ok_or_else(|| bad_request("target must be qualified"))?;
+                    if target.project_id != checkout.id {
+                        return Err(bad_request("target project must match checkout"));
+                    }
+                    self.checkout_registry
+                        .resolve_source(&target.project_id, &target.connection_id)
+                        .map_err(|error| bad_request(error.to_string()))?;
+                    let (_, source_connection) = self
+                        .checkout_registry
+                        .resolve_source(&source.project_id, &source.connection_id)
+                        .map_err(|error| bad_request(error.to_string()))?;
+                    if source_connection.provider != "git" {
+                        return Err(bad_request(
+                            "follow-up relationships are not supported by this source provider",
+                        ));
+                    }
+                    let source_store =
+                        FsStore::open(std::path::Path::new(&source_connection.locator))
+                            .map_err(store_err)?;
+                    let source_ticket = ops::resolve(&source_store, &source.native_id)
+                        .map_err(store_err)?
+                        .ok_or_else(|| not_found(&source.qualified()))?;
+                    ops::add_follow_up(&source_store, &source_ticket.id, target, (self.now)())
+                        .map_err(store_err)?;
+                    Ok(serde_json::json!({"linked": true}))
                 }
                 "POST" if close_id(path).is_some() => {
                     let t = self.resolve(close_id(path).unwrap())?;
@@ -2136,6 +2247,7 @@ mod core_backend {
                             .map(|_| str_vec(body, "tags")),
                         up_next: body.get("up_next").and_then(Value::as_bool),
                         blocked_by,
+                        follow_ups: None,
                         blocked_reason: match body.get("blocked_reason") {
                             None => None,
                             Some(Value::Null) => Some(None),
@@ -3223,6 +3335,7 @@ mod tests {
             "hotsheet_query",
             "hotsheet_get",
             "hotsheet_create",
+            "hotsheet_link_follow_up",
             "hotsheet_update",
             "hotsheet_close",
             "hotsheet_restore",
@@ -3397,6 +3510,75 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn hs2_2z11a5_serverless_create_links_only_successful_follow_ups() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let store_root = root.path().join("tickets.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(&checkout_root, Some("project"), None, vec![store_root])
+            .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        let path = format!("/checkouts/{}/tickets", checkout.id);
+        let source = backend
+            .send("POST", &path, &json!({"title":"Source"}))
+            .unwrap();
+        let source_id = source["id"].as_str().unwrap();
+        let source_ref = format!(
+            "@{}/{}",
+            checkout.id,
+            source["qualified_id"].as_str().unwrap()
+        );
+        assert!(
+            backend
+                .send(
+                    "POST",
+                    &path,
+                    &json!({
+                        "title": "Rejected",
+                        "status": "verified",
+                        "follow_up_to": source_ref
+                    })
+                )
+                .is_err()
+        );
+        let before = backend.get(&format!("{path}/{source_id}"), &[]).unwrap();
+        assert!(before["follow_ups"].as_array().is_none_or(Vec::is_empty));
+        let target = backend
+            .send(
+                "POST",
+                &path,
+                &json!({
+                    "title": "Next work",
+                    "follow_up_to": source_ref
+                }),
+            )
+            .unwrap();
+        let after = backend.get(&format!("{path}/{source_id}"), &[]).unwrap();
+        assert_eq!(after["follow_ups"][0]["project_id"], checkout.id);
+        assert_eq!(
+            after["follow_ups"][0]["connection_id"],
+            target["connection_id"]
+        );
+        assert_eq!(after["follow_ups"][0]["native_id"], target["native_id"]);
+        let repaired = backend.send(
+            "POST",
+            &format!("/checkouts/{}/follow-up-links", checkout.id),
+            &json!({
+                "source": source_ref,
+                "target": format!("@{}/{}", checkout.id, target["qualified_id"].as_str().unwrap())
+            }),
+        ).unwrap();
+        assert_eq!(repaired["linked"], true);
+        let after_retry = backend.get(&format!("{path}/{source_id}"), &[]).unwrap();
+        assert_eq!(after_retry["follow_ups"].as_array().unwrap().len(), 1);
     }
 
     /// HS2-JVF20F: the serverless backend pages a multi-store checkout with the shared

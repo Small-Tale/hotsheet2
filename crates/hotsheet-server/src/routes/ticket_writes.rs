@@ -79,6 +79,12 @@ pub(crate) fn do_create(
     entry: &StoreEntry,
     req: CreateReq,
 ) -> Result<ApiTicket, ApiError> {
+    if req.follow_up_to.is_some() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "create follow-ups through a checkout so their project-qualified relationship can be recorded",
+        ));
+    }
     let prefix = entry.store.metadata()?.ticket_prefix;
     let status = initial_status(req.status.as_deref())?;
     // Index-backed blocker lookups (HS2-HEKMKH).
@@ -214,6 +220,7 @@ pub(crate) fn do_update_with_ticket(
         tags: req.tags,
         up_next: req.up_next,
         blocked_by,
+        follow_ups: None,
         blocked_reason: req.blocked_reason,
     };
     // Role-specific rules run before any write (HS2-RD4M29).

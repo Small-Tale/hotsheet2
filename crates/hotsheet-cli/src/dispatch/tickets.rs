@@ -7,9 +7,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_model::{
-    Confidence, NoteKind, ReviewRequest, StartedPhase, Status, Ulid, to_file_string,
+    Confidence, NoteKind, ProjectTicketRef, ReviewRequest, StartedPhase, Status, Ulid,
+    to_file_string,
 };
-use hotsheet_ticketing::{FsStore, NewTicket, Person, Roster, TicketPatch, TicketQuery, ops};
+use hotsheet_ticketing::{
+    FsStore, NewTicket, Person, Roster, TicketPatch, TicketQuery, git_connection_id, ops,
+};
 
 use crate::{
     Cmd, confidence_change, default_index_path, now_ts, parse_close_reason, parse_confidence_arg,
@@ -24,6 +27,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let actor = ctx.actor.as_ref();
     match cmd {
         Cmd::New(args) => cmd_new(path, args),
+        Cmd::LinkFollowUp { source, target } => cmd_link_follow_up(path, &source, &target),
         Cmd::Ls { filters } => cmd_ls(path, &filters),
         Cmd::Show { id } => cmd_show(path, &id),
         Cmd::Batch { ids, update } => cmd_batch(actor, path, &ids, update),
@@ -107,6 +111,8 @@ pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
         up_next,
         tags,
         blocked_by,
+        follow_up_to,
+        project,
     } = args;
     let priority = priority.as_str();
     let title = title
@@ -115,6 +121,31 @@ pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
     let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
+    let source = follow_up_to
+        .as_deref()
+        .map(|id| resolve(&store, id))
+        .transpose()?;
+    let project = if source.is_some() {
+        let requested = project.context(
+            "--project is required with --follow-up-to to preserve a qualified ticket identity",
+        )?;
+        let checkout = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+        )
+        .resolve(&requested)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let connection = git_connection_id(&store);
+        if !checkout
+            .sources
+            .iter()
+            .any(|item| item.provider == "git" && item.connection_id == connection)
+        {
+            bail!("--project must identify a checkout linked to this ticket store");
+        }
+        Some(checkout.id)
+    } else {
+        None
+    };
     let ticket = ops::create(
         &store,
         Ulid::new(),
@@ -136,6 +167,37 @@ pub(crate) fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
         ticket.slug,
         store.ticket_path(&ticket.id).display()
     );
+    if let (Some(source), Some(project_id)) = (source, project) {
+        let target = ProjectTicketRef {
+            project_id,
+            connection_id: git_connection_id(&store),
+            native_id: ticket.id.to_string(),
+        };
+        if let Err(error) = ops::add_follow_up(&store, &source.id, target.clone(), now_ts()) {
+            eprintln!(
+                "Warning: follow-up target {} was created, but its source link was not saved: {error}. Repair only the link with `hotsheet-cli -C {} link-follow-up {} {}`.",
+                ticket.slug,
+                path.display(),
+                source.slug,
+                target.qualified()
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_link_follow_up(path: &PathBuf, source: &str, target: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let source = resolve(&store, source)?;
+    let target = ProjectTicketRef::from_qualified(target)
+        .context("target must be a qualified @project/connection:native ticket reference")?;
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    )
+    .resolve_source(&target.project_id, &target.connection_id)
+    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    ops::add_follow_up(&store, &source.id, target.clone(), now_ts())?;
+    println!("Linked {} to {}", source.slug, target.qualified());
     Ok(())
 }
 
@@ -880,6 +942,7 @@ pub(crate) fn cmd_edit(
         tags: (!tags.is_empty()).then_some(tags),
         up_next,
         blocked_by,
+        follow_ups: None,
         blocked_reason: if clear_blocked_reason {
             Some(None)
         } else {
@@ -1169,6 +1232,12 @@ pub(crate) struct NewArgs {
     /// Blocker ticket (slug or ULID), repeatable: `--blocked-by HS2-ABC --blocked-by HS2-DEF`.
     #[arg(long = "blocked-by")]
     blocked_by: Vec<String>,
+    /// Source ticket (slug or ULID) to receive a typed follow-up relation.
+    #[arg(long)]
+    follow_up_to: Option<String>,
+    /// Project checkout id for the qualified follow-up identity.
+    #[arg(long, requires = "follow_up_to")]
+    project: Option<String>,
 }
 
 #[derive(Args)]

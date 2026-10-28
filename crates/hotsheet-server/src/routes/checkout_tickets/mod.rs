@@ -43,6 +43,86 @@ pub(crate) struct CheckoutStoreQuery {
     store: Option<String>,
     source: Option<String>,
 }
+
+#[derive(Deserialize)]
+pub(crate) struct LinkFollowUpReq {
+    source: String,
+    target: String,
+}
+
+/// Retry only the idempotent source relation write after a target was created.
+pub(crate) async fn link_checkout_follow_up(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(req): Json<LinkFollowUpReq>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(checkout_lookup_error)?;
+    let source = ProjectTicketRef::from_qualified(&req.source).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "source must be a qualified ticket reference",
+        )
+    })?;
+    let target = ProjectTicketRef::from_qualified(&req.target).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "target must be a qualified ticket reference",
+        )
+    })?;
+    if target.project_id != checkout.id {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "target project must match the checkout",
+        ));
+    }
+    state
+        .checkout_registry
+        .resolve_source(&target.project_id, &target.connection_id)
+        .map_err(checkout_lookup_error)?;
+    let (_, source_connection) = state
+        .checkout_registry
+        .resolve_source(&source.project_id, &source.connection_id)
+        .map_err(checkout_lookup_error)?;
+    if source_connection.provider != "git" {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "follow-up relationships are not supported by this source provider",
+        ));
+    }
+    let source_ref = resolve_project_ticket_ref(&state, source)?;
+    let entry = state.hosted_source(&source_connection).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "follow-up source store is unavailable",
+        )
+    })?;
+    let id = Ulid::from_string(&source_ref.native_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid Git source ticket id"))?;
+    let updated = ops::add_follow_up(&entry.store, &id, target, now())
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    state.changed_in(&entry, "updated", &updated);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn settle_created_follow_up_link(
+    ticket: &mut ApiTicket,
+    result: Result<Ticket, hotsheet_ticketing::StoreError>,
+) -> Option<Ticket> {
+    match result {
+        Ok(updated) => Some(updated),
+        Err(error) => {
+            // The target exists. Treat creation as successful and expose the exact
+            // target so callers can retry only the link (HS2-2Z11A5).
+            ticket.follow_up_link_error = Some(format!(
+                "source link was not saved: {error}; retry the follow-up link operation using this created target"
+            ));
+            None
+        }
+    }
+}
 pub(crate) fn checkout_source_for_create(
     state: &AppState,
     reference: &str,
@@ -186,15 +266,53 @@ pub(crate) async fn create_checkout_ticket(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Query(q): Query<CheckoutStoreQuery>,
-    Json(req): Json<CreateReq>,
+    Json(mut req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
-    let (_, settings) = checkout_settings(&state, &reference)?;
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
     let source = checkout_source_for_create(
         &state,
         &reference,
         q.source.as_deref().or(q.store.as_deref()),
     )?;
-    let ticket = if source.provider == "git" {
+    // Resolve and verify a Git source before creating the target. External source providers
+    // cannot persist this relationship, so reject them explicitly (HS2-2Z11A5).
+    let follow_up_source = req
+        .follow_up_to
+        .as_deref()
+        .map(|raw| {
+            let parsed = ProjectTicketRef::from_qualified(raw).ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "follow_up_to must be a qualified ticket reference",
+                )
+            })?;
+            let (_, source) = state
+                .checkout_registry
+                .resolve_source(&parsed.project_id, &parsed.connection_id)
+                .map_err(checkout_lookup_error)?;
+            if source.provider != "git" {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "follow-up relationships are not supported by this source provider",
+                ));
+            }
+            let source_ref = resolve_project_ticket_ref(&state, parsed)?;
+            let entry = state.hosted_source(&source).ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::CONFLICT,
+                    "follow-up source store is unavailable",
+                )
+            })?;
+            let id = Ulid::from_string(&source_ref.native_id).map_err(|_| {
+                ApiError::new(StatusCode::BAD_REQUEST, "invalid Git source ticket id")
+            })?;
+            Ok::<_, ApiError>((entry, id))
+        })
+        .transpose()?;
+    // The checkout route owns the relation write; the provider adapter receives only
+    // fields it can authoritatively create in the target provider.
+    req.follow_up_to = None;
+    let mut ticket = if source.provider == "git" {
         let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
                 StatusCode::CONFLICT,
@@ -205,15 +323,88 @@ pub(crate) async fn create_checkout_ticket(
     } else {
         do_provider_create(&state, &source.connection_id, req)?
     };
+    if let Some((entry, source_id)) = follow_up_source {
+        let target = ProjectTicketRef {
+            project_id: checkout.id,
+            connection_id: ticket.connection_id.clone(),
+            native_id: ticket.native_id.clone(),
+        };
+        if let Some(updated) = settle_created_follow_up_link(
+            &mut ticket,
+            ops::add_follow_up(&entry.store, &source_id, target, now()),
+        ) {
+            state.changed_in(&entry, "updated", &updated);
+        }
+    }
     Ok((
         StatusCode::CREATED,
         Json(contextualize_api_ticket(ticket, &settings)?),
     ))
 }
+
+#[cfg(test)]
+mod follow_up_recovery_tests {
+    use super::*;
+    use hotsheet_model::Timestamp;
+    use hotsheet_ticketing::{NewTicket, StoreMetadata};
+
+    #[test]
+    fn hs2_2z11a5_link_failure_returns_created_target_and_repair_does_not_create_again() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let create = |title: &str| {
+            ops::create(
+                &store,
+                Ulid::new(),
+                "HS",
+                Timestamp::from("2026-10-28T00:00:00Z"),
+                NewTicket {
+                    title: title.into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let source = create("Source");
+        let target = create("Target");
+        let mut response = ApiTicket::from_provider(&target, "git", None);
+        let injected =
+            hotsheet_ticketing::StoreError::Io(std::io::Error::other("injected link failure"));
+        assert!(settle_created_follow_up_link(&mut response, Err(injected)).is_none());
+        assert_eq!(response.id, target.id.to_string());
+        assert!(
+            response
+                .follow_up_link_error
+                .as_deref()
+                .unwrap()
+                .contains("retry")
+        );
+        assert!(store.read_ticket(&source.id).unwrap().follow_ups.is_empty());
+        let reference = ProjectTicketRef {
+            project_id: "project".into(),
+            connection_id: "git".into(),
+            native_id: target.id.to_string(),
+        };
+        for _ in 0..2 {
+            ops::add_follow_up(
+                &store,
+                &source.id,
+                reference.clone(),
+                Timestamp::from("2026-10-28T00:01:00Z"),
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            store.read_ticket(&source.id).unwrap().follow_ups,
+            vec![reference]
+        );
+        assert_eq!(store.read_ticket(&target.id).unwrap().id, target.id);
+    }
+}
 /// Resolve ownership and retain the fetched payload. A successful qualified reference
 /// reads its checkout/source once; an unqualified reference reads each candidate once
 /// while preserving ambiguity detection (including remote providers).
-fn resolve_checkout_ticket(
+pub(crate) fn resolve_checkout_ticket(
     state: &AppState,
     reference: &str,
     id: &str,

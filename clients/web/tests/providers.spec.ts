@@ -32006,6 +32006,146 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
   }
 });
 
+test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer({
+    seed: async ({ root, env }) => {
+      const git = (...args: string[]) => {
+        const result = spawnSync('git', ['-C', root, ...args], { env });
+        if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr)}`);
+      };
+      git('init', '-q');
+      writeFileSync(join(root, 'readme.md'), 'synthetic project\n');
+      git('add', 'readme.md');
+      git('commit', '-qm', 'initial');
+    },
+  });
+  try {
+    const source = await server.request<FullTicket>('/tickets', 'POST', {
+      title: 'Synthetic source ticket',
+      category: 'task',
+    });
+    await mockProject(page);
+    let repairRequests = 0;
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      if (path.endsWith('/follow-up-links')) repairRequests += 1;
+      const requestBody = route.request().postDataJSON() as {
+        follow_up_to?: string;
+        source?: string;
+        target?: string;
+      } | null;
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        ...(requestBody?.follow_up_to || requestBody?.source || requestBody?.target
+          ? {
+              postData: JSON.stringify({
+                ...requestBody,
+                ...(requestBody.follow_up_to
+                  ? { follow_up_to: requestBody.follow_up_to.replace('@demo-checkout/', `@${server.checkoutId}/`) }
+                  : {}),
+                ...(requestBody.source
+                  ? { source: requestBody.source.replace('@demo-checkout/', `@${server.checkoutId}/`) }
+                  : {}),
+                ...(requestBody.target
+                  ? { target: requestBody.target.replace('@demo-checkout/', `@${server.checkoutId}/`) }
+                  : {}),
+              }),
+            }
+          : {}),
+      });
+      if (requestBody?.follow_up_to && response.ok()) {
+        const created = (await response.json()) as FullTicket;
+        await route.fulfill({ response, json: { ...created, follow_up_link_error: 'synthetic first link failure' } });
+        return;
+      }
+      if (path.endsWith('/code-review') && response.ok()) {
+        const review = (await response.json()) as {
+          follow_ups: Array<{ target: { project_id: string } }>;
+        };
+        for (const item of review.follow_ups) item.target.project_id = 'demo-checkout';
+        await route.fulfill({ response, json: review });
+        return;
+      }
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const sourceRow = page.locator(`[data-ticket-slug="${source.slug}"]`).first();
+    await expect(sourceRow).toBeVisible();
+    await sourceRow.click({ button: 'right' });
+    const menu = page.locator('[data-context-menu="ticket"]');
+    await expect(menu.getByText('Create follow-up')).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('hs2-2z11a5-action-wide.png') });
+    await menu.getByText('Create follow-up').click();
+    const dialog = page.getByRole('dialog', { name: `Create follow-up to ${source.slug}` });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Synthetic follow-up ticket');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: testInfo.outputPath('hs2-2z11a5-composer-wide.png') });
+    await dialog.getByRole('button', { name: 'Create ticket' }).click();
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(async () => (await server.request<FullTicket>(`/tickets/${source.id}`)).follow_ups?.length)
+      .toBe(1);
+    await expect.poll(() => repairRequests).toBe(1);
+    await sourceRow.click();
+    const inspector = page.locator('#app-right-rail');
+    await inspector.getByRole('tab', { name: 'Code Review' }).click();
+    const review = inspector.locator('[data-component="ticket-code-review"]');
+    await expect(review).toContainText('Follow-ups (1)');
+    await expect(review).toContainText('Synthetic follow-up ticket');
+    for (const [label, width, height] of [
+      ['medium', 900, 800],
+      ['narrow', 390, 844],
+      ['wide-again', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: testInfo.outputPath(`hs2-2z11a5-raw-resize-${label}.png`) });
+    }
+    for (const [label, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 900, 800],
+      ['narrow', 390, 844],
+      ['wide-again', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await page.goto(`/?store=demo-checkout&ticket=${source.slug}`);
+      const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+      await expect(reader).toBeVisible();
+      await reader.getByRole('tab', { name: 'Code Review' }).click();
+      await expect(reader.locator('[data-component="ticket-code-review"]')).toContainText('Follow-ups (1)');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: testInfo.outputPath(`hs2-2z11a5-review-${label}.png`) });
+    }
+    await page
+      .locator('[data-component="ticket-reader"][data-reader-active="true"] [data-action="open-follow-up-target"]')
+      .click();
+    await expect(
+      page
+        .locator('[data-component="ticket-reader"][data-reader-active="true"]')
+        .getByRole('heading', { name: 'Synthetic follow-up ticket', level: 1 }),
+    ).toBeVisible();
+  } finally {
+    await server.stop();
+  }
+});
+
 test('shows recorded completion confidence through the real server (HS2-DWTJ43)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

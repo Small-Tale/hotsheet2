@@ -23,6 +23,7 @@ const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
 export interface QuickTicketComposerProps {
   expanded?: boolean;
   title?: string;
+  followUpSource?: string;
   details?: string;
   category?: string;
   upNext?: boolean;
@@ -129,6 +130,7 @@ export function QuickTicketLauncher({
 export function QuickTicketComposer({
   expanded = false,
   title = '',
+  followUpSource,
   details = '',
   category = 'task',
   upNext = false,
@@ -154,10 +156,10 @@ export function QuickTicketComposer({
       class="quick-ticket-dialog"
       {...SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.attrs}
       data-key="quick-ticket-composer"
-      label="Create ticket"
+      label={followUpSource ? `Create follow-up to ${followUpSource}` : 'Create ticket'}
       role="dialog"
       aria-modal={expanded ? 'true' : 'false'}
-      aria-label="Create ticket"
+      aria-label={followUpSource ? `Create follow-up to ${followUpSource}` : 'Create ticket'}
       // Kerf 5.0.0-beta.56 leaves a custom element's role/aria-* alone when the template omits it, so
       // every state renders an explicit value rather than relying on the morph to remove it.
       aria-hidden={expanded ? 'false' : 'true'}
@@ -173,6 +175,11 @@ export function QuickTicketComposer({
           {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
           data-submitting={String(submitting)}
         >
+          {followUpSource && (
+            <Text variant="p" size="compact" tone="quiet">
+              Follow-up to {followUpSource}
+            </Text>
+          )}
           {!sourceIsDefault && (
             <div class="quick-ticket-composer__source-warning">
               <StateBanner

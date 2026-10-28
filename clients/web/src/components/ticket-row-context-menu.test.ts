@@ -29,10 +29,22 @@ describe('TicketRowContextMenu', () => {
     expect(eventTargetsContextMenu({ composedPath: () => [{}] })).toBe(false);
   });
   it('gives every action a distinct meaningful Lucide icon', () => {
-    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(11);
+    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(12);
+    expect(TICKET_CONTEXT_ACTIONS).toContainEqual(
+      expect.objectContaining({ action: 'Create follow-up', iconName: 'git-branch' }),
+    );
     expect(new Set(TICKET_CONTEXT_ACTIONS.map((item) => item.iconName)).size).toBe(TICKET_CONTEXT_ACTIONS.length);
     expect(TICKET_CONTEXT_ACTIONS.every((item) => item.icon.length > 0)).toBe(true);
-    const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
+    const markup = String(
+      TicketRowContextMenu({
+        x: 12,
+        y: 24,
+        category: 'bug',
+        priority: 'high',
+        status: 'started',
+        canCreateFollowUp: true,
+      }),
+    );
     for (const item of TICKET_CONTEXT_ACTIONS) expect(markup).toContain(`data-lucide="${item.iconName}"`);
   });
 
@@ -42,6 +54,20 @@ describe('TicketRowContextMenu', () => {
     expect(markup.indexOf('data-context-action="Move to Backlog"')).toBeLessThan(
       markup.indexOf('data-context-action="Archive ticket"'),
     );
+  });
+
+  it('HS2-2Z11A5 offers follow-up creation only for one writable source ticket', () => {
+    const action = 'data-context-action="Create follow-up"';
+    const single = String(TicketRowContextMenu({ x: 0, y: 0, canCreateFollowUp: true }));
+    expect(single).toContain(action);
+    expect(disabledItem(single, action)).toBe(false);
+    expect(
+      disabledItem(String(TicketRowContextMenu({ x: 0, y: 0, canCreateFollowUp: true, canBulkUpdate: false })), action),
+    ).toBe(true);
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, canCreateFollowUp: true, selectionCount: 2 }))).not.toContain(
+      action,
+    );
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, canCreateFollowUp: false }))).not.toContain(action);
   });
 
   it('copies one ticket ID or the selected ticket IDs through the same shared menu', () => {

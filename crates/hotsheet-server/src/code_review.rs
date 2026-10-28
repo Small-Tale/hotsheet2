@@ -128,6 +128,19 @@ pub struct CodeReview {
     pub truncated: bool,
     pub summary: CodeReviewSummary,
     pub files: Vec<CodeReviewFile>,
+    /// Explicit source-ticket follow-ups, including broken target diagnostics.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub follow_ups: Vec<FollowUpEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct FollowUpEvidence {
+    pub target: hotsheet_model::ProjectTicketRef,
+    /// `resolved`, `missing`, `unavailable`, or `invalid`; a broken link never blocks review.
+    pub state: &'static str,
+    pub slug: Option<String>,
+    pub title: Option<String>,
+    pub native_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -339,6 +352,7 @@ pub fn discover_with_classification(
     let truncated = truncated || unmerged_truncated;
     let files = discover_ticket_files(root, &commits, classification);
     Ok(CodeReview {
+        follow_ups: Vec::new(),
         summary: summarize_changes(&files),
         files,
         commits,
@@ -355,6 +369,7 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     let (commits, difftool, truncated) = discover_commits(root)?;
     let ranges = repository_range(&commits, ahead).into_iter().collect();
     Ok(CodeReview {
+        follow_ups: Vec::new(),
         summary: CodeReviewSummary::default(),
         files: Vec::new(),
         commits,
@@ -1314,6 +1329,7 @@ mod tests {
     #[test]
     fn arbitrary_commits_and_ranges_are_rejected_before_launch() {
         let review = CodeReview {
+            follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: Vec::new(),
             commits: vec![commit("bbbbbbbb", "HS2-X", "aaaaaaaa")],
@@ -1443,6 +1459,7 @@ mod tests {
     #[test]
     fn compare_uses_the_two_exact_discovered_commits() {
         let review = CodeReview {
+            follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: Vec::new(),
             commits: vec![
@@ -1516,6 +1533,7 @@ mod tests {
     #[test]
     fn ticket_file_targets_must_match_discovered_evidence() {
         let review = CodeReview {
+            follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: vec![CodeReviewFile {
                 path: "src/known.rs".into(),

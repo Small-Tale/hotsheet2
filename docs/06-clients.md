@@ -2368,6 +2368,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   test files. The summary is an action that opens a repository-browser-style master/detail
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
   card grows to contain every count and test-change line even in the narrow inspector.
+  It also lists explicit follow-up tickets with a count and qualified links (HS2-2Z11A5).
+  Broken, deleted, or unavailable targets display a diagnostic while the source stays
+  readable. A ticket context action opens the shared creation composer as a follow-up;
+  successful creation records the relation on its source.
+  If creation returns a target with `follow_up_link_error`, the client retries
+  only the idempotent source-link request and retains the created ticket even
+  if repair remains unavailable (HS2-2Z11A5).
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions

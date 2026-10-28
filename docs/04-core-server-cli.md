@@ -1077,6 +1077,20 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
 resolved on close.
+`follow_ups` is a separate durable relation from a source ticket to tickets created as
+follow-ups (HS2-2Z11A5). `hotsheet new --follow-up-to <source> --project <checkout-id>`
+creates a target and then records its project, connection, and native identity on the
+source. `POST /checkouts/{project}/tickets` accepts `follow_up_to` as an exact
+`@project/connection:native` source reference; it validates the source before target
+creation and links only after creation succeeds. Source providers without relation
+writes reject the request explicitly. Checkout-scoped MCP `hotsheet_create` accepts
+the same qualified `follow_up_to` and writes the link in serverless mode. Code Review
+resolves each target independently;
+missing or unavailable targets remain visible as diagnostics without blocking the source.
+If target creation succeeds but the source link write fails, creation returns the
+target with `follow_up_link_error`. Retry only the idempotent
+`/checkouts/{reference}/follow-up-links` operation, `hotsheet-cli link-follow-up
+<source> <qualified-target>`, or MCP `hotsheet_link_follow_up`.
 `blocked_reason` is an independently presence-aware nullable update field and the single
 source of truth for whether a ticket is blocked: omission
 leaves the current reason unchanged, a string sets its trimmed value, and JSON `null`

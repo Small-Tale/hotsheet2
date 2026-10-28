@@ -10,6 +10,41 @@
   padding-inline: var(--kui-space-xs);
   border-inline: 1px solid transparent;
 }
+.ticket-code-review__follow-ups {
+  min-width: 0;
+  padding: var(--kui-space-xs) var(--kui-space-m);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.ticket-code-review__follow-ups ul {
+  margin: var(--kui-space-xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ticket-code-review__follow-ups li + li {
+  margin-top: var(--kui-space-2xs);
+}
+.ticket-code-review__follow-ups button,
+.ticket-code-review__follow-ups li > span {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: var(--kui-space-2xs) 0;
+  border: 0;
+  align-items: center;
+  gap: var(--kui-space-xs);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.ticket-code-review__follow-ups button {
+  cursor: pointer;
+}
+.ticket-code-review__follow-ups button:hover {
+  color: var(--wa-color-brand-on-quiet);
+}
 /* Embedded in another surface (the repository status popover), the review spaces its heading from the
    commit list itself rather than leaving the host to reach in (HS2-4APEJP). */
 .ticket-code-review[data-embedded='true'] .ticket-code-review__header {

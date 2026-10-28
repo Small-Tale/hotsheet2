@@ -382,6 +382,8 @@ impl JiraProvider {
             needs_review: false,
             tags: issue.fields.labels,
             blocked_by: vec![],
+            follow_ups: vec![],
+            follow_up_link_error: None,
             blocked_reason: None,
             created_at: issue.fields.created,
             updated_at: issue.fields.updated,

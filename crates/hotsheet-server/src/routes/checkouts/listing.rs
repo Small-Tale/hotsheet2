@@ -567,6 +567,7 @@ pub(crate) async fn create_corrupt_ticket_repair(
                 tags: Some(vec!["corrupt-ticket".into(), "ai-repair".into()]),
                 up_next: Some(true),
                 blocked_by: None,
+                follow_up_to: None,
             },
         )?;
         return Ok((

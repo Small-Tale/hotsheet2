@@ -298,6 +298,7 @@ status: started
 up_next: true
 tags: [dashboard, ui]
 blocked_by: [01J9ZK…another-ulid]
+follow_ups: [{ project_id: project-id, connection_id: git-source-id, native_id: 01J9ZK…follow-up-ulid }]
 # human assignment (shared; see 10-assignment-and-collaboration.md)
 assignees: [alex@example.com]
 review_requests: [] # e.g. [{ who: dana@example.com, kind: feedback }]

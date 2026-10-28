@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+pub use hotsheet_model::ProjectTicketRef;
 use hotsheet_model::{
     CloseReason, Confidence, NoteKind, Priority, ReviewRequest, Status, Timestamp, Ulid,
 };
@@ -30,42 +31,6 @@ pub struct TicketRef {
 impl TicketRef {
     pub fn qualified(&self) -> String {
         format!("{}:{}", self.connection_id, self.native_id)
-    }
-}
-
-/// A ticket reference that remains routable when it crosses a client project boundary.
-/// Connection ids are project-scoped, so the project id is part of the persisted form.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ProjectTicketRef {
-    pub project_id: String,
-    pub connection_id: String,
-    pub native_id: String,
-}
-
-impl ProjectTicketRef {
-    pub fn qualified(&self) -> String {
-        format!(
-            "@{}/{}",
-            self.project_id,
-            TicketRef {
-                connection_id: self.connection_id.clone(),
-                native_id: self.native_id.clone(),
-            }
-            .qualified()
-        )
-    }
-
-    pub fn from_qualified(value: &str) -> Option<Self> {
-        let (project_id, ticket) = value.strip_prefix('@')?.split_once('/')?;
-        let (connection_id, native_id) = ticket.split_once(':')?;
-        if project_id.is_empty() || connection_id.is_empty() || native_id.is_empty() {
-            return None;
-        }
-        Some(Self {
-            project_id: project_id.to_string(),
-            connection_id: connection_id.to_string(),
-            native_id: native_id.to_string(),
-        })
     }
 }
 
@@ -1568,6 +1533,7 @@ impl TicketProvider for GitProvider {
                 tags: patch.tags,
                 up_next: patch.up_next,
                 blocked_by,
+                follow_ups: None,
                 blocked_reason: patch.blocked_reason,
             },
         )?;

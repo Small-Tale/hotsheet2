@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ProjectTicketRef;
 use crate::enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
 use crate::ids::Ulid;
 use crate::timestamp::Timestamp;
@@ -658,6 +659,10 @@ pub struct Ticket {
     pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocked_by: Vec<Ulid>,
+    /// Explicit follow-up tickets; unlike blockers or Markdown mentions these are
+    /// directed relationships from this source to provider-qualified targets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub follow_ups: Vec<ProjectTicketRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
     pub created_at: Timestamp,

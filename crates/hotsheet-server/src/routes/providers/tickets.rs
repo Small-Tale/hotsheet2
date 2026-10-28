@@ -87,6 +87,12 @@ pub(crate) fn do_provider_create(
     connection_id: &str,
     req: CreateReq,
 ) -> Result<ApiTicket, ApiError> {
+    if req.follow_up_to.is_some() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "create follow-ups through a checkout so their project-qualified relationship can be recorded",
+        ));
+    }
     let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
     let status = initial_status(req.status.as_deref())?;
     let provider = provider_for(state, connection_id)?;

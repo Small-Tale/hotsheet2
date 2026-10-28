@@ -105,6 +105,38 @@ paths:
           in: query
           schema:
             type: string
+  /checkouts/{reference}/follow-up-links:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+    post:
+      operationId: linkCheckoutFollowUp
+      description: Idempotently link an existing target after a partial follow-up creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source
+                - target
+              properties:
+                source:
+                  type: string
+                  description: Qualified source ticket reference
+                target:
+                  type: string
+                  description: Qualified existing target ticket reference
+              additionalProperties: false
+      responses:
+        '204':
+          description: Source relation saved or already present
+        '409':
+          description: Source relation could not be saved; retry this link operation only.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /providers/{connection_id}/tickets:
     parameters:
       - $ref: '#/components/parameters/Connection'
@@ -10544,6 +10576,7 @@ components:
         - needs_review
         - tags
         - blocked_by
+        - follow_ups
         - created_at
         - updated_at
         - claim_count
@@ -10603,6 +10636,13 @@ components:
           type: array
           items:
             type: string
+        follow_ups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTicketRef'
+        follow_up_link_error:
+          type: string
+          description: Target creation succeeded but its source relation needs idempotent repair.
         blocked_reason:
           anyOf:
             - type: string
@@ -10804,6 +10844,9 @@ components:
           type: array
           items:
             type: string
+        follow_up_to:
+          type: string
+          description: Qualified source ticket reference on checkout creation (HS2-2Z11A5).
       additionalProperties: false
     Actor:
       type: object
@@ -14434,6 +14477,42 @@ components:
         tests_modified:
           type: integer
       additionalProperties: false
+    ProjectTicketRef:
+      type: object
+      required:
+        - project_id
+        - connection_id
+        - native_id
+      properties:
+        project_id:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          type: string
+      additionalProperties: false
+    FollowUpEvidence:
+      type: object
+      required:
+        - target
+        - state
+      properties:
+        target:
+          $ref: '#/components/schemas/ProjectTicketRef'
+        state:
+          enum:
+            - resolved
+            - missing
+            - deleted
+            - unavailable
+            - invalid
+        slug:
+          type: string
+        title:
+          type: string
+        native_url:
+          type: string
+      additionalProperties: false
     CodeReview:
       type: object
       required:
@@ -14443,6 +14522,7 @@ components:
         - truncated
         - summary
         - files
+        - follow_ups
       properties:
         commits:
           type: array
@@ -14464,6 +14544,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CodeReviewFile'
+        follow_ups:
+          type: array
+          items:
+            $ref: '#/components/schemas/FollowUpEvidence'
       additionalProperties: false
     RepositoryOverview:
       type: object
