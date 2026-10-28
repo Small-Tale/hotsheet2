@@ -470,8 +470,10 @@ fn hs2_mfyyj9_held_lock_cannot_revive_expired_attempt_or_allow_grandchild_commit
     f.claim("worker");
     let child = f.guard("worker", "2", "grandchild-wait", "4000");
     f.wait_file("grandchild-started");
-    let before = f.ticket().claim_history;
     let holder = f.hold_ticket_lock(Duration::from_millis(2800));
+    // HS2-FDZGFD: snapshot only once the lock is held. The guard renews every second, so
+    // a snapshot taken earlier can miss a renewal that commits before the hold begins.
+    let before = f.ticket().claim_history;
     let output = child.wait_with_output().unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("lease deadline passed"));
