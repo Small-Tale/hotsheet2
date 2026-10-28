@@ -4,7 +4,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { browserStages, importCiTimings, inspectTimings, parseToolVersion, prepare, runGate } from './local-gate.mjs';
+import {
+  browserStages,
+  importCiTimings,
+  inspectTimings,
+  parseToolVersion,
+  performanceStages,
+  prepare,
+  runGate,
+} from './local-gate.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
@@ -134,6 +142,44 @@ test('HS2-VQ5ND5 profile tags change receipt identity and select performance che
   assert.notEqual(before.key, after.key);
   assert.ok(after.checks.some((stage) => stage.command === 'npm run test:performance'));
   assert.ok(after.checks.some((stage) => stage.reasons.includes('testing:perf selects the web performance baseline')));
+});
+
+test('HS2-A4HD9X maps testing:perf to direct Rust, migrator and web baselines', (t) => {
+  assert.deepEqual(performanceStages(['docs/07-migration.md']), []);
+  assert.equal(performanceStages(['scripts/perf-ticketing.mjs'])[0].command, 'node scripts/perf-ticketing.mjs');
+  assert.deepEqual(
+    performanceStages(['crates/hotsheet-cli/src/main.rs', 'migrator/src/export.mjs', 'clients/web/src/app.ts']).map(
+      (stage) => `${stage.cwd}::${stage.command}`,
+    ),
+    [
+      '.::node scripts/perf-ticketing.mjs',
+      'migrator::npm run test:performance',
+      'clients/web::npm run test:performance',
+    ],
+  );
+  const f = fixture(t);
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put('crates/hotsheet-ticketing/src/example.rs', 'pub fn synthetic() {}\n');
+  f.git('add', 'crates/hotsheet-ticketing/src/example.rs');
+  f.git('commit', '--quiet', '-m', 'rust change');
+  const profile = profileFromTags({ qualified_id: 'git:synthetic', tags: ['tier:T1', 'testing:perf'] });
+  const rust = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  assert.ok(rust.checks.some((stage) => stage.command === 'node scripts/perf-ticketing.mjs'));
+  assert.ok(!rust.deferred.some((stage) => stage.command === 'node scripts/perf-ticketing.mjs'));
+  f.put('migrator/src/example.mjs', 'export const synthetic = true;\n');
+  f.git('add', 'migrator/src/example.mjs');
+  f.git('commit', '--quiet', '-m', 'migrator change');
+  const both = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  assert.ok(both.checks.some((stage) => stage.cwd === 'migrator' && stage.command === 'npm run test:performance'));
+  assert.notEqual(rust.key, both.key, 'new baseline changes the exact receipt');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put('docs/example.md', 'synthetic documentation\n');
+  f.git('add', 'docs/example.md');
+  f.git('commit', '--quiet', '-m', 'docs change');
+  assert.throws(
+    () => prepare(f.repo, undefined, false, f.options.versions, { profile }),
+    /testing:perf has no configured baseline/,
+  );
 });
 
 test('HS2-GN06JT invalid checked-in budget config fails closed', (t) => {

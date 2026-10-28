@@ -1277,4 +1277,6 @@ stage history, never a kill timer. The mandatory floor and direct tests always r
 HS2-VQ5ND5 resolves provider-neutral ticket tags for the normal profile: an
 untagged or unresolved ticket gets the T1 target, deeper tags select affected
 browser/performance checks or all affected stages, and `tier:T2` stays uncapped
-with an explicit analyzed selection. See the profile vocabulary in the policy.
+with an explicit analyzed selection. HS2-A4HD9X adds synthetic local ticketing
+and PGLite export performance commands for non-web `testing:perf` tags; unsupported
+paths fail explicitly. See the profile vocabulary and bounds in the policy.

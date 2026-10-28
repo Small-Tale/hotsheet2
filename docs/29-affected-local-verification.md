@@ -48,12 +48,28 @@ the corresponding worker and policy wording.
 
 `deep-testing` runs every affected local stage without a cap. `testing:browser`
 selects the complete affected Playwright files rather than bounded test-name
-greps. `testing:perf` adds the web performance baseline when web paths are
-affected. `testing:platform` flags the ticket for Windows/Linux covering-CI
+greps. `testing:perf` forces the directly affected web, Rust ticketing, or
+migrator performance command into the local gate (HS2-A4HD9X).
+`testing:platform` flags the ticket for Windows/Linux covering-CI
 confirmation in the completion workflow. `test-budget:15m` replaces the default
 T0/T1 target. Tags combine; `--plan` shows each selected stage's reason and the
 resolved ticket/profile. Unknown `testing:*` tags, conflicting tier tags and
 invalid budget tags fail explicitly.
+
+The Rust command, `node scripts/perf-ticketing.mjs`, builds the local CLI and
+measures 20 Up Next listings and claim/release pairs against 100 synthetic tickets.
+It caps their p95 at 1,000 ms and 2,000 ms respectively. The migrator's
+`npm run test:performance` exports 500 synthetic PGLite tickets after two warmups
+and caps the five-sample p95 at 500 ms. Both commands print counts, observations,
+and limits, use no provider credentials or customer content, and exclude fixture
+setup/build time from the measured operation. These are broad regression bounds,
+not throughput estimates. A tagged docs-only or unsupported path fails the plan
+with an explicit missing-baseline message. The selected commands and profile are
+part of exact-input receipts; unknown timing estimates remain visible in `--plan`
+and cannot silently defer a forced performance stage. The opt-in checks add roughly
+one minute of local setup for Rust on the measured busy host and a few seconds for
+the migrator; CI still runs its full functional suites and does not treat these
+local performance bounds as a replacement for covering CI.
 
 The exact-input receipt records the ticket profile, budget, tier, selected and deferred commands.
 Changing the budget or analyzed set changes the receipt key. Gate code and config

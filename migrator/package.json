@@ -14,7 +14,8 @@
     "introspect": "node src/introspect.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:performance": "node test/performance.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",

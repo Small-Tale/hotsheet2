@@ -180,6 +180,39 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
   ];
 }
 
+/** HS2-A4HD9X: only directly changed packages receive their measured baseline. */
+export function performanceStages(changes) {
+  const stages = [];
+  if (changes.some((path) => /^crates\/|^Cargo\.(toml|lock)$|^scripts\/perf-ticketing\.mjs$/.test(path)))
+    stages.push({
+      cwd: '.',
+      group: 'rust',
+      selected: true,
+      force: true,
+      command: 'node scripts/perf-ticketing.mjs',
+      reasons: ['testing:perf selects the synthetic local ticketing baseline for Rust changes'],
+    });
+  if (changes.some((path) => path.startsWith('migrator/')))
+    stages.push({
+      cwd: 'migrator',
+      group: 'migrator',
+      selected: true,
+      force: true,
+      command: 'npm run test:performance',
+      reasons: ['testing:perf selects the synthetic PGLite export baseline for migrator changes'],
+    });
+  if (changes.some((path) => path.startsWith('clients/web/')))
+    stages.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      force: true,
+      command: 'npm run test:performance',
+      reasons: ['testing:perf selects the web performance baseline'],
+    });
+  return stages;
+}
+
 function budgetConfig(repo) {
   const config = read(join(repo, 'scripts/gate-budget.json'));
   if (!Number.isSafeInteger(config?.defaultBudgetMs) || config.defaultBudgetMs <= 0 || Object.keys(config).length !== 1)
@@ -259,17 +292,11 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
       },
     ];
   }
-  if (profile?.perf && !state.changes.some((path) => classifyPath(path).groups.includes?.('web')))
-    throw new Error('testing:perf has no configured baseline for these changed paths.');
-  if (profile?.perf)
-    affected.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      force: true,
-      command: 'npm run test:performance',
-      reasons: ['testing:perf selects the web performance baseline'],
-    });
+  if (profile?.perf) {
+    const performance = performanceStages(state.changes);
+    if (!performance.length) throw new Error('testing:perf has no configured baseline for these changed paths.');
+    affected.push(...performance);
+  }
   const config = budgetConfig(repo);
   const budgetMs =
     tier === 'T2' || profile?.deep ? null : (options.budgetMs ?? profile?.budgetMs ?? config.defaultBudgetMs);
