@@ -282,6 +282,12 @@
   border-radius: remify(8px);
   background: var(--wa-color-neutral-fill-normal);
 }
+/* Footnotes (the diff tool) sit on the commits' 17px text column with no fill (HS2-SHV8J7). */
+.ticket-code-review__footnotes {
+  display: grid;
+  padding-inline: calc(var(--kui-space-m) + 1px);
+  gap: var(--kui-space-2xs);
+}
 @container (max-width: remify(352px)) {
   .ticket-code-review__compare-banner {
     grid-template-columns: minmax(0, 1fr) auto;

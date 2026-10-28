@@ -11046,7 +11046,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   await expect(
     inspector.getByRole('tab', { name: 'Code Review' }).locator('[data-lucide="message-square-code"]'),
   ).toBeVisible();
-  await expect(review).toContainText('Opens in Glassbox');
+  await expect(review).toContainText('Code reviews open in Glassbox');
   const evidence = review.getByRole('button', { name: 'Open Change Evidence' });
   await expect(evidence).toContainText('2 docs3 tests3 source1 other2 new test files · 1 existing test file modified');
   await expect(review.locator('.ticket-code-review__commit')).toHaveCount(4);
@@ -11206,7 +11206,7 @@ test('renders the exact shared Code Review component in the inspector and reader
   const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('tab', { name: 'Code Review' }).click();
   const sidebarReview = sidebar.locator('[data-component="ticket-code-review"]');
-  await expect(sidebarReview).toContainText('Opens in Glassbox');
+  await expect(sidebarReview).toContainText('Code reviews open in Glassbox');
   await expect(sidebarReview).toContainText('No commits referencing this ticket were found.');
   const sharedMarkup = await sidebarReview.evaluate((element) => element.outerHTML);
   await sidebar.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-inspector-after.png' });
@@ -11214,7 +11214,7 @@ test('renders the exact shared Code Review component in the inspector and reader
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: 'Code Review' }).click();
   const readerReview = reader.locator('[data-component="ticket-code-review"]');
-  await expect(readerReview).toContainText('Opens in Glassbox');
+  await expect(readerReview).toContainText('Code reviews open in Glassbox');
   await expect(readerReview).toContainText('No commits referencing this ticket were found.');
   // Identical component markup; only the shared panel column carries its reader presentation variant (HS2-MGVE50).
   expect(await readerReview.evaluate((element) => element.outerHTML)).toBe(

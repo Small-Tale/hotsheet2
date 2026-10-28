@@ -348,7 +348,7 @@ describe('content components', () => {
     );
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-component="ticket-code-review"');
-    expect(markup).toContain('Opens in Glassbox');
+    expect(markup).toContain('Code reviews open in Glassbox');
     expect(markup).toContain('Reader parity');
     expect(markup).toContain('Expanded detail');
     expect(markup).toContain('Shared launch state');
