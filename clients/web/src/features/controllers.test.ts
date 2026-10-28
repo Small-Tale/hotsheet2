@@ -34,10 +34,12 @@ const command = (id: string): CommandDefinition => ({ id, title: id, kind: 'shel
 const json = (value: unknown) => Response.json(value);
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
@@ -2008,6 +2010,139 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(
       archive.conversationSelectedMessages('chat-b', state.conversationStates.value['chat-b'].messages),
     ).toHaveLength(1);
+  });
+});
+
+describe('conversation export lifecycle across cancel and reopen (HS2-1S33A9)', () => {
+  const destination = { selectionToken: 'chosen', displayPath: '/exports/chat', kind: 'directory' };
+  const savedManifest = {
+    format: 'hotsheet-conversation-export',
+    manifestVersion: 1,
+    exportId: 'export-1',
+    revision: 4,
+    exportedAt: '2026-10-28T00:00:00Z',
+    source: { conversationId: 'chat-a', tool: 'codex' },
+    selectedMessageIds: ['one', 'two'],
+    bundle: { includeAttachments: false, includeMedia: false, includeSummary: false },
+    reopen: {
+      conversationId: 'chat-a',
+      tool: 'codex',
+      firstMessageId: 'one',
+      lastMessageId: 'two',
+      resumesOriginalSession: false,
+    },
+    entries: [],
+    assets: [],
+  };
+  const path = (url: Parameters<typeof fetch>[0]) =>
+    typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+
+  /** Open export A, start its chooser, cancel it, and open replacement export B. */
+  async function replaceDuringChooser(settle: (late: ReturnType<typeof deferred<Response>>) => void) {
+    const state = chatOwners(),
+      { archive } = state,
+      late = deferred<Response>();
+    fetchMock.mockReturnValueOnce(late.promise);
+    archive.openConversationExport();
+    const choosing = archive.finishConversationExport();
+    expect(archive.conversationExportDialog.value?.busy).toBe(true);
+    archive.conversationExportDialog.value = undefined;
+    archive.openConversationExport();
+    archive.updateConversationExportDraft((draft) => ({ ...draft, scope: { kind: 'all' } }));
+    const replacement = archive.conversationExportDialog.value;
+    settle(late);
+    await choosing;
+    return { state, archive, replacement };
+  }
+
+  it('keeps a replacement export when the cancelled chooser later succeeds', async () => {
+    const { archive, replacement } = await replaceDuringChooser((late) => {
+      late.resolve(json({ destination }));
+    });
+    expect(archive.conversationExportDialog.value).toBe(replacement);
+    expect(archive.conversationExportDialog.value?.draft.destination).toBeUndefined();
+    expect(archive.conversationExportDialog.value?.busy).toBeFalsy();
+    // The cancelled export never continues to a write.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a replacement export when the cancelled chooser later fails', async () => {
+    const { archive, replacement } = await replaceDuringChooser((late) => {
+      late.reject(new Error('chooser crashed'));
+    });
+    expect(archive.conversationExportDialog.value).toBe(replacement);
+    expect(archive.conversationExportDialog.value?.error).toBe('');
+  });
+
+  it('applies a chooser result to its own export and keeps edits made while it was open', async () => {
+    const state = chatOwners(),
+      { archive } = state,
+      late = deferred<Response>();
+    fetchMock.mockReturnValueOnce(late.promise);
+    archive.openConversationExport();
+    const choosing = archive.finishConversationExport();
+    // A second finish while the chooser is open is refused rather than opening another chooser.
+    await archive.finishConversationExport();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    archive.updateConversationExportDraft((draft) => ({ ...draft, bundle: { ...draft.bundle, includeMedia: false } }));
+    late.resolve(json({ destination: null }));
+    await choosing;
+    // A native cancel leaves the export open without a destination, and a later choice fills it.
+    expect(archive.conversationExportDialog.value).toMatchObject({
+      busy: false,
+      draft: { bundle: { includeMedia: false } },
+    });
+    expect(archive.conversationExportDialog.value?.draft.destination).toBeUndefined();
+    fetchMock.mockImplementation(async (url) => {
+      if (path(url).endsWith('/destination')) return json({ destination });
+      return json({ displayPath: '/exports/chat', manifest: savedManifest });
+    });
+    await archive.finishConversationExport();
+    expect(archive.conversationExportDialog.value).toBeUndefined();
+    expect(state.showToast).toHaveBeenCalledWith('Saved conversation revision 4.');
+  });
+
+  for (const outcome of ['succeeds', 'fails'] as const)
+    it(`keeps a replacement export when the replaced export's write later ${outcome}`, async () => {
+      const state = chatOwners(),
+        { archive } = state,
+        write = deferred<Response>();
+      fetchMock.mockImplementation(async (url) => {
+        if (path(url).endsWith('/destination')) return json({ destination });
+        return write.promise;
+      });
+      archive.openConversationExport();
+      const saving = archive.finishConversationExport();
+      await vi.waitFor(() => {
+        expect(fetchMock.mock.calls.some(([url]) => path(url).endsWith('/write'))).toBe(true);
+      });
+      archive.conversationExportDialog.value = undefined;
+      archive.openConversationExport();
+      const replacement = archive.conversationExportDialog.value;
+      if (outcome === 'succeeds') write.resolve(json({ displayPath: '/exports/chat', manifest: savedManifest }));
+      else write.reject(new Error('disk full'));
+      await saving;
+      expect(archive.conversationExportDialog.value).toBe(replacement);
+      // The earlier export really did save, so its confirmation still appears.
+      if (outcome === 'succeeds') expect(state.showToast).toHaveBeenCalledWith('Saved conversation revision 4.');
+      else expect(state.showToast).not.toHaveBeenCalled();
+    });
+
+  it('reports a write failure on its own export and allows a further attempt', async () => {
+    const state = chatOwners(),
+      { archive } = state;
+    let fail = true;
+    fetchMock.mockImplementation(async (url) => {
+      if (path(url).endsWith('/destination')) return json({ destination });
+      if (fail) throw new Error('disk full');
+      return json({ displayPath: '/exports/chat', manifest: savedManifest });
+    });
+    archive.openConversationExport();
+    await archive.finishConversationExport();
+    expect(archive.conversationExportDialog.value).toMatchObject({ busy: false, error: 'disk full' });
+    fail = false;
+    await archive.finishConversationExport();
+    expect(archive.conversationExportDialog.value).toBeUndefined();
   });
 });
 
