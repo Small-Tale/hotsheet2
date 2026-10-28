@@ -81,17 +81,15 @@ pub(crate) struct ListParams {
     pub(crate) fields: Option<String>,
 }
 
-/// Parse the `fields=` allow-list (comma-separated, empties dropped).
-pub(crate) fn parse_fields(fields: &Option<String>) -> Vec<String> {
+/// Parse the `fields=` allow-list: names trimmed, empties dropped, and an unknown name
+/// refused with 400 naming it (HS2-Q2JEGK).
+pub(crate) fn parse_fields(fields: &Option<String>) -> Result<Vec<String>, ApiError> {
     fields
         .as_deref()
-        .map(|f| {
-            f.split(',')
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
+        .map(hotsheet_ticketing::wire::parse_field_list)
+        .transpose()
+        .map(Option::unwrap_or_default)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
 }
 
 /// Serialize compact rows to a JSON array, applying the `fields` projection if any.

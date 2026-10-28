@@ -251,7 +251,7 @@ fn merge_checkout_page(
     }
 
     let compact = params.compact.unwrap_or(true);
-    let fields = parse_fields(&params.fields);
+    let fields = parse_fields(&params.fields)?;
     // Batched `has_commit` evaluation: one repository scan per fetched batch, not per row.
     let commit_filter = |slugs: Vec<String>| -> Result<Option<HashSet<String>>, ApiError> {
         if params.has_commit.is_none() || slugs.is_empty() {

@@ -257,7 +257,7 @@ pub(crate) fn list_entry_tickets(
     params: ListParams,
 ) -> Result<Response, ApiError> {
     let compact = params.compact.unwrap_or(true);
-    let fields = parse_fields(&params.fields);
+    let fields = parse_fields(&params.fields)?;
     let mut query = params.into_query(entry.store.root())?;
     let bound = ops::StoreReadBound::new(query.limit)?;
     query.limit = Some(bound.fetch_limit());

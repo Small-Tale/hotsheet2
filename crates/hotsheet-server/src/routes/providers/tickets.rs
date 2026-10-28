@@ -39,7 +39,7 @@ pub(crate) async fn list_provider_tickets(
     Query(params): Query<ListParams>,
 ) -> Result<Response, ApiError> {
     let compact = params.compact == Some(true);
-    let fields = parse_fields(&params.fields);
+    let fields = parse_fields(&params.fields)?;
     let mut query = params.into_query(state.store.root())?;
     let bound = ops::StoreReadBound::new(query.limit).map_err(provider_bound_error)?;
     query.limit = Some(bound.fetch_limit());

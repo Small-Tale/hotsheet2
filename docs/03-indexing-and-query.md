@@ -305,6 +305,11 @@ query(filter, sort, text?, paging) -> TicketRow[]
   For an even leaner row, `fields=slug,status,up_next,title` keeps only the named keys
   (plus `slug`, always) — a JSON allow-list applied at the wire layer over the shared
   `TicketRow`, so server + MCP share one projection (`wire::project_fields`, HS2-GY3GWT).
+  Names are trimmed and empty entries ignored, so `fields=slug, title` works. A name
+  that is not a ticket row key (`wire::PROJECTABLE_FIELDS`: the serialized `TicketRow`
+  and provider `ApiTicket` keys, pinned to both structs by a source test) is refused
+  with 400 `unknown fields: …` on the store, provider, and checkout lists and in the
+  MCP, never silently dropped (HS2-Q2JEGK).
   The MCP shim additionally drops from pretty- to **compact JSON** once a result crosses
   ~8 KB, so a big list dump doesn't spend the caller's tokens on indentation.
 - **provider-qualified lists (HS2-DXD7DZ):** `GET /providers/{connection_id}/tickets`

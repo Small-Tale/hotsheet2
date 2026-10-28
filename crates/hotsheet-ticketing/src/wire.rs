@@ -554,13 +554,97 @@ impl TicketRow {
     }
 }
 
+/// Every name a `fields=` projection can keep: the serialized keys of [`TicketRow`]
+/// (index rows) and [`ApiTicket`] (provider rows). A source test pins this list to both
+/// struct definitions so a new field is never refused (HS2-Q2JEGK).
+pub const PROJECTABLE_FIELDS: &[&str] = &[
+    "assignees",
+    "attachments",
+    "auto_context",
+    "blocked_by",
+    "blocked_reason",
+    "category",
+    "claim_count",
+    "claim_eta_at",
+    "claim_history",
+    "claim_lease_expires_at",
+    "claim_started_at",
+    "claimed_by",
+    "close_reason",
+    "closed_at",
+    "completed_at",
+    "concurrency_token",
+    "connection_id",
+    "copied_from",
+    "created_at",
+    "details",
+    "duplicate_of",
+    "feedback_needed",
+    "follow_up_link_error",
+    "follow_ups",
+    "id",
+    "latest_confidence",
+    "legacy_number",
+    "moved_at",
+    "moved_to_store",
+    "native_id",
+    "native_url",
+    "needs_review",
+    "notes",
+    "pending_operation_ids",
+    "priority",
+    "qualified_id",
+    "review_requests",
+    "schema",
+    "slug",
+    "started_phase",
+    "started_phase_estimate_ms",
+    "started_phase_since",
+    "status",
+    "tags",
+    "title",
+    "transfer_operation_id",
+    "transferred_from",
+    "up_next",
+    "updated_at",
+    "verified_at",
+    "warnings",
+    "worker_label",
+];
+
+/// Parse a `fields=` allow-list: comma-separated, each name trimmed, empty entries
+/// dropped. A name outside [`PROJECTABLE_FIELDS`] is refused with a message naming every
+/// unknown key, instead of being silently dropped (HS2-Q2JEGK).
+pub fn parse_field_list(raw: &str) -> Result<Vec<String>, String> {
+    let fields: Vec<String> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let unknown: Vec<&str> = fields
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !PROJECTABLE_FIELDS.contains(name))
+        .collect();
+    if unknown.is_empty() {
+        Ok(fields)
+    } else {
+        Err(format!(
+            "unknown fields: {} (fields must name ticket row keys such as slug, title, status)",
+            unknown.join(", ")
+        ))
+    }
+}
+
 /// A leaner-than-compact list projection (HS2-GY3GWT item 1): keep only `fields` on each
 /// row object, for a truly minimal browse row (e.g. `slug,status,up_next,title`) without
 /// changing the shared [`TicketRow`] wire shape. Operates on already-serialized rows so the
 /// server and MCP share one implementation. Rules:
 /// - `slug` is **always** kept, so a projected row is still identifiable even if the caller
 ///   forgot to ask for it.
-/// - Unknown field names are ignored; a non-object element is left untouched.
+/// - Unknown field names are ignored here; [`parse_field_list`] refuses them at the
+///   request boundary. A non-object element is left untouched.
 /// - An empty `fields` list is a no-op (returns the full rows).
 pub fn project_fields(rows: &mut [serde_json::Value], fields: &[String]) {
     use std::collections::HashSet;
@@ -773,6 +857,56 @@ mod tests {
         // Everything else the list needs is still there.
         assert_eq!(compact_json["slug"], full_json["slug"]);
         assert_eq!(compact_json["status"], "started");
+    }
+
+    #[test]
+    fn hs2_q2jegk_field_lists_trim_names_and_refuse_unknown_keys() {
+        assert_eq!(
+            parse_field_list(" slug, title ,,status ").unwrap(),
+            ["slug", "title", "status"]
+        );
+        assert_eq!(parse_field_list("").unwrap(), Vec::<String>::new());
+        assert_eq!(parse_field_list(" , ").unwrap(), Vec::<String>::new());
+        let error = parse_field_list("slug, titel,bogus").unwrap_err();
+        assert!(error.starts_with("unknown fields: titel, bogus"), "{error}");
+        assert!(parse_field_list("Title").is_err(), "names are exact keys");
+        for name in PROJECTABLE_FIELDS {
+            assert_eq!(parse_field_list(name).unwrap(), [*name]);
+        }
+    }
+
+    #[test]
+    fn hs2_q2jegk_projectable_fields_match_both_row_structs() {
+        let source = include_str!("wire.rs");
+        let mut declared = std::collections::BTreeSet::new();
+        for name in ["ApiTicket", "TicketRow"] {
+            let start = source.find(&format!("pub struct {name} {{")).unwrap();
+            let body = &source[start..start + source[start..].find("\n}\n").unwrap()];
+            assert!(
+                !body.contains("rename") && !body.contains("flatten"),
+                "{name}: a serde rename or flatten changes its keys; teach this test about it"
+            );
+            declared.extend(body.lines().filter_map(|line| {
+                let field = line.trim_start().strip_prefix("pub ")?;
+                let (field, _) = field.split_once(':')?;
+                field
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                    .then(|| field.to_owned())
+            }));
+        }
+        let listed: std::collections::BTreeSet<String> = PROJECTABLE_FIELDS
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect();
+        assert_eq!(
+            listed, declared,
+            "PROJECTABLE_FIELDS drifted from the row structs"
+        );
+        let row = serde_json::to_value(TicketRow::from(&ticket())).unwrap();
+        for key in row.as_object().unwrap().keys() {
+            assert!(PROJECTABLE_FIELDS.contains(&key.as_str()), "{key}");
+        }
     }
 
     #[test]

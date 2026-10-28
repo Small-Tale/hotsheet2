@@ -165,7 +165,7 @@ fn base_tools_list() -> Value {
                 "cursor": str_prop("checkout queries only: the previous page's next_cursor, with the same filters, sort, and page_size"),
                 "counts": { "type": "boolean", "description": "checkout pages only: false returns counts as null, skipping a full summary read per page (use when walking every page)" },
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
-                "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
+                "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept; an unknown field name is an error"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
                 ,"checkout": str_prop("optional checkout id/alias/path; aggregates all linked stores"), "connection": str_prop("optional ticket-provider connection id")
             } }
@@ -1288,7 +1288,7 @@ mod core_backend {
                 );
             }
             let compact = wants_compact(query);
-            let fields = query_fields(query);
+            let fields = query_fields(query)?;
             let contexts = auto_context::effective(&checkout.settings())
                 .map_err(|e| bad_request(e.to_string()))?;
             let fetch = |request: checkout_page::SourceFetch<'_>| {
@@ -1387,7 +1387,7 @@ mod core_backend {
                     row
                 })
                 .collect();
-            let fields = query_fields(query);
+            let fields = query_fields(query)?;
             let mut vals: Vec<Value> = rows.iter().map(to_value).collect();
             hotsheet_ticketing::wire::project_fields(&mut vals, &fields);
             Ok(vals)
@@ -1576,7 +1576,7 @@ mod core_backend {
                                 "more than {max} tickets match; pass limit (at most {max}) or page with page_size and cursor"
                             )));
                         }
-                        let fields = query_fields(query);
+                        let fields = query_fields(query)?;
                         for row in &mut all {
                             let store = row.get("store").cloned();
                             hotsheet_ticketing::wire::project_fields(
@@ -1642,7 +1642,7 @@ mod core_backend {
                 bound
                     .finish(&mut vals)
                     .map_err(|e| bad_request(e.to_string()))?;
-                hotsheet_ticketing::wire::project_fields(&mut vals, &query_fields(query));
+                hotsheet_ticketing::wire::project_fields(&mut vals, &query_fields(query)?);
                 return Ok(Value::Array(vals));
             }
             if path == "/tickets" {
@@ -2779,17 +2779,15 @@ mod core_backend {
     }
 
     /// The `fields=` allow-list for a leaner list projection (comma-separated; HS2-GY3GWT).
-    fn query_fields(pairs: &[(String, String)]) -> Vec<String> {
+    /// Names are trimmed and an unknown name is refused like the server does (HS2-Q2JEGK).
+    fn query_fields(pairs: &[(String, String)]) -> Result<Vec<String>, BackendError> {
         pairs
             .iter()
             .find(|(k, _)| k == "fields")
-            .map(|(_, v)| {
-                v.split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default()
+            .map(|(_, v)| hotsheet_ticketing::wire::parse_field_list(v))
+            .transpose()
+            .map(Option::unwrap_or_default)
+            .map_err(bad_request)
     }
 
     /// A list is compact (no Markdown body) unless `compact=false` is passed.
@@ -4651,6 +4649,35 @@ mod tests {
                 .collect();
             assert_eq!(keys, ["slug", "status"].into_iter().collect());
         }
+    }
+
+    #[test]
+    fn hs2_q2jegk_mcp_fields_trim_names_and_refuse_unknown_keys() {
+        let (_d, backend) = core();
+        call(&backend, "hotsheet_create", json!({ "title": "a" }));
+        let rows = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "fields": "status, title" }),
+        );
+        let keys: std::collections::HashSet<&str> = rows[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, ["slug", "status", "title"].into_iter().collect());
+        let refused = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "fields": "title, titel" }),
+        );
+        let error = refused["error"].as_str().unwrap();
+        assert!(error.contains("unknown fields: titel"), "{error}");
+        let direct = backend
+            .get("/tickets", &[("fields".into(), "bogus".into())])
+            .unwrap_err();
+        assert_eq!(direct.status, Some(400));
     }
 
     #[test]

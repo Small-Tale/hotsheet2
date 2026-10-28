@@ -13551,6 +13551,77 @@ async fn fields_projection_returns_a_leaner_row() {
 }
 
 #[tokio::test]
+async fn hs2_q2jegk_fields_trim_names_and_refuse_unknown_keys_on_every_list() {
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"lean","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"lean me"}"#)))
+        .await
+        .unwrap();
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    let lists = [
+        "/tickets?".to_owned(),
+        format!("/providers/{connection}/tickets?limit=10&"),
+        "/checkouts/lean/tickets?page_size=10&".to_owned(),
+    ];
+    for list in lists {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("{list}fields=status,%20title%20"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{list}");
+        let body = body_json(response).await;
+        let rows = body.get("items").unwrap_or(&body);
+        let row = rows.as_array().unwrap()[0].as_object().unwrap();
+        assert_eq!(
+            row["title"], "lean me",
+            "{list}: a padded name still projects"
+        );
+        assert!(
+            row.contains_key("status") && !row.contains_key("category"),
+            "{list}"
+        );
+
+        let refused = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("{list}fields=title,titel,bogus"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST, "{list}");
+        let error = body_json(refused).await.to_string();
+        assert!(
+            error.contains("unknown fields: titel, bogus"),
+            "{list}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn keyset_paging_walks_the_store_and_rejects_a_bad_cursor() {
     let (_d, st) = state();
     let app = app(st);
