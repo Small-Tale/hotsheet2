@@ -430,10 +430,13 @@ mod tests {
         assert!(!queued.is_empty());
         let started = std::time::Instant::now();
         let error = is_live(&socket).unwrap_err();
+        // Linux can report ENOTCONN for a saturated listener; it remains uncertain.
         assert!(
             matches!(
                 error.kind(),
-                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                std::io::ErrorKind::WouldBlock
+                    | std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::NotConnected
             ),
             "{error}"
         );

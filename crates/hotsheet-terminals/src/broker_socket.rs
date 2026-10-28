@@ -444,7 +444,9 @@ mod tests {
         assert!(
             matches!(
                 full_error.kind(),
-                io::ErrorKind::TimedOut | io::ErrorKind::ConnectionRefused
+                io::ErrorKind::TimedOut
+                    | io::ErrorKind::ConnectionRefused
+                    | io::ErrorKind::NotConnected
             ),
             "{full_error}"
         );
