@@ -80,12 +80,15 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
       const heartbeat = setInterval(() => {
         claim(false);
       }, 1_000);
-      return () => {
-        clearInterval(heartbeat);
-        socket.close();
+      return {
+        claim,
+        stop: () => {
+          clearInterval(heartbeat);
+          socket.close();
+        },
       };
     };
-    const stopOther = await otherDevice();
+    const other = await otherDevice();
     try {
       await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
       const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
@@ -98,14 +101,17 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
         await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
         // The zoomed terminal drives the real PTY at 80×24 after the arbiter's focus hold.
         await expect
-          .poll(async () => {
-            const [grid, pty] = await Promise.all([
-              viewport.getAttribute('data-grid-size'),
-              viewport.getAttribute('data-pty-size'),
-            ]);
-            return grid === pty && grid === '80x24' ? grid : undefined;
-          })
-          .toBeTruthy();
+          .poll(async () =>
+            viewport.evaluate((element) => ({
+              grid: element.dataset.gridSize,
+              pty: element.dataset.ptySize,
+              driving: element.dataset.driving,
+              sizingFocus: element.dataset.sizingFocus,
+              visible: element.dataset.viewportVisible,
+              connection: element.dataset.connection,
+            })),
+          )
+          .toMatchObject({ grid: '80x24', pty: '80x24' });
         const grid = (await viewport.getAttribute('data-grid-size'))!;
         await expect(viewport).toHaveAttribute('data-driving', 'true');
         const [cols, rows] = grid.split('x');
@@ -131,13 +137,17 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
       await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
       const wide = await zoom('zoomed-wide');
       await unzoom();
+      // Force the competing device to take control while this viewport is tiled, so rezoom
+      // must actively reclaim the PTY rather than inheriting an unchanged 80×24 size.
+      other.claim(true);
+      await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-pty-size', '60x16');
       expect(await zoom('rezoomed-wide')).toBe(wide);
       await unzoom();
       await page.setViewportSize({ width: 1100, height: 640 });
       expect(await zoom('zoomed-narrow')).toBe(wide);
       await unzoom();
     } finally {
-      stopOther();
+      other.stop();
     }
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });

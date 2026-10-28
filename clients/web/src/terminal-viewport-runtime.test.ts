@@ -1343,6 +1343,17 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
           if (type === TERMINAL_VIEWPORT_PRESENTATION_EVENT)
             handler(new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }));
       },
+      present: (tile: boolean) => {
+        magnified = !tile;
+        for (const [type, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+          if (type === TERMINAL_VIEWPORT_PRESENTATION_EVENT)
+            handler(new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile } }));
+      },
+      resumeFocused: () => {
+        for (const [type, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+          if (type === TERMINAL_VIEWPORT_RESUME_EVENT)
+            handler(new CustomEvent(TERMINAL_VIEWPORT_RESUME_EVENT, { detail: { focus: true } }));
+      },
       focusin: () => {
         for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
           if (type === 'focusin') handler();
@@ -1402,6 +1413,22 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
       view.dispose();
       expect(sockets.at(-1)!.close).toHaveBeenCalled();
     }
+  });
+
+  it('claims interaction when a live tiled viewport resumes magnified without a new focusin (HS2-Y35W56)', () => {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.show();
+    view.runFrames();
+    view.present(true);
+    view.present(false);
+    view.resumeFocused();
+    view.runFrames();
+    expect(view.claims().filter((claim) => claim.interacting)).toEqual([
+      expect.objectContaining({ cols: 80, rows: 24, focus: true, visible: true, interacting: true }),
+    ]);
+    view.dispose();
   });
 
   it('returns a cold magnified viewport to the drawer sizing policy', () => {

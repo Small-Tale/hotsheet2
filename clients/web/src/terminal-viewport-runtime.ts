@@ -988,7 +988,12 @@ function initializeTerminalViewport(
       automaticInputFocusAllowed(window.innerWidth)
     ) {
       focusRequested = true;
+      // Reparenting a live tile may retain DOM focus, so `terminal.focus()` need not emit
+      // another focusin. The explicit resume intent must claim interaction itself; a missed
+      // event otherwise leaves the previous viewer driving the real PTY (HS2-Y35W56).
+      signalInteraction();
       terminal.focus();
+    } else {
       claim();
     }
     if (!webglParked) return;
