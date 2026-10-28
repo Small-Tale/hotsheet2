@@ -5910,17 +5910,13 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
   const review = page.locator('[data-component="ticket-code-review"]').first();
   await expect(review).toBeVisible();
   const spacing = await review.evaluate((node) => {
-    const heading = getComputedStyle(
-        node.querySelector<HTMLElement>('.ticket-code-review__header .kui-toolbar__leading')!,
-      ),
-      evidence = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence')!),
+    const evidence = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence')!),
       evidenceItem = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__evidence-grid span')!),
       range = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range')!),
       rangeItem = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__range-item')!),
       commit = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit')!),
       summary = getComputedStyle(node.querySelector<HTMLElement>('.ticket-code-review__commit-summary')!);
     return {
-      headingGap: heading.gap,
       evidenceMargin: evidence.marginBottom,
       evidencePadding: evidence.padding,
       evidenceItemGap: evidenceItem.gap,
@@ -5933,8 +5929,6 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     };
   });
   expect(spacing).toEqual({
-    // The heading Toolbar drops its gap token; each ToolbarText keeps its own inline padding.
-    headingGap: '0px',
     evidenceMargin: '16px',
     evidencePadding: '8px 16px',
     evidenceItemGap: '4px',
@@ -5946,8 +5940,8 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     summaryGap: '4px',
   });
   await review.screenshot({ path: 'target/visual-captures/hs2-737h3x-ticket-code-review-wide.png' });
-  // One 17px left text/icon edge and one right edge for the title, evidence, bundles, commits, and the
-  // diff tool footnote (HS2-XZTWTY, HS2-PB0VY5, HS2-SHV8J7).
+  // One 17px left text/icon edge and one right edge for the evidence, bundles, commits, and the diff
+  // tool footnote, with no inspector heading (HS2-XZTWTY, HS2-PB0VY5, HS2-SHV8J7, HS2-E9F1T3).
   const edges = () =>
     review.evaluate((node) => {
       const base = node.querySelector('.ticket-code-review__section')!.getBoundingClientRect(),
@@ -5962,7 +5956,6 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
       const footnote = node.querySelector('.ticket-code-review__footnotes p')!;
       return {
         left: [
-          left(text('.ticket-code-review__header .kui-toolbar-text')),
           left(text('.ticket-code-review__evidence h3')),
           left(rect('.ticket-code-review__evidence-grid svg')),
           left(rect('.ticket-code-review__range svg')),
@@ -5974,14 +5967,14 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
           right(rect('.ticket-code-review__commit > button svg')),
         ],
         footnoteText: footnote.textContent,
-        headingLabels: node.querySelectorAll('.ticket-code-review__header .kui-toolbar-text').length,
+        headings: node.querySelectorAll('.ticket-code-review__header').length,
       };
     });
   const expectedEdges = {
-    left: [17, 17, 17, 17, 17, 17],
+    left: [17, 17, 17, 17, 17],
     right: [17, 17],
     footnoteText: 'Code reviews open in Glassbox',
-    headingLabels: 1,
+    headings: 0,
   };
   await expect.poll(edges).toEqual(expectedEdges);
   await page.setViewportSize({ width: 390, height: 844 });

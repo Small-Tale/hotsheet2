@@ -42,6 +42,7 @@ export interface TicketCodeReviewProps {
   review?: CodeReview;
   loading?: boolean;
   message?: string;
+  /** The embedded review's heading; the inspector tab panel has none (HS2-E9F1T3). */
   title?: string;
   emptyMessage?: string;
   loadingMessage?: string;
@@ -76,9 +77,12 @@ export function TicketCodeReview({
   const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />;
   const body = (
     <List gap={embedded ? 'none' : 'xs'} className="ticket-code-review__section">
-      <div class="ticket-code-review__header">
-        <Toolbar dividerSides="" leading={heading} />
-      </div>
+      {embedded ? (
+        // The inspector tab already names the panel, so only an embedded review shows a heading (HS2-E9F1T3).
+        <div class="ticket-code-review__header">
+          <Toolbar dividerSides="" leading={heading} />
+        </div>
+      ) : undefined}
       {loading && (
         <Text variant="p" tone="quiet" size="compact" role="status">
           {loadingMessage}
