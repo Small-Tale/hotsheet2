@@ -1,0 +1,11 @@
+# HS2-M269HC: the global Git config for every process cargo or nextest starts
+# (`.cargo/config.toml` sets GIT_CONFIG_GLOBAL). Tests get a synthetic identity like
+# CI's, never a developer's signing, hooks or credential settings, and Git never starts
+# detached `maintenance run --auto` children that outlive a test (a nextest LEAK).
+[user]
+	name = Hot Sheet test
+	email = test@example.invalid
+[maintenance]
+	auto = false
+[gc]
+	auto = 0

@@ -788,6 +788,16 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
+- **Global Git config isolation (HS2-M269HC):** `.cargo/config.toml` forces
+  `GIT_CONFIG_GLOBAL=<repo>/.cargo/test-gitconfig` for every process cargo or nextest
+  starts. That file gives tests a synthetic identity like CI's, and sets
+  `maintenance.auto=false` and `gc.auto=0`. Without it, Git starts detached
+  `git maintenance run --auto` children after fetch, push, commit and receive-pack (788 in
+  one full suite), which can outlive a test and surface as a nextest `LEAK`, and tests read
+  each developer's global settings (signing, hooks, credential helpers).
+  `GIT_CONFIG_GLOBAL` survives `git::command`'s repository-environment scrub and Git's local
+  transports, unlike `GIT_CONFIG_COUNT`. `hotsheet-ticketing`'s
+  `hs2_m269hc_tests_use_the_repository_global_git_config` fails if the guard is removed.
 - **Installed AI-tool isolation (HS2-7W3D7V):** a test that starts a server or CLI with
   the inherited `PATH` would otherwise let AI-tool discovery execute the developer's real
   tools (`codex --version` and the app-server `model/list`, `opencode models`,

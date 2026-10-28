@@ -138,6 +138,28 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
+    /// HS2-M269HC: test processes read the repository's synthetic global Git config, so
+    /// no detached auto-maintenance outlives a test and no developer setting leaks in.
+    #[test]
+    fn hs2_m269hc_tests_use_the_repository_global_git_config() {
+        let global = std::env::var_os("GIT_CONFIG_GLOBAL").map(PathBuf::from);
+        assert!(
+            global
+                .as_deref()
+                .is_some_and(|path| path.ends_with(".cargo/test-gitconfig")),
+            "{global:?}"
+        );
+        let get = |key: &str| {
+            let out = command()
+                .args(["config", "--global", "--get", key])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
+        };
+        assert_eq!(get("maintenance.auto"), "false");
+        assert_eq!(get("user.email"), "test@example.invalid");
+    }
+
     #[test]
     fn covers_every_variable_git_clears_for_other_repositories() {
         let out = command()

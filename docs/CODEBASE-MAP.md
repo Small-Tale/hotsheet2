@@ -846,7 +846,7 @@ hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli
   `HOTSHEET_HOME=target/test-hotsheet-home` for every cargo/nextest-launched process so an
   inherited real `~/.hotsheet2` never reaches a test, and `HOTSHEET_CACHE_DIR=target/test-hotsheet-cache`
   likewise, and `HOTSHEET_AI_TOOL_PROBES=off` keeps discovery from executing installed AI
-  tools (HS2-7W3D7V; `crates/hotsheet-aitools/tests/probe_isolation.rs`). Parallel binaries share that home, so setup tests inject their plugin search
+  tools (HS2-7W3D7V; `crates/hotsheet-aitools/tests/probe_isolation.rs`). `GIT_CONFIG_GLOBAL=.cargo/test-gitconfig` gives tests a synthetic Git identity and no detached auto-maintenance (HS2-M269HC). Parallel binaries share that home, so setup tests inject their plugin search
   path, enforced by `crates/hotsheet-plugins/tests/setup_isolation_guard.rs` (HS2-SDPD95); see
   [12 §12.7.6](12-code-organization-and-testing.md#1276-fixtures--ci).
 - **Lint (must pass with zero warnings before push):** `cargo fmt --all --check` +

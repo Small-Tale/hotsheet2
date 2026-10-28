@@ -21,3 +21,8 @@ HOTSHEET_CACHE_DIR = { value = "target/test-hotsheet-cache", force = true, relat
 # with the inherited PATH. Tests keep the bundled offline catalogs; the few that exercise
 # probing against fixture tools remove this variable explicitly.
 HOTSHEET_AI_TOOL_PROBES = { value = "off", force = true }
+# HS2-M269HC: a repository-local global Git config. Git otherwise starts detached
+# `git maintenance run --auto` children after fetch, push, commit and receive-pack that
+# outlive tests (788 per full suite), and tests would read each developer's global config.
+# GIT_CONFIG_GLOBAL survives `git::command`'s repository-env scrub and local transports.
+GIT_CONFIG_GLOBAL = { value = ".cargo/test-gitconfig", force = true, relative = true }
