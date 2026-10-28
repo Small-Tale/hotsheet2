@@ -51,19 +51,21 @@ impl TerminalBroker {
         let project = hotsheet_tls::project_id(store_path);
         let socket = Self::socket_for(&project)?;
 
-        if is_live(&socket) {
-            return Ok(Self {
-                socket,
-                project,
-                restart: Arc::new(tokio::sync::Mutex::new(())),
-                legacy_list_only: Arc::default(),
-            });
+        match is_live(&socket) {
+            Ok(true) => {
+                return Ok(Self {
+                    socket,
+                    project,
+                    restart: Arc::new(tokio::sync::Mutex::new(())),
+                    legacy_list_only: Arc::default(),
+                });
+            }
+            Ok(false) => spawn_broker(&socket, &project)?,
+            Err(error) => return Err(error.into()),
         }
-        spawn_broker(&socket, &project)?;
-
         // Wait (briefly) for the freshly-spawned broker to bind + accept.
         for _ in 0..40 {
-            if is_live(&socket) {
+            if is_live(&socket).unwrap_or(false) {
                 return Ok(Self {
                     socket,
                     project,
@@ -80,7 +82,9 @@ impl TerminalBroker {
     pub fn discover(store_path: &Path) -> Option<Self> {
         let project = hotsheet_tls::project_id(store_path);
         let socket = Self::socket_for(&project).ok()?;
-        is_live(&socket).then_some(Self {
+        // An owned but unresponsive socket still identifies this namespace; callers must
+        // not silently choose another one while its liveness is uncertain (HS2-YDD60V).
+        (!matches!(is_live(&socket), Ok(false))).then_some(Self {
             socket,
             project,
             restart: Arc::new(tokio::sync::Mutex::new(())),
@@ -185,33 +189,44 @@ impl TerminalBroker {
     }
 }
 
-/// Whether a broker is accepting on `socket` right now (a blocking connect probe).
-fn is_live(socket: &Path) -> bool {
+/// A missing/refused socket is confirmed absent. Connect timeout, permission errors,
+/// and an accepting but unresponsive listener remain uncertain (HS2-YDD60V).
+fn is_live(socket: &Path) -> std::io::Result<bool> {
     use std::io::{BufRead, Write};
-    let Ok(mut stream) = std::os::unix::net::UnixStream::connect(socket) else {
-        return false;
+    let mut stream = match hotsheet_terminals::broker_socket::connect_probe(socket) {
+        Ok(stream) => stream,
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound
+            ) =>
+        {
+            if hotsheet_terminals::broker_socket::owner_lock_held(socket)? {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WouldBlock,
+                    "broker owns its socket but is not accepting connections",
+                ));
+            }
+            return Ok(false);
+        }
+        Err(error) => return Err(error),
     };
     let timeout = Some(std::time::Duration::from_millis(500));
-    let _ = stream.set_read_timeout(timeout);
-    let _ = stream.set_write_timeout(timeout);
-    let Ok(mut line) = serde_json::to_string(&BrokerRequest::Ping) else {
-        return false;
-    };
+    stream.set_read_timeout(timeout)?;
+    stream.set_write_timeout(timeout)?;
+    let mut line = serde_json::to_string(&BrokerRequest::Ping)?;
     line.push('\n');
-    if stream.write_all(line.as_bytes()).is_err() {
-        return false;
-    }
+    stream.write_all(line.as_bytes())?;
     let mut reply = String::new();
-    if std::io::BufReader::new(stream)
-        .read_line(&mut reply)
-        .is_err()
-    {
-        return false;
+    std::io::BufReader::new(stream).read_line(&mut reply)?;
+    match serde_json::from_str::<BrokerResponse>(&reply) {
+        Ok(BrokerResponse::Pong) => Ok(true),
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "broker did not answer Ping with Pong",
+        )),
+        Err(error) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
     }
-    matches!(
-        serde_json::from_str::<BrokerResponse>(&reply),
-        Ok(BrokerResponse::Pong)
-    )
 }
 
 /// Spawn the broker detached with stdio disconnected from the server. Prefer the dedicated
@@ -274,6 +289,8 @@ mod tests {
     use hotsheet_terminals::{
         BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
     };
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::OpenOptionsExt;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -364,6 +381,67 @@ mod tests {
             legacy
         );
         assert!(legacy.with_extension("lock").is_file());
+    }
+
+    #[test]
+    fn hs2_ydd60v_ping_distinguishes_refusal_from_an_unresponsive_owner() {
+        let home = legacy_home();
+        let socket = home.path().join("broker.sock");
+        assert!(!is_live(&socket).unwrap());
+        let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        let started = std::time::Instant::now();
+        let error = is_live(&socket).unwrap_err();
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ),
+            "{error}"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        drop(listener);
+        assert!(!is_live(&socket).unwrap());
+    }
+
+    #[test]
+    fn hs2_ydd60v_full_backlog_refusal_does_not_mark_owned_broker_absent() {
+        let home = legacy_home();
+        let socket = home.path().join("broker.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        // SAFETY: listener owns a listening descriptor; reducing its backlog is valid.
+        assert_eq!(unsafe { libc::listen(listener.as_raw_fd(), 1) }, 0);
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(socket.with_extension("lock"))
+            .unwrap();
+        // SAFETY: lock owns a valid descriptor until this test drops it.
+        assert_eq!(unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) }, 0);
+        let mut queued = Vec::new();
+        for _ in 0..16 {
+            match hotsheet_terminals::broker_socket::connect_probe(&socket) {
+                Ok(stream) => queued.push(stream),
+                Err(_) => break,
+            }
+        }
+        assert!(!queued.is_empty());
+        let started = std::time::Instant::now();
+        let error = is_live(&socket).unwrap_err();
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ),
+            "{error}"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        drop(queued);
+        drop(listener);
+        drop(lock);
+        assert!(!is_live(&socket).unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

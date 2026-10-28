@@ -2,13 +2,142 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use tokio::net::UnixListener;
+
+/// Covers connection establishment itself; stream read/write deadlines are separate.
+pub const PROBE_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
+
+/// Connect without letting a full Unix accept backlog block broker startup or cleanup.
+/// The caller must treat timeout and other uncertain errors as evidence that the socket
+/// may still be owned; refusal or disappearance is stale only with no held owner lock
+/// (HS2-YDD60V).
+pub fn connect_probe(path: &Path) -> io::Result<UnixStream> {
+    std::os::unix::net::SocketAddr::from_pathname(path)?;
+    let bytes = path.as_os_str().as_bytes();
+    // SAFETY: socket returns a fresh descriptor or -1, which is checked below.
+    let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: fd is a new owned socket descriptor and is closed when stream drops.
+    let stream = unsafe { UnixStream::from_raw_fd(fd) };
+    // SAFETY: stream owns fd; close-on-exec prevents a concurrent child launch from
+    // inheriting this temporary probe socket.
+    if unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    stream.set_nonblocking(true)?;
+
+    // SAFETY: a zeroed sockaddr_un is valid; validate the path before copying it.
+    let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    if bytes.len() >= address.sun_path.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "broker socket path exceeds the Unix address limit",
+        ));
+    }
+    address.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    for (target, byte) in address.sun_path.iter_mut().zip(bytes.iter().copied()) {
+        *target = byte as libc::c_char;
+    }
+    let length =
+        (std::mem::offset_of!(libc::sockaddr_un, sun_path) + bytes.len() + 1) as libc::socklen_t;
+    #[cfg(target_os = "macos")]
+    {
+        address.sun_len = length as u8;
+    }
+    // SAFETY: address and length describe the initialized sockaddr_un above.
+    let connected = unsafe {
+        libc::connect(
+            stream.as_raw_fd(),
+            (&raw const address).cast::<libc::sockaddr>(),
+            length,
+        )
+    };
+    if connected < 0 {
+        let error = io::Error::last_os_error();
+        if !matches!(error.raw_os_error(), Some(libc::EINPROGRESS | libc::EAGAIN)) {
+            return Err(error);
+        }
+        let deadline = Instant::now() + PROBE_CONNECT_TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "broker socket connect timed out",
+                ));
+            }
+            let mut event = libc::pollfd {
+                fd: stream.as_raw_fd(),
+                events: libc::POLLOUT,
+                revents: 0,
+            };
+            let wait_ms = remaining.as_millis().max(1).min(i32::MAX as u128) as i32;
+            // SAFETY: event points to one initialized pollfd for this owned descriptor.
+            match unsafe { libc::poll(&raw mut event, 1, wait_ms) } {
+                0 => continue,
+                -1 if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted => continue,
+                -1 => return Err(io::Error::last_os_error()),
+                _ => {
+                    let mut socket_error: libc::c_int = 0;
+                    let mut error_length = std::mem::size_of_val(&socket_error) as libc::socklen_t;
+                    // SAFETY: socket_error and error_length are valid output locations.
+                    if unsafe {
+                        libc::getsockopt(
+                            stream.as_raw_fd(),
+                            libc::SOL_SOCKET,
+                            libc::SO_ERROR,
+                            (&raw mut socket_error).cast(),
+                            &raw mut error_length,
+                        )
+                    } != 0
+                    {
+                        return Err(io::Error::last_os_error());
+                    }
+                    if socket_error != 0 {
+                        return Err(io::Error::from_raw_os_error(socket_error));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    stream.set_nonblocking(false)?;
+    Ok(stream)
+}
+
+/// A broker holds this exclusive lock for its entire listener lifetime. A full
+/// macOS Unix backlog can report ConnectionRefused, so refusal alone does not
+/// prove a socket with a live owner is stale (HS2-YDD60V).
+pub fn owner_lock_held(socket: &Path) -> io::Result<bool> {
+    let lock_path = socket.with_extension("lock");
+    match fs::symlink_metadata(&lock_path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+        Ok(_) => {}
+    }
+    let lock = open_lock(socket)?;
+    // SAFETY: lock owns a valid descriptor until this function returns.
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+        Ok(false)
+    } else {
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::WouldBlock {
+            Ok(true)
+        } else {
+            Err(error)
+        }
+    }
+}
 
 fn user_id() -> u32 {
     // SAFETY: geteuid takes no pointers and has no preconditions.
@@ -181,9 +310,7 @@ pub(crate) fn bind(socket: &Path) -> io::Result<(UnixListener, SocketOwnership)>
                     "refusing to remove an unowned or non-socket broker path",
                 ));
             }
-            match probe_existing_socket(|| {
-                std::os::unix::net::UnixStream::connect(socket).map(|_| ())
-            }) {
+            match probe_existing_socket(|| connect_probe(socket).map(|_| ())) {
                 Ok(_) => {
                     return Err(io::Error::new(
                         io::ErrorKind::AddrInUse,
@@ -264,6 +391,7 @@ fn open_lock(socket: &Path) -> io::Result<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::fd::AsRawFd;
     use std::os::unix::fs::symlink;
 
     #[test]
@@ -295,6 +423,60 @@ mod tests {
         });
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
         assert_eq!(attempts, 1);
+    }
+
+    #[tokio::test]
+    async fn hs2_ydd60v_full_backlog_probe_is_bounded_and_stale_bind_recovers() {
+        let root = fixture();
+        let socket = root.path().join("backlog.sock");
+        let (listener, owner) = bind(&socket).unwrap();
+        // SAFETY: listener owns a listening descriptor; reducing its accept backlog is valid.
+        assert_eq!(unsafe { libc::listen(listener.as_raw_fd(), 1) }, 0);
+        let mut queued = Vec::new();
+        let started = Instant::now();
+        let full_error = loop {
+            match connect_probe(&socket) {
+                Ok(stream) if queued.len() < 16 => queued.push(stream),
+                Ok(_) => panic!("the reduced Unix accept backlog did not fill"),
+                Err(error) => break error,
+            }
+        };
+        assert!(
+            matches!(
+                full_error.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::ConnectionRefused
+            ),
+            "{full_error}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let identity = socket_identity(&socket);
+        assert!(owner_lock_held(&socket).unwrap());
+        let started = Instant::now();
+        assert_eq!(
+            bind(&socket).err().unwrap().kind(),
+            io::ErrorKind::WouldBlock
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(
+            socket_identity(&socket),
+            identity,
+            "uncertain live socket removed"
+        );
+
+        drop(queued);
+        drop(listener);
+        drop(owner);
+        assert!(!socket.exists());
+        // Simulate an exited broker that left its socket inode behind.
+        drop(std::os::unix::net::UnixListener::bind(&socket).unwrap());
+        let (replacement, owner) = bind(&socket).unwrap();
+        assert_ne!(
+            socket_identity(&socket),
+            identity,
+            "stale socket not replaced"
+        );
+        drop(replacement);
+        drop(owner);
     }
 
     fn fixture() -> tempfile::TempDir {
