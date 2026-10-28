@@ -1314,6 +1314,9 @@ preview/download, server directory browser) are separate design work.
   columns show All Tickets matches, its title names the scope, and its own scope toolbar
   switches back to the selected view. Notifications do not show the scope toolbar
   (HS2-5WXA6W).
+  Count badges in sidebar view rows and board column headers are vertically centered in
+  their row or header; their app-owned wrappers are flex boxes, so no inline line box drops
+  the badge onto the text baseline (HS2-RA89QG).
   Pending searchable-view counts use a compact spinner;
   settled search-derived counts put a small magnifying-glass marker beside the number inside
   the same badge and remain inside the

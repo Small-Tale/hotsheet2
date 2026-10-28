@@ -34459,3 +34459,41 @@ test('keeps the list Needs review marker aligned with details after a kind corre
     await server.stop();
   }
 });
+
+test('centers count badges in sidebar view rows and board column headers (HS2-RA89QG)', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await page
+    .getByRole('button', { name: /Columns View/ })
+    .first()
+    .click();
+  await expect(page.locator('.ticket-board-column__header').first()).toBeVisible();
+  for (const width of [1600, 1100]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const offsets = await page.evaluate(() => {
+      const middle = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return (box.top + box.bottom) / 2;
+      };
+      const offset = (selector: string, parent: string) => {
+        const badge = document.querySelector(`${selector} [data-component="badge"]`)!;
+        return Math.abs(middle(badge) - middle(badge.closest(parent)!));
+      };
+      return [
+        offset('[data-component="view-navigation"] .view-navigation__count', '[data-component="list-item"]'),
+        offset('.ticket-board-column__count', '.ticket-board-column__header'),
+      ];
+    });
+    for (const value of offsets) expect(value).toBeLessThanOrEqual(0.5);
+  }
+  await page.locator('[data-component="view-navigation"]').screenshot({
+    path: 'target/visual-captures/hs2-ra89qg-view-navigation-badges.png',
+  });
+  await page.locator('.ticket-board-column__header').first().screenshot({
+    path: 'target/visual-captures/hs2-ra89qg-column-header-badge.png',
+  });
+});
