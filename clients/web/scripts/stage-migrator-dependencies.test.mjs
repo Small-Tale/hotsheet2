@@ -1,10 +1,13 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
+
+vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
 
 it('HS2-9XAJXR stages transitive runtime packages without development binaries', () => {
   const root = mkdtempSync(join(tmpdir(), 'hotsheet-migrator-package-'));
@@ -33,8 +36,15 @@ it('HS2-9XAJXR stages transitive runtime packages without development binaries',
     writeFileSync(join(dev, 'package.json'), JSON.stringify({ name: 'build-tool', version: '1.0.0' }));
     writeFileSync(join(dev, 'native.node'), 'build-only native binary');
 
+    // HS2-RZZWQV: package-manager startup is outside this unit test's staging contract.
+    // Keep the real parseable output shape while full-suite CPU load varies.
+    vi.mocked(execFileSync).mockReturnValue(`${migrator}\n${runtime}\n${nested}\n`);
     stageMigratorDependencies(migrator, staged);
 
+    expect(execFileSync).toHaveBeenCalledWith('npm', ['ls', '--omit=dev', '--all', '--parseable'], {
+      cwd: migrator,
+      encoding: 'utf8',
+    });
     expect(existsSync(join(staged, 'node_modules/runtime/package.json'))).toBe(true);
     expect(existsSync(join(staged, 'node_modules/runtime/node_modules/nested/index.js'))).toBe(true);
     expect(existsSync(join(staged, 'node_modules/build-tool/native.node'))).toBe(false);
