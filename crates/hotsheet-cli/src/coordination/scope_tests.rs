@@ -530,7 +530,7 @@ fn hs2_yhynj6_schema_five_needs_the_upgrade_assertion_and_fences_schema_four() {
     assert_eq!(reopened.version, 5);
     assert_eq!(reopened.integration.unwrap().shared, [COVERAGE]);
     let mut newer = state;
-    newer["version"] = 6.into();
+    newer["version"] = 7.into();
     fs::write(&path, serde_json::to_vec(&newer).unwrap()).unwrap();
     assert!(c.state().unwrap_err().to_string().contains("incompatible"));
 }

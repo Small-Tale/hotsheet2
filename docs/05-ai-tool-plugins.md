@@ -2362,6 +2362,42 @@ refill while CI remains pending. These synthetic process tests are not a real AI
 session pilot. HS2-AJ7FJY separately records real Codex/Claude evidence and remaining
 continuous-loop acceptance; no automatic app-session wake is claimed.
 
+#### Suspended integration after an independent gate failure (HS2-2D3099)
+
+An unpushed code handoff that has already been cherry-picked stays linked to its source
+commit and exact local main SHA. If an independent required local gate fails, the live
+integrator records a regular, operation-addressed `## Integration prerequisite` note on
+the assigned ticket. `coordination suspend-integration` verifies the note, current
+main SHA, unpushed upstream, and exact prerequisite ticket, then persists
+`suspended_integration`. The state is distinct from `ci`: no push or covering
+remote run is implied. It releases only the active main-mutation fence, so the
+prerequisite may enter integration while the original source evidence remains
+durable. It still prevents the pool from being declared drained.
+
+The first suspension requires an explicit all-participants-upgraded assertion and
+persists schema six. Older executables refuse the pool instead of dropping the new
+evidence. A prerequisite may use the same serial fence. After its commit passes the
+exact clean-tree root gate, the integrator records an operation-addressed regular
+`## Prerequisite gate` note on the prerequisite ticket. `resume-integration` checks
+the new main SHA descends from the suspended SHA, the tree is current, the root-gate
+receipt names it, and no other integration or findings verification holds the fence.
+It records the gate receipt on the original assignment and returns that assignment
+to `integrating`. Another independent gate failure requires a new unpushed main
+commit before another suspension. Earlier prerequisites, failure notes, and passed
+gate receipts remain in ordered schema-six history. Every schema-six code handoff,
+including a prerequisite, checks that the exact main SHA reached its configured
+upstream before `ci`; same-phase `ci` replay remains idempotent. `done` follows
+covering green CI and ticket completion.
+Failed or missing evidence leaves the suspension intact. Provider sources without
+local exact-ticket note verification report unsupported instead of inferring
+authority from metadata.
+
+HS2-34PWSK has no historical role-bounded main-mutation or local-gate durations, so
+it cannot quantify a production before/after critical-section gain for this path.
+The HS2-2D3099 real CLI-process fixture demonstrates the transition and serialization
+with synthetic tickets, commits, evidence notes, and an exact tree receipt; it does
+not represent a live multi-session pilot.
+
 ## 5.10 Testability — injected adapters + the fake agent
 
 > **Load-bearing rule** (maintainer, 2026-08-19): adding a tool to HS1 was a manual

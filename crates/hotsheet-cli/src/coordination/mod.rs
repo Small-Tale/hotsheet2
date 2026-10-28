@@ -31,8 +31,9 @@ use sha2::{Digest, Sha256};
 
 pub use authority::{CAPABILITIES, Capabilities};
 pub use contract::{
-    Assignment, AssignmentTransition, Authority, HandoffEvidence, IntegrationReport, Phase,
-    ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind, WaitRequest,
+    Assignment, AssignmentTransition, Authority, HandoffEvidence, IntegrationReport,
+    IntegrationSuspension, Phase, PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State,
+    TransitionActor, TransitionKind, WaitRequest,
 };
 
 pub struct Coordinator {
@@ -53,6 +54,10 @@ pub struct Coordinator {
 /// Fresh reservation checks run under the ticket transaction and state lock, after the
 /// current assignment authority is verified: the state and any replayed operation.
 pub type ReservationCheck<'a> = Box<dyn FnOnce(&State, Option<&Assignment>) -> Result<()> + 'a>;
+
+fn valid_full_sha(sha: &str) -> bool {
+    sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
 
 impl Coordinator {
     /// Idempotent local setup. The directory is under the shipping checkout's private
@@ -110,9 +115,10 @@ impl Coordinator {
         };
         // HS2-TWZW7X: schema four is read and written only once the live integrator has
         // explicitly enabled dispatcher authority; schema five only once it has published
-        // reviewed shared documents (HS2-YHYNJ6); anything newer is refused.
+        // reviewed shared documents (HS2-YHYNJ6); schema six only after the live
+        // integrator suspends a gate-blocked integration (HS2-2D3099). Newer is refused.
         ensure!(
-            matches!(state.version, 1..=5) && state.project_id == self.project_id,
+            matches!(state.version, 1..=6) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -310,6 +316,8 @@ impl Coordinator {
                 && assignment.phase == Phase::Offered
                 && assignment.commit.is_none()
                 && assignment.handoff.is_none()
+                && assignment.suspension.is_none()
+                && assignment.suspension_history.is_empty()
                 && assignment.transitions.is_empty(),
             "new assignment must be an offered operation id"
         );
@@ -498,6 +506,10 @@ impl Coordinator {
     ) -> Result<()> {
         self.change(|state| {
             Self::integrator(state, integrator, generation, now)?;
+            ensure!(
+                phase != Phase::SuspendedIntegration,
+                "use suspend-integration with exact prerequisite and failed-gate evidence"
+            );
             if matches!(phase, Phase::Integrating | Phase::Verifying) {
                 ensure!(
                     !state
@@ -561,6 +573,127 @@ impl Coordinator {
         })
     }
 
+    /// Park an unpushed integration after an independent failed local gate. The exact
+    /// integrator alone may release the main-mutation fence, and only after recording
+    /// the current main commit and prerequisite evidence (HS2-2D3099).
+    #[allow(clippy::too_many_arguments)] // HS2-2D3099: one fenced durable transition with explicit evidence.
+    pub fn suspend_integration(
+        &self,
+        integrator: &str,
+        generation: &str,
+        now: i64,
+        id: &str,
+        evidence: IntegrationSuspension,
+        all_participants_upgraded: bool,
+    ) -> Result<()> {
+        ensure!(
+            valid_full_sha(&evidence.main_commit),
+            "suspended integration requires a full main commit SHA"
+        );
+        ensure!(
+            !evidence.prerequisite.connection_id.is_empty()
+                && !evidence.prerequisite.native_id.is_empty(),
+            "prerequisite must be a qualified ticket reference"
+        );
+        let _ = hotsheet_model::Ulid::from_string(&evidence.failure_note)?;
+        ensure!(
+            evidence.resumed.is_none(),
+            "a new suspension cannot carry a prior resumption"
+        );
+        self.change(|state| {
+            Self::integrator(state, integrator, generation, now)?;
+            let a = state
+                .assignments
+                .get_mut(id)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            if a.phase == Phase::SuspendedIntegration && a.suspension.as_ref() == Some(&evidence) {
+                return Ok(());
+            }
+            ensure!(a.phase == Phase::Integrating, "only an integrating code handoff can be suspended");
+            ensure!(
+                matches!(a.handoff, Some(HandoffEvidence::Code { .. })),
+                "suspension requires a verified code handoff"
+            );
+            ensure!(
+                a.ticket != evidence.prerequisite,
+                "the prerequisite must be a different ticket"
+            );
+            ensure!(
+                state.version >= 6 || all_participants_upgraded,
+                "stop old participants and switch every participant to a schema-six artifact, then pass --all-participants-upgraded"
+            );
+            state.version = 6;
+            a.phase = Phase::SuspendedIntegration;
+            if let Some(previous) = a.suspension.replace(evidence) {
+                ensure!(
+                    previous.resumed.is_some(),
+                    "a previous suspension must have a gate receipt before another suspension"
+                );
+                a.suspension_history.push(previous);
+            }
+            a.record_transition(
+                TransitionKind::SuspendedIntegration,
+                time::OffsetDateTime::now_utc(),
+                Role::Integrator,
+                integrator,
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Resume only after a prerequisite gate has been verified by the CLI. Suspended
+    /// assignments do not hold the main fence; the transition reacquires it atomically.
+    pub fn resume_integration(
+        &self,
+        integrator: &str,
+        generation: &str,
+        now: i64,
+        id: &str,
+        gate: PrerequisiteGate,
+    ) -> Result<()> {
+        ensure!(
+            valid_full_sha(&gate.main_commit) && valid_full_sha(&gate.tree),
+            "resumption requires full main commit and passed tree SHAs"
+        );
+        let _ = hotsheet_model::Ulid::from_string(&gate.evidence_note)?;
+        self.change(|state| {
+            Self::integrator(state, integrator, generation, now)?;
+            ensure!(
+                !state.assignments.values().any(|a| {
+                    a.id != id && matches!(a.phase, Phase::Integrating | Phase::Verifying)
+                }),
+                "another ticket is integrating or verifying; serialize integrator work"
+            );
+            let a = state
+                .assignments
+                .get_mut(id)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            let suspension = a.suspension.as_mut().ok_or_else(|| {
+                anyhow::anyhow!("assignment has no preserved integration suspension")
+            })?;
+            if a.phase == Phase::Integrating && suspension.resumed.as_ref() == Some(&gate) {
+                return Ok(());
+            }
+            ensure!(
+                a.phase == Phase::SuspendedIntegration,
+                "only suspended integration can resume"
+            );
+            ensure!(
+                gate.main_commit != suspension.main_commit,
+                "prerequisite gate must cover a newer main commit"
+            );
+            suspension.resumed = Some(gate);
+            a.phase = Phase::Integrating;
+            a.record_transition(
+                TransitionKind::Integrating,
+                time::OffsetDateTime::now_utc(),
+                Role::Integrator,
+                integrator,
+            )?;
+            Ok(())
+        })
+    }
+
     pub fn finish(&self, integrator: &str, generation: &str, now: i64, reason: &str) -> Result<()> {
         ensure!(
             matches!(reason, "drained" | "blocked"),
@@ -602,6 +735,7 @@ impl Coordinator {
                         | Phase::Handoff
                         | Phase::Verifying
                         | Phase::Integrating
+                        | Phase::SuspendedIntegration
                         | Phase::Ci
                 )),
                 "work or CI remains in flight"

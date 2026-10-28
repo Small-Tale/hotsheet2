@@ -19,16 +19,19 @@ pub struct Capabilities {
     pub schema_written_with_dispatcher_authority: u32,
     /// Integrator-reviewed shared documents and section scopes (HS2-YHYNJ6).
     pub schema_written_with_shared_sections: u32,
+    /// Suspended integration and prerequisite gate evidence (HS2-2D3099).
+    pub schema_written_with_suspended_integration: u32,
     pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
 }
 
 pub const CAPABILITIES: Capabilities = Capabilities {
-    schemas_read: &[1, 2, 3, 4, 5],
+    schemas_read: &[1, 2, 3, 4, 5, 6],
     schema_written_with_integrator_authority: 3,
     schema_written_with_dispatcher_authority: 4,
     schema_written_with_shared_sections: 5,
+    schema_written_with_suspended_integration: 6,
     scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],
@@ -38,6 +41,16 @@ impl Coordinator {
     /// Schema three must stay exactly what a schema-three artifact writes, and schema four
     /// exactly what a schema-four artifact can read without dropping shared sections.
     pub(super) fn schema_fence(state: &State) -> Result<()> {
+        if state.version < 6 {
+            ensure!(
+                state.assignments.values().all(|a| {
+                    a.phase != Phase::SuspendedIntegration
+                        && a.suspension.is_none()
+                        && a.suspension_history.is_empty()
+                }),
+                "suspended integration evidence requires schema six; upgrade every participant first"
+            );
+        }
         if state.version < 5 {
             let sectioned = |scopes: &[String]| scopes.iter().any(|s| s.contains('#'));
             ensure!(

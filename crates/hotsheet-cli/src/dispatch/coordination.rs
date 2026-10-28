@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
-    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, Phase, ReservationCheck,
-    ReturnRoute, Role, WaitRequest,
+    Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationSuspension,
+    Phase, PrerequisiteGate, ReservationCheck, ReturnRoute, Role, WaitRequest,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -161,6 +161,43 @@ enum CoordinationCmd {
         assignment: String,
         #[arg(long, value_enum)]
         phase: Phase,
+    },
+    /// Preserve an unpushed integration blocked by an independent failed local gate.
+    SuspendIntegration {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        /// Full current unpushed main SHA containing the handed-off change.
+        #[arg(long)]
+        main_commit: String,
+        /// Qualified prerequisite ticket in the selected local source.
+        #[arg(long)]
+        prerequisite_connection: String,
+        #[arg(long)]
+        prerequisite_native_id: String,
+        /// Exact regular `## Integration prerequisite` note on the assigned ticket.
+        #[arg(long)]
+        failure_note: String,
+        /// Required on the first schema-six transition; old participants must stop.
+        #[arg(long)]
+        all_participants_upgraded: bool,
+    },
+    /// Reacquire the exclusive integration fence after the prerequisite's local gate.
+    ResumeIntegration {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        /// Full current main SHA containing the prerequisite fix.
+        #[arg(long)]
+        main_commit: String,
+        /// Exact passed `HEAD^{tree}` from the root gate.
+        #[arg(long)]
+        gate_tree: String,
+        /// Exact regular `## Prerequisite gate` note on the prerequisite ticket.
+        #[arg(long)]
+        evidence_note: String,
     },
     /// Release a stale reservation only after inspecting/preserving ticket and worktree artifacts.
     Recover {
@@ -392,6 +429,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     handoff: None,
                     return_route,
                     recovery_note: None,
+                    suspension: None,
+                    suspension_history: Vec::new(),
                     scope,
                     transitions: Vec::new(),
                 },
@@ -522,6 +561,26 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 .assignments
                 .get(&assignment)
                 .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            if phase == Phase::Ci
+                && a.phase != Phase::Ci
+                && state.version >= 6
+                && matches!(a.handoff, Some(HandoffEvidence::Code { .. }))
+            {
+                let resumed_main = a
+                    .suspension
+                    .as_ref()
+                    .map(|suspension| {
+                        suspension
+                            .resumed
+                            .as_ref()
+                            .map(|gate| gate.main_commit.as_str())
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("suspended integration has no prerequisite gate")
+                            })
+                    })
+                    .transpose()?;
+                require_pushed_main(&args.project, resumed_main)?;
+            }
             // HS2-FG7ZMF: metadata support never authorizes a foreign code or findings
             // transition, including records preserved from an older pool snapshot.
             anyhow::ensure!(
@@ -580,6 +639,146 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 }
             }
             coordinator.mark(&i.id, &i.session, now, &assignment, phase)?;
+        }
+        CoordinationCmd::SuspendIntegration {
+            integrator: i,
+            assignment,
+            main_commit,
+            prerequisite_connection,
+            prerequisite_native_id,
+            failure_note,
+            all_participants_upgraded,
+        } => {
+            require_current_main(&args.project, &main_commit)?;
+            require_unpushed_main(&args.project, &main_commit)?;
+            let state = coordinator.state()?;
+            let assigned = state
+                .assignments
+                .get(&assignment)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            if let Some(previous_gate) = assigned
+                .suspension
+                .as_ref()
+                .and_then(|suspension| suspension.resumed.as_ref())
+            {
+                let ancestry = git_output(
+                    &args.project,
+                    &[
+                        "merge-base",
+                        "--is-ancestor",
+                        &previous_gate.main_commit,
+                        &main_commit,
+                    ],
+                )?;
+                anyhow::ensure!(
+                    ancestry.status.success(),
+                    "repeat suspension must retain the previous prerequisite gate commit"
+                );
+            }
+            let store = local_assignment_store(ctx, &coordinator, assigned)?;
+            let ticket = store.read_ticket(&assigned.ticket.native_id.parse()?)?;
+            let prerequisite = TicketRef {
+                connection_id: prerequisite_connection,
+                native_id: prerequisite_native_id,
+            };
+            anyhow::ensure!(
+                prerequisite.connection_id == git_connection_id(&store),
+                "prerequisite ticket verification is unsupported for this source"
+            );
+            let _ = store.read_ticket(&prerequisite.native_id.parse()?)?;
+            verify_integration_evidence(
+                &ticket,
+                &failure_note,
+                "## Integration prerequisite",
+                &AddressedIntegrationEvidence {
+                    operation: assignment.clone(),
+                    source_commit: assigned
+                        .commit
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("suspension requires a code handoff SHA"))?,
+                    main_commit: main_commit.clone(),
+                    prerequisite: prerequisite.qualified(),
+                    tree: None,
+                },
+                &i.id,
+            )?;
+            coordinator.suspend_integration(
+                &i.id,
+                &i.session,
+                now,
+                &assignment,
+                IntegrationSuspension {
+                    main_commit,
+                    prerequisite,
+                    failure_note,
+                    resumed: None,
+                },
+                all_participants_upgraded,
+            )?;
+        }
+        CoordinationCmd::ResumeIntegration {
+            integrator: i,
+            assignment,
+            main_commit,
+            gate_tree,
+            evidence_note,
+        } => {
+            require_current_main(&args.project, &main_commit)?;
+            require_passed_tree(&args.project, &gate_tree)?;
+            let state = coordinator.state()?;
+            let assigned = state
+                .assignments
+                .get(&assignment)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            let suspension = assigned.suspension.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("assignment has no preserved integration suspension")
+            })?;
+            let ancestry = git_output(
+                &args.project,
+                &[
+                    "merge-base",
+                    "--is-ancestor",
+                    &suspension.main_commit,
+                    &main_commit,
+                ],
+            )?;
+            anyhow::ensure!(
+                ancestry.status.success(),
+                "prerequisite main commit must descend from the suspended integration"
+            );
+            let store = local_assignment_store(ctx, &coordinator, assigned)?;
+            anyhow::ensure!(
+                suspension.prerequisite.connection_id == git_connection_id(&store),
+                "prerequisite evidence verification is unsupported for this ticket source"
+            );
+            let prerequisite = store.read_ticket(&suspension.prerequisite.native_id.parse()?)?;
+            verify_integration_evidence(
+                &prerequisite,
+                &evidence_note,
+                "## Prerequisite gate",
+                &AddressedIntegrationEvidence {
+                    operation: assignment.clone(),
+                    source_commit: assigned
+                        .commit
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("resumption requires a code handoff SHA"))?,
+                    main_commit: main_commit.clone(),
+                    prerequisite: suspension.prerequisite.qualified(),
+                    tree: Some(gate_tree.clone()),
+                },
+                &i.id,
+            )?;
+            coordinator.resume_integration(
+                &i.id,
+                &i.session,
+                now,
+                &assignment,
+                PrerequisiteGate {
+                    main_commit,
+                    tree: gate_tree,
+                    evidence_note,
+                },
+            )?;
         }
         CoordinationCmd::ReviewReturn {
             integrator: i,
@@ -660,6 +859,152 @@ fn verify_addressed_route(
             && evidence.generation == generation
             && addressed_route == *route,
         "route evidence must address this exact operation, worker, generation and route"
+    );
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddressedIntegrationEvidence {
+    operation: String,
+    source_commit: String,
+    main_commit: String,
+    prerequisite: String,
+    #[serde(default)]
+    tree: Option<String>,
+}
+
+fn verify_integration_evidence(
+    ticket: &hotsheet_model::Ticket,
+    note_id: &str,
+    heading: &str,
+    expected: &AddressedIntegrationEvidence,
+    integrator: &str,
+) -> Result<()> {
+    let id = hotsheet_model::Ulid::from_string(note_id)?;
+    let note = ticket
+        .notes
+        .iter()
+        .find(|note| note.id == id)
+        .ok_or_else(|| {
+            anyhow::anyhow!("integration evidence note is absent from the exact ticket")
+        })?;
+    anyhow::ensure!(
+        note.kind == hotsheet_model::NoteKind::Regular
+            && note.actor.as_ref().and_then(|actor| actor.id.as_deref()) == Some(integrator),
+        "integration evidence must be a regular note by the exact integrator"
+    );
+    let body = note
+        .text
+        .strip_prefix(&format!("{heading}\n"))
+        .ok_or_else(|| anyhow::anyhow!("integration evidence has the wrong heading"))?;
+    let actual: AddressedIntegrationEvidence = serde_json::from_str(body.trim())?;
+    anyhow::ensure!(
+        actual == *expected,
+        "integration evidence must address this exact operation, source SHA, main SHA, prerequisite and gate tree"
+    );
+    Ok(())
+}
+
+fn local_assignment_store(
+    ctx: &Ctx,
+    coordinator: &Coordinator,
+    assignment: &Assignment,
+) -> Result<FsStore> {
+    anyhow::ensure!(
+        ctx.path
+            .join(hotsheet_ticketing::STORE_METADATA_FILE)
+            .exists(),
+        "provider integration verification is unsupported for this selected source"
+    );
+    let store = FsStore::open_without_maintenance(&ctx.path)?;
+    anyhow::ensure!(
+        assignment.ticket.connection_id == git_connection_id(&store),
+        "provider integration verification is unsupported for this source; {}",
+        coordinator.unsupported_source(&assignment.ticket.connection_id)?
+    );
+    Ok(store)
+}
+
+fn require_current_main(project: &std::path::Path, main_commit: &str) -> Result<()> {
+    let head = git_output(project, &["rev-parse", "HEAD"])?;
+    anyhow::ensure!(head.status.success(), "could not read shipping HEAD");
+    anyhow::ensure!(
+        String::from_utf8(head.stdout)?.trim() == main_commit,
+        "main commit must equal the current shipping HEAD"
+    );
+    Ok(())
+}
+
+fn require_unpushed_main(project: &std::path::Path, main_commit: &str) -> Result<()> {
+    let upstream = git_output(project, &["rev-parse", "@{upstream}"])?;
+    anyhow::ensure!(
+        upstream.status.success(),
+        "suspension requires a configured upstream to prove the integrated commit is unpushed"
+    );
+    let upstream_sha = String::from_utf8(upstream.stdout)?;
+    let upstream_sha = upstream_sha.trim();
+    anyhow::ensure!(
+        upstream_sha != main_commit,
+        "this integrated main commit is already pushed"
+    );
+    let ancestor = git_output(
+        project,
+        &["merge-base", "--is-ancestor", upstream_sha, main_commit],
+    )?;
+    anyhow::ensure!(
+        ancestor.status.success(),
+        "the unpushed main commit must descend from its upstream"
+    );
+    Ok(())
+}
+
+fn require_pushed_main(project: &std::path::Path, resumed_main: Option<&str>) -> Result<()> {
+    let head = git_output(project, &["rev-parse", "HEAD"])?;
+    let upstream = git_output(project, &["rev-parse", "@{upstream}"])?;
+    anyhow::ensure!(
+        head.status.success()
+            && upstream.status.success()
+            && head.stdout.trim_ascii() == upstream.stdout.trim_ascii(),
+        "code integration cannot enter CI before the exact main commit reaches its upstream"
+    );
+    if let Some(resumed_main) = resumed_main {
+        let ancestor = git_output(
+            project,
+            &["merge-base", "--is-ancestor", resumed_main, "HEAD"],
+        )?;
+        anyhow::ensure!(
+            ancestor.status.success(),
+            "pushed main must retain the verified prerequisite commit"
+        );
+    }
+    Ok(())
+}
+
+fn require_passed_tree(project: &std::path::Path, tree: &str) -> Result<()> {
+    let actual = git_output(project, &["rev-parse", "HEAD^{tree}"])?;
+    anyhow::ensure!(actual.status.success(), "could not read shipping tree");
+    anyhow::ensure!(
+        String::from_utf8(actual.stdout)?.trim() == tree,
+        "passed tree must equal the current shipping tree"
+    );
+    let cache = git_output(
+        project,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "hotsheet-root-gate",
+        ],
+    )?;
+    anyhow::ensure!(
+        cache.status.success(),
+        "could not locate local root-gate evidence"
+    );
+    let path = PathBuf::from(String::from_utf8(cache.stdout)?.trim()).join(tree);
+    anyhow::ensure!(
+        std::fs::read_to_string(path).ok().as_deref().map(str::trim) == Some(tree),
+        "the exact current tree has no successful local root-gate receipt"
     );
     Ok(())
 }

@@ -906,7 +906,8 @@ from its launch checkout/source.
 Local continuous worker coordination (HS2-76VMYG) lives in
 `crates/hotsheet-cli/src/coordination/`: `contract.rs` owns the provider-qualified
 session/assignment schema and typed code/findings evidence (HS2-A1F615), plus
-optional assignment transition history (HS2-4273QB). `mod.rs` owns the atomic
+optional assignment transition history (HS2-4273QB) and schema-six suspended
+integration/prerequisite gate receipts and ordered prior suspension cycles (HS2-2D3099). `mod.rs` owns the atomic
 local state transitions, stamps their role/id and RFC 3339 time, and performs immediate version-one/two migration to schema three
 on any `Coordinator::open` (all pool members switch artifacts before a live open),
 while `scripts/throughput-baseline.mjs` prefers durable events over legacy ticket-note
@@ -919,7 +920,8 @@ and known lease deadlines. `authority.rs` owns the single assignment authority
 (integrator or dispatcher), the integrator's published integration report, dispatcher
 scope/base/blocker rules, the schema-three write fence and schema-four switch, and the
 non-opening `capabilities` report (HS2-TWZW7X); `authority_tests.rs` pins its transitions
-and `tests/coordination_dispatcher.rs` its real multi-process boundaries. `scope.rs` owns the
+and `tests/coordination_dispatcher.rs` its real multi-process boundaries. It also fences
+schema-six suspension evidence until the explicit participant upgrade. `scope.rs` owns the
 scope grammar, reviewed shared-section overlap, keyed Markdown sections and the code-handoff
 scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
 `tests/coordination_shared_scope.rs` pin them. `source_support.rs` produces additive, registry-only per-source
@@ -929,7 +931,9 @@ zero external requests and exact unchanged state on rejected foreign transitions
 `dispatch/coordination.rs` exposes idempotent setup,
 registration, exact dispatch/acknowledgement, findings-note validation with
 full-precision claim authority, optional per-assignment route-evidence validation
-without changing the integrator registration or schema (HS2-HM9FRV), recovery,
+without changing the integrator registration or schema (HS2-HM9FRV),
+`suspend-integration` and `resume-integration` with exact main SHA, ticket note,
+ancestry and root-gate receipt checks (HS2-2D3099), recovery,
 and terminal outcomes through
 `hotsheet-cli coordination`. The shared code Git common directory stores the local
 registry; it is separate from ticket-provider identity. Existing ticket claims remain
@@ -937,7 +941,9 @@ authoritative. Private `dispatch/coordination_claims.rs` checks assignment eligi
 worker acceptance and recovery using fresh full-precision timestamps after ticket reads;
 integer mailbox availability/wake deadlines remain advisory (HS2-35R7M3).
 `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
-processes and real synthetic worktrees; `tests/coordination_routes.rs` covers mixed
+processes and real synthetic worktrees; `tests/coordination_suspended_integration.rs`
+pins the failed-gate pause, prerequisite serial integration and gated resume.
+`tests/coordination_routes.rs` covers mixed
 per-assignment routes, evidence, replay and fences (HS2-HM9FRV). Portable recovery/handoff coverage is in
 `crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and
 process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.

@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 11 -->
+<!-- hotsheet-skill-version: 12 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -103,6 +103,30 @@ scope and dependency evidence yourself before final integration:
    then `--phase done` without code integration or CI. Include integrator
    id/session on each call. The runtime fences a second integrating or verifying
    ticket; several CI records may coexist while workers take independent assignments.
+   If an independent required local gate fails after a code cherry-pick but before push
+   (HS2-2D3099), preserve the unpushed main SHA and source handoff SHA in a regular
+   `## Integration prerequisite` note on the assigned ticket. Its body is one JSON
+   object with `operation`, `source_commit`, `main_commit`, and qualified
+   `prerequisite` (`connection:native`). Run `coordination suspend-integration`
+   with those exact values, `--failure-note <id>`, and `--all-participants-upgraded`
+   only after every participant runs a schema-six artifact. This records
+   `suspended_integration`, releasing the main mutation fence while preserving the
+   original handoff. Do not mark it `ci` or publish the unpushed SHA as a safe base.
+   Integrate and gate the prerequisite through the same serial main fence. Record a
+   regular `## Prerequisite gate` note on that prerequisite ticket by the active
+   integrator; its JSON has the same operation/source/prerequisite fields, the newer
+   `main_commit`, and the exact passed `tree`. Once the root gate has written its
+   clean-tree receipt, run `coordination resume-integration --assignment <id>
+   --main-commit <new-main-sha> --gate-tree <passed-tree> --evidence-note <id>`.
+   Resume requires the newer main commit to descend from the suspended SHA and no
+   other integrating/verifying assignment. The original returns to `integrating`;
+   verify and push it before recording `ci`. If another independent gate fails
+   after a new unpushed main commit, add a new addressed prerequisite note and
+   suspend again. The earlier prerequisite, failure note, and passed gate receipt
+   remain in ordered suspension history. Every schema-six code handoff needs an
+   exact upstream push before its `ci` transition, including prerequisites.
+   Replaced integrator generations must register and use their own exact session;
+   the evidence remains in the mailbox.
 4. When waiting on local worker, ticket, or source-configuration changes, run
    `coordination next --role integrator --id <integrator> --session <generation>
 --route <return-route> --lease-seconds <lease-seconds>

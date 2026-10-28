@@ -94,6 +94,7 @@ pub enum Phase {
     Handoff,
     Verifying,
     Integrating,
+    SuspendedIntegration,
     Ci,
     Done,
     Blocked,
@@ -109,6 +110,7 @@ pub enum TransitionKind {
     Handoff,
     Verifying,
     Integrating,
+    SuspendedIntegration,
     Ci,
     Done,
     Blocked,
@@ -123,6 +125,7 @@ impl From<Phase> for TransitionKind {
             Phase::Handoff => Self::Handoff,
             Phase::Verifying => Self::Verifying,
             Phase::Integrating => Self::Integrating,
+            Phase::SuspendedIntegration => Self::SuspendedIntegration,
             Phase::Ci => Self::Ci,
             Phase::Done => Self::Done,
             Phase::Blocked => Self::Blocked,
@@ -154,6 +157,26 @@ pub enum HandoffEvidence {
     Findings { note_id: String },
 }
 
+/// A failed required local gate pauses an already integrated, unpushed commit without
+/// calling it CI or discarding the worker's source handoff (HS2-2D3099).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegrationSuspension {
+    pub main_commit: String,
+    pub prerequisite: TicketRef,
+    pub failure_note: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed: Option<PrerequisiteGate>,
+}
+
+/// The verified prerequisite result that allowed the suspended integration to reenter
+/// the exclusive main mutation fence. Kept after resume for recovery and audit.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrerequisiteGate {
+    pub main_commit: String,
+    pub tree: String,
+    pub evidence_note: String,
+}
+
 impl Phase {
     pub fn holds_worker(self) -> bool {
         matches!(self, Self::Offered | Self::Accepted)
@@ -182,6 +205,12 @@ pub struct Assignment {
     pub return_route: ReturnRoute,
     #[serde(default)]
     pub recovery_note: Option<String>,
+    /// Schema-six evidence; absent from every older assignment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suspension: Option<IntegrationSuspension>,
+    /// Earlier completed suspension cycles, oldest first (HS2-2D3099).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suspension_history: Vec<IntegrationSuspension>,
     /// Declared repository-relative path scope (HS2-TWZW7X). Dispatcher reservations must
     /// declare one; empty for every legacy integrator assignment, so schema three is unchanged.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -44,9 +44,278 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         handoff: None,
         return_route: ReturnRoute::HumanRelay,
         recovery_note: None,
+        suspension: None,
+        suspension_history: Vec::new(),
         scope: Vec::new(),
         transitions: Vec::new(),
     }
+}
+
+#[test]
+fn hs2_2d3099_suspension_fences_replay_and_serial_resume() {
+    let (_root, c) = fixture();
+    register(&c, Role::Integrator, "integrator", "generation-1", NOW);
+    register(&c, Role::Worker, "worker", "generation-1", NOW);
+    c.assign(
+        "integrator",
+        "generation-1",
+        NOW,
+        assignment("original", "worker", "source"),
+    )
+    .unwrap();
+    c.worker_transition("worker", "generation-1", "original", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition(
+        "worker",
+        "generation-1",
+        "original",
+        Phase::Handoff,
+        Some(SHA.into()),
+    )
+    .unwrap();
+    c.mark(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        Phase::Integrating,
+    )
+    .unwrap();
+    let suspended = IntegrationSuspension {
+        main_commit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        prerequisite: TicketRef {
+            connection_id: "source-a".into(),
+            native_id: "prerequisite".into(),
+        },
+        failure_note: Ulid::new().to_string(),
+        resumed: None,
+    };
+    assert!(
+        c.suspend_integration(
+            "integrator",
+            "generation-1",
+            NOW,
+            "original",
+            suspended.clone(),
+            false,
+        )
+        .is_err()
+    );
+    assert_eq!(c.state().unwrap().version, 3);
+    assert!(
+        c.suspend_integration(
+            "integrator",
+            "stale-generation",
+            NOW,
+            "original",
+            suspended.clone(),
+            true,
+        )
+        .is_err()
+    );
+    c.suspend_integration(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        suspended.clone(),
+        true,
+    )
+    .unwrap();
+    c.suspend_integration(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        suspended.clone(),
+        false,
+    )
+    .unwrap();
+    let parked = c.state().unwrap();
+    assert_eq!(parked.version, 6);
+    assert_eq!(
+        parked.assignments["original"].phase,
+        Phase::SuspendedIntegration
+    );
+    assert_eq!(parked.assignments["original"].commit.as_deref(), Some(SHA));
+    assert_eq!(
+        parked.assignments["original"].suspension.as_ref(),
+        Some(&suspended)
+    );
+    assert!(
+        c.mark("integrator", "generation-1", NOW, "original", Phase::Ci)
+            .is_err()
+    );
+    c.assign(
+        "integrator",
+        "generation-1",
+        NOW,
+        assignment("prerequisite", "worker", "prerequisite"),
+    )
+    .unwrap();
+    c.worker_transition(
+        "worker",
+        "generation-1",
+        "prerequisite",
+        Phase::Accepted,
+        None,
+    )
+    .unwrap();
+    c.worker_transition(
+        "worker",
+        "generation-1",
+        "prerequisite",
+        Phase::Handoff,
+        Some(SHA.into()),
+    )
+    .unwrap();
+    c.mark(
+        "integrator",
+        "generation-1",
+        NOW,
+        "prerequisite",
+        Phase::Integrating,
+    )
+    .unwrap();
+    let gate = PrerequisiteGate {
+        main_commit: "cccccccccccccccccccccccccccccccccccccccc".into(),
+        tree: "dddddddddddddddddddddddddddddddddddddddd".into(),
+        evidence_note: Ulid::new().to_string(),
+    };
+    assert!(
+        c.resume_integration("integrator", "generation-1", NOW, "original", gate.clone())
+            .is_err()
+    );
+    c.mark("integrator", "generation-1", NOW, "prerequisite", Phase::Ci)
+        .unwrap();
+    c.resume_integration("integrator", "generation-1", NOW, "original", gate.clone())
+        .unwrap();
+    c.resume_integration("integrator", "generation-1", NOW, "original", gate.clone())
+        .unwrap();
+    let resumed = c.state().unwrap();
+    assert_eq!(resumed.assignments["original"].phase, Phase::Integrating);
+    assert_eq!(
+        resumed.assignments["original"]
+            .suspension
+            .as_ref()
+            .unwrap()
+            .resumed
+            .as_ref(),
+        Some(&gate)
+    );
+    assert_eq!(
+        resumed.assignments["original"]
+            .transitions
+            .iter()
+            .map(|event| event.kind)
+            .collect::<Vec<_>>(),
+        [
+            TransitionKind::Offered,
+            TransitionKind::Accepted,
+            TransitionKind::Handoff,
+            TransitionKind::Integrating,
+            TransitionKind::SuspendedIntegration,
+            TransitionKind::Integrating,
+        ]
+    );
+    assert!(
+        c.mark(
+            "integrator",
+            "generation-1",
+            NOW,
+            "prerequisite",
+            Phase::Integrating,
+        )
+        .is_err()
+    );
+    let second = IntegrationSuspension {
+        main_commit: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+        prerequisite: TicketRef {
+            connection_id: "source-a".into(),
+            native_id: "second-prerequisite".into(),
+        },
+        failure_note: Ulid::new().to_string(),
+        resumed: None,
+    };
+    c.suspend_integration(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        second.clone(),
+        false,
+    )
+    .unwrap();
+    c.suspend_integration(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        second.clone(),
+        false,
+    )
+    .unwrap();
+    let again = c.state().unwrap();
+    let original = &again.assignments["original"];
+    assert_eq!(original.phase, Phase::SuspendedIntegration);
+    assert_eq!(original.suspension.as_ref(), Some(&second));
+    let mut first_completed = suspended.clone();
+    first_completed.resumed = Some(gate.clone());
+    assert_eq!(original.suspension_history, [first_completed.clone()]);
+    assert!(
+        c.mark("integrator", "generation-1", NOW, "original", Phase::Ci)
+            .is_err()
+    );
+    let second_gate = PrerequisiteGate {
+        main_commit: "1111111111111111111111111111111111111111".into(),
+        tree: "ffffffffffffffffffffffffffffffffffffffff".into(),
+        evidence_note: Ulid::new().to_string(),
+    };
+    c.resume_integration(
+        "integrator",
+        "generation-1",
+        NOW,
+        "original",
+        second_gate.clone(),
+    )
+    .unwrap();
+    let final_state = c.state().unwrap();
+    let original = &final_state.assignments["original"];
+    assert_eq!(original.phase, Phase::Integrating);
+    assert_eq!(original.suspension_history, [first_completed]);
+    assert_eq!(
+        original.suspension.as_ref().unwrap().resumed.as_ref(),
+        Some(&second_gate)
+    );
+    assert_eq!(
+        original
+            .transitions
+            .iter()
+            .map(|event| event.kind)
+            .collect::<Vec<_>>()
+            .as_slice(),
+        &[
+            TransitionKind::Offered,
+            TransitionKind::Accepted,
+            TransitionKind::Handoff,
+            TransitionKind::Integrating,
+            TransitionKind::SuspendedIntegration,
+            TransitionKind::Integrating,
+            TransitionKind::SuspendedIntegration,
+            TransitionKind::Integrating,
+        ]
+    );
+    let mut forged = final_state;
+    forged.version = 5;
+    let original = forged.assignments.get_mut("original").unwrap();
+    original.phase = Phase::Ci;
+    original.suspension = None;
+    assert!(
+        Coordinator::schema_fence(&forged)
+            .unwrap_err()
+            .to_string()
+            .contains("requires schema six")
+    );
 }
 
 #[test]
