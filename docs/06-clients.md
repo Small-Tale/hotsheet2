@@ -2033,7 +2033,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   activity begins the next workflow round; an upload gesture alone never advances the round.
   The tab groups both its compact rows and gallery previews into friendly human/AI rounds
   without persisting round numbers, and labels missing provider/legacy metadata as Legacy /
-  Uncategorized. Each transparent group reads as a titled section: its label switches to an
+  Uncategorized. Text and nested icons (the group title, row icons) share the inset text edge,
+  while bordered or filled elements (the purpose pill, the attachment rows) share the rows'
+  outer border edge (HS2-HMX9YH). Each transparent group reads as a titled section: its label switches to an
   inline editor on double-click; Enter saves, Escape cancels, and focus returns to the title
   control after the updated group renders (HS2-34SE3Z). Application state owns which label is
   being edited, per surface (the inspector or each reader frame), so a live ticket update that

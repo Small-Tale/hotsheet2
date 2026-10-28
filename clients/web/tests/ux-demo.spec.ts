@@ -10499,7 +10499,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   expect(triggerBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
 });
 
-test('aligns TicketAttachments group titles, chips, rows, and thumbnails on one left edge (HS2-KRFY2H)', async ({
+test('aligns TicketAttachments text on the inset edge and bordered elements on the row edge (HS2-KRFY2H, HS2-HMX9YH)', async ({
   page,
 }) => {
   for (const width of [1280, 390]) {
@@ -10511,16 +10511,20 @@ test('aligns TicketAttachments group titles, chips, rows, and thumbnails on one 
       const base = node.getBoundingClientRect().left,
         left = (selector: string) => Math.round(node.querySelector(selector)!.getBoundingClientRect().left - base),
         range = document.createRange();
-      // Kerf ListHeader, the Select pill's Badge, and the ContentItem row icon share the 17px edge (HS2-K9HSXZ).
       range.selectNodeContents(node.querySelector('.ticket-attachments__batch h3')!);
-      return [
-        Math.round(range.getClientRects()[0].left - base),
-        left('.ticket-attachments__batch kui-select [data-component="badge"]'),
-        left('.ticket-attachments__item svg'),
-        left('.ticket-attachments__image-grid button'),
-      ];
+      return {
+        // Nested text and icons share the inset text edge (HS2-KRFY2H, HS2-K9HSXZ).
+        text: [Math.round(range.getClientRects()[0].left - base), left('.ticket-attachments__item svg')],
+        // Bordered and filled elements share the attachment rows' border edge (HS2-HMX9YH).
+        bordered: [
+          left('.ticket-attachments__item [data-component="content-item"]'),
+          left('.ticket-attachments__batch kui-select [data-component="badge"]'),
+        ],
+      };
     });
-    expect(new Set(edges).size).toBe(1);
+    expect(new Set(edges.text).size).toBe(1);
+    expect(new Set(edges.bordered).size).toBe(1);
+    expect(edges.text[0]).toBeGreaterThan(edges.bordered[0]);
   }
 });
 
