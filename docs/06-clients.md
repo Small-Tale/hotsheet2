@@ -2372,8 +2372,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions
   remain explicit geometry (HS2-4Y6SM9).
-  The configured diff tool is named in a quiet footnote below the commits, "Code reviews open
-  in <tool>", rather than as a label beside the heading (HS2-SHV8J7).
+  The inspector's Code Review panel has no heading of its own, because its tab already names
+  it; only the review embedded in the repository popover keeps its Commits heading
+  (HS2-E9F1T3). The configured diff tool is named in a quiet footnote below the commits,
+  "Code reviews open in <tool>", rather than as a label beside the heading (HS2-SHV8J7).
   Clicking a file row selects it; only its visible ellipsis or a right-click opens the
   action menu. Platform-additive and range selection permit batch Show Diff and path-copy
   operations, while single-file-only Open and host-native reveal actions are disabled for

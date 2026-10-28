@@ -47,15 +47,19 @@ describe('TicketCodeReview', () => {
     const markup = String(TicketCodeReview({ review }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge"');
-    expect(markup).toContain('role="heading" aria-level="2"');
+    // The inspector tab names the panel; only the embedded review keeps a heading (HS2-E9F1T3).
+    expect(markup).not.toContain('ticket-code-review__header');
+    expect(markup).not.toContain('role="heading" aria-level="2"');
+    const embeddedMarkup = String(TicketCodeReview({ review, embedded: true, title: 'Commits' }));
+    expect(embeddedMarkup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge"');
+    expect(embeddedMarkup).toContain('role="heading" aria-level="2"');
+    expect(embeddedMarkup).toContain('<div class="ticket-code-review__header"><header class="kui-toolbar"');
     // The diff tool is a footnote, not a trailing heading label (HS2-SHV8J7).
     expect(markup).not.toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
     expect(markup).toMatch(
       /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Code reviews open in glassbox<\/p><\/footer>/,
     );
     expect(css).toMatchSource(/__footnotes \{ display: grid; padding-inline: calc\(var\(--kui-space-m\) \+ 1px\)/);
-    expect(markup).toContain('<div class="ticket-code-review__header"><header class="kui-toolbar"');
     expect(markup).toMatch(/class="kui-list ticket-code-review__section"[^>]*data-component="list"/);
     expect(markup).toContain('data-component="text" data-tone="default" data-size="compact"');
     expect(markup).toMatch(/class="ticket-code-review__commit-metadata"><div[^>]*data-component="row"/);
