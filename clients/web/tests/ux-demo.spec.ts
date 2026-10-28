@@ -10499,7 +10499,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   expect(triggerBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
 });
 
-test('aligns TicketAttachments text on the inset edge and bordered elements on the row edge (HS2-KRFY2H, HS2-HMX9YH)', async ({
+test('aligns TicketAttachments text on the inset edge and bordered elements on the row edge (HS2-KRFY2H, HS2-HMX9YH, HS2-Q9SGTC)', async ({
   page,
 }) => {
   for (const width of [1280, 390]) {
@@ -10519,12 +10519,28 @@ test('aligns TicketAttachments text on the inset edge and bordered elements on t
         bordered: [
           left('.ticket-attachments__item [data-component="content-item"]'),
           left('.ticket-attachments__batch kui-select [data-component="badge"]'),
+          left('.ticket-attachments__image-grid button'),
         ],
+        // A full first row of previews ends on the rows' right border edge (HS2-Q9SGTC).
+        rightEdges: (() => {
+          const row = node.querySelector('.ticket-attachments__item [data-component="content-item"]')!,
+            grid = node.querySelector<HTMLElement>('.ticket-attachments__image-grid')!,
+            tiles = [...grid.querySelectorAll('button')].map((tile) => tile.getBoundingClientRect()),
+            columns = getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+            firstRow = tiles.filter((tile) => Math.round(tile.top) === Math.round(tiles[0].top));
+          return {
+            columns,
+            full: firstRow.length === columns,
+            row: Math.round(row.getBoundingClientRect().right - base),
+            tile: Math.round(firstRow.at(-1)!.right - base),
+          };
+        })(),
       };
     });
     expect(new Set(edges.text).size).toBe(1);
     expect(new Set(edges.bordered).size).toBe(1);
     expect(edges.text[0]).toBeGreaterThan(edges.bordered[0]);
+    if (edges.rightEdges.full) expect(edges.rightEdges.tile).toBe(edges.rightEdges.row);
   }
 });
 

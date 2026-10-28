@@ -265,8 +265,14 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('ticket-attachments__annotation-marker');
     expect(attachments).toContain('data-lucide="pencil"');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
-    // Media grid items cap at 220px wide so they wrap instead of stretching full width (HS2-KEZ0EY).
-    expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
+    // Media previews are auto-fill columns of at least one 220px tile (160px tile floor on phones), so a lone
+    // preview never stretches across a wide panel (HS2-KEZ0EY), while the columns start and end on the
+    // attachment rows' border edges with no inline inset (HS2-Q9SGTC).
+    expect(css).toMatch(
+      /ticket-attachments__image-grid \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(min\(100%, remify\(220px\)\), 1fr\)\)/,
+    );
+    expect(css).not.toMatch(/ticket-attachments__image-grid \{[^}]*padding-inline/);
+    expect(css).not.toMatch(/ticket-attachments__image-grid button \{[^}]*max-width/);
     expect(css).toMatchSource(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(css).not.toContain('ticket-attachments__count');
     // Kerf ContentItem, Text, and icon-only Button own the row chrome inside the app-owned wrapper (HS2-K9HSXZ).
