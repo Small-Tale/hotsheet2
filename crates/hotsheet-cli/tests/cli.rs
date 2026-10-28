@@ -2150,7 +2150,9 @@ fn hs2_zwbsh1_hook_fixtures_ignore_a_poisoned_hot_sheet_session() {
     // The parent test process's own environment is never changed.
     let mut child = std::process::Command::new(std::env::current_exe().unwrap());
     child
-        .args(["--exact", "--test-threads", "1"])
+        // Each fixture owns a temp home and an ephemeral listener. A bounded replay keeps
+        // the inherited-session check intact without serializing host contention (HS2-SWBHYG).
+        .args(["--exact", "--test-threads", "4"])
         .args(HOOK_TESTS);
     for name in INHERITED_HOOK_SESSION_ENV {
         child.env(name, format!("poisoned-{}", name.to_ascii_lowercase()));
