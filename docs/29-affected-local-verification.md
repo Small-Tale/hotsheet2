@@ -31,13 +31,27 @@ checked-in target for that invocation. `--full` still runs the full local gate.
 `--tier T2 --t2-stage '<cwd>::<exact command>'` accepts an explicit analyzed stage
 selection without a time cap. Mandatory floor checks remain selected. The command
 requires an explicit selection when other affected checks exist. The risk analysis
-and chosen checks belong in the ticket's preliminary thoughts. Until HS2-VQ5ND5
-resolves provider-neutral tier tags and HS2-EJ8JTG updates the T2 policy, an
-ordinary `scripts/check.sh` retains the prior full affected selection. An explicit
-budget or T2 selection requires its tier flag; the gate never assumes an untagged
-T2 ticket is safe to budget.
+and chosen checks belong in the ticket's preliminary thoughts. HS2-VQ5ND5 resolves
+tags through normalized provider tickets. `--ticket <slug>` or
+`--ticket <connection_id>:<native_id>` takes precedence, followed by one slug in
+the clean HEAD commit subject, then the one live claim held by
+`HOTSHEET_WORKER_ID`. Ambiguous or missing resolution is printed in `--plan` and
+uses the default T1 budget. An untagged ticket also uses T1. A ticket with
+`tier:T2` is uncapped and needs the analyzed stage selection when affected
+non-floor stages exist; conflicting tier tags fail the plan. `--tier` remains a
+headless override for an explicit analyzed or diagnostic run. HS2-EJ8JTG owns
+the corresponding worker and policy wording.
 
-The exact-input receipt records the budget, tier, selected and deferred commands.
+`deep-testing` runs every affected local stage without a cap. `testing:browser`
+selects the complete affected Playwright files rather than bounded test-name
+greps. `testing:perf` adds the web performance baseline when web paths are
+affected. `testing:platform` flags the ticket for Windows/Linux covering-CI
+confirmation in the completion workflow. `test-budget:15m` replaces the default
+T0/T1 target. Tags combine; `--plan` shows each selected stage's reason and the
+resolved ticket/profile. Unknown `testing:*` tags, conflicting tier tags and
+invalid budget tags fail explicitly.
+
+The exact-input receipt records the ticket profile, budget, tier, selected and deferred commands.
 Changing the budget or analyzed set changes the receipt key. Gate code and config
 changes still force the full fallback. The executor reports actual elapsed time
 beside the budget after success or failure. Covering main CI checks the deferred

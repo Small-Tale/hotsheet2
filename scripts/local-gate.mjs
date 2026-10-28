@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
+import { readTicketProfile } from './gate-ticket-profile.mjs';
 import {
   importCiReports,
   loadTimingHistory,
@@ -186,11 +187,13 @@ function budgetConfig(repo) {
 }
 
 export function prepare(repo, baseRef, full = false, versions, options = {}) {
-  if (!options.tier && options.budgetMs !== undefined)
-    throw new Error('Specify --tier T0 or T1 with --budget until ticket-tier resolution ships.');
-  if (options.tier === 'T2' && options.budgetMs !== undefined)
-    throw new Error('T2 analyzed selection has no time budget; omit --budget.');
   const state = collect(repo, baseRef);
+  const profile = options.profile ?? readTicketProfile(repo, { ticket: options.ticket, dirty: state.dirty });
+  if (options.tier && profile.ticket && options.tier !== profile.tier)
+    throw new Error(`--tier ${options.tier} conflicts with ${profile.ticket} tag tier:${profile.tier}.`);
+  const tier = options.tier ?? profile?.tier ?? 'T1';
+  if (tier === 'T2' && (options.budgetMs !== undefined || profile?.budgetMs !== undefined))
+    throw new Error('T2 analyzed selection has no time budget; omit --budget.');
   const stages = parseCheckScript(readFileSync(join(repo, 'scripts/check-full.sh'), 'utf8'));
   const selected = plan({
     stages,
@@ -226,18 +229,49 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     if (shared) titles.length = 0;
     testTitles[path] = [...new Set(titles)];
   }
-  const affected = [
+  let affected = [
     ...selected.stages.filter((stage) => stage.selected),
     ...browserStages(
       state.changes,
-      selected.mode === 'full',
+      selected.mode === 'full' || profile?.browser === true,
       testTitles['clients/web/tests/providers.spec.ts'] ?? [],
       testTitles,
     ),
   ];
+  if (profile?.browser && affected.some((stage) => stage.command.startsWith('npx playwright test '))) {
+    const files = [
+      ...new Set(
+        affected
+          .filter((stage) => stage.command.startsWith('npx playwright test '))
+          .flatMap((stage) => [...stage.command.matchAll(/'?(tests\/[^' ]+\.spec\.ts)'?/g)].map((match) => match[1])),
+      ),
+    ].sort();
+    affected = [
+      ...affected.filter((stage) => !stage.command.startsWith('npx playwright test ')),
+      {
+        cwd: 'clients/web',
+        group: 'web',
+        selected: true,
+        force: true,
+        command: `npx playwright test ${files.map(quote).join(' ')}`,
+        reasons: ['testing:browser selects full affected Playwright files'],
+      },
+    ];
+  }
+  if (profile?.perf && !state.changes.some((path) => classifyPath(path).groups.includes?.('web')))
+    throw new Error('testing:perf has no configured baseline for these changed paths.');
+  if (profile?.perf)
+    affected.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      force: true,
+      command: 'npm run test:performance',
+      reasons: ['testing:perf selects the web performance baseline'],
+    });
   const config = budgetConfig(repo);
-  const tier = options.tier ?? 'unresolved';
-  const budgetMs = ['T2', 'unresolved'].includes(tier) ? null : (options.budgetMs ?? config.defaultBudgetMs);
+  const budgetMs =
+    tier === 'T2' || profile?.deep ? null : (options.budgetMs ?? profile?.budgetMs ?? config.defaultBudgetMs);
   const budgeted = selectBudget({
     stages: [...selected.stages.filter((stage) => !stage.selected), ...affected],
     changes: state.changes,
@@ -245,7 +279,8 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     budgetMs,
     tier,
     analyzed: options.analyzed ?? [],
-    full: selected.mode === 'full' || tier === 'unresolved',
+    full: selected.mode === 'full' || profile?.deep === true,
+    fullReason: profile?.deep ? 'deep-testing tag' : 'full fallback',
   });
   const chosen = budgeted.selected;
   const environment = Object.fromEntries(
@@ -265,6 +300,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     budgetMs,
     tier: budgeted.tier,
     analyzed: options.analyzed ?? [],
+    profile,
     tools,
     platform: process.platform,
     arch: process.arch,
@@ -284,7 +320,16 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   });
   const key = hash({ context, tree: state.tree, checks: checks.map((stage) => stage.key) });
   const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
-  return { ...state, ...selected, ...budgeted, checks, key, cache: join(common, 'hotsheet-local-gate'), tools };
+  return {
+    ...state,
+    ...selected,
+    ...budgeted,
+    profile,
+    checks,
+    key,
+    cache: join(common, 'hotsheet-local-gate'),
+    tools,
+  };
 }
 
 export function runGate(options = {}) {
@@ -299,9 +344,11 @@ export function runGate(options = {}) {
     budgetMs,
     tier,
     analyzed,
+    ticket,
+    profile,
     log = console.log,
   } = options;
-  const selection = { budgetMs, tier, analyzed };
+  const selection = { budgetMs, tier, analyzed, ticket, profile };
   const before = prepare(repo, base, full, versions, selection);
   const gateStarted = Date.now();
   const receiptPath = join(before.cache, `${before.key}.json`);
@@ -354,7 +401,7 @@ export function runGate(options = {}) {
       );
       return result.status;
     }
-    const current = prepare(repo, base, full, before.tools, selection);
+    const current = prepare(repo, base, full, before.tools, { ...selection, profile: before.profile });
     if (current.dirty || current.key !== before.key)
       throw new Error('Inputs changed during the gate; evidence discarded.');
     mkdirSync(before.cache, { recursive: true });
@@ -372,6 +419,7 @@ export function runGate(options = {}) {
       base: before.base,
       budgetMs: before.budgetMs,
       tier: before.tier,
+      profile: before.profile,
       selected: before.checks.map((stage) => stage.command),
       deferred: before.deferred.map((stage) => stage.command),
       results,
@@ -404,10 +452,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       '--budget',
       '--tier',
       '--t2-stage',
+      '--ticket',
     ]);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
-      if (['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage'].includes(args[i]) && !args[++i])
+      if (
+        ['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage', '--ticket'].includes(args[i]) &&
+        !args[++i]
+      )
         throw new Error(`${args[i - 1]} requires a value`);
     }
     if (args.includes('--timings') || args.includes('--import-ci-timings')) {
@@ -422,6 +474,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         budgetMs: args.includes('--budget') ? parseBudget(args[args.indexOf('--budget') + 1]) : undefined,
         tier: args.includes('--tier') ? args[args.indexOf('--tier') + 1] : undefined,
         analyzed: args.flatMap((arg, index) => (arg === '--t2-stage' ? [args[index + 1]] : [])),
+        ticket: args.includes('--ticket') ? args[args.indexOf('--ticket') + 1] : undefined,
       });
     }
   } catch (error) {

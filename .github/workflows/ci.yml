@@ -245,7 +245,7 @@ jobs:
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
-        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs

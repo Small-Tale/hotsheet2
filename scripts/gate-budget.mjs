@@ -34,12 +34,21 @@ function rank(stage) {
 }
 
 /** Preserve the required floor; spend remaining known time on affected stages in relevance order. */
-export function selectBudget({ stages, changes, history, budgetMs, tier = 'T1', analyzed = [], full = false }) {
+export function selectBudget({
+  stages,
+  changes,
+  history,
+  budgetMs,
+  tier = 'T1',
+  analyzed = [],
+  full = false,
+  fullReason = 'full fallback',
+}) {
   if (!['T0', 'T1', 'T2', 'unresolved'].includes(tier)) throw new Error(`Unknown risk tier: ${tier}`);
   if (tier === 'unresolved' && !full) throw new Error('Unresolved tier must preserve the full affected selection.');
   if (tier !== 'T2' && analyzed.length) throw new Error('Analyzed stage selection requires T2.');
   if (tier === 'T2' && budgetMs !== null) throw new Error('T2 analyzed selection has no time budget.');
-  if (['T0', 'T1'].includes(tier) && (!Number.isSafeInteger(budgetMs) || budgetMs <= 0))
+  if (['T0', 'T1'].includes(tier) && !full && (!Number.isSafeInteger(budgetMs) || budgetMs <= 0))
     throw new Error('T0/T1 need a positive budget.');
   const candidates = stages.filter((stage) => stage.selected);
   const candidateIds = new Set(candidates.map(stageId));
@@ -49,6 +58,7 @@ export function selectBudget({ stages, changes, history, budgetMs, tier = 'T1', 
     const timing = timingEstimate(history.stages[stageTimingKey(stage)]);
     const floor =
       full ||
+      stage.force === true ||
       stage.group === 'always' ||
       /(?:^| )lint$|typecheck/.test(stage.command) ||
       directlyAffected(stage, changes);
@@ -114,7 +124,7 @@ export function selectBudget({ stages, changes, history, budgetMs, tier = 'T1', 
         tier === 'unresolved'
           ? 'unresolved tier; preserve affected gate'
           : full
-            ? 'full fallback'
+            ? fullReason
             : item.floor
               ? 'mandatory floor'
               : selected

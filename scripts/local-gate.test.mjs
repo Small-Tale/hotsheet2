@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { browserStages, importCiTimings, inspectTimings, parseToolVersion, prepare, runGate } from './local-gate.mjs';
+import { profileFromTags } from './gate-ticket-profile.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
 test('HS2-RS0FFT tool versions exclude changing login-shell session messages', () => {
@@ -68,7 +69,7 @@ test('HS2-GN06JT budget and analyzed set are exact receipt inputs', (t) => {
   assert.ok(one.deferred.every((stage) => stage.budgetReason.includes('deferred to CI')));
   assert.equal(runGate({ ...f.options, runner: () => ({ status: 0 }), tier: 'T1', budgetMs: 300000 }), 0);
   assert.throws(() => runGate({ ...f.options, verify: true, tier: 'T1', budgetMs: 600000 }), /No valid/);
-  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { budgetMs: 600000 }), /Specify --tier/);
+  assert.equal(prepare(f.repo, undefined, false, f.options.versions, { budgetMs: 600000 }).budgetMs, 600000);
   assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { tier: 'T2' }), /explicit analyzed/);
   const build = 'clients/web::npm run build';
   const t2 = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T2', analyzed: [build] });
@@ -92,13 +93,47 @@ test('HS2-GN06JT gate and config changes keep the full fallback', (t) => {
   assert.ok(result.stages.filter((stage) => stage.group !== undefined).every((stage) => stage.selected));
 });
 
-test('HS2-GN06JT unresolved tier preserves existing affected gate until tag resolution', (t) => {
+test('HS2-VQ5ND5 missing ticket uses the default budgeted profile', (t) => {
   const f = fixture(t);
   const result = prepare(f.repo, undefined, false, f.options.versions);
-  assert.equal(result.tier, 'unresolved');
+  assert.equal(result.tier, 'T1');
+  assert.equal(result.budgetMs, 300000);
+  assert.match(result.profile.reason, /ticket source unavailable/);
+  assert.ok(result.deferred.some((stage) => stage.command === 'npm run build'));
+  assert.throws(
+    () => prepare(f.repo, undefined, false, f.options.versions, { ticket: 'HS2-SYNTHETIC' }),
+    /no linked ticket source/,
+  );
+});
+
+test('HS2-VQ5ND5 tagged ticket yields a deeper affected plan', (t) => {
+  const f = fixture(t);
+  const profile = profileFromTags({
+    qualified_id: 'git:synthetic',
+    tags: ['tier:T1', 'deep-testing', 'testing:browser', 'testing:platform', 'test-budget:15m'],
+  });
+  const result = prepare(f.repo, undefined, false, f.options.versions, { profile });
   assert.equal(result.budgetMs, null);
+  assert.equal(result.profile.platform, true);
   assert.ok(result.checks.some((stage) => stage.command === 'npm run build'));
-  assert.equal(result.deferred.length, 0);
+  assert.ok(
+    result.checks.some(
+      (stage) => stage.command.startsWith('npx playwright test ') && !stage.command.includes('--grep'),
+    ),
+  );
+  assert.ok(result.stages.filter((stage) => stage.selected).some((stage) => stage.budgetReason === 'deep-testing tag'));
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { profile, tier: 'T2' }), /conflicts/);
+});
+
+test('HS2-VQ5ND5 profile tags change receipt identity and select performance checks', (t) => {
+  const f = fixture(t);
+  const basic = profileFromTags({ qualified_id: 'git:synthetic', tags: ['tier:T1'] });
+  const perf = profileFromTags({ qualified_id: 'git:synthetic', tags: ['tier:T1', 'testing:perf'] });
+  const before = prepare(f.repo, undefined, false, f.options.versions, { profile: basic });
+  const after = prepare(f.repo, undefined, false, f.options.versions, { profile: perf });
+  assert.notEqual(before.key, after.key);
+  assert.ok(after.checks.some((stage) => stage.command === 'npm run test:performance'));
+  assert.ok(after.checks.some((stage) => stage.reasons.includes('testing:perf selects the web performance baseline')));
 });
 
 test('HS2-GN06JT invalid checked-in budget config fails closed', (t) => {

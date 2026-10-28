@@ -3,8 +3,9 @@
 `scripts/check.sh` runs `scripts/local-gate.mjs`, reusing the HS2-FCCRCK
 `scripts/gate-plan.mjs` dependency plan and exact-input stage receipts. The
 HS2-GN06JT `scripts/gate-budget.mjs` selects measured optional stages under the
-checked-in `scripts/gate-budget.json` target after the mandatory floor; risk-tier
-resolution remains conservative until HS2-VQ5ND5. The full
+checked-in `scripts/gate-budget.json` target after the mandatory floor.
+HS2-VQ5ND5 `scripts/gate-ticket-profile.mjs` resolves provider ticket tags for
+the default tier and deeper profiles. The full
 package stage catalog is `scripts/check-full.sh`; push and its hook use the same
 receipt-backed default. Policy and measured limits: [affected local verification](29-affected-local-verification.md)
 (HS2-RS0FFT).
@@ -196,6 +197,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/gate-timings.mjs   # Bounded per-stage and per-file local/CI timing history for budget estimates; local-gate --timings and --import-ci-timings (HS2-TCCKRZ; tests: gate-timings.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
+  scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles (HS2-VQ5ND5; tests: gate-ticket-profile.test.mjs)
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
