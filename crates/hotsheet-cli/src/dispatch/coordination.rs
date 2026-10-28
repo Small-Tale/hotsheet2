@@ -17,6 +17,8 @@ use crate::Cmd;
 
 #[path = "coordination_claims.rs"]
 mod claims;
+#[path = "coordination_readiness.rs"]
+mod readiness;
 
 #[derive(Debug, Args)]
 pub(crate) struct CoordinationArgs {
@@ -73,6 +75,19 @@ enum CoordinationCmd {
     /// Report the pool schemas, roles and assignment authorities this executable supports,
     /// without opening (and so without migrating) the pool.
     Capabilities,
+    /// Check an exact worker handoff before writing its durable ticket note.
+    Preflight {
+        #[command(flatten)]
+        worker: Identity,
+        #[arg(long)]
+        assignment: String,
+        /// Structured code or findings review evidence; kept machine-local.
+        #[arg(long)]
+        evidence_file: PathBuf,
+        /// Publish the checked handoff note, release the claim, and record mailbox handoff.
+        #[arg(long)]
+        publish: bool,
+    },
     /// Reserve an exact eligible ticket for an available worker; inspect scope/claims first.
     /// Run by the role holding assignment authority: the integrator in legacy mode, otherwise
     /// the dispatcher (HS2-TWZW7X).
@@ -258,6 +273,36 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         }
         CoordinationCmd::Status => {}
         CoordinationCmd::Capabilities => unreachable!("handled before opening the pool"),
+        CoordinationCmd::Preflight {
+            worker,
+            assignment,
+            evidence_file,
+            publish,
+        } => {
+            let report = if publish {
+                readiness::publish(
+                    &coordinator,
+                    &ctx.path,
+                    &args.project,
+                    &worker.id,
+                    &worker.session,
+                    &assignment,
+                    &evidence_file,
+                )?
+            } else {
+                readiness::preflight(
+                    &coordinator,
+                    &ctx.path,
+                    &args.project,
+                    &worker.id,
+                    &worker.session,
+                    &assignment,
+                    &evidence_file,
+                )?
+            };
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
         CoordinationCmd::Publish {
             integrator: i,
             base,

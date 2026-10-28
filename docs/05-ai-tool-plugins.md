@@ -2130,6 +2130,25 @@ of a nonempty `NoteKind::Regular` `## Findings handoff` note on that exact quali
 ticket and releases its claim first. The integrator must hold the exact live ticket
 claim to mark or replay `verifying`; it compares the full timestamp, including
 fractional seconds, and rechecks the note kind and evidence.
+The optional `preflight` command (HS2-NNSWDS) accepts a machine-local JSON file bound
+to the qualified ticket, exact assignment scope, claim-attempt id, ticket update time
+and last note id. It verifies the live claim and `initial_testing` phase. Code evidence
+also names the worktree, branch, full commit/tree and risk tier; the command checks
+clean source, assignment-base ancestry, declared path/section scope and the
+exact-tree root gate marker. Findings evidence supplies a proposed nonempty findings
+note and requires no commit or code gate. Both kinds attest latest-instruction,
+requirements and coverage review and list unresolved findings with existing follow-up
+tickets. For rendered web code, the worker attests inspection of the real parent,
+affected states and wide/medium/narrow/resize viewports; a ticket with reference
+attachments also needs a matching after attachment. These subjective reviews remain
+explicitly self-attested. The report classifies checked facts and attestations;
+failed checks name a repair. `--publish` repeats preflight, refuses intervening notes
+or claim loss under the ticket mutation lock, atomically writes its note and releases
+the exact claim, then records mailbox Handoff. Exact-evidence replay is idempotent.
+The worker can take independent work immediately after the durable released handoff.
+Older runtimes retain the manual note, release and `worker --phase handoff` path. The
+integrator still reviews the result and may return it.
+
 The ticket must be Completed or Verified before `done`. Findings never enter
 `integrating` or `ci` and require no empty commit,
 push, or remote CI. Existing ticket claims remain authoritative. A mailbox phase does
@@ -2350,8 +2369,8 @@ integrator serializes main review, local gates and push. Both consume the same
 durable events. The worker preserves older source artifacts until integration and
 returns to `next` without waiting for earlier CI. An unavailable terminal or native
 route requires human relay; guidance does not claim an ended independent app
-session automatically wakes. The worker's scoped self-review is guidance only;
-HS2-NNSWDS owns an executable preflight, HS2-E20S6K bounded advisory review and
+session automatically wakes. The worker's scoped self-review uses the optional
+executable preflight on current runtimes (HS2-NNSWDS); HS2-E20S6K owns bounded advisory review and
 HS2-1C1565 CI completion proposals. The full required local gate remains until
 HS2-FCCRCK changes that policy.
 

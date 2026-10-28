@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 45 -->
+<!-- hotsheet-skill-version: 46 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -80,11 +80,16 @@ setup`, then `status`.
    using the returned assignment id, worker id, and session token. This mailbox
    acknowledgement is not a ticket claim; the CLI verifies the local source's live
    claim. Unsupported provider verification fails explicitly (HS2-3ETJ26).
-5. After the durable handoff and claim release, run `coordination worker --phase
-handoff --assignment <id> --id <worker> --session <generation> --commit <full-sha>`
-   for code, or use `--findings-note <note-id>` for a no-code findings handoff.
-   These are mutually exclusive. The CLI checks the exact local ticket's released
-   claim and matching durable handoff note. Send only the
+5. When `coordination preflight --help` is supported, prepare the machine-local
+   evidence file described in `docs/30-handoff-readiness.md`. Run `coordination
+   preflight --id <worker> --session <generation> --assignment <id>
+   --evidence-file <path>` before publication, inspect its result, then repeat with
+   `--publish`. Publication rechecks the claim and source, writes the note, releases
+   the claim and records the typed mailbox handoff. An exact replay is idempotent.
+   On an older runtime, keep the manual note/release flow and run `coordination
+   worker --phase handoff --assignment <id> --id <worker> --session <generation>
+   --commit <full-sha>` for code or `--findings-note <note-id>` for findings.
+   Send only the
    ticket-slug cue, then return to `next`. The durable handoff feeds both the
    integrator backlog and dispatcher availability; an unconfirmed cue cannot erase
    either. Create a NEW ticket worktree from each new
@@ -152,16 +157,22 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
 3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
    work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
    Run the required local gates and inspect the diff. Before handoff, self-review
-   the exact requested scope, full commit/tree or findings note, active claim
+   the exact requested scope, full commit/tree or proposed findings note, active claim
    attempt/deadline, gate evidence, docs/coverage, unresolved review findings and
    linked follow-ups. For UI work, inspect the real parent at required states and
-   viewports and attach the matching after evidence. This is a readiness checklist;
-   HS2-NNSWDS owns a future executable preflight. For code changes, stage named
+   viewports and attach the matching after evidence. Use the headless preflight
+   (HS2-NNSWDS) when supported; check `coordination preflight --help` without opening
+   an older pool.
+   A missing or stale result needs the stated repair and another preflight. Older
+   runtimes retain this manual checklist. For code changes, stage named
    paths and commit the verified change on the worker branch with the ticket slug in
-   the subject. For a findings-only task, record the evidence in a regular ticket
-   note and do not create an empty commit. Do not
+   the subject. For a findings-only task, put the proposed `## Findings handoff`
+   text in the evidence file and do not create an empty commit. Do not
    merge or push the worker branch or `main` as part of this handoff.
-4. **Hand off without completing.** Add a regular ticket note for code headed `## Integration
+4. **Hand off without completing.** On a current runtime, run the read-only preflight,
+   inspect verified versus self-attested checks, then use `--publish`; do not add a
+   separate note, release or mailbox acknowledgement. A genuine blocker still uses
+   the blocked-report path. On an older runtime, add a regular ticket note for code headed `## Integration
 handoff` with the branch name, full commit SHA, worktree location labeled as
    machine-local, gate results, unresolved risks, and any follow-up slugs. State that
    the ticket remains Started pending integration. For findings, add a regular note

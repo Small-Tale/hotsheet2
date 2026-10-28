@@ -116,6 +116,7 @@ impl From<OpError> for ApiError {
             other @ (OpError::WrongWorker { .. }
             | OpError::NotClaimed(_)
             | OpError::ClaimUnavailable { .. }
+            | OpError::StaleHandoff(_)
             | OpError::NotWorkingRequiresCompleted(_)
             | OpError::NotInTrash(_)) => ApiError::new(StatusCode::CONFLICT, other.to_string()),
             other @ (OpError::DuplicateNeedsTarget

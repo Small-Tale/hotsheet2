@@ -945,6 +945,12 @@ zero external requests and exact unchanged state on rejected foreign transitions
 registration, exact dispatch/acknowledgement, findings-note validation with
 full-precision claim authority, optional per-assignment route-evidence validation
 without changing the integrator registration or schema (HS2-HM9FRV),
+and `dispatch/coordination_readiness.rs` implements the code/findings preflight,
+exact-tree gate check, scoped self-review report and durable handoff publication
+(HS2-NNSWDS; [contract](30-handoff-readiness.md)).
+`hotsheet-ticketing/src/ops.rs` atomically appends that handoff note and releases
+the exact claim after rechecking its ticket snapshot and deadline.
+The coordination CLI also exposes
 `suspend-integration` and `resume-integration` with exact main SHA, ticket note,
 ancestry and root-gate receipt checks (HS2-2D3099), recovery,
 and terminal outcomes through
@@ -956,6 +962,8 @@ integer mailbox availability/wake deadlines remain advisory (HS2-35R7M3).
 `crates/hotsheet-cli/tests/coordination.rs` drives separate CLI
 processes and real synthetic worktrees; `tests/coordination_suspended_integration.rs`
 pins the failed-gate pause, prerequisite serial integration and gated resume.
+`tests/coordination_readiness.rs` covers preflight, publish, replay, staleness and
+repair with real CLI processes and synthetic worktrees.
 `tests/coordination_routes.rs` covers mixed
 per-assignment routes, evidence, replay and fences (HS2-HM9FRV). Portable recovery/handoff coverage is in
 `crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and

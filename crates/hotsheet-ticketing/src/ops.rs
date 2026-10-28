@@ -48,6 +48,8 @@ pub enum OpError {
     NotInTrash(Status),
     #[error("invalid ETA: {0}")]
     InvalidEta(String),
+    #[error("stale handoff preflight: {0}")]
+    StaleHandoff(&'static str),
 }
 
 // ---- query -----------------------------------------------------------------------
@@ -1358,6 +1360,83 @@ pub fn add_note_with_metadata(
         t.updated_at = now;
         store.write_ticket_committing(&t)?;
         Ok(t)
+    })
+}
+
+/// Publish a reviewed worker handoff note and release its exact live claim in one
+/// ticket transaction (HS2-NNSWDS). An intervening note, renewal, claim attempt,
+/// or expired deadline refuses publication; the mailbox transition follows this
+/// durable mutation and may be retried independently after a process interruption.
+pub struct HandoffPublication<'a> {
+    pub note_id: Ulid,
+    pub now: Timestamp,
+    pub worker: &'a str,
+    pub claim_attempt: &'a Ulid,
+    pub reviewed_updated_at: &'a Timestamp,
+    pub text: String,
+}
+
+pub fn publish_handoff_note(
+    store: &FsStore,
+    id: &Ulid,
+    publication: HandoffPublication<'_>,
+) -> Result<Ticket, OpError> {
+    let HandoffPublication {
+        note_id,
+        now,
+        worker,
+        claim_attempt,
+        reviewed_updated_at,
+        text,
+    } = publication;
+    store.with_ticket_transaction(|| {
+        let mut ticket = store.read_ticket(id)?;
+        if ticket.updated_at != *reviewed_updated_at {
+            return Err(OpError::StaleHandoff(
+                "ticket notes or claim changed; reread and rerun preflight",
+            ));
+        }
+        if ticket.claimed_by.as_deref() != Some(worker)
+            || claim_available(&ticket, &now)
+            || ticket
+                .claim_history
+                .iter()
+                .rev()
+                .find(|event| event.kind == ClaimEventKind::Claim)
+                .is_none_or(|event| event.id != *claim_attempt || event.worker != worker)
+        {
+            return Err(OpError::StaleHandoff(
+                "exact live claim attempt or deadline changed; renew and rerun preflight",
+            ));
+        }
+        if ticket.started_phase != Some(StartedPhase::InitialTesting) {
+            return Err(OpError::StaleHandoff(
+                "worker handoff requires the recorded initial_testing phase",
+            ));
+        }
+        ticket.notes.push(Note {
+            id: note_id,
+            kind: NoteKind::Regular,
+            kind_explicit: true,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: Some(hotsheet_model::NoteActor {
+                role: hotsheet_model::AttachmentActorRole::Ai,
+                id: Some(worker.to_owned()),
+            }),
+            text,
+        });
+        end_claim(&mut ticket, &now);
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
     })
 }
 
@@ -2754,6 +2833,96 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn hs2_nnswds_handoff_publication_rejects_intervening_notes_and_expired_claims() {
+        let (_dir, store) = store();
+        let ticket = titled(&store, "Synthetic handoff");
+        let claimed = claim(
+            &store,
+            &ticket.id,
+            &ts("2026-10-16T00:00:00Z"),
+            ts("2026-10-16T00:10:00Z"),
+            "worker",
+            None,
+        )
+        .unwrap();
+        let attempt = claimed
+            .claim_history
+            .iter()
+            .find(|event| event.kind == ClaimEventKind::Claim)
+            .unwrap()
+            .id;
+        let mut ready = claimed;
+        ready.started_phase = Some(StartedPhase::InitialTesting);
+        ready.updated_at = ts("2026-10-16T00:01:00Z");
+        store.write_ticket_committing(&ready).unwrap();
+        let snapshot = ready.updated_at.clone();
+        add_note(
+            &store,
+            &ticket.id,
+            Ulid::new(),
+            ts("2026-10-16T00:02:00Z"),
+            NoteKind::Regular,
+            "Synthetic instruction changed during preflight".into(),
+        )
+        .unwrap();
+        assert!(matches!(
+            publish_handoff_note(
+                &store,
+                &ticket.id,
+                HandoffPublication {
+                    note_id: Ulid::new(),
+                    now: ts("2026-10-16T00:03:00Z"),
+                    worker: "worker",
+                    claim_attempt: &attempt,
+                    reviewed_updated_at: &snapshot,
+                    text: "## Findings handoff\nSynthetic result".into(),
+                },
+            ),
+            Err(OpError::StaleHandoff(_))
+        ));
+        let current = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(current.claimed_by.as_deref(), Some("worker"));
+        assert_eq!(
+            current.notes.last().unwrap().text,
+            "Synthetic instruction changed during preflight"
+        );
+        assert!(matches!(
+            publish_handoff_note(
+                &store,
+                &ticket.id,
+                HandoffPublication {
+                    note_id: Ulid::new(),
+                    now: ts("2026-10-16T00:10:00Z"),
+                    worker: "worker",
+                    claim_attempt: &attempt,
+                    reviewed_updated_at: &current.updated_at,
+                    text: "## Findings handoff\nSynthetic result".into(),
+                },
+            ),
+            Err(OpError::StaleHandoff(_))
+        ));
+        let published = publish_handoff_note(
+            &store,
+            &ticket.id,
+            HandoffPublication {
+                note_id: Ulid::new(),
+                now: ts("2026-10-16T00:04:00Z"),
+                worker: "worker",
+                claim_attempt: &attempt,
+                reviewed_updated_at: &current.updated_at,
+                text: "## Findings handoff\nSynthetic result".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(published.notes.len(), current.notes.len() + 1);
+        assert!(published.claimed_by.is_none());
+        assert_eq!(
+            published.claim_history.last().unwrap().kind,
+            ClaimEventKind::Release
+        );
     }
 
     #[test]

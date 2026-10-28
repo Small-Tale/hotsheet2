@@ -284,12 +284,16 @@ fn hs2_j81y9w_role_skills_require_addressed_handoff_delivery() {
         }
     }
     for worker in workers {
-        let note = worker.find("Add a regular ticket note").unwrap();
+        // HS2-NNSWDS keeps the addressed cue after either current publication or the manual fallback.
+        let publish = worker.find("then use `--publish`").unwrap();
+        let note = worker
+            .find("On an older runtime, add a regular ticket note")
+            .unwrap();
         let release = worker.find("Release the claim immediately").unwrap();
         let cue = worker.find("send only the ticket slug").unwrap();
         assert!(
-            note < release && release < cue,
-            "handoff must precede release and cue"
+            publish < note && note < release && release < cue,
+            "published or manual handoff must precede the addressed cue"
         );
     }
 }
@@ -434,7 +438,7 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 45 -->"));
+    assert!(worker.contains("<!-- hotsheet-skill-version: 46 -->")); // HS2-NNSWDS
     assert!(integrator.contains("<!-- hotsheet-skill-version: 13 -->"));
 
     let worker = flatten(worker);

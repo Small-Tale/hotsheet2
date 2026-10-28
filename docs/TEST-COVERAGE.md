@@ -1508,6 +1508,13 @@ discard flow remains covered by its existing real-router test.
 - Linked-reader regression (HS2-QRP14P): `tests/ticket-reader-stack.spec.ts # HS2-W8VEMP` edits the inline filename and finishes on blur while retaining owning-project/provider-qualified routing, batch label/purpose, upload, rename payload/rendering, deletion, cleanup and zero source-project writes.
 - Manual: packaged Tauri smoke and real provider launch remain in the manual plan; browser tests do not claim native-host verification.
 
+### Scoped handoff readiness (HS2-NNSWDS)
+
+- Behavior: a read-only code/findings preflight checks the exact qualified ticket, assignment scope, live claim attempt/deadline and latest note snapshot; code also checks immutable clean Git identity, declared scope and an exact-tree gate marker. Publication atomically appends the note and releases the claim before mailbox Handoff, with exact replay and immediate worker availability. Review booleans and rendered-page inspection remain self-attested; unsupported providers fail explicitly.
+- Unit: `crates/hotsheet-ticketing/src/ops.rs # hs2_nnswds_handoff_publication_rejects_intervening_notes_and_expired_claims` covers serialized ticket snapshot and deadline refusal.
+- End to end: `crates/hotsheet-cli/tests/coordination_readiness.rs` covers findings and code publication/replay, stale instructions/commit/tree, scope, missing UI evidence, missing gate repair and claim loss using real CLI processes and synthetic Git worktrees.
+- Manual: live before/after return-rate and correction-round measurement against the bounded HS2-34PWSK baseline belongs to HS2-K1QNGC; no measured improvement is claimed here.
+
 ### Coordination assignment transition history (HS2-4273QB)
 
 - Behavior: assignment status retains ordered Offered, Accepted, Handoff, Verifying, Integrating, CI, Done, Blocked, and Review return instants with known role/id. Legacy records without the optional history remain readable. The throughput baseline prefers durable events while retaining conservative legacy proxies.
