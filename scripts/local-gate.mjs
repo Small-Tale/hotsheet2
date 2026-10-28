@@ -1,7 +1,7 @@
 // HS2-RS0FFT: affected local verification and exact-input evidence.
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
@@ -333,6 +333,28 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   };
 }
 
+/** A passing T2 receipt for the current tree whose recorded selection reproduces its exact key. */
+function recordedT2Selection(repo, base, full, versions, selection) {
+  const cache = join(resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])), 'hotsheet-local-gate');
+  if (!existsSync(cache)) return undefined;
+  const { tree } = collect(repo, base);
+  for (const name of readdirSync(cache)) {
+    if (!name.endsWith('.json') || name.startsWith('stage-')) continue;
+    const receipt = read(join(cache, name));
+    if (receipt?.tree !== tree || receipt.tier !== 'T2' || !Array.isArray(receipt.analyzed) || !receipt.analyzed.length)
+      continue;
+    const candidate = { ...selection, analyzed: receipt.analyzed };
+    let before;
+    try {
+      before = prepare(repo, base, full, versions, candidate);
+    } catch {
+      continue;
+    }
+    if (before.key === receipt.key) return { selection: candidate, before };
+  }
+  return undefined;
+}
+
 export function runGate(options = {}) {
   const {
     repo = root,
@@ -350,8 +372,18 @@ export function runGate(options = {}) {
     log = console.log,
     env = process.env,
   } = options;
-  const selection = { budgetMs, tier, analyzed, ticket, profile };
-  const before = prepare(repo, base, full, versions, selection);
+  let selection = { budgetMs, tier, analyzed, ticket, profile };
+  let before;
+  try {
+    before = prepare(repo, base, full, versions, selection);
+  } catch (error) {
+    if (analyzed?.length || !/T2 needs an explicit analyzed/.test(error.message)) throw error;
+    // HS2-BNAYKG: push.sh and the pre-push hook run a bare check; reuse the exact receipt
+    // of the passing --t2-stage run for this tree instead of refusing every T2 push.
+    const reused = recordedT2Selection(repo, base, full, versions, selection);
+    if (!reused) throw new Error(`${error.message} Pass --t2-stage <cwd::command> for each analyzed check.`);
+    ({ selection, before } = reused);
+  }
   const gateStarted = Date.now();
   const receiptPath = join(before.cache, `${before.key}.json`);
   const compatibility = resolve(repo, git(repo, ['rev-parse', '--git-path', 'hotsheet-root-gate']));
@@ -423,6 +455,7 @@ export function runGate(options = {}) {
       base: before.base,
       budgetMs: before.budgetMs,
       tier: before.tier,
+      analyzed: selection.analyzed ?? [],
       profile: before.profile,
       selected: before.checks.map((stage) => stage.command),
       deferred: before.deferred.map((stage) => stage.command),

@@ -290,3 +290,31 @@ test('HS2-5PTT2Y a sandboxed failure names the sandbox; a pass or an unsandboxed
   assert.equal(passed.code, 0);
   assert.doesNotMatch(passed.text, /HS2-5PTT2Y/);
 });
+
+test('HS2-BNAYKG a bare check reuses only the exact passing T2 receipt for the tree', (t) => {
+  const f = fixture(t);
+  const build = 'clients/web::npm run build';
+  let runs = 0;
+  const runner = () => {
+    runs += 1;
+    return { status: 0 };
+  };
+  assert.throws(() => runGate({ ...f.options, runner, tier: 'T2' }), /--t2-stage/, 'no receipt yet: still refused');
+  assert.equal(runs, 0);
+  assert.equal(runGate({ ...f.options, runner, tier: 'T2', analyzed: [build] }), 0);
+  const ran = runs;
+  const lines = [];
+  assert.equal(runGate({ ...f.options, runner, tier: 'T2', log: (line) => lines.push(line) }), 0);
+  assert.equal(runGate({ ...f.options, runner, tier: 'T2', verify: true }), 0);
+  assert.equal(runs, ran, 'the push-time check reuses the receipt without rerunning a stage');
+  assert.match(lines.join('\n'), /already passed/);
+  assert.throws(
+    () => runGate({ ...f.options, runner, tier: 'T2', versions: [['synthetic-toolchain', '2']] }),
+    /--t2-stage/,
+    'changed inputs never match the recorded receipt',
+  );
+  f.put('clients/web/src/example.ts', 'export const value = 3;\n');
+  f.git('commit', '--quiet', '-am', 'another client change');
+  assert.throws(() => runGate({ ...f.options, runner, tier: 'T2', verify: true }), /--t2-stage/);
+  assert.equal(runs, ran);
+});

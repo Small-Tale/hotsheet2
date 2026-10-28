@@ -30,7 +30,11 @@ checked-in target for that invocation. `--full` still runs the full local gate.
 
 `--tier T2 --t2-stage '<cwd>::<exact command>'` accepts an explicit analyzed stage
 selection without a time cap. Mandatory floor checks remain selected. The command
-requires an explicit selection when other affected checks exist. The risk analysis
+requires an explicit selection when other affected checks exist. The receipt
+records that selection, so `scripts/push.sh` and the pre-push hook, which run a bare
+`scripts/check.sh`, reuse a passing T2 receipt for the same tree when re-planning
+with its recorded selection reproduces the exact receipt key. A bare run with no such
+receipt is refused and names `--t2-stage` (HS2-BNAYKG). The risk analysis
 and chosen checks belong in the ticket's preliminary thoughts. HS2-VQ5ND5 resolves
 tags through normalized provider tickets. `--ticket <slug>` or
 `--ticket <connection_id>:<native_id>` takes precedence, followed by one slug in
