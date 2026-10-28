@@ -234,6 +234,36 @@ describe('ticket metadata controls and inspector panels', () => {
     );
     expect(timedTimeline).toMatch(/class="ticket-timeline__duration"[^>]*><span class="ticket-timeline__usage"/);
     expect(timedTimeline).toContain('38K tokens');
+    // The stage under way swaps its rail dot for a spinner and shows its estimate (HS2-ST6RN1).
+    const live = String(
+      TicketTimeline({
+        entries: [
+          { id: 'created', time: '37m ago', title: 'Ticket created', durationToNext: '5m' },
+          {
+            id: 'working',
+            time: '32m ago',
+            title: 'Working',
+            inProgress: { label: '~12m left', title: 'This phase typically takes about 45m' },
+          },
+        ],
+      }),
+    );
+    expect(live.match(/data-in-progress="true"/g)).toHaveLength(1);
+    expect(live).toMatch(
+      /<li data-entry-id="working"[^>]*data-in-progress="true"><span class="ticket-timeline__progress"/,
+    );
+    expect(live).toContain('data-component="loading-spinner"');
+    expect(live).toMatch(/class="ticket-timeline__elapsed" title="This phase typically takes about 45m"/);
+    expect(live).toContain('~12m left');
+    expect(live).toContain('aria-label="~12m left. This phase typically takes about 45m"');
+    const timelineCss = readFileSync(resolve(import.meta.dirname, 'ticket-timeline.css'), 'utf8');
+    expect(timelineCss).toMatch(/li\[data-in-progress='true'\]::before \{\s*content: none;/);
+    // Without an estimate the spinner still marks the stage, with no label.
+    const unestimated = String(
+      TicketTimeline({ entries: [{ id: 'w', time: 'Now', title: 'Working', inProgress: { title: 'In progress' } }] }),
+    );
+    expect(unestimated).toContain('ticket-timeline__progress');
+    expect(unestimated).not.toContain('ticket-timeline__duration');
     const attachments = String(
       TicketAttachments({ attachments: [{ id: 'one', name: 'one.png', url: '/attachment/one', annotationCount: 2 }] }),
     );

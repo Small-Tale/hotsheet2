@@ -1,4 +1,4 @@
-import { batch, type Signal } from 'kerfjs';
+import { batch, type Signal, signal } from 'kerfjs';
 
 import {
   Api,
@@ -124,6 +124,7 @@ import {
   selectionVisibleInView,
   type TicketView,
 } from '../ticket-views';
+import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import type { StoredPendingAttachment } from '../workspace-session';
@@ -389,6 +390,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     draftScope,
     ago,
   } = dependencies;
+  /** Each project's median phase durations for the in-progress timeline stage, loaded once (HS2-ST6RN1). */
+  const typicalPhasesByProject = signal<Record<string, Readonly<Record<string, number>>>>({});
+  const typicalPhaseLoads = new Set<string>();
   /** Rebase-and-retry attempts after a stale-token rejection before an edit is reported as failed. */
   const MAX_CONCURRENT_EDIT_RETRIES = 4;
   let ticketCloseSearchGeneration = 0,
@@ -1683,12 +1687,30 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   function timeline(ticket: FullTicket) {
     const entries = ticketTimelineEntries(ticket),
-      usage = timelineUsageLabels(entries, ticketUsageFor(ticket));
+      usage = timelineUsageLabels(entries, ticketUsageFor(ticket)),
+      current = project(),
+      // The last entry is the stage under way while someone holds a live claim (HS2-ST6RN1).
+      inProgress = timelineStageEstimate(ticket, current ? typicalPhasesByProject.value[current.id] : undefined);
     return entries.map((entry, index) => ({
       ...entry,
       time: ago(entry.timestamp),
       ...(usage.perEntry[index] ? { usageToNext: usage.perEntry[index] } : {}),
+      ...(inProgress && index === entries.length - 1 ? { inProgress } : {}),
     }));
+  }
+  /** Load the project's phase medians once, the first time an actively worked ticket is shown (HS2-ST6RN1). */
+  async function loadTypicalPhases(ticket: FullTicket) {
+    const current = project();
+    if (!current || typicalPhaseLoads.has(current.id) || !timelineStageEstimate(ticket, undefined)) return;
+    typicalPhaseLoads.add(current.id);
+    try {
+      const report = await new Api(current.apiPath).checkoutPhaseReport(current.id);
+      typicalPhasesByProject.value = { ...typicalPhasesByProject.value, [current.id]: typicalPhaseDurations(report) };
+    } catch {
+      // The estimate is decoration: without history the stage falls back to the claim ETA, and the
+      // next time a ticket is shown may load it again.
+      typicalPhaseLoads.delete(current.id);
+    }
   }
   function timelineUsage(ticket: FullTicket) {
     return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).breakdown;
@@ -1917,6 +1939,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         .catch(() => undefined);
     if (inspectorTab.value === 'code-review') void refreshCodeReview();
     void refreshTicketUsage();
+    void loadTypicalPhases(ticket);
   }
   /** Read the selected ticket's AI usage for the timeline; a provider without local metrics yields none. */
   async function refreshTicketUsage() {

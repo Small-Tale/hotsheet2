@@ -33,6 +33,18 @@
   content: '';
   transform: translateX(-50%);
 }
+/* The stage under way swaps its dot for a spinner centered on the rail (HS2-ST6RN1). */
+.ticket-timeline__list li[data-in-progress='true']::before {
+  content: none;
+}
+.ticket-timeline__progress {
+  position: absolute;
+  top: remify(3.52px);
+  left: 0;
+  display: flex;
+  color: var(--wa-color-brand-on-quiet);
+  transform: translateX(-50%);
+}
 /* Emphasized events fill their dot. */
 .ticket-timeline__list li[data-emphasized='true']::before {
   background: var(--wa-color-neutral-border-loud);

@@ -28,6 +28,7 @@ import type {
   GuidanceSourceUpdate,
   MessageConnectionReceipt,
   PermissionRequest,
+  PhaseReport,
   PollResponse,
   ProviderAccount,
   ProviderConnection,
@@ -913,6 +914,13 @@ export const parseCommandDefinition = shape<CommandDefinition>(
 );
 
 export const parseCustomView = shape<CustomView>('view', { id: isString, name: isString, query: isString });
+
+const parsePhaseStats = shape<PhaseReport['phases'][number]>('phase stats', {
+  phase: isString,
+  wall: (value) => isRecord(value) && isNumber(value.median_ms),
+});
+
+export const parsePhaseReport = shape<PhaseReport>('phase report', { phases: listOf(parsePhaseStats.check) });
 
 const parseCommandLaunch = shape<NonNullable<CommandRun['launch']>>(
   'command launch',

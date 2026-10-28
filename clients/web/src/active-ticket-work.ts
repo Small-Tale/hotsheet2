@@ -64,7 +64,7 @@ export type ClaimEtaPresentation =
 
 const MINUTE = 60_000;
 
-function approximateDuration(ms: number): string {
+export function approximateDuration(ms: number): string {
   const minutes = Math.round(ms / MINUTE);
   if (minutes < 1) return '<1m';
   if (minutes < 60) return `~${minutes}m`;
