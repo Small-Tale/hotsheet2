@@ -1227,3 +1227,11 @@ HS2-AVXYCB exercises the actual reader's quoted inline answer against that serve
 checks the persisted ordinary note and cleared indexed/full-ticket review state, then
 reloads to confirm persistence. Provider discovery stays deterministic; ticket reads and
 writes cross the real HTTP and filesystem boundaries.
+
+### Affected local verification (HS2-RS0FFT, HS2-FCCRCK)
+
+The required local gate is `scripts/check.sh`, backed by the dependency planner,
+bounded relevant browser checks, and exact-input receipts. Inspect it with `--plan`;
+use `--full` for the full package gate. Full browser/platform regression remains
+in CI, with an additional full local browser run only for a concrete unresolved risk.
+See [the policy, input boundaries, and measurement limits](29-affected-local-verification.md).

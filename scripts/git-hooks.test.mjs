@@ -52,27 +52,9 @@ function fixture() {
   return { root, repo, dispose: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-test('HS2-CD3D2T root gate reuses only a clean, unchanged tree', () => {
-  const f = fixture();
-  try {
-    const bin = resolve(f.root, 'bin');
-    const log = resolve(f.root, 'gate.log');
-    for (const name of ['cargo', 'zsh', 'cargo-nextest'])
-      executable(resolve(bin, name), '#!/bin/sh\nprintf "%s\\n" "$0" >> "$HOTSHEET_HOOK_TEST_LOG"\n');
-    executable(resolve(bin, 'git-filter-repo'), '#!/bin/sh\nexit 0\n');
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOTSHEET_HOOK_TEST_LOG: log };
-    run('bash', ['scripts/check.sh'], f.repo, env);
-    const first = readFileSync(log, 'utf8');
-    assert.match(run('bash', ['scripts/check.sh'], f.repo, env), /already passed/);
-    assert.equal(readFileSync(log, 'utf8'), first);
-    put(resolve(f.repo, 'next'), 'next\n');
-    run('git', ['add', 'next'], f.repo);
-    run('git', ['commit', '-m', 'Next'], f.repo);
-    run('bash', ['scripts/check.sh'], f.repo, env);
-    assert.ok(readFileSync(log, 'utf8').length > first.length);
-  } finally {
-    f.dispose();
-  }
+test('HS2-RS0FFT required gate uses receipt validation without an environment bypass', () => {
+  assert.match(readFileSync(resolve(source, 'scripts/check.sh'), 'utf8'), /local-gate\.mjs/);
+  assert.doesNotMatch(readFileSync(resolve(source, '.githooks/pre-push'), 'utf8'), /HOTSHEET_GATE_PASSED_TREE/);
 });
 
 test('HS2-CD3D2T push gates before remote contact and pre-push skips that same tree', () => {
@@ -84,7 +66,7 @@ test('HS2-CD3D2T push gates before remote contact and pre-push skips that same t
     executable(resolve(bin, 'zsh'), '#!/bin/sh\nexit 0\n');
     executable(
       resolve(f.repo, 'scripts/check.sh'),
-      `#!/bin/sh\nprintf 'check\\n' >> "$HOTSHEET_HOOK_TEST_LOG"\n[ ! -f "$HOTSHEET_HOOK_TEST_FAIL" ]\n`,
+      `#!/bin/sh\ntree=$(git rev-parse 'HEAD^{tree}')\n[ -f ".git/test-gate-$tree" ] && exit 0\nprintf 'check\\n' >> "$HOTSHEET_HOOK_TEST_LOG"\n[ ! -f "$HOTSHEET_HOOK_TEST_FAIL" ] || exit 1\ntouch ".git/test-gate-$tree"\n`,
     );
     const remote = resolve(f.root, 'remote.git');
     run('git', ['init', '--bare', remote], f.root);
@@ -95,6 +77,7 @@ test('HS2-CD3D2T push gates before remote contact and pre-push skips that same t
       PATH: `${bin}:${process.env.PATH}`,
       HOTSHEET_HOOK_TEST_LOG: log,
       HOTSHEET_HOOK_TEST_FAIL: fail,
+      HOTSHEET_GATE_PASSED_TREE: run('git', ['rev-parse', 'HEAD^{tree}'], f.repo).trim(),
     };
     run('bash', ['scripts/push.sh'], f.repo, env);
     assert.equal(readFileSync(log, 'utf8'), 'check\n');

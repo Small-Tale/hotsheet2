@@ -1,5 +1,11 @@
 # Codebase Map
 
+`scripts/check.sh` runs `scripts/local-gate.mjs`, reusing the HS2-FCCRCK
+`scripts/gate-plan.mjs` dependency plan and exact-input stage receipts. The full
+package stage catalog is `scripts/check-full.sh`; push and its hook use the same
+receipt-backed default. Policy and measured limits: [affected local verification](29-affected-local-verification.md)
+(HS2-RS0FFT).
+
 `clients/web/tests/inspector-resize-delivery.ts` controls one actual resize-listener
 delivery in the real concurrency parent regression, with explicit callback release
 and restoration; it never assigns product rail state (HS2-ZV9M6R).

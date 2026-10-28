@@ -2,9 +2,4 @@
 # HS2-CD3D2T: avoid repeating the push script's already completed gate.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-tree="$(git rev-parse 'HEAD^{tree}')"
-if [[ "${HOTSHEET_GATE_PASSED_TREE:-}" == "$tree" ]]; then
-  echo "Root gate already passed before push for tree $tree"
-  exit 0
-fi
 scripts/check.sh

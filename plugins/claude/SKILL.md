@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 68 -->
+<!-- hotsheet-skill-version: 69 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -226,3 +226,18 @@ Notes:
   JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks
   outside inline/fenced backtick code; use `--allow-literal-backslash-n` only when prose
   containing literal `\\n` text is intentional.
+
+## Local verification (HS2-RS0FFT)
+
+Use the project's declared affected local gate and inspect its selected checks
+and fallback reasons. Client-only changes do not routinely run unrelated server
+suites. Keep affected unit/API tests, a bounded relevant browser set, shared
+policy/contracts/generated-artifact checks, and one real-app visual review of
+an authorized overlapping UI batch. Full browser/platform regression stays in
+CI. Broaden local checks for shared infrastructure, auth, data formats,
+migrations, gate changes, ambiguous dependencies, or a concrete failure, and
+record the reason. Run the full local browser suite only for an identified
+unresolved risk. Reuse only valid exact-input evidence. Preserve dirty local
+edits and verify the committed tree in a clean worktree; never use a bypass.
+After push, release the claim while CI runs and continue independent work.
+Complete only after successful covering CI on the shipping branch.

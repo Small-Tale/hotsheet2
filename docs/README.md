@@ -116,6 +116,11 @@ and don't imply reading order — read by group.
 
 **C · Data & storage**
 
+Local verification: [29-affected-local-verification.md](29-affected-local-verification.md)
+defines the affected package/browser gate, receipt invalidation, and full CI boundary
+(HS2-RS0FFT; implemented with conservative fallback; controlled throughput validation
+remains HS2-DAA8AB/HS2-K1QNGC).
+
 | Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Status                  |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | [02-ticket-storage.md](02-ticket-storage.md)         | Default git-provider format, activity history, AI completion confidence (HS2-DWTJ43; indexed filters/sort, list/board pill, actor-role completion rule, and calibration report HS2-RD4M29/HS2-A0Q6G6), durable attachment metadata, multi-store IDs with reviewed legacy recovery at moved or unchanged paths, auto-merge, copy/move, Trash restore + 30-day retention purge, phase-duration report CLI (HS2-JS7E61), explicit qualified follow-up relations (HS2-2Z11A5) | Shipped core/server/web |

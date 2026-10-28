@@ -1,7 +1,7 @@
 ---
 root: true
-targets: ["*"]
-description: "Hot Sheet 2 project-specific guidance"
+targets: ['*']
+description: 'Hot Sheet 2 project-specific guidance'
 ---
 
 # Hot Sheet 2 project guidance
@@ -75,6 +75,17 @@ Commit a finished ticket before starting the next one. After pushing, confirm th
 remote contains the commit and use `node scripts/ci-gate.mjs status --covers
 <full-sha>` to check the successful `main` CI run. A remote run never replaces a
 failing local gate.
+
+Local verification uses `scripts/check.sh` (HS2-RS0FFT), which prints an affected
+package and browser plan and records exact-input receipts. Inspect it with
+`scripts/check.sh --plan`; use `--full` when shared infrastructure, gate changes,
+ambiguous dependencies, or a concrete failure warrants broader checks. Client-only
+changes do not routinely run unrelated Rust suites. Full browser and platform
+regression remain in CI; run the full browser suite locally only for a specific
+unresolved risk and record that reason. Review overlapping UI changes once as an
+authorized batch at wide, medium, and narrow sizes including resize transitions.
+Never use an environment assertion to bypass receipt verification. Preserve local
+edits and use a clean worktree when the current checkout is dirty.
 
 ## Deployment-scripts deviation (HS2-51HMCC)
 
