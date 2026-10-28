@@ -1330,10 +1330,10 @@ pub(crate) struct LsFilters {
     /// Only tickets with a worker claim (a held lease).
     #[arg(long)]
     claimed: bool,
-    /// Only tickets that are blocked (a blocker isn't done yet).
+    /// Only tickets with a non-empty blocked reason (HS2-BSYW6F).
     #[arg(long, conflicts_with = "unblocked")]
     blocked: bool,
-    /// Only tickets that are unblocked (all blockers done / none).
+    /// Only tickets without a blocked reason; dependencies may still be open (HS2-BSYW6F).
     #[arg(long)]
     unblocked: bool,
     /// Only completed/verified tickets whose derived confidence is at least this (0-100).

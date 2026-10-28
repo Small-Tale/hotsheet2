@@ -144,8 +144,8 @@ pub struct TicketQuery {
     /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
     /// unclaimed. `None` doesn't constrain (HS2-89).
     pub claimed: Option<bool>,
-    /// `Some(true)` = only **blocked** tickets (some `blocked_by` isn't a done ticket);
-    /// `Some(false)` = only **unblocked**. `None` doesn't constrain (HS2-T84F9F, docs/03 §3.3).
+    /// `Some(true)` = a non-empty `blocked_reason`; `Some(false)` = no blocked reason.
+    /// Dependency eligibility is checked separately (HS2-BSYW6F, docs/03 §3.3).
     pub blocked: Option<bool>,
     /// Half-open `created_at` / `updated_at` range filters (ISO-8601 strings; inclusive
     /// lower, inclusive upper — lexical compare works on RFC3339). Custom-view dimensions.
@@ -251,7 +251,8 @@ impl StoreReadBound {
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
     let text = q.text.as_deref().map(str::to_lowercase);
-    // The done set, for the blocked/unblocked filter (a blocker not in it → still blocking).
+    // Keep the done set for is_blocked's compatibility signature; the filter itself
+    // uses only blocked_reason (HS2-BSYW6F).
     let done: HashSet<Ulid> = tickets
         .iter()
         .filter(|t| is_done(t))

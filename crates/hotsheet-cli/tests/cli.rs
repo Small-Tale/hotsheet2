@@ -6315,6 +6315,63 @@ fn blocked_by_set_clear_and_reject() {
 }
 
 #[test]
+fn hs2_bsyw6f_blocked_filters_use_reason_not_dependency_completion() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let dependency = new_ticket(p, "open dependency");
+    let dependent = new_ticket(p, "dependent ticket");
+    hs(p)
+        .args(["edit", &dependent, "--blocked-by", &dependency])
+        .assert()
+        .success();
+
+    // An open dependency alone does not place a ticket in the blocked display filter.
+    // Dispatcher reservation checks dependencies separately (coordination_dispatcher.rs).
+    hs(p)
+        .args(["ls", "--unblocked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dependent.clone()));
+    hs(p)
+        .args(["ls", "--blocked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dependent.clone()).not());
+
+    hs(p)
+        .args(["edit", &dependent, "--blocked-reason", "Waiting for review"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["ls", "--blocked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dependent.clone()));
+    hs(p)
+        .args(["ls", "--unblocked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dependent.clone()).not());
+
+    hs(p)
+        .args(["edit", &dependent, "--clear-blocked-reason"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["ls", "--unblocked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(dependent));
+
+    hs(p)
+        .args(["ls", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dependencies may still be open"));
+}
+
+#[test]
 fn blocked_reason_set_clear_and_omission() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
