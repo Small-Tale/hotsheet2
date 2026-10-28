@@ -6,6 +6,7 @@ use crate::dto::{
 };
 use crate::multistore::StoreEntry;
 use crate::routes::checkout_tickets::resolve_project_ticket_ref;
+use crate::routes::checkouts::TRUNCATED_HEADER;
 use crate::routes::providers::{
     ProviderTransferBody, hosted_provider_registry, provider_for, provider_read_get,
     provider_read_query, provider_transfer_error,
@@ -15,7 +16,8 @@ use crate::routes::tickets::api_ticket;
 use crate::{AppState, initial_status, now, opt_parse};
 use axum::Json;
 use axum::extract::{Multipart, Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use hotsheet_model::{CloseReason, NoteKind, ReviewRequest, Status, Ticket, Ulid};
 use hotsheet_ticketing::{
     ApiTicket, MutationContext, NewTicket, NotWorkingReport, ProviderDraft, ProviderEvidence,
@@ -27,18 +29,47 @@ use std::time::{Duration, Instant};
 /// Full provider tickets by default (the web client's shape). An explicit `compact=true`
 /// returns the shared compact row and `fields` keeps only the named keys, so a queue
 /// discovery read through a qualified connection is as lean as a store list (HS2-DXD7DZ).
+/// The array follows the store lists' bounded-response contract (HS2-6YXGKH): an implicit
+/// read that would exceed `STORE_READ_MAX_ROWS` fails with 400, and an explicit `limit`
+/// truncates with `x-hotsheet-truncated: true`. Larger reads page through the checkout
+/// route with `page_size`.
 pub(crate) async fn list_provider_tickets(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+) -> Result<Response, ApiError> {
     let compact = params.compact == Some(true);
     let fields = parse_fields(&params.fields);
-    let query = params.into_query(state.store.root())?;
-    let tickets = provider_read_query(&state, &connection_id, &query)?;
-    Ok(Json(hotsheet_ticketing::wire::provider_list_rows(
+    let mut query = params.into_query(state.store.root())?;
+    let bound = ops::StoreReadBound::new(query.limit).map_err(provider_bound_error)?;
+    query.limit = Some(bound.fetch_limit());
+    let mut tickets = provider_read_query(&state, &connection_id, &query)?;
+    let truncated = bound.finish(&mut tickets).map_err(provider_bound_error)?;
+    let mut response = Json(hotsheet_ticketing::wire::provider_list_rows(
         &tickets, compact, &fields,
-    )))
+    ))
+    .into_response();
+    if truncated {
+        response
+            .headers_mut()
+            .insert(TRUNCATED_HEADER, HeaderValue::from_static("true"));
+    }
+    Ok(response)
+}
+
+/// The store bound's refusals name `page_after`, which provider lists do not support;
+/// larger provider reads page through the checkout route instead (HS2-6YXGKH).
+fn provider_bound_error(error: ops::StoreReadBoundError) -> ApiError {
+    let max = ops::STORE_READ_MAX_ROWS;
+    let message = match error {
+        ops::StoreReadBoundError::LimitTooLarge => format!(
+            "limit must be at most {max}; page larger reads with GET /checkouts/{{checkout}}/tickets and page_size"
+        ),
+        ops::StoreReadBoundError::TooManyRows => format!(
+            "more than {max} tickets match; pass limit (at most {max}) or page with GET /checkouts/{{checkout}}/tickets and page_size"
+        ),
+    };
+    ApiError::new(StatusCode::BAD_REQUEST, message)
 }
 
 pub(crate) async fn get_provider_ticket(
