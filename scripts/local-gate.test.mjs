@@ -135,3 +135,20 @@ test('HS2-RS0FFT bounded browser selection includes affected terminal and timeli
   const shared = browserStages(['clients/web/src/state.ts'], false);
   assert.ok(shared.some((stage) => stage.command.includes('providers.spec.ts')));
 });
+
+test('HS2-RS0FFT identifies a changed parent in a browser file larger than the default subprocess buffer', (t) => {
+  const f = fixture(t);
+  const path = 'clients/web/tests/providers.spec.ts';
+  const content =
+    '// synthetic padding\n'.repeat(60000) + "test('large fixture parent', async () => {\n  const value = 1;\n});\n";
+  f.put(path, content);
+  f.git('add', path);
+  f.git('commit', '--quiet', '-m', 'large synthetic fixture');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put(path, content.replace('const value = 1', 'const value = 2'));
+  f.git('commit', '--quiet', '-am', 'changed test body');
+  const result = prepare(f.repo, undefined, false, f.options.versions);
+  assert.ok(
+    result.checks.some((stage) => stage.command.includes('--grep') && stage.command.includes('large fixture parent')),
+  );
+});

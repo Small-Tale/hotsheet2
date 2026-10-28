@@ -10,8 +10,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 const git = (repo, args) => {
-  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(`Git evidence unavailable: ${args[0]}`);
+  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (result.status !== 0)
+    throw new Error(`Git evidence unavailable: ${args[0]} (${result.error?.code ?? result.status})`);
   return result.stdout.trim();
 };
 const read = (path) => {
