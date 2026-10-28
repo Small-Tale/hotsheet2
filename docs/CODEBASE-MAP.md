@@ -904,9 +904,12 @@ from its launch checkout/source.
 
 Local continuous worker coordination (HS2-76VMYG) lives in
 `crates/hotsheet-cli/src/coordination/`: `contract.rs` owns the provider-qualified
-session/assignment schema and typed code/findings evidence (HS2-A1F615), `mod.rs`
-the atomic local state transitions and immediate version-one/two migration to schema three
+session/assignment schema and typed code/findings evidence (HS2-A1F615), plus
+optional assignment transition history (HS2-4273QB). `mod.rs` owns the atomic
+local state transitions, stamps their role/id and RFC 3339 time, and performs immediate version-one/two migration to schema three
 on any `Coordinator::open` (all pool members switch artifacts before a live open),
+while `scripts/throughput-baseline.mjs` prefers durable events over legacy ticket-note
+timing proxies.
 `review_return.rs` preserves rejected code/findings handoffs and enables structured
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),

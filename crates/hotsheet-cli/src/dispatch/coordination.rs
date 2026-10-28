@@ -393,6 +393,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     return_route,
                     recovery_note: None,
                     scope,
+                    transitions: Vec::new(),
                 },
                 check,
             )?;

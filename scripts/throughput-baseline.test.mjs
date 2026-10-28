@@ -104,6 +104,54 @@ test('HS2-34PWSK exact source, required push and first completed green produce v
   assert.equal(t.cohort, 'unknown');
 });
 
+test('HS2-4273QB durable assignment transitions replace missing note proxies and expose review time', () => {
+  const transitions = [
+    { kind: 'offered', at: iso(0), actor: { role: 'dispatcher', id: 'd' } },
+    { kind: 'accepted', at: iso(2), actor: { role: 'worker', id: 'w1' } },
+    { kind: 'handoff', at: iso(18), actor: { role: 'worker', id: 'w1' } },
+    { kind: 'integrating', at: iso(20), actor: { role: 'integrator', id: 'i' } },
+    { kind: 'ci', at: iso(30), actor: { role: 'integrator', id: 'i' } },
+    { kind: 'integrating', at: iso(31), actor: { role: 'integrator', id: 'i' } },
+    { kind: 'ci', at: iso(32), actor: { role: 'integrator', id: 'i' } },
+    { kind: 'done', at: iso(50), actor: { role: 'integrator', id: 'i' } },
+  ];
+  const t = assignmentTimeline(
+    args({ assignment: { ...assignment, transitions }, ticket: { ...ticket(), notes: [], claims: [] } }),
+  );
+  assert.equal(t.assignedAt, at(0));
+  assert.equal(t.acceptedAt, at(2));
+  assert.equal(t.claimAt, undefined, 'assignment acceptance is not proof of the ticket claim');
+  assert.equal(t.handoffAt, at(18));
+  assert.equal(t.integratingAt, at(20));
+  assert.equal(t.ciStartAt, at(30));
+  assert.equal(t.doneAt, at(50));
+  assert.equal(t.integratedSha, source);
+  assert.equal(t.verifiedAt, at(50));
+
+  const returned = assignmentTimeline(
+    args({
+      assignment: {
+        ...assignment,
+        phase: 'blocked',
+        transitions: [...transitions.slice(0, 3), { kind: 'review_return', at: iso(21) }],
+      },
+      ticket: { ...ticket(), notes: [], claims: [] },
+    }),
+  );
+  assert.equal(returned.reviewReturnAt, at(21));
+  assert.equal(returned.integratedAt, undefined);
+  assert.equal(returned.completedAt, undefined);
+
+  const outside = assignmentTimeline(
+    args({
+      assignment: { ...assignment, transitions: [{ kind: 'offered', at: iso(-1) }] },
+      ticket: ticket(),
+    }),
+  );
+  assert.equal(outside.assignedAt, at(-1));
+  assert.equal(outside.handoffAt, undefined);
+});
+
 test('HS2-34PWSK same-slug subjects and unproven cherry-picks never establish source integration', () => {
   const unrelated = { sha: other, subject: 'HS2-SYN001 same slug', at: at(30) };
   assert.equal(assignmentTimeline(args({ mainCommits: [unrelated] })).integratedSha, undefined);

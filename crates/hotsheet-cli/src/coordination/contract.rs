@@ -99,6 +99,52 @@ pub enum Phase {
     Blocked,
 }
 
+/// Immutable assignment timeline. Older records have no entries and remain readable
+/// (HS2-4273QB). A review return has its own event because it is a distinct blocked path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransitionKind {
+    Offered,
+    Accepted,
+    Handoff,
+    Verifying,
+    Integrating,
+    Ci,
+    Done,
+    Blocked,
+    ReviewReturn,
+}
+
+impl From<Phase> for TransitionKind {
+    fn from(phase: Phase) -> Self {
+        match phase {
+            Phase::Offered => Self::Offered,
+            Phase::Accepted => Self::Accepted,
+            Phase::Handoff => Self::Handoff,
+            Phase::Verifying => Self::Verifying,
+            Phase::Integrating => Self::Integrating,
+            Phase::Ci => Self::Ci,
+            Phase::Done => Self::Done,
+            Phase::Blocked => Self::Blocked,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransitionActor {
+    pub role: Role,
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentTransition {
+    pub kind: TransitionKind,
+    /// RFC 3339 instant from the mutation boundary, never reconstructed from ticket prose.
+    pub at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<TransitionActor>,
+}
+
 /// Durable handoff proof. A findings note is scoped by its assignment's qualified
 /// ticket and is checked again before the integrator completes it (HS2-A1F615).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,9 +186,29 @@ pub struct Assignment {
     /// declare one; empty for every legacy integrator assignment, so schema three is unchanged.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scope: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transitions: Vec<AssignmentTransition>,
 }
 
 impl Assignment {
+    pub fn record_transition(
+        &mut self,
+        kind: TransitionKind,
+        at: time::OffsetDateTime,
+        role: Role,
+        id: &str,
+    ) -> anyhow::Result<()> {
+        self.transitions.push(AssignmentTransition {
+            kind,
+            at: at.format(&time::format_description::well_known::Rfc3339)?,
+            actor: Some(TransitionActor {
+                role,
+                id: id.to_string(),
+            }),
+        });
+        Ok(())
+    }
+
     /// HS2-65ETRJ/HS2-AEBJYN: returned code and findings retain their original evidence.
     pub fn returned_for_review(&self) -> bool {
         self.phase == Phase::Blocked

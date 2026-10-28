@@ -41,7 +41,7 @@ fn keys(value: &serde_json::Value) -> BTreeSet<String> {
 }
 
 #[test]
-fn hs2_twzw7x_legacy_pool_stays_byte_compatible_schema_three() {
+fn hs2_4273qb_legacy_pool_keeps_schema_three_with_optional_history() {
     let (_root, c) = fixture();
     register(&c, Role::Integrator, "root", "root-1", NOW);
     worker(&c, "worker", NOW);
@@ -50,7 +50,8 @@ fn hs2_twzw7x_legacy_pool_stays_byte_compatible_schema_three() {
     let raw: serde_json::Value =
         serde_json::from_slice(&fs::read(c.directory.join("state.json")).unwrap()).unwrap();
     assert_eq!(raw["version"], 3);
-    // Exactly the schema-three field sets the frozen artifact writes and reads.
+    // HS2-4273QB adds only optional history inside an assignment; the pool schema
+    // and top-level field set stay compatible with legacy readers.
     assert_eq!(
         keys(&raw),
         [
@@ -79,7 +80,8 @@ fn hs2_twzw7x_legacy_pool_stays_byte_compatible_schema_three() {
             "commit",
             "handoff",
             "return_route",
-            "recovery_note"
+            "recovery_note",
+            "transitions"
         ]
         .map(String::from)
         .into()

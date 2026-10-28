@@ -57,6 +57,9 @@ fn hs2_65etrj_return_replays_after_restart_and_refill_without_losing_handoff() {
     let mut returned = before.clone();
     returned.phase = Phase::Blocked;
     returned.recovery_note = Some(note.clone());
+    returned
+        .record_transition(TransitionKind::ReviewReturn, at(), Role::Integrator, "i")
+        .unwrap();
     assert_eq!(reopened.state().unwrap().version, 3);
     assert_eq!(reopened.state().unwrap().assignments["original"], returned);
     let mut correction = before;
@@ -64,6 +67,7 @@ fn hs2_65etrj_return_replays_after_restart_and_refill_without_losing_handoff() {
     correction.phase = Phase::Offered;
     correction.commit = None;
     correction.handoff = None;
+    correction.transitions.clear();
     reopened
         .assign("i", "generation-1", NOW, correction.clone())
         .unwrap();

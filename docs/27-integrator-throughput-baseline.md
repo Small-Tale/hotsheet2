@@ -61,10 +61,21 @@ Git ancestry booleans; ticket titles, note prose, paths, credentials and custome
   remain unknown without recorded cohort evidence. A title heuristic is not a measured cohort.
   Human interventions, active review time and cost are unavailable. No provider effect is claimed.
 
-HS2-4273QB owns actual coordination transition timestamps. It does not substitute for exact
+HS2-4273QB adds actual coordination transition timestamps. They do not substitute for exact
 joins here. Phase-report's current completion timestamp and current assignment/ticket states
 cannot reconstruct every historical reopen or state transition; this conservative metric is a
 lower bound on matched evidence, not a claim that unmatched work never shipped.
+
+## Transition evidence for new assignments (HS2-4273QB)
+
+`coordination status` now retains an ordered per-assignment transition history with RFC 3339
+instants and the known role/id. The collector carries this identifier-only history into its
+frozen snapshot. New observations prefer Offered and Handoff events over note-time proxies,
+report Accepted separately from the ticket's actual claim history, and use the Review return
+event when present. They also report Verifying, Integrating, CI, Done and Blocked times
+when present. Legacy assignments without history still use the bounded proxies above. A CI
+transition records entry to that phase; it is not proof of a remote push or a green run. The
+2026-10-27 observation below remains frozen and is not recalculated from later state.
 
 ## Recomputed observation
 

@@ -100,7 +100,7 @@ export function requiredRun(run) {
   );
 }
 
-/** Bounded assignment-note proxies; absent or ambiguous evidence remains unknown. */
+/** Durable transition evidence first; bounded ticket-note proxies for legacy assignments. */
 export function assignmentTimeline({
   assignment,
   ticket,
@@ -111,8 +111,17 @@ export function assignmentTimeline({
   windowStart = -Infinity,
   windowEnd = Infinity,
 }) {
+  const transitionAt = (kind, after = -Infinity) =>
+    assignment.transitions
+      ?.filter((entry) => entry.kind === kind)
+      .map((entry) => Date.parse(entry.at))
+      .find((at) => finite(at) && at >= after);
+  const boundedTransitionAt = (kind, after) => {
+    const at = transitionAt(kind, after);
+    return at === undefined ? undefined : within(at) ? at : undefined;
+  };
   const addressed = ticket.notes.filter((n) => n.kind === 'assignment' && n.operations.includes(assignment.id));
-  const assignedAt = addressed.length === 1 ? addressed[0].at : undefined;
+  const assignedAt = transitionAt('offered') ?? (addressed.length === 1 ? addressed[0].at : undefined);
   const next = ticket.notes.find((n) => n.kind === 'assignment' && n.at > assignedAt)?.at ?? Infinity;
   const within = (at) => finite(at) && at >= assignedAt && at < next && at >= windowStart && at <= windowEnd;
   const unknown = {
@@ -132,6 +141,7 @@ export function assignmentTimeline({
   };
   if (!within(assignedAt)) return unknown;
   const claim = ticket.claims.find((c) => within(c.at) && c.kind === 'claim' && c.worker === assignment.worker);
+  const acceptedAt = boundedTransitionAt('accepted', assignedAt);
   const kind = assignment.handoff?.kind ?? (assignment.commit ? 'code' : undefined);
   const source =
     assignment.handoff?.kind === 'code' && assignment.handoff.commit === assignment.commit
@@ -145,17 +155,21 @@ export function assignmentTimeline({
         ? n.kind === 'findings' && n.id === assignment.handoff.note_id
         : kind === 'code' && n.kind === 'code' && n.commits.includes(source)),
   );
-  const handoff = matches.length === 1 ? matches[0] : undefined;
+  const recordedHandoffAt = transitionAt('handoff', acceptedAt ?? claim?.at ?? assignedAt);
+  const handoffAt = recordedHandoffAt === undefined ? undefined : within(recordedHandoffAt) ? recordedHandoffAt : undefined;
+  const handoff = handoffAt !== undefined ? { at: handoffAt } : matches.length === 1 ? matches[0] : undefined;
   const returned = ticket.notes.find(
     (n) => within(n.at) && n.at >= handoff?.at && n.kind === 'return' && n.operations.includes(assignment.id),
   );
+  const recordedReturnAt = transitionAt('review_return', handoff?.at);
+  const reviewReturnAt = recordedReturnAt === undefined ? returned?.at : within(recordedReturnAt) ? recordedReturnAt : undefined;
   const release = ticket.claims.find(
     (c) => within(c.at) && c.at >= handoff?.at && c.kind === 'release' && c.worker === assignment.worker,
   );
   // Git identity or an independently computed unique stable patch-id mapping; never subject matching.
   const candidates = source ? mainCommits.filter((c) => c.sha === source || c.verifiedSource === source) : [];
   const integrated =
-    !returned && assignment.phase !== 'blocked' && kind === 'code' && handoff && candidates.length === 1
+    !finite(reviewReturnAt) && assignment.phase !== 'blocked' && kind === 'code' && handoff && candidates.length === 1
       ? candidates[0]
       : undefined;
   const containing = integrated
@@ -178,7 +192,7 @@ export function assignmentTimeline({
     )
     .sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))[0];
   const completed =
-    !returned &&
+    !finite(reviewReturnAt) &&
     assignment.phase === 'done' &&
     ticket.status === 'completed' &&
     handoff &&
@@ -191,9 +205,15 @@ export function assignmentTimeline({
     kind,
     sourceCommit: source,
     claimAt: claim?.at,
+    acceptedAt,
     handoffAt: handoff?.at,
     releaseAt: release?.at,
-    reviewReturnAt: returned?.at,
+    reviewReturnAt,
+    verifyingAt: boundedTransitionAt('verifying', handoff?.at),
+    integratingAt: boundedTransitionAt('integrating', handoff?.at),
+    ciStartAt: boundedTransitionAt('ci', handoff?.at),
+    doneAt: boundedTransitionAt('done', handoff?.at),
+    blockedAt: boundedTransitionAt('blocked', assignedAt),
     integratedSha: integrated?.sha,
     integrationEvidence: integrated
       ? integrated.sha === source
@@ -413,6 +433,7 @@ function main(argv) {
         phase: a.phase,
         commit: a.commit,
         handoff: a.handoff,
+        transitions: a.transitions,
       })),
       tickets,
       completed,

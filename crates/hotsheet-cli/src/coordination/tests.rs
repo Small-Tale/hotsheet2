@@ -45,7 +45,91 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         return_route: ReturnRoute::HumanRelay,
         recovery_note: None,
         scope: Vec::new(),
+        transitions: Vec::new(),
     }
+}
+
+#[test]
+fn hs2_4273qb_assignment_history_survives_replay_restart_and_reversed_transitions() {
+    let (root, c) = fixture();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    register(&c, Role::Integrator, "i", "generation-1", now);
+    register(&c, Role::Worker, "a", "generation-1", now);
+    let input = assignment("operation", "a", "synthetic");
+    let offered = c.assign("i", "generation-1", now, input.clone()).unwrap();
+    assert_eq!(offered.transitions[0].kind, TransitionKind::Offered);
+    assert_eq!(
+        offered.transitions[0].actor.as_ref().unwrap().role,
+        Role::Integrator
+    );
+    assert_eq!(offered.transitions[0].actor.as_ref().unwrap().id, "i");
+    assert_eq!(c.assign("i", "generation-1", now, input).unwrap(), offered);
+
+    c.worker_transition("a", "generation-1", "operation", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition("a", "generation-1", "operation", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition(
+        "a",
+        "generation-1",
+        "operation",
+        Phase::Handoff,
+        Some(SHA.into()),
+    )
+    .unwrap();
+    c.mark(
+        "i",
+        "generation-1",
+        now + 1,
+        "operation",
+        Phase::Integrating,
+    )
+    .unwrap();
+    c.mark("i", "generation-1", now + 2, "operation", Phase::Ci)
+        .unwrap();
+    c.mark(
+        "i",
+        "generation-1",
+        now + 3,
+        "operation",
+        Phase::Integrating,
+    )
+    .unwrap();
+    c.mark("i", "generation-1", now + 4, "operation", Phase::Ci)
+        .unwrap();
+    c.mark("i", "generation-1", now + 4, "operation", Phase::Ci)
+        .unwrap();
+    c.mark("i", "generation-1", now + 5, "operation", Phase::Done)
+        .unwrap();
+
+    let reopened = Coordinator::open(&root.path().join("project"), &c.source).unwrap();
+    let history = &reopened.snapshot(now + 5).unwrap().state.assignments["operation"].transitions;
+    assert_eq!(
+        history.iter().map(|event| event.kind).collect::<Vec<_>>(),
+        [
+            TransitionKind::Offered,
+            TransitionKind::Accepted,
+            TransitionKind::Handoff,
+            TransitionKind::Integrating,
+            TransitionKind::Ci,
+            TransitionKind::Integrating,
+            TransitionKind::Ci,
+            TransitionKind::Done,
+        ]
+    );
+    for event in history {
+        time::OffsetDateTime::parse(&event.at, &time::format_description::well_known::Rfc3339)
+            .unwrap();
+        assert!(!event.actor.as_ref().unwrap().id.is_empty());
+    }
+    assert_eq!(history[1].actor.as_ref().unwrap().role, Role::Worker);
+    assert_eq!(history[3].actor.as_ref().unwrap().role, Role::Integrator);
+
+    let mut legacy =
+        serde_json::to_value(&reopened.state().unwrap().assignments["operation"]).unwrap();
+    legacy.as_object_mut().unwrap().remove("transitions");
+    let legacy: Assignment = serde_json::from_value(legacy).unwrap();
+    assert!(legacy.transitions.is_empty());
 }
 
 #[test]
@@ -93,8 +177,12 @@ fn hs2_76vmyg_duplicate_assignment_and_old_session_cannot_take_other_work() {
         register(&c, Role::Worker, worker, "generation-1", NOW);
     }
     let a = assignment("operation-1", "a", "opaque/native-id");
-    c.assign("i", "generation-1", NOW, a.clone()).unwrap();
-    assert_eq!(c.assign("i", "generation-1", NOW, a.clone()).unwrap(), a);
+    let offered = c.assign("i", "generation-1", NOW, a.clone()).unwrap();
+    assert_eq!(
+        c.assign("i", "generation-1", NOW, a.clone()).unwrap(),
+        offered
+    );
+    assert_eq!(offered.transitions.len(), 1);
     assert!(
         c.assign(
             "i",
@@ -191,6 +279,22 @@ fn hs2_76vmyg_worker_refills_while_handoff_or_ci_waits_for_integrator() {
         .unwrap();
     c.worker_transition("a", "generation-1", "two", Phase::Blocked, None)
         .unwrap();
+    let blocked = c.state().unwrap().assignments["two"].clone();
+    assert_eq!(
+        blocked.transitions.last().unwrap().kind,
+        TransitionKind::Blocked
+    );
+    assert_eq!(
+        blocked
+            .transitions
+            .last()
+            .unwrap()
+            .actor
+            .as_ref()
+            .unwrap()
+            .role,
+        Role::Worker
+    );
     assert!(c.state().unwrap().active_assignment("a").is_none());
     c.finish("i2", "generation-2", NOW, "blocked").unwrap();
     assert_eq!(c.state().unwrap().stopped.as_deref(), Some("blocked"));
@@ -430,6 +534,22 @@ fn hs2_76vmyg_explicit_recovery_and_serial_integration_preserve_old_artifacts() 
     register(&c, Role::Integrator, "i", "generation-1", NOW + 200);
     c.recover("i", "generation-1", NOW + 200, "one", &evidence)
         .unwrap();
+    let recovered = c.state().unwrap().assignments["one"].clone();
+    assert_eq!(
+        recovered.transitions.last().unwrap().kind,
+        TransitionKind::Blocked
+    );
+    assert_eq!(
+        recovered
+            .transitions
+            .last()
+            .unwrap()
+            .actor
+            .as_ref()
+            .unwrap()
+            .role,
+        Role::Integrator
+    );
     assert_eq!(
         c.state().unwrap().assignments["one"]
             .recovery_note

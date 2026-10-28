@@ -174,6 +174,26 @@ fn hs2_76vmyg_worker_first_handoff_survives_absence_then_refills_from_new_main()
         refill.state.assignments["operation-one"].phase,
         hotsheet_cli::coordination::Phase::Ci
     );
+    let transitions = &refill.state.assignments["operation-one"].transitions;
+    assert_eq!(
+        transitions
+            .iter()
+            .map(|event| event.kind)
+            .collect::<Vec<_>>(),
+        [
+            hotsheet_cli::coordination::TransitionKind::Offered,
+            hotsheet_cli::coordination::TransitionKind::Accepted,
+            hotsheet_cli::coordination::TransitionKind::Handoff,
+            hotsheet_cli::coordination::TransitionKind::Integrating,
+            hotsheet_cli::coordination::TransitionKind::Ci,
+        ]
+    );
+    assert_eq!(transitions[0].actor.as_ref().unwrap().id, "integrator");
+    assert_eq!(transitions[1].actor.as_ref().unwrap().id, "worker");
+    assert!(transitions.iter().all(|event| {
+        time::OffsetDateTime::parse(&event.at, &time::format_description::well_known::Rfc3339)
+            .is_ok()
+    }));
     assert_eq!(
         fs::read_to_string(f.project.join("synthetic.txt")).unwrap(),
         "verified synthetic change\n"

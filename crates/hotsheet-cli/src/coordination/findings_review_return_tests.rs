@@ -90,6 +90,7 @@ fn hs2_aebjyn_findings_return_survives_restart_replay_and_correction_completion(
         correction.phase = Phase::Offered;
         correction.handoff = None;
         correction.recovery_note = None;
+        correction.transitions.clear();
         c.assign("i", "generation-1", NOW, correction).unwrap();
         ops::claim(
             &store,

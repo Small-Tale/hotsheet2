@@ -84,6 +84,7 @@ impl Coordinator {
                 );
                 a.phase = Phase::Blocked;
                 a.recovery_note = Some(evidence_note.into());
+                a.record_transition(TransitionKind::ReviewReturn, now, Role::Integrator, integrator)?;
                 Ok(())
             })
         })

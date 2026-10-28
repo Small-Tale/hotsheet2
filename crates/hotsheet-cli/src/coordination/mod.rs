@@ -31,8 +31,8 @@ use sha2::{Digest, Sha256};
 
 pub use authority::{CAPABILITIES, Capabilities};
 pub use contract::{
-    Assignment, Authority, HandoffEvidence, IntegrationReport, Phase, ReturnRoute, Role, Session,
-    Snapshot, State, WaitRequest,
+    Assignment, AssignmentTransition, Authority, HandoffEvidence, IntegrationReport, Phase,
+    ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind, WaitRequest,
 };
 
 pub struct Coordinator {
@@ -309,7 +309,8 @@ impl Coordinator {
             !assignment.id.is_empty()
                 && assignment.phase == Phase::Offered
                 && assignment.commit.is_none()
-                && assignment.handoff.is_none(),
+                && assignment.handoff.is_none()
+                && assignment.transitions.is_empty(),
             "new assignment must be an offered operation id"
         );
         ensure!(
@@ -368,10 +369,20 @@ impl Coordinator {
                             && !a.returned_for_review()),
                     "ticket already assigned or awaiting integration/CI"
                 );
+                let mut offered = assignment.clone();
+                offered.record_transition(
+                    TransitionKind::Offered,
+                    time::OffsetDateTime::now_utc(),
+                    match state.authority {
+                        Authority::Integrator => Role::Integrator,
+                        Authority::Dispatcher => Role::Dispatcher,
+                    },
+                    authority,
+                )?;
                 state
                     .assignments
-                    .insert(assignment.id.clone(), assignment.clone());
-                Ok(assignment)
+                    .insert(offered.id.clone(), offered.clone());
+                Ok(offered)
             })
         };
         if self
@@ -467,6 +478,12 @@ impl Coordinator {
             };
             a.phase = phase;
             a.handoff = handoff;
+            a.record_transition(
+                phase.into(),
+                time::OffsetDateTime::now_utc(),
+                Role::Worker,
+                worker,
+            )?;
             Ok(())
         })
     }
@@ -531,7 +548,15 @@ impl Coordinator {
                     ),
                 "invalid integrator transition"
             );
-            a.phase = phase;
+            if a.phase != phase {
+                a.phase = phase;
+                a.record_transition(
+                    phase.into(),
+                    time::OffsetDateTime::now_utc(),
+                    Role::Integrator,
+                    integrator,
+                )?;
+            }
             Ok(())
         })
     }
@@ -620,6 +645,12 @@ impl Coordinator {
                 .expect("assignment checked above");
             a.phase = Phase::Blocked;
             a.recovery_note = Some(evidence_note.into());
+            a.record_transition(
+                TransitionKind::Blocked,
+                time::OffsetDateTime::now_utc(),
+                Role::Integrator,
+                integrator,
+            )?;
             Ok(())
         })
     }

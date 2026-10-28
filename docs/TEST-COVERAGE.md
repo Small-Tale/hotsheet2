@@ -1495,3 +1495,10 @@ discard flow remains covered by its existing real-router test.
 - End to end: `tests/native-prompt-replacements.spec.ts` covers all three real application parents, real attachment/command storage, controlled values, failure/retry/later edits, cancellation/reopen, keyboard focus, and wide/medium/narrow/wide-return captures. AI launch delivery is intercepted at its existing API boundary so no real provider starts. Existing provider modifier-launch and kept-group tests retain their behavioral assertions using the in-app dialogs.
 - Linked-reader regression (HS2-QRP14P): `tests/ticket-reader-stack.spec.ts # HS2-W8VEMP` edits the inline filename and finishes on blur while retaining owning-project/provider-qualified routing, batch label/purpose, upload, rename payload/rendering, deletion, cleanup and zero source-project writes.
 - Manual: packaged Tauri smoke and real provider launch remain in the manual plan; browser tests do not claim native-host verification.
+
+### Coordination assignment transition history (HS2-4273QB)
+
+- Behavior: assignment status retains ordered Offered, Accepted, Handoff, Verifying, Integrating, CI, Done, Blocked, and Review return instants with known role/id. Legacy records without the optional history remain readable. The throughput baseline prefers durable events while retaining conservative legacy proxies.
+- Unit: `crates/hotsheet-cli/src/coordination/tests.rs # hs2_4273qb_assignment_history_survives_replay_restart_and_reversed_transitions`; `crates/hotsheet-cli/src/coordination/review_return_tests.rs # hs2_65etrj_return_replays_after_restart_and_refill_without_losing_handoff`; `scripts/throughput-baseline.test.mjs # HS2-4273QB`.
+- End to end: `crates/hotsheet-cli/tests/coordination.rs # hs2_76vmyg_worker_first_handoff_survives_absence_then_refills_from_new_main` asserts status history across separate CLI processes and a restarted integrator.
+- Manual: none; this is headless coordination state and offline baseline analysis.

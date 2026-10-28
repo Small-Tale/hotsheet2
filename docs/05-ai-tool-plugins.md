@@ -2096,6 +2096,13 @@ Use the same prefix, with `--project` before the subcommand:
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                                                                            | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                                                                         | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
+Each assignment in `coordination status` carries an ordered `transitions` history
+(HS2-4273QB). A successful Offered, Accepted, Handoff, Verifying, Integrating, CI,
+Done, Blocked, or Review return mutation records its RFC 3339 instant and the known
+role/id. Retries of the same transition do not append another event. Older assignments
+without this field remain readable and display an empty history; their timing remains
+unknown unless independent ticket evidence supplies it.
+
 `next` re-registers the session from its own `--route` and `--lease-seconds` flags; it
 does not inherit what an earlier `register` recorded. Omitted flags keep their CLI
 defaults (`human` relay and 120 seconds), so a bare `next` silently replaces a verified
