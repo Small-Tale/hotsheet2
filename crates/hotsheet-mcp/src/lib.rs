@@ -3323,6 +3323,26 @@ mod tests {
         assert!(call.contains("cursor") && call.contains("v2.abc"), "{call}");
     }
 
+    // HS2-Z1NY93: list reads need canonical ticket files, not the per-ticket
+    // writer's migration and atomic-update checks during synthetic setup.
+    fn seed_bounded_ticket_store(store: &FsStore) {
+        let now = hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z");
+        for index in 0..501 {
+            let id = hotsheet_model::Ulid::new();
+            let ticket = hotsheet_model::Ticket::new(
+                id,
+                hotsheet_model::derive_slug(&id, "BIG"),
+                format!("ticket {index:03}"),
+                "",
+                now.clone(),
+                now.clone(),
+            );
+            let path = store.ticket_path(&id);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, hotsheet_model::to_file_string(&ticket)).unwrap();
+        }
+    }
+
     /// HS2-CYXS0N: the serverless checkout query applies the server's 500-row bound and
     /// rejects cursor paging it cannot serve instead of silently returning everything.
     #[test]
@@ -3332,19 +3352,7 @@ mod tests {
         std::fs::create_dir(&checkout_root).unwrap();
         let store_root = root.path().join("BIG.hs2");
         let store = FsStore::init(&store_root, &StoreMetadata::new("BIG")).unwrap();
-        for index in 0..501 {
-            ops::create(
-                &store,
-                hotsheet_model::Ulid::new(),
-                "BIG",
-                hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
-                hotsheet_ticketing::NewTicket {
-                    title: format!("ticket {index:03}"),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        }
+        seed_bounded_ticket_store(&store);
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
             root.path().join("home/checkouts.json"),
         );
@@ -3568,19 +3576,7 @@ mod tests {
     fn corebackend_store_query_is_bounded_and_pages_with_page_after() {
         let root = tempfile::tempdir().unwrap();
         let store = FsStore::init(root.path(), &StoreMetadata::new("BIG")).unwrap();
-        for index in 0..501 {
-            ops::create(
-                &store,
-                hotsheet_model::Ulid::new(),
-                "BIG",
-                hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
-                hotsheet_ticketing::NewTicket {
-                    title: format!("ticket {index:03}"),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        }
+        seed_bounded_ticket_store(&store);
         let backend = CoreBackend::new(store);
         let get = |pairs: &[(&str, &str)]| {
             let pairs = pairs

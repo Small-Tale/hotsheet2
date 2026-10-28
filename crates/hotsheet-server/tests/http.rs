@@ -22570,6 +22570,30 @@ async fn provider_continuations_survive_rows_shifting_before_the_cursor() {
     }
 }
 
+// HS2-Z1NY93: list reads need canonical ticket files, not the per-ticket
+// writer's migration and atomic-update checks during synthetic setup.
+fn seed_bounded_ticket_store(store: &FsStore) {
+    let now = hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z");
+    for index in 0..501 {
+        let id = hotsheet_model::Ulid::new();
+        let ticket = hotsheet_model::Ticket::new(
+            id,
+            hotsheet_model::derive_slug(&id, "BIG"),
+            if index == 7 {
+                "needle ticket".to_owned()
+            } else {
+                format!("bulk ticket {index:03}")
+            },
+            "task",
+            now.clone(),
+            now.clone(),
+        );
+        let path = store.ticket_path(&id);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, hotsheet_model::to_file_string(&ticket)).unwrap();
+    }
+}
+
 /// HS2-CYXS0N: the unpaged checkout array is bounded. An implicit read that would exceed
 /// 500 rows fails explicitly, an explicit `limit` truncates with `x-hotsheet-truncated`,
 /// and whole-checkout callers page with `page_size` + `cursor` instead.
@@ -22581,24 +22605,7 @@ async fn unpaged_checkout_arrays_are_bounded_and_flag_truncation() {
     let ticket_store = workspace.path().join("big.hs2");
     std::fs::create_dir(&checkout).unwrap();
     let store = FsStore::init(&ticket_store, &StoreMetadata::new("BIG")).unwrap();
-    for index in 0..501 {
-        hotsheet_ticketing::ops::create(
-            &store,
-            hotsheet_model::Ulid::new(),
-            "BIG",
-            hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
-            hotsheet_ticketing::NewTicket {
-                title: if index == 7 {
-                    "needle ticket".into()
-                } else {
-                    format!("bulk ticket {index:03}")
-                },
-                category: "task".into(),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    }
+    seed_bounded_ticket_store(&store);
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = checkout_call(
@@ -22789,24 +22796,7 @@ async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
 async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("BIG")).unwrap();
-    for index in 0..501 {
-        hotsheet_ticketing::ops::create(
-            &store,
-            hotsheet_model::Ulid::new(),
-            "BIG",
-            hotsheet_model::Timestamp::new("2026-09-25T00:00:00Z"),
-            hotsheet_ticketing::NewTicket {
-                title: if index == 7 {
-                    "needle ticket".into()
-                } else {
-                    format!("bulk ticket {index:03}")
-                },
-                category: "task".into(),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    }
+    seed_bounded_ticket_store(&store);
     let store_id = hotsheet_ticketing::git_connection_id(&store);
     let router = app(AppState::new(store, SECRET.into()).unwrap());
     let get = |uri: String| {
