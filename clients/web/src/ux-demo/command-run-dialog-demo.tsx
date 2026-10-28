@@ -14,8 +14,11 @@ import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
-/** The two public presentations of CommandRunDialog: run output, or the `confirmStop` confirmation. */
-export type CommandRunDialogPresentation = 'output' | 'stop';
+/**
+ * The public presentations of CommandRunDialog: run output, the `confirmStop` confirmation, or a shell or
+ * AI command's launch history (HS2-PWNPM2).
+ */
+export type CommandRunDialogPresentation = 'output' | 'stop' | 'launches';
 
 const COMMAND_RUN_DIALOG_DEMO_SELECTOR =
   '[data-dialog-component="command-run-dialog"], [data-dialog-component="command-cancellation-dialog"]';
@@ -57,6 +60,25 @@ const runningRun: CommandRun = {
   ],
 };
 
+const aiCommand: CommandDefinition = {
+  id: 'everything',
+  title: 'Everything',
+  kind: 'ai',
+  prompt: 'Check requirements, hygiene, and code quality in turn.',
+};
+const aiLaunch = (id: string, slug: string, startedAt: string): CommandRun => ({
+  id,
+  command_id: 'everything',
+  state: 'completed',
+  output: [],
+  started_at: startedAt,
+  launch: { kind: 'ai', ticket_slug: slug, tool: 'claude' },
+});
+const aiLaunches = [
+  aiLaunch('launch-2', 'HS2-4Q2ZVB', '2026-10-21T16:20:00Z'),
+  aiLaunch('launch-1', 'HS2-NK3WAM', '2026-10-14T09:05:00Z'),
+];
+
 /**
  * CommandRunDialog renders an open `wa-dialog` whenever it is mounted, the same way the app shows it
  * while a command dialog is selected; the demo mounts it on selection, presentation swap, or Open
@@ -86,7 +108,11 @@ export function dismissCommandRunDialogDemo(): void {
   if (!commandRunDialogSettings.open.value) return;
   closeCommandRunDialogDemo();
   commandRunDialogSettings.event.value =
-    commandRunDialogSettings.presentation.value === 'stop' ? 'Kept Run checks running' : 'Closed Run checks output';
+    commandRunDialogSettings.presentation.value === 'stop'
+      ? 'Kept Run checks running'
+      : commandRunDialogSettings.presentation.value === 'launches'
+        ? 'Closed Everything launch history'
+        : 'Closed Run checks output';
 }
 
 export function confirmStopCommandRunDemo(runId: string | undefined): void {
@@ -99,9 +125,16 @@ export function CommandRunDialogDemo() {
   return (
     <>
       <CatalogExample align="glyph" label="Interactive" rootAttributes={{ 'data-command-run-dialog-demo': '' }}>
-        {commandRunDialogSettings.open.value && (
-          <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
-        )}
+        {commandRunDialogSettings.open.value &&
+          (commandRunDialogSettings.presentation.value === 'launches' ? (
+            <CommandRunDialog
+              command={aiCommand}
+              launches={aiLaunches}
+              launchTickets={{ 'HS2-4Q2ZVB': { title: 'Everything', status: 'started' } }}
+            />
+          ) : (
+            <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
+          ))}
         <Button action={DEMO_ACTIONS.openCommandRunDialogDemo.value}>Open Dialog</Button>
       </CatalogExample>
       <DemoEvent>{commandRunDialogSettings.event.value}</DemoEvent>
@@ -119,6 +152,7 @@ export function CommandRunDialogSettings() {
         choices={[
           { value: 'output', label: 'Run Output' },
           { value: 'stop', label: 'Stop Confirmation' },
+          { value: 'launches', label: 'Launch History' },
         ]}
       />
       <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>

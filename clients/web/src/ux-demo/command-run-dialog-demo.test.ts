@@ -57,6 +57,17 @@ describe('CommandRunDialog demo (HS2-CWWX7S, HS2-Z7C27E)', () => {
     expect(commandRunDialogSettings.event.value).toBe('Stop requested for run-43');
   });
 
+  it('swaps to an AI command launch history and reports its dismissal (HS2-PWNPM2)', () => {
+    expect(String(CommandRunDialogSettings())).toContain('Launch History');
+    setCommandRunDialogPresentation('launches');
+    const markup = String(CommandRunDialogDemo());
+    expect(markup).toContain('aria-label="Recent launches"');
+    expect(markup).toContain('data-ticket-slug="HS2-4Q2ZVB"');
+    expect(markup).not.toContain('aria-label="Command output"');
+    dismissCommandRunDialogDemo();
+    expect(commandRunDialogSettings.event.value).toBe('Closed Everything launch history');
+  });
+
   it('ignores a repeated dismiss (a close request after a button close) instead of rewriting the event', () => {
     confirmStopCommandRunDemo('run-43');
     dismissCommandRunDialogDemo();

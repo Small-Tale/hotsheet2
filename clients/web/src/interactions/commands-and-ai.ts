@@ -40,6 +40,7 @@ import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
@@ -701,6 +702,18 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       commandDialogId.value = undefined;
       commandStopConfirmation.value = false;
     }),
+  );
+  // Opening a ticket an AI command queued closes its launch history so the ticket shows (HS2-PWNPM2);
+  // the shared linked-ticket handler opens it.
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      `[data-dialog-component="command-run-dialog"] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.selector}`,
+      () => {
+        commandDialogId.value = undefined;
+      },
+    ),
   );
   lifetime.add(
     delegateCapture(

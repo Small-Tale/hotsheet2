@@ -1,14 +1,18 @@
 //! Bounded in-memory command execution/history. Exact argv comes from typed settings;
 //! output is cursor-pollable while the process runs and cancellation kills the child.
+//! Shell and AI commands run in a client terminal or AI session instead, so the client records
+//! each launch here and the same history lists it (HS2-PWNPM2).
 
+use hotsheet_model::Timestamp;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::commands::{CommandDefinition, CommandKind};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
+use time::OffsetDateTime;
 
 const HISTORY_CAP: usize = 50;
 const OUTPUT_CAP: usize = 10_000;
@@ -21,6 +25,31 @@ pub struct OutputLine {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchKind {
+    Shell,
+    Ai,
+}
+
+/// Where a shell or AI command launch went: the terminal it opened, or the ticket it queued and
+/// the AI tool signaled to work it (HS2-PWNPM2).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CommandLaunch {
+    pub kind: LaunchKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_label: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CommandRun {
     pub id: String,
@@ -30,6 +59,9 @@ pub struct CommandRun {
     pub state: String,
     pub exit_code: Option<i32>,
     pub output: Vec<OutputLine>,
+    pub started_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub launch: Option<CommandLaunch>,
 }
 
 struct LiveRun {
@@ -243,27 +275,14 @@ impl CommandManager {
             state: "running".into(),
             exit_code: None,
             output: vec![],
+            started_at: Timestamp::from_datetime(OffsetDateTime::now_utc()),
+            launch: None,
         };
-        self.runs.lock_or_recover().insert(
-            id.clone(),
-            LiveRun {
-                view: view.clone(),
-                child: Some(handle.clone()),
-                next_seq: 0,
-            },
-        );
-        {
-            let mut order = self.order.lock_or_recover();
-            order.push_front(id.clone());
-            while order.len() > HISTORY_CAP {
-                if let Some(old) = order.pop_back() {
-                    self.runs.lock_or_recover().remove(&old);
-                }
-            }
-        }
-        if let Some(callback) = &self.on_change {
-            callback(view.clone());
-        }
+        self.remember(LiveRun {
+            view: view.clone(),
+            child: Some(handle.clone()),
+            next_seq: 0,
+        });
         if let Some(out) = stdout {
             self.read_lines(id.clone(), "stdout", out);
         }
@@ -314,6 +333,69 @@ impl CommandManager {
             }
         });
         Ok(view)
+    }
+    /// Record that the client launched a shell command in a terminal or queued an AI command's
+    /// ticket. The launch is complete once recorded and joins the bounded history (HS2-PWNPM2).
+    pub fn record_launch_for(
+        &self,
+        project: &str,
+        command_id: &str,
+        launch: CommandLaunch,
+    ) -> Result<CommandRun, String> {
+        let kind = self
+            .definitions
+            .lock_or_recover()
+            .get(project)
+            .and_then(|definitions| {
+                definitions
+                    .iter()
+                    .find(|definition| definition.id == command_id)
+            })
+            .map(|definition| definition.kind)
+            .ok_or_else(|| "unknown configured command".to_string())?;
+        let expected = match kind {
+            CommandKind::Shell => LaunchKind::Shell,
+            CommandKind::Ai => LaunchKind::Ai,
+            CommandKind::Program => {
+                return Err("program commands record their own runs".to_string());
+            }
+        };
+        if launch.kind != expected {
+            return Err("launch kind does not match the command".to_string());
+        }
+        let view = CommandRun {
+            id: ulid::Ulid::new().to_string(),
+            command_id: command_id.into(),
+            project: project.to_owned(),
+            state: "completed".into(),
+            exit_code: None,
+            output: vec![],
+            started_at: Timestamp::from_datetime(OffsetDateTime::now_utc()),
+            launch: Some(launch),
+        };
+        self.remember(LiveRun {
+            view: view.clone(),
+            child: None,
+            next_seq: 0,
+        });
+        Ok(view)
+    }
+    /// Add a run to the newest end of the bounded history and announce it.
+    fn remember(&self, run: LiveRun) {
+        let view = run.view.clone();
+        self.runs.lock_or_recover().insert(view.id.clone(), run);
+        {
+            let mut order = self.order.lock_or_recover();
+            order.push_front(view.id.clone());
+            while order.len() > HISTORY_CAP {
+                if let Some(old) = order.pop_back() {
+                    self.runs.lock_or_recover().remove(&old);
+                }
+            }
+        }
+        if let Some(callback) = &self.on_change {
+            callback(view);
+        }
     }
     fn read_lines(&self, id: String, stream: &str, reader: impl std::io::Read + Send + 'static) {
         let runs = self.runs.clone();
@@ -418,6 +500,69 @@ fn shell_execution(command: &str) -> Result<(String, Vec<String>), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn defs() -> Vec<CommandDefinition> {
+        serde_json::from_str(
+            r#"[{"id":"build","title":"Build","kind":"shell","command":"make"},{"id":"ai","title":"AI","kind":"ai","prompt":"Go"},{"id":"echo","title":"Echo","program":"/bin/echo","args":[]}]"#,
+        )
+        .unwrap()
+    }
+
+    fn shell_launch() -> CommandLaunch {
+        CommandLaunch {
+            kind: LaunchKind::Shell,
+            ticket_id: None,
+            ticket_slug: None,
+            tool: None,
+            terminal_id: Some("t".into()),
+            terminal_label: Some("Build".into()),
+        }
+    }
+
+    #[test]
+    fn launches_are_scoped_validated_and_bounded_like_runs() {
+        let manager = CommandManager::new(PathBuf::from("/tmp"), defs());
+        manager.replace_project("other", PathBuf::from("/tmp"), defs());
+        let run = manager
+            .record_launch_for("", "build", shell_launch())
+            .unwrap();
+        assert_eq!(run.state, "completed");
+        assert_eq!(run.launch, Some(shell_launch()));
+        // Project-scoped: the other project's history does not see it, and its own launch stays there.
+        manager
+            .record_launch_for("other", "build", shell_launch())
+            .unwrap();
+        assert_eq!(manager.list_for("").len(), 1);
+        assert_eq!(manager.list_for("other").len(), 1);
+        assert!(manager.get_for("other", &run.id, 0).is_none());
+        assert_eq!(
+            manager
+                .record_launch_for("", "echo", shell_launch())
+                .unwrap_err(),
+            "program commands record their own runs"
+        );
+        assert_eq!(
+            manager
+                .record_launch_for("", "ai", shell_launch())
+                .unwrap_err(),
+            "launch kind does not match the command"
+        );
+        assert_eq!(
+            manager
+                .record_launch_for("", "missing", shell_launch())
+                .unwrap_err(),
+            "unknown configured command"
+        );
+        // Newest first, capped at the shared history size.
+        for _ in 0..HISTORY_CAP + 5 {
+            manager
+                .record_launch_for("", "build", shell_launch())
+                .unwrap();
+        }
+        let listed = manager.list_all();
+        assert_eq!(listed.len(), HISTORY_CAP);
+        assert!(listed.iter().all(|item| item.id != run.id));
+    }
 
     #[test]
     fn ordered_writes_reject_repeats_and_older_sequences_per_project_and_session() {

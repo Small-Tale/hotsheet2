@@ -120,9 +120,10 @@ use routes::project_tools::{
     get_command_run, list_checkout_command_groups, list_checkout_command_runs,
     list_checkout_commands, list_checkout_custom_views, list_command_groups, list_command_runs,
     list_commands, list_custom_views, list_notifications, phase_report, publish_notification,
-    run_checkout_command, run_command, save_checkout_command_groups, save_checkout_commands,
-    save_checkout_custom_views, save_command_groups, save_commands, save_custom_views,
-    synthesize_speech, ticket_flow_summary, usage_metrics_summary,
+    record_checkout_command_launch, record_command_launch, run_checkout_command, run_command,
+    save_checkout_command_groups, save_checkout_commands, save_checkout_custom_views,
+    save_command_groups, save_commands, save_custom_views, synthesize_speech, ticket_flow_summary,
+    usage_metrics_summary,
 };
 use routes::providers::{
     assign_provider_ticket, close_provider_ticket, copy_provider_attachment,
@@ -1295,6 +1296,10 @@ pub fn app(state: AppState) -> Router {
             post(run_checkout_command),
         )
         .route(
+            "/checkouts/{reference}/commands/{id}/launches",
+            post(record_checkout_command_launch),
+        )
+        .route(
             "/checkouts/{reference}/command-runs",
             get(list_checkout_command_runs),
         )
@@ -1710,6 +1715,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/views", get(list_custom_views).put(save_custom_views))
         .route("/commands/{id}/run", post(run_command))
+        .route("/commands/{id}/launches", post(record_command_launch))
         .route("/command-runs", get(list_command_runs))
         .route("/command-runs/{id}", get(get_command_run))
         .route("/command-runs/{id}/cancel", post(cancel_command_run))

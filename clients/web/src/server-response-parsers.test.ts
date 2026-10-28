@@ -309,6 +309,19 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: true }],
     [parseTerminalRead, { id: 't', alive: true, busy: false, scrollback: '' }],
     [parseCommandRun, { id: 'r', command_id: 'c', state: 'running', output: [] }],
+    // A recorded shell or AI launch carries its start time and destination (HS2-PWNPM2).
+    [
+      parseCommandRun,
+      {
+        id: 'r',
+        command_id: 'c',
+        state: 'completed',
+        exit_code: null,
+        output: [],
+        started_at: '2026-10-28T10:00:00Z',
+        launch: { kind: 'ai', ticket_id: '01', ticket_slug: 'HS2-AAAAAA', tool: 'claude' },
+      },
+    ],
     [parseAiToolDefaults, { tool: 'claude', providers: { claude: { model: 'opus' } } }],
     [parseGitHubAuthStatus, { state: 'pending' }],
     [parsePermissionDecision, { connection: 'c', decision: 'allow', persisted: false }],
@@ -338,6 +351,8 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseRepositoryStatus, { ahead: '1' }],
     [parsePollResponse, { cursor: 1, events: [{}], overflow: false }],
     [parseTerminalInfo, { id: 't', alive: 'yes', busy: false }],
+    [parseCommandRun, { id: 'r', command_id: 'c', state: 'completed', output: [], launch: { kind: 'program' } }],
+    [parseCommandRun, { id: 'r', command_id: 'c', state: 'completed', output: [], started_at: 7 }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: 'yes' }],
     [parsePermissionDecision, { connection: 'c', decision: 'maybe' }],
     [

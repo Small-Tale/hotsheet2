@@ -1062,12 +1062,23 @@ export interface CommandOutputLine {
   stream: string;
   text: string;
 }
+/** Where a shell command's terminal launch or an AI command's queued ticket went (HS2-PWNPM2). */
+export interface CommandLaunch {
+  kind: 'shell' | 'ai';
+  ticket_id?: string;
+  ticket_slug?: string;
+  tool?: string;
+  terminal_id?: string;
+  terminal_label?: string;
+}
 export interface CommandRun {
   id: string;
   command_id: string;
   state: 'running' | 'completed' | 'failed' | 'cancelled';
   exit_code?: number;
   output: CommandOutputLine[];
+  started_at?: string;
+  launch?: CommandLaunch;
 }
 export interface ActivityEvent {
   id: string;
@@ -1983,6 +1994,12 @@ export class Api {
   commandRuns = () => this.parsed(parseCommandRun.list, '/command-runs');
   runCommand = (id: string) =>
     this.parsed(parseCommandRun, `/commands/${encodeURIComponent(id)}/run`, { method: 'POST' });
+  /** Record a shell or AI command launch in the command's run history (HS2-PWNPM2). */
+  recordCommandLaunch = (id: string, launch: CommandLaunch) =>
+    this.parsed(parseCommandRun, `/commands/${encodeURIComponent(id)}/launches`, {
+      method: 'POST',
+      body: JSON.stringify(launch),
+    });
   commandRun = (id: string, after = 0) =>
     this.parsed(parseCommandRun, `/command-runs/${encodeURIComponent(id)}?after=${after}`);
   cancelCommandRun = (id: string) =>

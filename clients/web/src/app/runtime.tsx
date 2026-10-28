@@ -20,6 +20,7 @@ import {
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
   type CommandDefinition,
+  type CommandLaunch,
   type CorruptTicket,
   type CustomView,
   type DuplicateBacklink,
@@ -1007,7 +1008,7 @@ export async function startHotSheetWebClient() {
     commandRunFor,
     commandIcon,
     commandDialogSurface,
-  } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences });
+  } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences, tickets });
   const driveConversations = createDriveConversationsController({
     projects,
     project: () => project(),
@@ -4033,6 +4034,12 @@ export async function startHotSheetWebClient() {
         command.tool,
         aiDefaults.value.tool,
       );
+      void recordCommandLaunch(current, command.id, {
+        kind: 'ai',
+        ticket_id: created.id,
+        ticket_slug: created.slug,
+        ...(connection ? { tool: connection.tool } : {}),
+      });
       if (!connection) {
         showToast(`Queued ${created.slug}.`);
         return;
@@ -4092,7 +4099,13 @@ export async function startHotSheetWebClient() {
     }
     if (command.confirmation && !window.confirm(command.confirmation)) return;
     if (command.kind === 'shell') {
-      await createShellCommandTerminal(command, current);
+      const terminalId = await createShellCommandTerminal(command, current);
+      if (terminalId)
+        await recordCommandLaunch(current, commandId, {
+          kind: 'shell',
+          terminal_id: terminalId,
+          terminal_label: command.title,
+        });
       return;
     }
     if (command.kind === 'ai') {
@@ -4107,12 +4120,23 @@ export async function startHotSheetWebClient() {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
+  /** Add a shell or AI launch to the command's run history; the launch itself already happened (HS2-PWNPM2). */
+  async function recordCommandLaunch(current: Project, commandId: string, launch: CommandLaunch) {
+    try {
+      const run = await new Api(current.apiPath).recordCommandLaunch(commandId, launch);
+      if (project()?.id === current.id)
+        commandRuns.value = [run, ...commandRuns.value.filter((item) => item.id !== run.id)];
+    } catch {
+      // History is best-effort: an older server without launch records keeps the launch working.
+    }
+  }
   async function openCommandHistory(commandId: string) {
     const current = project(),
       run = commandRunFor(commandId);
     commandDialogId.value = commandId;
     commandStopConfirmation.value = false;
-    if (!current || !run) return;
+    // A shell or AI launch record has no captured output to fetch (HS2-PWNPM2).
+    if (!current || !run || run.launch) return;
     try {
       const full = await new Api(current.apiPath).commandRun(run.id);
       if (project()?.id === current.id)

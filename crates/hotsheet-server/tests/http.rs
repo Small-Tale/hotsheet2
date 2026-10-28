@@ -6322,7 +6322,7 @@ async fn checkout_command_definitions_and_runs_do_not_leak_between_projects() {
         .clone()
         .oneshot(command_replace(
             &format!("/checkouts/{}/commands", ids[0]),
-            r#"[{"id":"wait","title":"Wait","program":"/bin/sh","args":["-c","sleep 2"]}]"#,
+            r#"[{"id":"wait","title":"Wait","program":"/bin/sh","args":["-c","sleep 2"]},{"id":"build","title":"Build","kind":"shell","command":"make"}]"#,
         ))
         .await
         .unwrap();
@@ -6374,6 +6374,40 @@ async fn checkout_command_definitions_and_runs_do_not_leak_between_projects() {
         .await
         .unwrap();
     assert_eq!(leaked.status(), StatusCode::NOT_FOUND);
+    // A checkout's shell launch joins only that checkout's history (HS2-PWNPM2).
+    let launched = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{}/commands/build/launches", ids[0]),
+            Some(r#"{"kind":"shell","terminal_label":"Build"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched.status(), StatusCode::CREATED);
+    let unconfigured = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{}/commands/build/launches", ids[1]),
+            Some(r#"{"kind":"shell"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unconfigured.status(), StatusCode::BAD_REQUEST);
+    let first_runs = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/command-runs", ids[0]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(first_runs).await[0]["launch"]["terminal_label"],
+        "Build"
+    );
     let cancelled = application
         .oneshot(authed(
             "POST",
@@ -11950,6 +11984,92 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn shell_and_ai_command_launches_join_the_run_history() {
+    // HS2-PWNPM2: a shell command runs in a client terminal and an AI command queues a ticket, so
+    // the client records each launch and long-press history lists it like a program run.
+    let (_d, st) = state();
+    let mut events = st.subscribe();
+    let app = app(st);
+    let definitions = r#"[{"id":"build","title":"Build","kind":"shell","command":"make"},{"id":"everything","title":"Everything","kind":"ai","prompt":"Do everything"},{"id":"echo","title":"Echo","program":"/bin/echo","args":["hi"]}]"#;
+    assert_eq!(
+        app.clone()
+            .oneshot(command_replace("/commands", definitions))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let launch = |path: &str, body: &str| {
+        let app = app.clone();
+        let (path, body) = (path.to_owned(), body.to_owned());
+        async move {
+            app.oneshot(authed("POST", &path, Some(&body)))
+                .await
+                .unwrap()
+        }
+    };
+    let queued = launch(
+        "/commands/everything/launches",
+        r#"{"kind":"ai","ticket_id":"01ABC","ticket_slug":"HS2-AAAAAA","tool":"claude"}"#,
+    )
+    .await;
+    assert_eq!(queued.status(), StatusCode::CREATED);
+    let queued = body_json(queued).await;
+    assert_eq!(queued["command_id"], "everything");
+    assert_eq!(queued["state"], "completed");
+    assert_eq!(queued["launch"]["ticket_slug"], "HS2-AAAAAA");
+    assert_eq!(queued["launch"]["tool"], "claude");
+    assert!(
+        queued["started_at"]
+            .as_str()
+            .is_some_and(|value| value.ends_with('Z'))
+    );
+    let event = events.recv().await.unwrap();
+    assert_eq!(event.kind, "command_updated");
+    let opened = launch(
+        "/commands/build/launches",
+        r#"{"kind":"shell","terminal_id":"t-1","terminal_label":"Build"}"#,
+    )
+    .await;
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/command-runs", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["command_id"], "build");
+    assert_eq!(listed[0]["launch"]["terminal_label"], "Build");
+    assert_eq!(listed[1]["command_id"], "everything");
+    // A launch must match its command's kind; program commands, unknown commands, and unknown
+    // fields are rejected.
+    for (path, body) in [
+        (
+            "/commands/build/launches",
+            r#"{"kind":"ai","ticket_slug":"HS2-AAAAAA"}"#,
+        ),
+        ("/commands/echo/launches", r#"{"kind":"shell"}"#),
+        ("/commands/missing/launches", r#"{"kind":"shell"}"#),
+    ] {
+        assert_eq!(
+            launch(path, body).await.status(),
+            StatusCode::BAD_REQUEST,
+            "{path}"
+        );
+    }
+    assert!(
+        launch(
+            "/commands/build/launches",
+            r#"{"kind":"shell","command":"rm -rf /"}"#
+        )
+        .await
+        .status()
+        .is_client_error()
+    );
 }
 
 #[tokio::test]

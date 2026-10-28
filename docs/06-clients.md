@@ -759,7 +759,11 @@ preview/download, server directory browser) are separate design work.
 
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
-  outcome, and press-and-hold output history. Definitions are edited in Project
+  outcome, and press-and-hold output history. Shell and AI commands record each launch
+  instead of output: press-and-hold lists recent launches with their time, an AI launch's
+  queued ticket (its slug opens the ticket and closes the history; a loaded ticket also
+  shows its title and current status), and a shell launch's terminal; with none it says
+  Never run (HS2-PWNPM2). Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the
   primary editing interface. Add group opens an in-app New Command Group dialog with a blank

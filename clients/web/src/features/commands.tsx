@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 import { effect, signal } from 'kerfjs';
 
-import { Api, type CommandDefinition, type CommandRun } from '../api';
+import { Api, type CommandDefinition, type CommandRun, type TicketRow } from '../api';
 import { createCommandGroupDialog } from '../command-group-dialog';
 import type { CommandDropTarget } from '../command-order';
 import { normalizeCommandGroups } from '../command-order';
@@ -19,6 +19,7 @@ import { CommandGroupDialog } from '../components/command-group-dialog';
 import { commandIconNeedsCatalog } from '../components/command-icon';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { CommandDialogSurface } from '../components/reader-overlay-surfaces';
+import type { TicketStatus } from '../components/status-badge';
 import type { Control, Project } from '../interactions/types';
 import { loadLucideCatalog } from '../lucide-catalog';
 import { projectSettingsValue, updateProjectSettingsValue } from '../project-settings-state';
@@ -27,6 +28,8 @@ import type { WorkspacePreferences } from '../workspace-preferences';
 export interface CommandsDependencies {
   projects: Signal<Project[]>;
   selectedProjectId: Signal<string>;
+  /** The open project's loaded tickets, so AI launch history shows each queued ticket's status (HS2-PWNPM2). */
+  tickets?: Signal<readonly TicketRow[]>;
   storedWorkspacePreferences: Pick<WorkspacePreferences, 'commandGroupExpanded' | 'commandGroupsCollapsed'>;
 }
 
@@ -70,6 +73,7 @@ export function createCommandsController({
   projects,
   selectedProjectId,
   storedWorkspacePreferences,
+  tickets,
 }: CommandsDependencies) {
   const commandDefinitions = signal<CommandDefinition[]>([]),
     commandRuns = signal<CommandRun[]>([]),
@@ -313,10 +317,25 @@ export function createCommandsController({
   function commandDialogSurface() {
     const id = commandDialogId.value,
       command = commandDefinitions.value.find((item) => item.id === id),
-      run = id ? commandRunFor(id) : undefined;
+      run = id ? commandRunFor(id) : undefined,
+      launches = commandRuns.value.filter((item) => item.command_id === id && item.launch),
+      queued = new Set(launches.flatMap((item) => (item.launch?.ticket_slug ? [item.launch.ticket_slug] : []))),
+      launchTickets = Object.fromEntries(
+        (tickets?.value ?? []).flatMap((ticket) =>
+          queued.has(ticket.slug) && ticket.status
+            ? [[ticket.slug, { title: ticket.title, status: ticket.status as TicketStatus }] as const]
+            : [],
+        ),
+      );
     return (
       <>
-        <CommandDialogSurface command={command} run={run} confirmStop={commandStopConfirmation.value} />
+        <CommandDialogSurface
+          command={command}
+          run={run}
+          confirmStop={commandStopConfirmation.value}
+          launches={launches}
+          launchTickets={launchTickets}
+        />
         <CommandGroupDialog state={commandGroupDialog.state.value} />
       </>
     );

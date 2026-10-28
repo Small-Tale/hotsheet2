@@ -612,6 +612,37 @@ pub(crate) async fn run_checkout_command(
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
 }
 
+/// Record a shell command's terminal launch or an AI command's queued ticket (HS2-PWNPM2).
+pub(crate) async fn record_command_launch(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(launch): Json<commands::CommandLaunch>,
+) -> Result<(StatusCode, Json<commands::CommandRun>), ApiError> {
+    state
+        .commands
+        .record_launch_for("", &id, launch)
+        .map(|run| (StatusCode::CREATED, Json(run)))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
+}
+
+pub(crate) async fn record_checkout_command_launch(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(launch): Json<commands::CommandLaunch>,
+) -> Result<(StatusCode, Json<commands::CommandRun>), ApiError> {
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    let definitions = hotsheet_ticketing::commands::from_settings(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state
+        .commands
+        .replace_project(checkout.id.clone(), checkout.root.into(), definitions);
+    state
+        .commands
+        .record_launch_for(&checkout.id, &id, launch)
+        .map(|run| (StatusCode::CREATED, Json(run)))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
+}
+
 pub(crate) async fn list_command_runs(
     State(state): State<AppState>,
 ) -> Json<Vec<commands::CommandRun>> {

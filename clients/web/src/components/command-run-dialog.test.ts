@@ -46,4 +46,50 @@ describe('CommandRunDialog', () => {
     expect(stop).toContain('data-action="confirm-stop-command"');
     expect(stop).toContain('data-run-id="run-1"');
   });
+
+  it('lists shell and AI launches with their ticket, terminal, and time instead of output (HS2-PWNPM2)', () => {
+    const launch = (id: string, value: object) => ({
+      id,
+      command_id: 'everything',
+      state: 'completed' as const,
+      output: [],
+      started_at: '2026-10-28T10:00:00Z',
+      launch: value as never,
+    });
+    const ai = { id: 'everything', title: 'Everything', kind: 'ai' as const, prompt: 'Do it' };
+    const markup = String(
+      CommandRunDialog({
+        command: ai,
+        launches: [
+          launch('l2', { kind: 'ai', ticket_slug: 'HS2-BBBBBB', tool: 'claude' }),
+          launch('l1', { kind: 'ai', ticket_slug: 'HS2-AAAAAA' }),
+        ],
+        launchTickets: { 'HS2-BBBBBB': { title: 'Everything', status: 'started' } },
+      }),
+    );
+    expect(markup).toContain('aria-label="Recent launches"');
+    expect(markup).not.toContain('Never run');
+    expect(markup).not.toContain('aria-label="Command output"');
+    // Newest first; each slug opens its ticket through the shared linked-ticket action.
+    expect(markup.indexOf('HS2-BBBBBB')).toBeLessThan(markup.indexOf('HS2-AAAAAA'));
+    expect(markup).toMatch(
+      /<a href="#ticket-HS2-BBBBBB"[^>]*data-action="open-linked-ticket"[^>]*data-ticket-slug="HS2-BBBBBB"/,
+    );
+    // A loaded ticket shows its title and status; an unloaded one shows only its slug.
+    expect(markup).toContain('data-component="text"');
+    expect(markup).toContain('Started');
+    expect(markup.match(/data-command-launch=/g)).toHaveLength(2);
+    expect(markup).toContain('<time datetime="2026-10-28T10:00:00Z">');
+    const shell = String(
+      CommandRunDialog({
+        command: { id: 'build', title: 'Build', kind: 'shell', command: 'make' },
+        launches: [launch('s1', { kind: 'shell', terminal_label: 'Build' })],
+      }),
+    );
+    expect(shell).toContain('Opened in terminal Build');
+    // Shell and AI commands with no launches say so without an empty output box.
+    const never = String(CommandRunDialog({ command: ai }));
+    expect(never).toContain('Never run');
+    expect(never).not.toContain('No output recorded.');
+  });
 });
