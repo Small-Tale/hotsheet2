@@ -65,6 +65,13 @@ export function createConversationArchiveController(dependencies: ConversationAr
   } = dependencies;
   const conversationSelections = signal<Record<string, ConversationMessageSelection | undefined>>({});
   const conversationExportDialog = signal<ConversationExportDialogState | undefined>(undefined);
+  // HS2-1S33A9: each opened export has a generation, so a chooser or write that resolves after its
+  // dialog was cancelled or replaced cannot change or close the export that replaced it.
+  let conversationExportGeneration = 0;
+
+  function currentConversationExport(generation: number) {
+    return generation === conversationExportGeneration ? conversationExportDialog.value : undefined;
+  }
 
   function conversationSelectedMessages(connectionId: string, messages: readonly ConversationMessage[]) {
     return selectedConversationMessagesFor(messages, conversationSelections.value[connectionId]);
@@ -143,6 +150,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
         ? { kind: 'messages', messageIds: picked.map((message) => message.id) }
         : undefined,
       draft = { ...defaultConversationExportDraft(), ...(selectedScope ? { scope: selectedScope } : {}) };
+    conversationExportGeneration += 1;
     conversationExportDialog.value = {
       source: {
         conversationId: chat?.sourceConversationId ?? connectionId,
@@ -174,31 +182,29 @@ export function createConversationArchiveController(dependencies: ConversationAr
   }
 
   async function pickConversationExportDestination() {
-    const state = conversationExportDialog.value;
+    const state = conversationExportDialog.value,
+      generation = conversationExportGeneration;
     if (!state || state.busy) return;
     conversationExportDialog.value = { ...state, busy: true, error: '' };
     try {
       const result = await localBridge.chooseConversationExportDestination(
-        suggestedConversationExportName(state.source.tool),
-      );
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      if (conversationExportDialog.value) {
-        if (!result.destination) {
-          conversationExportDialog.value = { ...state, busy: false };
-          return;
-        }
-        conversationExportDialog.value = {
-          ...state,
-          busy: false,
-          draft: { ...state.draft, destination: result.destination, writeMode: 'create' },
-          error: '',
-        };
-      }
+          suggestedConversationExportName(state.source.tool),
+        ),
+        current = currentConversationExport(generation);
+      if (!current) return;
+      conversationExportDialog.value = result.destination
+        ? {
+            ...current,
+            busy: false,
+            draft: { ...current.draft, destination: result.destination, writeMode: 'create' },
+            error: '',
+          }
+        : { ...current, busy: false };
     } catch (reason) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      if (conversationExportDialog.value)
+      const current = currentConversationExport(generation);
+      if (current)
         conversationExportDialog.value = {
-          ...state,
+          ...current,
           busy: false,
           error: reason instanceof Error ? reason.message : String(reason),
         };
@@ -206,7 +212,8 @@ export function createConversationArchiveController(dependencies: ConversationAr
   }
 
   async function saveConversationExport() {
-    const state = conversationExportDialog.value;
+    const state = conversationExportDialog.value,
+      generation = conversationExportGeneration;
     if (!state || state.busy) return;
     try {
       const messages = [...selectedConversationMessages(state.messages, state.draft.scope)],
@@ -225,12 +232,13 @@ export function createConversationArchiveController(dependencies: ConversationAr
           activity: state.activity ?? [],
           assets,
         });
-      conversationExportDialog.value = undefined;
+      if (currentConversationExport(generation)) conversationExportDialog.value = undefined;
       showToast(`Saved conversation revision ${result.manifest.revision}.`);
     } catch (reason) {
-      if (conversationExportDialog.value)
+      const current = currentConversationExport(generation);
+      if (current)
         conversationExportDialog.value = {
-          ...conversationExportDialog.value,
+          ...current,
           busy: false,
           error: reason instanceof Error ? reason.message : String(reason),
         };
@@ -238,11 +246,12 @@ export function createConversationArchiveController(dependencies: ConversationAr
   }
 
   async function finishConversationExport() {
-    const state = conversationExportDialog.value;
+    const state = conversationExportDialog.value,
+      generation = conversationExportGeneration;
     if (!state || state.busy) return;
     if (!state.draft.destination) {
       await pickConversationExportDestination();
-      const selected = conversationExportDialog.value;
+      const selected = currentConversationExport(generation);
       if (!selected?.draft.destination || selected.draft.destination.existing) return;
     }
     await saveConversationExport();
