@@ -475,12 +475,18 @@ mod tests {
         assert!(!socket.exists());
         // Simulate an exited broker that left its socket inode behind.
         drop(std::os::unix::net::UnixListener::bind(&socket).unwrap());
+        assert!(socket.exists());
         let (replacement, owner) = bind(&socket).unwrap();
-        assert_ne!(
-            socket_identity(&socket),
-            identity,
-            "stale socket not replaced"
-        );
+        // Inode numbers can be reused after unlink on Linux. A connection accepted by the
+        // new listener proves that stale recovery installed a usable replacement.
+        let connected = connect_probe(&socket).unwrap();
+        let (accepted, _) = tokio::time::timeout(Duration::from_secs(1), replacement.accept())
+            .await
+            .expect("replacement listener did not accept")
+            .unwrap();
+        assert!(owner_lock_held(&socket).unwrap());
+        drop(connected);
+        drop(accepted);
         drop(replacement);
         drop(owner);
     }
