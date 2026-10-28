@@ -945,10 +945,16 @@ export const parseCommandDefinition = shape<CommandDefinition>(
 
 export const parseCustomView = shape<CustomView>('view', { id: isString, name: isString, query: isString });
 
+const parseCommandLaunch = shape<NonNullable<CommandRun['launch']>>(
+  'command launch',
+  { kind: (value) => value === 'shell' || value === 'ai' },
+  { ticket_id: isString, ticket_slug: isString, tool: isString, terminal_id: isString, terminal_label: isString },
+);
+
 export const parseCommandRun = shape<CommandRun>(
   'command run',
   { id: isString, command_id: isString, state: isString, output: listOf(isObject) },
-  { exit_code: isNumber },
+  { exit_code: isNumber, started_at: isString, launch: parseCommandLaunch.check },
 );
 
 export const parsePollResponse = shape<PollResponse>('change poll', {

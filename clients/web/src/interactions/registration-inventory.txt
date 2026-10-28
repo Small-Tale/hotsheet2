@@ -182,6 +182,7 @@ commands-and-ai	delegate	document.body	'submit'	'[data-action="submit-ai-feedbac
 commands-and-ai	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="ai-feedback-dialog"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="run-command"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="dismiss-command-dialog"]'
+commands-and-ai	delegate	document.body	'click'	`[data-dialog-component="command-run-dialog"] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.selector}`
 commands-and-ai	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="command-run-dialog"], [data-dialog-component="command-cancellation-dialog"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-stop-command"]'
 commands-and-ai	wireCommandSettingsEditor	document.body

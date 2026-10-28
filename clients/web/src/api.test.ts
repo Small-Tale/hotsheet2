@@ -1058,3 +1058,33 @@ describe('withHumanActor (HS2-XF81CJ)', () => {
     expect(withHumanActor('/checkouts/c/tickets/HS2-1', { method: 'PATCH', body: form }).body).toBe(form);
   });
 });
+
+describe('command launch records (HS2-PWNPM2)', () => {
+  it('posts a shell or AI launch to the command history and parses the recorded run', async () => {
+    const run = {
+      id: 'r1',
+      command_id: 'everything',
+      state: 'completed',
+      exit_code: null,
+      output: [],
+      started_at: '2026-10-28T10:00:00Z',
+      launch: { kind: 'ai', ticket_slug: 'HS2-AAAAAA' },
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify(run), { status: 201 }));
+    try {
+      const recorded = await new Api('/api').recordCommandLaunch('every thing', {
+        kind: 'ai',
+        ticket_slug: 'HS2-AAAAAA',
+      });
+      expect(recorded.launch?.ticket_slug).toBe('HS2-AAAAAA');
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        '/api/commands/every%20thing/launches',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ kind: 'ai', ticket_slug: 'HS2-AAAAAA' }) }),
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});

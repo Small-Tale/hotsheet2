@@ -260,8 +260,10 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       }
     });
   }
+  /** Open a shell command's terminal; resolves to the new terminal's id once it exists (HS2-PWNPM2). */
   async function createShellCommandTerminal(command: CommandDefinition, current: Project) {
-    if (!command.command) return;
+    if (!command.command) return undefined;
+    let createdId: string | undefined;
     await queueTerminalCreate(async () => {
       if (project()?.id !== current.id) return;
       terminalDashboardLoading.value = true;
@@ -271,6 +273,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
           shell_command: command.command,
           cwd: command.cwd || current.root,
         });
+        createdId = created.id;
         saveTerminalName(current.id, created.id, command.title);
         persistTerminalVisibility(
           hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${created.id}`),
@@ -285,6 +288,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         terminalDashboardLoading.value = false;
       }
     });
+    return createdId;
   }
   async function createDrawerAIChat(
     selection: AiToolDefaults,

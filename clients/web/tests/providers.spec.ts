@@ -34637,3 +34637,114 @@ test('centers count badges in sidebar view rows and board column headers (HS2-RA
     path: 'target/visual-captures/hs2-ra89qg-column-header-badge.png',
   });
 });
+
+test('records shell and AI command launches through the real server and lists them as run history (HS2-PWNPM2)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    launches: Array<Record<string, unknown>> = [];
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        commands: [
+          { id: 'everything', title: 'Everything', kind: 'ai', prompt: 'Do everything.', group: 'Quality' },
+          { id: 'build', title: 'Build', kind: 'shell', command: 'echo built', group: 'Quality' },
+        ],
+      }),
+    );
+    await mockProject(page);
+    // Commands, launch records, and the run history come from the real server; the rest is the project fixture.
+    const proxy = async (route: import('@playwright/test').Route, path: string) => {
+      const response = await route.fetch({
+        url: `${server.url}/checkouts/${server.checkoutId}${path}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    };
+    await page.route('**/__hotsheet/project-api/demo-checkout/commands', (route) =>
+      route.request().method() === 'GET' ? proxy(route, '/commands') : route.fallback(),
+    );
+    await page.route('**/__hotsheet/project-api/demo-checkout/command-runs', (route) => proxy(route, '/command-runs'));
+    await page.route('**/__hotsheet/project-api/demo-checkout/command-runs/*', (route) =>
+      proxy(route, new URL(route.request().url()).pathname.replace(/^.*\/command-runs\//, '/command-runs/')),
+    );
+    await page.route('**/__hotsheet/project-api/demo-checkout/commands/*/launches', (route) => {
+      launches.push(route.request().postDataJSON() as Record<string, unknown>);
+      return proxy(route, new URL(route.request().url()).pathname.replace(/^.*\/commands\//, '/commands/'));
+    });
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const history = page.locator('[data-dialog-component="command-run-dialog"]');
+    const openHistory = async (name: string) => {
+      const button = page.getByRole('button', { name, exact: true });
+      await button.dispatchEvent('pointerdown');
+      await page.waitForTimeout(600);
+      await button.dispatchEvent('pointerup');
+      await expect(history).toBeVisible();
+    };
+    // Before any launch, the AI command's history says it never ran.
+    await openHistory('Everything AI command');
+    await expect(history).toContainText('Never run');
+    await page.keyboard.press('Escape');
+    await expect(history).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Everything AI command', exact: true }).click();
+    await expect
+      .poll(() => launches)
+      .toEqual([{ kind: 'ai', ticket_id: expect.any(String), ticket_slug: 'HS2-NEW001' }]);
+    await page.getByRole('button', { name: 'Build Shell Command', exact: true }).click();
+    await expect.poll(() => launches.length).toBe(2);
+    expect(launches[1]).toEqual({ kind: 'shell', terminal_id: expect.any(String), terminal_label: 'Build' });
+    // The real server lists both launches in the project's run history.
+    const recorded = await server.request<Array<{ command_id: string; launch?: { kind: string } }>>(
+      `/checkouts/${server.checkoutId}/command-runs`,
+    );
+    expect(recorded.map((run) => `${run.command_id}:${run.launch?.kind}`)).toEqual(['build:shell', 'everything:ai']);
+
+    await openHistory('Everything AI command');
+    await expect(history.getByRole('list', { name: 'Recent launches' })).toBeVisible();
+    await expect(history).toHaveCSS('opacity', '1');
+    await expect(history).not.toContainText('Never run');
+    const slug = history.getByRole('link', { name: 'HS2-NEW001' });
+    await expect(slug).toBeVisible();
+    await expect(history.locator('time')).toHaveCount(1);
+    await history.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-ai-launch-history.png' });
+    // Opening the queued ticket closes the history so the ticket shows.
+    await slug.click();
+    await expect(history).toHaveCount(0);
+    await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toBeVisible();
+
+    await openHistory('Build Shell Command');
+    await expect(history).toContainText('Opened in terminal Build');
+    await history.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-shell-launch-history.png' });
+    await page.keyboard.press('Escape');
+    await expect(history).toHaveCount(0);
+    // At phone width the launch row wraps inside the dialog instead of overflowing it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const narrowCommand = page.locator('[data-action="run-command"][data-item-id="everything"]');
+    await narrowCommand.dispatchEvent('pointerdown');
+    await page.waitForTimeout(600);
+    await narrowCommand.dispatchEvent('pointerup');
+    await expect(history.getByRole('link', { name: 'HS2-NEW001' })).toBeVisible();
+    await expect(history).toHaveCSS('opacity', '1');
+    // Opening a launch history never fetches output it does not have, so no load error appears.
+    await expect(page.getByText('The server returned an invalid command run response.')).toHaveCount(0);
+    expect(
+      await history.evaluate((dialog) => {
+        const box = dialog.getBoundingClientRect();
+        return [...dialog.querySelectorAll('[data-command-launch] *')].every((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.left >= box.left && rect.right <= box.right;
+        });
+      }),
+    ).toBe(true);
+    await page.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-ai-launch-history-narrow.png' });
+  } finally {
+    await server.stop();
+  }
+});
