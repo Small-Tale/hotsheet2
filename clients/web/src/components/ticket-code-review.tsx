@@ -72,13 +72,11 @@ export function TicketCodeReview({
   const enabled = Boolean(review?.difftool) && hostActionsAvailable,
     hostReason = hostOnlyDisabledReason('diff-tool', hostActionsAvailable);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
-  // The diff tool label sits on the trailing edge, aligned with the rows' open icons (HS2-PB0VY5).
-  const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />,
-    difftoolLabel = review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined;
+  const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />;
   const body = (
     <List gap={embedded ? 'none' : 'xs'} className="ticket-code-review__section">
       <div class="ticket-code-review__header">
-        <Toolbar dividerSides="" leading={heading} trailing={difftoolLabel} />
+        <Toolbar dividerSides="" leading={heading} />
       </div>
       {loading && (
         <Text variant="p" tone="quiet" size="compact" role="status">
@@ -299,6 +297,14 @@ export function TicketCodeReview({
           )}
         </>
       )}
+      {!loading && review?.difftool ? (
+        // The diff tool is a footnote below the commits rather than a heading label (HS2-SHV8J7).
+        <footer class="ticket-code-review__footnotes">
+          <Text variant="p" size="compact" tone="quiet" flush>
+            Code reviews open in {review.difftool}
+          </Text>
+        </footer>
+      ) : undefined}
       {message ? (
         <Text variant="p" tone="quiet" size="compact" role="status" className="ticket-code-review__message">
           {message}

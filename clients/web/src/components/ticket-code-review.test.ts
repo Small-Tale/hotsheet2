@@ -49,7 +49,12 @@ describe('TicketCodeReview', () => {
     expect(css).not.toContain('--wa-space-');
     expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge"');
     expect(markup).toContain('role="heading" aria-level="2"');
-    expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
+    // The diff tool is a footnote, not a trailing heading label (HS2-SHV8J7).
+    expect(markup).not.toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
+    expect(markup).toMatch(
+      /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Code reviews open in glassbox<\/p><\/footer>/,
+    );
+    expect(css).toMatchSource(/__footnotes \{ display: grid; padding-inline: calc\(var\(--kui-space-m\) \+ 1px\)/);
     expect(markup).toContain('<div class="ticket-code-review__header"><header class="kui-toolbar"');
     expect(markup).toMatch(/class="kui-list ticket-code-review__section"[^>]*data-component="list"/);
     expect(markup).toContain('data-component="text" data-tone="default" data-size="compact"');
@@ -90,7 +95,8 @@ describe('TicketCodeReview', () => {
 
   it('lists commit messages and exposes only server-provided commit and range targets', () => {
     const markup = String(TicketCodeReview({ review }));
-    expect(markup).toContain('Opens in glassbox');
+    expect(markup).toContain('Code reviews open in glassbox');
+    expect(markup).not.toContain('Opens in');
     expect(markup).toContain('HS2-TEST: finish review UI');
     expect(markup).toContain('data-review-mode="range" data-review-from="aaa1111" data-review-to="bbb2222"');
     expect(markup).toContain('data-review-mode="range" data-review-from="ccc3333" data-review-to="ddd4444"');
