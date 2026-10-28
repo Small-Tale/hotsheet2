@@ -10576,7 +10576,6 @@ components:
         - needs_review
         - tags
         - blocked_by
-        - follow_ups
         - created_at
         - updated_at
         - claim_count
