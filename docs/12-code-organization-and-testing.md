@@ -797,7 +797,12 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `crates/hotsheet-aitools/tests/probe_isolation.rs` fails if the guard is removed. Tests
   that probe their own fixture tools (`antigravity_discovery.rs`, the `graceful_shutdown`
   slow-discovery fixtures) remove the variable explicitly. Browser and Node fixtures do not
-  receive cargo's `[env]`; HS2-F6R2HQ tracks them.
+  receive cargo's `[env]`, so `clients/web/vitest.config.ts`, `clients/web/playwright.config.ts`
+  and the migrator's `globalSetup` (`migrator/test/isolated-home.mjs`) set it before any
+  worker starts, through `clients/web/scripts/test-ai-tool-isolation.mjs` on the web side.
+  `clients/web/scripts/test-ai-tool-isolation.test.mjs`, the real-server browser fixture
+  (`tests/real-ticket-server.ts`) and `migrator/test/isolated-home.test.mjs` fail without
+  it (HS2-F6R2HQ).
 - **Session-identity isolation (HS2-ZWBSH1):** the same launched shells also export their
   session identity (`HOTSHEET_PERMISSION_PROJECT`, `HOTSHEET_PROJECT`, `HOTSHEET_SERVER`,
   `HOTSHEET_SECRET`, `HOTSHEET_TERMINAL_ID`, `HOTSHEET_AGENT`) and the agent harness exports

@@ -10,5 +10,7 @@ import { join } from 'node:path';
 export default function setup() {
   const home = mkdtempSync(join(tmpdir(), 'hs2-migrator-home-'));
   process.env.HOTSHEET_HOME = home;
+  // HS2-F6R2HQ: spawned binaries never execute the developer's installed AI tools.
+  process.env.HOTSHEET_AI_TOOL_PROBES = 'off';
   return () => rmSync(home, { recursive: true, force: true });
 }

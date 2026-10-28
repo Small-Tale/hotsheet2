@@ -5,10 +5,13 @@ import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
+import { isolateAiToolProbes } from './scripts/test-ai-tool-isolation.mjs';
 import { playwrightRetries, quarantineGrepInvert } from './src/test-quarantine';
 
 // Before any worker, browser, or web server starts: they inherit the lowered priority (HS2-FVT34A).
 lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
+// Fixture servers and CLIs inherit this and never run installed AI tools (HS2-F6R2HQ).
+isolateAiToolProbes();
 
 const port = Number(process.env.HOTSHEET_WEB_TEST_PORT ?? 4176);
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));

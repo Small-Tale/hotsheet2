@@ -32,6 +32,9 @@ export async function realTicketServer(
     throw new Error('Build the isolated browser test binaries with npm run test:e2e.');
   assertFixtureServer(binary);
   assertFixtureCli(cli);
+  // HS2-F6R2HQ: playwright.config.ts turns installed AI-tool probes off for every worker.
+  if (process.env.HOTSHEET_AI_TOOL_PROBES !== 'off')
+    throw new Error('Run browser fixtures through playwright.config.ts so installed AI tools are never probed.');
   const directory = await mkdtemp(resolve(tmpdir(), 'hotsheet-browser-')),
     store = resolve(directory, 'tickets'),
     root = resolve(directory, 'project'),

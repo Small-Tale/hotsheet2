@@ -11,4 +11,8 @@ describe('migrator test isolation', () => {
     expect(resolve(home)).not.toBe(resolve(join(homedir(), '.hotsheet2')));
     expect(home.startsWith(tmpdir())).toBe(true);
   });
+
+  it('runs every spawned binary with installed AI-tool probes off (HS2-F6R2HQ)', () => {
+    expect(process.env.HOTSHEET_AI_TOOL_PROBES).toBe('off');
+  });
 });
