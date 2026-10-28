@@ -1098,6 +1098,12 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   which nextest writes on every run per `.config/nextest.toml`; `--vitest <json>`, from
   `--reporter=json --outputFile.json=<path>`; and `--playwright <json>`, from
   `--reporter=json`. CI prints the Rust and web-unit profiles after the tests.
+- **Gate timing history (HS2-TCCKRZ).** `scripts/check.sh --timings` reads bounded,
+  machine-local p75 stage and test-file estimates, with sample count and local/CI
+  provenance. Only a fully passing gate adds executed stages; reused receipts and
+  failed or interrupted runs add none. Passing CI runner reports can seed missing
+  local file estimates via `--import-ci-timings <directory>`. See
+  [29-affected-local-verification.md](29-affected-local-verification.md).
 - **Full-suite bottlenecks (HS2-XSP0GJ).** A recent full nextest JUnit report covered 965
   cases; the longest was the terminal shell-history isolation case at 51.4 s
   (`HS2-5YC1E5`), followed by CLI permission-hook cases at 21.8–46.5 s

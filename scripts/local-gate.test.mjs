@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { browserStages, parseToolVersion, prepare, runGate } from './local-gate.mjs';
+import { browserStages, importCiTimings, inspectTimings, parseToolVersion, prepare, runGate } from './local-gate.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
 test('HS2-RS0FFT tool versions exclude changing login-shell session messages', () => {
@@ -59,6 +59,37 @@ test('HS2-RS0FFT receipts reuse unchanged inputs and invalidate toolchain and ba
   assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
 });
 
+test('HS2-TCCKRZ completed stage samples exclude receipt reuse', (t) => {
+  const f = fixture(t);
+  const runner = () => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
+    return { status: 0 };
+  };
+  assert.equal(runGate({ ...f.options, runner }), 0);
+  const first = inspectTimings(f.repo);
+  assert.ok(first.stages.some((entry) => entry.samples === 1 && entry.ms > 0));
+  assert.equal(runGate({ ...f.options, runner }), 0);
+  assert.deepEqual(inspectTimings(f.repo), first);
+});
+
+test('HS2-TCCKRZ headless CI import seeds timing estimates without running a gate', (t) => {
+  const f = fixture(t);
+  const artifacts = join(f.repo, 'target/ci-artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(
+    join(artifacts, 'vitest-report.json'),
+    JSON.stringify({
+      success: true,
+      testResults: [{ name: '/ci-root/clients/web/src/example.test.ts', startTime: 0, endTime: 1800 }],
+    }),
+  );
+  importCiTimings(f.repo, artifacts);
+  assert.deepEqual(inspectTimings(f.repo).files, [
+    { key: 'vitest:src/example.test.ts', ms: 1800, samples: 1, host: 'ci' },
+  ]);
+  assert.throws(() => importCiTimings(f.repo, join(f.repo, 'missing')), /No CI timing artifacts/);
+});
+
 test('HS2-RS0FFT source and lock changes invalidate receipts and lock changes select full', (t) => {
   const f = fixture(t);
   runGate({ ...f.options, runner: () => ({ status: 0 }) });
@@ -104,6 +135,7 @@ test('HS2-RS0FFT failure propagates and cannot be accepted by a receipt check', 
     7,
   );
   assert.equal(calls, 1);
+  assert.deepEqual(inspectTimings(f.repo), { stages: [], files: [] });
   assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
 });
 

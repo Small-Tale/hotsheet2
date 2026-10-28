@@ -245,7 +245,7 @@ jobs:
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
-        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs
@@ -297,6 +297,21 @@ jobs:
         if: always()
         working-directory: clients/web
         run: node ../../scripts/test-profile.mjs --top 15 --vitest target/vitest-report.json || true
+
+      - name: Preserve passing CI test-file timing reports
+        if: success()
+        run: |
+          mkdir -p target/ci-timings
+          cp target/nextest/default/junit.xml target/ci-timings/nextest-junit.xml
+          cp clients/web/target/vitest-report.json target/ci-timings/vitest-report.json
+
+      - name: Upload CI test-file timing reports
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-timing-reports
+          path: target/ci-timings/
+          retention-days: 14
 
       - name: Web Chromium smoke flows
         working-directory: clients/web
@@ -573,6 +588,14 @@ jobs:
       - name: Slowest browser tests
         working-directory: clients/web
         run: node ../../scripts/test-profile.mjs --top 20 --playwright playwright-report.json || true
+
+      - name: Upload CI browser timing report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-timing-report
+          path: clients/web/playwright-report.json
+          retention-days: 14
 
       - name: Upload the merged HTML report
         uses: actions/upload-artifact@v4

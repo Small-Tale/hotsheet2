@@ -40,6 +40,37 @@ only after successful verification. Push and its hook call the same executor;
 before opening the remote connection; the hook reuses valid evidence. A successful
 covering main CI run is still required before ticket completion.
 
+## Timing history (HS2-TCCKRZ)
+
+`scripts/check.sh --timings` prints recent stage and test-file cost estimates as
+JSON. The executor records wall time only after a complete successful gate and
+only for stages it actually executed. Receipt hits, interrupted runs, and failed
+gates add no samples. It keeps the latest 20 samples per key in
+`hotsheet-gate-timings.json` under the Git common directory, outside tracked
+source. The estimate is the nearest-rank p75 with a sample count; a missing key
+reports `null` and `unknown`, never zero. Vitest and Playwright stages write
+temporary JSON reports under their ignored `target/` directory. Nextest's JUnit
+test target and module names are mapped only to Rust source files that exist in
+the checkout; unmapped cases add no guessed file sample. File times are summed
+test durations, so parallel execution means they are not a gate wall time.
+
+CI uploads passing nextest/Vitest reports as `gate-timing-reports` and the merged
+Playwright JSON as `browser-timing-report`. Download those artifacts from one
+successful main run into one directory, then import them:
+
+```sh
+gh run download <run-id> -n gate-timing-reports -D target/ci-timings
+gh run download <run-id> -n browser-timing-report -D target/ci-timings
+scripts/check.sh --import-ci-timings target/ci-timings
+```
+
+The import accepts files named
+`nextest-junit.xml`, `vitest-report.json`, and `playwright-report.json`, skips
+failed reports and duplicate contents, and labels their samples `ci`. Local
+samples take precedence over CI samples; CI estimates are a different-host seed
+and must be scaled or distrusted by any budget planner. Import and `--timings`
+never create gate receipts or change test selection.
+
 ## Measurement and limitations (2026-10-28)
 
 The current UI batch's full package gate passed 2,225 Rust tests, 2,806 web unit

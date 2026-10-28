@@ -1,10 +1,17 @@
 // HS2-RS0FFT: affected local verification and exact-input evidence.
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
+import {
+  importCiReports,
+  loadTimingHistory,
+  recordCompletedGate,
+  reportFileTimings,
+  summarizeTimings,
+} from './gate-timings.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -34,6 +41,68 @@ const read = (path) => {
     return null;
   }
 };
+
+function timingPath(repo) {
+  const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
+  return join(common, 'hotsheet-gate-timings.json');
+}
+
+function reportFor(stage, repo) {
+  if (stage.command.startsWith('cargo nextest run '))
+    return { kind: 'nextest', path: join(repo, 'target/nextest/default/junit.xml'), root: repo };
+  if (stage.command === 'npm run test:unit')
+    return {
+      kind: 'vitest',
+      path: join(repo, 'clients/web/target', `gate-vitest-${stage.key}.json`),
+      root: join(repo, 'clients/web'),
+    };
+  if (stage.command.startsWith('npx playwright test '))
+    return {
+      kind: 'playwright',
+      path: join(repo, 'clients/web/target', `gate-playwright-${stage.key}.json`),
+      root: join(repo, 'clients/web'),
+    };
+  return null;
+}
+
+function instrumentedRunner(stage, repo, report) {
+  const env = { ...process.env };
+  let command = stage.command;
+  if (report?.kind === 'vitest')
+    command += ` -- --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
+  if (report?.kind === 'playwright') {
+    command += ' --reporter=line,json';
+    env.PLAYWRIGHT_JSON_OUTPUT_NAME = report.path;
+  }
+  return spawnSync('zsh', ['-ic', command], { cwd: join(repo, stage.cwd), stdio: 'inherit', env });
+}
+
+function observedFiles(report, started) {
+  if (!report) return [];
+  try {
+    if (statSync(report.path).mtimeMs < started) return [];
+    return reportFileTimings(report.kind, readFileSync(report.path, 'utf8'), report.root);
+  } catch {
+    return [];
+  }
+}
+
+export function importCiTimings(repo, directory) {
+  const paths = {
+    nextest: join(directory, 'nextest-junit.xml'),
+    vitest: join(directory, 'vitest-report.json'),
+    playwright: join(directory, 'playwright-report.json'),
+  };
+  const reports = Object.fromEntries(Object.entries(paths).filter(([, path]) => existsSync(path)));
+  if (!Object.keys(reports).length) throw new Error('No CI timing artifacts found in the named directory.');
+  const roots = { nextest: repo, vitest: join(repo, 'clients/web'), playwright: join(repo, 'clients/web') };
+  mkdirSync(dirname(timingPath(repo)), { recursive: true });
+  return importCiReports(timingPath(repo), reports, roots);
+}
+
+export function inspectTimings(repo) {
+  return summarizeTimings(loadTimingHistory(timingPath(repo)));
+}
 
 export function browserStages(changes, full, providerTitles = [], testTitles = {}) {
   if (!full && !changes.some((path) => classifyPath(path).groups.includes?.('web'))) return [];
@@ -222,6 +291,7 @@ export function runGate(options = {}) {
   rmSync(marker, { force: true });
   if (verify) throw new Error('No valid exact-input local gate receipt; run scripts/check.sh before pushing.');
   const results = [];
+  const observations = [];
   for (const stage of before.checks) {
     const stagePath = join(before.cache, `stage-${stage.key}.json`);
     if (read(stagePath)?.key === stage.key) {
@@ -229,7 +299,16 @@ export function runGate(options = {}) {
       continue;
     }
     log(`Run ${stage.cwd}: ${stage.command} (${stage.reasons.join('; ')})`);
-    const result = execute([stage], { repo, runner });
+    const report = runner ? null : reportFor(stage, repo);
+    if (report && report.kind !== 'nextest') {
+      mkdirSync(dirname(report.path), { recursive: true });
+      rmSync(report.path, { force: true });
+    }
+    const started = Date.now();
+    const result = execute([stage], {
+      repo,
+      runner: runner ?? ((current) => instrumentedRunner(current, repo, report)),
+    });
     results.push(...result.results);
     if (result.status !== 0) return result.status;
     const current = prepare(repo, base, full, before.tools);
@@ -237,14 +316,20 @@ export function runGate(options = {}) {
       throw new Error('Inputs changed during the gate; evidence discarded.');
     mkdirSync(before.cache, { recursive: true });
     writeFileSync(stagePath, JSON.stringify({ key: stage.key }));
+    observations.push({ ...result.results[0], files: observedFiles(report, started) });
   }
   const after = prepare(repo, base, full, before.tools);
   if (after.dirty || after.key !== before.key) throw new Error('Inputs changed during the gate; evidence discarded.');
   mkdirSync(before.cache, { recursive: true });
   writeFileSync(receiptPath, JSON.stringify({ key: before.key, tree: before.tree, base: before.base, results }));
-  // Preserve the coordination/completion contract after the stronger receipt has been recorded.
+  // Preserve the coordination/completion contract before recording an observation.
   mkdirSync(compatibility, { recursive: true });
   writeFileSync(marker, `${before.tree}\n`);
+  try {
+    recordCompletedGate(timingPath(repo), observations);
+  } catch (error) {
+    console.warn(`Gate passed, but timing history was unavailable: ${error.message}`);
+  }
   log(`Local ${before.mode} gate passed for tree ${before.tree}`);
   return 0;
 }
@@ -252,17 +337,23 @@ export function runGate(options = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    const allowed = new Set(['--plan', '--full', '--verify-receipt', '--base']);
+    const allowed = new Set(['--plan', '--full', '--verify-receipt', '--base', '--timings', '--import-ci-timings']);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
-      if (args[i] === '--base' && !args[++i]) throw new Error('--base requires a ref');
+      if (['--base', '--import-ci-timings'].includes(args[i]) && !args[++i])
+        throw new Error(`${args[i - 1]} requires a value`);
     }
-    process.exitCode = runGate({
-      inspect: args.includes('--plan'),
-      full: args.includes('--full'),
-      verify: args.includes('--verify-receipt'),
-      base: args.includes('--base') ? args[args.indexOf('--base') + 1] : undefined,
-    });
+    if (args.includes('--timings') || args.includes('--import-ci-timings')) {
+      if (args.includes('--import-ci-timings')) importCiTimings(root, args[args.indexOf('--import-ci-timings') + 1]);
+      console.log(JSON.stringify(inspectTimings(root), null, 2));
+    } else {
+      process.exitCode = runGate({
+        inspect: args.includes('--plan'),
+        full: args.includes('--full'),
+        verify: args.includes('--verify-receipt'),
+        base: args.includes('--base') ? args[args.indexOf('--base') + 1] : undefined,
+      });
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
