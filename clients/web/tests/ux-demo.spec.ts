@@ -5973,7 +5973,7 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
   const expectedEdges = {
     left: [17, 17, 17, 17, 17],
     right: [17, 17],
-    footnoteText: 'Code reviews open in Glassbox',
+    footnoteText: 'Code reviews open in Glassbox.',
     headings: 0,
   };
   await expect.poll(edges).toEqual(expectedEdges);

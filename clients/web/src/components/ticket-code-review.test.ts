@@ -57,7 +57,7 @@ describe('TicketCodeReview', () => {
     // The diff tool is a footnote, not a trailing heading label (HS2-SHV8J7).
     expect(markup).not.toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
     expect(markup).toMatch(
-      /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Code reviews open in glassbox<\/p><\/footer>/,
+      /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Code reviews open in glassbox\.<\/p><\/footer>/,
     );
     expect(css).toMatchSource(/__footnotes \{ display: grid; padding-inline: calc\(var\(--kui-space-m\) \+ 1px\)/);
     expect(markup).toMatch(/class="kui-list ticket-code-review__section"[^>]*data-component="list"/);
@@ -116,6 +116,21 @@ describe('TicketCodeReview', () => {
     expect(laterRange).toBeLessThan(latestCommit);
     expect(earlierRange).toBeGreaterThan(markup.indexOf('data-commit-sha="ccc3333"'));
     expect(earlierRange).toBeLessThan(earlierCommit);
+  });
+
+  it('shows the commit window as an unfilled footnote above the diff tool footnote (HS2-1VWZ9S)', () => {
+    const markup = String(TicketCodeReview({ review: { ...review, truncated: true } }));
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(markup).toMatch(
+      /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Showing matches from the newest 2,000 commits\.<\/p><p[^>]*>Code reviews open in glassbox\.<\/p><\/footer>/,
+    );
+    expect(markup).not.toMatch(/ticket-code-review__notice[^>]*>(?:(?!<\/div>).)*newest 2,000/su);
+    expect(css).not.toMatch(/__footnotes \{[^}]*background/);
+    // Without commits or without truncation there is no commit-window footnote.
+    expect(String(TicketCodeReview({ review }))).not.toContain('newest 2,000');
+    expect(String(TicketCodeReview({ review: { ...review, truncated: true, commits: [], ranges: [] } }))).not.toContain(
+      'newest 2,000',
+    );
   });
 
   it('decorates commits with their git refs classified by kind (HS2-SFJ5TE)', () => {

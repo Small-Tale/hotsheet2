@@ -72,6 +72,7 @@ export function TicketCodeReview({
 }: TicketCodeReviewProps) {
   const enabled = Boolean(review?.difftool) && hostActionsAvailable,
     hostReason = hostOnlyDisabledReason('diff-tool', hostActionsAvailable);
+  const truncatedHistory = Boolean(review?.truncated && review.commits.length > 0);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
   const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />;
   const body = (
@@ -292,21 +293,22 @@ export function TicketCodeReview({
               ];
             })}
           </ol>
-          {review.truncated && (
-            <div class="ticket-code-review__notice">
-              <Text variant="p" size="compact" tone="quiet" flush>
-                Showing matches from the newest 2,000 commits.
-              </Text>
-            </div>
-          )}
         </>
       )}
-      {!loading && review?.difftool ? (
-        // The diff tool is a footnote below the commits rather than a heading label (HS2-SHV8J7).
+      {!loading && review && (truncatedHistory || review.difftool) ? (
+        // The commit window and the diff tool are footnotes below the commits, with no fill
+        // (HS2-SHV8J7, HS2-1VWZ9S).
         <footer class="ticket-code-review__footnotes">
-          <Text variant="p" size="compact" tone="quiet" flush>
-            Code reviews open in {review.difftool}
-          </Text>
+          {truncatedHistory ? (
+            <Text variant="p" size="compact" tone="quiet" flush>
+              Showing matches from the newest 2,000 commits.
+            </Text>
+          ) : undefined}
+          {review.difftool ? (
+            <Text variant="p" size="compact" tone="quiet" flush>
+              Code reviews open in {review.difftool}.
+            </Text>
+          ) : undefined}
         </footer>
       ) : undefined}
       {message ? (
