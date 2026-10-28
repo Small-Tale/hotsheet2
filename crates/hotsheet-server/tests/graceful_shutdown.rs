@@ -4,7 +4,7 @@
 //! every path removes the discovery instance file and index-writer lock.
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
@@ -377,17 +377,37 @@ fn hs2_bnghkm_interrupted_test_owner_reaps_detached_broker() {
 }
 
 /// Open a request whose body never finishes arriving, so its handler stays in flight and
-/// a graceful drain can never complete on its own.
+/// a graceful drain can never complete on its own. Returns only once the handler is
+/// reading the body: hyper answers `Expect: 100-continue` when the body is first polled,
+/// so a stop signal sent afterwards always finds the request in flight (HS2-2TTYMD).
 fn stuck_request(info: &InstanceInfo) -> TcpStream {
     let address = info.url.trim_start_matches("http://");
     let mut stream = TcpStream::connect(address).unwrap();
     write!(
         stream,
         "POST /permissions/ask HTTP/1.1\r\nHost: {address}\r\nX-Hotsheet-Secret: {}\r\n\
-         Content-Type: application/json\r\nContent-Length: 4096\r\n\r\n{{\"connection\":",
+         Content-Type: application/json\r\nContent-Length: 4096\r\n\
+         Expect: 100-continue\r\n\r\n",
         info.secret
     )
     .unwrap();
+    stream.flush().unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut received = Vec::new();
+    while !String::from_utf8_lossy(&received).contains("100 Continue") {
+        let mut chunk = [0; 128];
+        let read = stream
+            .read(&mut chunk)
+            .expect("the server never started reading the stuck request");
+        assert!(
+            read > 0,
+            "the server closed the stuck request: {received:?}"
+        );
+        received.extend_from_slice(&chunk[..read]);
+    }
+    write!(stream, "{{\"connection\":").unwrap();
     stream.flush().unwrap();
     stream
 }
@@ -499,7 +519,6 @@ fn drain_deadline_forces_exit_past_a_stuck_request() {
     let mut server = Server::start(400);
     let info = server.ready();
     let _stuck = stuck_request(&info);
-    std::thread::sleep(Duration::from_millis(200));
     server.sigterm();
     let status = server.exits_within(Duration::from_secs(5));
     assert!(status.success(), "unclean exit {status}: {}", server.log());
@@ -516,7 +535,6 @@ fn second_stop_signal_forces_exit_during_a_long_drain() {
     let mut server = Server::start(60_000);
     let info = server.ready();
     let _stuck = stuck_request(&info);
-    std::thread::sleep(Duration::from_millis(200));
     server.sigterm();
     // Still draining: the first signal alone waits for the stuck request.
     std::thread::sleep(Duration::from_millis(500));
@@ -541,7 +559,6 @@ fn stopping_server_stops_accepting_connections() {
     let mut server = Server::start(60_000);
     let info = server.ready();
     let _stuck = stuck_request(&info);
-    std::thread::sleep(Duration::from_millis(200));
     server.sigterm();
     std::thread::sleep(Duration::from_millis(300));
     let address = info.url.trim_start_matches("http://");
