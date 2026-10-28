@@ -2381,8 +2381,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   remain explicit geometry (HS2-4Y6SM9).
   The inspector's Code Review panel has no heading of its own, because its tab already names
   it; only the review embedded in the repository popover keeps its Commits heading
-  (HS2-E9F1T3). The configured diff tool is named in a quiet footnote below the commits,
-  "Code reviews open in <tool>", rather than as a label beside the heading (HS2-SHV8J7).
+  (HS2-E9F1T3). Quiet, unfilled footnotes close the review: "Showing matches from the newest
+  2,000 commits." when the history search was truncated (HS2-1VWZ9S), then the configured
+  diff tool, "Code reviews open in <tool>.", rather than a label beside the heading
+  (HS2-SHV8J7).
   Clicking a file row selects it; only its visible ellipsis or a right-click opens the
   action menu. Platform-additive and range selection permit batch Show Diff and path-copy
   operations, while single-file-only Open and host-native reveal actions are disabled for
