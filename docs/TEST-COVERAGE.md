@@ -1515,6 +1515,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-cli/tests/coordination_readiness.rs` covers findings and code publication/replay, stale instructions/commit/tree, scope, missing UI evidence, missing gate repair and claim loss using real CLI processes and synthetic Git worktrees.
 - Manual: live before/after return-rate and correction-round measurement against the bounded HS2-34PWSK baseline belongs to HS2-K1QNGC; no measured improvement is claimed here.
 
+### Frozen handoff advisory review (HS2-E20S6K)
+
+- Behavior: an integrator addresses at most two outstanding advisory requests per frozen handoff to reviewers outside the implementation worker pool. The local ticket records requests, results and cancellations without changing the implementation claim or main fence. Reviewer publication validates the qualified ticket, exact handoff, full source tree or findings note, request, instructions and main context; integrator inspection rechecks currentness. Explicit delivery is required.
+- Unit: source-level coordination checks are exercised through the process tests; no additional isolated mock layer mirrors the CLI implementation.
+- End to end: `crates/hotsheet-cli/tests/coordination_advisory.rs` uses separate real CLI processes and synthetic Git stores for concurrent reviews, request capacity/cancellation, code and findings results, replay/restart, changed instructions, main advancement and review return.
+- Manual: host-native delivery and the live HS2-34PWSK before/after queue-delay, correction-round and critical-path measurement remain for HS2-K1QNGC.
+
 ### Coordination assignment transition history (HS2-4273QB)
 
 - Behavior: assignment status retains ordered Offered, Accepted, Handoff, Verifying, Integrating, CI, Done, Blocked, and Review return instants with known role/id. Legacy records without the optional history remain readable. The throughput baseline prefers durable events while retaining conservative legacy proxies.

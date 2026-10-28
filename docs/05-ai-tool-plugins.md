@@ -2370,7 +2370,9 @@ durable events. The worker preserves older source artifacts until integration an
 returns to `next` without waiting for earlier CI. An unavailable terminal or native
 route requires human relay; guidance does not claim an ended independent app
 session automatically wakes. The worker's scoped self-review uses the optional
-executable preflight on current runtimes (HS2-NNSWDS); HS2-E20S6K owns bounded advisory review and
+executable preflight on current runtimes (HS2-NNSWDS); bounded, integrator-addressed
+advisory reviews use durable request/result/cancellation notes with a separate reviewer
+identity and exact source/currentness checks ([contract](31-advisory-reviews.md), HS2-E20S6K), and
 HS2-1C1565 CI completion proposals. The full required local gate remains until
 HS2-FCCRCK changes that policy.
 

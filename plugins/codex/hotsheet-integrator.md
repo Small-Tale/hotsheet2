@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 13 -->
+<!-- hotsheet-skill-version: 14 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -238,10 +238,22 @@ Require a concise worker self-review of exact scope, full source commit or findi
 note, current claim attempt/deadline, local gate evidence, docs/coverage, unresolved
 findings and follow-ups. For UI work, require real-parent visual evidence and a
 matching after attachment when the ticket has a reference image. This is a
-handoff contract, not an executable preflight; HS2-NNSWDS owns that command.
-Consume a current bounded advisory review if present (HS2-E20S6K), verify its
-specific findings and the changed integration delta, then retain the final decision.
-Advisory review never enters or bypasses the exclusive integrating/verifying fence.
+handoff contract, supplemented by executable `coordination preflight --evidence-file`
+for current runtimes (HS2-NNSWDS). For a frozen handoff that would benefit from parallel
+inspection, use `coordination advisory-request --id <integrator> --session <generation>
+--assignment <id> --reviewer <separate-id> --reviewer-session <token>
+--return-route <native:id|terminal:id|human>`. The durable request note identifies
+the exact handoff and return route, but delivery still needs an explicit addressed
+send or human relay. Reviewers are separate from registered implementation workers;
+the two outstanding requests per handoff are pilot capacity, not a worker-count limit.
+Use `advisory-cancel --request-note <id>` for a lost cue or superseded request, then
+address a replacement. A reviewer reads the snapshot with `advisory-review`, examines
+the exact source read-only, and publishes a structured findings file with
+`advisory-review --evidence-file <path> --publish`. On return, run
+`advisory-inspect --assignment <id> --note <result-note-id>` before serial integration.
+If it reports stale, request a scoped refresh. Verify specific findings, changed
+integration delta and all required gates; the integrator retains the final decision
+(HS2-E20S6K). Advisory review never enters or bypasses the exclusive fence.
 
 For a `## Findings handoff`, read the whole exact provider-qualified ticket and
 the referenced regular note. Confirm the worker released its claim. Claim that exact

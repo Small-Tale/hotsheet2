@@ -3,7 +3,7 @@ name: hotsheet-dispatcher
 description: Keep a local dispatcher assigning independent Hot Sheet tickets while an integrator reviews and ships handoffs.
 ---
 
-<!-- hotsheet-skill-version: 1 -->
+<!-- hotsheet-skill-version: 2 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -92,8 +92,10 @@ worktree until the integrator verifies integration. Review returns use a NEW
 assignment and preserve the original operation and artifact (HS2-65ETRJ). A scope
 that proves too narrow is blocked and returned through the reviewed scope-change
 path, not silently widened. The integrator retains the exclusive integrating or
-verifying fence and the final review decision. Bounded advisory review and an
-executable handoff preflight are future HS2-E20S6K and HS2-NNSWDS work.
+verifying fence and the final review decision. The integrator may address up to
+two separate advisory reviewers of a frozen handoff (HS2-E20S6K). They are not
+registered implementation workers and never enter this dispatcher pool. The
+worker's executable handoff preflight is available on current runtimes (HS2-NNSWDS).
 
 Report `no_live_dispatcher`, `no_integrator_registered`, stale or missing base,
 unavailable worker, blocked independent work, unsupported source and expired

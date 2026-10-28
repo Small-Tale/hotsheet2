@@ -15,6 +15,8 @@ use serde::Deserialize;
 use super::{Ctx, misrouted};
 use crate::Cmd;
 
+#[path = "coordination_advisory.rs"]
+mod advisory;
 #[path = "coordination_claims.rs"]
 mod claims;
 #[path = "coordination_readiness.rs"]
@@ -87,6 +89,51 @@ enum CoordinationCmd {
         /// Publish the checked handoff note, release the claim, and record mailbox handoff.
         #[arg(long)]
         publish: bool,
+    },
+    /// Inspect or publish a read-only advisory review of a frozen handoff.
+    AdvisoryReview {
+        #[command(flatten)]
+        reviewer: Identity,
+        #[arg(long)]
+        assignment: String,
+        /// Omit to print the immutable evidence snapshot needed by a reviewer.
+        #[arg(long)]
+        evidence_file: Option<PathBuf>,
+        /// Recheck and publish one durable advisory result; requires evidence_file.
+        #[arg(long, requires = "evidence_file")]
+        publish: bool,
+    },
+    /// Address a bounded, durable advisory request to a separate reviewer session.
+    AdvisoryRequest {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reviewer_session: String,
+        /// Explicit delivery path; this command records it but does not wake a reviewer.
+        #[arg(long)]
+        return_route: ReturnRoute,
+    },
+    /// Cancel a lost or superseded advisory request to free bounded review capacity.
+    AdvisoryCancel {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        #[arg(long)]
+        request_note: String,
+    },
+    /// Read an advisory result and report whether the integrator may use it now.
+    AdvisoryInspect {
+        #[command(flatten)]
+        integrator: Identity,
+        #[arg(long)]
+        assignment: String,
+        #[arg(long)]
+        note: String,
     },
     /// Reserve an exact eligible ticket for an available worker; inspect scope/claims first.
     /// Run by the role holding assignment authority: the integrator in legacy mode, otherwise
@@ -300,6 +347,75 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     &evidence_file,
                 )?
             };
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::AdvisoryReview {
+            reviewer,
+            assignment,
+            evidence_file,
+            publish,
+        } => {
+            let report = advisory::run(
+                &coordinator,
+                &ctx.path,
+                &args.project,
+                &reviewer,
+                &assignment,
+                evidence_file.as_deref(),
+                publish,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::AdvisoryRequest {
+            integrator,
+            assignment,
+            reviewer,
+            reviewer_session,
+            return_route,
+        } => {
+            let report = advisory::request(
+                &coordinator,
+                &ctx.path,
+                &integrator,
+                &assignment,
+                &reviewer,
+                &reviewer_session,
+                &return_route,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::AdvisoryCancel {
+            integrator,
+            assignment,
+            request_note,
+        } => {
+            let report = advisory::cancel(
+                &coordinator,
+                &ctx.path,
+                &integrator,
+                &assignment,
+                &request_note,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::AdvisoryInspect {
+            integrator,
+            assignment,
+            note,
+        } => {
+            let report = advisory::inspect(
+                &coordinator,
+                &ctx.path,
+                &args.project,
+                &integrator.id,
+                &integrator.session,
+                &assignment,
+                &note,
+            )?;
             println!("{}", serde_json::to_string_pretty(&report)?);
             return Ok(());
         }

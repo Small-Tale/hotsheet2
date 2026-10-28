@@ -948,6 +948,10 @@ without changing the integrator registration or schema (HS2-HM9FRV),
 and `dispatch/coordination_readiness.rs` implements the code/findings preflight,
 exact-tree gate check, scoped self-review report and durable handoff publication
 (HS2-NNSWDS; [contract](30-handoff-readiness.md)).
+`dispatch/coordination_advisory.rs` publishes bounded integrator-addressed review
+requests, read-only reviewer results and cancellation notes, then verifies result
+currentness before serial integration (HS2-E20S6K; [contract](31-advisory-reviews.md));
+`tests/coordination_advisory.rs` exercises separate CLI processes and synthetic stores.
 `hotsheet-ticketing/src/ops.rs` atomically appends that handoff note and releases
 the exact claim after rechecking its ticket snapshot and deadline.
 The coordination CLI also exposes
