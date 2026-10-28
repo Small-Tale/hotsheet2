@@ -45,6 +45,10 @@ pub struct Coordinator {
     /// dispatcher authority and before its atomic registration (HS2-TWZW7X).
     #[cfg(test)]
     pub(crate) before_dispatcher_register: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// Runs after the atomic attempt, so a test can inspect a rejected registration
+    /// before publishing another authority change (HS2-ZKWCE0).
+    #[cfg(test)]
+    pub(crate) after_dispatcher_register: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// Readiness signal: runs once a dispatcher wait is subscribed and waiting unregistered,
     /// so tests never infer that state from elapsed time (HS2-TWZW7X).
     #[cfg(test)]
@@ -90,6 +94,8 @@ impl Coordinator {
             ),
             #[cfg(test)]
             before_dispatcher_register: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            after_dispatcher_register: std::sync::Mutex::new(None),
             #[cfg(test)]
             waiting_unregistered: std::sync::Mutex::new(None),
         };

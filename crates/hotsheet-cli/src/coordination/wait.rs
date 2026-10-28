@@ -180,6 +180,15 @@ impl Coordinator {
                     request.lease_seconds,
                     request.return_route.clone(),
                 )?;
+                #[cfg(test)]
+                if let Some(hook) = self
+                    .after_dispatcher_register
+                    .lock()
+                    .expect("test hook lock")
+                    .take()
+                {
+                    hook();
+                }
                 renew_at = current + request.lease_seconds / 2;
                 state = self.state()?;
             }

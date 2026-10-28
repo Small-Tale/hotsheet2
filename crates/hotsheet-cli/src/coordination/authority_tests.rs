@@ -556,7 +556,6 @@ fn hs2_twzw7x_waiting_dispatcher_survives_a_revert_between_observation_and_regis
     let store = root.path().join("store");
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     register(&c, Role::Integrator, "root", "root-1", now);
-    let (reverted_tx, reverted) = std::sync::mpsc::channel();
     let (hook_project, hook_store) = (project.clone(), store.clone());
     // Runs exactly at the interleaving point: authority was observed, registration not yet run.
     *c.before_dispatcher_register.lock().unwrap() = Some(Box::new(move || {
@@ -564,36 +563,27 @@ fn hs2_twzw7x_waiting_dispatcher_survives_a_revert_between_observation_and_regis
         other
             .set_authority("root", "root-1", now, Authority::Integrator, false)
             .unwrap();
-        reverted_tx.send(()).unwrap();
     }));
-    let (waiting_tx, waiting) = std::sync::mpsc::channel();
+    let (hook_project, hook_store) = (project.clone(), store.clone());
+    *c.after_dispatcher_register.lock().unwrap() = Some(Box::new(move || {
+        let other = Coordinator::open(&hook_project, &hook_store).unwrap();
+        assert_eq!(other.state().unwrap().authority, Authority::Integrator);
+        assert!(other.state().unwrap().dispatcher.is_none());
+        other
+            .set_authority("root", "root-1", now, Authority::Dispatcher, false)
+            .unwrap();
+    }));
+    let (hook_project, hook_store) = (project.clone(), store.clone());
     *c.waiting_unregistered.lock().unwrap() = Some(Box::new(move || {
-        waiting_tx.send(()).unwrap();
+        // The subscription already exists. Publish the first transition from this
+        // readiness hook so host scheduling cannot consume a short test deadline.
+        Coordinator::open(&hook_project, &hook_store)
+            .unwrap()
+            .set_authority("root", "root-1", now, Authority::Dispatcher, true)
+            .unwrap();
     }));
-    let waiter = std::thread::spawn(move || c.next(&dispatcher_wait()));
-    let control = Coordinator::open(&project, &store).unwrap();
-    // Wait for the waiter's own readiness signal: subscribed and unregistered on the legacy pool.
-    waiting
-        .recv_timeout(std::time::Duration::from_secs(10))
-        .expect("waiter subscribed without registering");
-    control
-        .set_authority("root", "root-1", now, Authority::Dispatcher, true)
-        .unwrap();
-    reverted
-        .recv_timeout(std::time::Duration::from_secs(10))
-        .expect("waiter reached the registration interleaving point");
-    assert_eq!(control.state().unwrap().authority, Authority::Integrator);
-    assert!(control.state().unwrap().dispatcher.is_none());
-    assert!(
-        !waiter.is_finished(),
-        "the reverted waiter keeps waiting instead of failing"
-    );
-    control
-        .set_authority("root", "root-1", now, Authority::Dispatcher, false)
-        .unwrap();
-    let snapshot = waiter
-        .join()
-        .unwrap()
+    let snapshot = c
+        .next(&dispatcher_wait())
         .expect("the same waiter registers after re-enable");
     assert!(snapshot.live_dispatcher);
     assert_eq!(snapshot.state.dispatcher.unwrap().generation, "dispatch-1");
