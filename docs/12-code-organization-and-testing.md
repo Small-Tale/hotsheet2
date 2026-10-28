@@ -1241,3 +1241,7 @@ bounded relevant browser checks, and exact-input receipts. Inspect it with `--pl
 use `--full` for the full package gate. Full browser/platform regression remains
 in CI, with an additional full local browser run only for a concrete unresolved risk.
 See [the policy, input boundaries, and measurement limits](29-affected-local-verification.md).
+HS2-GN06JT adds an explicit T0/T1 five-minute planning target based on measured
+stage history, never a kill timer. The mandatory floor and direct tests always run;
+an unresolved tier retains the existing affected selection until provider-neutral
+tag resolution (HS2-VQ5ND5). Explicit T2 analyzed selections have no budget cap.

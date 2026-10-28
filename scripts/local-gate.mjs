@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
+import { parseBudget, selectBudget } from './gate-budget.mjs';
 import {
   importCiReports,
   loadTimingHistory,
@@ -177,7 +178,18 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
   ];
 }
 
-export function prepare(repo, baseRef, full = false, versions) {
+function budgetConfig(repo) {
+  const config = read(join(repo, 'scripts/gate-budget.json'));
+  if (!Number.isSafeInteger(config?.defaultBudgetMs) || config.defaultBudgetMs <= 0 || Object.keys(config).length !== 1)
+    throw new Error('Checked-in gate budget config needs a positive defaultBudgetMs.');
+  return config;
+}
+
+export function prepare(repo, baseRef, full = false, versions, options = {}) {
+  if (!options.tier && options.budgetMs !== undefined)
+    throw new Error('Specify --tier T0 or T1 with --budget until ticket-tier resolution ships.');
+  if (options.tier === 'T2' && options.budgetMs !== undefined)
+    throw new Error('T2 analyzed selection has no time budget; omit --budget.');
   const state = collect(repo, baseRef);
   const stages = parseCheckScript(readFileSync(join(repo, 'scripts/check-full.sh'), 'utf8'));
   const selected = plan({
@@ -214,7 +226,7 @@ export function prepare(repo, baseRef, full = false, versions) {
     if (shared) titles.length = 0;
     testTitles[path] = [...new Set(titles)];
   }
-  const chosen = [
+  const affected = [
     ...selected.stages.filter((stage) => stage.selected),
     ...browserStages(
       state.changes,
@@ -223,6 +235,19 @@ export function prepare(repo, baseRef, full = false, versions) {
       testTitles,
     ),
   ];
+  const config = budgetConfig(repo);
+  const tier = options.tier ?? 'unresolved';
+  const budgetMs = ['T2', 'unresolved'].includes(tier) ? null : (options.budgetMs ?? config.defaultBudgetMs);
+  const budgeted = selectBudget({
+    stages: [...selected.stages.filter((stage) => !stage.selected), ...affected],
+    changes: state.changes,
+    history: loadTimingHistory(timingPath(repo)),
+    budgetMs,
+    tier,
+    analyzed: options.analyzed ?? [],
+    full: selected.mode === 'full' || tier === 'unresolved',
+  });
+  const chosen = budgeted.selected;
   const environment = Object.fromEntries(
     [
       'CI',
@@ -235,8 +260,11 @@ export function prepare(repo, baseRef, full = false, versions) {
     ].map((name) => [name, process.env[name] ?? null]),
   );
   const context = {
-    version: 1,
+    version: 2,
     base: state.base,
+    budgetMs,
+    tier: budgeted.tier,
+    analyzed: options.analyzed ?? [],
     tools,
     platform: process.platform,
     arch: process.arch,
@@ -249,11 +277,14 @@ export function prepare(repo, baseRef, full = false, versions) {
       const groups = classifyPath(path).groups;
       return groups === 'full' || groups.includes(stage.group);
     });
-    return { ...stage, key: hash({ context, stage, inputs }) };
+    return {
+      ...stage,
+      key: hash({ context, stage: { cwd: stage.cwd, command: stage.command, group: stage.group }, inputs }),
+    };
   });
   const key = hash({ context, tree: state.tree, checks: checks.map((stage) => stage.key) });
   const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
-  return { ...state, ...selected, checks, key, cache: join(common, 'hotsheet-local-gate'), tools };
+  return { ...state, ...selected, ...budgeted, checks, key, cache: join(common, 'hotsheet-local-gate'), tools };
 }
 
 export function runGate(options = {}) {
@@ -265,9 +296,14 @@ export function runGate(options = {}) {
     verify = false,
     runner,
     versions,
+    budgetMs,
+    tier,
+    analyzed,
     log = console.log,
   } = options;
-  const before = prepare(repo, base, full, versions);
+  const selection = { budgetMs, tier, analyzed };
+  const before = prepare(repo, base, full, versions, selection);
+  const gateStarted = Date.now();
   const receiptPath = join(before.cache, `${before.key}.json`);
   const compatibility = resolve(repo, git(repo, ['rev-parse', '--git-path', 'hotsheet-root-gate']));
   const marker = join(compatibility, before.tree);
@@ -285,7 +321,9 @@ export function runGate(options = {}) {
   if (existing?.key === before.key && existing.tree === before.tree) {
     mkdirSync(compatibility, { recursive: true });
     writeFileSync(marker, `${before.tree}\n`);
-    log(`Local gate already passed for tree ${before.tree}`);
+    log(
+      `Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${before.budgetMs ?? 'none'}ms`,
+    );
     return 0;
   }
   rmSync(marker, { force: true });
@@ -298,7 +336,7 @@ export function runGate(options = {}) {
       results.push({ command: stage.command, reused: true });
       continue;
     }
-    log(`Run ${stage.cwd}: ${stage.command} (${stage.reasons.join('; ')})`);
+    log(`Run ${stage.cwd}: ${stage.command} (${stage.budgetReason}; ${stage.reasons.join('; ')})`);
     const report = runner ? null : reportFor(stage, repo);
     if (report && report.kind !== 'nextest') {
       mkdirSync(dirname(report.path), { recursive: true });
@@ -310,18 +348,35 @@ export function runGate(options = {}) {
       runner: runner ?? ((current) => instrumentedRunner(current, repo, report)),
     });
     results.push(...result.results);
-    if (result.status !== 0) return result.status;
-    const current = prepare(repo, base, full, before.tools);
+    if (result.status !== 0) {
+      log(
+        `Local gate failed after ${Date.now() - gateStarted}ms; budget ${before.budgetMs ?? 'none'}ms. No receipt recorded.`,
+      );
+      return result.status;
+    }
+    const current = prepare(repo, base, full, before.tools, selection);
     if (current.dirty || current.key !== before.key)
       throw new Error('Inputs changed during the gate; evidence discarded.');
     mkdirSync(before.cache, { recursive: true });
     writeFileSync(stagePath, JSON.stringify({ key: stage.key }));
     observations.push({ ...result.results[0], files: observedFiles(report, started) });
   }
-  const after = prepare(repo, base, full, before.tools);
+  const after = prepare(repo, base, full, before.tools, selection);
   if (after.dirty || after.key !== before.key) throw new Error('Inputs changed during the gate; evidence discarded.');
   mkdirSync(before.cache, { recursive: true });
-  writeFileSync(receiptPath, JSON.stringify({ key: before.key, tree: before.tree, base: before.base, results }));
+  writeFileSync(
+    receiptPath,
+    JSON.stringify({
+      key: before.key,
+      tree: before.tree,
+      base: before.base,
+      budgetMs: before.budgetMs,
+      tier: before.tier,
+      selected: before.checks.map((stage) => stage.command),
+      deferred: before.deferred.map((stage) => stage.command),
+      results,
+    }),
+  );
   // Preserve the coordination/completion contract before recording an observation.
   mkdirSync(compatibility, { recursive: true });
   writeFileSync(marker, `${before.tree}\n`);
@@ -330,17 +385,29 @@ export function runGate(options = {}) {
   } catch (error) {
     console.warn(`Gate passed, but timing history was unavailable: ${error.message}`);
   }
-  log(`Local ${before.mode} gate passed for tree ${before.tree}`);
+  log(
+    `Local ${before.mode} gate passed for tree ${before.tree}; actual ${Date.now() - gateStarted}ms, budget ${before.budgetMs ?? 'none'}ms${before.floorOverBudget ? ' (mandatory floor exceeded budget)' : ''}`,
+  );
   return 0;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    const allowed = new Set(['--plan', '--full', '--verify-receipt', '--base', '--timings', '--import-ci-timings']);
+    const allowed = new Set([
+      '--plan',
+      '--full',
+      '--verify-receipt',
+      '--base',
+      '--timings',
+      '--import-ci-timings',
+      '--budget',
+      '--tier',
+      '--t2-stage',
+    ]);
     for (let i = 0; i < args.length; i += 1) {
       if (!allowed.has(args[i])) throw new Error(`Unknown argument: ${args[i]}`);
-      if (['--base', '--import-ci-timings'].includes(args[i]) && !args[++i])
+      if (['--base', '--import-ci-timings', '--budget', '--tier', '--t2-stage'].includes(args[i]) && !args[++i])
         throw new Error(`${args[i - 1]} requires a value`);
     }
     if (args.includes('--timings') || args.includes('--import-ci-timings')) {
@@ -352,6 +419,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         full: args.includes('--full'),
         verify: args.includes('--verify-receipt'),
         base: args.includes('--base') ? args[args.indexOf('--base') + 1] : undefined,
+        budgetMs: args.includes('--budget') ? parseBudget(args[args.indexOf('--budget') + 1]) : undefined,
+        tier: args.includes('--tier') ? args[args.indexOf('--tier') + 1] : undefined,
+        analyzed: args.flatMap((arg, index) => (arg === '--t2-stage' ? [args[index + 1]] : [])),
       });
     }
   } catch (error) {

@@ -24,6 +24,7 @@ function fixture(t) {
   git('config', 'user.name', 'Synthetic');
   git('config', 'user.email', 'synthetic@invalid.example');
   put('scripts/check-full.sh', fullScript);
+  put('scripts/gate-budget.json', JSON.stringify({ defaultBudgetMs: 300000 }));
   put('clients/web/src/example.ts', 'export const value = 1;\n');
   git('add', '.');
   git('commit', '--quiet', '-m', 'base');
@@ -57,6 +58,53 @@ test('HS2-RS0FFT receipts reuse unchanged inputs and invalidate toolchain and ba
   assert.throws(() => runGate({ ...f.options, versions: [['synthetic-toolchain', '2']], verify: true }), /No valid/);
   f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
+});
+
+test('HS2-GN06JT budget and analyzed set are exact receipt inputs', (t) => {
+  const f = fixture(t);
+  const one = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1', budgetMs: 300000 });
+  const two = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1', budgetMs: 600000 });
+  assert.notEqual(one.key, two.key);
+  assert.ok(one.deferred.every((stage) => stage.budgetReason.includes('deferred to CI')));
+  assert.equal(runGate({ ...f.options, runner: () => ({ status: 0 }), tier: 'T1', budgetMs: 300000 }), 0);
+  assert.throws(() => runGate({ ...f.options, verify: true, tier: 'T1', budgetMs: 600000 }), /No valid/);
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { budgetMs: 600000 }), /Specify --tier/);
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions, { tier: 'T2' }), /explicit analyzed/);
+  const build = 'clients/web::npm run build';
+  const t2 = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T2', analyzed: [build] });
+  assert.equal(t2.budgetMs, null);
+  assert.ok(t2.checks.some((stage) => stage.command === 'npm run build'));
+  assert.throws(
+    () => prepare(f.repo, undefined, false, f.options.versions, { tier: 'T2', budgetMs: 300000, analyzed: [build] }),
+    /no time budget/,
+  );
+});
+
+test('HS2-GN06JT gate and config changes keep the full fallback', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-budget.json', JSON.stringify({ defaultBudgetMs: 600000 }));
+  f.git('add', 'scripts/gate-budget.json');
+  f.git('commit', '--quiet', '-m', 'budget config change');
+  const result = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1' });
+  assert.equal(result.mode, 'full');
+  assert.equal(result.budgetMs, 600000);
+  assert.equal(result.deferred.length, 0);
+  assert.ok(result.stages.filter((stage) => stage.group !== undefined).every((stage) => stage.selected));
+});
+
+test('HS2-GN06JT unresolved tier preserves existing affected gate until tag resolution', (t) => {
+  const f = fixture(t);
+  const result = prepare(f.repo, undefined, false, f.options.versions);
+  assert.equal(result.tier, 'unresolved');
+  assert.equal(result.budgetMs, null);
+  assert.ok(result.checks.some((stage) => stage.command === 'npm run build'));
+  assert.equal(result.deferred.length, 0);
+});
+
+test('HS2-GN06JT invalid checked-in budget config fails closed', (t) => {
+  const f = fixture(t);
+  f.put('scripts/gate-budget.json', JSON.stringify({ defaultBudgetMs: 0, typo: true }));
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions), /Checked-in gate budget config/);
 });
 
 test('HS2-TCCKRZ completed stage samples exclude receipt reuse', (t) => {

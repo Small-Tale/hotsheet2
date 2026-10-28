@@ -15,6 +15,35 @@ select their dependent packages. Unknown paths, missing baseline, configuration,
 lockfiles, toolchain, gate scripts, or ambiguous stages select the full package gate.
 High-risk changes retain full affected suites.
 
+## Per-ticket time budget (HS2-GN06JT)
+
+The checked-in `scripts/gate-budget.json` sets a five-minute planning target. With
+`scripts/check.sh --tier T0` or `--tier T1`, the planner always keeps formatting,
+lint, typechecks, repository policy and generated-artifact checks, plus suites that
+directly test changed source. It ranks the remaining affected suites by relevance
+and admits only stages with a known local timing estimate that fit the remaining
+budget. An unknown or CI-only estimate is deferred to covering CI. The plan lists
+each selected and deferred stage, its estimate and the reason. If the mandatory
+floor exceeds five minutes, every floor check still runs and the overrun is shown;
+there is no deadline or mid-stage interruption. `--budget 15m` overrides the
+checked-in target for that invocation. `--full` still runs the full local gate.
+
+`--tier T2 --t2-stage '<cwd>::<exact command>'` accepts an explicit analyzed stage
+selection without a time cap. Mandatory floor checks remain selected. The command
+requires an explicit selection when other affected checks exist. The risk analysis
+and chosen checks belong in the ticket's preliminary thoughts. Until HS2-VQ5ND5
+resolves provider-neutral tier tags and HS2-EJ8JTG updates the T2 policy, an
+ordinary `scripts/check.sh` retains the prior full affected selection. An explicit
+budget or T2 selection requires its tier flag; the gate never assumes an untagged
+T2 ticket is safe to budget.
+
+The exact-input receipt records the budget, tier, selected and deferred commands.
+Changing the budget or analyzed set changes the receipt key. Gate code and config
+changes still force the full fallback. The executor reports actual elapsed time
+beside the budget after success or failure. Covering main CI checks the deferred
+stages before completion. HS2-DAA8AB owns quiet-host selected-versus-full outcome
+comparison, and HS2-K1QNGC owns live throughput measurement.
+
 Run additional browser checks when an actual shared routing/rendering/state change,
 auth change, data format/migration, ambiguous dependency, or concrete failure needs
 them. Record the reason in the ticket. A full local browser run is warranted for an

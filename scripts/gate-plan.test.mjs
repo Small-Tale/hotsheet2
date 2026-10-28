@@ -65,6 +65,7 @@ test('HS2-FCCRCK falls back to the full gate for gate, config, lock, toolchain, 
   for (const path of [
     'scripts/check.sh',
     'scripts/gate-plan.mjs',
+    'scripts/gate-budget.json',
     '.githooks/pre-push',
     '.github/workflows/ci.yml',
     'Cargo.lock',
