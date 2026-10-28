@@ -2367,7 +2367,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   source, and other file counts plus separate counts for newly added and modified existing
   test files. The summary is an action that opens a repository-browser-style master/detail
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
-  card grows to contain every count and test-change line even in the narrow inspector.
+  card grows to contain every count and test-change line even in the narrow inspector. It has
+  no resting fill, only a hover fill as its action affordance, and a rule separates this
+  header area from the first commit (HS2-3F2DZN).
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions

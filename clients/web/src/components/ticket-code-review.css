@@ -27,7 +27,9 @@
   border-radius: var(--wa-border-radius-m);
   box-sizing: border-box;
   color: inherit;
-  background: var(--wa-color-neutral-fill-quiet);
+  /* No resting fill: the summary reads as the panel's header area, and the hover fill remains its
+     action affordance (HS2-3F2DZN). */
+  background: transparent;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -154,11 +156,13 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* A rule separates the header area (evidence and notices) from the first commit (HS2-3F2DZN). */
 .ticket-code-review__commits {
   display: grid;
   min-width: 0;
   margin: 0;
   padding: 0;
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
   list-style: none;
 }
 .ticket-code-review__commit {

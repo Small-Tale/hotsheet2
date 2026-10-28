@@ -92,6 +92,17 @@ describe('TicketCodeReview', () => {
     expect(css).toMatchSource(/__refs \{[^}]*gap: var\(--kui-space-2xs\); margin-top: var\(--kui-space-2xs\)/);
   });
 
+  it('leaves Change Evidence unfilled at rest and rules it off from the first commit (HS2-3F2DZN)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(css).toMatch(/\.ticket-code-review__evidence \{[^}]*background: transparent;/);
+    expect(css).toMatch(
+      /\.ticket-code-review__evidence:hover \{[^}]*background: var\(--wa-color-neutral-fill-normal\)/,
+    );
+    expect(css).toMatch(
+      /\.ticket-code-review__commits \{[^}]*border-top: 1px solid var\(--wa-color-neutral-border-quiet\)/,
+    );
+  });
+
   it('resets the native list-item indent so commit rows align with their list', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).toMatch(/\.ticket-code-review__commit \{[^}]*margin-inline-start: 0;/);
