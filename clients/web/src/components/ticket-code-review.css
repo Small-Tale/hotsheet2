@@ -213,6 +213,10 @@
   align-items: start;
   gap: var(--kui-space-xs);
 }
+/* The last row needs no closing rule; the footnotes' whitespace ends the list (HS2-X8XK9D). */
+.ticket-code-review__commits > :last-child {
+  border-bottom: 0;
+}
 .ticket-code-review__graph {
   display: grid;
   width: remify(20px);
@@ -289,6 +293,7 @@
 /* Footnotes (the diff tool) sit on the commits' 17px text column with no fill (HS2-SHV8J7). */
 .ticket-code-review__footnotes {
   display: grid;
+  margin-top: var(--kui-space-l);
   padding-inline: calc(var(--kui-space-m) + 1px);
   gap: var(--kui-space-2xs);
 }
