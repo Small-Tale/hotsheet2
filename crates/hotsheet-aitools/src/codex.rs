@@ -71,6 +71,10 @@ struct Inner {
     notes: Mutex<Vec<Value>>,
     cvar: Condvar,
     closed: AtomicBool,
+    /// Probe connections (HS2-7T7CS4) fail in-flight requests as soon as the connection
+    /// closes instead of letting them run out their request timeout. Drive sessions keep
+    /// waiting for the timeout.
+    fail_pending_on_close: bool,
     /// How approval ServerRequests are decided; `None` = permissively auto-approve (the
     /// back-compat default, and what the isolated headless launch expects).
     permission: Mutex<Option<PermissionPolicy>>,
@@ -93,6 +97,12 @@ impl Inner {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = channel();
         self.pending.lock_or_recover().insert(id, tx);
+        // HS2-7T7CS4: a close that drained `pending` before this insert would leave the
+        // request waiting for its timeout, so recheck after inserting.
+        if self.fail_pending_on_close && self.closed.load(Ordering::SeqCst) {
+            self.pending.lock_or_recover().remove(&id);
+            return Err(AppServerError::Unavailable("connection closed".into()));
+        }
 
         let msg = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
         if let Err(e) = self.send_raw(&msg.to_string()) {
@@ -189,6 +199,10 @@ impl Inner {
 
     fn mark_closed(&self) {
         self.closed.store(true, Ordering::SeqCst);
+        if self.fail_pending_on_close {
+            // Dropping each sender wakes its waiting request with a closed connection.
+            self.pending.lock_or_recover().clear();
+        }
         self.cancel_active_approval();
         // Wake any turn blocked in `wait_for_completed` so it can observe the close.
         let _guard = self.notes.lock_or_recover();
@@ -292,7 +306,11 @@ fn approval_action(params: &Value) -> String {
 struct CodexRpc;
 
 impl CodexRpc {
-    fn start(transport: Box<dyn RpcTransport>, request_timeout: Duration) -> Arc<Inner> {
+    fn start(
+        transport: Box<dyn RpcTransport>,
+        request_timeout: Duration,
+        fail_pending_on_close: bool,
+    ) -> Arc<Inner> {
         let (writer, mut reader) = transport.split();
         let inner = Arc::new(Inner {
             writer: Mutex::new(writer),
@@ -302,6 +320,7 @@ impl CodexRpc {
             notes: Mutex::new(Vec::new()),
             cvar: Condvar::new(),
             closed: AtomicBool::new(false),
+            fail_pending_on_close,
             permission: Mutex::new(None),
             active_approval: AtomicU64::new(0),
         });
@@ -356,16 +375,25 @@ impl Drop for CodexAppServer {
 impl CodexAppServer {
     /// Connect over `transport` and perform the `initialize` → `initialized` handshake.
     pub fn connect(transport: Box<dyn RpcTransport>) -> Result<Self, AppServerError> {
-        Self::connect_with_timeout(transport, REQUEST_TIMEOUT)
+        Self::connect_with(transport, REQUEST_TIMEOUT, false)
     }
 
-    /// Connect with a bounded per-request timeout for short-lived capability probes.
-    pub(crate) fn connect_with_timeout(
+    /// Connect a short-lived capability probe with a bounded per-request timeout. Its
+    /// in-flight requests fail as soon as the probe process exits (HS2-7T7CS4).
+    pub(crate) fn connect_probe(
         transport: Box<dyn RpcTransport>,
         request_timeout: Duration,
     ) -> Result<Self, AppServerError> {
+        Self::connect_with(transport, request_timeout, true)
+    }
+
+    fn connect_with(
+        transport: Box<dyn RpcTransport>,
+        request_timeout: Duration,
+        fail_pending_on_close: bool,
+    ) -> Result<Self, AppServerError> {
         let client = Self {
-            inner: CodexRpc::start(transport, request_timeout),
+            inner: CodexRpc::start(transport, request_timeout, fail_pending_on_close),
             last_thread: Mutex::new(None),
             approval_policy: Mutex::new("never"),
         };
@@ -1761,6 +1789,7 @@ mod approval_tests {
             notes: Mutex::new(Vec::new()),
             cvar: Condvar::new(),
             closed: AtomicBool::new(false),
+            fail_pending_on_close: false,
             permission: Mutex::new(Some(policy)),
             active_approval: AtomicU64::new(0),
         });
@@ -1925,6 +1954,7 @@ mod failure_tests {
                 notes: Mutex::default(),
                 cvar: Condvar::new(),
                 closed: AtomicBool::new(false),
+                fail_pending_on_close: false,
                 permission: Mutex::new(None),
                 active_approval: AtomicU64::new(0),
             }),
