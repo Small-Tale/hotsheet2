@@ -135,7 +135,13 @@ impl Server {
             let file = fs::File::create(&log).unwrap();
             (file.try_clone().unwrap().into(), file.into())
         });
-        let child = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"));
+        if slow_discovery.is_some() {
+            // HS2-7W3D7V: the test environment disables tool probes; this fixture probes
+            // only its own hanging tool, so it opts back in.
+            command.env_remove(hotsheet_aitools::AI_TOOL_PROBES_ENV);
+        }
+        let child = command
             .arg("-C")
             .arg(&store)
             .args(["--bind", "127.0.0.1:0", "--secret", "drain-test"])

@@ -2584,6 +2584,11 @@ launcher appears first on `PATH`. The trusted file must still be a regular,
 executable native binary; an invalid path or script leaves the bundled catalog
 in use. Changing or removing the trusted directory invalidates the live model
 cache (HS2-6FVRZS). The exact model-id input remains available for other models.
+Setting `HOTSHEET_AI_TOOL_PROBES=off` disables every runtime catalog probe: discovery
+still detects installed tools on `PATH`, but every provider keeps its bundled catalog
+and no tool is executed. Any other value, or no value, leaves probing on. The Rust test
+environment forces it off so tests never run the developer's installed tools
+(HS2-7W3D7V).
 The provenance review (HS2-3VHPFR, 2026-10-08) found no documented offline check
 strong enough to prove an installed `agy` is the agent CLI across supported platforms.
 Google's current [Unix installer](https://antigravity.google/cli/install.sh) and

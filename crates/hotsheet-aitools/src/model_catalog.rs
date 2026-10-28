@@ -340,6 +340,17 @@ impl ModelCatalogCache {
     }
 }
 
+/// The environment switch that keeps discovery from executing installed tools.
+pub const AI_TOOL_PROBES_ENV: &str = "HOTSHEET_AI_TOOL_PROBES";
+
+/// Whether discovery may run installed tools' version and model-catalog commands.
+/// `HOTSHEET_AI_TOOL_PROBES=off` keeps every provider on its bundled offline catalog
+/// without executing anything. `.cargo/config.toml` forces it for every test process so
+/// no test runs the developer's real AI tools or their network calls (HS2-7W3D7V).
+pub fn ai_tool_probes_enabled() -> bool {
+    std::env::var_os(AI_TOOL_PROBES_ENV).is_none_or(|value| value != "off")
+}
+
 /// Discover all installed drivable plugins, enriching only those whose drive exposes a
 /// runtime catalog capability. Registry order remains stable.
 pub fn discover_ai_tool_descriptors(
@@ -348,9 +359,10 @@ pub fn discover_ai_tool_descriptors(
     cache: &mut ModelCatalogCache,
     refresh: bool,
 ) -> Vec<AiToolDescriptor> {
+    let probes = ai_tool_probes_enabled();
     hotsheet_plugins::detected_drivable_plugins(search_dirs)
         .into_iter()
-        .filter_map(|plugin| resolve_plugin(&plugin, cwd, cache, refresh))
+        .filter_map(|plugin| resolve_plugin(&plugin, cwd, cache, refresh, probes))
         .collect()
 }
 
@@ -359,9 +371,10 @@ fn resolve_plugin(
     cwd: &Path,
     cache: &mut ModelCatalogCache,
     refresh: bool,
+    probes: bool,
 ) -> Option<AiToolDescriptor> {
     let manifest = hotsheet_plugins::ai_tool_descriptor(plugin)?;
-    let drive = drive_for(plugin);
+    let drive = probes.then(|| drive_for(plugin)).flatten();
     Some(
         cache.resolve(
             manifest,

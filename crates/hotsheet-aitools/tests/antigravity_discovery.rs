@@ -59,6 +59,8 @@ fn main() {
         std::env::set_var("PATH", &bin);
         std::env::set_var("HOME", &home);
         std::env::remove_var("HOTSHEET_ANTIGRAVITY_CLI_DIR");
+        // HS2-7W3D7V: this test probes fixture tools, so it opts back into probing.
+        std::env::remove_var(hotsheet_aitools::AI_TOOL_PROBES_ENV);
         std::env::set_var("AGY_FIXTURE_MARKER", &marker);
     }
     let mut cache = hotsheet_aitools::ModelCatalogCache::default();
@@ -255,6 +257,8 @@ fn main() {
     unsafe {
         std::env::set_var("PATH", path);
         std::env::remove_var("HOTSHEET_ANTIGRAVITY_CLI_DIR");
+        // HS2-7W3D7V: this test probes fixture tools, so it opts back into probing.
+        std::env::remove_var(hotsheet_aitools::AI_TOOL_PROBES_ENV);
         std::env::set_var("AGY_FIXTURE_MARKER", &marker);
         std::env::set_var("AGY_FIXTURE_MODE", "live");
     }

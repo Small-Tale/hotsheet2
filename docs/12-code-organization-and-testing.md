@@ -788,6 +788,16 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
+- **Installed AI-tool isolation (HS2-7W3D7V):** a test that starts a server or CLI with
+  the inherited `PATH` would otherwise let AI-tool discovery execute the developer's real
+  tools (`codex --version` and the app-server `model/list`, `opencode models`,
+  `agy models`) with their real credentials and network access. `.cargo/config.toml`
+  forces `HOTSHEET_AI_TOOL_PROBES=off`, so discovery still detects installed tools on
+  `PATH` but keeps their bundled offline catalogs and executes nothing.
+  `crates/hotsheet-aitools/tests/probe_isolation.rs` fails if the guard is removed. Tests
+  that probe their own fixture tools (`antigravity_discovery.rs`, the `graceful_shutdown`
+  slow-discovery fixtures) remove the variable explicitly. Browser and Node fixtures do not
+  receive cargo's `[env]`; HS2-F6R2HQ tracks them.
 - **Session-identity isolation (HS2-ZWBSH1):** the same launched shells also export their
   session identity (`HOTSHEET_PERMISSION_PROJECT`, `HOTSHEET_PROJECT`, `HOTSHEET_SERVER`,
   `HOTSHEET_SECRET`, `HOTSHEET_TERMINAL_ID`, `HOTSHEET_AGENT`) and the agent harness exports

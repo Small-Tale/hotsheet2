@@ -15,3 +15,9 @@ HOTSHEET_HOME = { value = "target/test-hotsheet-home", force = true, relative = 
 # (`~/Library/Caches/hotsheet2` on macOS). Tests that assert cache contents still inject
 # their own temp directory with `AppState::with_cache_dir`.
 HOTSHEET_CACHE_DIR = { value = "target/test-hotsheet-cache", force = true, relative = true }
+# HS2-7W3D7V: AI-tool discovery would otherwise execute the developer's installed tools
+# (`codex --version`, the Codex app-server `model/list`, `opencode models`, `agy models`)
+# with their real credentials and network access whenever a test starts a server or CLI
+# with the inherited PATH. Tests keep the bundled offline catalogs; the few that exercise
+# probing against fixture tools remove this variable explicitly.
+HOTSHEET_AI_TOOL_PROBES = { value = "off", force = true }

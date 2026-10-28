@@ -68,8 +68,9 @@ pub use drive::{
 pub use host::{TriggerError, TriggerRequest, Triggered, drive_for, trigger};
 pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger, run_trigger_controlled};
 pub use model_catalog::{
-    CommandModelCatalog, ModelCatalogCache, RuntimeModelCatalog, RuntimeModelCatalogSource,
-    RuntimeModelSpec, discover_ai_tool_descriptors,
+    AI_TOOL_PROBES_ENV, CommandModelCatalog, ModelCatalogCache, RuntimeModelCatalog,
+    RuntimeModelCatalogSource, RuntimeModelSpec, ai_tool_probes_enabled,
+    discover_ai_tool_descriptors,
 };
 pub use permission::{
     DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
