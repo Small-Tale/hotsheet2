@@ -1476,6 +1476,19 @@ pub fn rate_ai_content(
     }
     store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
+        // HS2-HB31Z3: a note rating names a live note on this ticket (deleting a note
+        // removes its ratings). Withdrawal is unaffected; activity and conversation ids
+        // live outside the ticket and keep shape-only validation.
+        if rating.is_some()
+            && let Some(note_id) = target.strip_prefix("note:")
+            && !Ulid::from_string(note_id)
+                .is_ok_and(|id| ticket.notes.iter().any(|note| note.id == id))
+        {
+            return Err(StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "AI feedback note target must name a note on this ticket",
+            )));
+        }
         let previous = ticket.notes.iter_mut().rev().find(|note| {
             note.ai_feedback_value()
                 .is_some_and(|feedback| feedback.target == target)
@@ -4667,6 +4680,87 @@ mod tests {
                 actor
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn hs2_hb31z3_note_ratings_name_a_live_note_on_the_same_ticket() {
+        let (_dir, store) = store();
+        let (id, other) = (Ulid::new(), Ulid::new());
+        for ticket in [id, other] {
+            create(&store, ticket, "HS", ts("t0"), NewTicket::default()).unwrap();
+        }
+        let (note, foreign) = (Ulid::new(), Ulid::new());
+        add_note(
+            &store,
+            &id,
+            note,
+            ts("t1"),
+            NoteKind::Regular,
+            "answer".into(),
+        )
+        .unwrap();
+        add_note(
+            &store,
+            &other,
+            foreign,
+            ts("t1"),
+            NoteKind::Regular,
+            "elsewhere".into(),
+        )
+        .unwrap();
+        let actor = Some(hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Human,
+            id: Some("rater-1".into()),
+        });
+        let rate = |target: String, rating| {
+            rate_ai_content(&store, &id, ts("t2"), &target, rating, None, actor.clone())
+        };
+        let refused = |target: String| {
+            let error = rate(target, Some(hotsheet_model::AiFeedbackRating::Helpful)).unwrap_err();
+            assert!(error.to_string().contains("note on this ticket"), "{error}");
+        };
+
+        refused(format!("note:{}", Ulid::new()));
+        refused(format!("note:{foreign}"));
+        refused("note:not-a-ulid".into());
+        assert_eq!(
+            store.read_ticket(&id).unwrap().notes.len(),
+            1,
+            "refusals never write"
+        );
+
+        let rated = rate(
+            format!("note:{}", note.to_string().to_lowercase()),
+            Some(hotsheet_model::AiFeedbackRating::Helpful),
+        )
+        .unwrap();
+        assert_eq!(rated.notes.len(), 2);
+        rate(
+            format!("note:{note}"),
+            Some(hotsheet_model::AiFeedbackRating::NotHelpful),
+        )
+        .unwrap();
+        assert!(
+            rate(
+                "activity:outside-the-ticket".into(),
+                Some(hotsheet_model::AiFeedbackRating::Helpful)
+            )
+            .is_ok()
+        );
+
+        // Deleting the rated note removes its ratings, and it can no longer be rated.
+        let deleted = delete_note(&store, &id, &note, ts("t3")).unwrap();
+        assert!(
+            deleted
+                .notes
+                .iter()
+                .all(|item| item.ai_feedback_for_note() != Some(note))
+        );
+        refused(format!("note:{note}"));
+        assert!(
+            rate(format!("note:{note}"), None).is_err(),
+            "nothing left to withdraw"
         );
     }
 

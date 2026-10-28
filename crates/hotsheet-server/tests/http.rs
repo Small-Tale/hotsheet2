@@ -235,7 +235,24 @@ async fn ai_feedback_http_revisions_are_queryable_without_duplicate_votes() {
             .unwrap()
             .status(),
         StatusCode::BAD_REQUEST
-    );
+    ); // HS2-HB31Z3: the legacy ticket route refuses a note that is not on this ticket.
+    let unknown_note = serde_json::json!({
+        "ai_feedback":{"target":format!("note:{}", hotsheet_model::Ulid::new()),"rating":"helpful"},
+        "actor":{"role":"human","id":"rater-a"}
+    })
+    .to_string();
+    let refused = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{id}"),
+            Some(&unknown_note),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    let error = body_json(refused).await;
+    assert!(error.to_string().contains("note on this ticket"), "{error}");
 }
 
 impl PreparedClientDrive for FakePreparedClientDrive {
@@ -11090,6 +11107,33 @@ async fn ai_feedback_stale_tokens_carry_ticket_changed_and_other_refusals_stay_d
         )
         .await
     };
+    // HS2-HB31Z3: a note rating must name a live note on the same ticket.
+    let fs_store = FsStore::open(store.path()).unwrap();
+    let note_on = |ticket: &str| {
+        let note = hotsheet_model::Ulid::new();
+        hotsheet_ticketing::ops::add_note(
+            &fs_store,
+            &hotsheet_model::Ulid::from_string(ticket).unwrap(),
+            note,
+            hotsheet_model::Timestamp::from_datetime(time::OffsetDateTime::now_utc()),
+            hotsheet_model::NoteKind::Regular,
+            "rated answer".into(),
+        )
+        .unwrap();
+        note
+    };
+    let other = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/rate/tickets",
+                Some(r#"{"title":"Other ticket"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let foreign_note = note_on(other["id"].as_str().unwrap());
     let stale = serde_json::json!("stale");
     for (index, route) in routes.iter().enumerate() {
         let target = format!("activity:run-{index}");
@@ -11141,6 +11185,12 @@ async fn ai_feedback_stale_tokens_carry_ticket_changed_and_other_refusals_stay_d
         let distinct = [
             rate("activity:", "helpful".into(), &token),
             rate("note:has space", "helpful".into(), &token),
+            rate(
+                &format!("note:{}", hotsheet_model::Ulid::new()),
+                "helpful".into(),
+                &token,
+            ),
+            rate(&format!("note:{foreign_note}"), "helpful".into(), &token),
             rate("activity:never-rated", serde_json::Value::Null, &token),
             serde_json::json!({
                 "ai_feedback": {"target": "activity:no-rater", "rating": "helpful"},
@@ -11162,6 +11212,27 @@ async fn ai_feedback_stale_tokens_carry_ticket_changed_and_other_refusals_stay_d
             current().await["concurrency_token"],
             token,
             "refused ratings never write on {route}"
+        );
+
+        let live_note = note_on(&native_id);
+        let token = current().await["concurrency_token"].clone();
+        let live = app
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                route,
+                Some(&rate(
+                    &format!("note:{live_note}"),
+                    "helpful".into(),
+                    &token,
+                )),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            live.status(),
+            StatusCode::OK,
+            "{route}: a live note can be rated"
         );
     }
 }

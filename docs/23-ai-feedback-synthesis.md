@@ -6,7 +6,12 @@ The web client's thumbs controls save a regular ticket note beginning
 `AI feedback for <target>: Helpful` or `AI feedback for <target>: Not helpful`, followed
 by an optional explanation. For a `note:<id>` target, the Notes UI nests the rating
 inside that source note behind a disclosure and Git-backed parent deletion removes the
-rating. Missing-parent and other-target feedback stays visible. The action preserves an
+rating. Rating or re-rating a `note:<id>` target requires a live note with that id on the
+same ticket; a deleted note, another ticket's note, or a malformed id is refused with a
+400 and no `ticket_changed` code on the checkout, provider, and legacy ticket routes.
+Withdrawal and `activity:`/`conversation:` targets, whose ids live outside the ticket,
+keep shape-only validation (HS2-HB31Z3). Missing-parent and other-target feedback that
+already exists stays visible. The action preserves an
 auditable response in the ticket; it does not update a model, prompt, agent instruction,
 or future suggestion. Git-backed ratings carry structured target, value, and optional
 explanation metadata; note id, actor, creation time, and edit time supply identity and
