@@ -186,6 +186,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: named leak diagnostics, capped failure excerpts, full log path (HS2-CP63FG, HS2-ET5FF1; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
+  scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
   scripts/windows-crt-directives.mjs # Windows CI dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
   scripts/windows-crt-link-correlation.mjs # Windows CI one-target verbose link; same-SHA/run/attempt, fresh package/test diagnostic attribution and private complete-member digests; weak matches advisory (HS2-9E879K; tests: windows-crt-link-correlation.test.mjs, registered local+CI)
   scripts/throughput-baseline.mjs # Read-only integrator/worker throughput spans from coordination, claims, notes, Git and main CI (HS2-34PWSK; tests: throughput-baseline.test.mjs; report: docs/27-integrator-throughput-baseline.md)
@@ -913,6 +914,9 @@ local state transitions, stamps their role/id and RFC 3339 time, and performs im
 on any `Coordinator::open` (all pool members switch artifacts before a live open),
 while `scripts/throughput-baseline.mjs` prefers durable events over legacy ticket-note
 timing proxies.
+`scripts/ci-completion-proposal.mjs` records a reviewed handoff-to-main mapping in the
+local Git common directory and explicitly refreshes read-only completion evidence;
+`docs/28-ci-completion-proposals.md` describes its authority and unavailable states.
 `review_return.rs` preserves rejected code/findings handoffs and enables structured
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),
