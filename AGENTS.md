@@ -76,14 +76,30 @@ failing local gate.
 
 Local verification uses `scripts/check.sh` (HS2-RS0FFT), which prints an affected
 package and browser plan and records exact-input receipts. Inspect it with
-`scripts/check.sh --plan`; use `--full` when shared infrastructure, gate changes,
-ambiguous dependencies, or a concrete failure warrants broader checks. Client-only
+`scripts/check.sh --plan`; use `--full` when the risk analysis of shared
+infrastructure, gate changes, ambiguous dependencies, or a concrete failure
+warrants broader checks. Client-only
 changes do not routinely run unrelated Rust suites. Full browser and platform
 regression remain in CI; run the full browser suite locally only for a specific
 unresolved risk and record that reason. Review overlapping UI changes once as an
 authorized batch at wide, medium, and narrow sizes including resize transitions.
 Never use an environment assertion to bypass receipt verification. Preserve local
 edits and use a clean worktree when the current checkout is dirty.
+
+HS2-EJ8JTG is this project's deviation from the shared Testing Philosophy's
+note-only tier declaration and full-affected T2 wording. Set exactly one
+`tier:T0`, `tier:T1`, or `tier:T2` ticket tag when declaring risk; the tag is
+authoritative, and the preliminary-thoughts note (or trivial claim note) explains
+the choice. A reviewer raises risk by changing the tag. An untagged ticket uses
+the default T1 profile. T0/T1 use the checked-in five-minute planning budget;
+`deep-testing`, `testing:browser`, `testing:platform`, `testing:perf`, and
+`test-budget:<duration>` select documented deeper checks. T2 has no time cap:
+analyze the actual risks, record the chosen checks and reasons in the ticket,
+then run that selection. Run `scripts/check.sh` without profile flags normally;
+inspect `--plan` for the selected and deferred checks. CI covers checks not run
+locally. The completion note names deferred-to-CI checks and the successful
+covering main CI run. If a defect escaped local selection, create a prioritized
+follow-up bug naming the missed selection so the policy can be tuned.
 
 ## Deployment-scripts deviation (HS2-51HMCC)
 

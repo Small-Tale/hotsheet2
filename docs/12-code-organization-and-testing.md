@@ -531,19 +531,27 @@ stateful modules; adversarial pass; a manual test plan) — adapted to Rust +
 distributed + git. **Coverage is a floor, not a ceiling:** the behavior / property /
 transition-matrix tests are the real assurance.
 
-**Risk tiers (HS2-GC3D2X).** Per-ticket testing effort scales with a tier declared in the
-ticket's `## Preliminary thoughts` note, or in its claim note for trivial work:
+**Risk tiers (HS2-GC3D2X, HS2-EJ8JTG).** Per-ticket testing effort scales with one
+authoritative `tier:T0`, `tier:T1`, or `tier:T2` ticket tag. Set it when declaring
+risk; explain the reason in `## Preliminary thoughts`, or the claim note for
+trivial work. A reviewer raises the tier by changing the tag:
 
 - **T0** (trivial): lint, typecheck, and directly related tests.
 - **T1** (normal): affected tests only, plus one regression test per fix and double coverage
   for new features.
-- **T2** (high-risk): the full treatment in §12.7.2–§12.7.3 and the full affected suites.
+- **T2** (high-risk): analyze the state and failure paths, record the relevant
+  checks and reasons, then run that analyzed selection without a time cap.
 
 The T2 surfaces are the merge driver, claims and leases, index reconcile, the sync engine,
 the file-format parser, the terminal-sizing arbiter, auth/credentials/TLS, data migration,
 shared components, and the shared guidance templates. The list is kept in `AGENTS.md`.
-The bundled testing guidance (`plugins/shared/testing-philosophy.md` v5) carries the same
-tiers for every project; each project names its own T2 surfaces. A reviewer may raise a tier.
+This HS2-specific tier-tag and analyzed-selection policy supersedes the shared
+Testing Philosophy rule's note-only tier and full-affected T2 wording. T0/T1 use
+the checked-in five-minute planning budget; deeper tags add checks. CI covers
+locally deferred checks for every tier. A missed defect becomes a prioritized
+follow-up bug that identifies the local selection that missed it. The bundled
+testing guidance (`plugins/shared/testing-philosophy.md` v6) otherwise carries the same
+tiers for every project; each project names its own T2 surfaces.
 The completion `## Confidence` verification factor is judged against the tier.
 
 **Targeted reruns (HS2-AEE51Y).** After a failure, agents rerun only the failing tests, for

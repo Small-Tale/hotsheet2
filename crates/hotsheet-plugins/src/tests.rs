@@ -438,8 +438,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 46 -->")); // HS2-NNSWDS
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 14 -->"));
+    assert!(worker.contains("<!-- hotsheet-skill-version: 47 -->")); // HS2-EJ8JTG
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 15 -->")); // HS2-EJ8JTG
 
     let worker = flatten(worker);
     let at = |phrase: &str| {

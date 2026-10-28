@@ -5,7 +5,10 @@
 HS2-GN06JT `scripts/gate-budget.mjs` selects measured optional stages under the
 checked-in `scripts/gate-budget.json` target after the mandatory floor.
 HS2-VQ5ND5 `scripts/gate-ticket-profile.mjs` resolves provider ticket tags for
-the default tier and deeper profiles. The full
+the default tier and deeper profiles. The HS2-EJ8JTG tier-tag policy and T2
+deviation live in `.rulesync/rules/project-local.md`; generic role guidance is
+maintained in `plugins/shared/role-skills/` and mirrored by
+`scripts/sync-role-skills.mjs`. The full
 package stage catalog is `scripts/check-full.sh`; push and its hook use the same
 receipt-backed default. Policy and measured limits: [affected local verification](29-affected-local-verification.md)
 (HS2-RS0FFT).

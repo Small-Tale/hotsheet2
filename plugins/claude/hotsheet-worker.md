@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 46 -->
+<!-- hotsheet-skill-version: 47 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -155,7 +155,10 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    that tests ran. Never backfill or rewrite a missed transition. Record
    the missed transition in a note instead.
 3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
-   work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
+   work. If the project declares authoritative tier tags, set the ticket's tier
+   tag when declaring risk and explain it in that note; use the claim note for
+   trivial work. A reviewer raises risk by changing the tag. Update affected
+   tests, coverage, and docs; create follow-up tickets for gaps.
    Run the required local gates and inspect the diff. Before handoff, self-review
    the exact requested scope, full commit/tree or proposed findings note, active claim
    attempt/deadline, gate evidence, docs/coverage, unresolved review findings and
@@ -231,14 +234,18 @@ queue on a timer for another assignment.
 ## Local verification (HS2-RS0FFT)
 
 Use the project's declared affected local gate and inspect its selected checks
-and fallback reasons. Client-only changes do not routinely run unrelated server
-suites. Keep affected unit/API tests, a bounded relevant browser set, shared
-policy/contracts/generated-artifact checks, and one real-app visual review of
+and fallback reasons. Where the project has ticket-tag testing profiles, run the
+normal gate without profile flags, record its deferred-to-CI checks, and use the
+project's analyzed selection for uncapped high-risk work. Client-only changes do
+not routinely run unrelated server suites. Keep affected unit/API tests,
+a bounded relevant browser set, shared policy/contracts/generated-artifact
+checks, and one real-app visual review of
 an authorized overlapping UI batch. Full browser/platform regression stays in
-CI. Broaden local checks for shared infrastructure, auth, data formats,
-migrations, gate changes, ambiguous dependencies, or a concrete failure, and
-record the reason. Run the full local browser suite only for an identified
-unresolved risk. Reuse only valid exact-input evidence. Preserve dirty local
-edits and verify the committed tree in a clean worktree; never use a bypass.
+CI. Analyze whether shared infrastructure, auth, data formats, migrations,
+gate changes, ambiguous dependencies, or a concrete failure needs broader local
+checks, and record the chosen checks and reasons. Run the full local browser
+suite only for an identified unresolved risk. Reuse only valid exact-input
+evidence. Preserve dirty local edits and verify the committed tree in a clean
+worktree; never use a bypass.
 After push, release the claim while CI runs and continue independent work.
 Complete only after successful covering CI on the shipping branch.

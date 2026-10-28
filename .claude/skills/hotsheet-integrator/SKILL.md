@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 14 -->
+<!-- hotsheet-skill-version: 15 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -314,14 +314,19 @@ check `hotsheet-cli ls --claimed` and release every claim you still hold.
 ## Local verification (HS2-RS0FFT)
 
 Use the project's declared affected local gate and inspect its selected checks
-and fallback reasons. Client-only changes do not routinely run unrelated server
-suites. Keep affected unit/API tests, a bounded relevant browser set, shared
-policy/contracts/generated-artifact checks, and one real-app visual review of
+and fallback reasons. Where the project has ticket-tag testing profiles, run the
+normal gate without profile flags, inspect any deferred-to-CI checks, and verify
+the worker's analyzed selection for uncapped high-risk work. Record deferred
+checks and the covering main CI run in the completion note. Client-only changes
+do not routinely run unrelated server suites. Keep affected unit/API tests,
+a bounded relevant browser set, shared policy/contracts/generated-artifact
+checks, and one real-app visual review of
 an authorized overlapping UI batch. Full browser/platform regression stays in
-CI. Broaden local checks for shared infrastructure, auth, data formats,
-migrations, gate changes, ambiguous dependencies, or a concrete failure, and
-record the reason. Run the full local browser suite only for an identified
-unresolved risk. Reuse only valid exact-input evidence. Preserve dirty local
-edits and verify the committed tree in a clean worktree; never use a bypass.
+CI. Analyze whether shared infrastructure, auth, data formats, migrations,
+gate changes, ambiguous dependencies, or a concrete failure needs broader local
+checks, and record the chosen checks and reasons. Run the full local browser
+suite only for an identified unresolved risk. Reuse only valid exact-input
+evidence. Preserve dirty local edits and verify the committed tree in a clean
+worktree; never use a bypass.
 After push, release the claim while CI runs and continue independent work.
 Complete only after successful covering CI on the shipping branch.
