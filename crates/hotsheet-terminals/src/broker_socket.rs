@@ -111,6 +111,10 @@ pub fn connect_probe(path: &Path) -> io::Result<UnixStream> {
             }
         }
     }
+    // Linux may report POLLOUT and SO_ERROR=0 after EAGAIN on a full Unix backlog
+    // even though no connection exists. Confirm the peer before returning a stream
+    // that callers could mistake for a live broker (HS2-YDD60V).
+    stream.peer_addr()?;
     stream.set_nonblocking(false)?;
     Ok(stream)
 }
