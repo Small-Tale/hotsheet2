@@ -34608,3 +34608,62 @@ test('records shell and AI command launches through the real server and lists th
     await server.stop();
   }
 });
+
+test('sizes the magnified Workspace Grid terminal to its 80x24 aspect and fills the overlay (HS2-KR0C0B)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 2560, height: 1410 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await useLightweightTerminalPreviews(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
+  await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified Codex Main' });
+  await expect(magnified).toBeVisible();
+  for (const [width, height] of [
+    [2560, 1410],
+    [1440, 900],
+    [1100, 700],
+    [2560, 1410],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const overlay = document.querySelector<HTMLElement>('.terminal-dashboard__magnified')!,
+            style = getComputedStyle(overlay),
+            box = overlay.getBoundingClientRect(),
+            contentWidth = box.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+            contentHeight = box.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+            tile = overlay.querySelector('.terminal-tile')!.getBoundingClientRect(),
+            frame = overlay.querySelector('.terminal-tile__viewport-frame')!.getBoundingClientRect(),
+            screen = overlay.querySelector('.xterm-screen')?.getBoundingClientRect();
+          if (!screen) return 'no screen';
+          const aspect = frame.width / frame.height,
+            fillsLimit = Math.abs(tile.width - contentWidth) <= 2 || Math.abs(tile.height - contentHeight) <= 2,
+            terminalFillsFrame =
+              screen.width >= frame.width * 0.9 &&
+              screen.height >= frame.height * 0.9 &&
+              screen.right <= frame.right + 1 &&
+              screen.bottom <= frame.bottom + 1,
+            contained = tile.width <= contentWidth + 1 && tile.height <= contentHeight + 1;
+          return Math.abs(aspect - 5 / 3) < 0.03 && fillsLimit && terminalFillsFrame && contained
+            ? 'fitted'
+            : JSON.stringify({ aspect, tile, contentWidth, contentHeight, frame, screen });
+        }),
+      )
+      .toBe('fitted');
+    // The refit settles and repaints the terminal at every size.
+    const viewport = magnified.locator('[data-display-mode="interactive"]');
+    await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(viewport.locator('.terminal')).toBeVisible();
+    // The rendered rows, not just the buffer, repaint after the font refit.
+    await expect(viewport.locator('.xterm-rows')).toContainText('Live terminal ready');
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.screenshot({ path: `target/visual-captures/hs2-kr0c0b-magnified-${width}x${height}.png` });
+  }
+});

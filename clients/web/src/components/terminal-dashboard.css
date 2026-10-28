@@ -396,6 +396,26 @@
   height: 100%;
   max-height: none;
 }
+/* On desktop the tile is the largest box the overlay fits at the 80x24 terminal's 5:3 frame plus its
+   inset ring and footer, so the scaled terminal fills the card and its text grows with the window
+   instead of letterboxing in a tall, width-capped card (HS2-KR0C0B). The phone presentation keeps
+   its full-screen card (HS2-WMN626). */
+.terminal-dashboard__magnified:not([data-mobile='true']) {
+  container-type: size;
+}
+.terminal-dashboard__magnified:not([data-mobile='true']) .terminal-tile {
+  width: min(
+    100cqw,
+    calc(
+      (100cqh - var(--terminal-tile-footer-height) - 2 * var(--terminal-tile-frame-inset)) * 5 / 3 + 2 *
+        var(--terminal-tile-frame-inset)
+    )
+  );
+  height: auto;
+}
+.terminal-dashboard__magnified:not([data-mobile='true']) .terminal-tile__preview {
+  flex: none;
+}
 .terminal-dashboard__magnified .terminal-tile__preview {
   flex: 1;
   min-height: 0;
@@ -413,6 +433,10 @@
   height: 100%;
   aspect-ratio: auto;
   pointer-events: auto;
+}
+.terminal-dashboard__magnified:not([data-mobile='true']) .terminal-tile__viewport-frame {
+  height: auto;
+  aspect-ratio: 5 / 3;
 }
 /* On a phone the magnified terminal fills the visual viewport, which the virtual keyboard shrinks,
    with no inset ring; the toolbar moves to the top and hides while the keyboard is up (HS2-WMN626). */
