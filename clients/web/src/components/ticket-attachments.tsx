@@ -275,19 +275,19 @@ export function TicketAttachments({
                         )}
                       </Row>
                     )}
-                    <ListInsetText sides="l">
-                      <Select
-                        name="attachment-batch-purpose"
-                        ariaLabel={`Purpose for ${group.label}`}
-                        presentation="inline"
-                        size="compact"
-                        caret={false}
-                        value={group.purpose ?? UNCATEGORIZED_PURPOSE}
-                        choices={PURPOSE_CHOICES}
-                        disabled={!manageable}
-                        renderSelected={(choice) => <Badge tone="info">{choice.label}</Badge>}
-                      />
-                    </ListInsetText>
+                    {/* The filled purpose pill is a bordered element, so it aligns to the attachment rows'
+                      border edge rather than the title's inset text edge (HS2-HMX9YH). */}
+                    <Select
+                      name="attachment-batch-purpose"
+                      ariaLabel={`Purpose for ${group.label}`}
+                      presentation="inline"
+                      size="compact"
+                      caret={false}
+                      value={group.purpose ?? UNCATEGORIZED_PURPOSE}
+                      choices={PURPOSE_CHOICES}
+                      disabled={!manageable}
+                      renderSelected={(choice) => <Badge tone="info">{choice.label}</Badge>}
+                    />
                   </List>
                   {group.items.map((attachment) => (
                     // The app-owned wrapper carries the drag source and row identity Kerf roots protect
