@@ -364,3 +364,29 @@ test('HS2-BNAYKG a bare check reuses only the exact passing T2 receipt for the t
   assert.throws(() => runGate({ ...f.options, runner, tier: 'T2', verify: true }), /--t2-stage/);
   assert.equal(runs, ran);
 });
+
+test('HS2-Q5XAAK bare push check reuses the explicit ticket receipt without weakening identity', (t) => {
+  const f = fixture(t);
+  const base = profileFromTags({ qualified_id: 'git:synthetic', tags: ['tier:T2'] });
+  const explicit = { ...base, reason: 'explicit --ticket; tier from tier:T2' };
+  const inferred = { ...base, reason: 'HEAD commit subject; tier from tier:T2' };
+  const analyzed = ['clients/web::npm run build'];
+  const first = prepare(f.repo, undefined, false, f.options.versions, { profile: explicit, analyzed });
+  const second = prepare(f.repo, undefined, false, f.options.versions, { profile: inferred, analyzed });
+  assert.equal(first.key, second.key, 'resolution explanation does not change the effective profile');
+  assert.notEqual(first.profile.reason, second.profile.reason, 'the plan still explains how the ticket was resolved');
+
+  let runs = 0;
+  const runner = () => {
+    runs += 1;
+    return { status: 0 };
+  };
+  assert.equal(runGate({ ...f.options, profile: explicit, analyzed, runner }), 0);
+  const passedStages = runs;
+  assert.equal(runGate({ ...f.options, profile: inferred, runner, verify: true }), 0);
+  assert.equal(runs, passedStages, 'push reuses the exact passing receipt');
+
+  const changed = { ...inferred, ticket: 'git:another' };
+  assert.notEqual(prepare(f.repo, undefined, false, f.options.versions, { profile: changed, analyzed }).key, first.key);
+  assert.throws(() => runGate({ ...f.options, profile: changed, runner, verify: true }), /--t2-stage/);
+});

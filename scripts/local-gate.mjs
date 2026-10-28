@@ -322,13 +322,16 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
       'PLAYWRIGHT_BROWSERS_PATH',
     ].map((name) => [name, process.env[name] ?? null]),
   );
+  // HS2-Q5XAAK: discovery explains the plan but does not change the verified inputs.
+  const profileIdentity = { ...profile };
+  delete profileIdentity.reason;
   const context = {
     version: 2,
     base: state.base,
     budgetMs,
     tier: budgeted.tier,
     analyzed: options.analyzed ?? [],
-    profile,
+    profile: profileIdentity,
     tools,
     platform: process.platform,
     arch: process.arch,

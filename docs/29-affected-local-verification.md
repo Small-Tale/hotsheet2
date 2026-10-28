@@ -72,6 +72,9 @@ the migrator; CI still runs its full functional suites and does not treat these
 local performance bounds as a replacement for covering CI.
 
 The exact-input receipt records the ticket profile, budget, tier, selected and deferred commands.
+The diagnostic text explaining whether a ticket came from `--ticket` or the clean commit
+subject is excluded from the key; the qualified ticket, tags and effective settings remain
+exact inputs, so a bare push check reuses the ticket gate's receipt (HS2-Q5XAAK).
 Changing the budget or analyzed set changes the receipt key. Gate code and config
 changes still force the full fallback. The executor reports actual elapsed time
 beside the budget after success or failure. Covering main CI checks the deferred
