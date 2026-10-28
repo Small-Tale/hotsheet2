@@ -160,6 +160,40 @@ export function TicketTimelineDemo() {
           ]}
         />
       </CatalogExample>
+      <CatalogExample
+        label="Work Under Way"
+        note="While a worker holds the ticket, the last stage shows a spinner and its time left; each step's bar is its share of the estimated total (HS2-ST6RN1, HS2-TE86WX)."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketTimeline
+          entries={[
+            {
+              id: 'created',
+              time: '45m ago',
+              title: 'Ticket created',
+              durationToNext: '5m',
+              emphasized: true,
+              share: { start: 0, size: 5 / 60 },
+            },
+            {
+              id: 'analyzing',
+              time: '40m ago',
+              title: 'Analyzing',
+              durationToNext: '30m',
+              emphasized: true,
+              share: { start: 5 / 60, size: 30 / 60 },
+            },
+            {
+              id: 'working',
+              time: '10m ago',
+              title: 'Working',
+              emphasized: true,
+              inProgress: { label: '~15m left', title: 'This phase typically takes about 25m' },
+              share: { start: 35 / 60, size: 10 / 60, estimate: 15 / 60 },
+            },
+          ]}
+        />
+      </CatalogExample>
     </>
   );
 }

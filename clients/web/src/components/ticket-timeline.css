@@ -87,3 +87,40 @@
   bottom: 0;
   transform: none;
 }
+/* The step title shares its row with the step's time-share bar (HS2-TE86WX). */
+.ticket-timeline__heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--kui-space-xs);
+}
+/* A thin neutral track; the step's slice sits after the earlier steps' slices, and an in-progress
+   step's estimated remainder follows in a lighter fill. */
+.ticket-timeline__share {
+  position: relative;
+  flex: none;
+  width: remify(64px);
+  height: remify(6px);
+  margin-top: remify(5px);
+  overflow: hidden;
+  border-radius: var(--wa-border-radius-pill);
+  background: var(--wa-color-neutral-fill-normal);
+}
+.ticket-timeline__share-own,
+.ticket-timeline__share-estimate {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--wa-border-radius-pill);
+}
+.ticket-timeline__share-own {
+  left: calc(var(--timeline-share-start) * 100%);
+  width: max(remify(2px), calc(var(--timeline-share-size) * 100%));
+  background: var(--wa-color-brand-fill-loud);
+}
+.ticket-timeline__share-estimate {
+  left: calc((var(--timeline-share-start) + var(--timeline-share-size)) * 100%);
+  width: calc(var(--timeline-share-estimate) * 100%);
+  background: var(--wa-color-brand-fill-normal);
+}

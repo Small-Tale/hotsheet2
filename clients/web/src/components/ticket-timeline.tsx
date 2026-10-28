@@ -6,6 +6,7 @@ import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { Text } from '@kerfjs/ui/text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 
+import { type TimelineShare, timelineShareLabel } from '../ticket-timeline-data';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
@@ -22,6 +23,8 @@ export interface TicketTimelineEntry {
   emphasized?: boolean;
   /** The stage under way on an actively worked ticket: a spinner and its estimate (HS2-ST6RN1). */
   inProgress?: { label?: string; title: string };
+  /** The step's slice of the ticket's total time (HS2-TE86WX). */
+  share?: TimelineShare;
 }
 export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
   {
@@ -88,9 +91,25 @@ export function TicketTimeline({
                 </strong>
               </Text>
               <div>
-                <Text variant="p" size="compact" lineHeight="tight" flush>
-                  <strong>{entry.title}</strong>
-                </Text>
+                <div class="ticket-timeline__heading">
+                  <Text variant="p" size="compact" lineHeight="tight" flush>
+                    <strong>{entry.title}</strong>
+                  </Text>
+                  {entry.share && (
+                    // The step's slice of the total time after the earlier steps' slices on a neutral
+                    // track; an in-progress step's estimated remainder follows lighter (HS2-TE86WX).
+                    <span
+                      class="ticket-timeline__share"
+                      role="img"
+                      aria-label={timelineShareLabel(entry.share)}
+                      title={timelineShareLabel(entry.share)}
+                      style={`--timeline-share-start:${entry.share.start};--timeline-share-size:${entry.share.size};--timeline-share-estimate:${entry.share.estimate ?? 0}`}
+                    >
+                      <span class="ticket-timeline__share-own" />
+                      {entry.share.estimate ? <span class="ticket-timeline__share-estimate" /> : undefined}
+                    </span>
+                  )}
+                </div>
                 {entry.subtitle && (
                   <Text variant="p" tone="quiet" size="compact" flush>
                     {entry.subtitle}

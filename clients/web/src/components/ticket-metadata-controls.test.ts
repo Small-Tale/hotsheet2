@@ -264,6 +264,19 @@ describe('ticket metadata controls and inspector panels', () => {
     );
     expect(unestimated).toContain('ticket-timeline__progress');
     expect(unestimated).not.toContain('ticket-timeline__duration');
+    // A step's time share draws after the earlier steps' shares, its estimate after it (HS2-TE86WX).
+    const shared = String(
+      TicketTimeline({
+        entries: [{ id: 'w', time: 'Now', title: 'Working', share: { start: 0.25, size: 0.25, estimate: 0.5 } }],
+      }),
+    );
+    expect(shared).toMatch(
+      /<span class="ticket-timeline__share" role="img" aria-label="25% of the estimated total time so far, about 50% more estimated"[^>]*style="--timeline-share-start:0\.25;--timeline-share-size:0\.25;--timeline-share-estimate:0\.5"/,
+    );
+    expect(shared).toContain('ticket-timeline__share-estimate');
+    expect(String(TicketTimeline({ entries: [{ id: 'x', time: 'Now', title: 'Done' }] }))).not.toContain(
+      'ticket-timeline__share',
+    );
     const attachments = String(
       TicketAttachments({ attachments: [{ id: 'one', name: 'one.png', url: '/attachment/one', annotationCount: 2 }] }),
     );

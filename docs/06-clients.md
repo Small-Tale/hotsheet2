@@ -4277,6 +4277,11 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   the title names the typical duration). Without phase history it shows the claim's ETA, and
   with neither only the spinner. The client reads the checkout's `GET /phase-report` once per
   project, the first time it shows an actively worked ticket (HS2-ST6RN1).
+  Beside each step title a thin bar shows that step's slice of the ticket's total time, placed
+  after the earlier steps' slices on a neutral track. A closed ticket uses its actual total and
+  its final step has no bar; an open ticket's last step runs until now, and while it is actively
+  worked the stage's remaining estimate follows in a lighter fill and joins an estimated total.
+  Each bar is named and titled with its share, for example `18% of the total time` (HS2-TE86WX).
   Usage appears after a driven or supported terminal turn reports token telemetry while
   its session holds exactly one live claim on this ticket. Local Codex Work sessions
   outside those surfaces capture numeric usage when a CLI or MCP claim is released,

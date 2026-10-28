@@ -5881,7 +5881,8 @@ test('aligns timeline duration and usage labels through wide and phone widths (H
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=ticket-timeline');
-    const timeline = page.locator('[data-component="ticket-timeline"]').last(),
+    // The "With AI Usage" example, which a later "Work Under Way" example follows (HS2-TE86WX).
+    const timeline = page.locator('[data-component="ticket-timeline"]').filter({ hasText: 'Initial testing' }),
       duration = timeline.locator('.ticket-timeline__duration').first(),
       usage = timeline.locator('.ticket-timeline__usage').first();
     await expect(duration.locator('[data-component="text"]')).toHaveAttribute('data-size', 'compact');
