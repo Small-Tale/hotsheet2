@@ -513,7 +513,8 @@ test('HS2-9E879K normalizes archive separators, case and dot segments for qualif
 });
 
 test('HS2-9E879K registers its real regression suite in both root gates', () => {
-  for (const path of ['../scripts/check.sh', '../.github/workflows/ci.yml']) {
+  // HS2-RS0FFT keeps the complete registered stages in the full package catalog.
+  for (const path of ['../scripts/check-full.sh', '../.github/workflows/ci.yml']) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8');
     const command = source
       .split('\n')

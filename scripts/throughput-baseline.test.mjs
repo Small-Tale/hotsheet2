@@ -24,7 +24,7 @@ const source = 'a'.repeat(40),
   head = 'c'.repeat(40);
 
 test('HS2-34PWSK registers baseline regressions in local and CI gates', () => {
-  for (const relative of ['./check.sh', '../.github/workflows/ci.yml']) {
+  for (const relative of ['./check-full.sh', '../.github/workflows/ci.yml']) {
     const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
     const commands = source.split('\n').filter((line) => /\bnode --test\b/.test(line));
     assert.ok(

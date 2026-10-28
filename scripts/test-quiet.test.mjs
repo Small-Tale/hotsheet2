@@ -166,7 +166,7 @@ test("HS2-ET5FF1 quiet Rust entry points retain leak names with supported nextes
   assert.equal(args[args.indexOf("--status-level") + 1], "leak");
   assert.equal(args[args.indexOf("--final-status-level") + 1], "fail", "nextest has no final leak level");
   assert.equal(args[args.indexOf("--success-output") + 1], "never");
-  const rootGate = fs.readFileSync(path.join(here, "check.sh"), "utf8");
+  const rootGate = fs.readFileSync(path.join(here, "check-full.sh"), "utf8"); // HS2-RS0FFT stage catalog
   assert.match(rootGate, /^cargo nextest run --all-features --status-level leak$/m);
 });
 
