@@ -272,3 +272,21 @@ test('HS2-RS0FFT identifies a changed parent in a browser file larger than the d
     result.checks.some((stage) => stage.command.includes('--grep') && stage.command.includes('large fixture parent')),
   );
 });
+
+test('HS2-5PTT2Y a sandboxed failure names the sandbox; a pass or an unsandboxed failure does not', (t) => {
+  const run = (env, status) => {
+    const f = fixture(t);
+    const lines = [];
+    const code = runGate({ ...f.options, runner: () => ({ status }), env, log: (line) => lines.push(line) });
+    return { code, text: lines.join('\n') };
+  };
+  const sandboxed = run({ SANDBOX_RUNTIME: '1' }, 1);
+  assert.equal(sandboxed.code, 1, 'the notice never turns a failure into a pass');
+  assert.match(sandboxed.text, /No receipt recorded/);
+  assert.match(sandboxed.text, /HS2-5PTT2Y.*Rerun outside the sandbox/);
+  assert.doesNotMatch(run({}, 1).text, /HS2-5PTT2Y/);
+  assert.doesNotMatch(run({ SANDBOX_RUNTIME: '' }, 1).text, /HS2-5PTT2Y/);
+  const passed = run({ SANDBOX_RUNTIME: '1' }, 0);
+  assert.equal(passed.code, 0);
+  assert.doesNotMatch(passed.text, /HS2-5PTT2Y/);
+});

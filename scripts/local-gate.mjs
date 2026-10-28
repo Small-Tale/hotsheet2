@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
+import { sandboxFailureNotice } from './sandbox-notice.mjs';
 import {
   importCiReports,
   loadTimingHistory,
@@ -347,6 +348,7 @@ export function runGate(options = {}) {
     ticket,
     profile,
     log = console.log,
+    env = process.env,
   } = options;
   const selection = { budgetMs, tier, analyzed, ticket, profile };
   const before = prepare(repo, base, full, versions, selection);
@@ -399,6 +401,8 @@ export function runGate(options = {}) {
       log(
         `Local gate failed after ${Date.now() - gateStarted}ms; budget ${before.budgetMs ?? 'none'}ms. No receipt recorded.`,
       );
+      const notice = sandboxFailureNotice(env);
+      if (notice) log(notice.trim());
       return result.status;
     }
     const current = prepare(repo, base, full, before.tools, { ...selection, profile: before.profile });

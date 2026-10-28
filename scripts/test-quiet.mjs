@@ -13,6 +13,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { sandboxFailureNotice } from "./sandbox-notice.mjs";
+
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const DEFAULT_MAX_FAILURES = 8;
@@ -59,6 +61,8 @@ export const TIERS = {
     keep: "head-tail",
     // HS2-ET5FF1: a nonfailing leak is named diagnostic metadata, never a failure body.
     summary: [/^\s*LEAK\s+\[.*$/, /^\s*Summary \[.*$/],
+    // HS2-5PTT2Y: broker, PTY, and watcher tests cannot pass inside the Claude Code sandbox.
+    sandboxSensitive: true,
   },
   "web-unit": {
     steps: (args) => [
@@ -80,6 +84,7 @@ export const TIERS = {
     failureStart: /^\s+\d+\) \S/,
     failureEnd: /^\s+\d+ (failed|flaky|passed|skipped|interrupted|did not run)\b/,
     summary: [/^\s+\d+ (failed|flaky|passed|skipped|interrupted|did not run)\b.*$/],
+    sandboxSensitive: true,
   },
   migrator: {
     steps: (args) => [
@@ -174,14 +179,17 @@ function runStep(step, log, env) {
  * Run one tier: every step's output goes to `log`; the returned report is the compact text
  * printed to the terminal. Steps stop at the first failing one (a failed build skips its tests).
  */
-export async function runTier(tier, { args = [], logDir, maxFailures, maxLines, steps, now = Date.now } = {}) {
+export async function runTier(
+  tier,
+  { args = [], logDir, maxFailures, maxLines, steps, now = Date.now, env: callerEnv = process.env } = {},
+) {
   const spec = TIERS[tier];
   if (!spec) throw new Error(`unknown tier: ${tier}`);
   fs.mkdirSync(logDir, { recursive: true });
   const stamp = new Date(now()).toISOString().replace(/[:.]/g, "-");
   const log = path.join(logDir, `${tier}-${stamp}.log`);
   fs.writeFileSync(log, "");
-  const env = { ...process.env, NO_COLOR: "1", CARGO_TERM_COLOR: "never" };
+  const env = { ...callerEnv, NO_COLOR: "1", CARGO_TERM_COLOR: "never" };
   delete env.FORCE_COLOR;
   const started = Date.now();
   let code = 0;
@@ -204,6 +212,8 @@ export async function runTier(tier, { args = [], logDir, maxFailures, maxLines, 
       lines.push(...excerpts);
       if (omitted > 0) lines.push(`  … ${omitted} more failures in the log`);
     }
+    const notice = spec.sandboxSensitive ? sandboxFailureNotice(callerEnv) : undefined;
+    if (notice) lines.push(notice);
   }
   return { code, log, report: lines.join("\n") };
 }

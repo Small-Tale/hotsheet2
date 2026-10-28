@@ -1065,6 +1065,14 @@ example `node scripts/test-quiet.mjs rust -- -p hotsheet-cli -E 'test(claim)'`.
   compile error, prints the last 30 lines instead. Excerpt lines are clipped at 240
   characters; the log keeps them whole.
 - The exit status is the runner's. A failed build step stops the tier before its tests run.
+- Inside the Claude Code local sandbox (`SANDBOX_RUNTIME=1`), a failed `rust` or `web-e2e`
+  tier and a failed `scripts/check.sh` stage end with a notice to rerun outside the sandbox
+  (HS2-5PTT2Y). Seatbelt denies AF_UNIX bind/connect, PTY spawn, and file-system watcher
+  events, so about 150 broker, terminal, server, session-push, launch, and coordination
+  tests fail there, and coordination waiters can block until their timeout, without any
+  regression. Those tests are not skipped in the sandbox, because a skipped suite would
+  report success while proving nothing; run them, and the local gate, outside it. The notice
+  never changes an exit code or records a receipt (`scripts/sandbox-notice.mjs`).
 
 A primary agent may hand a test run to a cheaper background agent that returns only the
 wrapper's summary. The wrapper's parsing is covered by `scripts/test-quiet.test.mjs`,

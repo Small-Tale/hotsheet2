@@ -197,6 +197,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: named leak diagnostics, capped failure excerpts, full log path (HS2-CP63FG, HS2-ET5FF1; tests: test-quiet.test.mjs + fixtures/test-quiet/)
+  scripts/sandbox-notice.mjs # Claude Code sandbox detection and the rerun-outside notice on failed Rust/browser tiers and gate stages (HS2-5PTT2Y)
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/gate-timings.mjs   # Bounded per-stage and per-file local/CI timing history for budget estimates; local-gate --timings and --import-ci-timings (HS2-TCCKRZ; tests: gate-timings.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)

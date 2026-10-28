@@ -125,6 +125,27 @@ test("a failed build step stops the tier and falls back to the output tail", asy
   assert.equal(fs.existsSync(path.join(logDir, "ran")), false, "tests do not run after a failed build");
 });
 
+test("HS2-5PTT2Y sandboxed Rust and browser failures name the sandbox without changing the exit code", async () => {
+  const logDir = tempDir();
+  const failing = node("console.log('     Summary [   1.0s] 2 tests run: 1 passed, 1 failed'); process.exit(100)", logDir);
+  const passing = node("console.log('     Summary [   1.0s] 2 tests run: 2 passed')", logDir);
+  const sandbox = { ...process.env, SANDBOX_RUNTIME: "1" };
+  const outside = { ...process.env, SANDBOX_RUNTIME: "" };
+  const notice = /HS2-5PTT2Y.*Rerun outside the sandbox/;
+  for (const tier of ["rust", "web-e2e"]) {
+    const sandboxed = await runTier(tier, { logDir, steps: [failing], env: sandbox });
+    assert.equal(sandboxed.code, 100);
+    assert.match(sandboxed.report, notice);
+    assert.doesNotMatch((await runTier(tier, { logDir, steps: [failing], env: outside })).report, notice);
+    const passed = await runTier(tier, { logDir, steps: [passing], env: sandbox });
+    assert.equal(passed.code, 0);
+    assert.doesNotMatch(passed.report, notice);
+  }
+  for (const tier of ["web-unit", "migrator"]) {
+    assert.doesNotMatch((await runTier(tier, { logDir, steps: [failing], env: sandbox })).report, notice);
+  }
+});
+
 test("excerpt and fallback lines are clipped to a readable width", async () => {
   const long = "x".repeat(MAX_LINE_CHARS + 50);
   assert.equal(failureExcerpts("web-unit", ` FAIL  a.test.ts > t\n${long}\n`).excerpts[0].split("\n")[1], `${"x".repeat(MAX_LINE_CHARS)} …`);
