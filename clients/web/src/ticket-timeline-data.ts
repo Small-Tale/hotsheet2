@@ -139,3 +139,51 @@ export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEn
     durationToNext: sorted[index + 1] && timelineDuration(entry.timestamp, sorted[index + 1].timestamp),
   }));
 }
+
+/** A timeline step's slice of the ticket's total time, as fractions of that total (HS2-TE86WX). */
+export interface TimelineShare {
+  /** Where the step's slice begins: the earlier steps' share. */
+  start: number;
+  /** The step's own elapsed share. */
+  size: number;
+  /** The in-progress step's estimated remaining share, after its elapsed share. */
+  estimate?: number;
+}
+
+/**
+ * Each step's slice of the total time (HS2-TE86WX). A step runs until the next step; the last step of
+ * an open ticket runs until `now`, plus the stage's remaining estimate when someone is working it, and
+ * the total is then the estimated total. A closed ticket's final step has no slice. Undefined entries
+ * have no slice; an empty or zero-length history has none at all.
+ */
+export function timelineShares(
+  timestamps: readonly string[],
+  { open, now = Date.now(), remainingMs }: { open: boolean; now?: number; remainingMs?: number },
+): (TimelineShare | undefined)[] {
+  const times = timestamps.map((value) => Date.parse(value));
+  if (!times.length || times.some((time) => !Number.isFinite(time))) return times.map(() => undefined);
+  const durations = times.map((time, index) => {
+    const end = index < times.length - 1 ? times[index + 1] : open ? Math.max(now, time) : undefined;
+    return end === undefined ? undefined : Math.max(0, end - time);
+  });
+  const estimate = open && remainingMs !== undefined && remainingMs > 0 ? remainingMs : 0,
+    total = durations.reduce<number>((sum, value) => sum + (value ?? 0), 0) + estimate;
+  if (total <= 0) return times.map(() => undefined);
+  let elapsed = 0;
+  return durations.map((duration, index) => {
+    if (duration === undefined) return undefined;
+    const share: TimelineShare = { start: elapsed / total, size: duration / total };
+    if (index === durations.length - 1 && estimate) share.estimate = estimate / total;
+    elapsed += duration;
+    return share;
+  });
+}
+
+const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
+
+/** The time-share bar's accessible name and tooltip (HS2-TE86WX). */
+export function timelineShareLabel(share: TimelineShare): string {
+  return share.estimate
+    ? `${percent(share.size)} of the estimated total time so far, about ${percent(share.estimate)} more estimated`
+    : `${percent(share.size)} of the total time`;
+}

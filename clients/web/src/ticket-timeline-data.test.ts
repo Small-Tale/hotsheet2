@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FullTicket, Note } from './api';
-import { completionConfidenceByNote, ticketTimelineEntries, timelineDuration } from './ticket-timeline-data';
+import {
+  completionConfidenceByNote,
+  ticketTimelineEntries,
+  timelineDuration,
+  timelineShareLabel,
+  timelineShares,
+} from './ticket-timeline-data';
 
 const note = (id: string, kind: Note['kind'], created_at: string, text: string): Note => ({
   id,
@@ -227,5 +233,52 @@ describe('timelineDuration', () => {
   it('does not show a duration for invalid or reversed timestamps', () => {
     expect(timelineDuration('invalid', start)).toBeUndefined();
     expect(timelineDuration(start, '2026-09-01T23:59:59Z')).toBeUndefined();
+  });
+});
+
+describe('timelineShares (HS2-TE86WX)', () => {
+  const at = (minutes: number) => new Date(Date.UTC(2026, 9, 28, 10, minutes)).toISOString();
+  it('gives a closed ticket each step its slice of the actual total and the final step none', () => {
+    expect(timelineShares([at(0), at(10), at(40)], { open: false })).toEqual([
+      { start: 0, size: 0.25 },
+      { start: 0.25, size: 0.75 },
+      undefined,
+    ]);
+  });
+  it("runs an open ticket's last step until now, then adds the estimated remainder to the total", () => {
+    const now = Date.parse(at(40));
+    expect(timelineShares([at(0), at(20)], { open: true, now })).toEqual([
+      { start: 0, size: 0.5 },
+      { start: 0.5, size: 0.5 },
+    ]);
+    expect(timelineShares([at(0), at(20)], { open: true, now, remainingMs: 40 * 60_000 })).toEqual([
+      { start: 0, size: 0.25 },
+      { start: 0.25, size: 0.25, estimate: 0.5 },
+    ]);
+    // An overrun estimate adds nothing; a closed ticket ignores any estimate.
+    expect(timelineShares([at(0), at(20)], { open: true, now, remainingMs: 0 })[1]).toEqual({ start: 0.5, size: 0.5 });
+    expect(timelineShares([at(0), at(20)], { open: false, now, remainingMs: 60_000 })[1]).toBeUndefined();
+  });
+  it('has no slices without measurable time or valid timestamps', () => {
+    expect(timelineShares([], { open: true })).toEqual([]);
+    expect(timelineShares([at(0)], { open: false })).toEqual([undefined]);
+    expect(timelineShares([at(0), at(0)], { open: false })).toEqual([undefined, undefined]);
+    expect(timelineShares([at(0), 'not a time'], { open: true })).toEqual([undefined, undefined]);
+  });
+  it('keeps zero-length steps and a clock behind the last step at zero size', () => {
+    expect(timelineShares([at(0), at(0), at(30)], { open: true, now: Date.parse(at(20)) })).toEqual([
+      { start: 0, size: 0 },
+      { start: 0, size: 1 },
+      { start: 1, size: 0 },
+    ]);
+  });
+});
+
+describe('timelineShareLabel (HS2-TE86WX)', () => {
+  it('names the share in whole percent, with the estimate when the step is under way', () => {
+    expect(timelineShareLabel({ start: 0, size: 0.184 })).toBe('18% of the total time');
+    expect(timelineShareLabel({ start: 0.25, size: 0.25, estimate: 0.5 })).toBe(
+      '25% of the estimated total time so far, about 50% more estimated',
+    );
   });
 });

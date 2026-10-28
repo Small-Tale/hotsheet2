@@ -113,7 +113,7 @@ import {
   type TicketReaderFrame,
   updateTicketReaderFrame,
 } from '../ticket-reader-stack';
-import { ticketTimelineEntries } from '../ticket-timeline-data';
+import { ticketTimelineEntries, timelineShares } from '../ticket-timeline-data';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import { copiedTicketPlacement, ticketClipboardText } from '../ticket-transfer';
 import { timelineUsageLabels } from '../ticket-usage-timeline';
@@ -1690,12 +1690,21 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       usage = timelineUsageLabels(entries, ticketUsageFor(ticket)),
       current = project(),
       // The last entry is the stage under way while someone holds a live claim (HS2-ST6RN1).
-      inProgress = timelineStageEstimate(ticket, current ? typicalPhasesByProject.value[current.id] : undefined);
+      inProgress = timelineStageEstimate(ticket, current ? typicalPhasesByProject.value[current.id] : undefined),
+      // Each step's slice of the actual, or for an open ticket the estimated, total time (HS2-TE86WX).
+      shares = timelineShares(
+        entries.map((entry) => entry.timestamp),
+        {
+          open: ticket.status === 'not_started' || ticket.status === 'started',
+          remainingMs: inProgress?.remainingMs,
+        },
+      );
     return entries.map((entry, index) => ({
       ...entry,
       time: ago(entry.timestamp),
       ...(usage.perEntry[index] ? { usageToNext: usage.perEntry[index] } : {}),
       ...(inProgress && index === entries.length - 1 ? { inProgress } : {}),
+      ...(shares[index] ? { share: shares[index] } : {}),
     }));
   }
   /** Load the project's phase medians once, the first time an actively worked ticket is shown (HS2-ST6RN1). */

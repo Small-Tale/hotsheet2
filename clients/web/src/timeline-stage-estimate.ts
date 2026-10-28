@@ -11,6 +11,8 @@ type StageEstimateTicket = Pick<
 export interface TimelineStageEstimate {
   label?: string;
   title: string;
+  /** Estimated time left in the stage; 0 once overrun, absent without an estimate (HS2-TE86WX). */
+  remainingMs?: number;
 }
 
 /**
@@ -33,11 +35,20 @@ export function timelineStageEstimate(
     const deadline = since + typical,
       usual = approximateDuration(typical).replace('~', 'about ');
     return deadline <= now
-      ? { label: 'Soon', title: `Past this phase's typical duration (${usual})` }
-      : { label: `${approximateDuration(deadline - now)} left`, title: `This phase typically takes ${usual}` };
+      ? { label: 'Soon', title: `Past this phase's typical duration (${usual})`, remainingMs: 0 }
+      : {
+          label: `${approximateDuration(deadline - now)} left`,
+          title: `This phase typically takes ${usual}`,
+          remainingMs: deadline - now,
+        };
   }
   const eta = claimEtaPresentation(ticket, now);
-  if (eta) return { label: eta.label, title: eta.title };
+  if (eta)
+    return {
+      label: eta.label,
+      title: eta.title,
+      remainingMs: eta.kind === 'estimate' ? Math.max(0, Date.parse(ticket.claim_eta_at ?? '') - now) : 0,
+    };
   return { title: 'In progress; no estimate yet' };
 }
 

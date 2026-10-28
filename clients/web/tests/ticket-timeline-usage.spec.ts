@@ -309,68 +309,74 @@ for (const width of [1280, 390])
     await expect(timeline.locator('[data-component="value-table"]')).toContainText('63K tokens');
   });
 
+/** Open the Timeline of a ticket a worker is actively on: Working for 10 minutes, a 25-minute
+ * Working median in the phase report (HS2-ST6RN1, HS2-TE86WX). */
+async function openLiveTimeline(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 900 });
+  await mockProject(page);
+  const now = Date.now(),
+    at = (minutes: number) => new Date(now + minutes * 60_000).toISOString(),
+    claimed = {
+      ...row,
+      started_phase: 'working',
+      started_phase_since: at(-10),
+      claimed_by: 'claude-worker',
+      claim_lease_expires_at: at(60),
+      claim_started_at: at(-40),
+      claim_eta_at: at(120),
+    },
+    phaseReports: string[] = [];
+  await page.route('**/tickets', (route) =>
+    new URL(route.request().url()).searchParams.has('page_size')
+      ? route.fallback()
+      : route.fulfill({ json: [claimed] }),
+  );
+  await page.route(/\/tickets\/(git-local%3A)?01$/i, (route) =>
+    route.fulfill({
+      json: {
+        ...full,
+        ...claimed,
+        created_at: at(-45),
+        notes: [
+          activity('N1', at(-40), 'Status changed from Not Started to Started'),
+          activity('N2', at(-40), 'Started phase changed from Unspecified to Analyzing'),
+          activity('N3', at(-10), 'Started phase changed from Analyzing to Working'),
+        ],
+      },
+    }),
+  );
+  // The project's phase medians come from the phase report: Working typically takes 25 minutes.
+  await page.route('**/phase-report', (route) => {
+    phaseReports.push(new URL(route.request().url()).pathname);
+    return route.fulfill({
+      json: {
+        completed_tickets: 4,
+        tickets_with_phases: 4,
+        phases: [
+          {
+            phase: 'working',
+            label: 'Working',
+            tickets: 4,
+            wall: { median_ms: 25 * 60_000, p75_ms: 0, p90_ms: 0, total_ms: 0 },
+            active: { median_ms: 0, p75_ms: 0, p90_ms: 0, total_ms: 0 },
+          },
+        ],
+        tickets: [],
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByText('Measure the phases').click();
+  await page.getByRole('tab', { name: 'Timeline' }).click();
+  return { timeline: page.locator('[data-component="ticket-timeline"]'), phaseReports };
+}
+
 for (const width of [1280, 390]) {
   test(`shows a spinner and the phase estimate on the stage under way at ${width}px (HS2-ST6RN1)`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    await mockProject(page);
-    const now = Date.now(),
-      at = (minutes: number) => new Date(now + minutes * 60_000).toISOString(),
-      claimed = {
-        ...row,
-        started_phase: 'working',
-        started_phase_since: at(-10),
-        claimed_by: 'claude-worker',
-        claim_lease_expires_at: at(60),
-        claim_started_at: at(-40),
-        claim_eta_at: at(120),
-      },
-      phaseReports: string[] = [];
-    await page.route('**/tickets', (route) =>
-      new URL(route.request().url()).searchParams.has('page_size')
-        ? route.fallback()
-        : route.fulfill({ json: [claimed] }),
-    );
-    await page.route(/\/tickets\/(git-local%3A)?01$/i, (route) =>
-      route.fulfill({
-        json: {
-          ...full,
-          ...claimed,
-          created_at: at(-45),
-          notes: [
-            activity('N1', at(-40), 'Status changed from Not Started to Started'),
-            activity('N2', at(-40), 'Started phase changed from Unspecified to Analyzing'),
-            activity('N3', at(-10), 'Started phase changed from Analyzing to Working'),
-          ],
-        },
-      }),
-    );
-    // The project's phase medians come from the phase report: Working typically takes 25 minutes.
-    await page.route('**/phase-report', (route) => {
-      phaseReports.push(new URL(route.request().url()).pathname);
-      return route.fulfill({
-        json: {
-          completed_tickets: 4,
-          tickets_with_phases: 4,
-          phases: [
-            {
-              phase: 'working',
-              label: 'Working',
-              tickets: 4,
-              wall: { median_ms: 25 * 60_000, p75_ms: 0, p90_ms: 0, total_ms: 0 },
-              active: { median_ms: 0, p75_ms: 0, p90_ms: 0, total_ms: 0 },
-            },
-          ],
-          tickets: [],
-        },
-      });
-    });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.getByText('Measure the phases').click();
-    await page.getByRole('tab', { name: 'Timeline' }).click();
-    const timeline = page.locator('[data-component="ticket-timeline"]'),
-      stage = timeline.locator('[data-entry-id="N3"]');
+    const { timeline, phaseReports } = await openLiveTimeline(page, width);
+    const stage = timeline.locator('[data-entry-id="N3"]');
     await expect(stage).toHaveAttribute('data-in-progress', 'true');
     await expect(timeline.locator('[data-in-progress="true"]')).toHaveCount(1);
     await expect(stage.locator('.ticket-timeline__progress [data-component="loading-spinner"]')).toBeVisible();
@@ -394,5 +400,50 @@ for (const width of [1280, 390]) {
     });
     expect(placement).toEqual({ centered: true, inside: true, dot: 'none' });
     await timeline.screenshot({ path: `target/visual-captures/hs2-st6rn1-timeline-in-progress-${width}.png` });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`draws each step's share of the estimated total time at ${width}px (HS2-TE86WX)`, async ({ page }) => {
+    const { timeline } = await openLiveTimeline(page, width);
+    const bars = timeline.locator('.ticket-timeline__share');
+    await expect(bars).toHaveCount(4);
+    // 45 minutes so far plus the Working stage's 15 estimated minutes make a 60-minute estimated total.
+    expect(await bars.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))).toEqual([
+      '8% of the total time',
+      '0% of the total time',
+      '50% of the total time',
+      '17% of the estimated total time so far, about 25% more estimated',
+    ]);
+    const geometry = await timeline.evaluate((node) =>
+      [...node.querySelectorAll<HTMLElement>('.ticket-timeline__share')].map((bar) => {
+        const track = bar.getBoundingClientRect(),
+          own = bar.querySelector('.ticket-timeline__share-own')!.getBoundingClientRect(),
+          estimate = bar.querySelector('.ticket-timeline__share-estimate')?.getBoundingClientRect(),
+          row = bar.closest('li')!.getBoundingClientRect(),
+          relative = (value: number) => (value - track.left) / track.width;
+        return {
+          start: relative(own.left),
+          end: relative(own.right),
+          estimate: estimate ? [relative(estimate.left), relative(estimate.right)] : undefined,
+          inside: track.left >= row.left && track.right <= row.right + 0.5,
+        };
+      }),
+    );
+    // Slices follow one another along the track, and the estimate continues where the elapsed slice ends.
+    for (const [index, bar] of geometry.entries()) {
+      expect(bar.inside).toBe(true);
+      if (index > 0) expect(bar.start).toBeGreaterThanOrEqual(geometry[index - 1].start - 0.01);
+    }
+    expect(geometry[2].start).toBeCloseTo(5 / 60, 1);
+    expect(geometry[2].end).toBeCloseTo(35 / 60, 1);
+    expect(geometry[3].estimate![0]).toBeCloseTo(45 / 60, 1);
+    expect(geometry[3].estimate![1]).toBeCloseTo(1, 1);
+    // Every bar shares one right edge, beside its step title.
+    expect(
+      new Set(await bars.evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().right))))
+        .size,
+    ).toBe(1);
+    await timeline.screenshot({ path: `target/visual-captures/hs2-te86wx-timeline-shares-${width}.png` });
   });
 }

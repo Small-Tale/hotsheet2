@@ -16,6 +16,7 @@ describe('timelineStageEstimate (HS2-ST6RN1)', () => {
     expect(timelineStageEstimate(live, { working: 25 * 60_000 }, now)).toEqual({
       label: '~15m left',
       title: 'This phase typically takes about 25m',
+      remainingMs: 15 * 60_000,
     });
   });
 
@@ -23,12 +24,16 @@ describe('timelineStageEstimate (HS2-ST6RN1)', () => {
     expect(timelineStageEstimate(live, { working: 5 * 60_000 }, now)).toEqual({
       label: 'Soon',
       title: "Past this phase's typical duration (about 5m)",
+      remainingMs: 0,
     });
   });
 
   it('falls back to the live claim ETA without phase history, then to no estimate', () => {
     const withEta = { ...live, claim_eta_at: '2026-10-28T14:00:00Z', claim_started_at: '2026-10-28T11:00:00Z' };
-    expect(timelineStageEstimate(withEta, { analyzing: 60_000 }, now)?.label).toBe('~2h left');
+    expect(timelineStageEstimate(withEta, { analyzing: 60_000 }, now)).toMatchObject({
+      label: '~2h left',
+      remainingMs: 2 * 3_600_000,
+    });
     expect(timelineStageEstimate(withEta, undefined, now)?.label).toBe('~2h left');
     // A phase with no start time cannot use the median, so the ETA answers.
     expect(timelineStageEstimate({ ...withEta, started_phase_since: undefined }, { working: 1 }, now)?.label).toBe(
