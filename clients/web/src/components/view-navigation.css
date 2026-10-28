@@ -9,3 +9,9 @@
   --kui-list-item-selected-color: var(--wa-color-danger-on-normal);
   --kui-list-item-selected-background: var(--wa-color-danger-fill-normal);
 }
+/* The app-owned count wrapper lays its Badge out as a flex item, so no inline line box or font strut
+   drops the Badge below the row's center (HS2-RA89QG). */
+.view-navigation__count {
+  display: flex;
+  align-items: center;
+}

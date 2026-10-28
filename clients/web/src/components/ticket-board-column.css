@@ -31,6 +31,12 @@
   gap: var(--kui-space-xs);
   text-align: left;
 }
+/* The app-owned count wrapper lays its Badge out as a flex item, so no inline line box or font strut
+   drops the Badge below the header's center (HS2-RA89QG). */
+.ticket-board-column__count {
+  display: flex;
+  align-items: center;
+}
 /* The native h2 only names the column; it adds no heading margin or type scale. */
 .ticket-board-column > header h2 {
   margin: 0;
