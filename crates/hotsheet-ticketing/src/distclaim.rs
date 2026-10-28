@@ -387,6 +387,18 @@ mod tests {
             bare.to_str().unwrap(),
             b.to_str().unwrap(),
         ]);
+        // HS2-6Q3E18: fetch, push and receive-pack otherwise start detached
+        // `git maintenance run --auto` children that can outlive the test (a nextest LEAK).
+        // Repository config reaches receive-pack, which drops inherited GIT_CONFIG_* values.
+        for repo in [&bare, &a, &b] {
+            run(&[
+                "-C",
+                repo.to_str().unwrap(),
+                "config",
+                "maintenance.auto",
+                "false",
+            ]);
+        }
         (dir, a, b)
     }
 
@@ -435,6 +447,25 @@ mod tests {
     }
 
     #[test]
+    fn hs2_6q3e18_fixture_repositories_never_start_detached_maintenance() {
+        let (dir, a, b) = two_workers();
+        for repo in [dir.path().join("remote.git"), a, b] {
+            let output = crate::git::command()
+                .arg("-C")
+                .arg(&repo)
+                .args(["config", "--local", "--get", "maintenance.auto"])
+                .output()
+                .unwrap();
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout).trim(),
+                "false",
+                "{}",
+                repo.display()
+            );
+        }
+    }
+
+    #[test]
     fn sweep_reaps_only_expired_markers() {
         let (_d, a, _b) = two_workers();
         let live = id("01ARZ3NDEKTSV4RRFFQ69G5FB0");
@@ -457,6 +488,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         crate::git::command()
             .args(["init", "--quiet", dir.path().to_str().unwrap()])
+            .status()
+            .unwrap();
+        // HS2-6Q3E18: no detached auto-maintenance child may outlive the test.
+        crate::git::command()
+            .arg("-C")
+            .arg(dir.path())
+            .args(["config", "maintenance.auto", "false"])
             .status()
             .unwrap();
         let t = id("01ARZ3NDEKTSV4RRFFQ69G5FAV");
