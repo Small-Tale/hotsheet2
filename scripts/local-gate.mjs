@@ -9,6 +9,18 @@ import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-p
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+export function parseToolVersion(command, output) {
+  const prefix = command.startsWith('node ')
+    ? /^v\d+\./
+    : command.startsWith('npm ')
+      ? /^\d+\./
+      : command.startsWith('rustc ')
+        ? /^rustc \d+\./
+        : /^cargo \d+\./;
+  const version = output.split('\n').find((line) => prefix.test(line));
+  if (!version) throw new Error(`Toolchain version unavailable: ${command}`);
+  return version;
+}
 const git = (repo, args) => {
   const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (result.status !== 0)
@@ -90,7 +102,9 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       reasons: ['build the real-server browser fixtures once before the selected flows'],
     },
     ...result,
-    ...scoped,
+    ...scoped.filter(
+      (stage) => ![...files].some((file) => stage.command.startsWith(`npx playwright test ${quote(file)} --grep `)),
+    ),
   ];
 }
 
@@ -107,7 +121,7 @@ export function prepare(repo, baseRef, full = false, versions) {
     ['node --version', 'npm --version', 'rustc --version', 'cargo --version'].map((command) => {
       const result = spawnSync('zsh', ['-ic', command], { cwd: repo, encoding: 'utf8' });
       if (result.status !== 0) throw new Error(`Toolchain evidence unavailable: ${command}`);
-      return [command, result.stdout.trim()];
+      return [command, parseToolVersion(command, result.stdout)];
     });
   const entries = git(repo, ['ls-files', '--stage', '-z']).split('\0').filter(Boolean);
   const testTitles = {};

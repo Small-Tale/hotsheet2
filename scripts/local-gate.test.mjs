@@ -4,9 +4,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { browserStages, prepare, runGate } from './local-gate.mjs';
+import { browserStages, parseToolVersion, prepare, runGate } from './local-gate.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
+test('HS2-RS0FFT tool versions exclude changing login-shell session messages', () => {
+  assert.equal(parseToolVersion('rustc --version', 'Restored session: synthetic time\nrustc 1.97.0\n'), 'rustc 1.97.0');
+  assert.equal(parseToolVersion('node --version', 'Restored session: another time\nv22.23.2\n'), 'v22.23.2');
+  assert.throws(() => parseToolVersion('cargo --version', 'no version'), /unavailable/);
+});
 function fixture(t) {
   const repo = mkdtempSync(join(tmpdir(), 'hs2-rs0fft-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
