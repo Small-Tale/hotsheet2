@@ -434,8 +434,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 43 -->"));
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 10 -->"));
+    assert!(worker.contains("<!-- hotsheet-skill-version: 44 -->"));
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 11 -->"));
 
     let worker = flatten(worker);
     let at = |phrase: &str| {
@@ -526,6 +526,74 @@ fn hs2_hm9frv_role_skills_pin_optional_addressed_assignment_routes() {
     ] {
         assert!(worker.contains(phrase), "worker missing {phrase}");
     }
+}
+
+#[test]
+fn hs2_7e5r4a_three_role_sources_and_provider_mirrors_are_identical() {
+    let codex = find_in("codex", &[]).unwrap();
+    let claude = find_in("claude", &[]).unwrap();
+    let roles = [
+        (
+            "hotsheet-dispatcher",
+            include_str!("../../../plugins/shared/role-skills/hotsheet-dispatcher.md"),
+            include_str!("../../../.agents/skills/hotsheet-dispatcher/SKILL.md"),
+            include_str!("../../../.claude/skills/hotsheet-dispatcher/SKILL.md"),
+        ),
+        (
+            "hotsheet-integrator",
+            include_str!("../../../plugins/shared/role-skills/hotsheet-integrator.md"),
+            include_str!("../../../.agents/skills/hotsheet-integrator/SKILL.md"),
+            include_str!("../../../.claude/skills/hotsheet-integrator/SKILL.md"),
+        ),
+        (
+            "hotsheet-worker",
+            include_str!("../../../plugins/shared/role-skills/hotsheet-worker.md"),
+            include_str!("../../../.agents/skills/hotsheet-worker/SKILL.md"),
+            include_str!("../../../.claude/skills/hotsheet-worker/SKILL.md"),
+        ),
+    ];
+    assert_eq!(codex.additional_skills().len(), roles.len());
+    assert_eq!(claude.additional_skills().len(), roles.len());
+    for (name, source, codex_mirror, claude_mirror) in roles {
+        assert_eq!(codex_mirror, source, "Codex {name} mirror drifted");
+        assert_eq!(
+            claude_mirror.replace("allowed-tools: Read, Grep, Glob, Edit, Write, Bash\n", ""),
+            source,
+            "Claude {name} mirror drifted"
+        );
+        for (plugin, expected) in [(&codex, codex_mirror), (&claude, claude_mirror)] {
+            let (target, body) = plugin
+                .additional_skills()
+                .into_iter()
+                .find(|(target, _)| target.ends_with(&format!("/{name}/SKILL.md")))
+                .expect("declared role skill");
+            assert_eq!(body, expected, "{} {target} source drifted", plugin.id());
+        }
+    }
+
+    let flatten = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let dispatcher = flatten(roles[0].1);
+    let integrator = flatten(roles[1].1);
+    let worker = flatten(roles[2].1);
+    for phrase in [
+        "only the live dispatcher may reserve",
+        "A reservation is not the worker's",
+        "released code or findings handoff remains in the integration backlog",
+        "--return-route",
+        "--route-evidence-note",
+        "exact live claim",
+        "reviewed sections",
+        "no chat delivery is required",
+    ] {
+        assert!(
+            dispatcher.to_lowercase().contains(&phrase.to_lowercase()),
+            "dispatcher missing {phrase}"
+        );
+    }
+    assert!(integrator.contains("In dispatcher mode, do not call `assign`"));
+    assert!(integrator.contains("HS2-FCCRCK"));
+    assert!(worker.contains("integrator review"));
+    assert!(worker.contains("HS2-NNSWDS"));
 }
 
 #[test]

@@ -1,18 +1,20 @@
 ---
 name: hotsheet-integrator
-description: Keep a local main-branch integrator running, assign independent tickets, and resolve verified code or findings handoffs.
+description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 10 -->
+<!-- hotsheet-skill-version: 11 -->
 
-Stay in the shipping `main` checkout. Own ticket selection, worker assignments,
-integration, push, CI follow-through, and completion. Workers use
-`$hotsheet-worker` in separate Git worktrees. Follow `AGENTS.md` for the project's
+Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
+owns queue review, safe-base selection and exact worker reservations; this session
+owns main mutation, review, integration, push, CI follow-through and completion.
+The legacy integrator alone assigns only while the runtime reports integrator
+authority. Workers use `$hotsheet-worker` in separate Git worktrees. Follow `AGENTS.md` for the project's
 claim, phase, test, commit, push, and completion rules.
 
 ## Continuous local session
 
-Preflight `hotsheet-cli coordination --help` using the executable selected by
+Preflight `hotsheet-cli coordination --help` and `coordination capabilities` using the executable selected by
 `command -v hotsheet-cli`. If missing, identify that runtime capability blocker and
 give workers a verified current executable path; do not call their queue empty.
 In a Hot Sheet 2 source checkout only, rebuild with `cargo build -p hotsheet-cli` in
@@ -29,6 +31,12 @@ artifact. Even `status` and `setup` immediately migrate schema-one or schema-two
 older executables then refuse that pool. `coordination --help` alone does not
 prove schema-three support. When upgrading, workers wait for the integrator to
 coordinate this switch before running any pool command (HS2-A1F615).
+For dispatcher authority, verify all participants use the same schema-four capable
+artifact, then the exact live integrator runs `authority --mode dispatcher
+--all-participants-upgraded`. Reviewed `--shared` section scopes need the explicit
+schema-five upgrade and the same all-participant check (HS2-TWZW7X, HS2-YHYNJ6).
+An isolated linked worktree shares this checkout's live pool; use an independent
+disposable project and store for candidate process tests.
 
 Start with `hotsheet-cli -C <shared-store> coordination --project <main> setup`, then
 `register --role integrator --id <integrator> --session <fresh-generation> --route
@@ -41,12 +49,22 @@ registered values (HS2-CP6GWA). The code Git common directory stores the durable
 mailboxes shared by all worktrees; ticket identities remain provider-qualified.
 This is one explicit source scope, not a declaration that every linked source was read.
 
-Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
+Loop over durable `status`, published integration reports and preserved handoffs.
+The dispatcher reads the whole Up Next queue in three-role mode; inspect ticket
+scope and dependency evidence yourself before final integration:
 
 1. Discover live available workers and pending handoff/integration/CI records. Workers
    may have started first. If work is ready but no worker has joined, stay available
    for later workers. Do not infer worker identity from an arbitrary process or cwd.
-2. After the dependency/file-overlap review below, reserve an exact assignment with
+   Publish the latest safe full main SHA, qualified blockers, in-flight path scopes
+   and any reviewed shared documents with `publish --id <integrator> --session
+   <generation> --base <full-sha> [--blocked <connection:native>]
+   [--in-flight <path>] [--shared <file>]`. Only the integrator approves shared
+   files; distinct `#row:` or `#heading:` sections may be reserved concurrently.
+   Republish after a new integrator generation or main base. Do not label an
+   unpushed commit as CI or publish an unsafe base.
+2. Only when `status` reports legacy integrator assignment authority, after the
+   dependency/file-overlap review below, reserve an exact assignment with
    `coordination assign --id <integrator> --session <generation> --worker <worker>
 --worker-session <worker-generation> --operation <unique-id> --connection <source>
 --native-id <native-id> --slug <slug> --base <full-main-sha>`. Record the scope and
@@ -55,7 +73,8 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    claim remains authoritative before any code work.
    For a different route on one assignment, first verify `coordination assign --help`
    on the selected CLI supports `--return-route` and `--route-evidence-note` (HS2-HM9FRV).
-   Add a separate regular note on the exact ticket, authored with
+   Add a separate regular note on the exact ticket, authored by the active
+   assignment authority (integrator in legacy mode, dispatcher otherwise) with
    `--actor-id <integrator>`, whose whole body is the heading and JSON below. Pass its
    id with both optional flags; the CLI rejects a note for another operation, worker,
    generation, route, ticket, or author. Check a native recipient is in this tool's
@@ -75,6 +94,7 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    note id and chosen recipient in the regular `## Worker assignment` note. Never
    change the integrator's global registration merely to route one worker.
 
+   In dispatcher mode, do not call `assign`: only the live dispatcher may reserve.
 3. Resolve one durable handoff at a time using the steps below. For code, record
    `coordination mark --assignment <id> --phase integrating`, then `ci` after verified
    push, then `done` after covering green CI and ticket completion. For findings,
@@ -96,6 +116,9 @@ Loop over the durable `status`, the whole Up Next queue, and preserved handoffs:
    CI completion needs an actual supported status/event route or human cue. If none
    exists, name the exact pending CI and unavailable wake route as no safe automatic
    progress; do not invent a subscription, add network polling, or report drained.
+   The dispatcher may refill an available worker while you review, gate or wait on
+   CI. A released handoff feeds both durable integration backlog and worker
+   availability; no chat delivery is required for the dispatcher to observe it.
 6. Once the covered queue is exhausted and no work/handoff/verifying/CI remains, call
    `coordination finish --reason drained`. When only inspected blockers remain, record
    the exact blockers and use `--reason blocked`; the runtime refuses to finish over
@@ -142,13 +165,17 @@ All participants issuing correction assignments need a CLI supporting `review-re
 the return transition adds no record fields. The startup migration described
 above still applies before invoking any command with a schema-three CLI.
 
-## Assign
+## Assign in legacy mode; review dispatcher plans
 
-1. Read the full Up Next queue and relevant tickets. Check dependencies, file overlap,
+1. In legacy mode, read the full Up Next queue and relevant tickets. In dispatcher
+   mode, the dispatcher owns that plan and you inspect its exact reservation and
+   published base before integration. Check dependencies, file overlap,
    live claims, and `git worktree list --porcelain` before assigning exact slugs to
    distinct workers. Give each worker its ticket, the common ticket store, the
    shipping base, any known scope boundary, and an explicit return route. Start only
-   independent tickets in parallel. A worker creates its own ticket branch and worktree unless one is
+   independent tickets in parallel. `ls --unblocked` is a visible-reason filter,
+   not dependency eligibility; the runtime separately checks `blocked_by`
+   (HS2-BSYW6F). A worker creates its own ticket branch and worktree unless one is
    already prepared. Do not give two workers the same checkout.
 2. Keep the assignment visible in the ticket with a regular note. Do not claim a
    worker's ticket yourself while it holds the live lease. If a worker stops, read
@@ -182,6 +209,15 @@ native message, supported terminal prompt, configured event notification, or hum
 do not promise automatic monitoring when none is connected.
 
 ## Integrate one handoff at a time
+
+Require a concise worker self-review of exact scope, full source commit or findings
+note, current claim attempt/deadline, local gate evidence, docs/coverage, unresolved
+findings and follow-ups. For UI work, require real-parent visual evidence and a
+matching after attachment when the ticket has a reference image. This is a
+handoff contract, not an executable preflight; HS2-NNSWDS owns that command.
+Consume a current bounded advisory review if present (HS2-E20S6K), verify its
+specific findings and the changed integration delta, then retain the final decision.
+Advisory review never enters or bypasses the exclusive integrating/verifying fence.
 
 For a `## Findings handoff`, read the whole exact provider-qualified ticket and
 the referenced regular note. Confirm the worker released its claim. Claim that exact
@@ -218,7 +254,8 @@ For a code handoff, follow these integration steps:
    changed its SHA, record the new main SHA. Keep the worker branch available until
    that check succeeds.
 3. Run the local gates required for the integrated result and inspect the diff.
-   Fix ticket-caused failures before pushing. Follow this repository's
+   Fix ticket-caused failures before pushing. Retain the current required full
+   gate and exact-tree evidence until HS2-FCCRCK changes the policy. Follow this repository's
    `push-per-ticket` policy: push the verified main commit, confirm `origin/main`
    contains it and `git status -sb` has no ahead count, then set `final_testing`.
    Record `CI gate commit: <full main SHA>` and the run in the ticket. Use

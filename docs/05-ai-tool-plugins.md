@@ -1165,8 +1165,8 @@ each `started_phase` transition as it happens (`initial_testing` before tests or
 `hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
 `working` while its tests run. Instructions v62 add that phases are never backfilled or
 skipped to tidy the record, because `hotsheet-cli phase-report` measures them
-([02](02-ticket-storage.md), HS2-JS7E61). The coordinated role skills (worker v43,
-integrator v10) apply this to every worker assignment, including `T0` docs and test-only work:
+([02](02-ticket-storage.md), HS2-JS7E61). The coordinated role skills (worker v44,
+integrator v11, dispatcher v1) apply this to every worker assignment, including `T0` docs and test-only work:
 `working` before the first edit, `initial_testing` before any gate, and handoff from
 `initial_testing`. The integrator checks that history on review and names a missing
 transition rather than backfilling it (HS2-5EGBTH). Instructions v63 and skill v64 add how to treat a
@@ -1986,8 +1986,9 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
 - **Commands Log** transcript of triggers/permissions/shell runs — keep; plugins
   emit, the host owns the log shape.
 
-**Assigned worker handoff (HS2-W3TKX9).** In a parallel Codex/Claude session, an
-integrator assigns an exact ticket after checking dependencies and file overlap. The
+**Assigned worker handoff (HS2-W3TKX9, HS2-7E5R4A).** In a parallel Codex/Claude session, the
+runtime-designated assignment authority (dispatcher in three-role mode, integrator
+in legacy mode) assigns an exact ticket after checking dependencies and file overlap. The
 worker uses a separate ticket branch and worktree linked to the same ticket store,
 claims that ticket, verifies and commits the branch, then writes an `Integration
 handoff` ticket note naming its full commit SHA, branch, machine-local worktree
@@ -1998,9 +1999,9 @@ isolate code changes. No worker independently completes a ticket from its branch
 `crates/hotsheet-plugins/src/tests.rs # hs2_w3tkx9_worker_skills_require_integration_handoff`
 checks both skill variants and the completion boundary.
 
-**Main-branch integrator (HS2-BNSQF9).** The `/hotsheet-integrator` skill keeps one
-coordinator in `main`. It checks the queue and worktree inventory before assigning
-independent exact tickets; on handoff it verifies the stored note, branch, SHA, and
+**Main-branch integrator (HS2-BNSQF9, HS2-7E5R4A).** The `/hotsheet-integrator` skill keeps one
+integrator in `main`. It publishes the safe base, blockers and in-flight scopes for
+the dispatcher; in legacy mode only, it also assigns exact tickets. On handoff it verifies the stored note, branch, SHA, and
 released claim. It serializes integration, tests the resulting main commit, pushes
 under the repository policy, and waits for a covering green CI run before removing
 the clean worker worktree and completing the ticket. A failed handoff leaves the
@@ -2327,8 +2328,32 @@ repositories; they are not the connected multi-session AI pilot, which HS2-K1QNG
 no live pool is upgraded here.
 
 Tentative next plans (HS2-XCMAVT) and the worker read model (HS2-DBECD0) consume this
-authority when built; role skill wording and installation are HS2-7E5R4A, the live
-multi-session rollout HS2-K1QNGC.
+authority when built; the live multi-session rollout remains HS2-K1QNGC.
+
+#### Three-role guidance and setup (HS2-7E5R4A)
+
+`plugins/shared/role-skills/` is the authored source for dispatcher, integrator and
+worker instructions. `scripts/sync-role-skills.mjs --write` generates byte-checked
+Codex and Claude mirrors, including the plugin-bundled sources. Both first-party
+manifests declare the three additional skills beside the worklist skill. The same
+core setup path used by headless `setup <tool>`, `setup --refresh`, authenticated
+server setup and graphical Project guidance installs or refreshes all three in
+their tool skill directories; disabled-tool cleanup removes only managed copies.
+A newer or equal-version customized role file is preserved and diagnosed.
+
+The dispatcher reviews the whole queue and reserves only independently ready
+qualified tickets at the integrator's published safe base. It rechecks open
+dependencies independently of the visible `--unblocked` filter (HS2-BSYW6F),
+claims, source capability, worker generation and path or reviewed section scopes.
+It refills a worker after that worker's durable released handoff, while the
+integrator serializes main review, local gates and push. Both consume the same
+durable events. The worker preserves older source artifacts until integration and
+returns to `next` without waiting for earlier CI. An unavailable terminal or native
+route requires human relay; guidance does not claim an ended independent app
+session automatically wakes. The worker's scoped self-review is guidance only;
+HS2-NNSWDS owns an executable preflight, HS2-E20S6K bounded advisory review and
+HS2-1C1565 CI completion proposals. The full required local gate remains until
+HS2-FCCRCK changes that policy.
 
 Rust transition tests and real separate CLI-process tests cover startup in both
 orders, duplicate dispatch/waits, fenced generations, stale recovery, source scope,

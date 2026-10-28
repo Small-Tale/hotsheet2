@@ -3048,6 +3048,69 @@ fn concurrent_checkout_register_processes_preserve_every_entry() {
 }
 
 #[test]
+fn hs2_7e5r4a_headless_setup_installs_and_refreshes_three_role_skills() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    for tool in ["codex", "claude"] {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["setup", tool, "--project"])
+            .arg(&project)
+            .assert()
+            .success();
+    }
+    let roles = [
+        "hotsheet-dispatcher",
+        "hotsheet-integrator",
+        "hotsheet-worker",
+    ];
+    let before = [".agents", ".claude"].map(|directory| {
+        roles.map(|role| {
+            std::fs::read_to_string(
+                project
+                    .join(directory)
+                    .join("skills")
+                    .join(role)
+                    .join("SKILL.md"),
+            )
+            .unwrap()
+        })
+    });
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["setup", "--refresh", "--project"])
+        .arg(&project)
+        .assert()
+        .success();
+    let after = [".agents", ".claude"].map(|directory| {
+        roles.map(|role| {
+            std::fs::read_to_string(
+                project
+                    .join(directory)
+                    .join("skills")
+                    .join(role)
+                    .join("SKILL.md"),
+            )
+            .unwrap()
+        })
+    });
+    assert_eq!(before, after);
+    for installed in before.into_iter().flatten() {
+        assert!(installed.contains("<!-- hotsheet-skill-version:"));
+    }
+}
+
+#[test]
 fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");

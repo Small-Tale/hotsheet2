@@ -71,6 +71,24 @@ releases its claim, and reports the need to resume the integrator and relay the
 slug. Confirm no automatic wake or monitoring is claimed and no timer polls the
 queue. Native parent-channel delivery applies only inside the same tool agent tree.
 
+### Three-role connected rollout (HS2-7E5R4A, HS2-K1QNGC)
+
+On an independent disposable project and synthetic ticket store, verify the
+headless `setup codex`/`setup claude` and graphical setup/refresh paths expose the
+same dispatcher, integrator and worker skills. Start the three roles in different
+orders with the same capability-checked CLI. Have the integrator explicitly
+publish a safe base and enable dispatcher authority only after all participants
+upgrade. Confirm the integrator can no longer reserve, the dispatcher can reserve
+two non-overlapping scoped tickets, and a released handoff frees a worker for a
+new assignment while the integrator remains busy on the first. Use distinct owned
+browser fixture ports for concurrent workers. Confirm stale base, open dependency,
+unavailable source, expired role generation and no live dispatcher each report a
+specific blocker. Reviewed shared document sections may run concurrently only
+after the integrator's schema-five publication. End and restart the dispatcher;
+the durable backlog and old source worktrees must remain available without a
+chat cue. HS2-K1QNGC owns this connected pilot and its measured throughput result;
+automated role/setup checks in HS2-7E5R4A do not substitute for it.
+
 ### Multi-collaborator attachment compaction recovery (HS2-RFJ1GN)
 
 On disposable dedicated Git ticket stores with a shared bare remote and synthetic

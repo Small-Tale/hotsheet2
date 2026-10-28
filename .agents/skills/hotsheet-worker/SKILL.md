@@ -1,12 +1,14 @@
 ---
 name: hotsheet-worker
-description: Keep a local worker session running, receive exact Hot Sheet assignments, and hand verified code or findings to the main-branch integrator.
+description: Keep a local worker session receiving exact dispatcher or legacy assignments and handing verified work to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 43 -->
+<!-- hotsheet-skill-version: 44 -->
 
-Work one assigned ticket at a time. The integrator owns selection, `main`, integration,
-push, remote CI, and ticket completion. Follow the project's `AGENTS.md` and the ticket's
+Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
+selection and exact reservations; the integrator owns `main`, review, integration,
+push, remote CI, and ticket completion. In legacy mode, the integrator also assigns.
+Follow the project's `AGENTS.md` and the ticket's
 full history; these instructions define the worker handoff only.
 
 ## Startup and next-ticket loop
@@ -28,7 +30,11 @@ artifact. Even `status` and `setup` immediately migrate schema-one or schema-two
 `Coordinator::open`;
 older executables then refuse that pool. `coordination --help` alone does not
 prove schema-three support. When upgrading, workers wait for the integrator to
-coordinate this switch before running any pool command (HS2-A1F615).
+coordinate this switch before running any pool command (HS2-A1F615). Dispatcher
+authority requires a coordinated schema-four upgrade; reviewed shared-section
+scopes require schema five. `coordination capabilities` reports supported roles,
+authorities and schemas without opening the pool. A linked worktree shares the
+live Git common directory and cannot serve as a disposable upgrade test.
 
 Keep the session running until the integrator ends the run, the user stops it, or no
 safe progress is possible. An invocation without a ticket slug means become available;
@@ -54,11 +60,16 @@ setup`, then `status`.
    inherit the registered route or lease, and omitted flags fall back to the CLI
    defaults (human relay, 120 seconds), silently replacing a verified route
    (HS2-CP6GWA). It blocks on filesystem events for this worker's exact
-   generation-bound assignment. Keep the yielded tool process running and resume its
+   generation-bound assignment. The dispatcher may start before or after this
+   worker and refills from durable handoff/availability events; integrator review
+   and CI do not block a new independent assignment (HS2-TWZW7X). Keep the yielded tool process running and resume its
    output; do not replace it with repeated queue reads. Availability lease renewal
    does not query the queue or network. A stopped run returns its explicit reason.
 4. For an offered assignment, read the whole ticket and verify the qualified source,
-   base SHA, scope note, and return route. Follow the per-ticket steps below. Read the
+   base SHA, scope note, and return route. Check that `status` names the active
+   assignment authority; only its exact operation is valid. A scope on a reviewed
+   shared document names the relevant `#row:` or `#heading:` section. Follow the
+   per-ticket steps below. Read the
    optional route-evidence note named in the `## Worker assignment` note, if one
    exists, and verify its operation, worker, generation, and recipient match this
    structured assignment (HS2-HM9FRV). Native parent delivery is available only in
@@ -73,7 +84,9 @@ handoff --assignment <id> --id <worker> --session <generation> --commit <full-sh
    for code, or use `--findings-note <note-id>` for a no-code findings handoff.
    These are mutually exclusive. The CLI checks the exact local ticket's released
    claim and matching durable handoff note. Send only the
-   ticket-slug cue, then return to `next`. Create a NEW ticket worktree from each new
+   ticket-slug cue, then return to `next`. The durable handoff feeds both the
+   integrator backlog and dispatcher availability; an unconfirmed cue cannot erase
+   either. Create a NEW ticket worktree from each new
    assignment's current shipping SHA; preserve prior handoff worktrees for integration.
    Do not wait for a previous ticket's remote CI before becoming available again.
 
@@ -91,15 +104,19 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
 
 ## For each assignment
 
-1. **Prepare isolation.** Confirm the assigned ticket slug, the integrator, and the
+1. **Prepare isolation.** Confirm the assigned ticket slug, active assignment authority,
+   integrator, and the
    shared Hot Sheet store, and explicit return route with its exact recipient. Create a
    ticket-named branch and separate Git worktree from the current shipping branch, or use
    the worktree the integrator prepared. Never edit
    the integrator's checkout. Link the worktree to the same ticket store and set up its
    AI-tool integration if needed; do not create a second ticket store. Keep build and
    test state inside the worktree. If the assigned ticket overlaps another worker's
-   files or an existing dirty worktree, tell the integrator and wait for a different
-   assignment.
+   files or an existing dirty worktree, tell the dispatcher (or legacy integrator)
+   and wait for a different assignment. Separate worktrees do not isolate browser
+   ports; use an owned distinct fixture endpoint for concurrent browser runs
+   (HS2-BJ00D1). Do not remove shared docs from a declared scope: reviewed
+   `#row:`/`#heading:` sections are the supported sharing path (HS2-YHYNJ6).
 2. **Claim exactly that ticket** with `hotsheet-cli claim <slug> --worker <id> --eta
 <duration>` or the equivalent Hot Sheet MCP operation. Use `HOTSHEET_WORKER_ID` when
    set; otherwise choose one stable session-specific id. Read the whole ticket,
@@ -133,7 +150,12 @@ does not resume automatically; report the human relay needed (HS2-4H7D8D).
    the missed transition in a note instead.
 3. **Implement and verify only its scope.** Record preliminary thoughts for non-trivial
    work. Update affected tests, coverage, and docs; create follow-up tickets for gaps.
-   Run the required local gates and inspect the diff. For code changes, stage named
+   Run the required local gates and inspect the diff. Before handoff, self-review
+   the exact requested scope, full commit/tree or findings note, active claim
+   attempt/deadline, gate evidence, docs/coverage, unresolved review findings and
+   linked follow-ups. For UI work, inspect the real parent at required states and
+   viewports and attach the matching after evidence. This is a readiness checklist;
+   HS2-NNSWDS owns a future executable preflight. For code changes, stage named
    paths and commit the verified change on the worker branch with the ticket slug in
    the subject. For a findings-only task, record the evidence in a regular ticket
    note and do not create an empty commit. Do not

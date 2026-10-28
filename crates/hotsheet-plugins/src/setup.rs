@@ -1155,6 +1155,9 @@ fn collect_findings(
             add(ArtifactKind::Instructions, &canonical.target, preserved);
         }
         if let Some((path, _)) = plugin.skill() { add(ArtifactKind::Skill, path, preserved); }
+        for (path, bundled) in plugin.additional_skills() {
+            add(ArtifactKind::Skill, path, marked_skill_requires_preservation(&original, project, path, bundled));
+        }
         add(ArtifactKind::Mcp, &plugin.manifest.mcp.target, false);
         if let Some(hooks) = &plugin.manifest.hooks { add(ArtifactKind::Hooks, &hooks.target, false); }
         }
@@ -1302,6 +1305,14 @@ fn remove_disabled_tool_artifacts(
             if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
                 report.record(rel, remove_managed_file(fs, project, rel, false)?);
             }
+        }
+    }
+    for (rel, bundled) in plugin.additional_skills() {
+        if crate::is_safe_rel_path(rel)
+            && !claimed.contains(rel)
+            && !marked_skill_requires_preservation(fs, project, rel, bundled)
+        {
+            report.record(rel, remove_managed_file(fs, project, rel, false)?);
         }
     }
     let mcp = &plugin.manifest.mcp.target;
@@ -1550,6 +1561,10 @@ fn has_managed_setup(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
         || plugin
             .skill()
             .is_some_and(|(target, _)| fs.is_file(&project_dir.join(target)))
+        || plugin
+            .additional_skills()
+            .iter()
+            .any(|(target, _)| fs.is_file(&project_dir.join(target)))
         || plugin
             .manifest
             .hooks
@@ -1914,6 +1929,7 @@ fn setup_plugins_with_fs(
                     wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
                 }
             }
+            wrote.extend(write_additional_skills(fs, project_dir, p));
             wrote.push(write_mcp(fs, project_dir, &store_abs, p)?);
             let mut notices = Vec::new();
             if let Some(blocked) = blocked_guidance.remove(&p.manifest.instructions.target) {
@@ -2422,18 +2438,27 @@ fn per_tool_section_requires_preservation(plugin: &Plugin, instructions: Option<
 /// the bundled skill.
 fn skill_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> bool {
     plugin.skill().is_some_and(|(target, bundled)| {
-        let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
-        fs.read_to_string(&project.join(target))
-            .ok()
-            .is_some_and(|installed| {
-                marked_artifact_requires_preservation(
-                    &installed,
-                    bundled,
-                    bundled_version,
-                    SKILL_VERSION_PREFIX,
-                )
-            })
+        marked_skill_requires_preservation(fs, project, target, bundled)
     })
+}
+
+fn marked_skill_requires_preservation(
+    fs: &PlanFs,
+    project: &Path,
+    target: &str,
+    bundled: &str,
+) -> bool {
+    let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
+    fs.read_to_string(&project.join(target))
+        .ok()
+        .is_some_and(|installed| {
+            marked_artifact_requires_preservation(
+                &installed,
+                bundled,
+                bundled_version,
+                SKILL_VERSION_PREFIX,
+            )
+        })
 }
 
 fn installed_workflow_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> bool {
@@ -2823,6 +2848,17 @@ fn write_skill(fs: &mut PlanFs, project: &Path, p: &Plugin) -> Result<Option<Str
         }
         None => Ok(None),
     }
+}
+
+fn write_additional_skills(fs: &mut PlanFs, project: &Path, plugin: &Plugin) -> Vec<String> {
+    let mut wrote = Vec::new();
+    for (target, body) in plugin.additional_skills() {
+        if !marked_skill_requires_preservation(fs, project, target, body) {
+            fs.write(&project.join(target), body.as_bytes());
+            wrote.push(target.to_string());
+        }
+    }
+    wrote
 }
 
 /// Register the `hotsheet-mcp` server in the tool's MCP config, merge-safe. The writer is
@@ -3377,6 +3413,55 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_7e5r4a_setup_and_refresh_install_three_roles_for_codex_and_claude() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        for tool in ["codex", "claude"] {
+            run_setup_in(store.path(), project.path(), Some(tool), false, None, &[]).unwrap();
+            let plugin = crate::find_in(tool, &[]).unwrap();
+            for (target, expected) in plugin.additional_skills() {
+                assert_eq!(
+                    std::fs::read_to_string(project.path().join(target)).unwrap(),
+                    expected
+                );
+            }
+        }
+
+        let target = project
+            .path()
+            .join(".agents/skills/hotsheet-dispatcher/SKILL.md");
+        std::fs::write(&target, "<!-- hotsheet-skill-version: 0 -->\nold\n").unwrap();
+        let plan = plan_refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        assert!(
+            plan.changes
+                .iter()
+                .any(|change| change.path == ".agents/skills/hotsheet-dispatcher/SKILL.md")
+        );
+        refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        let expected = crate::find_in("codex", &[])
+            .unwrap()
+            .additional_skills()
+            .into_iter()
+            .find(|(path, _)| *path == ".agents/skills/hotsheet-dispatcher/SKILL.md")
+            .unwrap()
+            .1
+            .to_string();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), expected);
+        let second = plan_refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        assert!(
+            !second
+                .changes
+                .iter()
+                .any(|change| change.path == ".agents/skills/hotsheet-dispatcher/SKILL.md")
+        );
+
+        let newer = "<!-- hotsheet-skill-version: 99 -->\ncustom dispatcher\n";
+        std::fs::write(&target, newer).unwrap();
+        refresh_setup_in(store.path(), project.path(), None, &[]).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), newer);
+    }
 
     #[test]
     fn hs2_019vva_preview_reuses_apply_protection_without_writing() {

@@ -22,6 +22,11 @@ section = "instructions.md"
 # kept byte-identical to the repository's shared `.agents` workflow by a sync test.
 target = ".agents/skills/hotsheet/SKILL.md"
 source = "SKILL.md"
+additional = [
+  { target = ".agents/skills/hotsheet-dispatcher/SKILL.md", source = "hotsheet-dispatcher.md" },
+  { target = ".agents/skills/hotsheet-integrator/SKILL.md", source = "hotsheet-integrator.md" },
+  { target = ".agents/skills/hotsheet-worker/SKILL.md", source = "hotsheet-worker.md" },
+]
 
 [mcp]
 # Codex stores MCP servers as TOML under [mcp_servers.<name>] in $CODEX_HOME/config.toml

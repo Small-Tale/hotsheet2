@@ -649,7 +649,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/codex.rs (perm)    #   Codex approval ServerRequests route through a PermissionPolicy (Arc<SharedPermissionBridge> + connection + timeout) via decide_approval → request_blocking_timeout: allow-rules auto-resolve, else BLOCK the turn for a human over the route-back (up to timeout, then safe default) — HS2-0QGW07 → HS2-Q1F6HV; attached in live.rs when a bridge is threaded through LiveTrigger/SafeTrigger
       src/permission.rs (2)  #   SharedPermissionBridge: thread-safe request_blocking (blocks a tool until a human resolve() over the route-back) + pending() + resolve() + set_on_pending (event-bus nudge) + reseed_rules; durable rule storage load_rules/append_rule (StoredRule) — the human-round-trip transport (docs/05 §5.7, HS2-9R9YZW) + request_blocking_timeout (block for a human, safe fallback); codex is activated through the drive (HS2-Q1F6HV); Claude PreToolUse hook adapter pending (HS2-YMR9HE)
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
-      src/setup.rs           #   run_setup: core-owned one-shot setup writers (monotonic versioned instructions/skill bundle; equal-version divergent project variants are preserved; tools sharing one instruction file with identical bodies get one `hotsheet:<target-key>` shared section, migrated from per-tool copies and reconciled on refresh, HS2-329EED; MCP config and permission hook via [hooks] capability; merge-safe and idempotent, HS2-XCTAHM) + mcp_command — shared by CLI + server (HS2-91)
+      src/setup.rs           #   run_setup: core-owned one-shot setup writers (monotonic versioned instructions/worklist and manifest-declared dispatcher/integrator/worker skills; equal-version divergent project variants are preserved; tools sharing one instruction file with identical bodies get one `hotsheet:<target-key>` shared section, migrated from per-tool copies and reconciled on refresh, HS2-329EED/HS2-7E5R4A; MCP config and permission hook via [hooks] capability; merge-safe and idempotent, HS2-XCTAHM) + mcp_command — shared by CLI + server (HS2-91)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
                              #     HooksSpec.event_matchers/event_timeout_seconds override shared values for named hook events (HS2-C4ZG2B)
@@ -657,8 +657,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/no_tool_id_branches.rs # HS2-9 plugin-first lint: core must not branch on a tool id (ids derived from the registry)
       tests/setup_isolation_guard.rs # HS2-SDPD95 source guard: setup tests inject their plugin search path, never the shared test HOTSHEET_HOME
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
-    claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; [drive] claude-channel (async); [session_push] claude-inbox (hook-reported inbox socket)
-    codex/                   #   AGENTS.md instructions + project-local .agents/skills/hotsheet/SKILL.md; codex-toml MCP; [drive] app-server (persistent)
+    shared/role-skills/      #   canonical three-role instructions (HS2-7E5R4A); scripts/sync-role-skills.mjs generates both provider skill mirrors and bundled plugin sources
+    claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + worklist and three role skills; claude-json MCP; [drive] claude-channel (async); [session_push] claude-inbox (hook-reported inbox socket)
+    codex/                   #   AGENTS.md instructions + project-local worklist and three role skills; codex-toml MCP; [drive] app-server (persistent)
     antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume; no [session_push] (messaging its sessions is unsupported)
     opencode/                #   AGENTS.md instructions; opencode.json MCP; [drive] acp; [launch] opencode --model; [session_push] opencode-http (--port + OPENCODE_SERVER_PASSWORD)
   migrator/                  # disposable Node HS1 exporter (docs/07)
@@ -942,8 +943,11 @@ per-assignment routes, evidence, replay and fences (HS2-HM9FRV). Portable recove
 process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.
 The native Windows CI job executes these coordination/lock targets explicitly
 (HS2-9TD8Q5); native execution is not inferred from credential coverage.
-Role instructions are canonical in
-`.claude/skills/hotsheet-{integrator,worker}/` with `.agents/skills/` mirrors.
+Role instructions are canonical in `plugins/shared/role-skills/`, with generated
+`.agents/skills/` and `.claude/skills/` mirrors and bundled first-party plugin
+sources; `scripts/sync-role-skills.mjs --check` and `hotsheet-plugins` policy tests
+pin their bytes. Setup and refresh install dispatcher, integrator and worker through
+the same headless/GUI path (HS2-7E5R4A).
 Source adapters beyond the selected local queue are explicit unsupported operations
 (HS2-3ETJ26); remote CI/app wake requires an actual supported route, not polling.
 External descriptors share configuration-owned canonical capabilities with live adapters;

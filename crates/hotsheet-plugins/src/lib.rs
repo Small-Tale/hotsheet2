@@ -387,6 +387,15 @@ pub struct CanonicalInstructions {
 pub struct Skills {
     pub target: String,
     pub source: String,
+    #[serde(default)]
+    pub additional: Vec<SkillArtifact>,
+}
+
+/// Another skill installed through the same tool setup and refresh workflow.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SkillArtifact {
+    pub target: String,
+    pub source: String,
 }
 
 /// How the `hotsheet-mcp` server is registered in the tool's MCP config. `{project}` or `{store}` in
@@ -427,6 +436,9 @@ impl Plugin {
         plugin.require(&plugin.manifest.instructions.section)?;
         if let Some(skills) = &plugin.manifest.skills {
             plugin.require(&skills.source)?;
+            for additional in &skills.additional {
+                plugin.require(&additional.source)?;
+            }
         }
         Ok(plugin)
     }
@@ -518,6 +530,26 @@ impl Plugin {
         Some((&skills.target, self.file(&skills.source).unwrap_or("")))
     }
 
+    /// Additional, manifest-declared skills installed beside the worklist skill.
+    pub fn additional_skills(&self) -> Vec<(&str, &str)> {
+        self.manifest
+            .skills
+            .as_ref()
+            .map(|skills| {
+                skills
+                    .additional
+                    .iter()
+                    .map(|entry| {
+                        (
+                            entry.target.as_str(),
+                            self.file(&entry.source).unwrap_or(""),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Instantiate project-owned policy wording in bundled workflow templates.
     /// Third-party plugin files are passed through unchanged.
     pub(crate) fn with_push_policy(
@@ -601,6 +633,7 @@ impl Plugin {
         }
         if let Some(s) = &self.manifest.skills {
             v.push(s.target.as_str());
+            v.extend(s.additional.iter().map(|entry| entry.target.as_str()));
         }
         if let Some(hooks) = &self.manifest.hooks {
             v.push(hooks.target.as_str());

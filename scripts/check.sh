@@ -29,6 +29,7 @@ cargo nextest run --all-features --status-level leak
 zsh -ic 'node --test scripts/instruction-policy.test.mjs scripts/sync-ai-playbook.test.mjs scripts/check-test-coverage.test.mjs scripts/check-test-quarantine.test.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs'
 zsh -ic 'node scripts/check-test-coverage.mjs'
 zsh -ic 'node scripts/check-test-quarantine.mjs'
+zsh -ic 'node scripts/sync-role-skills.mjs --check'
 (
   cd clients/web
   zsh -ic 'npm run lint && npm run typecheck && npm run test:unit && npm run build'

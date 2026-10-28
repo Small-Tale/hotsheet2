@@ -27,6 +27,11 @@ import = "@AGENTS.md"
 # Where the worklist skill is written in the project, and its source in this plugin.
 target = ".claude/skills/hotsheet/SKILL.md"
 source = "SKILL.md"
+additional = [
+  { target = ".claude/skills/hotsheet-dispatcher/SKILL.md", source = "hotsheet-dispatcher.md" },
+  { target = ".claude/skills/hotsheet-integrator/SKILL.md", source = "hotsheet-integrator.md" },
+  { target = ".claude/skills/hotsheet-worker/SKILL.md", source = "hotsheet-worker.md" },
+]
 
 [mcp]
 # The tool's MCP config file + how the hotsheet server is registered in it. `{project}`
