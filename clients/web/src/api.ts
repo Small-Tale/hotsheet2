@@ -41,6 +41,7 @@ import {
   parsePermissionDecision,
   parsePermissionRequest,
   parsePermissionRule,
+  parsePhaseReport,
   parsePollResponse,
   parseProviderAccount,
   parseProviderConnection,
@@ -1096,6 +1097,10 @@ export interface CommandRun {
   started_at?: string;
   launch?: CommandLaunch;
 }
+/** The phase report fields the client reads: each phase's median wall time (HS2-ST6RN1). */
+export interface PhaseReport {
+  phases: { phase: string; wall: { median_ms: number } }[];
+}
 export interface ActivityEvent {
   id: string;
   ts: string;
@@ -1607,6 +1612,9 @@ export class Api {
       parseDuplicateBacklinks,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/duplicate-backlinks`,
     );
+  /** Each phase's median wall time over the checkout's completed tickets, for timeline estimates (HS2-ST6RN1). */
+  checkoutPhaseReport = (checkout: string) =>
+    this.parsed(parsePhaseReport, `/checkouts/${encodeURIComponent(checkout)}/phase-report`);
   checkoutTicketUsage = (checkout: string, id: string) =>
     this.parsed(parseTicketUsage, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/usage`);
   checkoutLegacyPermissionPreview = (checkout: string, source: string) =>

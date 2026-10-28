@@ -4271,6 +4271,12 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   rollup keeps no per-model split. The client reads
   `GET /checkouts/{checkout}/tickets/{ticket}/usage` when a ticket is selected and keeps the
   last known usage if that read fails (HS2-ZA7W6E, HS2-J14225).
+  While someone holds a live claim on a Started ticket, the final entry is the stage under way:
+  a spinner replaces its rail dot and its gap label shows the time left, this project's median
+  duration of the current phase minus the time already in it (`~12m left`, `Soon` once overrun;
+  the title names the typical duration). Without phase history it shows the claim's ETA, and
+  with neither only the spinner. The client reads the checkout's `GET /phase-report` once per
+  project, the first time it shows an actively worked ticket (HS2-ST6RN1).
   Usage appears after a driven or supported terminal turn reports token telemetry while
   its session holds exactly one live claim on this ticket. Local Codex Work sessions
   outside those surfaces capture numeric usage when a CLI or MCP claim is released,

@@ -308,3 +308,91 @@ for (const width of [1280, 390])
     await page.reload();
     await expect(timeline.locator('[data-component="value-table"]')).toContainText('63K tokens');
   });
+
+for (const width of [1280, 390]) {
+  test(`shows a spinner and the phase estimate on the stage under way at ${width}px (HS2-ST6RN1)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockProject(page);
+    const now = Date.now(),
+      at = (minutes: number) => new Date(now + minutes * 60_000).toISOString(),
+      claimed = {
+        ...row,
+        started_phase: 'working',
+        started_phase_since: at(-10),
+        claimed_by: 'claude-worker',
+        claim_lease_expires_at: at(60),
+        claim_started_at: at(-40),
+        claim_eta_at: at(120),
+      },
+      phaseReports: string[] = [];
+    await page.route('**/tickets', (route) =>
+      new URL(route.request().url()).searchParams.has('page_size')
+        ? route.fallback()
+        : route.fulfill({ json: [claimed] }),
+    );
+    await page.route(/\/tickets\/(git-local%3A)?01$/i, (route) =>
+      route.fulfill({
+        json: {
+          ...full,
+          ...claimed,
+          created_at: at(-45),
+          notes: [
+            activity('N1', at(-40), 'Status changed from Not Started to Started'),
+            activity('N2', at(-40), 'Started phase changed from Unspecified to Analyzing'),
+            activity('N3', at(-10), 'Started phase changed from Analyzing to Working'),
+          ],
+        },
+      }),
+    );
+    // The project's phase medians come from the phase report: Working typically takes 25 minutes.
+    await page.route('**/phase-report', (route) => {
+      phaseReports.push(new URL(route.request().url()).pathname);
+      return route.fulfill({
+        json: {
+          completed_tickets: 4,
+          tickets_with_phases: 4,
+          phases: [
+            {
+              phase: 'working',
+              label: 'Working',
+              tickets: 4,
+              wall: { median_ms: 25 * 60_000, p75_ms: 0, p90_ms: 0, total_ms: 0 },
+              active: { median_ms: 0, p75_ms: 0, p90_ms: 0, total_ms: 0 },
+            },
+          ],
+          tickets: [],
+        },
+      });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByText('Measure the phases').click();
+    await page.getByRole('tab', { name: 'Timeline' }).click();
+    const timeline = page.locator('[data-component="ticket-timeline"]'),
+      stage = timeline.locator('[data-entry-id="N3"]');
+    await expect(stage).toHaveAttribute('data-in-progress', 'true');
+    await expect(timeline.locator('[data-in-progress="true"]')).toHaveCount(1);
+    await expect(stage.locator('.ticket-timeline__progress [data-component="loading-spinner"]')).toBeVisible();
+    await expect(stage.locator('.ticket-timeline__elapsed')).toHaveText('~15m left');
+    await expect(stage.locator('.ticket-timeline__elapsed')).toHaveAttribute(
+      'title',
+      'This phase typically takes about 25m',
+    );
+    // The report loads once for the project, through the checkout-scoped route.
+    expect(phaseReports).toEqual(['/__hotsheet/project-api/demo/checkouts/demo/phase-report']);
+    // The spinner sits on the rail where the dot was, inside the panel.
+    const placement = await stage.evaluate((node) => {
+      const spinner = node.querySelector('.ticket-timeline__progress')!.getBoundingClientRect(),
+        item = node.getBoundingClientRect(),
+        panel = node.closest('[data-component="ticket-timeline"]')!.getBoundingClientRect();
+      return {
+        centered: Math.abs(spinner.left + spinner.width / 2 - item.left) <= 1,
+        inside: spinner.left >= panel.left && spinner.right <= panel.right,
+        dot: getComputedStyle(node, '::before').content,
+      };
+    });
+    expect(placement).toEqual({ centered: true, inside: true, dot: 'none' });
+    await timeline.screenshot({ path: `target/visual-captures/hs2-st6rn1-timeline-in-progress-${width}.png` });
+  });
+}
