@@ -23143,6 +23143,53 @@ async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
     }
 }
 
+/// HS2-6YXGKH: the provider-qualified list `GET /providers/{connection_id}/tickets` follows
+/// the same 500-row contract instead of returning every matching provider ticket.
+#[tokio::test]
+async fn hs2_6yxgkh_provider_ticket_lists_are_bounded() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("BIG")).unwrap();
+    seed_bounded_ticket_store(&store);
+    let connection = hotsheet_ticketing::git_connection_id(&store);
+    let router = app(AppState::new(store, SECRET.into()).unwrap());
+    let get = |uri: String| {
+        let router = router.clone();
+        async move { router.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+    let base = format!("/providers/{connection}/tickets");
+
+    let implicit = get(base.clone()).await;
+    assert_eq!(implicit.status(), StatusCode::BAD_REQUEST);
+    let message = body_json(implicit).await["error"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(message.contains("more than 500 tickets match"), "{message}");
+    assert!(message.contains("page_size"), "{message}");
+    assert!(!message.contains("page_after"), "{message}");
+    let too_large = get(format!("{base}?limit=501")).await;
+    assert_eq!(too_large.status(), StatusCode::BAD_REQUEST);
+
+    let narrow = get(format!("{base}?text=needle")).await;
+    assert_eq!(narrow.status(), StatusCode::OK);
+    assert!(narrow.headers().get("x-hotsheet-truncated").is_none());
+    assert_eq!(body_json(narrow).await.as_array().unwrap().len(), 1);
+    let exact = get(format!("{base}?limit=1&text=needle")).await;
+    assert!(exact.headers().get("x-hotsheet-truncated").is_none());
+    assert_eq!(body_json(exact).await.as_array().unwrap().len(), 1);
+
+    let capped = get(format!("{base}?limit=200&compact=true&fields=id")).await;
+    assert_eq!(capped.status(), StatusCode::OK);
+    assert_eq!(
+        capped.headers().get("x-hotsheet-truncated").unwrap(),
+        "true"
+    );
+    assert_eq!(body_json(capped).await.as_array().unwrap().len(), 200);
+    let full = get(format!("{base}?limit=500&compact=true&fields=id")).await;
+    assert_eq!(full.headers().get("x-hotsheet-truncated").unwrap(), "true");
+    assert_eq!(body_json(full).await.as_array().unwrap().len(), 500);
+}
+
 // --- Session claim release for shell terminals, restarted broker terminals, and chat drives
 // (HS2-RXWXQ8) ---
 

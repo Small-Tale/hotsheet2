@@ -161,7 +161,7 @@ impl RuntimeModelCatalogSource for AppServerModelCatalog {
             crate::probe::probe_timeout(),
         )
         .map_err(|error| format!("starting '{} app-server': {error}", self.program))?;
-        CodexAppServer::connect_with_timeout(transport, MODEL_CATALOG_REQUEST_TIMEOUT)
+        CodexAppServer::connect_probe(transport, MODEL_CATALOG_REQUEST_TIMEOUT)
             .map_err(|error| error.to_string())?
             .list_models()
             .map_err(|error| error.to_string())
@@ -371,5 +371,30 @@ mod catalog_probe_tests {
                 .unwrap();
         assert_gone(app_server_pid(&pid_file));
         drop(guard);
+    }
+
+    #[test]
+    fn hs2_7t7cs4_a_killed_probe_fails_its_pending_request_without_waiting_for_the_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let (program, pid_file) = wedged_codex(dir.path());
+        let (transport, guard) =
+            StdioTransport::spawn_probe(&program, dir.path(), &[], Duration::from_secs(60))
+                .unwrap();
+        // A request timeout far longer than the test, so only the close can end the wait.
+        let request_timeout = Duration::from_secs(60);
+        let connecting = std::thread::spawn(move || {
+            CodexAppServer::connect_probe(transport, request_timeout).map(|_| ())
+        });
+        let pid = app_server_pid(&pid_file);
+        let killed = Instant::now();
+        drop(guard);
+        assert_gone(pid);
+        let error = connecting.join().unwrap().unwrap_err();
+        assert!(error.to_string().contains("connection closed"), "{error}");
+        assert!(
+            killed.elapsed() < Duration::from_secs(10),
+            "the pending initialize waited {:?} after its probe was killed",
+            killed.elapsed()
+        );
     }
 }

@@ -308,8 +308,8 @@ query(filter, sort, text?, paging) -> TicketRow[]
   The MCP shim additionally drops from pretty- to **compact JSON** once a result crosses
   ~8 KB, so a big list dump doesn't spend the caller's tokens on indentation.
 - **provider-qualified lists (HS2-DXD7DZ):** `GET /providers/{connection_id}/tickets`
-  returns full provider tickets (body, notes, attachments, claim history) by default,
-  which is the shape the web client reads. An explicit `compact=true` returns the shared
+  returns full provider tickets (body, notes, attachments, claim history) by default.
+  An explicit `compact=true` returns the shared
   compact `TicketRow` instead (the same keys as a compact store row, with the provider's
   own qualified identity), and `fields` selects from whichever shape was chosen. MCP
   `hotsheet_query` with `connection` sends `compact=true` unless the caller passes
@@ -334,6 +334,12 @@ query(filter, sort, text?, paging) -> TicketRow[]
   - an explicit `limit` accepts truncation; the server flags omitted rows with
     `x-hotsheet-truncated: true` (the MCP tool, which returns only the row array, relies
     on the caller's explicit `limit` and a full page as the signal to continue).
+
+  The provider-qualified array `GET /providers/{connection_id}/tickets` follows the same
+  bound (HS2-6YXGKH), so a large GitHub, GitLab, or Jira project is never serialized into
+  one response. Provider lists have no `page_after`, so their refusals point at
+  `GET /checkouts/{checkout}/tickets` with `page_size` for larger reads. The web client
+  reads provider tickets through checkout pages, not this route.
 
   The CLI `ls` is intentionally unbounded: it reads the local index directly and streams
   rows to a terminal rather than serializing one response, and it already offers

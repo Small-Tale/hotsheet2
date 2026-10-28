@@ -62,7 +62,6 @@ import {
   parseTerminalName,
   parseTerminalRead,
   parseTerminalSettings,
-  parseTicket,
   parseTicketRow,
   parseTicketUsage,
   parseToolConnection,
@@ -1310,7 +1309,6 @@ export class Api {
   providers = () => this.parsed(parseProviderDescriptor.list, '/providers');
   /** This project's own ticket-source connections; the bridge scopes the path to the checkout (HS2-SM9PM8). */
   connections = () => this.parsed(parseProviderConnection.list, '/provider-connections');
-  tickets = (id: string) => this.parsed(parseTicket.list, `/providers/${encodeURIComponent(id)}/tickets`);
   queueProviderUpdates = (
     connection: string,
     operations: Array<{ operation_id: string; native_id: string; patch: Record<string, unknown> }>,
