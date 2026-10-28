@@ -782,19 +782,7 @@ fn hs2_76vmyg_lost_cue_replays_durable_assignment_and_duplicate_wait_is_rejected
 fn hs2_76vmyg_known_claim_expiry_wakes_integrator_without_a_file_write() {
     let f = Fixture::new();
     let ticket = f.ticket();
-    let at = time::OffsetDateTime::now_utc()
-        .replace_nanosecond(750_000_000)
-        .unwrap();
-    ops::claim(
-        &f.store,
-        &ticket.id,
-        &Timestamp::from_datetime(at),
-        Timestamp::from_datetime(at + time::Duration::seconds(5)),
-        "other-worker",
-        None,
-    )
-    .unwrap();
-    let initial = f.run(&[
+    let register = [
         "register",
         "--role",
         "integrator",
@@ -802,10 +790,31 @@ fn hs2_76vmyg_known_claim_expiry_wakes_integrator_without_a_file_write() {
         "integrator",
         "--session",
         "root",
-    ]);
+    ];
+    // HS2-XME4ZX: the claim must outlive the register call and the waiter's start, or the
+    // waiter sees it already expired and returns without subscribing. Size the lease from
+    // this host's CLI round trip under its current load instead of a fixed wall-clock bet.
+    let started = Instant::now();
+    f.run(&register);
+    let lease = i64::try_from((started.elapsed() * 4).as_secs())
+        .unwrap()
+        .max(5);
+    let at = time::OffsetDateTime::now_utc()
+        .replace_nanosecond(750_000_000)
+        .unwrap();
+    ops::claim(
+        &f.store,
+        &ticket.id,
+        &Timestamp::from_datetime(at),
+        Timestamp::from_datetime(at + time::Duration::seconds(lease)),
+        "other-worker",
+        None,
+    )
+    .unwrap();
+    let initial = f.run(&register);
     assert_eq!(
         initial.local_queue.as_ref().unwrap()[0].claim_expires_at,
-        Some(at.unix_timestamp() + 6)
+        Some(at.unix_timestamp() + lease + 1)
     );
     assert_eq!(
         initial.local_queue.as_ref().unwrap()[0]
