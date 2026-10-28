@@ -2369,7 +2369,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
   card grows to contain every count and test-change line even in the narrow inspector. It has
   no resting fill, only a hover fill as its action affordance, and a rule separates this
-  header area from the first commit (HS2-3F2DZN).
+  header area from the first commit (HS2-3F2DZN). The last commit has no closing rule;
+  whitespace separates it from the footnotes (HS2-X8XK9D).
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions

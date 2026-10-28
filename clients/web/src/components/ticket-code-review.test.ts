@@ -59,7 +59,9 @@ describe('TicketCodeReview', () => {
     expect(markup).toMatch(
       /<footer class="ticket-code-review__footnotes"><p[^>]*data-tone="quiet"[^>]*>Code reviews open in glassbox\.<\/p><\/footer>/,
     );
-    expect(css).toMatchSource(/__footnotes \{ display: grid; padding-inline: calc\(var\(--kui-space-m\) \+ 1px\)/);
+    expect(css).toMatchSource(
+      /__footnotes \{ display: grid; margin-top: var\(--kui-space-l\); padding-inline: calc\(var\(--kui-space-m\) \+ 1px\)/,
+    );
     expect(markup).toMatch(/class="kui-list ticket-code-review__section"[^>]*data-component="list"/);
     expect(markup).toContain('data-component="text" data-tone="default" data-size="compact"');
     expect(markup).toMatch(/class="ticket-code-review__commit-metadata"><div[^>]*data-component="row"/);
@@ -101,6 +103,12 @@ describe('TicketCodeReview', () => {
     expect(css).toMatch(
       /\.ticket-code-review__commits \{[^}]*border-top: 1px solid var\(--wa-color-neutral-border-quiet\)/,
     );
+  });
+
+  it('ends the commit list with whitespace instead of a closing rule (HS2-X8XK9D)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(css).toMatchSource(/\.ticket-code-review__commits > :last-child \{ border-bottom: 0; \}/);
+    expect(css).toMatch(/__footnotes \{[^}]*margin-top: var\(--kui-space-l\)/);
   });
 
   it('resets the native list-item indent so commit rows align with their list', () => {
