@@ -41,21 +41,21 @@
 .ticket-attachments[data-dragging-group-attachment='true'] .ticket-attachments__new-group {
   display: block;
 }
+/* Bordered previews span the attachment rows' outer border edges: equal columns of at least one
+   tile fill the row, so the first column starts on the rows' left edge and a full row of tiles
+   ends on their right edge (HS2-Q9SGTC). */
 .ticket-attachments__image-grid {
-  display: flex;
-  padding-inline: calc(var(--kui-space-xs) + 1px);
-  flex-wrap: wrap;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, remify(220px)), 1fr));
+  align-items: start;
   gap: var(--kui-space-xs);
 }
 .ticket-attachments__image-grid button {
   position: relative;
   display: grid;
   width: 100%;
-  max-width: remify(220px);
   height: auto;
   aspect-ratio: 1;
-  flex: none;
   padding: var(--kui-space-2xs);
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
@@ -90,8 +90,7 @@
   place-items: center;
 }
 @media (max-width: remify(640px)) {
-  .ticket-attachments__image-grid button {
-    width: min(remify(160px), 44vw);
-    height: min(remify(160px), 44vw);
+  .ticket-attachments__image-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, remify(160px)), 1fr));
   }
 }
