@@ -132,7 +132,22 @@ function worktree(project, path, expected, run) {
   return { state: head === expected && !dirty ? 'clean' : 'changed', path: resolve(path), branch, head, dirty };
 }
 
-function mapping(project, source, integrated, run) {
+function reviewedMapping(project, record, run) {
+  const { project_id: projectId, connection_id: connectionId, native_id: nativeId } = record.ticket;
+  if (!projectId || !connectionId || !nativeId) return false;
+  const qualified = `@${projectId}/${connectionId}:${nativeId}`;
+  const common = git(project, ['rev-parse', '--git-common-dir'], run);
+  const path = join(resolve(project, common), 'hotsheet-integrations', hash(qualified), `${record.operation}.json`);
+  if (!existsSync(path)) return false;
+  const evidence = JSON.parse(readFileSync(path, 'utf8'));
+  return evidence.version === 1 && evidence.operation === record.operation && evidence.branch === 'main'
+    && evidence.ticket?.project_id === projectId && evidence.ticket?.connection_id === connectionId
+    && evidence.ticket?.native_id === nativeId && evidence.source_commits?.includes(record.sourceCommit)
+    && evidence.shipping_commits?.includes(record.integrated);
+}
+
+function mapping(project, source, integrated, run, record) {
+  if (record && reviewedMapping(project, record, run)) return 'reviewed_integration_record';
   if (source === integrated) return 'identity';
   let sourceDiff, mainDiff;
   try {
@@ -165,6 +180,7 @@ export function evaluate(record, evidence) {
     if (evidence.assignment?.handoff?.kind !== 'code' || evidence.assignment.handoff.commit !== record.sourceCommit) reasons.push('source handoff changed');
     if (evidence.integrated !== record.integrated || evidence.tree !== record.tree) reasons.push('integrated main commit or tree changed');
     if (evidence.mapping === 'unverified') reasons.push('source-to-main mapping is not independently verified');
+    if (record.ticket.project_id && evidence.mapping !== 'reviewed_integration_record') reasons.push('durable integration mapping is missing; record it before cleanup');
     if (evidence.mainBranch !== 'main' || !evidence.mainContains) reasons.push('current main HEAD does not contain the integrated commit');
     if (evidence.remoteAncestry !== 'covered') reasons.push(`remote main ancestry is ${evidence.remoteAncestry}; query origin and fetch main if the remote commit is absent locally`);
     if (!evidence.gateReceipt) reasons.push('exact integrated tree has no successful local root gate receipt');
@@ -197,7 +213,7 @@ export function collect(record, { run = command, runs } = {}) {
   if (record.kind === 'code') {
     evidence.integrated = git(project, ['rev-parse', `${record.integrated}^{commit}`], run);
     evidence.tree = git(project, ['rev-parse', `${record.integrated}^{tree}`], run);
-    evidence.mapping = mapping(project, record.sourceCommit, record.integrated, run);
+    evidence.mapping = mapping(project, record.sourceCommit, record.integrated, run, record);
     evidence.mainHead = git(project, ['rev-parse', 'HEAD'], run);
     evidence.mainBranch = git(project, ['symbolic-ref', '--short', 'HEAD'], run);
     evidence.mainContains = run('git', ['merge-base', '--is-ancestor', record.integrated, 'HEAD'], project).status === 0;
@@ -293,7 +309,7 @@ export function register(opts, run = command) {
   if (kind === 'code' && realpathSync(opts.worktree) === realpathSync(project)) throw new Error('source worktree must not be the main checkout');
   if (kind === 'findings' && (opts.integrated || opts.worktree)) throw new Error('findings handoff has no code gate or worktree');
   const record = {
-    version: 1, project, store, operation: assignment.id, ticket: assignment.ticket, slug: assignment.slug,
+    version: 1, project, store, operation: assignment.id, ticket: { ...assignment.ticket, project_id: snapshot.state.project_id }, slug: assignment.slug,
     workerGeneration: assignment.generation, integrator: snapshot.state.integrator ? { id: snapshot.state.integrator.id, generation: snapshot.state.integrator.generation } : null,
     ticketRevision: currentTicket.revision, kind,
     sourceCommit: kind === 'code' ? assignment.handoff.commit : undefined,

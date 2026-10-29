@@ -4,11 +4,28 @@
 
 ## Run it
 
-After integrating a code handoff onto main, passing `scripts/check.sh` on that exact clean tree, pushing, and recording the coordination `Ci` phase:
+After integrating a code handoff onto main, passing `scripts/check.sh` on that exact clean tree,
+and confirming the remote contains the final commit, record the reviewed mapping
+(HS2-39D5YS):
+
+```sh
+zsh -ic 'node scripts/integration-record.mjs --project <main-checkout> --ticket @<project-id>/<connection-id>:<native-id> --operation <assignment-id> --source <worker-full-sha> --shipping <main-full-sha>'
+```
+
+Repeat `--source` and `--shipping` for each reviewed commit. The record survives
+worker-branch cleanup. Replay the same operation after interruption; a changed
+mapping requires a new reviewed operation. After recording the coordination `Ci`
+phase, register the completion proposal:
 
 ```sh
 zsh -ic 'node scripts/ci-completion-proposal.mjs register --project <main-checkout> --store <ticket-store> --assignment <operation-id> --integrated <full-main-sha> --worktree <source-worktree>'
 ```
+
+A code proposal from a project-qualified coordinator cannot become ready without
+the durable record, including when Git preserves the SHA or a stable patch id.
+A reviewed conflict resolution with unequal patch ids can be ready through this
+explicit mapping; fresh remote ancestry, the exact gate, green main CI and
+worktree checks still apply.
 
 For a findings-only handoff in `Verifying`, omit `--integrated` and `--worktree`. If a previous `## Review return` finding has been resolved, pass its exact note id as `--resolved-review-note <id>`; repeat for each resolved finding. Registration stores the current ticket revision, worker and integrator generations, handoff evidence, and the reviewed source-to-main mapping in the Git common directory under `hotsheet-ci-proposals/<operation-id>.json`. It does not copy ticket prose into that file. Re-register after a changed ticket, session, or integrated commit has been reviewed.
 
@@ -22,7 +39,7 @@ zsh -ic 'node scripts/ci-completion-proposal.mjs refresh --project <main-checkou
 
 ## Evidence and limits
 
-For code, readiness requires the exact source handoff, identical commit or stable patch id mapping to the recorded main commit, a root-gate receipt for that commit's tree, ancestry against a fresh `git ls-remote origin refs/heads/main` result, a successful covering **main push** CI run, an unchanged ticket revision, no unresolved Review return note or active claim, and the exact clean source worktree at its recorded commit. The selected store's canonical connection id and the ticket's native id must match the assignment, so a same-slug ticket from another store cannot approve completion. The source worktree cannot be the main checkout. CI evidence retains run ids, URLs, pending/failure/cancelled/superseded/unavailable states, and each run's ancestry result. A green source-branch run is ignored. A returned `Blocked` operation stays blocked, including after a later success. Findings-only handoffs require the authoritative findings note and current ticket but do not invent a code gate, CI run, or source worktree.
+For code, readiness requires the exact source handoff, the matching durable integration record for current project-qualified coordinator pools (or the legacy identity/stable-patch mapping for older proposals), a root-gate receipt for that commit's tree, ancestry against a fresh `git ls-remote origin refs/heads/main` result, a successful covering **main push** CI run, an unchanged ticket revision, no unresolved Review return note or active claim, and the exact clean source worktree at its recorded commit. The selected store's canonical connection id and the ticket's native id must match the assignment, so a same-slug ticket from another store cannot approve completion. The source worktree cannot be the main checkout. CI evidence retains run ids, URLs, pending/failure/cancelled/superseded/unavailable states, and each run's ancestry result. A green source-branch run is ignored. A returned `Blocked` operation stays blocked, including after a later success. Findings-only handoffs require the authoritative findings note and current ticket but do not invent a code gate, CI run, or source worktree.
 
 The collector reads up to 100 recent main push CI runs on each explicit refresh and queries the actual remote main ref; a stale local `origin/main` is not sufficient. If GitHub or the Git remote is unavailable, the run is outside that window, local Git lacks the remote commit, or the authoritative provider ticket cannot be read, it reports `unavailable` and does not approve completion. Fetch `origin/main` and refresh when ancestry cannot be proved. An independent gate failure during integration belongs to the `suspended_integration` / prerequisite path from HS2-2D3099; this proposal tool cannot turn it into CI. It never upgrades a live coordination pool.
 

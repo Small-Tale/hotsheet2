@@ -856,6 +856,8 @@ export interface FollowUpEvidence {
 export interface CodeReview {
   commits: CodeReviewCommit[];
   ranges: CodeReviewRange[];
+  /** Recorded shipping commits are on remote main while this checkout is behind (HS2-39D5YS). */
+  checkout_behind_main?: boolean;
   difftool?: string;
   truncated: boolean;
   summary?: CodeReviewSummary;

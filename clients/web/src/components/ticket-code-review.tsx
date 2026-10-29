@@ -235,6 +235,14 @@ export function TicketCodeReview({
             </div>
           )}
           {unmergedNotice(review)}
+          {review.checkout_behind_main && (
+            <div class="ticket-code-review__notice" data-checkout-behind-main="true" role="status">
+              <Text variant="p" size="compact" tone="quiet" flush>
+                Recorded ticket work is on remote main. This checkout is behind; update it to review the latest local
+                history.
+              </Text>
+            </div>
+          )}
           <ol class="ticket-code-review__commits">
             {review.commits.flatMap((commit) => {
               const expanded = expandedCommits.includes(commit.sha),

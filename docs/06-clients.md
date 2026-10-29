@@ -2392,6 +2392,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   no resting fill, only a hover fill as its action affordance, and a rule separates this
   header area from the first commit (HS2-3F2DZN). The last commit has no closing rule;
   whitespace separates it from the footnotes (HS2-X8XK9D).
+  Explicit integration records show final shipping commits and suppress only their
+  mapped worker originals; later worker changes remain marked unmerged. If the
+  local checkout is behind recorded remote main, a separate notice says to update it
+  (HS2-39D5YS).
   It also lists explicit follow-up tickets with a count and qualified links (HS2-2Z11A5).
   Broken, deleted, or unavailable targets display a diagnostic while the source stays
   readable. A ticket context action opens the shared creation composer as a follow-up;

@@ -11191,6 +11191,84 @@ test('marks unmerged worktree commits and opens them before they are merged (HS2
   await page.screenshot({ path: 'target/visual-captures/hs2-0wzrk5-unmerged-narrow.png', fullPage: true });
 });
 
+test('shows recorded shipping work separately from a stale checkout and later pending work (HS2-39D5YS)', async ({
+  page,
+}) => {
+  const actions = await mockProject(page);
+  await page.route(/\/tickets\/(git-local%3A)?01\/code-review$/i, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: {
+            difftool: 'Glassbox',
+            truncated: false,
+            checkout_behind_main: true,
+            summary: { files: { total: 1, docs: 0, tests: 0, source: 1, other: 0 }, tests_added: 0, tests_modified: 0 },
+            files: [{ path: 'clients/web/src/example.ts', change: 'modified', category: 'source' }],
+            ranges: [{ from: 'final222', to: 'final222', count: 1 }],
+            commits: [
+              {
+                sha: 'later333',
+                short_sha: 'later333',
+                subject: 'HS2-DEMO01: later branch work',
+                committed_at: '2026-09-04T10:00:00Z',
+                unmerged: { branch: 'worker-later', worktree: '/repo/worktrees/later' },
+              },
+              {
+                sha: 'final222',
+                short_sha: 'final222',
+                subject: 'Corrected integrated change',
+                committed_at: '2026-09-03T10:00:00Z',
+              },
+            ],
+          },
+        })
+      : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  let inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
+  let review = inspector.locator('[data-component="ticket-code-review"]');
+  const assertReview = async () => {
+    await expect(review).toBeVisible();
+    await expect(review.locator('[data-checkout-behind-main]')).toContainText(
+      'Recorded ticket work is on remote main. This checkout is behind',
+    );
+    await expect(review.locator('[data-unmerged-notice]')).toContainText('1 commit is not merged');
+    await expect(review.locator('li[data-commit-sha="final222"]')).toContainText('Corrected integrated change');
+    await expect(review.locator('li[data-commit-sha="final222"] .ticket-code-review__unmerged')).toHaveCount(0);
+    await expect(review.locator('li[data-commit-sha="later333"] .ticket-code-review__unmerged')).toBeVisible();
+    await expect(review.locator('li[data-commit-sha="source111"]')).toHaveCount(0);
+  };
+  await assertReview();
+  await page.screenshot({ path: 'target/visual-captures/hs2-39d5ys-code-review-inspector-1440.png', fullPage: true });
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await reader.getByRole('tab', { name: 'Code Review' }).click();
+  review = reader.locator('[data-component="ticket-code-review"]');
+  for (const width of [900, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await assertReview();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-39d5ys-code-review-reader-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await review.getByRole('button', { name: 'Open Commit final222 in Glassbox' }).click();
+  await expect
+    .poll(() => actions.some((action) => action.operation === 'code-review' && action.commit === 'final222'))
+    .toBe(true);
+  await page.reload();
+  inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
+  review = inspector.locator('[data-component="ticket-code-review"]');
+  await assertReview();
+});
+
 test('renders the exact shared Code Review component in the inspector and reader', async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 1000 });
   await mockProject(page);

@@ -389,6 +389,15 @@ changed-files summary stays on the merged commits when any exist (otherwise the 
 unmerged source's run). Launch validation accepts them exactly like merged commits. The
 ticket-list commit indicator counts unmerged work too; the repository browser stays on
 `HEAD` history.
+After a reviewed integration reaches remote main, `scripts/integration-record.mjs`
+records the provider-qualified ticket, operation, worker commits, shipping commits,
+branch and verified remote tip under the checkout's Git common directory
+(`hotsheet-integrations/`; HS2-39D5YS). Retained non-branch refs keep source
+objects reviewable after worker-branch cleanup. Code Review suppresses only
+explicitly mapped originals, includes the recorded shipping commits even when
+their messages differ, and keeps later branch work pending. A checkout behind
+the recorded remote main tip reports that state separately. Replaying the same
+operation is idempotent; a changed mapping requires a new reviewed operation.
 Adjacent matching commits form reviewable ranges without spanning unrelated work. The
 response also reports the checkout's Git `diff.tool`. The matching `POST` accepts only a
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,

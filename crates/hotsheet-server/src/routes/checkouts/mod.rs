@@ -947,7 +947,13 @@ pub(crate) async fn get_checkout_code_review(
         .checkout_registry
         .resolve(&reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let (source, _) = checkout_ticket_owner(&state, &reference, &id)?;
     let (_, ticket) = checkout_git_ticket(&state, &reference, &id)?;
+    let ticket_ref = hotsheet_model::ProjectTicketRef {
+        project_id: checkout.id.clone(),
+        connection_id: source.connection_id,
+        native_id: ticket.id.to_string(),
+    };
     let slug = ticket.slug;
     let follow_ups = ticket.follow_ups;
     let classification = checkout
@@ -965,7 +971,7 @@ pub(crate) async fn get_checkout_code_review(
         .unwrap_or_default();
     let root: std::path::PathBuf = checkout.root.into();
     let mut review = tokio::task::spawn_blocking(move || {
-        code_review::discover_with_classification(&root, &slug, &classification)
+        code_review::discover_for_ticket(&root, &slug, &classification, &ticket_ref)
     })
     .await
     .map_err(|error| {
@@ -1022,11 +1028,22 @@ pub(crate) async fn open_checkout_code_review(
         .checkout_registry
         .resolve(&reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let (source, _) = checkout_ticket_owner(&state, &reference, &id)?;
     let (_, ticket) = checkout_git_ticket(&state, &reference, &id)?;
+    let ticket_ref = hotsheet_model::ProjectTicketRef {
+        project_id: checkout.id.clone(),
+        connection_id: source.connection_id,
+        native_id: ticket.id.to_string(),
+    };
     let root: std::path::PathBuf = checkout.root.into();
     let slug = ticket.slug;
     tokio::task::spawn_blocking(move || {
-        let review = code_review::discover(&root, &slug)?;
+        let review = code_review::discover_for_ticket(
+            &root,
+            &slug,
+            &code_review::CodeReviewClassification::default(),
+            &ticket_ref,
+        )?;
         code_review::launch(&root, &review, &target)
     })
     .await

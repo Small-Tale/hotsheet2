@@ -57,7 +57,7 @@ test('HS2-1C1565 only a successful covering main push CI run is green', () => {
   assert.equal(classifyRuns(null, integrated, covers).state, 'unavailable');
 });
 
-function fixture({ kind = 'code', phase = 'ci', review = '', dirty = false, head = source, sourceWorktree = true } = {}) {
+function fixture({ kind = 'code', phase = 'ci', review = '', dirty = false, head = source, sourceWorktree = true, projectId } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hs2-1c1565-'));
   const project = join(root, 'project'), store = join(root, 'store'), gitDir = join(root, 'git'), worktree = join(root, 'worker');
   for (const path of [project, store, gitDir, worktree, join(gitDir, 'hotsheet-root-gate')]) mkdirSync(path, { recursive: true });
@@ -81,7 +81,7 @@ function fixture({ kind = 'code', phase = 'ci', review = '', dirty = false, head
     const ok = (stdout = '') => ({ status: 0, stdout, stderr: '' });
     const fail = () => ({ status: 1, stdout: '', stderr: 'synthetic failure' });
     if (binary === 'hotsheet-cli' && args.at(-2) === 'show') return providerAvailable ? ok(ticketText) : fail();
-    if (binary === 'hotsheet-cli' && args.at(-1) === 'status') return ok(JSON.stringify({ state: { assignments: { 'operation-1': assignment }, integrator }, live_integrator: true, live_claims: activeClaims, cursor: 'unrelated-cursor' }));
+    if (binary === 'hotsheet-cli' && args.at(-1) === 'status') return ok(JSON.stringify({ state: { project_id: projectId, assignments: { 'operation-1': assignment }, integrator }, live_integrator: true, live_claims: activeClaims, cursor: 'unrelated-cursor' }));
     if (binary !== 'git') throw new Error(`unexpected ${binary}`);
     if (args[0] === 'rev-parse' && args[1] === '--git-common-dir') return ok(gitDir);
     if (args[0] === 'rev-parse' && args[1] === '--git-path') return ok(join(gitDir, 'hotsheet-root-gate'));
@@ -99,7 +99,7 @@ function fixture({ kind = 'code', phase = 'ci', review = '', dirty = false, head
     if (args[0] === 'cat-file') return ok();
     throw new Error(`unexpected git ${args.join(' ')}`);
   };
-  return { project, store, worktree, assignment, ticketRef, fake, calls,
+  return { project, store, gitDir, worktree, assignment, ticketRef, fake, calls,
     setTicket: (value) => { ticketText = value; },
     setRemote: (value) => { remoteContains = value; },
     setCoverage: (value) => { coverage = value; },
@@ -131,6 +131,28 @@ test('HS2-1C1565 refreshes a durable proposal without duplicate writes and reche
   f.setTicket(markdown(note('review-2', '## Review return\nNew finding')));
   assert.match(refresh(path, { run: f.fake, runs: green }).reasons.join(' '), /ticket changed/);
   assert.ok(readFileSync(path, 'utf8').includes('review-2'));
+});
+
+test('HS2-39D5YS requires a qualified durable mapping and accepts a reviewed unequal patch', () => {
+  const f = fixture({ projectId: 'project' });
+  const path = register({ project: f.project, store: f.store, assignment: 'operation-1', integrated, worktree: f.worktree }, f.fake);
+  const green = [run(1, integrated, 'completed', 'success', '2026-10-28T01:00:00Z')];
+  assert.match(refresh(path, { run: f.fake, runs: green }).reasons.join(' '), /durable integration mapping/);
+  f.setMapping(false);
+  const qualified = `@project/${f.ticketRef.connection_id}:${f.ticketRef.native_id}`;
+  const directory = join(f.gitDir, 'hotsheet-integrations', createHash('sha256').update(qualified).digest('hex'));
+  mkdirSync(directory, { recursive: true });
+  const ledgerPath = join(directory, 'operation-1.json');
+  const evidence = { version: 1, operation: 'operation-1', ticket: { project_id: 'wrong-project', ...f.ticketRef }, remote: 'origin', branch: 'main', source_commits: [source], shipping_commits: [integrated], remote_tip: integrated, recorded_at: '2026-10-28T00:00:00Z' };
+  writeFileSync(ledgerPath, JSON.stringify(evidence));
+  assert.match(refresh(path, { run: f.fake, runs: green }).reasons.join(' '), /mapping/);
+  evidence.ticket.project_id = 'project';
+  writeFileSync(ledgerPath, JSON.stringify(evidence));
+  const ready = refresh(path, { run: f.fake, runs: green });
+  assert.equal(ready.ready, true);
+  assert.equal(ready.integrated.mapping, 'reviewed_integration_record');
+  f.setRemote(false);
+  assert.match(refresh(path, { run: f.fake, runs: green }).reasons.join(' '), /remote main ancestry/);
 });
 
 test('HS2-1C1565 blocks dirty, missing, unmapped, returned and stale-generation cleanup', () => {

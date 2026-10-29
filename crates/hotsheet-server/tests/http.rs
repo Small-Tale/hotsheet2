@@ -27389,6 +27389,167 @@ async fn code_review_shows_unmerged_worktree_commits_until_they_are_merged() {
 }
 
 #[tokio::test]
+async fn hs2_39d5ys_code_review_reopens_with_corrected_shipping_commit_and_later_work() {
+    use sha2::{Digest, Sha256};
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let root = checkout.path();
+    let git = |args: &[&str]| {
+        let output = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.name", "Synthetic Test"]);
+    git(&["config", "user.email", "test@invalid.example"]);
+    git(&["config", "diff.tool", "hs2-test"]);
+    git(&["config", "difftool.hs2-test.cmd", "true"]);
+    std::fs::write(root.join("seed"), "seed\n").unwrap();
+    git(&["add", "seed"]);
+    git(&["commit", "-qm", "Seed"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":root,"alias":"mapped","stores":[store.path()]}).to_string();
+    let registered = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = registered["id"].as_str().unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/mapped/tickets",
+                Some(r#"{"title":"Mapped work"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let slug = created["slug"].as_str().unwrap();
+    let connection_id = created["qualified_id"]
+        .as_str()
+        .unwrap()
+        .split(':')
+        .next()
+        .unwrap();
+    git(&["switch", "-q", "-c", "worker"]);
+    std::fs::write(root.join("work"), "original\n").unwrap();
+    git(&["add", "work"]);
+    git(&["commit", "-qm", &format!("{slug} Worker source")]);
+    let source = git(&["rev-parse", "HEAD"]);
+    std::fs::write(root.join("later"), "new work\n").unwrap();
+    git(&["add", "later"]);
+    git(&["commit", "-qm", &format!("{slug} Later work")]);
+    let later = git(&["rev-parse", "HEAD"]);
+    git(&["switch", "-q", "main"]);
+    std::fs::write(root.join("work"), "corrected\n").unwrap();
+    git(&["add", "work"]);
+    git(&["commit", "-qm", "Reviewed correction"]);
+    let shipping = git(&["rev-parse", "HEAD"]);
+    git(&[
+        "update-ref",
+        &format!("refs/hotsheet/integration-source/{source}"),
+        &source,
+    ]);
+    let path = format!("/checkouts/mapped/tickets/{id}/code-review");
+    let before = body_json(
+        app.clone()
+            .oneshot(authed("GET", &path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        before["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|commit| commit["sha"] == source && commit.get("unmerged").is_some())
+    );
+    let qualified = format!("@{project_id}/{connection_id}:{id}");
+    let digest = format!("{:x}", Sha256::digest(qualified.as_bytes()));
+    let directory = root.join(".git/hotsheet-integrations").join(digest);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("handoff.json"), serde_json::json!({
+        "version": 1, "ticket": {"project_id": project_id, "connection_id": connection_id, "native_id": id},
+        "operation": "handoff", "remote": "origin", "branch": "main",
+        "source_commits": [source], "shipping_commits": [shipping], "remote_tip": shipping,
+        "recorded_at": "2026-10-29T00:00:00Z"
+    }).to_string()).unwrap();
+    let after = body_json(
+        app.clone()
+            .oneshot(authed("GET", &path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let commits = after["commits"].as_array().unwrap();
+    assert!(!commits.iter().any(|commit| commit["sha"] == source));
+    assert!(
+        commits
+            .iter()
+            .any(|commit| commit["sha"] == later && commit.get("unmerged").is_some())
+    );
+    assert!(
+        commits
+            .iter()
+            .any(|commit| commit["sha"] == shipping && commit.get("unmerged").is_none())
+    );
+    let open = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &path,
+            Some(&serde_json::json!({"mode":"commit","commit":shipping}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(open.status(), StatusCode::NO_CONTENT);
+    git(&["switch", "-q", "-c", "stale", &base]);
+    let reopened = body_json(
+        app.clone()
+            .oneshot(authed("GET", &path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reopened["checkout_behind_main"], true);
+    assert!(
+        reopened["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|commit| commit["sha"] == shipping && commit.get("unmerged").is_none())
+    );
+    let reopened_diff = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &path,
+            Some(&serde_json::json!({"mode":"commit","commit":shipping}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reopened_diff.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn checkout_ticket_usage_lists_attributed_events_in_order_and_keeps_settled_cost() {
     let (store, st) = state();
     let checkout = tempfile::tempdir().unwrap();

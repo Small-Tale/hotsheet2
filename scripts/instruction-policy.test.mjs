@@ -46,3 +46,12 @@ test('HS2-EJ8JTG pins authoritative tier tags and analyzed T2 testing', () => {
   assert.match(integrator, /verify\s+the worker's analyzed selection for uncapped high-risk work/);
   assert.match(integrator, /Record deferred\s+checks and the covering main CI run in the completion note/);
 });
+
+test('HS2-39D5YS requires an explicit integration record before worker cleanup', () => {
+  const integrator = read('plugins/shared/role-skills/hotsheet-integrator.md');
+  assert.match(integrator, /scripts\/integration-record\.mjs/);
+  assert.match(integrator, /--ticket\s+@<project-id>\/<connection-id>:<native-id>/);
+  assert.match(integrator, /Repeat `--source`\s+and `--shipping`/);
+  assert.match(integrator, /before proposing\s+completion or deleting the worker branch/);
+  assert.match(integrator, /integration record is durable/);
+});

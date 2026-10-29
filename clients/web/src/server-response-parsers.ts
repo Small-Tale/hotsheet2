@@ -758,6 +758,7 @@ export const parseCodeReview = shape<CodeReview>(
   'code review',
   { commits: listOf(commit.check), ranges: listOf(isObject) },
   {
+    checkout_behind_main: isBoolean,
     difftool: isString,
     truncated: isBoolean,
     summary: isObject,

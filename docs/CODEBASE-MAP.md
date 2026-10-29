@@ -209,6 +209,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
+  scripts/integration-record.mjs # Provider-qualified source-to-shipping ledger in the Git common directory, fresh remote-main reachability, replay, and retained source refs (HS2-39D5YS; tests: integration-record.test.mjs; server reader: code_review.rs)
   scripts/windows-crt-directives.mjs # Windows CI dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
   scripts/windows-crt-link-correlation.mjs # Windows CI one-target verbose link; same-SHA/run/attempt, fresh package/test diagnostic attribution and private complete-member digests; weak matches advisory (HS2-9E879K; tests: windows-crt-link-correlation.test.mjs, registered local+CI)
   scripts/throughput-baseline.mjs # Read-only integrator/worker throughput spans from coordination, claims, notes, Git and main CI (HS2-34PWSK; tests: throughput-baseline.test.mjs; report: docs/27-integrator-throughput-baseline.md)

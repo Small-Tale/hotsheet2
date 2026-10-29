@@ -261,6 +261,21 @@ describe('TicketCodeReview', () => {
     expect(none).not.toContain('data-unmerged-notice');
   });
 
+  it('HS2-39D5YS explains a stale checkout separately from genuinely pending work', () => {
+    const markup = String(
+      TicketCodeReview({
+        review: {
+          ...review,
+          checkout_behind_main: true,
+          commits: [{ ...review.commits[0], unmerged: { branch: 'later-work' } }, review.commits[1]],
+        },
+      }),
+    );
+    expect(markup).toContain('data-checkout-behind-main="true"');
+    expect(markup).toContain('Recorded ticket work is on remote main. This checkout is behind');
+    expect(markup).toContain('1 commit is not merged into this checkout yet (later-work).');
+  });
+
   it('summarizes classified changes and calls out modified existing tests', () => {
     const markup = String(
       TicketCodeReview({

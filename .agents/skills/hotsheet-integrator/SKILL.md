@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 15 -->
+<!-- hotsheet-skill-version: 17 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -297,11 +297,22 @@ For a code handoff, follow these integration steps:
    Record `CI gate commit: <full main SHA>` and the run in the ticket. Use
    `node scripts/ci-gate.mjs status --covers <full main SHA>` from the configured
    login shell; a successful main run must cover the ticket commit.
+   After remote main contains the final commit, record the reviewed integration
+   with `node scripts/integration-record.mjs --project <main-checkout> --ticket
+   @<project-id>/<connection-id>:<native-id> --operation <assignment-id> --source
+   <worker-full-sha> --shipping <main-full-sha>` (HS2-39D5YS). Repeat `--source`
+   and `--shipping` for every reviewed commit in a multi-commit integration;
+   include both even when a direct merge preserves a SHA. The exact qualified
+   ticket and operation come from the coordination handoff. The recorder verifies
+   fresh remote reachability and retains each worker commit under a non-branch
+   Git ref. Replay the same command after an interrupted post-push step; a
+   conflicting mapping needs a new reviewed operation. Do this before proposing
+   completion or deleting the worker branch.
 4. While remote CI runs, release the claim and take another independent ready
    ticket. Reclaim this exact ticket when CI resolves. On green CI, re-read the
    ticket, verify scope and follow-ups, and remove the finished worker worktree
-   and branch after confirming they have no uncommitted work and their commits
-   are integrated. Complete it with the required confidence note and integrated
+   and branch after confirming they have no uncommitted work, their commits
+   are integrated, and the integration record is durable. Complete it with the required confidence note and integrated
    SHA, then release the claim. On a ticket-caused CI failure, return to working,
    repair and verify it; record an independent failure as a follow-up ticket.
 

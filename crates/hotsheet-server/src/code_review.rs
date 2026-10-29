@@ -12,10 +12,12 @@
 //! (HS2-0WZRK5).
 
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const LOG_LIMIT: usize = 2_000;
@@ -131,6 +133,9 @@ pub struct CodeReview {
     /// Explicit source-ticket follow-ups, including broken target diagnostics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub follow_ups: Vec<FollowUpEvidence>,
+    /// Recorded shipping work is on remote main, but this checkout has not advanced to it.
+    #[serde(default)]
+    pub checkout_behind_main: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -334,8 +339,143 @@ pub fn discover_with_classification(
     ticket_slug: &str,
     classification: &CodeReviewClassification,
 ) -> Result<CodeReview, CodeReviewError> {
+    discover_ticket(root, ticket_slug, classification, None)
+}
+
+/// A qualified ticket's explicit integration records supplement slug-based Git discovery
+/// (HS2-39D5YS). The old entry point remains useful for repository-only callers.
+pub fn discover_for_ticket(
+    root: &Path,
+    ticket_slug: &str,
+    classification: &CodeReviewClassification,
+    ticket: &hotsheet_model::ProjectTicketRef,
+) -> Result<CodeReview, CodeReviewError> {
+    discover_ticket(root, ticket_slug, classification, Some(ticket))
+}
+
+#[derive(Deserialize)]
+struct IntegrationRecord {
+    version: u8,
+    ticket: hotsheet_model::ProjectTicketRef,
+    operation: String,
+    remote: String,
+    branch: String,
+    source_commits: Vec<String>,
+    shipping_commits: Vec<String>,
+    remote_tip: String,
+    recorded_at: String,
+}
+
+fn integration_records(
+    root: &Path,
+    ticket: &hotsheet_model::ProjectTicketRef,
+) -> Result<Vec<IntegrationRecord>, CodeReviewError> {
+    let common = git_output(
+        root,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?;
+    let digest = format!("{:x}", Sha256::digest(ticket.qualified().as_bytes()));
+    let directory = Path::new(common.trim())
+        .join("hotsheet-integrations")
+        .join(digest);
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+    let mut records = Vec::new();
+    for entry in fs::read_dir(directory).map_err(|error| CodeReviewError::Git(error.to_string()))? {
+        let entry = entry.map_err(|error| CodeReviewError::Git(error.to_string()))?;
+        if entry
+            .path()
+            .extension()
+            .is_none_or(|extension| extension != "json")
+        {
+            continue;
+        }
+        let bytes =
+            fs::read(entry.path()).map_err(|error| CodeReviewError::Git(error.to_string()))?;
+        let record: IntegrationRecord = serde_json::from_slice(&bytes).map_err(|error| {
+            CodeReviewError::Git(format!("invalid integration record: {error}"))
+        })?;
+        let valid_sha = |value: &str| {
+            value.len() == 40
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        };
+        if record.version != 1
+            || record.ticket != *ticket
+            || entry.file_name().to_string_lossy() != format!("{}.json", record.operation)
+            || record.remote.is_empty()
+            || record.branch.is_empty()
+            || record.recorded_at.is_empty()
+            || !valid_sha(&record.remote_tip)
+            || record.source_commits.is_empty()
+            || record.shipping_commits.is_empty()
+            || !record.source_commits.iter().all(|value| valid_sha(value))
+            || !record.shipping_commits.iter().all(|value| valid_sha(value))
+        {
+            return Err(CodeReviewError::Git(
+                "invalid integration record identity or commits".into(),
+            ));
+        }
+        for source in &record.source_commits {
+            let retained = git_output(
+                root,
+                &[
+                    "rev-parse",
+                    &format!("refs/hotsheet/integration-source/{source}"),
+                ],
+            )?;
+            if retained.trim() != source {
+                return Err(CodeReviewError::Git(
+                    "integration source is not retained".into(),
+                ));
+            }
+        }
+        for shipping in &record.shipping_commits {
+            if !git_success(
+                root,
+                &["merge-base", "--is-ancestor", shipping, &record.remote_tip],
+            ) {
+                return Err(CodeReviewError::Git(
+                    "integration shipping commit is not in the recorded remote tip".into(),
+                ));
+            }
+        }
+        records.push(record);
+    }
+    records.sort_by(|left, right| left.operation.cmp(&right.operation));
+    Ok(records)
+}
+
+fn discover_ticket(
+    root: &Path,
+    ticket_slug: &str,
+    classification: &CodeReviewClassification,
+    ticket: Option<&hotsheet_model::ProjectTicketRef>,
+) -> Result<CodeReview, CodeReviewError> {
     let (all, difftool, truncated) = discover_commits(root)?;
     let (unmerged, unmerged_truncated) = discover_unmerged_commits(root);
+    let records = ticket
+        .map(|ticket| integration_records(root, ticket))
+        .transpose()?
+        .unwrap_or_default();
+    let checkout_behind_main = records.iter().any(|record| {
+        record.branch == "main"
+            && git_success(
+                root,
+                &["merge-base", "--is-ancestor", "HEAD", &record.remote_tip],
+            )
+            && !git_success(
+                root,
+                &["merge-base", "--is-ancestor", &record.remote_tip, "HEAD"],
+            )
+    });
+    let reconciled: HashSet<&str> = records
+        .iter()
+        .flat_map(|record| record.source_commits.iter().chain(&record.shipping_commits))
+        .map(String::as_str)
+        .collect();
     let matching = |commits: &[CodeReviewCommit]| {
         commits
             .iter()
@@ -343,15 +483,36 @@ pub fn discover_with_classification(
             .cloned()
             .collect::<Vec<_>>()
     };
-    let merged = matching(&all);
-    let pending = matching(&unmerged);
+    let mut merged = matching(&all);
+    let pending = matching(&unmerged)
+        .into_iter()
+        .filter(|commit| !reconciled.contains(commit.sha.as_str()))
+        .collect::<Vec<_>>();
     let mut ranges = unmerged_ranges(&pending);
     ranges.extend(contiguous_ranges(&all, &merged));
+    let mut seen: HashSet<String> = merged.iter().map(|commit| commit.sha.clone()).collect();
+    for shipping in records.iter().flat_map(|record| &record.shipping_commits) {
+        if !seen.insert(shipping.clone()) {
+            continue;
+        }
+        let output = git_output(root, &["log", "-n", "1", &log_format(), shipping])?;
+        let commit = parse_log(&output).into_iter().next().ok_or_else(|| {
+            CodeReviewError::Git(format!("integration commit {shipping} is unavailable"))
+        })?;
+        ranges.push(CodeReviewRange {
+            from: shipping.clone(),
+            to: shipping.clone(),
+            count: 1,
+        });
+        merged.push(commit);
+    }
+    merged.sort_by(|left, right| right.committed_at.cmp(&left.committed_at));
     // Unmerged work is listed first: it is the newest, not-yet-integrated part of the ticket.
     let commits = pending.into_iter().chain(merged).collect::<Vec<_>>();
     let truncated = truncated || unmerged_truncated;
     let files = discover_ticket_files(root, &commits, classification);
     Ok(CodeReview {
+        checkout_behind_main,
         follow_ups: Vec::new(),
         summary: summarize_changes(&files),
         files,
@@ -369,6 +530,7 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     let (commits, difftool, truncated) = discover_commits(root)?;
     let ranges = repository_range(&commits, ahead).into_iter().collect();
     Ok(CodeReview {
+        checkout_behind_main: false,
         follow_ups: Vec::new(),
         summary: CodeReviewSummary::default(),
         files: Vec::new(),
@@ -1135,6 +1297,132 @@ fn contiguous_ranges(
 mod tests {
     use super::*;
 
+    #[test]
+    fn hs2_39d5ys_qualified_mapping_keeps_new_branch_work_pending() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let git = |args: &[&str]| {
+            let output = hotsheet_ticketing::git::command_in(root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "-b", "main"]);
+        git(&["config", "user.name", "Synthetic Test"]);
+        git(&["config", "user.email", "test@invalid.example"]);
+        fs::write(root.join("seed"), "seed\n").unwrap();
+        git(&["add", "seed"]);
+        git(&["commit", "-m", "Seed"]);
+        git(&["switch", "-c", "worker"]);
+        fs::write(root.join("work"), "original\n").unwrap();
+        git(&["add", "work"]);
+        git(&["commit", "-m", "HS2-39D5YS Worker source"]);
+        let source = git(&["rev-parse", "HEAD"]);
+        fs::write(root.join("later"), "later\n").unwrap();
+        git(&["add", "later"]);
+        git(&["commit", "-m", "HS2-39D5YS Follow-on work"]);
+        let later = git(&["rev-parse", "HEAD"]);
+        git(&["switch", "main"]);
+        fs::write(root.join("work"), "corrected\n").unwrap();
+        git(&["add", "work"]);
+        git(&["commit", "-m", "Reviewed correction"]);
+        let shipping = git(&["rev-parse", "HEAD"]);
+        git(&[
+            "update-ref",
+            &format!("refs/hotsheet/integration-source/{source}"),
+            &source,
+        ]);
+        let ticket = hotsheet_model::ProjectTicketRef {
+            project_id: "project-a".into(),
+            connection_id: "connection-a".into(),
+            native_id: "ticket-123".into(),
+        };
+        let digest = format!("{:x}", Sha256::digest(ticket.qualified().as_bytes()));
+        let directory = root.join(".git/hotsheet-integrations").join(digest);
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(
+            directory.join("handoff.json"),
+            serde_json::json!({
+                "version": 1,
+                "ticket": ticket,
+                "operation": "handoff",
+                "remote": "origin",
+                "branch": "main",
+                "source_commits": [source],
+                "shipping_commits": [shipping],
+                "remote_tip": shipping,
+                "recorded_at": "2026-10-29T00:00:00Z"
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let review = discover_for_ticket(
+            root,
+            "HS2-39D5YS",
+            &CodeReviewClassification::default(),
+            &ticket,
+        )
+        .unwrap();
+        assert!(
+            review
+                .commits
+                .iter()
+                .any(|commit| commit.sha == shipping && commit.unmerged.is_none())
+        );
+        assert!(
+            review
+                .commits
+                .iter()
+                .any(|commit| commit.sha == later && commit.unmerged.is_some())
+        );
+        assert!(!review.commits.iter().any(|commit| commit.sha == source));
+        let other = hotsheet_model::ProjectTicketRef {
+            project_id: "project-b".into(),
+            ..ticket.clone()
+        };
+        let other_review = discover_for_ticket(
+            root,
+            "HS2-39D5YS",
+            &CodeReviewClassification::default(),
+            &other,
+        )
+        .unwrap();
+        assert!(
+            other_review
+                .commits
+                .iter()
+                .any(|commit| commit.sha == source && commit.unmerged.is_some())
+        );
+        assert!(
+            !other_review
+                .commits
+                .iter()
+                .any(|commit| commit.sha == shipping)
+        );
+        let base = git(&["rev-parse", "main^"]);
+        git(&["switch", "-c", "stale", &base]);
+        let stale = discover_for_ticket(
+            root,
+            "HS2-39D5YS",
+            &CodeReviewClassification::default(),
+            &ticket,
+        )
+        .unwrap();
+        assert!(stale.checkout_behind_main);
+        assert!(
+            stale
+                .commits
+                .iter()
+                .any(|commit| commit.sha == shipping && commit.unmerged.is_none())
+        );
+    }
+
     fn commit(sha: &str, subject: &str, parent: &str) -> CodeReviewCommit {
         CodeReviewCommit {
             sha: sha.into(),
@@ -1329,6 +1617,7 @@ mod tests {
     #[test]
     fn arbitrary_commits_and_ranges_are_rejected_before_launch() {
         let review = CodeReview {
+            checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: Vec::new(),
@@ -1459,6 +1748,7 @@ mod tests {
     #[test]
     fn compare_uses_the_two_exact_discovered_commits() {
         let review = CodeReview {
+            checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: Vec::new(),
@@ -1533,6 +1823,7 @@ mod tests {
     #[test]
     fn ticket_file_targets_must_match_discovered_evidence() {
         let review = CodeReview {
+            checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
             files: vec![CodeReviewFile {
