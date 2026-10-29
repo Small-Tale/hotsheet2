@@ -2,7 +2,6 @@
 //! transitions, permission requests, published notifications) delivered through the
 //! running notification router to a faithful fake ntfy transport.
 
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -20,7 +19,7 @@ const SECRET: &str = "test-secret";
 
 /// Records each request and wakes the waiting test, replying like ntfy.sh does.
 struct SignallingHttp {
-    sent: Mutex<mpsc::Sender<HttpRequest>>,
+    sent: Mutex<tokio::sync::mpsc::UnboundedSender<HttpRequest>>,
 }
 
 impl HttpTransport for SignallingHttp {
@@ -38,7 +37,7 @@ struct Harness {
     home: std::path::PathBuf,
     store_id: String,
     state: AppState,
-    received: mpsc::Receiver<HttpRequest>,
+    received: tokio::sync::mpsc::UnboundedReceiver<HttpRequest>,
 }
 
 fn harness() -> Harness {
@@ -47,7 +46,7 @@ fn harness() -> Harness {
     let store = FsStore::init(dir.path().join("demo.hs2"), &StoreMetadata::new("HS")).unwrap();
     let home = dir.path().join("machine-home");
     let store_id = hotsheet_server::multistore::store_url_id(&store);
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let http = Arc::new(SignallingHttp {
         sent: Mutex::new(tx),
     });
@@ -106,11 +105,12 @@ fn header<'a>(request: &'a HttpRequest, name: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-/// Wait for the router's next delivery (event-driven; the timeout is only a failure bound).
-fn next(h: &Harness) -> HttpRequest {
-    h.received
-        .recv_timeout(Duration::from_secs(20))
+/// Wait without occupying a Tokio worker; a one-worker runtime must still route the event.
+async fn next(h: &mut Harness) -> HttpRequest {
+    tokio::time::timeout(Duration::from_secs(20), h.received.recv())
+        .await
         .expect("the router delivered a notification")
+        .expect("the notification transport stayed open")
 }
 
 async fn configure(router: &axum::Router, events: Value) {
@@ -134,7 +134,7 @@ async fn configure(router: &axum::Router, events: Value) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn admin_routes_validate_store_secrets_by_reference_and_test_channels() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
 
     let (status, list) = call(&router, "GET", "/notifiers", None).await;
@@ -200,7 +200,7 @@ async fn admin_routes_validate_store_secrets_by_reference_and_test_channels() {
     assert_eq!(status, StatusCode::OK, "{record}");
     assert_eq!(record["outcome"], "delivered");
     assert_eq!(record["event"], "test");
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(header(&sent, "Authorization"), Some("Bearer tk-e2e"));
     assert_eq!(header(&sent, "Title"), Some("Hot Sheet test notification"));
 
@@ -247,7 +247,7 @@ async fn admin_routes_validate_store_secrets_by_reference_and_test_channels() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ticket_transitions_permission_requests_and_published_notifications_reach_channels() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
     configure(
         &router,
@@ -299,7 +299,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     let click = header(&sent, "Click").unwrap();
     assert!(
         click.starts_with("http://hotsheet.lan:4174/?project="),
@@ -332,7 +332,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
         Some(json!({"blocked_reason":"waiting on review"})),
     )
     .await;
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some(format!("{slug} is blocked").as_str())
@@ -351,7 +351,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
         Some(json!({"note":"Pick A or B?","note_kind":"feedback_needed"})),
     )
     .await;
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some(format!("{slug} needs your feedback").as_str())
@@ -365,7 +365,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(header(&sent, "Title"), Some("Build finished"));
     assert_eq!(header(&sent, "Tags"), Some("white_check_mark"));
     assert_eq!(String::from_utf8(sent.body).unwrap(), "All **green**");
@@ -377,7 +377,7 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
 
 #[test]
 fn permission_requests_and_unconfigured_events_route_synchronously() {
-    let h = harness();
+    let mut h = harness();
     let event = |kind: &str| hotsheet_server::ChangeEvent {
         cursor: None,
         store: "/work/demo.hs2".into(),
@@ -431,7 +431,7 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
         &event("permission_asked"),
     );
     assert_eq!(records.len(), 1);
-    let sent = next(&h);
+    let sent = h.received.try_recv().expect("synchronous route delivered");
     assert_eq!(
         header(&sent, "Title"),
         Some("claude needs permission in demo")
@@ -452,7 +452,7 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
 /// running router, which reports the stop after the idle grace with the completed ticket.
 #[tokio::test(flavor = "multi_thread")]
 async fn releasing_the_last_claim_reports_the_project_stopped_after_the_grace() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
     configure(&router, json!(["project.stopped"])).await;
     let (_, created) = call(
@@ -491,7 +491,7 @@ async fn releasing_the_last_claim_reports_the_project_stopped_after_the_grace() 
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some("Hot Sheet project demo has stopped working on tickets")
@@ -500,14 +500,18 @@ async fn releasing_the_last_claim_reports_the_project_stopped_after_the_grace() 
     let body = String::from_utf8(sent.body).unwrap();
     assert!(body.contains(&format!("Completed: {slug}.")), "{body}");
     // One report per active period: nothing else arrives.
-    assert!(h.received.recv_timeout(Duration::from_secs(1)).is_err());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), h.received.recv())
+            .await
+            .is_err()
+    );
 }
 
 /// HS2-2MM07G: a lease that expires without renewal reports the project stalled, naming
 /// the ticket and worker; the clock is driven directly so the test needs no real expiry.
 #[tokio::test(flavor = "multi_thread")]
 async fn an_unrenewed_claim_reports_the_project_stalled() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
     configure(&router, json!(["project.stopped"])).await;
     let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Hang"}))).await;
@@ -544,7 +548,7 @@ async fn an_unrenewed_claim_reports_the_project_stalled() {
     .unwrap();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].event, hotsheet_notify::EventKind::ProjectStopped);
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some("Hot Sheet project demo has stalled")
@@ -561,7 +565,7 @@ async fn an_unrenewed_claim_reports_the_project_stalled() {
 /// checkout's alias is the project name in the message.
 #[tokio::test(flavor = "multi_thread")]
 async fn rules_match_linked_checkouts_and_use_their_alias() {
-    let h = harness();
+    let mut h = harness();
     let project = h._dir.path().join("rocket-src");
     std::fs::create_dir_all(&project).unwrap();
     let registry_path = h._dir.path().join("checkouts.json");
@@ -655,7 +659,7 @@ async fn rules_match_linked_checkouts_and_use_their_alias() {
         1,
         "the linked checkout id matches the store's event"
     );
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some("Hot Sheet project Rocket has stalled")
@@ -735,7 +739,7 @@ async fn a_renewed_claim_is_not_reported_stalled() {
 /// HS2-P57XHV: claims renewed without progress report "may be stuck" once.
 #[tokio::test(flavor = "multi_thread")]
 async fn held_claims_without_progress_report_the_project_may_be_stuck() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
     configure(&router, json!(["project.stopped"])).await;
     let (status, timing) = call(
@@ -774,7 +778,7 @@ async fn held_claims_without_progress_report_the_project_may_be_stuck() {
     )
     .await;
     assert_eq!(records.len(), 1);
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some("Hot Sheet project demo may be stuck")
@@ -790,9 +794,10 @@ async fn held_claims_without_progress_report_the_project_may_be_stuck() {
 
 /// HS2-P57XHV: a halt report from the terminal whose worker holds a claim reaches the
 /// running router and names the claim and the halt reason.
-#[tokio::test(flavor = "multi_thread")]
+// HS2-QXG1JQ: the router and the delivery wait must work with only one Tokio worker.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn a_halted_session_with_a_claim_reports_its_project() {
-    let h = harness();
+    let mut h = harness();
     let router = app(h.state.clone());
     configure(&router, json!(["project.stopped"])).await;
     let (_, created) = call(
@@ -830,7 +835,7 @@ async fn a_halted_session_with_a_claim_reports_its_project() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let sent = next(&h);
+    let sent = next(&mut h).await;
     assert_eq!(
         header(&sent, "Title"),
         Some("Hot Sheet project demo: an AI session halted")

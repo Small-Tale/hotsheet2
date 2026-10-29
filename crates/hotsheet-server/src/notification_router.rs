@@ -97,8 +97,9 @@ impl AppState {
 }
 
 /// Start the router: seed ticket snapshots off the runtime (subscribed first, so no
-/// change is lost meanwhile), then route each bus event on a blocking worker so a slow
-/// channel never delays the bus. Returns once seeding finished.
+/// change is lost meanwhile), then drain the bus without waiting for a slow channel
+/// and route events in order on one blocking worker. A halt must not overtake the claim
+/// it reports (HS2-QXG1JQ). Returns once seeding finished.
 pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHandle<()> {
     let mut events = state.events.subscribe();
     let seeding = state.clone();
@@ -118,12 +119,19 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
     if let Err(error) = tokio::task::spawn_blocking(seed).await {
         tracing::warn!(%error, "notification snapshot seeding failed");
     }
+    let (queued, mut pending) = tokio::sync::mpsc::unbounded_channel::<ChangeEvent>();
+    tokio::task::spawn_blocking(move || {
+        while let Some(event) = pending.blocking_recv() {
+            route_change_event(&state, &event);
+        }
+    });
     tokio::spawn(async move {
         loop {
             match events.recv().await {
                 Ok(event) => {
-                    let state = state.clone();
-                    tokio::task::spawn_blocking(move || route_change_event(&state, &event));
+                    if queued.send(event).is_err() {
+                        break;
+                    }
                 }
                 Err(RecvError::Lagged(skipped)) => {
                     tracing::warn!(skipped, "notification router fell behind the change bus");
