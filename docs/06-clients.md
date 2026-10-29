@@ -234,6 +234,30 @@ preview/download, server directory browser) are separate design work.
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
+- **Worker view (approved design, not yet shipped; HS2-T7EVFD).** Add a Workers
+  segment beside List and Columns in the project workspace. Show one column per
+  observed worker, with a card naming the worker, tool or kind, observed availability,
+  and a quiet detail such as last seen or the background parent. Keep the integrator
+  in the first column. A supported, registered background agent gets an adjacent
+  column that names its parent; the dispatcher has its own explicit identity when
+  present. Do not infer either role or availability from another worker's activity.
+  Within a worker column, distinguish offered reservations, live claims under
+  **Working on**, and ordered tentative **Planned next** tickets. The integrator
+  distinguishes live integration from **Waiting to integrate** handoffs and remote
+  CI; handed-off tickets do not make the former worker appear busy. Preserve a
+  disconnected worker's column and label its retained work **Unresolved**, without
+  a live spinner. If a source or tool cannot be observed, say that coverage is
+  unknown rather than showing zero workers. Keep idle workers visible and give a
+  genuine zero-worker state. Ticket activation opens the existing inspector; this
+  monitoring view adds no launch, stop, or message actions.
+  Use the shared column ticket summary and Kerf's column track: horizontally
+  reachable columns on desktop and paged columns with a next-column peek on phones.
+  Preserve column identity, order, focus, and scroll across updates and size changes.
+  HS2-DBECD0 owns the authoritative worker/coverage read model, HS2-XCMAVT owns
+  tentative plans, HS2-E9SR7R owns the screen and phone composition, and
+  HS2-1Z3T0Z owns lifecycle and rendered verification. The approved synthetic
+  design captures are attached to HS2-T7EVFD; they do not establish shipped behavior.
+
 - **Responsive mobile layout.** The web client has a desktop size floor (the app-shell
   `min-width`, 1024px). At and above it the two side panels — the left project sidebar and
   the right ticket inspector — sit beside the main column and resize/persist as usual. Below
