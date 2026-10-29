@@ -574,3 +574,162 @@ fn hs2_97zhmm_webhook_slack_teams_and_sms_deliver_over_live_http() {
         sms[0].body
     );
 }
+
+#[test]
+fn hs2_4jg95g_quiet_hours_rate_limits_and_text_rules_from_the_cli() {
+    let env = env();
+    let (base, received) = loopback();
+    let records = |args: &[&str]| -> Vec<(String, Option<String>)> {
+        let out = hs(&env)
+            .args(args)
+            .arg("--json")
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let value: Value = serde_json::from_slice(&out).unwrap();
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["outcome"].as_str().unwrap().to_string(),
+                    r["error"].as_str().map(str::to_owned),
+                )
+            })
+            .collect()
+    };
+    // A quiet window around the current UTC time, so the test never depends on the hour.
+    let now = time::OffsetDateTime::now_utc();
+    let hhmm = |t: time::OffsetDateTime| format!("{:02}:{:02}", t.hour(), t.minute());
+    let window = format!(
+        "{}-{}",
+        hhmm(now - time::Duration::hours(1)),
+        hhmm(now + time::Duration::hours(1))
+    );
+    hs(&env)
+        .args([
+            "channel",
+            "add",
+            "quiet",
+            "--notifier",
+            "webhook",
+            "--quiet",
+            &window,
+            "--quiet-offset",
+            "+00:00",
+        ])
+        .assert()
+        .success();
+    hs(&env)
+        .args(["channel", "secret", "quiet", "url"])
+        .write_stdin(format!("{base}/quiet\n"))
+        .assert()
+        .success();
+    hs(&env)
+        .args([
+            "channel",
+            "add",
+            "limited",
+            "--notifier",
+            "webhook",
+            "--max-per-hour",
+            "1",
+        ])
+        .assert()
+        .success();
+    hs(&env)
+        .args(["channel", "secret", "limited", "url"])
+        .write_stdin(format!("{base}/limited\n"))
+        .assert()
+        .success();
+    hs(&env)
+        .args([
+            "rule",
+            "add",
+            "all",
+            "--event",
+            "notification",
+            "--channel",
+            "quiet",
+            "--channel",
+            "limited",
+        ])
+        .assert()
+        .success();
+    hs(&env)
+        .args([
+            "rule",
+            "add",
+            "release",
+            "--event",
+            "digest",
+            "--channel",
+            "limited",
+            "--text",
+            "release",
+        ])
+        .assert()
+        .success();
+
+    let first = records(&["send", "--title", "one"]);
+    assert_eq!(first[0].0, "suppressed");
+    assert!(
+        first[0].1.as_deref().unwrap().starts_with("quiet hours"),
+        "{first:?}"
+    );
+    assert_eq!(first[1], ("delivered".to_string(), None));
+    let second = records(&["send", "--title", "two"]);
+    assert_eq!(
+        second[1],
+        (
+            "suppressed".to_string(),
+            Some("rate limit of 1 per hour reached".into())
+        )
+    );
+    // An explicit test ignores quiet hours.
+    hs(&env)
+        .args(["channel", "test", "quiet"])
+        .assert()
+        .success();
+    // A text rule needs a ticket to match; a bare send has none.
+    hs(&env)
+        .args(["send", "--event", "digest", "--title", "release notes"])
+        .assert()
+        .success()
+        .stdout(contains("No enabled rule matched"));
+    let paths: Vec<String> = (0..2)
+        .map(|_| {
+            received
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap()
+                .line
+        })
+        .collect();
+    assert!(
+        paths.iter().any(|l| l.contains(" /limited "))
+            && paths.iter().any(|l| l.contains(" /quiet ")),
+        "{paths:?}"
+    );
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .is_err(),
+        "nothing else was sent"
+    );
+    hs(&env)
+        .args([
+            "channel",
+            "add",
+            "x",
+            "--notifier",
+            "webhook",
+            "--quiet",
+            "late",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("--quiet expects HH:MM-HH:MM"));
+}

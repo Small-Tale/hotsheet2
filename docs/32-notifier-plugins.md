@@ -116,12 +116,18 @@ The delivery record notes `truncated` and `omitted_attachments`.
 - Channel and rule ids are lowercase letters, digits, `-`, and `_`.
 - A rule matches when it is enabled, names the event, and its filter passes. All of the
   filter's lists are optional:
-  - `projects` matches the project or store id;
+  - `projects` matches the project, the store id, or any checkout linked to the store,
+    so one checkout id covers its ticket, permission, and project events;
   - `tags` matches any one tag;
   - `statuses` matches the new status;
   - `categories` and `priorities` match the ticket's values;
-  - `min_severity` sets the lowest severity that passes.
-- Any ticket filter requires ticket facts.
+  - `min_severity` sets the lowest severity that passes;
+  - `text` matches a case-insensitive substring of the ticket slug, title, or a tag.
+- Any ticket filter, including `text`, requires ticket facts. Rules that name a saved
+  view are HS2-G8NXNC.
+- A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a fixed `utc_offset`
+  such as `+09:00`, and `allow_errors`, default true) and `max_per_hour`. Adjust the
+  offset when daylight saving time changes.
 - `test` cannot be a rule event; tests go only to the channel being tested.
 - Saving validates everything: unique ids, installed notifiers, settings against the
   schema, rule references, and no inline secrets. An invalid change is refused and
@@ -209,6 +215,12 @@ tail is reported. A plugin that outlives its timeout is killed.
 - **Matching.** Every enabled rule that matches contributes its channels. Each enabled
   channel receives a message once, even when several rules match. An explicit send or
   test goes to one channel whatever its rules or enabled flag.
+- **Quiet hours and rate limits (HS2-4JG95G).** Inside a channel's quiet window, a
+  rule-routed delivery is recorded as `suppressed` with the reason; error-severity
+  messages still go out while `allow_errors` holds. Past `max_per_hour` deliveries in
+  the last hour, a delivery is `suppressed` with the reason. The count reads the
+  delivery log, so the limit survives restarts. Tests and explicit sends bypass both.
+  Batching held messages into a summary is HS2-G8NXNC.
 - **Cooldown.** With a dedupe key and `cooldown_seconds > 0`, a repeat to the same
   channel inside the window is recorded as `suppressed` and not sent. The check reads
   memory and the delivery log, so it survives a server restart and separate CLI runs.
@@ -245,8 +257,8 @@ changed ticket with a snapshot that is seeded from each store's index when the r
 starts, before it reads the bus. The first change in a store hosted after startup only
 records its baseline. An event with no enabled rule is dropped before any ticket is
 read. With no server running, only `hotsheet-cli notify send` delivers (HS2-8VAXXA).
-Ticket events carry the store id as their project. Checkout-scoped filters are
-HS2-4JG95G.
+Ticket, permission, and project events carry the checkout ids linked to their store,
+and a linked checkout's alias is the project name in the message (HS2-4JG95G).
 
 `digest` (HS2-D33WPH) is reserved for that producer. Until it ships, scripts and agents
 can raise any event with `hotsheet-cli notify send --event <kind>`.
@@ -288,20 +300,20 @@ hotsheet-cli notify rule add stopped --event project.stopped --channel phone
 Both call the same `hotsheet_notify::admin` workflow, and every operation is
 idempotent.
 
-| CLI (`hotsheet-cli notify …`)                                            | REST                                                         |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `notifiers [--json]`                                                     | `GET /notifiers` (with `load_errors`)                        |
-| `config [--json]`                                                        | `GET /notification-config`                                   |
-| `channel add <id> --notifier <n> [--label] [--set k=v]… [--disabled]`    | `PUT /notification-channels/{id}`                            |
-| `channel secret <id> <field>` (prompt or piped stdin)                    | `PUT /notification-channels/{id}/secrets/{field}`            |
-| `channel enable\|disable <id>`                                           | `PUT /notification-channels/{id}` with `enabled`             |
-| `channel remove <id>`                                                    | `DELETE /notification-channels/{id}`                         |
-| `channel trust <id>` (approve the external plugin as it is now)          | `POST /notification-channels/{id}/trust`                     |
-| `channel test <id> [--json]`                                             | `POST /notification-channels/{id}/test`                      |
-| `rule add <id> --event … --channel … [filters] [--cooldown s]`           | `PUT /notification-rules/{id}`                               |
-| `rule remove <id>`                                                       | `DELETE /notification-rules/{id}`                            |
-| `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…` | `POST /notifications` (published events route through rules) |
-| `deliveries [--limit] [--json]`                                          | `GET /notification-deliveries?limit=`                        |
+| CLI (`hotsheet-cli notify …`)                                                                                                                       | REST                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `notifiers [--json]`                                                                                                                                | `GET /notifiers` (with `load_errors`)                        |
+| `config [--json]`                                                                                                                                   | `GET /notification-config`                                   |
+| `channel add <id> --notifier <n> [--label] [--set k=v]… [--disabled] [--quiet HH:MM-HH:MM --quiet-offset +HH:MM --quiet-errors] [--max-per-hour n]` | `PUT /notification-channels/{id}`                            |
+| `channel secret <id> <field>` (prompt or piped stdin)                                                                                               | `PUT /notification-channels/{id}/secrets/{field}`            |
+| `channel enable\|disable <id>`                                                                                                                      | `PUT /notification-channels/{id}` with `enabled`             |
+| `channel remove <id>`                                                                                                                               | `DELETE /notification-channels/{id}`                         |
+| `channel trust <id>` (approve the external plugin as it is now)                                                                                     | `POST /notification-channels/{id}/trust`                     |
+| `channel test <id> [--json]`                                                                                                                        | `POST /notification-channels/{id}/test`                      |
+| `rule add <id> --event … --channel … [filters incl. --text] [--cooldown s]`                                                                         | `PUT /notification-rules/{id}`                               |
+| `rule remove <id>`                                                                                                                                  | `DELETE /notification-rules/{id}`                            |
+| `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                            | `POST /notifications` (published events route through rules) |
+| `deliveries [--limit] [--json]`                                                                                                                     | `GET /notification-deliveries?limit=`                        |
 
 - `--set` values are parsed by the field's type; lists are comma-separated. A secret
   field passed to `--set` is refused, and the error names the `channel secret` command.
@@ -367,7 +379,8 @@ idempotent.
 | Webhook, Slack, Teams, SMS notifiers                                       | Shipped | HS2-97ZHMM |
 | MMS image attachments through Twilio                                       | Planned | HS2-K57DK0 |
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
-| Saved-query, checkout, quiet-hour, and rate-limit filters                  | Planned | HS2-4JG95G |
+| Text, checkout, quiet-hour, and rate-limit filters                         | Shipped | HS2-4JG95G |
+| Saved-view rules and batched summaries of held messages                    | Planned | HS2-G8NXNC |
 | Click-through links                                                        | Planned | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server                                       | Planned | HS2-8VAXXA |

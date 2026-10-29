@@ -77,6 +77,7 @@ impl Default for RetryPolicy {
 }
 
 pub type Sleeper = Arc<dyn Fn(Duration) + Send + Sync>;
+pub type Clock = Arc<dyn Fn() -> time::OffsetDateTime + Send + Sync>;
 
 /// `(channel, dedupe key)` → last delivery, shared by every dispatcher a long-lived host
 /// builds so rule cooldowns survive across dispatches.
@@ -90,6 +91,9 @@ pub struct Dispatcher {
     sleeper: Sleeper,
     recent: Cooldowns,
     log_lock: Mutex<()>,
+    clock: Clock,
+    /// Delivery times per channel, for rate limits when there is no delivery log.
+    sent: Mutex<HashMap<String, Vec<time::OffsetDateTime>>>,
 }
 
 impl Dispatcher {
@@ -105,6 +109,8 @@ impl Dispatcher {
             retry: RetryPolicy::default(),
             sleeper: Arc::new(std::thread::sleep),
             recent: Cooldowns::default(),
+            clock: Arc::new(time::OffsetDateTime::now_utc),
+            sent: Mutex::new(HashMap::new()),
             log_lock: Mutex::new(()),
         }
     }
@@ -112,6 +118,11 @@ impl Dispatcher {
     pub fn with_retry(mut self, retry: RetryPolicy, sleeper: Sleeper) -> Dispatcher {
         self.retry = retry;
         self.sleeper = sleeper;
+        self
+    }
+
+    pub fn with_clock(mut self, clock: Clock) -> Dispatcher {
+        self.clock = clock;
         self
     }
 
@@ -143,14 +154,20 @@ impl Dispatcher {
             .into_iter()
             .filter_map(|(channel, rule, cooldown)| {
                 let channel = config.channel(channel).filter(|c| c.enabled)?;
-                if self.suppressed(&channel.id, message, cooldown) {
-                    return Some(self.finish(self.record(
+                let reason = self.held(channel, message).or_else(|| {
+                    self.suppressed(&channel.id, message, cooldown)
+                        .then(|| "a repeat inside the rule's cooldown".to_string())
+                });
+                if let Some(reason) = reason {
+                    let mut record = self.record(
                         message,
                         &channel.id,
                         &channel.notifier,
                         Some(rule),
                         Outcome::Suppressed,
-                    )));
+                    );
+                    record.error = Some(reason);
+                    return Some(self.finish(record));
                 }
                 Some(self.deliver(config, &channel.id, Some(rule), message))
             })
@@ -169,6 +186,48 @@ impl Dispatcher {
             return Err(format!("unknown channel '{channel}'"));
         }
         Ok(self.deliver(config, channel, None, message))
+    }
+
+    /// Why a rule-routed delivery to `channel` is held right now: quiet hours or the hourly
+    /// limit (HS2-4JG95G). Tests and explicit sends bypass both.
+    fn held(&self, channel: &crate::config::ChannelConfig, message: &Message) -> Option<String> {
+        let now = (self.clock)();
+        if let Some(quiet) = &channel.quiet_hours {
+            let urgent = quiet.allow_errors && message.severity >= crate::message::Severity::Error;
+            if quiet.contains(now) && !urgent {
+                return Some(format!(
+                    "quiet hours {}-{} ({})",
+                    quiet.start, quiet.end, quiet.utc_offset
+                ));
+            }
+        }
+        let limit = channel.max_per_hour?;
+        let since = now - time::Duration::hours(1);
+        let count = match &self.log_path {
+            Some(path) => {
+                let _guard = self.log_lock.lock_or_recover();
+                std::fs::read_to_string(path)
+                    .unwrap_or_default()
+                    .lines()
+                    .filter_map(|line| serde_json::from_str::<DeliveryRecord>(line).ok())
+                    .filter(|r| r.channel == channel.id && r.outcome == Outcome::Delivered)
+                    .filter_map(|r| {
+                        time::OffsetDateTime::parse(
+                            &r.at,
+                            &time::format_description::well_known::Rfc3339,
+                        )
+                        .ok()
+                    })
+                    .filter(|at| *at > since)
+                    .count()
+            }
+            None => self
+                .sent
+                .lock_or_recover()
+                .get(&channel.id)
+                .map_or(0, |times| times.iter().filter(|at| **at > since).count()),
+        };
+        (count >= limit as usize).then(|| format!("rate limit of {limit} per hour reached"))
     }
 
     /// Whether `channel` already took this dedupe key inside the cooldown: from this
@@ -203,7 +262,7 @@ impl Dispatcher {
         let Ok(text) = std::fs::read_to_string(path) else {
             return false;
         };
-        let now = time::OffsetDateTime::now_utc();
+        let now = (self.clock)();
         text.lines()
             .rev()
             .filter_map(|line| serde_json::from_str::<DeliveryRecord>(line).ok())
@@ -281,6 +340,12 @@ impl Dispatcher {
             record.attempts += 1;
             match notifier.deliver(channel_id, &rendered, &resolved) {
                 Ok(provider_id) => {
+                    let now = (self.clock)();
+                    let mut sent = self.sent.lock_or_recover();
+                    let times = sent.entry(channel_id.to_string()).or_default();
+                    times.retain(|at| now - *at < time::Duration::hours(1));
+                    times.push(now);
+                    drop(sent);
                     record.outcome = Outcome::Delivered;
                     record.provider_id = provider_id;
                     record.error = None;
@@ -307,7 +372,9 @@ impl Dispatcher {
     ) -> DeliveryRecord {
         DeliveryRecord {
             id: ulid::Ulid::new().to_string(),
-            at: now(),
+            at: (self.clock)()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
             event: message.event,
             channel: channel.into(),
             notifier: notifier.into(),
@@ -346,12 +413,6 @@ fn dedupe_hash(key: &str) -> String {
         .take(8)
         .map(|b| format!("{b:02x}"))
         .collect()
-}
-
-fn now() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_default()
 }
 
 fn append_log(path: &Path, record: &DeliveryRecord) -> std::io::Result<()> {
@@ -460,6 +521,8 @@ mod tests {
             )
             .unwrap(),
             plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
         }
     }
 
@@ -619,6 +682,113 @@ mod tests {
                 .iter()
                 .all(|r| r.outcome != Outcome::Suppressed)
         );
+    }
+
+    /// A dispatcher over `h`'s transport and log whose clock reads `clock`.
+    fn at(h: &Harness, clock: Arc<Mutex<time::OffsetDateTime>>, log: bool) -> Dispatcher {
+        let registry = Arc::new(Registry::with_builtins(
+            vec![Arc::new(Ntfy::with_transport(h.http.clone()))],
+            None,
+            Arc::new(LiveRunner),
+        ));
+        let secrets = BTreeMap::from([("ntfy-token".to_string(), "tk".to_string())]);
+        Dispatcher::new(registry, Arc::new(secrets), log.then(|| h.home.path()))
+            .with_clock(Arc::new(move || *clock.lock_or_recover()))
+    }
+
+    fn utc(h: u8, m: u8) -> time::OffsetDateTime {
+        time::OffsetDateTime::UNIX_EPOCH
+            .replace_date(time::Date::from_calendar_date(2026, time::Month::October, 29).unwrap())
+            .replace_time(time::Time::from_hms(h, m, 0).unwrap())
+    }
+
+    fn one_channel(cooldown: u64) -> NotificationConfig {
+        let mut c = config(cooldown);
+        c.rules.truncate(1);
+        c.rules[0].channels = vec!["phone".into()];
+        c
+    }
+
+    #[test]
+    fn hs2_4jg95g_quiet_hours_hold_routine_messages_but_not_errors_or_tests() {
+        let h = harness(vec![ok()]);
+        let clock = Arc::new(Mutex::new(utc(23, 0)));
+        let d = at(&h, clock.clone(), true);
+        let mut c = one_channel(0);
+        c.channels[0].quiet_hours = Some(crate::config::QuietHours {
+            start: "22:00".into(),
+            end: "07:00".into(),
+            utc_offset: "+00:00".into(),
+            allow_errors: true,
+        });
+        let held = d.dispatch(&c, &blocked()).remove(0);
+        assert_eq!(held.outcome, Outcome::Suppressed);
+        assert_eq!(
+            held.error.as_deref(),
+            Some("quiet hours 22:00-07:00 (+00:00)")
+        );
+        assert!(h.http.requests().is_empty());
+        let mut urgent = blocked();
+        urgent.severity = crate::message::Severity::Error;
+        assert_eq!(
+            d.dispatch(&c, &urgent).remove(0).outcome,
+            Outcome::Delivered
+        );
+        c.channels[0].quiet_hours.as_mut().unwrap().allow_errors = false;
+        assert_eq!(
+            d.dispatch(&c, &urgent).remove(0).outcome,
+            Outcome::Suppressed
+        );
+        // A test or explicit send ignores quiet hours.
+        assert_eq!(
+            d.deliver_to(&c, "phone", &blocked()).unwrap().outcome,
+            Outcome::Delivered
+        );
+        *clock.lock_or_recover() = utc(7, 0);
+        assert_eq!(
+            d.dispatch(&c, &blocked()).remove(0).outcome,
+            Outcome::Delivered
+        );
+        assert!(
+            recent_deliveries(h.home.path(), 1)[0]
+                .at
+                .starts_with("2026-10-29T07:00:00")
+        );
+    }
+
+    #[test]
+    fn hs2_4jg95g_hourly_rate_limit_counts_the_log_and_memory() {
+        for log in [true, false] {
+            let h = harness(vec![ok()]);
+            let clock = Arc::new(Mutex::new(utc(9, 0)));
+            let d = at(&h, clock.clone(), log);
+            let mut c = one_channel(0);
+            c.channels[0].max_per_hour = Some(2);
+            let mut m = blocked();
+            m.dedupe_key = None;
+            let outcomes = |d: &Dispatcher| d.dispatch(&c, &m).remove(0);
+            assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
+            *clock.lock_or_recover() = utc(9, 30);
+            assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
+            let limited = outcomes(&d);
+            assert_eq!(limited.outcome, Outcome::Suppressed);
+            assert_eq!(
+                limited.error.as_deref(),
+                Some("rate limit of 2 per hour reached")
+            );
+            if log {
+                // A restarted process reads the same limit from the delivery log.
+                assert_eq!(
+                    outcomes(&at(&h, clock.clone(), true)).outcome,
+                    Outcome::Suppressed
+                );
+            }
+            // The 09:00 delivery leaves the window after an hour.
+            *clock.lock_or_recover() = utc(10, 1);
+            assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
+            assert_eq!(outcomes(&d).outcome, Outcome::Suppressed);
+            assert_eq!(h.http.requests().len(), 3);
+        }
     }
 
     #[test]

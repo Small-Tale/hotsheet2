@@ -101,6 +101,8 @@ impl Severity {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TicketFacts {
     pub slug: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
@@ -156,6 +158,10 @@ pub struct Message {
     /// Repeats with the same key inside a rule's cooldown are suppressed per channel.
     #[serde(default)]
     pub dedupe_key: Option<String>,
+    /// Checkout ids linked to the event's store, so a rule's `projects` filter can name a
+    /// checkout for store-scoped events (HS2-4JG95G).
+    #[serde(default)]
+    pub checkouts: Vec<String>,
 }
 
 impl Message {
@@ -172,6 +178,7 @@ impl Message {
             url: None,
             attachments: Vec::new(),
             dedupe_key: None,
+            checkouts: Vec::new(),
         }
     }
 }

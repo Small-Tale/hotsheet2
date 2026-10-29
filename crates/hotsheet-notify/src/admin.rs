@@ -347,6 +347,8 @@ mod tests {
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs-test"})).unwrap(),
             plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
         }
     }
 
@@ -475,6 +477,8 @@ mod tests {
             enabled: true,
             settings: Default::default(),
             plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
         };
         // Creating the channel approves the plugin as it is.
         let created = put_channel(home.path(), &registry(), relay.clone()).unwrap();

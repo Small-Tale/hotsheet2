@@ -16937,6 +16937,27 @@ components:
         plugin_digest:
           type: string
           description: For an external notifier, the plugin digest this channel approved (HS2-208RB1).
+        quiet_hours:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              description: HH:MM
+            end:
+              type: string
+              description: HH:MM; the window may wrap midnight.
+            utc_offset:
+              type: string
+              description: Fixed offset such as +09:00 (default +00:00).
+            allow_errors:
+              type: boolean
+          additionalProperties: false
+        max_per_hour:
+          type: integer
+          minimum: 1
       additionalProperties: false
     NotificationChannelInput:
       type: object
@@ -16953,6 +16974,27 @@ components:
           type: boolean
         settings:
           type: object
+        quiet_hours:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              description: HH:MM
+            end:
+              type: string
+              description: HH:MM; the window may wrap midnight.
+            utc_offset:
+              type: string
+              description: Fixed offset such as +09:00 (default +00:00).
+            allow_errors:
+              type: boolean
+          additionalProperties: false
+        max_per_hour:
+          type: integer
+          minimum: 1
       additionalProperties: false
     NotificationSecretInput:
       type: object
@@ -17012,6 +17054,9 @@ components:
             - success
             - warning
             - error
+        text:
+          type: string
+          description: Case-insensitive substring of the ticket slug, title, or a tag.
       additionalProperties: false
     NotificationRule:
       type: object

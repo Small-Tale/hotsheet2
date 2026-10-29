@@ -18,6 +18,73 @@ fn yes() -> bool {
     true
 }
 
+/// A daily window during which a channel holds deliveries (HS2-4JG95G). Times are
+/// `HH:MM` in the fixed `utc_offset` (`+09:00`, `-05:00`); a window may wrap midnight.
+/// A fixed offset avoids local-time lookups in a multithreaded server; adjust it when
+/// daylight saving time changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuietHours {
+    pub start: String,
+    pub end: String,
+    #[serde(default = "utc")]
+    pub utc_offset: String,
+    /// Error-severity messages (a stalled project, a failed build) still go out.
+    #[serde(default = "yes")]
+    pub allow_errors: bool,
+}
+
+fn utc() -> String {
+    "+00:00".into()
+}
+
+fn minutes(hhmm: &str) -> Option<i64> {
+    let (h, m) = hhmm.split_once(':')?;
+    let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
+    ((0..24).contains(&h) && (0..60).contains(&m) && hhmm.len() == 5).then_some(h * 60 + m)
+}
+
+fn offset(text: &str) -> Option<time::UtcOffset> {
+    let sign = match text.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let total = minutes(&text[1..])?;
+    time::UtcOffset::from_whole_seconds((sign * total * 60) as i32).ok()
+}
+
+impl QuietHours {
+    pub fn validate(&self) -> Result<(), String> {
+        let (Some(start), Some(end)) = (minutes(&self.start), minutes(&self.end)) else {
+            return Err("quiet hours start and end must be HH:MM".into());
+        };
+        if start == end {
+            return Err("quiet hours start and end must differ".into());
+        }
+        offset(&self.utc_offset)
+            .map(|_| ())
+            .ok_or_else(|| "quiet hours utc_offset must look like +09:00 or -05:00".into())
+    }
+
+    /// Whether `at` falls inside the window.
+    pub fn contains(&self, at: time::OffsetDateTime) -> bool {
+        let (Some(start), Some(end), Some(offset)) = (
+            minutes(&self.start),
+            minutes(&self.end),
+            offset(&self.utc_offset),
+        ) else {
+            return false;
+        };
+        let local = at.to_offset(offset);
+        let now = i64::from(local.hour()) * 60 + i64::from(local.minute());
+        if start < end {
+            (start..end).contains(&now)
+        } else {
+            now >= start || now < end
+        }
+    }
+}
+
 /// One configured destination: a notifier plus its settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -33,6 +100,11 @@ pub struct ChannelConfig {
     /// refused when the plugin's current digest differs (HS2-208RB1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_hours: Option<QuietHours>,
+    /// At most this many deliveries per rolling hour; later ones are suppressed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_per_hour: Option<u32>,
 }
 
 /// Narrows which events a rule forwards. Empty lists match everything.
@@ -53,6 +125,9 @@ pub struct RuleFilter {
     pub priorities: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_severity: Option<Severity>,
+    /// Case-insensitive substring of the ticket's slug, title, or a tag.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 /// Routes matching events to channels.
@@ -94,14 +169,22 @@ impl Rule {
             && !f.projects.iter().any(|p| {
                 message.project.as_deref() == Some(p.as_str())
                     || message.store.as_deref() == Some(p.as_str())
+                    || message.checkouts.iter().any(|c| c == p)
             })
         {
             return false;
         }
+        let text = f
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_lowercase);
         let ticket_filters = !(f.tags.is_empty()
             && f.statuses.is_empty()
             && f.categories.is_empty()
-            && f.priorities.is_empty());
+            && f.priorities.is_empty()
+            && text.is_none());
         if !ticket_filters {
             return true;
         }
@@ -116,6 +199,17 @@ impl Rule {
             && any_eq(&f.statuses, ticket.status.as_deref())
             && any_eq(&f.categories, ticket.category.as_deref())
             && any_eq(&f.priorities, ticket.priority.as_deref())
+            && text.is_none_or(|needle| {
+                ticket.slug.to_lowercase().contains(&needle)
+                    || ticket
+                        .title
+                        .as_deref()
+                        .is_some_and(|t| t.to_lowercase().contains(&needle))
+                    || ticket
+                        .tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&needle))
+            })
     }
 }
 
@@ -232,6 +326,17 @@ impl NotificationConfig {
             })?;
             settings::validate(&notifier.descriptor().settings, &channel.settings)
                 .map_err(|e| invalid(format!("channel '{}': {e}", channel.id)))?;
+            if let Some(quiet) = &channel.quiet_hours {
+                quiet
+                    .validate()
+                    .map_err(|e| invalid(format!("channel '{}': {e}", channel.id)))?;
+            }
+            if channel.max_per_hour == Some(0) {
+                return Err(invalid(format!(
+                    "channel '{}': max_per_hour must be at least 1",
+                    channel.id
+                )));
+            }
         }
         let mut rules = std::collections::BTreeSet::new();
         for rule in &self.rules {
@@ -334,6 +439,8 @@ mod tests {
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs"})).unwrap(),
             plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
         }
     }
 
@@ -389,6 +496,85 @@ mod tests {
         r.enabled = false;
         r.filter = RuleFilter::default();
         assert!(!r.matches(&ticket_message("completed", &[])));
+    }
+
+    #[test]
+    fn hs2_4jg95g_text_and_checkout_filters() {
+        let mut r = rule(vec![EventKind::TicketStatusChanged]);
+        r.filter.text = Some("  Release ".into());
+        let mut m = ticket_message("completed", &[]);
+        assert!(!r.matches(&m));
+        m.ticket.as_mut().unwrap().title = Some("Cut the release branch".into());
+        assert!(r.matches(&m), "title match");
+        m.ticket.as_mut().unwrap().title = None;
+        m.ticket.as_mut().unwrap().tags = vec!["pre-release".into()];
+        assert!(r.matches(&m), "tag substring match");
+        r.filter.text = Some("hs2-1".into());
+        assert!(r.matches(&m), "slug match, case-insensitive");
+        r.filter.text = Some("   ".into());
+        assert!(r.matches(&m), "blank text does not filter");
+        let mut by_checkout = rule(vec![EventKind::TicketStatusChanged]);
+        by_checkout.filter.projects = vec!["hotsheet2-ab12".into()];
+        assert!(!by_checkout.matches(&m));
+        m.checkouts = vec!["other-1".into(), "hotsheet2-ab12".into()];
+        assert!(by_checkout.matches(&m));
+    }
+
+    #[test]
+    fn hs2_4jg95g_quiet_hours_windows() {
+        let at = |h: u8, m: u8| {
+            time::OffsetDateTime::UNIX_EPOCH.replace_time(time::Time::from_hms(h, m, 0).unwrap())
+        };
+        let night = QuietHours {
+            start: "22:00".into(),
+            end: "07:00".into(),
+            utc_offset: "+00:00".into(),
+            allow_errors: true,
+        };
+        assert!(night.validate().is_ok());
+        assert!(
+            night.contains(at(23, 30)) && night.contains(at(6, 59)) && night.contains(at(22, 0))
+        );
+        assert!(!night.contains(at(7, 0)) && !night.contains(at(12, 0)));
+        let lunch = QuietHours {
+            start: "12:00".into(),
+            end: "13:00".into(),
+            utc_offset: "+09:00".into(),
+            allow_errors: false,
+        };
+        // 03:30 UTC is 12:30 at +09:00.
+        assert!(lunch.contains(at(3, 30)) && !lunch.contains(at(12, 30)));
+        for bad in [
+            ("25:00", "07:00", "+00:00"),
+            ("22:00", "22:00", "+00:00"),
+            ("22:00", "7:00", "+00:00"),
+            ("22:00", "07:00", "09:00"),
+        ] {
+            let q = QuietHours {
+                start: bad.0.into(),
+                end: bad.1.into(),
+                utc_offset: bad.2.into(),
+                allow_errors: true,
+            };
+            assert!(q.validate().is_err(), "{bad:?}");
+        }
+        let reg = registry();
+        let mut c = NotificationConfig::default();
+        let mut phone = ntfy("phone");
+        phone.quiet_hours = Some(QuietHours {
+            start: "x".into(),
+            ..night.clone()
+        });
+        c.channels.push(phone.clone());
+        assert!(c.validate(&reg).unwrap_err().to_string().contains("HH:MM"));
+        c.channels[0].quiet_hours = Some(night);
+        c.channels[0].max_per_hour = Some(0);
+        assert!(
+            c.validate(&reg)
+                .unwrap_err()
+                .to_string()
+                .contains("max_per_hour")
+        );
     }
 
     #[test]

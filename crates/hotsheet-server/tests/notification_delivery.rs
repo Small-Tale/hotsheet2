@@ -384,6 +384,8 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs-e2e"})).unwrap(),
             plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
         },
     )
     .unwrap();
@@ -528,5 +530,110 @@ async fn an_unrenewed_claim_reports_the_project_stalled() {
     assert!(
         body.contains(&format!("{slug}** (worker w-stuck)")),
         "{body}"
+    );
+}
+
+/// HS2-4JG95G: a store-scoped event matches a rule that names a linked checkout, and the
+/// checkout's alias is the project name in the message.
+#[tokio::test(flavor = "multi_thread")]
+async fn rules_match_linked_checkouts_and_use_their_alias() {
+    let h = harness();
+    let project = h._dir.path().join("rocket-src");
+    std::fs::create_dir_all(&project).unwrap();
+    let registry_path = h._dir.path().join("checkouts.json");
+    let checkout = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(
+            &project,
+            Some("Rocket"),
+            None,
+            vec![h._dir.path().join("demo.hs2")],
+        )
+        .unwrap();
+    let state = h.state.clone().with_checkout_registry(&registry_path);
+    let router = app(state.clone());
+    let registry = hotsheet_notify::Registry::builtin_only();
+    hotsheet_notify::admin::put_channel(
+        &h.home,
+        &registry,
+        hotsheet_notify::ChannelConfig {
+            id: "phone".into(),
+            notifier: "ntfy".into(),
+            label: None,
+            enabled: true,
+            settings: serde_json::from_value(json!({"topic":"hs-e2e"})).unwrap(),
+            plugin_digest: None,
+            quiet_hours: None,
+            max_per_hour: None,
+        },
+    )
+    .unwrap();
+    let rule = |projects: Vec<String>| hotsheet_notify::Rule {
+        id: "rocket".into(),
+        events: vec![hotsheet_notify::EventKind::ProjectStopped],
+        channels: vec!["phone".into()],
+        enabled: true,
+        filter: hotsheet_notify::RuleFilter {
+            projects,
+            ..Default::default()
+        },
+        cooldown_seconds: 0,
+    };
+    let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Launch"}))).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let stall = |projects: Vec<String>| {
+        hotsheet_notify::admin::put_rule(&h.home, &registry, rule(projects)).unwrap();
+        let state = state.clone();
+        let store = h.store_id.clone();
+        let event = hotsheet_server::ChangeEvent {
+            cursor: None,
+            store: store.clone(),
+            kind: "claimed".into(),
+            id: id.clone(),
+            slug: String::new(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: None,
+        };
+        move || {
+            hotsheet_server::notification_router::route_change_event(&state, &event);
+            let later = time::OffsetDateTime::now_utc() + time::Duration::minutes(2);
+            hotsheet_server::notification_router::check_project_activity(&state, &store, later)
+        }
+    };
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w1","lease_minutes":1})),
+    )
+    .await;
+    let other = tokio::task::spawn_blocking(stall(vec!["another-checkout".into()]))
+        .await
+        .unwrap();
+    assert!(
+        other.is_empty(),
+        "a rule for another checkout does not match"
+    );
+
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/renew"),
+        Some(json!({"worker":"w1","lease_minutes":1})),
+    )
+    .await;
+    let records = tokio::task::spawn_blocking(stall(vec![checkout.id.clone()]))
+        .await
+        .unwrap();
+    assert_eq!(
+        records.len(),
+        1,
+        "the linked checkout id matches the store's event"
+    );
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project Rocket has stalled")
     );
 }

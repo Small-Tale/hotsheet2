@@ -74,6 +74,10 @@ pub(crate) struct ChannelBody {
     enabled: bool,
     #[serde(default)]
     settings: hotsheet_notify::settings::Settings,
+    #[serde(default)]
+    quiet_hours: Option<hotsheet_notify::config::QuietHours>,
+    #[serde(default)]
+    max_per_hour: Option<u32>,
 }
 
 fn enabled() -> bool {
@@ -93,6 +97,8 @@ pub(crate) async fn put_notification_channel(
             enabled: body.enabled,
             settings: body.settings,
             plugin_digest: None,
+            quiet_hours: body.quiet_hours,
+            max_per_hour: body.max_per_hour,
         };
         admin::put_channel(state.machine_home(), &state.notifier_registry(), channel)
             .map(Json)

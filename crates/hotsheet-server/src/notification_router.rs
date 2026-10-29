@@ -205,7 +205,7 @@ pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<Delivery
     };
     let messages = match event.kind.as_str() {
         "permission_asked" if wants(&[EventKind::PermissionRequested]) => {
-            vec![permission_message(event)]
+            vec![permission_message(state, event)]
         }
         "notification" if wants(&[EventKind::Notification]) => {
             hub_message(state, event).into_iter().collect()
@@ -264,8 +264,43 @@ fn project_name(project: &str) -> String {
         .unwrap_or_else(|| project.to_string())
 }
 
-fn permission_message(event: &ChangeEvent) -> Message {
-    let name = project_name(&event.store);
+/// The checkouts that link `root` (a store or project path): their ids, for rule
+/// `projects` filters, and the first alias, as the project's display name (HS2-4JG95G).
+fn linked_checkouts(state: &AppState, root: &std::path::Path) -> (Vec<String>, Option<String>) {
+    let checkouts = state.checkout_registry.list().unwrap_or_default();
+    let linked: Vec<_> = checkouts
+        .into_iter()
+        .filter(|c| {
+            crate::watcher::same_path(std::path::Path::new(&c.root), root)
+                || c.stores
+                    .iter()
+                    .any(|s| crate::watcher::same_path(std::path::Path::new(s), root))
+        })
+        .collect();
+    let alias = linked
+        .iter()
+        .map(|c| c.alias.trim())
+        .find(|a| !a.is_empty())
+        .map(str::to_owned);
+    (linked.into_iter().map(|c| c.id).collect(), alias)
+}
+
+/// Checkout ids and display name for a hosted store.
+fn store_identity(state: &AppState, store: &str) -> (Vec<String>, String) {
+    match state.host.get(store) {
+        Some(entry) => {
+            let root = entry.store.root().to_path_buf();
+            let (checkouts, alias) = linked_checkouts(state, &root);
+            let name = alias.unwrap_or_else(|| project_name(&root.display().to_string()));
+            (checkouts, name)
+        }
+        None => (Vec::new(), project_name(store)),
+    }
+}
+
+fn permission_message(state: &AppState, event: &ChangeEvent) -> Message {
+    let (checkouts, alias) = linked_checkouts(state, std::path::Path::new(&event.store));
+    let name = alias.unwrap_or_else(|| project_name(&event.store));
     let tool = if event.slug.is_empty() {
         "An AI tool"
     } else {
@@ -280,6 +315,7 @@ fn permission_message(event: &ChangeEvent) -> Message {
     message.severity = Severity::Warning;
     message.project = Some(event.store.clone());
     message.project_name = Some(name);
+    message.checkouts = checkouts;
     message.dedupe_key = Some(format!("permission:{}", event.id));
     message
 }
@@ -372,8 +408,10 @@ fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
     }) else {
         return Vec::new();
     };
+    let (checkouts, name) = store_identity(state, &event.store);
     let facts = TicketFacts {
         slug: ticket.slug.clone(),
+        title: Some(ticket.title.clone()),
         status: Some(current.status.clone()),
         previous_status: Some(previous.status.clone()),
         category: Some(ticket.category.clone()),
@@ -385,7 +423,8 @@ fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
         message.body = format!("**{}**", escape(&ticket.title));
         message.severity = severity;
         message.project = Some(event.store.clone());
-        message.project_name = Some(project_name(&entry.store.root().display().to_string()));
+        message.project_name = Some(name.clone());
+        message.checkouts = checkouts.clone();
         message.store = Some(event.store.clone());
         message.ticket = Some(facts.clone());
         message.dedupe_key = Some(key);
@@ -617,11 +656,7 @@ pub fn check_project_activity(
 }
 
 fn stop_message(state: &AppState, store: &str, report: &StopReport) -> Message {
-    let name = state
-        .host
-        .get(store)
-        .map(|entry| project_name(&entry.store.root().display().to_string()))
-        .unwrap_or_else(|| project_name(store));
+    let (checkouts, name) = store_identity(state, store);
     let (title, severity) = match report.reason {
         StopReason::Finished => (
             format!("Hot Sheet project {name} has stopped working on tickets"),
@@ -657,6 +692,7 @@ fn stop_message(state: &AppState, store: &str, report: &StopReport) -> Message {
     message.severity = severity;
     message.project = Some(store.to_string());
     message.project_name = Some(name);
+    message.checkouts = checkouts;
     message.store = Some(store.to_string());
     message.dedupe_key = Some(format!(
         "project-stopped:{store}:{}",

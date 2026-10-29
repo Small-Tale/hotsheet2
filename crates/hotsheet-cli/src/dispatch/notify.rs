@@ -104,6 +104,18 @@ pub(crate) enum ChannelCmd {
         /// Create the channel disabled.
         #[arg(long)]
         disabled: bool,
+        /// Hold rule deliveries during this daily window, HH:MM-HH:MM (may wrap midnight).
+        #[arg(long, value_name = "HH:MM-HH:MM")]
+        quiet: Option<String>,
+        /// UTC offset of the quiet window, like +09:00 (default +00:00).
+        #[arg(long, value_name = "+HH:MM", allow_hyphen_values = true)]
+        quiet_offset: Option<String>,
+        /// Hold error-severity messages during quiet hours too.
+        #[arg(long)]
+        quiet_errors: bool,
+        /// Deliver at most this many rule notifications per rolling hour.
+        #[arg(long)]
+        max_per_hour: Option<u32>,
     },
     /// Store a credential for a channel's secret setting. Prompts on a terminal or reads
     /// piped stdin; the value goes to the machine key store, never to the config file.
@@ -159,6 +171,9 @@ pub(crate) struct RuleAddArgs {
     /// Minimum severity: info | success | warning | error.
     #[arg(long)]
     pub(crate) min_severity: Option<String>,
+    /// Only tickets whose slug, title, or a tag contains this text (case-insensitive).
+    #[arg(long)]
+    pub(crate) text: Option<String>,
     /// Suppress repeats of the same event per channel for this many seconds.
     #[arg(long, default_value_t = 0)]
     pub(crate) cooldown: u64,
@@ -363,7 +378,24 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
             label,
             settings,
             disabled,
+            quiet,
+            quiet_offset,
+            quiet_errors,
+            max_per_hour,
         } => {
+            let quiet_hours = quiet
+                .map(|window| {
+                    let (start, end) = window
+                        .split_once('-')
+                        .ok_or_else(|| anyhow!("--quiet expects HH:MM-HH:MM, got '{window}'"))?;
+                    Ok::<_, anyhow::Error>(hotsheet_notify::config::QuietHours {
+                        start: start.trim().to_string(),
+                        end: end.trim().to_string(),
+                        utc_offset: quiet_offset.clone().unwrap_or_else(|| "+00:00".into()),
+                        allow_errors: !quiet_errors,
+                    })
+                })
+                .transpose()?;
             let descriptor = registry
                 .get(&notifier)
                 .ok_or_else(|| {
@@ -396,6 +428,8 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
                     enabled: !disabled,
                     settings: parsed,
                     plugin_digest: None,
+                    quiet_hours,
+                    max_per_hour,
                 },
             )
             .map_err(admin_err)?;
@@ -552,6 +586,7 @@ fn rule(home: &Path, registry: &Registry, cmd: RuleCmd) -> Result<()> {
                 categories,
                 priorities,
                 min_severity,
+                text,
                 cooldown,
                 disabled,
             } = *args;
@@ -571,6 +606,7 @@ fn rule(home: &Path, registry: &Registry, cmd: RuleCmd) -> Result<()> {
                     categories,
                     priorities,
                     min_severity: min_severity.as_deref().map(parse_severity).transpose()?,
+                    text,
                 },
                 cooldown_seconds: cooldown,
             };
