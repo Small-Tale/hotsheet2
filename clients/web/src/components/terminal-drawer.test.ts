@@ -59,13 +59,20 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('message-terminal-session');
     expect(markup).toContain('data-terminal-id="one"');
   });
-  it('keeps the grid tab fixed while the shared tab strip overflows', () => {
-    // Kerf's pinned TabBarItem owns the sticky treatment; the app adds no rule or class (HS2-WF3W6A).
+  it('keeps the Project grid control fixed in the leading zone outside the scrolling tabs (HS2-T8SPNP)', () => {
+    // Kerf beta.123 removed pinned tabs (KF-K6GKN3); TabBar's leading zone owns the fixed control and the app
+    // adds no sticky rule or class (HS2-WF3W6A).
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
     expect(css).not.toContain('terminal-drawer__grid-tab');
-    expect(render()).toMatch(/data-tab-id="grid"[^>]*data-pinned="true"/);
-    expect(render()).not.toContain('terminal-drawer__grid-tab');
+    const markup = render();
+    expect(markup).not.toContain('data-tab-id="grid"');
+    expect(markup).not.toContain('data-pinned');
+    expect(markup).toMatch(
+      /kui-tab-bar__leading[\s\S]*data-button-appearance="push"[\s\S]*data-action="select-drawer-item"[^>]*data-item-id="grid"[^>]*aria-label="Project Grid"[^>]*aria-pressed="true"[\s\S]*data-kui-tab-list/,
+    );
+    expect(render('one')).toMatch(/data-item-id="grid"[^>]*aria-pressed="false"/);
+    expect(markup).not.toContain('terminal-drawer__grid-tab');
   });
   it('keeps the PopupMenu trigger on the compact pill button surface through Kerf props', () => {
     // Kerf beta.59 sizes a compact PopupMenu trigger from the group's size prop; no app ::part rule (HS2-MYVVK3).
@@ -114,7 +121,7 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-trailing-placement="adjacent"');
     // Kerf beta.99 keeps snap end room inside the strip, so whole-tab snapping is on (HS2-3P7TZV).
     expect(markup).toContain('data-snap-tabs="true"');
-    expect(markup).toContain('>Project grid</span>');
+    expect(markup).toContain('aria-label="Project Grid"');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
     expect(markup).toMatch(/data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*New Drawer Item/);

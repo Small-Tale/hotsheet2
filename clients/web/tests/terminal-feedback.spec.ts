@@ -429,7 +429,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   expect(dedicatedEdges.bottom).toBeGreaterThanOrEqual(0);
   expect(dedicatedEdges.rowsContained).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
-  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   await expect(drawer.locator('kui-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });

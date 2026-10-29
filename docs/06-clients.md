@@ -1415,7 +1415,7 @@ preview/download, server directory browser) are separate design work.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.121 (HS2-6ABCVC). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.123 (HS2-6ABCVC, HS2-T8SPNP). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
@@ -3493,11 +3493,12 @@ closeable tab. The segmented dashboard and view controls likewise expose each ch
 order. The horizontally scrolling tab strips reserve a canonical 4 px inset on every edge so pill shadows
 and focus rings remain complete at either end. The project strip places the dashboard-mode
 buttons in `TabBar`'s leading slot and the add-project action in its trailing slot. The drawer
-strip keeps its Project grid tab pinned at the start of the shared horizontal scroller (Kerf's
-`pinned` TabBarItem, HS2-WF3W6A) and places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
+strip keeps its Project grid control fixed in `TabBar`'s leading slot, outside the scrolling
+tablist, as a pressed toggle button while the grid view shows (Kerf beta.123 removed pinned
+tabs, `KF-K6GKN3`, HS2-T8SPNP), and places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
-Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
+Double-clicking the rail, Project grid control, or any terminal tab toggles drawer maximization while
 preserving the last manual height. If the drawer was manually dragged to its maximum,
 the next double-click restores the default height so the gesture visibly changes it
 (HS2-S751KR). Closing the selected terminal follows HS1's

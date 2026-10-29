@@ -1962,7 +1962,8 @@ The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar
 terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the
 connected rows in its create menu (HS2-4Y6SM9).
 When the tab strip overflows (for example at a 390 px phone width), its Kerf `TabBar`
-scrolls horizontally past the pinned Project grid tab. The trailing tab, pinned grid tab,
+scrolls horizontally beside the fixed Project grid control in its leading zone (Kerf beta.123
+removed pinned tabs, `KF-K6GKN3`, HS2-T8SPNP). The trailing tab, Project grid control,
 and creation action remain reachable. Whole-tab snapping (HS2-6Y8HSH, Kerf `KF-4ESG02`)
 is disabled because its end padding can expand a twelve-tab strip beyond the drawer rail;
 the beta.90 check still reproduced that overflow (HS2-3P7TZV).
@@ -2488,7 +2489,8 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   demo controls, and `ProgressRing` for the live-claim ETA. HS2-CQ1TZN adopted Kerf
   `TextField` for the remaining Web Awesome single-line and multiline fields. The native
   ticket draft editors and date/time helper retain their separate contracts.
-  One `KUI-L203` exception covers Kerf's stale `MessageComposer` composition zone (KF-Z00DKT).
+  The `KUI-L203` exception for Kerf's stale `MessageComposer` composition zone (KF-Z00DKT) was
+  removed in the beta.123 upgrade once the doctor no longer reported it (HS2-T8SPNP).
 
 ### Kerf beta.24 layout adoption
 
@@ -2707,7 +2709,8 @@ rules. The remaining `wa-*` subjects wait on `KF-PDPAVF` (tag chip), except the 
 rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). `KUI-L022` is
 at zero: HS2-3J2PX3 retired the visibility Toolbar's class by moving its configuration onto its app
 wrapper through Kerf beta.62's `--kui-toolbar-inset` token (`KF-3EZ92R`), HS2-WF3W6A retired the
-drawer grid tab's class with Kerf's `pinned` TabBarItem (`KF-DTFQSC`), and HS2-T67Z3N retired the project
+drawer grid tab's class with Kerf's `pinned` TabBarItem (`KF-DTFQSC`; the control moved to the
+TabBar leading zone when beta.123 removed `pinned`, HS2-T8SPNP), and HS2-T67Z3N retired the project
 tab's class with Kerf's `dropTarget` and `nameOverflow` props (`KF-373HYM`): the drag handler marks
 `data-drop-target` on a tab it hovers, and the strip sets the attention, drop-target, and
 disconnected colors through the public `--kui-tab-bar-item-*` tokens.

@@ -156,7 +156,7 @@ for (const width of [1280, 390])
 
     for (let round = 0; round < 2; round += 1) {
       // The drawer's project grid shows the same emulator inside the tile, scaled and inert.
-      await drawer.getByRole('tab', { name: 'Project grid' }).click();
+      await drawer.getByRole('button', { name: 'Project Grid' }).click();
       const tile = drawer.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:demo-one"]');
       await expect(tile.locator('[data-presentation="tile"]')).toHaveCount(1);
       await expect(tile.locator('.xterm-rows')).toContainText('demo-one READY');
@@ -319,7 +319,7 @@ for (const width of [1280, 390])
     await expect(fromMagnified).toHaveAttribute('data-connection', 'connected');
     expect((await emulatorOf(page, 'demo-one'))[0].tag).toBe(first.tag);
     expect(await socketsFor(page, 'demo-one')).toBe(firstSockets);
-    await drawer.getByRole('tab', { name: 'Project grid' }).click();
+    await drawer.getByRole('button', { name: 'Project Grid' }).click();
     await expect(firstTile.locator('[data-presentation="tile"]')).toHaveCount(1);
     const overflow = drawer.locator('[data-terminal-id="demo-three"][data-display-mode="scaled-preview"]');
     await expect(overflow).toHaveCount(1);
@@ -337,7 +337,7 @@ for (const width of [1280, 390])
       { ...first, inTile: false, inSession: true, presentation: 'drawer' },
     ]);
     expect(await socketsFor(page, 'demo-one')).toBe(1);
-    await drawer.getByRole('tab', { name: 'Project grid' }).click();
+    await drawer.getByRole('button', { name: 'Project Grid' }).click();
     await expect(drawer.locator('[data-terminal-key="demo-checkout:demo-one"] [data-presentation="tile"]')).toHaveCount(
       1,
     );

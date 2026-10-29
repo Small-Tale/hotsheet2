@@ -207,18 +207,6 @@ export function TerminalDrawer({
       projectName,
     })),
     tabs = [
-      <TabBarItem
-        id="grid"
-        name="Project grid"
-        selected={selected === 'grid'}
-        closable={false}
-        // Kerf keeps the leading tab visible while its peers scroll (beta.62 `pinned`, HS2-WF3W6A).
-        pinned
-        presentation="icon-only"
-        size="compact"
-        selectAction="select-drawer-item"
-        leading={<LucideIcon icon={LayoutGrid} name="layout-grid" />}
-      />,
       ...orderedIds.map((id) => {
         const session = sessionsById.get(id);
         if (session)
@@ -367,6 +355,23 @@ export function TerminalDrawer({
               activation="manual"
               // Kerf beta.99 keeps snap end room inside the strip (KF-3Q98FJ, HS2-3P7TZV).
               snapTabs
+              // Kerf beta.123 removed pinned tabs (KF-K6GKN3): the fixed Project grid control lives in the
+              // leading zone outside the scrolling tablist, pressed while the grid view shows (HS2-T8SPNP).
+              leading={
+                // `push` paints the pressed state for a single toggle, so the grid view stays visibly selected.
+                <ToolbarControlGroup size="compact" appearance="borderless" buttonAppearance="push" single>
+                  <button
+                    type="button"
+                    {...TERMINALS_ACTIONS.selectDrawerItem.attrs}
+                    data-item-id="grid"
+                    aria-label="Project Grid"
+                    aria-pressed={selected === 'grid' ? 'true' : 'false'}
+                    title="Project Grid"
+                  >
+                    <LucideIcon icon={LayoutGrid} name="layout-grid" />
+                  </button>
+                </ToolbarControlGroup>
+              }
               trailingPlacement="adjacent"
               trailing={
                 <ToolbarControlGroup size="compact" appearance="borderless" single nestedDropdown>

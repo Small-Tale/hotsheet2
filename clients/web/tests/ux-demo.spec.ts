@@ -7510,12 +7510,17 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   );
   await expect(terminalDrawer.locator('.kui-tab-bar__end [data-component="toolbar-control-group"]')).toHaveCount(1);
   await expect(terminalDrawer.getByRole('button', { name: 'Close Development' })).toBeAttached();
-  const gridTab = terminalDrawer.getByRole('tab', { name: 'Project grid' }),
-    gridRoot = terminalDrawer.locator('[data-component="tab-bar-item"][data-pinned="true"]'),
+  const gridTab = terminalDrawer.getByRole('button', { name: 'Project Grid' }),
+    // Kerf beta.123 removed pinned tabs (KF-K6GKN3): the control sits in TabBar's fixed leading zone (HS2-T8SPNP).
+    gridRoot = terminalDrawer.locator('.kui-tab-bar__leading'),
     gridWidth = (await gridTab.boundingBox())!.width;
+  // The catalog drawer opens on its terminal, so the grid control is present but not pressed.
+  await expect(gridRoot.getByRole('button', { name: 'Project Grid' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(terminalDrawer.locator('[data-kui-tab-list]').getByRole('button', { name: 'Project Grid' })).toHaveCount(
+    0,
+  );
   await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();
   await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);
-  await expect(gridRoot).toHaveCSS('flex-shrink', '0');
   await terminalDrawer.evaluate((node) => {
     node.style.width = '520px';
     const tabs = node.querySelector('.kui-tab-bar__tabs')!,

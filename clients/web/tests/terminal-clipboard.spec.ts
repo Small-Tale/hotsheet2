@@ -452,7 +452,7 @@ test.describe('touch tablet at a desktop width', () => {
     await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['echo tablet']);
 
     // Selecting the grid drops the rail pair; a magnified tile's desktop toolbar carries it instead.
-    await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+    await drawer.getByRole('button', { name: 'Project Grid' }).tap();
     await expect(railCopy).toHaveCount(0);
     await page.getByRole('button', { name: 'Workspace Grid' }).click();
     const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),

@@ -5751,7 +5751,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     '336',
   );
-  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   const dashboard = drawer.getByRole('region', { name: 'Workspace Grid' });
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
@@ -7960,7 +7960,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
-  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
   const projectChat = drawer.locator('[data-component="workspace-chat-tile"]');
   await expect(projectChat).toContainText('Codex AI Chat');
   await expect(projectChat).toContainText('Open Codex chat to continue the conversation.');
@@ -9079,7 +9079,7 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await page.mouse.up();
   await expect.poll(claimCount, { timeout: 800 }).toBeGreaterThan(initialClaims);
   await expect(viewport).toHaveAttribute('data-driving', 'true');
-  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
   const dashboard = drawer.getByRole('region', { name: 'Workspace Grid' });
   await dashboard.getByRole('button', { name: /Zoom In/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '1');
@@ -9980,7 +9980,7 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     '336',
   );
-  await drawer.getByRole('tab', { name: 'Project grid' }).dispatchEvent('dblclick');
+  await drawer.getByRole('button', { name: 'Project Grid' }).dispatchEvent('dblclick');
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
   await drawer.getByRole('tab', { name: /Codex Main/ }).dispatchEvent('dblclick');
@@ -29812,9 +29812,9 @@ test('reorders project and terminal tabs while preserving project order and comp
   await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect.poll(terminalNames).toEqual(['Tests', 'Codex Main']);
-  await drawer.getByRole('tab', { name: 'Project grid' }).focus();
+  await terminalTabs.getByRole('tab', { name: 'Tests' }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(terminalTabs.getByRole('tab', { name: 'Tests' })).toBeFocused();
+  await expect(terminalTabs.getByRole('tab', { name: 'Codex Main' })).toBeFocused();
 });
 
 test('copies selected ticket ids to the local pasteboard without the async Clipboard API (HS2-B68KPQ)', async ({
@@ -33880,7 +33880,7 @@ test('paints magnified terminals above every surface from the workspace grid and
   // The project drawer's grid, which used to clip the magnified terminal to the drawer region.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('tab', { name: 'Project grid' }).click();
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
   await drawer.locator('[data-terminal-key="demo-checkout:codex-main"]').first().click();
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toBeVisible();
   expect(await coversViewport('Magnified Codex Main')).toEqual({

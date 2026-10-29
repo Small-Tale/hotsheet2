@@ -1058,7 +1058,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await openDemoProject(page, true);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+  await drawer.getByRole('button', { name: 'Project Grid' }).tap();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   const more = drawer.getByRole('button', { name: 'More Actions for Codex Main' });
   await more.tap();
@@ -1081,7 +1081,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   // Open focuses the terminal, which enters phone focus mode; leave it to reach the tab rail.
   const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
   if (await exitFocus.isVisible()) await exitFocus.tap();
-  await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+  await drawer.getByRole('button', { name: 'Project Grid' }).tap();
   await drawer
     .locator('[data-component="terminal-tile"][data-action="preview-terminal"] .terminal-tile__preview')
     .first()
@@ -1150,7 +1150,7 @@ test('keeps overflowing phone drawer tabs and actions reachable with whole-tab s
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     strip = drawer.locator('.terminal-drawer__views .kui-tab-bar__tabs'),
-    gridTab = drawer.getByRole('tab', { name: 'Project grid' }),
+    gridTab = drawer.getByRole('button', { name: 'Project Grid' }),
     peers = drawer.locator('.terminal-drawer__views [data-tab-kind="terminal"]');
   await expect(peers).toHaveCount(3);
   await expect(strip).toHaveAttribute('data-snap-tabs', 'true');

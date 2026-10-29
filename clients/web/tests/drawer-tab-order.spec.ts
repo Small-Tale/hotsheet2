@@ -184,6 +184,49 @@ async function dragBefore(page: import('@playwright/test').Page, sourceId: strin
   );
 }
 
+for (const theme of ['light', 'dark'] as const)
+  test(`HS2-T8SPNP keeps the fixed Project Grid control truthful through ${theme} drawer resize transitions`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await installFixture(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      grid = drawer.getByRole('button', { name: 'Project Grid', exact: true }),
+      shell = drawer.locator('[data-tab-id="shell-one"]').getByRole('tab');
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 900],
+      ['narrow', 390],
+      ['wide-again', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const selected of [true, false]) {
+        await (selected ? grid : shell).click();
+        await expect(grid).toHaveAttribute('aria-pressed', String(selected));
+        await expect(shell).toHaveAttribute('aria-selected', String(!selected));
+        await page.mouse.move(0, 0);
+        await page.waitForFunction(() =>
+          document
+            .getAnimations()
+            .every(
+              (animation) =>
+                animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity,
+            ),
+        );
+        await expect(grid).toBeInViewport();
+        await expect(drawer.getByRole('button', { name: 'New Drawer Item' })).toBeInViewport();
+        await page.screenshot({
+          path: `target/visual-captures/hs2-t8spnp-${theme}-${label}-${selected ? 'grid' : 'terminal'}.png`,
+        });
+      }
+    }
+  });
+
 test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible drawer sequence', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFixture(page);
@@ -288,7 +331,12 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   await expect(terminalMenu.getByRole('menu', { name: /Tab Actions$/ })).toBeVisible();
   await terminalMenu.getByText('Close All Tabs').click();
   await expect.poll(() => drawerOrder(drawer)).toEqual([]);
-  await expect(drawer.getByRole('tab', { name: 'Project grid' })).toHaveAttribute('aria-selected', 'true');
+  await expect(drawer.getByRole('button', { name: 'Project Grid' })).toHaveAttribute('aria-pressed', 'true');
+  // The pressed grid control paints visible selected chrome in its fixed leading zone (HS2-T8SPNP).
+  await expect(drawer.locator('.kui-tab-bar__leading [data-component="toolbar-control-group"]')).not.toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
   await page.screenshot({ path: 'target/visual-captures/hs2-3kwk6m-mixed-drawer-close-wide.png', fullPage: true });
   await page.setViewportSize({ width: 900, height: 650 });
   await page.screenshot({ path: 'target/visual-captures/hs2-3kwk6m-mixed-drawer-close-narrow.png', fullPage: true });

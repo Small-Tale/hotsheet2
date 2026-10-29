@@ -7,7 +7,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   const drawer = page
     .getByRole('region', { name: 'Interactive', exact: true })
     .locator('[data-component="terminal-drawer"]');
-  const gridTab = drawer.getByRole('tab', { name: 'Project grid' });
+  const gridTab = drawer.getByRole('button', { name: 'Project Grid' });
   const tabs = drawer.locator('.kui-tab-bar__tabs');
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
 

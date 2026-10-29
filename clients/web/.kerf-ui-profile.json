@@ -323,12 +323,6 @@
       "rules": ["KUI-L004"],
       "target": "src/components/halted-session-popup.tsx",
       "rationale": "Reviewed HS2-SWY32A: design: halted-session-popup__question adds room inside the bordered question group, while halted-session-popup__free-text supplies the text field's own input inset; both are visible and intentional in wide and phone captures."
-    },
-    {
-      "id": "message-composer-trailing-zone",
-      "rules": ["KUI-L203"],
-      "target": "src/components/ai-conversation.tsx",
-      "rationale": "Kerf beta.106's composition catalog still declares MessageComposer's removed actions zone, so a correct trailing prop reads as empty (KF-Z00DKT); remove once it ships."
     }
   ]
 }

@@ -135,7 +135,7 @@ test('project grid -> workspace grid -> full screen -> exit -> project grid reus
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   // Maximize the drawer so all six tiles are in view and mount.
-  await page.getByRole('tab', { name: 'Project grid' }).dblclick();
+  await page.getByRole('button', { name: 'Project Grid' }).dblclick();
   await settledGrid(page, 'demo Terminal Drawer');
   const tags = await tagTerminals(page),
     sockets = await socketCount(page);
