@@ -407,7 +407,12 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
                 .map(|f| f.key.as_str())
                 .collect();
             for field in missing {
-                println!("  optional credential: hotsheet-cli notify channel secret {id} {field}");
+                let need = descriptor
+                    .settings
+                    .iter()
+                    .any(|f| f.key == field && f.required);
+                let kind = if need { "required" } else { "optional" };
+                println!("  {kind} credential: hotsheet-cli notify channel secret {id} {field}");
             }
         }
         ChannelCmd::Secret { id, field } => {

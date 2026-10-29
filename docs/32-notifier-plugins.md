@@ -2,7 +2,8 @@
 
 **Status:** Partial. The core contract, the `speak`, `ntfy`, and `email` built-ins,
 external plugins, rules, the server router, REST administration, and the headless CLI
-shipped in HS2-R5HTZN. The web settings surface is HS2-DPBJJA.
+shipped in HS2-R5HTZN. The `webhook`, `slack`, `teams`, and `twilio` built-ins shipped in
+HS2-97ZHMM. The web settings surface is HS2-DPBJJA.
 
 Hot Sheet raises events that a person may need to hear about when they are not
 looking at the app: a ticket finished or became blocked, an AI asked for feedback or
@@ -60,7 +61,10 @@ Every notifier publishes a descriptor (`GET /notifiers`, `hotsheet-cli notify no
 `{"secret": "<key name>"}`, and the value lives in the machine key registry (OS
 credential store, [04](04-core-server-cli.md#471-secure-provider-keys)). It is
 resolved only for the duration of one delivery. A `HOTSHEET_API_KEY_<NAME>` environment
-variable overrides the value, as for provider keys.
+variable overrides the value, as for provider keys. Because a credential is stored after
+its channel exists, a channel may be saved with a required credential still missing.
+Delivery then fails and names the `notify channel secret` command, and `channel add`
+prints that command.
 
 ## 32.4 Rendering and degradation
 
@@ -309,11 +313,15 @@ idempotent.
 
 ## 32.10 Built-in notifiers
 
-| Notifier | Formats             | Limits                                                     | Settings                                                                                                   |
-| -------- | ------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `speak`  | plain (audio)       | 400-byte utterance; no title field; no attachments         | `voice`, `rate` (wpm), `command` (custom program and arguments), `timeout_seconds`                         |
-| `ntfy`   | Markdown, plain     | title 250 B, message 4,096 B; one attachment ≤ 15 MiB      | `server` (default `https://ntfy.sh`), `topic` (required), `token` (secret), `priority`, `tags`             |
-| `email`  | HTML + plain, mixed | subject 200 B, body 200 KB; ≤ 10 attachments, 10 MiB total | `to` (list, required), `from`, `smtp_host`, `smtp_port` (587), `security`, `username`, `password` (secret) |
+| Notifier  | Formats                | Limits                                                      | Settings                                                                                                   |
+| --------- | ---------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `speak`   | plain (audio)          | 400-byte utterance; no title field; no attachments          | `voice`, `rate` (wpm), `command` (custom program and arguments), `timeout_seconds`                         |
+| `ntfy`    | Markdown, plain        | title 250 B, message 4,096 B; one attachment ≤ 15 MiB       | `server` (default `https://ntfy.sh`), `topic` (required), `token` (secret), `priority`, `tags`             |
+| `email`   | HTML + plain, mixed    | subject 200 B, body 200 KB; ≤ 10 attachments, 10 MiB total  | `to` (list, required), `from`, `smtp_host`, `smtp_port` (587), `security`, `username`, `password` (secret) |
+| `webhook` | JSON (Markdown body)   | title 500 B, body 64 KB; no attachments                     | `url` (secret, required), `method` (`POST`/`PUT`), `signing_secret` (secret)                               |
+| `slack`   | Slack mrkdwn           | header 150 B, section 3,000 characters; no attachments      | `webhook_url` (secret, required)                                                                           |
+| `teams`   | Adaptive Card Markdown | title 250 B, body 20 KB; no attachments                     | `webhook_url` (secret, required)                                                                           |
+| `twilio`  | plain (SMS)            | 1,600 B; no title field; no attachments (MMS is HS2-K57DK0) | `account_sid`, `auth_token` (secret), `from`, `to` (list), `api_base`                                      |
 
 - **`speak`** runs `say` on macOS, `spd-say --wait` on Linux, and System.Speech through
   PowerShell on Windows, where the text is read from stdin. It never uses a shell, and
@@ -326,6 +334,19 @@ idempotent.
 - **`email`** uses SMTP through rustls (`starttls`, implicit `tls`, or `none` for a
   local relay only) and sends multipart/alternative plus attachments to every
   recipient.
+- **`webhook`** sends the rendered message as JSON: event, severity, title, Markdown body,
+  format, url, project, ticket facts, and truncation flags. With a `signing_secret`, it
+  adds `X-Hotsheet-Timestamp` and `X-Hotsheet-Signature: sha256=<hex>`, an HMAC-SHA256
+  over `<timestamp>.<body>` that a receiver recomputes to verify the sender.
+- **`slack`** posts Block Kit to an incoming webhook: a header, a section with the body
+  converted to Slack mrkdwn (`*bold*`, `_italic_`, `<url|text>`, `•` bullets, with `&<>`
+  escaped), an Open in Hot Sheet button, and a plain `text` fallback.
+- **`teams`** posts one Adaptive Card 1.4 to a Teams workflow webhook. The title is
+  colored by severity, the body stays Markdown, and the link becomes an Open URL action.
+- **`twilio`** sends one SMS per recipient through the Messages API with HTTP basic auth.
+  An `MG…` sender is used as a messaging service. If some recipients received the
+  message and others failed, the failure is permanent, so a retry never re-texts the
+  recipients who already got it.
 
 ## 32.11 Privacy and security
 
@@ -343,7 +364,8 @@ idempotent.
 | -------------------------------------------------------------------------- | ------- | ---------- |
 | Contract, rendering, built-ins, external plugins, rules, router, CLI, REST | Shipped | HS2-R5HTZN |
 | Web settings for channels and rules                                        | Planned | HS2-DPBJJA |
-| Webhook, Slack, Teams, SMS notifiers                                       | Planned | HS2-97ZHMM |
+| Webhook, Slack, Teams, SMS notifiers                                       | Shipped | HS2-97ZHMM |
+| MMS image attachments through Twilio                                       | Planned | HS2-K57DK0 |
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
 | Saved-query, checkout, quiet-hour, and rate-limit filters                  | Planned | HS2-4JG95G |
 | Click-through links                                                        | Planned | HS2-04J8WS |

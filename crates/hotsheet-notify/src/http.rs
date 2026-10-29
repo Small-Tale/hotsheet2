@@ -45,6 +45,17 @@ impl HttpTransport for LiveHttp {
     }
 }
 
+/// Refuse anything but an http(s) URL before sending a credential-bearing request.
+pub fn require_http_url(url: &str, what: &str) -> Result<(), DeliveryError> {
+    if url.starts_with("https://") || url.starts_with("http://") {
+        Ok(())
+    } else {
+        Err(DeliveryError::permanent(format!(
+            "{what} must be an http(s) URL"
+        )))
+    }
+}
+
 /// Map an HTTP status to the delivery outcome every HTTP notifier shares.
 pub fn classify(response: &HttpResponse, provider: &str) -> Result<(), DeliveryError> {
     let detail = || crate::notifier::tail(response.body.as_bytes(), 300);

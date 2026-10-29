@@ -35,7 +35,9 @@ pub fn secret_reference(value: &Value) -> Option<&str> {
     value.get("secret").and_then(Value::as_str)
 }
 
-/// Check stored settings against a schema. Secrets must be references, never values.
+/// Check stored settings against a schema. Secrets must be references, never values. A
+/// required credential may still be missing: it is stored after the channel exists
+/// (`notify channel secret`), and delivery reports it until then.
 pub fn validate(fields: &[SettingField], settings: &Settings) -> Result<(), String> {
     for key in settings.keys() {
         if !fields.iter().any(|field| &field.key == key) {
@@ -44,7 +46,7 @@ pub fn validate(fields: &[SettingField], settings: &Settings) -> Result<(), Stri
     }
     for field in fields {
         let Some(value) = settings.get(&field.key) else {
-            if field.required && field.default.is_none() {
+            if field.required && field.default.is_none() && field.kind != SettingKind::Secret {
                 return Err(format!("setting '{}' is required", field.key));
             }
             continue;
@@ -127,6 +129,12 @@ pub fn resolve(
             Some(value) => value.clone(),
             None => match &field.default {
                 Some(value) => value.clone(),
+                None if field.required => {
+                    return Err(format!(
+                        "credential '{}' is not set; store it with `hotsheet-cli notify channel secret <channel> {}`",
+                        field.key, field.key
+                    ));
+                }
                 None => continue,
             },
         };
@@ -191,6 +199,14 @@ mod tests {
         assert!(validate(&f, &settings(json!({"topic":"x","mode":"c"}))).is_err());
         assert!(validate(&f, &settings(json!({"topic":"x","port":"25"}))).is_err());
         assert!(validate(&f, &settings(json!({"topic":"x","on":"yes"}))).is_err());
+    }
+
+    #[test]
+    fn a_required_credential_may_be_saved_missing_but_not_delivered() {
+        let fields = vec![SettingField::new("url", "URL", SettingKind::Secret).required()];
+        assert!(validate(&fields, &Settings::new()).is_ok());
+        let err = resolve(&fields, &Settings::new(), &BTreeMap::new()).unwrap_err();
+        assert!(err.contains("notify channel secret <channel> url"), "{err}");
     }
 
     #[test]

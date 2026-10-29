@@ -364,3 +364,213 @@ fn headless_setup_send_test_and_removal_through_an_external_plugin() {
     assert_eq!(config["channels"], serde_json::json!([]));
     assert_eq!(config["rules"], serde_json::json!([]));
 }
+
+/// One HTTP request the loopback listener received.
+#[derive(Debug)]
+struct Received {
+    line: String,
+    headers: Vec<(String, String)>,
+    body: String,
+}
+
+/// A loopback HTTP server that answers every request `201 {"sid":"SMx"}` and reports what it
+/// got, so the CLI's live HTTP transport runs without the internet (HS2-97ZHMM).
+fn loopback() -> (String, std::sync::mpsc::Receiver<Received>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            let mut headers = Vec::new();
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).unwrap();
+                let header = header.trim_end().to_string();
+                if header.is_empty() {
+                    break;
+                }
+                let (name, value) = header.split_once(':').unwrap();
+                headers.push((name.trim().to_ascii_lowercase(), value.trim().to_string()));
+            }
+            let length: usize = headers
+                .iter()
+                .find(|(n, _)| n == "content-length")
+                .map_or(0, |(_, v)| v.parse().unwrap());
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let reply = r#"{"sid":"SMx"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            )
+            .unwrap();
+            let _ = tx.send(Received {
+                line: line.trim_end().to_string(),
+                headers,
+                body: String::from_utf8(body).unwrap(),
+            });
+        }
+    });
+    (base, rx)
+}
+
+#[test]
+fn hs2_97zhmm_webhook_slack_teams_and_sms_deliver_over_live_http() {
+    let env = env();
+    let (base, received) = loopback();
+    let add = |args: &[&str]| {
+        hs(&env)
+            .args(["channel", "add"])
+            .args(args)
+            .assert()
+            .success();
+    };
+    let secret = |channel: &str, field: &str, value: &str| {
+        hs(&env)
+            .args(["channel", "secret", channel, field])
+            .write_stdin(format!("{value}\n"))
+            .assert()
+            .success();
+    };
+    add(&["hook", "--notifier", "webhook"]);
+    secret("hook", "url", &format!("{base}/hook"));
+    secret("hook", "signing_secret", "s3");
+    add(&["slack", "--notifier", "slack"]);
+    secret("slack", "webhook_url", &format!("{base}/slack"));
+    add(&["teams", "--notifier", "teams"]);
+    secret("teams", "webhook_url", &format!("{base}/teams"));
+    let api = format!("api_base={base}");
+    add(&[
+        "sms",
+        "--notifier",
+        "twilio",
+        "--set",
+        "account_sid=AC1",
+        "--set",
+        "from=+15550000000",
+        "--set",
+        "to=+15551110000,+15552220000",
+        "--set",
+        &api,
+    ]);
+    secret("sms", "auth_token", "tok");
+    hs(&env)
+        .args([
+            "rule",
+            "add",
+            "digest",
+            "--event",
+            "digest",
+            "--channel",
+            "hook",
+            "--channel",
+            "slack",
+            "--channel",
+            "teams",
+            "--channel",
+            "sms",
+        ])
+        .assert()
+        .success();
+
+    let out = hs(&env)
+        .args([
+            "send",
+            "--event",
+            "digest",
+            "--title",
+            "Daily digest",
+            "--body",
+            "**3** tickets done",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let records: Value = serde_json::from_slice(&out).unwrap();
+    let delivered: Vec<_> = records
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["channel"].as_str().unwrap().to_string(),
+                r["outcome"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        delivered,
+        [
+            ("hook", "delivered"),
+            ("slack", "delivered"),
+            ("teams", "delivered"),
+            ("sms", "delivered")
+        ]
+        .map(|(c, o)| (c.to_string(), o.to_string()))
+    );
+
+    let requests: Vec<Received> = (0..5)
+        .map(|_| {
+            received
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap()
+        })
+        .collect();
+    let by_path = |path: &str| {
+        requests
+            .iter()
+            .filter(|r| r.line.contains(path))
+            .collect::<Vec<_>>()
+    };
+    let header = |r: &Received, name: &str| {
+        r.headers
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.clone())
+    };
+
+    let hook = by_path(" /hook ")[0];
+    let body: Value = serde_json::from_str(&hook.body).unwrap();
+    assert_eq!(
+        (body["event"].as_str(), body["title"].as_str()),
+        (Some("digest"), Some("Daily digest"))
+    );
+    assert!(
+        header(hook, "x-hotsheet-signature")
+            .unwrap()
+            .starts_with("sha256=")
+    );
+
+    let slack: Value = serde_json::from_str(&by_path(" /slack ")[0].body).unwrap();
+    assert_eq!(slack["blocks"][1]["text"]["text"], "*3* tickets done");
+
+    let teams: Value = serde_json::from_str(&by_path(" /teams ")[0].body).unwrap();
+    assert_eq!(
+        teams["attachments"][0]["content"]["body"][0]["text"],
+        "Daily digest"
+    );
+
+    let sms = by_path("/2010-04-01/Accounts/AC1/Messages.json");
+    assert_eq!(sms.len(), 2, "one message per recipient");
+    assert_eq!(
+        header(sms[0], "authorization").as_deref(),
+        Some("Basic QUMxOnRvaw==")
+    );
+    assert!(sms.iter().any(|r| r.body.starts_with("To=%2B15552220000&")));
+    assert!(
+        sms[0]
+            .body
+            .contains("Body=Daily%20digest%0A%0A3%20tickets%20done"),
+        "{}",
+        sms[0].body
+    );
+}

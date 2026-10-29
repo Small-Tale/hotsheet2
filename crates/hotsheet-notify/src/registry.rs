@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::builtin::{email, ntfy, speak};
+use crate::builtin::{email, ntfy, slack, speak, teams, twilio, webhook};
 use crate::capability::NotifierDescriptor;
 use crate::external;
 use crate::notifier::{CommandRunner, LiveRunner, Notifier};
@@ -17,15 +17,24 @@ pub struct Registry {
     pub load_errors: Vec<String>,
 }
 
+/// Every first-party notifier over its live transport, in listing order.
+fn live_builtins() -> Vec<Arc<dyn Notifier>> {
+    vec![
+        Arc::new(speak::Speak::live()),
+        Arc::new(ntfy::Ntfy::live()),
+        Arc::new(email::EmailNotifier::live()),
+        Arc::new(webhook::Webhook::live()),
+        Arc::new(slack::Slack::live()),
+        Arc::new(teams::Teams::live()),
+        Arc::new(twilio::Twilio::live()),
+    ]
+}
+
 impl Registry {
     /// Live built-ins plus external plugins under `home/notifiers`.
     pub fn live(home: &Path) -> Registry {
         Registry::with_builtins(
-            vec![
-                Arc::new(speak::Speak::live()),
-                Arc::new(ntfy::Ntfy::live()),
-                Arc::new(email::EmailNotifier::live()),
-            ],
+            live_builtins(),
             Some(&Registry::plugins_dir(home)),
             Arc::new(LiveRunner),
         )
@@ -33,15 +42,7 @@ impl Registry {
 
     /// Live built-ins only (for validation where plugins are irrelevant).
     pub fn builtin_only() -> Registry {
-        Registry::with_builtins(
-            vec![
-                Arc::new(speak::Speak::live()),
-                Arc::new(ntfy::Ntfy::live()),
-                Arc::new(email::EmailNotifier::live()),
-            ],
-            None,
-            Arc::new(LiveRunner),
-        )
+        Registry::with_builtins(live_builtins(), None, Arc::new(LiveRunner))
     }
 
     /// The given notifiers plus external plugins from `plugins_dir`, run by `runner`.
@@ -120,6 +121,11 @@ mod tests {
             .into_iter()
             .map(|d| d.id)
             .collect();
-        assert_eq!(live, ["speak", "ntfy", "email"]);
+        assert_eq!(
+            live,
+            [
+                "speak", "ntfy", "email", "webhook", "slack", "teams", "twilio"
+            ]
+        );
     }
 }
