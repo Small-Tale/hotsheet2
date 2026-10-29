@@ -2531,12 +2531,14 @@ export async function startHotSheetWebClient() {
       // A cached activation revalidates silently: the rows are already painted and kept current by the
       // project's live change stream, so the switch must not show loading or the busy indicator.
       quiet = cached;
+    // AI discovery is independent of the parked project session. Keep its bounded, project-owned
+    // refresh running while ticket and session restoration proceeds (HS2-3VR31Y).
+    void aiRefresh;
     await Promise.all([
       refreshProject({ showLoading: !cached, quiet, refreshRepository: true }),
       refreshCommands(current, quiet),
       refreshCustomViews(current, quiet),
       settingsRefresh,
-      aiRefresh,
       ...(firstActivation ? [refreshDriveConnections(current, true, quiet)] : []),
       // The terminal dashboard snapshot spans every open project; switching tabs only needs a load when
       // this project's group has never been loaded (terminal creation/close refresh it explicitly).

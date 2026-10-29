@@ -1548,6 +1548,9 @@ preview/download, server directory browser) are separate design work.
     joins that pending read when it is reactivated rather than issuing another pair, so a slow
     discovery cannot fill the browser's per-origin connection pool across A→B→A switches
     (HS2-XZ3TTH);
+  - restores its parked ticket composer and attachment draft after the ticket/session reads,
+    while any pending AI inventory refresh continues separately. A held discovery must not
+    delay that restoration on A→B→A (HS2-3VR31Y);
   - skips the all-project terminal dashboard reload when that project's terminal group is
     already loaded (terminal create/close still refresh it explicitly);
   - revalidates tickets, commands, shared views, and the single-project settings projection
