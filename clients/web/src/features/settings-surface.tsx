@@ -51,6 +51,7 @@ export interface SettingsSurfaceDependencies {
   permissionRulesPreviewFor: (projectId: string, visible: boolean) => Props['permissions']['preview'];
   permissionRulesMessage: Readable<string>;
   lockedPermissionRules: Readable<ReadonlySet<string>>;
+  unrefreshedPermissionRules: Readable<ReadonlySet<string>>;
   permissionLegacyDiscardFor: (projectId: string) => NonNullable<Props['permissions']['legacy']>['review'];
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
@@ -104,6 +105,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     permissionRulesPreviewFor,
     permissionRulesMessage,
     lockedPermissionRules,
+    unrefreshedPermissionRules,
     permissionLegacyDiscardFor,
     revokingPermissionRules,
     hideVerifiedColumn,
@@ -193,6 +195,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           revoking: revokingPermissionRules.value,
           rulesMessage: permissionRulesMessage.value,
           locked: lockedPermissionRules.value.has(current.id),
+          rulesRefreshFailed: unrefreshedPermissionRules.value.has(current.id),
           legacy: {
             sources: projectSourcesSettings(current)
               .sources.filter(

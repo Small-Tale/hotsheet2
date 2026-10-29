@@ -2551,3 +2551,155 @@ it('isolates repeated LAN archive opens through read-only, failed resume and suc
   expect(state.showToast).toHaveBeenCalledWith('Opened read-only; resume failed: Resume unavailable');
   expect(state.error.value).toBe('');
 });
+
+describe('remembered-rule refresh after a saved reviewed match (HS2-9YVX6Q)', () => {
+  const rule = (action: string, pattern?: { version: 1; kind: 'template' | 'regex'; expression: string }) => ({
+    project: '/work/a',
+    tool: 'Bash',
+    action,
+    exact_action: action,
+    decision: 'allow',
+    scope: 'always',
+    created_at: '2026-10-16T00:00:00Z',
+    ...(pattern ? { match_type: pattern.kind, pattern } : { match_type: 'exact' }),
+  });
+  const regex = { version: 1, kind: 'regex', expression: '^npm test$' } as const;
+  const flush = async () => {
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+  };
+  const failure = (status: number) => Response.json({ error: `status ${status}` }, { status });
+  const calls = (method: 'GET' | 'PATCH') =>
+    fetchMock.mock.calls.filter(
+      ([url, options]) => url === '/api/a/permissions/rules' && (options?.method ?? 'GET') === method,
+    ).length;
+  async function loaded(initial: unknown[]) {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    fetchMock.mockResolvedValueOnce(json(initial));
+    let shown: string[] = [];
+    const stop = effect(() => {
+      shown = owner.permissionRules('a').map((value) => value.action);
+    });
+    await flush();
+    return { owner, stop, shown: () => shown };
+  }
+
+  it('reports the saved match separately when the refresh GET fails, keeps the list, and recovers on retry', async () => {
+    const { owner, stop, shown } = await loaded([rule('npm test')]);
+    const key = permissionRuleKey(rule('npm test'));
+    owner.openPermissionRuleEditor('a', key);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(failure(500));
+    await owner.changePermissionRulePattern('a', key, regex);
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe(
+      'Reviewed match updated, but the list could not be refreshed. status 500',
+    );
+    expect(shown()).toEqual(['npm test']);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(true);
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(false);
+    expect(owner.permissionRuleEditorFor('a', true)).toBeUndefined();
+    // No automatic retry loop while the failure stands.
+    await flush();
+    expect(calls('GET')).toBe(2);
+    // Retry reloads the list only; the PATCH is never resubmitted.
+    fetchMock.mockResolvedValueOnce(json([rule('npm test (regex)', regex)]));
+    await owner.retryPermissionRules('a');
+    await flush();
+    expect(calls('PATCH')).toBe(1);
+    expect(calls('GET')).toBe(3);
+    expect(shown()).toEqual(['npm test (regex)']);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(owner.permissionRulesMessage.value).toBe('');
+    stop();
+    owner.dispose();
+  });
+
+  it('a retry that fails again stays truthful, and a later rules-change refetch recovers', async () => {
+    const { owner, stop, shown } = await loaded([rule('npm test')]);
+    const key = permissionRuleKey(rule('npm test'));
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(failure(500));
+    await owner.changePermissionRulePattern('a', key, regex);
+    fetchMock.mockResolvedValueOnce(failure(502));
+    await owner.retryPermissionRules('a');
+    expect(owner.permissionRulesMessage.value).toBe('Could not load remembered answers. status 502');
+    expect(shown()).toEqual(['npm test']);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(true);
+    fetchMock.mockResolvedValueOnce(json([rule('npm test (regex)', regex)]));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(shown()).toEqual(['npm test (regex)']);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(calls('PATCH')).toBe(1);
+    stop();
+    owner.dispose();
+  });
+
+  it('reports a lock found by the refresh without calling the saved match a failure', async () => {
+    const { owner, stop, shown } = await loaded([rule('npm test')]);
+    const key = permissionRuleKey(rule('npm test'));
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(failure(503));
+    await owner.changePermissionRulePattern('a', key, regex);
+    expect(owner.permissionRulesMessage.value).toMatch(/^Reviewed match updated\. Remembered answers are locked\./);
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(shown()).toEqual([]);
+    stop();
+    owner.dispose();
+  });
+
+  it('waits for a load that started after the save instead of an overlapping older one', async () => {
+    const { owner, stop, shown } = await loaded([rule('npm test')]);
+    const key = permissionRuleKey(rule('npm test'));
+    // A rules-change event starts a load, and the save lands while that load is still in flight.
+    const overlapping = deferred<Response>(),
+      newer = deferred<Response>();
+    fetchMock
+      .mockReturnValueOnce(overlapping.promise)
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockReturnValueOnce(newer.promise);
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(calls('GET')).toBe(2);
+    let settled = false;
+    const saving = owner.changePermissionRulePattern('a', key, regex).then(() => {
+      settled = true;
+    });
+    await flush();
+    expect(calls('PATCH')).toBe(1);
+    // The pre-save load settles with pre-save rows: the save must not report from it.
+    overlapping.resolve(json([rule('npm test')]));
+    await flush();
+    expect(settled).toBe(false);
+    expect(calls('GET')).toBe(3);
+    newer.resolve(json([rule('npm test (regex)', regex)]));
+    await saving;
+    expect(owner.permissionRulesMessage.value).toBe('Reviewed match updated.');
+    expect(shown()).toEqual(['npm test (regex)']);
+    stop();
+    owner.dispose();
+  });
+
+  it('reports each of repeated saves truthfully across failed and successful refreshes', async () => {
+    const { owner, stop, shown } = await loaded([rule('one'), rule('two')]);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(failure(500));
+    await owner.changePermissionRulePattern('a', permissionRuleKey(rule('one')), regex);
+    expect(owner.permissionRulesMessage.value).toBe(
+      'Reviewed match updated, but the list could not be refreshed. status 500',
+    );
+    expect(shown()).toEqual(['one', 'two']);
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(json([rule('one (regex)', regex), rule('two (regex)', regex)]));
+    await owner.changePermissionRulePattern('a', permissionRuleKey(rule('two')), regex);
+    expect(owner.permissionRulesMessage.value).toBe('Reviewed match updated.');
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(shown()).toEqual(['one (regex)', 'two (regex)']);
+    // A rejected save after a recovered list reports the save failure, not a refresh.
+    fetchMock.mockResolvedValueOnce(failure(400));
+    await owner.changePermissionRulePattern('a', permissionRuleKey(rule('one (regex)', regex)), 'exact');
+    expect(owner.permissionRulesMessage.value).toBe('Could not update the match. status 400');
+    expect(calls('PATCH')).toBe(3);
+    expect(calls('GET')).toBe(3);
+    stop();
+    owner.dispose();
+  });
+});

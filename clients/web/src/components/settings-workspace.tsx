@@ -55,6 +55,7 @@ export interface SettingsWorkspaceProps {
     revoking?: readonly string[];
     rulesMessage?: string;
     locked?: boolean;
+    rulesRefreshFailed?: boolean;
     legacy?: PermissionRulesSettingsProps['legacy'];
   };
   columns: { hideVerified: boolean };
@@ -149,6 +150,7 @@ export function SettingsWorkspace({
                 message={permissions.rulesMessage}
                 legacy={permissions.legacy}
                 locked={permissions.locked}
+                refreshFailed={permissions.rulesRefreshFailed}
               />
             </List>
           )}

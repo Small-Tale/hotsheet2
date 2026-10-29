@@ -16378,6 +16378,151 @@ for (const width of [1280, 390]) {
   });
 }
 
+for (const width of [1280, 390]) {
+  test(`keeps a saved reviewed match truthful when the list refresh fails, then retries the list only at ${width}px (HS2-9YVX6Q)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await mockProject(page);
+    const action = 'npm test --token=abc';
+    let rule = {
+      project: '/work/demo.hs2',
+      tool: 'Bash',
+      action: rememberedActionKey(action),
+      exact_action: action,
+      decision: 'allow',
+      scope: 'always',
+      match_type: 'exact',
+      pattern: undefined as Record<string, unknown> | undefined,
+    };
+    const requests: string[] = [];
+    // Faithful server shapes: PATCH answers 204 with no body; a failed GET answers 500 or 503 with
+    // the server's `{ error }` body.
+    let failNextGet: 500 | 503 | undefined;
+    await page.route('**/permissions/rules', async (route) => {
+      const method = route.request().method();
+      requests.push(method);
+      if (method === 'PATCH') {
+        const body = route.request().postDataJSON();
+        rule = {
+          ...rule,
+          action: rememberedActionKey(JSON.stringify(body.pattern)),
+          match_type: body.pattern === 'exact' ? 'exact' : body.pattern.kind,
+          pattern: body.pattern === 'exact' ? undefined : body.pattern,
+        };
+        failNextGet = 500;
+        return route.fulfill({ status: 204, body: '' });
+      }
+      const status = failNextGet;
+      failNextGet = undefined;
+      if (status === 500) return route.fulfill({ status: 500, json: { error: 'rule store busy' } });
+      return route.fulfill({ json: [rule] });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (await showSidebar.isVisible()) await showSidebar.click();
+    await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+    const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+    if (await hideSidebar.isVisible()) await hideSidebar.click();
+    const preview = page.locator('[data-component="permission-rules-settings"]');
+    const status = preview.getByRole('status');
+    const retry = preview.getByRole('button', { name: 'Retry', exact: true });
+    const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+    await expect(preview).toContainText(action);
+    await expect(retry).toHaveCount(0);
+    await preview.locator('[data-action="select-permission-rule-row"]').first().dblclick();
+    await editor.getByRole('button', { name: 'Regex', exact: true }).click();
+    await editor.getByLabel('Pattern for Bash').fill('^npm test --token=[a-z]+$');
+    await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(status).toHaveText('Reviewed match updated, but the list could not be refreshed. rule store busy');
+    // The last good list stays visible instead of a false "No Remembered Answers".
+    await expect(preview).toContainText(action);
+    await expect(preview).not.toContainText('No Remembered Answers');
+    await expect(retry).toBeVisible();
+    await preview.screenshot({ path: `target/visual-captures/hs2-9yvx6q-refresh-failed-${width}.png` });
+    await page.screenshot({ path: `target/visual-captures/hs2-9yvx6q-refresh-failed-page-${width}.png` });
+    if (width === 1280) {
+      // Wide to medium to narrow and back: the status and Retry stay visible and keep their state.
+      for (const size of [900, 390, 1280]) {
+        await page.setViewportSize({ width: size, height: 1000 });
+        await page.waitForFunction(() =>
+          document
+            .getAnimations()
+            .every(
+              (animation) =>
+                animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity,
+            ),
+        );
+        // Wait until the settled layout leaves the remembered-answers section's far edge uncovered.
+        await expect
+          .poll(() =>
+            preview.evaluate((section) => {
+              const box = section.getBoundingClientRect();
+              const hit = document.elementFromPoint(box.right - 4, box.top + box.height / 2);
+              return box.right <= window.innerWidth && Boolean(hit && section.contains(hit));
+            }),
+          )
+          .toBe(true);
+        await expect(retry).toBeVisible();
+        await expect(status).toContainText('Reviewed match updated, but the list could not be refreshed.');
+        if (size !== 1280)
+          await page.screenshot({ path: `target/visual-captures/hs2-9yvx6q-refresh-failed-transition-${size}.png` });
+      }
+    }
+    expect(requests).toEqual(['GET', 'PATCH', 'GET']);
+    await retry.click();
+    await expect(preview).toContainText('^npm test --token=[a-z]+$');
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveText('');
+    // Retry re-read the list once and never resubmitted the saved change.
+    expect(requests).toEqual(['GET', 'PATCH', 'GET', 'GET']);
+    await preview.screenshot({ path: `target/visual-captures/hs2-9yvx6q-recovered-${width}.png` });
+  });
+}
+
+test('reports a lock found by the refresh after a saved reviewed match (HS2-9YVX6Q)', async ({ page }) => {
+  await mockProject(page);
+  const action = 'npm test --token=abc';
+  const rule = {
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: rememberedActionKey(action),
+    exact_action: action,
+    decision: 'allow',
+    scope: 'always',
+    match_type: 'exact',
+  };
+  let saved = false;
+  await page.route('**/permissions/rules', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      saved = true;
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (saved) return route.fulfill({ status: 503, json: { error: 'permission rules are locked' } });
+    return route.fulfill({ json: [rule] });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+  const preview = page.locator('[data-component="permission-rules-settings"]');
+  await preview.locator('[data-action="select-permission-rule-row"]').first().dblclick();
+  const editor = page.getByRole('dialog', { name: 'Edit Remembered Answer', exact: true });
+  await editor.getByRole('button', { name: 'Exact Action', exact: true }).click();
+  await editor.getByRole('button', { name: 'Save Reviewed Match', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(preview.getByRole('status').filter({ hasText: 'Reviewed match updated' })).toHaveText(
+    /^Reviewed match updated\. Remembered answers are locked\./,
+  );
+  await expect(preview).toContainText('Remembered Answers Locked');
+  await expect(preview.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+});
+
 test('validates and applies the dedicated match editor through a real permission server (HS2-400WZZ)', async ({
   page,
 }) => {

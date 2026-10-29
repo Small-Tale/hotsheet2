@@ -1482,7 +1482,10 @@ the preview or full list, with exact-action, placeholder, and constrained-regex 
 restores the saved rule. Save is explicit because it changes reviewed automatic matching.
 The server validates the complete pattern against the original action before changing the
 rule. Save prevents repeated submissions or dismissal while pending, closes only on success,
-and retains the draft/error on failure. Closing returns focus to its opener. Project/settings
+and retains the draft/error on failure. A saved match then re-reads the list from a load that
+started after the save; when that refresh fails, the status reports the saved change separately
+from the failed refresh, the last good list stays visible, and Retry re-reads the list without
+resubmitting the change (a 503 still shows the locked state) (HS2-9YVX6Q). Closing returns focus to its opener. Project/settings
 changes discard the local draft; late responses cannot replace another editor. The opaque keyed `action` field remains the edit/revoke identity and is not
 shown as a label. The exact action is returned only by the authenticated local rules API, not
 events or logs. If the credential key or encrypted file is unavailable, the list shows a locked

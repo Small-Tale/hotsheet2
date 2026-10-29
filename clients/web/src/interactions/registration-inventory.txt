@@ -297,6 +297,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="revoke-per
 notifications-and-links	delegate	document.body	'click'	'[data-action="change-permission-rule-decision"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="change-permission-rule-scope"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="open-permission-rules"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="retry-permission-rules"]'
 notifications-and-links	delegate	document.body	'input'	'[name="permission-rule-search"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="load-more-permission-rules"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="filter-permission-rule-lifetime"]'

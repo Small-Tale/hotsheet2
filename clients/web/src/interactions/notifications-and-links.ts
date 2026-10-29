@@ -72,6 +72,8 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly changePermissionRuleEditorExpression: (projectId: string, expression: string) => void;
   readonly savePermissionRuleEditor: (projectId: string) => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
+  /** Reload a list whose refresh failed, without resending any change (HS2-9YVX6Q). */
+  readonly retryPermissionRules: (projectId: string) => Promise<void>;
   readonly openLegacyPermissionDiscard: (projectId: string, sourceId: string) => Promise<void>;
   readonly closeLegacyPermissionDiscard: () => void;
   readonly applyLegacyPermissionDiscard: () => Promise<void>;
@@ -137,6 +139,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     changePermissionRuleEditorExpression,
     savePermissionRuleEditor,
     openPermissionRules,
+    retryPermissionRules,
     openLegacyPermissionDiscard,
     closeLegacyPermissionDiscard,
     applyLegacyPermissionDiscard,
@@ -564,6 +567,11 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
   lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector, () => {
       openPermissionRules(selectedProjectId.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.retryPermissionRules.selector, () => {
+      void retryPermissionRules(selectedProjectId.value);
     }),
   );
   lifetime.add(

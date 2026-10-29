@@ -275,6 +275,32 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
     scope: index % 2 ? 'session' : 'always',
   }));
 
+  it('offers a list-only Retry beside the status after a failed refresh, never while locked (HS2-9YVX6Q)', () => {
+    const message = 'Reviewed match updated, but the list could not be refreshed. status 500';
+    const retry = /<button class="kui-button"[^>]*data-action="retry-permission-rules"[^>]*>[^]*?<\/button>/u;
+    const preview = String(PermissionRulesSettings({ rules, message, refreshFailed: true }));
+    expect(preview).toContain(message);
+    expect(preview.match(retry)?.[0]).toMatch(/data-lucide="refresh-cw"[^]*Retry/u);
+    expect(preview).toContain('command-00000011');
+    expect(String(PermissionRulesSettings({ rules, message }))).not.toMatch(retry);
+    expect(String(PermissionRulesSettings({ rules: [], message, refreshFailed: true, locked: true }))).not.toMatch(
+      retry,
+    );
+    const dialog = String(
+      PermissionRulesSettings({ rules, message, refreshFailed: true, dialog: { query: '', visibleCount: 100 } }),
+    );
+    expect(dialog.match(new RegExp(retry.source, 'gu'))).toHaveLength(2);
+    const busy = String(
+      PermissionRulesSettings({
+        rules,
+        message,
+        refreshFailed: true,
+        dialog: { query: '', visibleCount: 100, busy: true },
+      }),
+    );
+    expect(busy).toContain('Updating selected answers…');
+  });
+
   it('shows the newest three and a route to all answers', () => {
     const markup = String(PermissionRulesSettings({ rules }));
     expect(markup).toMatch(/data-component="list-header"[^]*<h3[^>]*>[^]*Remembered Answers/u);

@@ -41,6 +41,12 @@ import {
 } from '../permission-notifications';
 import type { LegacyPermissionPreview } from '../server-response-parsers';
 
+/** How one remembered-answer load settled; `skipped` means the list was already fresh (HS2-9YVX6Q). */
+export type PermissionRulesLoad = { status: 'loaded' | 'skipped' | 'locked' } | { status: 'failed'; reason: string };
+
+const PERMISSION_RULES_LOCKED_MESSAGE =
+  'Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry.';
+
 export interface PermissionsDependencies {
   projects: Signal<Project[]>;
   selectedProjectId: Signal<string>;
@@ -105,7 +111,14 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         }
       | undefined
     >(undefined);
-  const loadingPermissionRules = new Set<string>();
+  // In-flight rule loads per project, each stamped with the order it started in, so a mutation can
+  // wait for a load that began after it changed the server (HS2-9YVX6Q).
+  const loadingPermissionRules = new Map<string, { seq: number; outcome: Promise<PermissionRulesLoad> }>();
+  const settledPermissionRules = new Map<string, { seq: number; outcome: PermissionRulesLoad }>();
+  let permissionRulesLoadSeq = 0;
+  // Projects whose last rule load failed without a lock: the list on screen is the last good copy,
+  // and the view offers a refresh retry that never resubmits a mutation (HS2-9YVX6Q).
+  const unrefreshedPermissionRules = signal<ReadonlySet<string>>(new Set());
   const legacyDiscard = signal<
     | {
         projectId: string;
@@ -740,10 +753,43 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     markPermissionRulesStale(projectId);
   }
 
-  /** Fetch one project's remembered answers once; a failure leaves it stale for the next view. */
-  async function loadPermissionRules(project: Project) {
-    if (freshPermissionRules.peek().has(project.id) || loadingPermissionRules.has(project.id)) return;
-    loadingPermissionRules.add(project.id);
+  /**
+   * Fetch one project's remembered answers once. A lock (503) clears the list and shows the locked
+   * state; any other failure keeps the last good list, marks it unrefreshed, and stays fresh so a
+   * view does not retry in a loop: only an explicit retry or a rules-change event refetches.
+   */
+  function loadPermissionRules(project: Project): Promise<PermissionRulesLoad> {
+    const inFlight = loadingPermissionRules.get(project.id);
+    if (inFlight) return inFlight.outcome;
+    if (freshPermissionRules.peek().has(project.id)) return Promise.resolve({ status: 'skipped' });
+    const seq = ++permissionRulesLoadSeq,
+      outcome = fetchPermissionRules(project, seq);
+    loadingPermissionRules.set(project.id, { seq, outcome });
+    return outcome;
+  }
+
+  /**
+   * Re-read `project`'s answers after this client changed them: wait out any load that started
+   * before the change, then return the outcome of the first one that started after it (HS2-9YVX6Q).
+   */
+  async function reloadPermissionRules(project: Project): Promise<PermissionRulesLoad> {
+    const changedAt = permissionRulesLoadSeq;
+    markPermissionRulesStale(project.id);
+    for (;;) {
+      const inFlight = loadingPermissionRules.get(project.id);
+      if (inFlight && inFlight.seq > changedAt) return inFlight.outcome;
+      if (inFlight) {
+        await inFlight.outcome;
+        continue;
+      }
+      const settled = settledPermissionRules.get(project.id);
+      if (settled && settled.seq > changedAt) return settled.outcome;
+      markPermissionRulesStale(project.id);
+      return loadPermissionRules(project);
+    }
+  }
+
+  async function fetchPermissionRules(project: Project, seq: number): Promise<PermissionRulesLoad> {
     freshPermissionRules.value = new Set([...freshPermissionRules.peek(), project.id]);
     // Settle the loading mark before publishing, so a view re-rendered by the result can refetch at
     // once when a rules change made it stale while this request was in flight (HS2-KYK1S7).
@@ -752,20 +798,26 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
     } catch (reason) {
       loadingPermissionRules.delete(project.id);
-      permissionRulesByProject.value = { ...permissionRulesByProject.value, [project.id]: [] };
+      let outcome: PermissionRulesLoad;
       if (reason instanceof ApiHttpError && reason.status === 503) {
+        permissionRulesByProject.value = { ...permissionRulesByProject.value, [project.id]: [] };
         lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
-        if (selectedProjectId.value === project.id)
-          permissionRulesMessage.value =
-            'Remembered answers are locked. Restore the host credential store and encrypted rule file, then reload this page to retry.';
+        setUnrefreshedPermissionRules(project.id, false);
+        outcome = { status: 'locked' };
+        if (selectedProjectId.value === project.id) permissionRulesMessage.value = PERMISSION_RULES_LOCKED_MESSAGE;
       } else {
+        setUnrefreshedPermissionRules(project.id, true);
+        outcome = { status: 'failed', reason: reason instanceof Error ? reason.message : String(reason) };
         if (selectedProjectId.value === project.id)
-          permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+          permissionRulesMessage.value = `Could not load remembered answers. ${outcome.reason}`;
       }
-      return;
+      settledPermissionRules.set(project.id, { seq, outcome });
+      return outcome;
     }
     loadingPermissionRules.delete(project.id);
+    settledPermissionRules.set(project.id, { seq, outcome: { status: 'loaded' } });
     lockedPermissionRules.value = new Set([...lockedPermissionRules.value].filter((id) => id !== project.id));
+    setUnrefreshedPermissionRules(project.id, false);
     if (selectedProjectId.value === project.id) permissionRulesMessage.value = '';
     permissionRulesByProject.value = {
       ...permissionRulesByProject.value,
@@ -782,6 +834,23 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           dialog,
         ).visibleCount,
       };
+    return { status: 'loaded' };
+  }
+
+  function setUnrefreshedPermissionRules(projectId: string, failed: boolean) {
+    const current = unrefreshedPermissionRules.peek();
+    if (current.has(projectId) === failed) return;
+    unrefreshedPermissionRules.value = failed
+      ? new Set([...current, projectId])
+      : new Set([...current].filter((id) => id !== projectId));
+  }
+
+  /** Retry a failed list refresh from Settings → Permissions; never resubmits a change (HS2-9YVX6Q). */
+  async function retryPermissionRules(projectId: string) {
+    const project = projects.value.find((value) => value.id === projectId);
+    if (!project || loadingPermissionRules.has(projectId)) return;
+    if (selectedProjectId.value === projectId) permissionRulesMessage.value = '';
+    await reloadPermissionRules(project);
   }
 
   /** Change one remembered answer's decision from its row menu (HS2-X4ES6Z). */
@@ -860,9 +929,16 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       permissionRuleEditor.value = { ...currentEditor, busy: true, error: undefined };
     try {
       await new Api(project.apiPath).updatePermissionRulePattern(rule, pattern);
-      markPermissionRulesStale(projectId);
-      await loadPermissionRules(project);
-      if (selectedProjectId.value === projectId) permissionRulesMessage.value = 'Reviewed match updated.';
+      // The change is saved; report the list refresh separately so a failed GET neither erases the
+      // list nor reads as a failed save, and never resubmit the PATCH to recover (HS2-9YVX6Q).
+      const refreshed = await reloadPermissionRules(project);
+      if (selectedProjectId.value === projectId)
+        permissionRulesMessage.value =
+          refreshed.status === 'failed'
+            ? `Reviewed match updated, but the list could not be refreshed. ${refreshed.reason}`
+            : refreshed.status === 'locked'
+              ? `Reviewed match updated. ${PERMISSION_RULES_LOCKED_MESSAGE}`
+              : 'Reviewed match updated.';
       const editor = permissionRuleEditor.value;
       if (editor?.projectId === projectId && editor.ruleKey === key) permissionRuleEditor.value = undefined;
     } catch (reason) {
@@ -928,6 +1004,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRules,
     permissionRulesChanged,
     permissionRulesMessage,
+    unrefreshedPermissionRules,
+    retryPermissionRules,
     legacyDiscardFor,
     openLegacyPermissionDiscard,
     closeLegacyPermissionDiscard,

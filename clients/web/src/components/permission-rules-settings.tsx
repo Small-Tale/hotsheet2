@@ -15,7 +15,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Clock3, Copy, Ellipsis, Pencil, Pin, ShieldCheck, ShieldX, Trash2 } from 'lucide';
+import { Clock3, Copy, Ellipsis, Pencil, Pin, RefreshCw, ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
@@ -57,6 +57,8 @@ export interface PermissionRulesSettingsProps {
   revoking?: readonly string[];
   message?: string;
   locked?: boolean;
+  /** The last list refresh failed; the rows are the last good copy and Retry reloads them (HS2-9YVX6Q). */
+  refreshFailed?: boolean;
   legacy?: {
     sources: readonly { id: string; name: string; locator: string }[];
     review?: {
@@ -147,6 +149,7 @@ export function PermissionRulesSettings({
   revoking = [],
   message = '',
   locked = false,
+  refreshFailed = false,
   legacy,
 }: PermissionRulesSettingsProps) {
   const editingRule = editor && rules.find((rule) => permissionRuleKey(rule) === editor.ruleKey);
@@ -349,6 +352,28 @@ export function PermissionRulesSettings({
       </ToolbarControlGroup>
     );
   }
+  /** The status line, with a list-only Retry after a failed refresh; it never resends a change (HS2-9YVX6Q). */
+  function status(text: string, busy = false) {
+    const line = (
+      <Text tone="quiet" size="compact" role="status">
+        {text}
+      </Text>
+    );
+    if (!refreshFailed || locked) return line;
+    return (
+      <Row gap="xs" vAlign="middle" wrap>
+        {line}
+        <Button
+          emphasis="plain"
+          icon={<LucideIcon icon={RefreshCw} name="refresh-cw" />}
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.retryPermissionRules.value}
+          disabled={busy}
+        >
+          Retry
+        </Button>
+      </Row>
+    );
+  }
   return (
     <section
       class="permission-rules-settings"
@@ -434,9 +459,7 @@ export function PermissionRulesSettings({
             )}
           </>
         )}
-        <Text tone="quiet" size="compact" role="status">
-          {message}
-        </Text>
+        {status(message, false)}
       </List>
       {legacy && legacy.sources.length > 0 && (
         <section class="permission-rules-settings__migration" aria-label="Legacy Permission Answers">
@@ -602,9 +625,7 @@ export function PermissionRulesSettings({
                   </Button>
                 </Row>
               )}
-              <Text tone="quiet" size="compact" role="status">
-                {dialog?.busy ? 'Updating selected answers…' : message}
-              </Text>
+              {status(dialog?.busy ? 'Updating selected answers…' : message, dialog?.busy)}
               {list.rows.length ? (
                 <div class="permission-rules-settings__all" tabindex="0" aria-label="Scrollable Remembered Answers">
                   <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'All Remembered Answers' }}>

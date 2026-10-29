@@ -416,6 +416,14 @@ export function PermissionRulesSettingsDemo() {
           message="Could not revoke the rule. The server is unavailable."
         />
       </CatalogExample>
+      <CatalogExample label="Saved Match with a Failed List Refresh and Retry">
+        <PermissionRulesSettings
+          rules={PERMISSION_RULES_DEMO}
+          owner={{ id: 'demo', name: 'Demo Code Project', root: '/work/demo-code' }}
+          message="Reviewed match updated, but the list could not be refreshed. The server is unavailable."
+          refreshFailed
+        />
+      </CatalogExample>
       <CatalogExample label="Discard Legacy Permission Answers">
         <div data-demo-permission-migration>
           <PermissionRulesSettings

@@ -21,6 +21,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   changePermissionRuleScope: action('change-permission-rule-scope'),
   changeSelectedPermissionRuleScope: action('change-selected-permission-rule-scope'),
   openPermissionRules: action('open-permission-rules'),
+  retryPermissionRules: action('retry-permission-rules'),
   openLegacyPermissionDiscard: action('open-legacy-permission-discard'),
   closeLegacyPermissionDiscard: action('close-legacy-permission-discard'),
   applyLegacyPermissionDiscard: action('apply-legacy-permission-discard'),
