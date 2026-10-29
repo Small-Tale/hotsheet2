@@ -594,7 +594,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['settings-workspace', 1],
     ['trash-settings', 3],
     ['terminal-memory-settings', 6],
-    ['permission-rules-settings', 4],
+    ['permission-rules-settings', 5],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
     ['ai-tool-settings', 1],
