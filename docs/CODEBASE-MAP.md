@@ -596,6 +596,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
       src/notification_router.rs # notifier delivery (HS2-R5HTZN): change-bus subscriber seeded from the index; ticket status/feedback/blocked transitions, permission_asked, and hub notifications → hotsheet-notify dispatch on blocking workers; AppState::with_notifiers test override
+      src/project_activity.rs #  pure claim-derived per-store activity tracker: active → released + grace → stopped, unrenewed lease → stalled; router arms one timer per store (HS2-2MM07G)
       src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-channels/{id}[/secrets/{field}|/test], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
       tests/notification_delivery.rs # E2E: admin routes + real bus events through the running router to a fake ntfy transport
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)

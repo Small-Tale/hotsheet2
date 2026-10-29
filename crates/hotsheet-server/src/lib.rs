@@ -28,6 +28,7 @@ pub mod multistore;
 pub mod notification_router;
 pub mod notifications;
 mod presence;
+pub mod project_activity;
 mod provider_overlay;
 pub mod provider_write_behind;
 pub mod repository_browser;

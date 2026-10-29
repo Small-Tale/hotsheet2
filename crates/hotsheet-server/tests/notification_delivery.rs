@@ -36,6 +36,7 @@ impl HttpTransport for SignallingHttp {
 struct Harness {
     _dir: tempfile::TempDir,
     home: std::path::PathBuf,
+    store_id: String,
     state: AppState,
     received: mpsc::Receiver<HttpRequest>,
 }
@@ -45,6 +46,7 @@ fn harness() -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path().join("demo.hs2"), &StoreMetadata::new("HS")).unwrap();
     let home = dir.path().join("machine-home");
+    let store_id = hotsheet_server::multistore::store_url_id(&store);
     let (tx, rx) = mpsc::channel();
     let http = Arc::new(SignallingHttp {
         sent: Mutex::new(tx),
@@ -53,10 +55,13 @@ fn harness() -> Harness {
         .unwrap()
         .with_default_codex_home(dir.path().join("no-codex-home"))
         .with_machine_home(&home)
-        .with_notifiers(vec![Arc::new(Ntfy::with_transport(http))]);
+        .with_notifiers(vec![Arc::new(Ntfy::with_transport(http))])
+        // A short grace keeps the project-stopped E2E fast (HS2-2MM07G).
+        .with_project_idle_grace(Duration::from_millis(300));
     Harness {
         _dir: dir,
         home,
+        store_id,
         state,
         received: rx,
     }
@@ -401,5 +406,114 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
     assert!(
         hotsheet_server::notification_router::route_change_event(&h.state, &event("turn_event"))
             .is_empty()
+    );
+}
+
+/// HS2-2MM07G: a real claim, completion, and release through the HTTP routes reach the
+/// running router, which reports the stop after the idle grace with the completed ticket.
+#[tokio::test(flavor = "multi_thread")]
+async fn releasing_the_last_claim_reports_the_project_stopped_after_the_grace() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let (_, created) = call(
+        &router,
+        "POST",
+        "/tickets",
+        Some(json!({"title":"Wire it"})),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    let _router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w1"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"status":"completed"})),
+    )
+    .await;
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/release"),
+        Some(json!({"worker":"w1"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project demo has stopped working on tickets")
+    );
+    assert_eq!(header(&sent, "Priority"), Some("4"));
+    let body = String::from_utf8(sent.body).unwrap();
+    assert!(body.contains(&format!("Completed: {slug}.")), "{body}");
+    // One report per active period: nothing else arrives.
+    assert!(h.received.recv_timeout(Duration::from_secs(1)).is_err());
+}
+
+/// HS2-2MM07G: a lease that expires without renewal reports the project stalled, naming
+/// the ticket and worker; the clock is driven directly so the test needs no real expiry.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unrenewed_claim_reports_the_project_stalled() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Hang"}))).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w-stuck","lease_minutes":1})),
+    )
+    .await;
+    let event = hotsheet_server::ChangeEvent {
+        cursor: None,
+        store: h.store_id.clone(),
+        kind: "claimed".into(),
+        id: id.clone(),
+        slug: slug.clone(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    };
+    let state = h.state.clone();
+    let store = h.store_id.clone();
+    let records = tokio::task::spawn_blocking(move || {
+        assert!(
+            hotsheet_server::notification_router::route_change_event(&state, &event).is_empty()
+        );
+        let later = time::OffsetDateTime::now_utc() + time::Duration::minutes(2);
+        hotsheet_server::notification_router::check_project_activity(&state, &store, later)
+    })
+    .await
+    .unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].event, hotsheet_notify::EventKind::ProjectStopped);
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project demo has stalled")
+    );
+    assert_eq!(header(&sent, "Priority"), Some("5"));
+    let body = String::from_utf8(sent.body).unwrap();
+    assert!(
+        body.contains(&format!("{slug}** (worker w-stuck)")),
+        "{body}"
     );
 }

@@ -235,9 +235,40 @@ read. With no server running, only `hotsheet-cli notify send` delivers (HS2-8VAX
 Ticket events carry the store id as their project. Checkout-scoped filters are
 HS2-4JG95G.
 
-`digest` (HS2-D33WPH) and `project.stopped` (HS2-2MM07G) are reserved for those
-producers. Until they ship, scripts and agents can raise any event with
-`hotsheet-cli notify send --event <kind>`.
+`digest` (HS2-D33WPH) is reserved for that producer. Until it ships, scripts and agents
+can raise any event with `hotsheet-cli notify send --event <kind>`.
+
+### 32.8.1 Project stopped or stalled (HS2-2MM07G)
+
+The router raises `project.stopped` for each hosted store from ticket **claims**. Every
+AI session that follows the Hot Sheet workflow claims the ticket it works on, renews the
+lease during long work, and releases it when it stops, whatever its tool or transport.
+
+- **Active.** At least one ticket in the store holds a live claim: a worker and an
+  unexpired lease.
+- **Stopped (finished).** The last claim was released, and no new claim appeared within
+  a 120-second grace. The grace exists so that a worker moving to its next ticket is not
+  reported. The message reads "Hot Sheet project _name_ has stopped working on tickets",
+  has severity `warning`, and lists the tickets completed during the active period.
+- **Stalled (stuck).** A claim's lease expired without renewal, so its session stopped
+  renewing: it crashed, hung, or halted. The report waits until no live claim remains in
+  the store. It then reads "Hot Sheet project _name_ has stalled", has severity `error`,
+  and names each expired claim's ticket and worker.
+
+Each active period is reported once; its dedupe key is the store plus the period's
+start. A check runs before each new claim is recorded, so a period whose grace already
+ended is reported rather than continued. The tracker is seeded from each store's index
+when the router starts, but only if an enabled rule names `project.stopped`. Grace and
+lease deadlines are one event-driven server timer per store; no request polls. Sessions
+that never claim tickets produce no signal. Token-usage idleness, terminal halts, and a
+configurable grace are HS2-P57XHV.
+
+For example, to push to a phone when any project stops:
+
+```sh
+hotsheet-cli notify channel add phone --notifier ntfy --set topic=hs-7f3k
+hotsheet-cli notify rule add stopped --event project.stopped --channel phone
+```
 
 ## 32.9 Headless CLI and REST API
 
@@ -309,4 +340,5 @@ idempotent.
 | Configuration write lock                                                   | Planned | HS2-YGNDET |
 | Transitions without a running server                                       | Planned | HS2-8VAXXA |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
-| `project.stopped` producer                                                 | Planned | HS2-2MM07G |
+| `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
+| Token-idle and terminal-halt stuck signals; configurable grace             | Planned | HS2-P57XHV |
