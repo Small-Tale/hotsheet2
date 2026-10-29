@@ -122,8 +122,9 @@ The delivery record notes `truncated` and `omitted_attachments`.
 - Saving validates everything: unique ids, installed notifiers, settings against the
   schema, rule references, and no inline secrets. An invalid change is refused and
   nothing is written.
-- Writes are atomic (temp file plus rename). Concurrent CLI and server edits can still
-  race; HS2-YGNDET tracks the lock.
+- Writes are atomic (temp file plus rename). Each read-modify-write holds an OS file
+  lock on `.notifications.json.lock` beside the file, so concurrent CLI and server edits
+  never drop each other's change (HS2-YGNDET).
 - A newer `version` than this build understands is refused rather than rewritten.
 
 ## 32.6 External notifier plugins
@@ -337,7 +338,7 @@ idempotent.
 | External plugin digest trust gate                                          | Planned | HS2-208RB1 |
 | Saved-query, checkout, quiet-hour, and rate-limit filters                  | Planned | HS2-4JG95G |
 | Click-through links                                                        | Planned | HS2-04J8WS |
-| Configuration write lock                                                   | Planned | HS2-YGNDET |
+| Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server                                       | Planned | HS2-8VAXXA |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |

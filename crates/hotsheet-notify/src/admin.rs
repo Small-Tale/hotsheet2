@@ -46,6 +46,23 @@ impl From<ConfigError> for AdminError {
     }
 }
 
+/// Hold the configuration lock for one read-modify-write, so a CLI edit and a server edit
+/// running at once never drop each other's change (HS2-YGNDET). The lock file lives beside
+/// the configuration in the machine home.
+fn lock(home: &Path) -> Result<hotsheet_ticketing::FileLock, AdminError> {
+    let storage =
+        |e: std::io::Error| AdminError::Storage(format!("locking the notification config: {e}"));
+    std::fs::create_dir_all(home).map_err(storage)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(home.join(".notifications.json.lock"))
+        .map_err(storage)?;
+    hotsheet_ticketing::FileLock::acquire(file).map_err(storage)
+}
+
 fn load(home: &Path) -> Result<NotificationConfig, AdminError> {
     Ok(NotificationConfig::load(home)?)
 }
@@ -59,6 +76,7 @@ pub fn put_channel(
     registry: &Registry,
     mut channel: ChannelConfig,
 ) -> Result<ChannelConfig, AdminError> {
+    let _lock = lock(home)?;
     let mut config = load(home)?;
     if let (Some(existing), Some(notifier)) = (
         config
@@ -91,6 +109,7 @@ pub fn set_channel_secret(
     field: &str,
     value: &str,
 ) -> Result<(), AdminError> {
+    let _lock = lock(home)?;
     if value.is_empty() {
         return Err(AdminError::Invalid("the credential value is empty".into()));
     }
@@ -131,6 +150,7 @@ pub fn set_channel_enabled(
     channel: &str,
     enabled: bool,
 ) -> Result<(), AdminError> {
+    let _lock = lock(home)?;
     let mut config = load(home)?;
     let entry = config
         .channels
@@ -157,6 +177,7 @@ pub fn remove_channel(
     secrets: &dyn SecretWriter,
     channel: &str,
 ) -> Result<ChannelRemoval, AdminError> {
+    let _lock = lock(home)?;
     let mut config = load(home)?;
     let managed: Vec<String> = config
         .channel(channel)
@@ -187,6 +208,7 @@ pub fn remove_channel(
 }
 
 pub fn put_rule(home: &Path, registry: &Registry, rule: Rule) -> Result<Rule, AdminError> {
+    let _lock = lock(home)?;
     let mut config = load(home)?;
     config.upsert_rule(rule.clone());
     config.save(home, registry)?;
@@ -194,6 +216,7 @@ pub fn put_rule(home: &Path, registry: &Registry, rule: Rule) -> Result<Rule, Ad
 }
 
 pub fn remove_rule(home: &Path, registry: &Registry, rule: &str) -> Result<bool, AdminError> {
+    let _lock = lock(home)?;
     let mut config = load(home)?;
     if !config.remove_rule(rule) {
         return Ok(false);
@@ -325,6 +348,42 @@ mod tests {
             ChannelRemoval::default()
         );
         assert!(!remove_rule(home.path(), &registry, "stopped").unwrap());
+    }
+
+    #[test]
+    fn hs2_ygndet_concurrent_writers_lose_no_change() {
+        let home = tempfile::tempdir().unwrap();
+        let registry = Arc::new(Registry::builtin_only());
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let home = home.path().to_path_buf();
+                let registry = registry.clone();
+                std::thread::spawn(move || {
+                    let mut c = channel();
+                    c.id = format!("phone-{i}");
+                    put_channel(&home, &registry, c).unwrap();
+                    put_rule(
+                        &home,
+                        &registry,
+                        Rule {
+                            id: format!("rule-{i}"),
+                            events: vec![EventKind::Digest],
+                            channels: vec![format!("phone-{i}")],
+                            enabled: true,
+                            filter: RuleFilter::default(),
+                            cooldown_seconds: 0,
+                        },
+                    )
+                    .unwrap();
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        let config = NotificationConfig::load(home.path()).unwrap();
+        assert_eq!(config.channels.len(), 8);
+        assert_eq!(config.rules.len(), 8);
     }
 
     #[test]
