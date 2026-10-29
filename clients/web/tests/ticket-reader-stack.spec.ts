@@ -243,6 +243,48 @@ async function mockLayeredProjects(
   });
 }
 
+for (const surface of ['workspace', 'linked'] as const)
+  test(`HS2-XBWGP6 preserves early response focus when delayed initial focus runs in the ${surface} reader`, async ({
+    page,
+  }) => {
+    const prompt = {
+      id: 'EARLY-REPLY',
+      kind: 'feedback_needed',
+      created_at: '2026-10-29T00:00:00Z',
+      edited_at: '2026-10-29T00:00:00Z',
+      text: 'FEEDBACK NEEDED: choose a synthetic option.',
+    };
+    await mockLayeredProjects(page, [], false, {}, { source: [prompt], target: [prompt] });
+    await openProjects(page);
+    await page.clock.install({ time: new Date('2026-10-29T00:00:00Z') });
+    await page.clock.pauseAt(new Date('2026-10-29T00:00:01Z'));
+    if (surface === 'workspace')
+      await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+    else await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+    const reader = page.locator('[data-reader-active="true"]'),
+      response = reader.getByRole('textbox', { name: 'Feedback response' });
+    await response.fill('Synthetic early reply');
+    await expect(response).toBeFocused();
+    await page.clock.runFor(200);
+    await expect(response).toBeFocused();
+    await expect(response).toHaveValue('Synthetic early reply');
+    await response.pressSequentially(' continued');
+    await expect(response).toHaveValue('Synthetic early reply continued');
+    await page.clock.resume();
+    if (surface === 'workspace')
+      for (const [label, width] of [
+        ['wide', 1280],
+        ['medium', 900],
+        ['narrow', 390],
+        ['wide-again', 1280],
+      ] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(response).toBeInViewport();
+        await expect(response).toBeFocused();
+        await page.screenshot({ path: test.info().outputPath(`hs2-xbwgp6-${label}.png`) });
+      }
+  });
+
 test('uses native modality for focus, nested Escape, backdrop policy, and responsive containment', async ({ page }) => {
   await mockLayeredProjects(page);
   await page.setViewportSize({ width: 1200, height: 900 });

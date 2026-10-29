@@ -1667,6 +1667,9 @@ preview/download, server directory browser) are separate design work.
   Ticket readers are persistent Web Awesome dialogs opened through the native modal lifecycle,
   so focus is trapped by the platform, Escape closes only the top reader after nested controls,
   backdrop clicks do not dismiss it, and focus returns to the live opener or workspace fallback.
+  Delayed initial focus only moves to the active reader's close control while focus remains
+  outside that reader. It preserves a response field or other control the person already
+  focused, and resolves the current top reader when the callback runs (HS2-XBWGP6).
   The client commits the complete reader state before presenting the native dialog, preventing an
   empty modal frame during startup or open transitions; the same render-before-show rule applies to
   the quick-ticket composer. The accessibility host mirrors the visible modal bounds while the

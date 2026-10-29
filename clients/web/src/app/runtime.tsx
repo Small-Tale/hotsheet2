@@ -205,6 +205,7 @@ import {
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
 import { waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
+import { focusTopTicketReader } from '../ticket-reader-focus';
 import {
   activeTicketReaderProject,
   popTicketReaderFrame,
@@ -2973,17 +2974,6 @@ export async function startHotSheetWebClient() {
     const byId = new Map(existing.map((ticket) => [ticket.qualified_id, ticket]));
     for (const ticket of incoming) byId.set(ticket.qualified_id, ticket);
     return [...byId.values()];
-  }
-  function focusTopTicketReader() {
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>(
-            '[data-component="ticket-reader"][data-reader-active="true"] [data-action="close-ticket-reader"]',
-          )
-          ?.focus({ preventScroll: true }),
-      ),
-    );
   }
   function readerDialog(id: string) {
     return document.querySelector<TicketReaderDialogElement>(
