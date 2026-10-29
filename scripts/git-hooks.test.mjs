@@ -36,7 +36,14 @@ function fixture() {
   run('git', ['config', 'user.email', 'test@invalid.example'], repo);
   for (const path of ['clients/web', 'migrator', 'spikes/kerf-webawesome'])
     mkdirSync(resolve(repo, path), { recursive: true });
-  for (const path of ['scripts/check.sh', 'scripts/push.sh', '.githooks/pre-commit', '.githooks/pre-push']) {
+  for (const path of [
+    'scripts/check.sh',
+    'scripts/push.sh',
+    'scripts/main-integration-window.mjs',
+    'scripts/main-integration-options.mjs',
+    '.githooks/pre-commit',
+    '.githooks/pre-push',
+  ]) {
     const target = resolve(repo, path);
     mkdirSync(dirname(target), { recursive: true });
     copyFileSync(resolve(source, path), target);
@@ -45,7 +52,16 @@ function fixture() {
   put(resolve(repo, 'seed'), 'seed\n');
   run(
     'git',
-    ['add', 'seed', 'scripts/check.sh', 'scripts/push.sh', '.githooks/pre-commit', '.githooks/pre-push'],
+    [
+      'add',
+      'seed',
+      'scripts/check.sh',
+      'scripts/push.sh',
+      'scripts/main-integration-window.mjs',
+      'scripts/main-integration-options.mjs',
+      '.githooks/pre-commit',
+      '.githooks/pre-push',
+    ],
     repo,
   );
   run('git', ['commit', '-m', 'Seed'], repo);
@@ -57,17 +73,22 @@ test('HS2-RS0FFT required gate uses receipt validation without an environment by
   assert.doesNotMatch(readFileSync(resolve(source, '.githooks/pre-push'), 'utf8'), /HOTSHEET_GATE_PASSED_TREE/);
 });
 
-test('HS2-CD3D2T push gates before remote contact and pre-push skips that same tree', () => {
+test('HS2-BND42N reserves main before gate and rejects direct main push', () => {
   const f = fixture();
   try {
     const log = resolve(f.root, 'gate.log');
     const fail = resolve(f.root, 'fail');
     const bin = resolve(f.root, 'bin');
-    executable(resolve(bin, 'zsh'), '#!/bin/sh\nexit 0\n');
+    executable(
+      resolve(bin, 'zsh'),
+      '#!/bin/sh\nif [ "$2" = "npm run format:check" ]; then exit 0; fi\nexec /bin/zsh "$@"\n',
+    );
     executable(
       resolve(f.repo, 'scripts/check.sh'),
-      `#!/bin/sh\ntree=$(git rev-parse 'HEAD^{tree}')\n[ -f ".git/test-gate-$tree" ] && exit 0\nprintf 'check\\n' >> "$HOTSHEET_HOOK_TEST_LOG"\n[ ! -f "$HOTSHEET_HOOK_TEST_FAIL" ] || exit 1\ntouch ".git/test-gate-$tree"\n`,
+      `#!/bin/sh\ntree=$(git rev-parse 'HEAD^{tree}')\nif [ "\${1:-}" = '--verify-receipt' ]; then test -f ".git/test-gate-$tree"; exit; fi\n[ -f ".git/test-gate-$tree" ] && exit 0\nprintf 'check\\n' >> "$HOTSHEET_HOOK_TEST_LOG"\n[ ! -f "$HOTSHEET_HOOK_TEST_FAIL" ] || exit 1\ntouch ".git/test-gate-$tree"\n`,
     );
+    run('git', ['add', 'scripts/check.sh'], f.repo);
+    run('git', ['commit', '-m', 'Fixture gate'], f.repo);
     const remote = resolve(f.root, 'remote.git');
     run('git', ['init', '--bare', remote], f.root);
     run('git', ['remote', 'add', 'origin', remote], f.repo);
@@ -88,8 +109,10 @@ test('HS2-CD3D2T push gates before remote contact and pre-push skips that same t
     put(fail, 'fail');
     assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, env));
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], remote).trim(), pushed);
+    assert.throws(() => run('git', ['show-ref', '--verify', 'refs/hotsheet/main-integration-window'], f.repo));
     rmSync(fail);
-    run('git', ['push', 'origin', 'main'], f.repo, env);
+    assert.throws(() => run('git', ['push', 'origin', 'main'], f.repo, env));
+    run('bash', ['scripts/push.sh'], f.repo, env);
     assert.equal(readFileSync(log, 'utf8'), 'check\ncheck\ncheck\n');
     assert.notEqual(run('git', ['rev-parse', 'refs/heads/main'], remote).trim(), pushed);
   } finally {

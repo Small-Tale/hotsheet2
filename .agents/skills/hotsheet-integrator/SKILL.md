@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 17 -->
+<!-- hotsheet-skill-version: 18 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -289,11 +289,22 @@ For a code handoff, follow these integration steps:
    is reachable from `main` with `git branch --contains <sha>`; if cherry-picking
    changed its SHA, record the new main SHA. Keep the worker branch available until
    that check succeeds.
-3. Run the local gates required for the integrated result and inspect the diff.
-   Fix ticket-caused failures before pushing. Retain the current required full
-   gate and exact-tree evidence until HS2-FCCRCK changes the policy. Follow this repository's
-   `push-per-ticket` policy: push the verified main commit, confirm `origin/main`
-   contains it and `git status -sb` has no ahead count, then set `final_testing`.
+3. Inspect the integrated diff and `scripts/check.sh --plan`; fix ticket-caused
+   failures before pushing. Set the ticket to `initial_testing`, then run
+   `scripts/push.sh origin main --integrator-id <id> --integrator-session <session>
+   --assignment <active-code-handoff-id> --gate-arg --ticket --gate-arg <slug>`.
+   Forward every analyzed T2 stage with another `--gate-arg --t2-stage --gate-arg
+   <cwd::command>`, and forward `--gate-arg --full` when the reviewed plan requires
+   a full gate. Use `--source-store <path>` when this coordinator's source
+   differs from the shipping checkout. The script holds one local main writer
+   reservation through remote preflight, the selected exact-tree gate, push, and
+   confirmation (HS2-BND42N). It checks the live integrator generation and active
+   integrating code handoff, advances the ticket to `integrating` before push and
+   `final_testing` after confirmation. A failed gate or remote preflight does not
+   push. Preserve HS2-FCCRCK affected-gate planning and exact-tree receipts; the
+   reservation changes writer timing, not check selection. Follow this repository's
+   `push-per-ticket` policy: confirm `origin/main`
+   contains the verified commit and `git status -sb` has no ahead count.
    Record `CI gate commit: <full main SHA>` and the run in the ticket. Use
    `node scripts/ci-gate.mjs status --covers <full main SHA>` from the configured
    login shell; a successful main run must cover the ticket commit.

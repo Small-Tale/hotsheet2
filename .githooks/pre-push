@@ -1,5 +1,31 @@
 #!/bin/bash
-# HS2-CD3D2T: avoid repeating the push script's already completed gate.
+# HS2-BND42N: direct main pushes need the live reserved writer and exact receipt.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-scripts/check.sh
+remote_name="${1:-}"
+updates=0
+total_updates=0
+main_local_sha=''
+main_remote_sha=''
+while read -r local_ref local_sha remote_ref remote_sha; do
+  total_updates=$((total_updates + 1))
+  if [[ "$remote_ref" == refs/heads/main ]]; then
+    updates=$((updates + 1))
+    if [[ "$updates" -ne 1 ]]; then
+      echo 'Push exactly one main ref update' >&2
+      exit 1
+    fi
+    main_local_sha="$local_sha"
+    main_remote_sha="$remote_sha"
+  fi
+done
+if [[ "$updates" -eq 0 ]]; then
+  scripts/check.sh
+  exit 0
+fi
+if [[ "$total_updates" -ne 1 ]]; then
+  echo 'Main integration permits exactly one ref update' >&2
+  exit 1
+fi
+zsh -ic 'node scripts/main-integration-window.mjs verify "$@"' \
+  hotsheet-main-window "$remote_name" refs/heads/main "$main_local_sha" "$main_remote_sha"

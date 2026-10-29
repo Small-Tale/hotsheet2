@@ -1,10 +1,5 @@
 #!/bin/bash
-# HS2-CD3D2T: complete the long gate before opening a remote Git connection.
+# HS2-BND42N: reserve main before preflight, gate, push, and confirmation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-scripts/check.sh
-if [[ $# -eq 0 ]]; then
-  git push origin main
-else
-  git push "$@"
-fi
+exec zsh -ic 'node scripts/main-integration-window.mjs push "$@"' hotsheet-main-window "$@"

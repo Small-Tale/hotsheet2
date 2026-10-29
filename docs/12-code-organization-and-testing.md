@@ -557,9 +557,12 @@ The completion `## Confidence` verification factor is judged against the tier.
 **Targeted reruns (HS2-AEE51Y).** After a failure, agents rerun only the failing tests, for
 example `nextest -E 'test(<name>)'`, `vitest <file> -t '<name>'`, or `playwright -g '<title>'`,
 until they pass. They then run the ticket's affected set once. A rebase onto commits that do
-not touch the ticket's area needs no rerun; an overlapping rebase reruns only the affected
-tests of the overlap. A passing suite is never rerun just to double-check. The bundled
-instructions (v61) carry the same rule.
+not touch the ticket's area needs no manual test rerun; an overlapping rebase reruns only the
+affected tests of the overlap. In either case, `scripts/check.sh --plan` must be reviewed
+for the new commit/tree, and the exact-input gate receipt must pass before pushing. Matching
+stage receipts may be reused; a prior tree's receipt never authorizes a different tree. A
+passing suite is never rerun just to double-check. The bundled instructions (v61) carry the
+same targeted rerun rule.
 
 ### 12.7.1 Tiers
 
@@ -825,15 +828,24 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   changes), and `hs2_zwbsh1_every_hook_fixture_uses_the_isolated_child` fails when a new
   hook fixture bypasses the helper or the rerun list. Toolchain and home settings stay
   inherited.
-- **Local push gate (HS2-CD3D2T):** Run `scripts/install-git-hooks.sh` once per
-  checkout, then `scripts/push.sh origin main` for each verified ticket commit.
-  The checked-in pre-commit hook runs staged whitespace and format checks.
-  `scripts/check.sh` runs the Rust, root Node, web, migrator, and spike checks
-  before `git push` opens a remote connection; the pre-push hook runs the same
-  check for direct pushes. A clean tree that passed is cached under Git's local
-  metadata by tree id. `scripts/push.sh` passes its verified tree to the hook so
-  the gate runs only once even when unrelated local files are dirty. The root
-  gate requires `cargo-nextest`, `git-filter-repo`, and installed npm packages.
+- **Local push gate (HS2-CD3D2T, HS2-BND42N):** Run `scripts/install-git-hooks.sh` once per
+  checkout. For each clean, committed main ticket, inspect `scripts/check.sh --plan`, then
+  use `scripts/push.sh origin main`. The wrapper reserves the Git common directory's main
+  integration ref before reading remote main, runs the selected exact-input gate inside that
+  reservation, verifies its receipt, makes a fast-forward push of the frozen commit, and
+  confirms remote main contains it. A live coordination integrator must supply
+  `--integrator-id <id> --integrator-session <generation>` and the active code handoff's
+  `--assignment <id>` when one holds the integration fence. An inactive retained pool
+  requires explicit `--standalone`; a source outside the default project uses
+  `--source-store <path>`. Forward ticket and T2 selections as repeated
+  `--gate-arg <argument>` pairs (for example `--gate-arg --ticket --gate-arg HS2-BND42N`).
+  When a ticket is supplied, the wrapper changes its phase to `integrating` before push
+  and `final_testing` after remote confirmation; set `initial_testing` before the wrapper.
+  The pre-push hook checks the live reservation before and after exact receipt
+  verification. Direct main pushes without the reservation fail; other branch pushes keep
+  their previous gate behavior. A dirty tree cannot produce an exact-input receipt.
+  Git's fast-forward check remains the cross-machine guard. The root gate requires
+  `cargo-nextest`, `git-filter-repo`, and installed npm packages.
   Permission integration tests use an in-memory vault under the test-only dependency
   feature, so the same full Rust suite runs on macOS and Linux (`HS2-R8S894`).
 - **Commit drafting (HS2-VA97HW):** the root `package.json` pins `gitgist` exactly
