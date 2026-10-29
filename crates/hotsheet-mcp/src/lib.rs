@@ -366,9 +366,10 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim",
-            "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Returns the claimed ticket without changing its durable status.",
+            "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
+                "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
                 "label": str_prop("human-readable worker label"),
                 "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" },
@@ -390,6 +391,7 @@ fn base_tools_list() -> Value {
             "description": "Release a claim (only the holding worker unless force).",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
+                "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("the releasing worker (default: worker)"),
                 "force": { "type": "boolean", "description": "release even if held by another worker" }
             }, "required": ["id"] }
@@ -399,6 +401,7 @@ fn base_tools_list() -> Value {
             "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
+                "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("the holding worker (default: worker)"),
                 "lease_minutes": { "type": "integer", "description": "new lease length in minutes (default 30)" },
                 "eta": str_prop("new estimated completion time: a duration from now (45m, 2h) or an RFC 3339 timestamp; omit to keep the current one")
@@ -871,8 +874,8 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
             backend
                 .send(
                     "POST",
-                    &format!("/tickets/{id}/claim"),
-                    &without(args, "id"),
+                    &checkout_route(args, &format!("/tickets/{id}/claim")),
+                    &without_many(args, &["id", "checkout", "connection"]),
                 )
                 .map_err(be_msg)
         }
@@ -882,8 +885,8 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
             backend
                 .send(
                     "POST",
-                    &format!("/tickets/{id}/release"),
-                    &without(args, "id"),
+                    &checkout_route(args, &format!("/tickets/{id}/release")),
+                    &without_many(args, &["id", "checkout", "connection"]),
                 )
                 .map_err(be_msg)
         }
@@ -892,8 +895,8 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
             let mut renewed = backend
                 .send(
                     "POST",
-                    &format!("/tickets/{id}/renew"),
-                    &without(args, "id"),
+                    &checkout_route(args, &format!("/tickets/{id}/renew")),
+                    &without_many(args, &["id", "checkout", "connection"]),
                 )
                 .map_err(be_msg)?;
             // Prompt a re-estimate at the renewal touchpoint once the ETA has passed (HS2-DQQ0AX).
@@ -1834,6 +1837,9 @@ mod core_backend {
                         .map(|v| (v, "close"))
                         .or_else(|| tail.strip_suffix("/restore").map(|v| (v, "restore")))
                         .or_else(|| tail.strip_suffix("/assign").map(|v| (v, "assign")))
+                        .or_else(|| tail.strip_suffix("/claim").map(|v| (v, "claim")))
+                        .or_else(|| tail.strip_suffix("/release").map(|v| (v, "release")))
+                        .or_else(|| tail.strip_suffix("/renew").map(|v| (v, "renew")))
                         .unwrap_or((tail, "update"));
                     let mut matched = Vec::new();
                     for store in stores {
@@ -1855,6 +1861,9 @@ mod core_backend {
                         "close" => format!("/tickets/{id}/close"),
                         "restore" => format!("/tickets/{id}/restore"),
                         "assign" => format!("/tickets/{id}/assign"),
+                        "claim" => format!("/tickets/{id}/claim"),
+                        "release" => format!("/tickets/{id}/release"),
+                        "renew" => format!("/tickets/{id}/renew"),
                         _ => format!("/tickets/{id}"),
                     };
                     return self
@@ -4548,6 +4557,36 @@ mod tests {
     }
 
     #[test]
+    fn hs2_em6ywp_project_claim_lifecycle_targets_the_ticket_checkout() {
+        let backend = FakeBackend::default();
+        for name in ["hotsheet_claim", "hotsheet_renew", "hotsheet_release"] {
+            let message = req(
+                "tools/call",
+                json!({"name":name,"arguments":{"id":"TST-EXACT","worker":"agent","actor_role":"ai","actor_id":"agent"}}),
+            );
+            handle_message_for_checkout(&message, &backend, Some("code-project"));
+        }
+        handle_message_for_checkout(
+            &req(
+                "tools/call",
+                json!({"name":"hotsheet_claim","arguments":{"checkout":"other","id":"TST-EXACT","worker":"agent"}}),
+            ),
+            &backend,
+            Some("code-project"),
+        );
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with("POST /checkouts/code-project/tickets/TST-EXACT/claim "));
+        assert!(calls[1].starts_with("POST /checkouts/code-project/tickets/TST-EXACT/renew "));
+        assert!(calls[2].starts_with("POST /checkouts/code-project/tickets/TST-EXACT/release "));
+        assert!(calls[3].starts_with("POST /checkouts/other/tickets/TST-EXACT/claim "));
+        assert!(
+            calls[..3]
+                .iter()
+                .all(|call| call.contains("\"actor\":{\"id\":\"agent\",\"role\":\"ai\"}"))
+        );
+    }
+
+    #[test]
     fn provider_targeting_routes_mcp_crud_to_the_selected_connection() {
         let backend = FakeBackend::default();
         call(
@@ -5778,6 +5817,62 @@ mod tests {
             json!({ "worker": "agent-1" }),
         );
         assert!(empty.is_null(), "no claimable tickets → null");
+    }
+
+    #[test]
+    fn hs2_em6ywp_corebackend_claims_the_linked_sibling_store() {
+        let root = tempfile::tempdir().unwrap();
+        let primary_root = root.path().join("primary.hs2");
+        let sibling_root = root.path().join("project.hs2");
+        let project_root = root.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        let primary = FsStore::init(&primary_root, &StoreMetadata::new("PRI")).unwrap();
+        let sibling = FsStore::init(&sibling_root, &StoreMetadata::new("TST")).unwrap();
+        let created = call(
+            &CoreBackend::new(sibling.clone()),
+            "hotsheet_create",
+            json!({"title":"Synthetic sibling ticket"}),
+        );
+        let slug = created["slug"].as_str().unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(&project_root, Some("project"), None, vec![sibling_root])
+            .unwrap();
+        let backend = CoreBackend::new(primary).with_checkout_registry(registry);
+        let target = json!({"checkout":checkout.id,"id":slug});
+        assert_eq!(call(&backend, "hotsheet_get", target.clone())["slug"], slug);
+        assert!(
+            call(
+                &backend,
+                "hotsheet_claim",
+                json!({"id":slug,"worker":"agent"})
+            )["error"]
+                .as_str()
+                .unwrap()
+                .contains("no ticket matching")
+        );
+        let claimed = call(
+            &backend,
+            "hotsheet_claim",
+            json!({"checkout":checkout.id,"id":slug,"worker":"agent","actor_role":"ai","actor_id":"agent"}),
+        );
+        assert_eq!(claimed["claimed_by"], "agent");
+        assert_eq!(claimed["claim_count"], 1);
+        let renewed = call(
+            &backend,
+            "hotsheet_renew",
+            json!({"checkout":checkout.id,"id":slug,"worker":"agent","actor_role":"ai","actor_id":"agent"}),
+        );
+        assert_eq!(renewed["claimed_by"], "agent");
+        let released = call(
+            &backend,
+            "hotsheet_release",
+            json!({"checkout":checkout.id,"id":slug,"worker":"agent","actor_role":"ai","actor_id":"agent"}),
+        );
+        assert!(released["claimed_by"].is_null());
+        assert_eq!(released["claim_history"][2]["kind"], "release");
     }
 
     #[test]

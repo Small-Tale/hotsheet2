@@ -100,7 +100,10 @@ use routes::checkouts::{
     prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_source,
     resolve_checkout, set_checkout_default_source, set_checkout_source_color,
 };
-use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
+use routes::claims::{
+    claim_checkout_ticket, claim_next_ticket, claim_ticket, release_checkout_ticket,
+    release_ticket, renew_checkout_ticket, renew_ticket,
+};
 use routes::guidance::{
     decide_checkout_guidance_recommendation, get_checkout_guidance,
     get_checkout_guidance_interview_preview, get_checkout_guidance_recommendations,
@@ -1500,6 +1503,18 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/claim",
+            post(claim_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/release",
+            post(release_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/renew",
+            post(renew_checkout_ticket),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/duplicate-backlinks",

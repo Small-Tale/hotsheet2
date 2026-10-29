@@ -2,10 +2,14 @@
 
 use crate::api_error::ApiError;
 use crate::dto::{ClaimReq, ReleaseReq, RenewReq};
+use crate::multistore;
+use crate::routes::checkout_tickets::checkout_ticket_owner;
+use crate::routes::store_scoped::ResolvedTicket;
 use crate::routes::tickets::api_ticket;
 use crate::{AppState, now};
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use hotsheet_ticketing::{ApiTicket, ops};
 
 // ---- coordination: claim / release / renew (HS2-86) ------------------------------
@@ -113,4 +117,115 @@ pub(crate) async fn renew_ticket(
     let renewed = ops::renew_with_eta(&entry.store, &ticket.id, now, lease, &worker, eta)?;
     state.changed_in(&entry, "renewed", &renewed);
     Ok(Json(api_ticket(&entry, &renewed)?))
+}
+
+/// Resolve the owner before a claim mutation. An unqualified id must identify one
+/// ticket in this checkout; a qualified id selects its linked source directly.
+fn checkout_claim_entry(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+) -> Result<(multistore::StoreEntry, String), ApiError> {
+    let (source, native_id) = checkout_ticket_owner(state, reference, id)?;
+    if source.provider != "git" {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "claim operations are unsupported by {} ticket sources",
+                source.provider
+            ),
+        ));
+    }
+    let entry = state.hosted_source(&source).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout links an unhosted git source",
+        )
+    })?;
+    Ok((entry, native_id))
+}
+
+fn resolved_claim_ticket(
+    entry: &multistore::StoreEntry,
+    ticket: &hotsheet_model::Ticket,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(entry, ticket)?,
+    }))
+}
+
+/// HS2-EM6YWP: project-launched MCP claims must mutate the source that supplied
+/// the ticket read, rather than the machine server's default store.
+pub(crate) async fn claim_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<ClaimReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (entry, native_id) = checkout_claim_entry(&state, &reference, &id)?;
+    let ticket = entry
+        .resolve(&native_id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let claimed = ops::claim_with_eta(
+        &entry.store,
+        &ticket.id,
+        &now,
+        lease,
+        &worker,
+        req.label,
+        eta,
+    )?;
+    state.changed_in(&entry, "claimed", &claimed);
+    resolved_claim_ticket(&entry, &claimed)
+}
+
+pub(crate) async fn release_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<ReleaseReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (entry, native_id) = checkout_claim_entry(&state, &reference, &id)?;
+    let ticket = entry
+        .resolve(&native_id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let released = ops::release(
+        &entry.store,
+        &ticket.id,
+        now(),
+        &worker,
+        req.force.unwrap_or(false),
+    )?;
+    state.changed_in(&entry, "released", &released);
+    resolved_claim_ticket(&entry, &released)
+}
+
+pub(crate) async fn renew_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<RenewReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (entry, native_id) = checkout_claim_entry(&state, &reference, &id)?;
+    let ticket = entry
+        .resolve(&native_id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let renewed = ops::renew_with_eta(&entry.store, &ticket.id, now, lease, &worker, eta)?;
+    state.changed_in(&entry, "renewed", &renewed);
+    resolved_claim_ticket(&entry, &renewed)
 }

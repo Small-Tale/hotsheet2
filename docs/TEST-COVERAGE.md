@@ -140,6 +140,15 @@ The source and generated Claude/Codex guidance names the MCP fallback for
 sibling-store `Operation not permitted (os error 1)`, plus approved unsandboxed
 browser-gate retry for EPERM or mach-port launch denials. The actual host
 sandbox behavior remains a manual launched-session check.
+HS2-EM6YWP covers the exact MCP claim, renew, and release path after a project
+launch injects its checkout. `crates/hotsheet-mcp` route and serverless tests
+exercise a synthetic sibling store; the `hotsheet-server` HTTP regression checks
+the same store through the checkout route, including worker lease and AI note
+actor identity. `portable_project_config.rs` launches the MCP binary with the
+generated Codex entry and checks that the checkout-scoped claim carries the
+worker and AI actor. `clients/web/tests/contracts.spec.ts` pins the three
+checkout lease routes to concrete OpenAPI request and response schemas.
+HS2-NB2TTN retains the live agent and browser review.
 
 HS2-CD3D2T provides a checked-in root gate, gate-before-push command, and
 pre-commit/pre-push hooks. `scripts/git-hooks.test.mjs` uses temporary Git

@@ -1856,8 +1856,10 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >
 > - **`--project <code project>` → project startup**, opening the registered checkout
 >   and all its configured Git and external sources through the machine-local server.
->   It starts that server when absent, and unqualified ticket operations use the
->   checkout identity; callers can specify a connection for an ambiguous operation.
+>   It starts that server when absent. Unqualified ticket reads, edits, and exact
+>   claim, renew, and release operations use the checkout identity; callers can
+>   specify a connection for ambiguous ticket reads or edits. Project-scoped
+>   `hotsheet_claim_next` remains pending HS2-AV80C4.
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
 >   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
 >   §4.4). The headless default. A running server's watcher still picks up its writes.

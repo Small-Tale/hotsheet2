@@ -83,13 +83,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
                     break;
                 }
             }
-            paths.push(
-                String::from_utf8_lossy(&request)
-                    .lines()
-                    .next()
-                    .unwrap()
-                    .to_owned(),
-            );
+            paths.push(String::from_utf8_lossy(&request).into_owned());
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
         }
         paths
@@ -106,6 +100,26 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
     registry
         .register_sources(&project, None, None, vec![], None)
         .unwrap();
+    hotsheet_cli::setup::run_setup_in(&bootstrap, &project, Some("codex"), false, &[]).unwrap();
+    let config: toml::Value = std::fs::read_to_string(project.join(".codex/config.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let entry = &config["mcp_servers"]["hotsheet"];
+    assert_eq!(entry["command"].as_str(), Some("hotsheet-mcp"));
+    let args: Vec<&str> = entry["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        args,
+        [
+            "--project",
+            project.canonicalize().unwrap().to_str().unwrap()
+        ]
+    );
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let instance = hotsheet_cli::external_launch::instance_path(&home, &bootstrap);
@@ -128,12 +142,13 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
                 r#"{"checkout":{"id":"code-project"}}"#,
                 "[]",
                 r#"{"checkout":{"id":"code-project"}}"#,
+                r#"{"store":"sibling","ticket":{"slug":"TST-EXACT","claimed_by":"agent"}}"#,
                 "[]",
             ],
         )
     });
     let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
-        .args(["--project", "."])
+        .args(&args)
         .current_dir(&nested)
         .env("HOTSHEET_HOME", &home)
         .stdin(Stdio::piped())
@@ -173,6 +188,27 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
             true,
         )
         .unwrap();
+    // HS2-EM6YWP: exercise claim through the generated project MCP entry after
+    // linking a sibling source. The server HTTP regression checks persistence.
+    writeln!(
+        stdin,
+        "{}",
+        serde_json::json!({
+            "jsonrpc":"2.0", "id":4, "method":"tools/call",
+            "params":{"name":"hotsheet_claim","arguments":{
+                "id":"TST-EXACT", "worker":"agent", "actor_role":"ai", "actor_id":"agent"
+            }}
+        })
+    )
+    .unwrap();
+    let mut claimed = String::new();
+    stdout.read_line(&mut claimed).unwrap();
+    let claimed: serde_json::Value = serde_json::from_str(&claimed).unwrap();
+    assert_eq!(claimed["id"], 4);
+    assert_ne!(claimed["result"]["isError"], true, "{claimed}");
+    let claimed_ticket: serde_json::Value =
+        serde_json::from_str(claimed["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(claimed_ticket["ticket"]["claimed_by"], "agent");
     writeln!(stdin, "{}", query(2)).unwrap();
     let mut relinked = String::new();
     stdout.read_line(&mut relinked).unwrap();
@@ -213,15 +249,34 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
         String::from_utf8_lossy(&output.stderr)
     );
     let paths = server.join().unwrap();
-    assert_eq!(paths[0], "POST /projects/open HTTP/1.1");
+    assert_eq!(
+        paths[0].lines().next(),
+        Some("POST /projects/open HTTP/1.1")
+    );
     assert!(
         paths[1].starts_with("GET /checkouts/code-project/tickets"),
         "{:?}",
         paths
     );
-    assert_eq!(paths[2], "POST /projects/open HTTP/1.1");
-    assert!(paths[3].starts_with("GET /checkouts/code-project/tickets"));
+    assert_eq!(
+        paths[2].lines().next(),
+        Some("POST /projects/open HTTP/1.1")
+    );
+    assert_eq!(
+        paths[3].lines().next(),
+        Some("POST /checkouts/code-project/tickets/TST-EXACT/claim HTTP/1.1")
+    );
+    assert!(paths[3].contains("\"worker\":\"agent\""), "{}", paths[3]);
+    assert!(
+        paths[3].contains("\"actor\":{\"id\":\"agent\",\"role\":\"ai\"}"),
+        "{}",
+        paths[3]
+    );
+    assert!(paths[4].starts_with("GET /checkouts/code-project/tickets"));
     let replacement_paths = replacement_server.join().unwrap();
-    assert_eq!(replacement_paths[0], "POST /projects/open HTTP/1.1");
+    assert_eq!(
+        replacement_paths[0].lines().next(),
+        Some("POST /projects/open HTTP/1.1")
+    );
     assert!(replacement_paths[1].starts_with("GET /checkouts/code-project/tickets"));
 }

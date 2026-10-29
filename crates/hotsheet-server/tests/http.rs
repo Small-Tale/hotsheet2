@@ -16259,6 +16259,144 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
 }
 
 #[tokio::test]
+async fn hs2_em6ywp_checkout_claim_lifecycle_uses_sibling_store() {
+    let (_primary, state) = state();
+    let sibling = tempfile::tempdir().unwrap();
+    FsStore::init(sibling.path(), &StoreMetadata::new("TST")).unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let hosted = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(&serde_json::json!({"path":sibling.path()}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(hosted.status(), StatusCode::CREATED);
+    let store_id = body_json(hosted).await["id"].as_str().unwrap().to_owned();
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root":project.path(),"alias":"fixture","stores":[sibling.path()]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/stores/{store_id}/tickets"),
+            Some(r#"{"title":"Synthetic sibling claim"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    let slug = created["slug"].as_str().unwrap();
+    let qualified_id = created["qualified_id"].as_str().unwrap();
+
+    let wrong_store = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/claim"),
+            Some(r#"{"worker":"agent"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(wrong_store.status(), StatusCode::NOT_FOUND);
+
+    let claimed = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/fixture/tickets/{slug}/claim"),
+            Some(r#"{"worker":"agent","eta":"5m"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(claimed.status(), StatusCode::OK);
+    let claimed = body_json(claimed).await;
+    assert_eq!(claimed["claimed_by"], "agent");
+    assert_eq!(claimed["claim_count"], 1);
+    assert_eq!(claimed["status"], "started");
+    assert_eq!(claimed["qualified_id"], qualified_id);
+    assert_eq!(claimed["store"], store_id);
+
+    let noted = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/fixture/tickets/{qualified_id}"),
+            Some(r#"{"note":"Synthetic claim note","actor":{"role":"ai","id":"agent"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(noted.status(), StatusCode::OK);
+    let noted = body_json(noted).await;
+    let note = noted["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["text"] == "Synthetic claim note")
+        .unwrap();
+    assert_eq!(note["actor"]["role"], "ai");
+    assert_eq!(note["actor"]["id"], "agent");
+
+    let renewed = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/fixture/tickets/{qualified_id}/renew"),
+            Some(r#"{"worker":"agent","lease_minutes":60}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(renewed.status(), StatusCode::OK);
+    assert_eq!(body_json(renewed).await["claimed_by"], "agent");
+
+    let wrong_worker = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/fixture/tickets/{slug}/release"),
+            Some(r#"{"worker":"other"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(wrong_worker.status().is_client_error());
+
+    let released = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/fixture/tickets/{slug}/release"),
+            Some(r#"{"worker":"agent"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(released.status(), StatusCode::OK);
+    let released = body_json(released).await;
+    assert!(released["claimed_by"].is_null());
+    assert_eq!(released["claim_count"], 1);
+    assert_eq!(released["claim_history"][2]["kind"], "release");
+    assert!(
+        released["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note["text"] == "Synthetic claim note" && note["actor"]["id"] == "agent")
+    );
+}
+
+#[tokio::test]
 async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     // Inject the machine home so the lock files land in a temp dir without mutating the
     // process-global environment (HS2-NYZ3PS).
