@@ -30,6 +30,22 @@ pub struct BackendError {
     pub message: String,
 }
 
+/// HS2-9DV32Q: retain the historical array for a complete checkout read, but
+/// make an incomplete read impossible to mistake for one.
+fn checkout_array_result(value: Value, partial: bool, truncated: bool) -> Value {
+    if !value.is_array() || (!partial && !truncated) {
+        return value;
+    }
+    let mut warnings = Vec::new();
+    if partial {
+        warnings.push("Results are partial: one or more ticket sources were omitted.");
+    }
+    if truncated {
+        warnings.push("Results are truncated: the requested limit omitted matching tickets; use page_size and cursor to read all rows.");
+    }
+    json!({ "items": value, "partial": partial, "truncated": truncated, "warnings": warnings })
+}
+
 /// Handle one JSON-RPC message. Returns the response value, or `None` for a
 /// notification (no `id`). Transport-level infallible.
 pub fn handle_message(msg: &Value, backend: &dyn Backend) -> Option<Value> {
@@ -137,7 +153,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Complete unpaged checkout results are arrays; partial or truncated results are {items, partial, truncated, warnings}. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -1098,7 +1114,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 // ---- direct-core backend (serverless) --------------------------------------------
 
 mod core_backend {
-    use super::{Backend, BackendError, decode_checkout_reference};
+    use super::{Backend, BackendError, checkout_array_result, decode_checkout_reference};
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
@@ -1554,7 +1570,7 @@ mod core_backend {
                             // Each source reads at most one row past the checkout cap; the
                             // merged result is bounded below with checkout-specific errors.
                             let mut source = build_query(&source_query, store.root())?;
-                            source.limit = Some(order.limit.unwrap_or(max + 1));
+                            source.limit = Some(order.limit.map_or(max + 1, |limit| limit + 1));
                             for mut row in backend.store_rows(&source, &source_query)? {
                                 if let Some(obj) = row.as_object_mut() {
                                     obj.insert(
@@ -1569,12 +1585,16 @@ mod core_backend {
                             all,
                             order.sort,
                             order.descending,
-                            Some(order.limit.unwrap_or(max + 1)),
+                            Some(order.limit.map_or(max + 1, |limit| limit + 1)),
                         );
                         if order.limit.is_none() && all.len() > max {
                             return Err(bad_request(format!(
                                 "more than {max} tickets match; pass limit (at most {max}) or page with page_size and cursor"
                             )));
+                        }
+                        let truncated = order.limit.is_some_and(|limit| all.len() > limit);
+                        if let Some(limit) = order.limit {
+                            all.truncate(limit);
                         }
                         let fields = query_fields(query)?;
                         for row in &mut all {
@@ -1587,7 +1607,11 @@ mod core_backend {
                                 obj.insert("store".into(), store);
                             }
                         }
-                        return Ok(Value::Array(all));
+                        let partial = checkout
+                            .sources
+                            .iter()
+                            .any(|source| source.provider != "git");
+                        return Ok(checkout_array_result(Value::Array(all), partial, truncated));
                     }
                     let id = suffix.trim_start_matches('/');
                     let settings = checkout.settings();
@@ -3043,8 +3067,15 @@ impl HttpBackend {
     ) -> Result<Value, BackendError> {
         match res {
             Ok(resp) => {
+                let partial = resp.header("x-hotsheet-partial") == Some("true");
+                let truncated = resp.header("x-hotsheet-truncated") == Some("true");
                 let text = resp.into_string().unwrap_or_default();
-                Ok(serde_json::from_str(&text).unwrap_or(Value::Null))
+                let value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                if path.starts_with("/checkouts/") && path.ends_with("/tickets") {
+                    Ok(checkout_array_result(value, partial, truncated))
+                } else {
+                    Ok(value)
+                }
             }
             Err(ureq::Error::Status(code, resp)) => {
                 let text = resp.into_string().unwrap_or_default();
@@ -3319,6 +3350,49 @@ mod tests {
         server.join().unwrap();
     }
 
+    /// HS2-9DV32Q: the HTTP shim must carry checkout array headers into the
+    /// tool result while preserving the legacy shape for a complete response.
+    #[test]
+    fn hs2_9dv32q_http_checkout_query_reports_partial_and_truncated() {
+        use std::io::{Read, Write};
+
+        for (partial, truncated) in [(false, false), (true, false), (false, true), (true, true)] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 2048];
+                let _ = stream.read(&mut request).unwrap();
+                let body = r#"[{"slug":"HS-ONE"}]"#;
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nx-hotsheet-partial: {partial}\r\nx-hotsheet-truncated: {truncated}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            });
+            let backend = HttpBackend::new(format!("http://{addr}"), "synthetic-secret");
+            let result = call(
+                &backend,
+                "hotsheet_query",
+                json!({ "checkout": "synthetic" }),
+            );
+            if partial || truncated {
+                assert_eq!(result["items"][0]["slug"], "HS-ONE");
+                assert_eq!(result["partial"], partial);
+                assert_eq!(result["truncated"], truncated);
+                let warnings = result["warnings"].as_array().unwrap();
+                assert_eq!(
+                    warnings.len(),
+                    usize::from(partial) + usize::from(truncated)
+                );
+            } else {
+                assert_eq!(result[0]["slug"], "HS-ONE");
+            }
+            server.join().unwrap();
+        }
+    }
+
     #[test]
     fn tools_list_has_the_hotsheet_tools() {
         let r = handle_message(&req("tools/list", json!({})), &FakeBackend::default()).unwrap();
@@ -3497,7 +3571,8 @@ mod tests {
         assert_eq!(bare.status, Some(400));
         assert_eq!(bare.message, "cursor requires page_size");
         let capped = get(&[("limit", "500"), ("sort", "title")]).unwrap();
-        let capped = capped.as_array().unwrap();
+        assert_eq!(capped["truncated"], true);
+        let capped = capped["items"].as_array().unwrap();
         assert_eq!(capped.len(), 500);
         assert_eq!(capped[0]["title"], "ticket 000");
         assert_eq!(
@@ -3507,6 +3582,87 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    /// HS2-9DV32Q: a serverless checkout cannot read hosted sources, so the
+    /// available Git rows carry the same partial warning as the HTTP backend.
+    #[test]
+    fn hs2_9dv32q_serverless_checkout_query_reports_partial_and_truncated() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let store_root = root.path().join("HS.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        for title in ["Alpha", "Bravo"] {
+            ops::create(
+                &store,
+                hotsheet_model::Ulid::new(),
+                "HS",
+                hotsheet_model::Timestamp::new("2026-10-01T00:00:00Z"),
+                hotsheet_ticketing::NewTicket {
+                    title: title.into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &checkout_root,
+                Some("project"),
+                None,
+                vec![store_root.clone()],
+            )
+            .unwrap();
+        let backend = CoreBackend::new(FsStore::open(&store_root).unwrap()).with_checkout_registry(
+            hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+                root.path().join("home/checkouts.json"),
+            ),
+        );
+        let query = |backend: &dyn Backend, limit: usize| {
+            call(
+                backend,
+                "hotsheet_query",
+                json!({ "checkout": checkout.id, "sort": "title", "limit": limit }),
+            )
+        };
+        let complete = query(&backend, 2);
+        assert!(complete.is_array(), "{complete}");
+        let truncated = query(&backend, 1);
+        assert_eq!(truncated["items"].as_array().unwrap().len(), 1);
+        assert_eq!(truncated["partial"], false);
+        assert_eq!(truncated["truncated"], true);
+        assert!(
+            truncated["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("requested limit")
+        );
+
+        registry
+            .add_source(
+                &checkout.id,
+                hotsheet_ticketing::checkouts::TicketSource {
+                    connection_id: "github-synthetic".into(),
+                    provider: "github".into(),
+                    locator: "synthetic/project".into(),
+                },
+                false,
+            )
+            .unwrap();
+        let partial = query(&backend, 2);
+        assert_eq!(partial["items"].as_array().unwrap().len(), 2);
+        assert_eq!(partial["partial"], true);
+        assert_eq!(partial["truncated"], false);
+        assert!(
+            partial["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("sources were omitted")
         );
     }
 
@@ -3622,7 +3778,8 @@ mod tests {
             "hotsheet_query",
             json!({"checkout": checkout_root, "fields": "title", "limit": 1}),
         );
-        assert_eq!(by_path.as_array().unwrap().len(), 1, "{by_path}");
+        assert_eq!(by_path["items"].as_array().unwrap().len(), 1, "{by_path}");
+        assert_eq!(by_path["truncated"], true);
         let resolved = call(
             &backend,
             "hotsheet_resolve_checkout",
@@ -3994,7 +4151,11 @@ mod tests {
             let rows = backend
                 .get(&format!("/checkouts/{}/tickets", checkout.id), &pairs)
                 .unwrap();
-            let rows = rows.as_array().unwrap().clone();
+            let rows = rows
+                .as_array()
+                .or_else(|| rows["items"].as_array())
+                .unwrap()
+                .clone();
             assert!(rows.iter().all(|row| row["store"].is_string()), "{rows:?}");
             rows.iter()
                 .map(|row| row["title"].as_str().unwrap().to_owned())

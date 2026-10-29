@@ -756,7 +756,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   through the machine-local server; `hotsheet-mcp --path <store>` provides explicit
   serverless, direct-to-disk access, and `--server <url> --secret <s>` proxies a running server.
   Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project;
-  `--project .` resolves the code project for portable shared MCP configs.
+  `--project .` resolves the code project for portable shared MCP configs. Its
+  `hotsheet_query` keeps complete unpaged checkout arrays plain and wraps partial
+  or truncated arrays with flags and warnings (HS2-9DV32Q).
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

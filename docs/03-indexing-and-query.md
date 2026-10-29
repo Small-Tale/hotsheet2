@@ -337,8 +337,9 @@ query(filter, sort, text?, paging) -> TicketRow[]
     `400 more than 500 tickets match; pass limit (at most 500) and page with page_after`;
   - `limit` above 500 is `400`;
   - an explicit `limit` accepts truncation; the server flags omitted rows with
-    `x-hotsheet-truncated: true` (the MCP tool, which returns only the row array, relies
-    on the caller's explicit `limit` and a full page as the signal to continue).
+    `x-hotsheet-truncated: true` (MCP wraps a truncated checkout array in
+    `{items, partial, truncated, warnings}`; store-level reads use the explicit
+    `limit` and a full page as the signal to continue).
 
   The provider-qualified array `GET /providers/{connection_id}/tickets` follows the same
   bound (HS2-6YXGKH), so a large GitHub, GitLab, or Jira project is never serialized into
@@ -387,7 +388,13 @@ query(filter, sort, text?, paging) -> TicketRow[]
   responses include `source_errors` when a provider could not be read; their `counts`
   then cover only successfully read sources, so the client shows a partial-data warning
   alongside the available tickets. Unpaged responses retain their array shape and set
-  `x-hotsheet-partial: true` when a source was omitted. A fresh page after recovery
+  `x-hotsheet-partial: true` when a source was omitted. MCP `hotsheet_query` preserves
+  a complete unpaged checkout result as a plain array, but wraps a partial or
+  truncated result in `{items, partial, truncated, warnings}`. The warning strings
+  identify omitted sources and a limit that cut rows. The HTTP backend reads both
+  response headers; without a server, the MCP backend marks a checkout partial
+  when it has external sources that only the server can read. The serverless backend
+  detects truncation by reading one additional merged row. A fresh page after recovery
   includes the source again; callers restart pagination rather than continuing a
   partial cursor when they need the recovered source's older rows (HS2-190BAS).
   The web client carries partial status through checkout search, sidebar search counts,
