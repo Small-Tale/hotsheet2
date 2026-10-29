@@ -261,6 +261,64 @@ The authorized credential is stored in the keychain registry under the returned
 `credential_reference`; clients then link it to a connection without ever holding the
 token. Attachment copy is a user-initiated copy (§16.9), not synchronization.
 
+### 16.8.1 Serverless MCP hosted reads (HS2-A4VJZX design)
+
+**Selected boundary (maintainer review, HS2-A4VJZX):** a trusted,
+machine-local read broker owns credential resolution and the provider request. The
+AI-tool-hosted MCP process receives normalized ticket rows, cursor data, and
+`source_errors`; it never receives a provider access or refresh token, an OS-keychain
+master, or the server's general `X-Hotsheet-Secret`. Reuse the server's provider and
+page-merge code rather than adding a second provider implementation. `--project`
+already routes MCP reads through the machine server. Pure `--path`/`CoreBackend`
+needs a separately provisioned broker connection for hosted sources; spawning a
+credential-bearing helper from inside the AI tool's sandbox does not establish a
+trusted boundary.
+
+The broker accepts only checkout-scoped list/detail reads for configured sources.
+Its authorization is a separate, short-lived, read-only capability bound to the
+checkout identity and allowed operations, never the current general server bearer.
+The trusted host launcher provisions and renews that capability; the MCP process
+cannot mint it or exchange it for a broader credential. The broker validates the
+requested connection against the checkout's links and applies the same filters,
+sort, page limits, and `provider:{connection_id}` cursor source keys as the server.
+Keep capability lifetime no longer than five minutes and revoke it when the broker
+session ends. HS2-TVWKMS owns the longer-term opaque-reference resolver and TTL
+strategy; neither that resolver nor this broker grants a raw token to MCP. The
+precise launcher and read-capability protocol are implementation work for
+HS2-C1E8Q4; today's server bearer is not a substitute.
+
+Credential resolution runs only in the trusted broker process. A headless read
+must fail promptly and explicitly if the OS store is locked, denies access, or
+would require an interactive prompt; it must not wait for a prompt inside the MCP
+process. Platform tests must establish this behavior on macOS and the other
+supported credential stores. Do not assume an AI-tool sandbox can reach a native
+keychain, or that a child process escapes the sandbox. The broker may use a
+pre-authorized host process, but must not weaken the encrypted-envelope or
+explicit environment-fallback rules in §4.7.1.
+
+If no trusted broker is available, a capability is expired, or one source's
+credential or provider read fails, return the available Git rows and a named
+`source_errors` entry for every omitted `provider:{connection_id}`. Mark the
+result partial in both paged and unpaged MCP shapes. Do not silently return a
+Git-only result that appears complete. Preserve the shared cursor codec and source
+set validation so a cursor can move between the brokered and server reads; report
+an invalid or changed source set explicitly rather than skipping rows.
+
+| Threat or failure                                                                 | Required control and observable result                                                                                                                                                |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write-capable provider token reaches the AI process, tool output, logs, or a dump | Resolve and use credentials only in the trusted broker; return rows and sanitized errors, never tokens. Keep token lifetime and in-memory copies minimal and zeroize where practical. |
+| General server bearer enables writes from an MCP read path                        | Use a distinct read-only, checkout-scoped capability with a short TTL; reject write routes and arbitrary connection ids.                                                              |
+| Stolen, replayed, or stale read capability                                        | Bind to the checkout and operations, expire within five minutes, revoke on session end, and reject expired or mismatched requests. Avoid logging capability values.                   |
+| OS-keychain prompt or sandbox denial stalls headless work                         | Resolve only in the host broker with a bounded, noninteractive failure path; return named `source_errors` and partial Git results. Verify on each supported platform.                 |
+| Provider outage or malformed response hides a hosted source                       | Isolate each source failure, sanitize the diagnostic, and preserve other sources' rows with an explicit partial marker.                                                               |
+| Different merge, filter, or cursor semantics omit or duplicate rows               | Share provider and page-merge implementation and test server/broker cursor interchange, source failures, and source-set changes with synthetic data.                                  |
+
+Before shipping, test missing, forged, expired, and wrong-checkout capabilities;
+unauthorized methods and connection ids; locked/denied credential stores without
+prompt hangs; provider failures; and both read shapes with Git-plus-hosted sources.
+Assert that no credential, capability, or customer content appears in MCP output,
+errors, or diagnostics. No customer data is needed for these tests.
+
 ## 16.9 No automatic cross-provider mirroring
 
 Hot Sheet does **not** continuously mirror a ticket between two authoritative
