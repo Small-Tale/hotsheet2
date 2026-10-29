@@ -3299,8 +3299,9 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  // Eight comfortable cards, the compact-density pair, and two long-code overflow fixtures.
-  await expect(notes).toHaveCount(12);
+  // Eight comfortable cards, the compact-density pair, two unsent-response states,
+  // and two long-code overflow fixtures (HS2-VBFSZJ).
+  await expect(notes).toHaveCount(14);
   for (const id of ['compact-regular', 'compact-activity']) {
     const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
     await expect(compact).toHaveAttribute('data-density', 'compact');
@@ -3311,6 +3312,10 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     await expect(frame).toHaveCSS('border-radius', '12px');
   }
   const noteById = (id: string) => page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
+  for (const id of ['changed-response', 'removed-response'])
+    await expect(noteById(id).getByRole('textbox', { name: 'Feedback response' })).toHaveValue('An unsent reply');
+  await expect(noteById('changed-response').getByRole('button', { name: 'No Response Needed' })).toBeVisible();
+  await expect(noteById('removed-response').getByRole('button', { name: 'No Response Needed' })).toHaveCount(0);
   for (const [id, kind, icon] of [
     ['regular', 'regular', 'message-square-text'],
     ['status', 'status', 'refresh-cw'],
