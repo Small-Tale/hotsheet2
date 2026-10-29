@@ -170,6 +170,35 @@ impl ProviderConfigRegistry {
         &self.path
     }
 
+    /// Atomically change provider configuration across processes. Every production
+    /// read-modify-write path uses the stable sibling lock, so a webhook setup
+    /// cannot overwrite a concurrent connection edit (HS2-SGQ183).
+    pub fn update<T>(
+        &self,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, ProviderError>,
+    ) -> Result<T, ProviderError> {
+        use std::fs::OpenOptions;
+        let lock_path = self.path.with_extension("json.lock");
+        if let Some(parent) = lock_path.parent() {
+            std::fs::create_dir_all(parent).map_err(StoreError::Io)?;
+        }
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(StoreError::Io)?;
+        let _guard = crate::file_lock::FileLock::acquire(file).map_err(StoreError::Io)?;
+        let mut connections = self.load()?;
+        let before = connections.clone();
+        let result = change(&mut connections)?;
+        if connections != before {
+            self.save(&connections)?;
+        }
+        Ok(result)
+    }
+
     /// Disable or re-enable one connection (HS2-SF6W34). Idempotent; `None` when no such
     /// connection exists. Shared by the server route and the headless CLI.
     pub fn set_disabled(
@@ -177,20 +206,16 @@ impl ProviderConfigRegistry {
         connection_id: &str,
         disabled: bool,
     ) -> Result<Option<ProviderConnection>, ProviderError> {
-        let mut connections = self.load()?;
-        let Some(connection) = connections
-            .iter_mut()
-            .find(|connection| connection.id == connection_id)
-        else {
-            return Ok(None);
-        };
-        if connection.disabled != disabled {
+        self.update(|connections| {
+            let Some(connection) = connections
+                .iter_mut()
+                .find(|connection| connection.id == connection_id)
+            else {
+                return Ok(None);
+            };
             connection.disabled = disabled;
-            let updated = connection.clone();
-            self.save(&connections)?;
-            return Ok(Some(updated));
-        }
-        Ok(Some(connection.clone()))
+            Ok(Some(connection.clone()))
+        })
     }
 
     /// The connection's record when it is disabled; lets hosts refuse before contacting it.

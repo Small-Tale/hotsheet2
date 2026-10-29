@@ -154,6 +154,13 @@ enum Cmd {
     },
     /// Create or update a GitHub Issues connection in this ticket store, safely repeatable.
     GithubConnect(GithubConnectArgs),
+    /// Configure a GitHub webhook key and print exact external callback steps.
+    GithubWebhookSetup {
+        connection: String,
+        /// Existing machine key reference created with `key set`.
+        #[arg(long)]
+        secret_ref: String,
+    },
     /// Create or update a GitLab or Jira ticket source, safely repeatable: the same validated
     /// workflow as the client form, optionally reusing a signed-in `--account`.
     ProviderConnect(ProviderConnectArgs),

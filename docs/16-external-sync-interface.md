@@ -333,12 +333,19 @@ Unsupported claims, dependencies, review requests, and query
 dimensions are declared or rejected rather than discarded. Attachments are supported only
 through a configured assets repository (below).
 
-The payload parser does not provide signature verification, a host ingestion route or
-subscription setup. GitHub, GitLab and Jira therefore report `watch:false` (HS2-FG7ZMF);
-HS2-SGQ183 owns authenticated delivery/replay and idempotent setup. Metadata descriptors
+HS2-SGQ183 adds a source-bound, HMAC-authenticated GitHub ingress and idempotent
+key-reference setup; the host re-reads the exact issue and publishes a cursor-bearing
+invalidation through its bounded event ring. An external HTTPS callback must still be
+configured and verified as described in [04](04-core-server-cli.md). GitHub, GitLab and
+Jira keep static `watch:false` (HS2-FG7ZMF) because configuration alone cannot
+prove an external callback is installed and reachable. The server reports GitHub
+`watch:true` only after a successful signed delivery in its current process and
+while the current source remains linked, enabled, and keyed with the verified value.
+Rotating the value under the same key reference requires a new verified delivery.
+Static metadata descriptors
 are constructed from validated configuration without creating a live adapter or resolving
-credentials; they share the live provider's canonical capability construction. Coordination
-support reports do not equate implemented native reads with remote availability or native
+credentials; the server checks its machine key before advertising verified watch support.
+Coordination support reports do not equate implemented native reads with remote availability or native
 claim authority. HS2-BPKM76 owns the absent native claim/release evidence; HS2-3ETJ26 remains
 the umbrella for actual external coordination.
 

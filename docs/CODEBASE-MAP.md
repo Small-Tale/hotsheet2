@@ -1023,7 +1023,13 @@ the same headless/GUI path (HS2-7E5R4A).
 Source adapters beyond the selected local queue are explicit unsupported operations
 (HS2-3ETJ26); remote CI/app wake requires an actual supported route, not polling.
 External descriptors share configuration-owned canonical capabilities with live adapters;
-GitHub/Jira/GitLab watch remains false until HS2-SGQ183 implements a real subscription.
+`crates/hotsheet-server/src/github_webhooks.rs` receives source-bound GitHub HMAC
+deliveries, re-reads the issue, and emits through the existing bounded event
+cursor ring (HS2-SGQ183). CLI and HTTP setup share
+`hotsheet-extsync/src/github_webhook_setup.rs` to record the machine key
+reference idempotently. Callback reachability remains a manual setup step.
+Static GitHub/Jira/GitLab watch capabilities stay false; the server's GitHub
+descriptor becomes true after a verified delivery for the current source.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home.

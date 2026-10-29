@@ -28,6 +28,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Providers { json } => cmd_providers(path, json),
         Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
         Cmd::GithubConnect(args) => cmd_github_connect(path, args),
+        Cmd::GithubWebhookSetup {
+            connection,
+            secret_ref,
+        } => cmd_github_webhook_setup(path, &connection, &secret_ref),
         Cmd::ProviderConnect(args) => cmd_provider_connect(path, args),
         Cmd::ProviderAttach {
             connection,
@@ -224,6 +228,50 @@ pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     Ok(())
 }
 
+/// Headless counterpart of `PUT /providers/{connection_id}/webhook`: both call the
+/// same idempotent configuration workflow and retain only a key reference.
+pub(crate) fn cmd_github_webhook_setup(
+    path: &Path,
+    connection_id: &str,
+    secret_ref: &str,
+) -> Result<()> {
+    KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
+        .get(secret_ref)
+        .context(
+            "webhook key reference unavailable; run `hotsheet-cli key set <reference>` first",
+        )?;
+    let store = FsStore::open(path)?;
+    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let connection = hotsheet_extsync::configure_webhook(&registry, connection_id, secret_ref)?;
+    println!(
+        "Configured GitHub webhook key reference for {}.",
+        connection.id
+    );
+    println!(
+        "If this source is not linked to a checkout, run `hotsheet-cli checkout add-source <CHECKOUT> {} github {}`.",
+        connection.id, connection.locator
+    );
+    println!(
+        "1. Make this server reachable through HTTPS; forward only /webhooks/github/{} to its local listener.",
+        connection.id
+    );
+    println!(
+        "2. In the provider repository {} webhook settings, set the payload URL to that HTTPS origin plus /webhooks/github/{}.",
+        connection.locator, connection.id
+    );
+    println!(
+        "3. Select application/json, the issues and issue_comment events, and the secret stored under key reference {secret_ref}. Preserve the raw request body and GitHub signature, event, and delivery headers.",
+    );
+    println!(
+        "4. Send a synthetic test delivery, then inspect GET /providers/{}/webhook with the local server bearer; active becomes true only after a signed delivery is verified and re-read.",
+        connection.id
+    );
+    println!(
+        "5. If a delivery fails, fix reachability or credentials and redeliver it from the provider's Recent Deliveries. GitHub does not retry failed deliveries automatically."
+    );
+    Ok(())
+}
+
 pub(crate) fn cmd_github_sign_in(web_base: &str) -> Result<()> {
     const BUNDLED_ID: &str = include_str!("../../../hotsheet-server/github-app-client-id.txt");
     let client_id =
@@ -391,12 +439,15 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
         disabled: existing.is_some_and(|item| item.disabled),
     };
     let replacing = existing.map(|item| item.id.clone());
-    let updated = hotsheet_extsync::updated_connections(
-        connections,
-        connection.clone(),
-        replacing.as_deref(),
-    )?;
-    registry.save(&updated)?;
+    registry.update(|connections| {
+        let updated = hotsheet_extsync::updated_connections(
+            std::mem::take(connections),
+            connection.clone(),
+            replacing.as_deref(),
+        )?;
+        *connections = updated;
+        Ok(())
+    })?;
     if let Some(reference) = &checkout {
         checkout_registry.add_registered_source(
             &registry,

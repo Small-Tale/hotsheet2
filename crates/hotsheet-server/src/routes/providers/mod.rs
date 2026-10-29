@@ -55,8 +55,11 @@ pub(crate) async fn list_providers(
         .collect::<Vec<_>>();
     for connection in connections {
         if connection.provider != "git" {
-            descriptors
-                .push(hotsheet_extsync::descriptor(&connection).map_err(provider_transfer_error)?);
+            let mut descriptor =
+                hotsheet_extsync::descriptor(&connection).map_err(provider_transfer_error)?;
+            descriptor.capabilities.watch =
+                crate::github_webhooks::watch_ready(&state, &connection);
+            descriptors.push(descriptor);
         }
     }
     descriptors.extend(state.injected_providers.descriptors());
@@ -148,7 +151,12 @@ pub(crate) async fn list_checkout_providers(
             .iter()
             .find(|connection| connection.id == source.connection_id)
         {
-            Some(hotsheet_extsync::descriptor(connection).map_err(provider_transfer_error)?)
+            let mut descriptor =
+                hotsheet_extsync::descriptor(connection).map_err(provider_transfer_error)?;
+            descriptor.capabilities.watch = source.provider == connection.provider
+                && source.locator == connection.locator
+                && crate::github_webhooks::watch_ready(&state, connection);
+            Some(descriptor)
         } else {
             injected
                 .iter()
@@ -194,15 +202,30 @@ pub(crate) async fn list_provider_connections(
 
 fn save_provider_connections(
     state: &AppState,
-    connections: Vec<ProviderConnection>,
-    connection: ProviderConnection,
+    mut connection: ProviderConnection,
     replacing: Option<&str>,
-) -> Result<(), ApiError> {
-    let connections = hotsheet_extsync::updated_connections(connections, connection, replacing)
-        .map_err(provider_connection_error)?;
+) -> Result<ProviderConnection, ApiError> {
     ProviderConfigRegistry::new(state.store.root().join("providers.json"))
-        .save(&connections)
-        .map_err(provider_transfer_error)
+        .update(|connections| {
+            if let Some(id) = replacing {
+                connection.disabled = connections
+                    .iter()
+                    .any(|current| current.id == id && current.disabled);
+            }
+            let updated = hotsheet_extsync::updated_connections(
+                std::mem::take(connections),
+                connection.clone(),
+                replacing,
+            )?;
+            let saved = updated
+                .iter()
+                .find(|item| item.id == connection.id)
+                .cloned()
+                .expect("updated connection retained");
+            *connections = updated;
+            Ok(saved)
+        })
+        .map_err(provider_connection_error)
 }
 
 /// The HTTP status of a rejected connection record.
@@ -255,7 +278,7 @@ pub(crate) async fn create_provider_connection(
         );
     }
     fill_reused_sign_in_endpoint(&state, &mut connection);
-    save_provider_connections(&state, connections, connection.clone(), None)?;
+    let connection = save_provider_connections(&state, connection, None)?;
     Ok((StatusCode::CREATED, Json(connection)))
 }
 
@@ -410,11 +433,12 @@ pub(crate) async fn set_checkout_provider_connection_disabled(
     Json(body): Json<ProviderConnectionDisabledBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     checkout_linking(&state, &reference, &connection_id)?;
-    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .set_disabled(&connection_id, body.disabled)
         .map_err(provider_transfer_error)?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found(&connection_id))
+        .ok_or_else(|| ApiError::not_found(&connection_id))?;
+    crate::github_webhooks::forget_connection(&state, &connection_id);
+    Ok(Json(connection))
 }
 
 fn update_connection_record(
@@ -423,16 +447,10 @@ fn update_connection_record(
     mut connection: ProviderConnection,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     connection.id = connection_id.clone();
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
-        .load()
-        .map_err(provider_transfer_error)?;
-    // Only the dedicated toggle changes whether a connection is disabled (HS2-SF6W34); an
-    // ordinary settings edit keeps it as it was.
-    connection.disabled = connections
-        .iter()
-        .any(|existing| existing.id == connection_id && existing.disabled);
-    save_provider_connections(state, connections, connection.clone(), Some(&connection_id))?;
+    // The transaction preserves the current disabled flag and webhook setup.
+    let connection = save_provider_connections(state, connection, Some(&connection_id))?;
     forget_live_provider(state, &connection_id);
+    crate::github_webhooks::forget_connection(state, &connection_id);
     // Checkout links copy the locator; an edit reaches every project that shares the
     // connection (HS2-RCBKA3).
     state
@@ -460,6 +478,7 @@ pub(crate) async fn set_provider_connection_disabled(
         .map_err(provider_transfer_error)?
         .ok_or_else(|| ApiError::not_found(&connection_id))?;
     forget_live_provider(&state, &connection_id);
+    crate::github_webhooks::forget_connection(&state, &connection_id);
     Ok(Json(connection))
 }
 
@@ -493,6 +512,7 @@ pub(crate) async fn delete_provider_connection(
             other => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
         })?;
         forget_live_provider(&state, &connection_id);
+        crate::github_webhooks::forget_connection(&state, &connection_id);
         Ok(Json(removed))
     })
     .await

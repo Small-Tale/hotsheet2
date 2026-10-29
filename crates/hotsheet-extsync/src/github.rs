@@ -202,6 +202,52 @@ pub fn multipart_file_body(
 pub struct GitHubWebhook {
     pub action: String,
     pub native_id: String,
+    /// Repository identity from the signed payload; the host binds it to one connection.
+    pub repository: String,
+}
+
+/// Verify GitHub's SHA-256 webhook signature before parsing any untrusted payload.
+/// The comparison examines all 32 digest bytes even when an early byte differs.
+pub fn verify_webhook_signature(secret: &[u8], payload: &[u8], signature: &str) -> bool {
+    let Some(hex) = signature.strip_prefix("sha256=") else {
+        return false;
+    };
+    if secret.is_empty() || hex.len() != 64 {
+        return false;
+    }
+    let mut supplied = [0_u8; 32];
+    for (index, pair) in hex.as_bytes().chunks_exact(2).enumerate() {
+        let Some(high) = (pair[0] as char).to_digit(16) else {
+            return false;
+        };
+        let Some(low) = (pair[1] as char).to_digit(16) else {
+            return false;
+        };
+        supplied[index] = ((high << 4) | low) as u8;
+    }
+    let mut key = [0_u8; 64];
+    if secret.len() > key.len() {
+        key[..32].copy_from_slice(&Sha256::digest(secret));
+    } else {
+        key[..secret.len()].copy_from_slice(secret);
+    }
+    let mut inner = Sha256::new();
+    for byte in key {
+        inner.update([byte ^ 0x36]);
+    }
+    inner.update(payload);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha256::new();
+    for byte in key {
+        outer.update([byte ^ 0x5c]);
+    }
+    outer.update(inner_digest);
+    let expected = outer.finalize();
+    let mismatch = expected
+        .iter()
+        .zip(supplied)
+        .fold(0_u8, |difference, (a, b)| difference | (*a ^ b));
+    mismatch == 0
 }
 
 pub fn parse_webhook(event: &str, payload: &[u8]) -> Result<Option<GitHubWebhook>, ProviderError> {
@@ -213,6 +259,14 @@ pub fn parse_webhook(event: &str, payload: &[u8]) -> Result<Option<GitHubWebhook
             ticket: "github-webhook".into(),
             message: format!("invalid webhook payload: {error}"),
         })?;
+    // GitHub sends `issue_comment` for pull requests too; they are outside this
+    // Issues source and must not invalidate a ticket (HS2-SGQ183).
+    if value
+        .pointer("/issue/pull_request")
+        .is_some_and(|value| !value.is_null())
+    {
+        return Ok(None);
+    }
     let number = value
         .get("issue")
         .and_then(|issue| issue.get("number"))
@@ -221,6 +275,19 @@ pub fn parse_webhook(event: &str, payload: &[u8]) -> Result<Option<GitHubWebhook
             ticket: "github-webhook".into(),
             message: "webhook has no issue.number".into(),
         })?;
+    let repository = value
+        .get("repository")
+        .and_then(|repository| repository.get("full_name"))
+        .and_then(Value::as_str)
+        .filter(|name| {
+            name.split_once('/').is_some_and(|(owner, repo)| {
+                !owner.is_empty() && !repo.is_empty() && !repo.contains('/')
+            })
+        })
+        .ok_or_else(|| ProviderError::Conflict {
+            ticket: "github-webhook".into(),
+            message: "webhook has no repository.full_name".into(),
+        })?;
     Ok(Some(GitHubWebhook {
         action: value
             .get("action")
@@ -228,6 +295,7 @@ pub fn parse_webhook(event: &str, payload: &[u8]) -> Result<Option<GitHubWebhook
             .unwrap_or("changed")
             .into(),
         native_id: number.to_string(),
+        repository: repository.into(),
     }))
 }
 
@@ -2030,7 +2098,8 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         offline_mutation: false,
         write_behind: false,
         history: true,
-        // HS2-SGQ183: no authenticated host subscription is implemented yet.
+        // HS2-SGQ183: inbound HMAC delivery exists, but a descriptor cannot prove the
+        // external callback is reachable and still installed; coordination stays off.
         watch: false,
         provider_idempotency: false,
         query_fields: [
@@ -3820,13 +3889,40 @@ mod tests {
     fn webhook_is_an_invalidation_reference_not_a_mirrored_ticket() {
         let event = parse_webhook(
             "issue_comment",
-            br#"{"action":"created","issue":{"number":77},"comment":{"body":"remote"}}"#,
+            br#"{"action":"created","issue":{"number":77},"repository":{"full_name":"synthetic/issues"},"comment":{"body":"remote"}}"#,
         )
         .unwrap()
         .unwrap();
         assert_eq!(event.native_id, "77");
         assert_eq!(event.action, "created");
+        assert_eq!(event.repository, "synthetic/issues");
         assert!(parse_webhook("push", br#"{}"#).unwrap().is_none());
+        assert!(parse_webhook(
+            "issue_comment",
+            br#"{"issue":{"number":8,"pull_request":{"url":"https://github.test/pr/8"}},"repository":{"full_name":"synthetic/issues"}}"#,
+        ).unwrap().is_none());
+    }
+
+    #[test]
+    fn hs2_sgq183_verifies_signed_webhook_bytes_and_repository_binding() {
+        let signature = "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17";
+        assert!(verify_webhook_signature(
+            b"It's a Secret to Everybody",
+            b"Hello, World!",
+            signature,
+        ));
+        assert!(!verify_webhook_signature(
+            b"It's a Secret to Everybody",
+            b"Hello, world!",
+            signature,
+        ));
+        assert!(!verify_webhook_signature(b"", b"Hello, World!", signature));
+        assert!(!verify_webhook_signature(
+            b"It's a Secret to Everybody",
+            b"Hello, World!",
+            "sha256=invalid",
+        ));
+        assert!(parse_webhook("issues", br#"{"issue":{"number":7}}"#).is_err());
     }
 
     #[test]

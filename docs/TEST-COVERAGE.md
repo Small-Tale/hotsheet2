@@ -1,5 +1,21 @@
 # Feature Coverage Matrix
 
+HS2-SGQ183 has synthetic HMAC and repository parsing tests in
+`crates/hotsheet-extsync/src/github.rs`, a shared CLI/HTTP idempotent setup test
+in `crates/hotsheet-extsync/src/github_webhook_setup.rs`, concurrent setup and
+provider-edit preservation in that module and `source_connect.rs`, bounded
+delivery/revision and key-rotation readiness tests in
+`crates/hotsheet-server/src/github_webhooks.rs`, and an in-process real-router
+test in `crates/hotsheet-server/tests/http.rs` for idempotent key-reference setup,
+bad signatures, cross-source rejection, duplicate delivery, cursor emission,
+key rotation under the same reference, disable, and removal. A single-thread
+Tokio router test holds the synthetic authoritative provider read while an idle
+request completes, pinning blocking-pool isolation for slow provider transport;
+a delivery-state test pins retry after request cancellation.
+The existing `events.rs` replay/overflow and web change-stream tests cover consumer
+reconciliation; external callback reachability and GitHub's failed-delivery
+redelivery remain manual checks in `docs/manual-test-plan.md`.
+
 HS2-2Z11A5 covers typed follow-up identity and file round trips in
 `hotsheet-model`, union merge and idempotent source linking in `hotsheet-ticketing`,
 checkout creation plus Code Review diagnostics in the server HTTP suite,

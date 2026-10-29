@@ -90,6 +90,7 @@ impl Cmd {
             Providers { .. }
             | GithubSignIn { .. }
             | GithubConnect(_)
+            | GithubWebhookSetup { .. }
             | ProviderConnect(_)
             | ProviderAttach { .. }
             | ProviderLs { .. }

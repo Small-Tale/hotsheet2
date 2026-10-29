@@ -955,6 +955,47 @@ those flags keeps the repository, and `--no-attachments` removes it (HS2-HSA64D,
 files to a provider-native ticket and fails explicitly when the connection reports no
 attachment support.
 
+GitHub issue change delivery (HS2-SGQ183) uses a separate webhook secret for each
+connection. First create a random webhook secret and store it with `hotsheet-cli key set
+<WEBHOOK_KEY_REFERENCE>`; the command prompts without echo, or reads standard input.
+Run `hotsheet-cli github-webhook-setup <CONNECTION_ID> --secret-ref
+<WEBHOOK_KEY_REFERENCE>` to record the reference and print callback and recovery
+steps headlessly. With the local server bearer, `PUT /providers/<CONNECTION_ID>/webhook` with JSON
+`{"secret_ref":"<WEBHOOK_KEY_REFERENCE>"}` records only that key reference in
+`providers.json` through the same idempotent workflow. Repeating either request is
+safe. `GET` on the same path returns the
+relative delivery path, selected events, content type, key reference, whether the
+source and key are configured, and whether an authenticated delivery succeeded in
+this server process. The secret value is never returned.
+
+In the GitHub repository's webhook settings, set the payload URL to the externally
+reachable HTTPS origin plus the returned `/webhooks/github/<CONNECTION_ID>` path,
+content type `application/json`, secret to the value stored above, and select only
+`issues` and `issue_comment` events. Configure an HTTPS ingress that forwards that
+path to this server; the normal local loopback address cannot be reached by GitHub.
+The ingress must preserve the raw body and `X-Hub-Signature-256`, `X-GitHub-Event`,
+and `X-GitHub-Delivery` headers. GitHub Enterprise uses its own reachable webhook
+origin. A webhook request never accepts the local Hot Sheet bearer in place of its
+HMAC. Disabled connections and signed bodies naming another repository are rejected.
+Each accepted event re-reads the issue from GitHub and emits a cursor-bearing
+`changed` event into the existing bounded WebSocket/long-poll replay stream. The
+client performs its normal authoritative refresh, including on replay overflow.
+Delivery ids and issue revisions are deduplicated in bounded server memory; a
+restart can cause an extra harmless invalidation. Server provider descriptors
+advertise GitHub `watch:true` only after a successful signed delivery bound to
+the current connection, repository, resolved key value, and linked checkout during
+this server process. Rotating the value under the same key reference clears support
+until a delivery verifies with the new value. Disabling or unlinking the source
+clears advertised support.
+The headless coordination source report still refuses remote assignment and
+completion until HS2-BPKM76 and HS2-3ETJ26 add native claim verification and
+event subscription consumption.
+GitHub does not automatically retry a failed webhook delivery. After correcting
+reachability, credentials, or provider-read failure, use the repository's
+**Settings → Webhooks → [hook] → Recent Deliveries → Redeliver** for each failed
+delivery. The GitHub delivery GUID is deduplicated after a successful receipt;
+failed authoritative reads leave it retryable.
+
 `batch <ids…>` accepts the same field and note options as `edit`, reads a `--note-file`
 once, and applies the update to each id independently. It prints JSON with `updated`
 slugs and `errors` containing the requested id and message, like `POST /batch`; an

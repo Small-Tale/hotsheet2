@@ -110,17 +110,18 @@ fn detach_source_with_hook(
         .map(|other| other.id)
         .collect::<Vec<_>>();
     before_provider_save();
-    let mut removed_connection = false;
-    if linked_provider.as_deref() != Some("git") && still_used_by.is_empty() {
-        let mut connections = providers.load()?;
-        let before = connections.len();
-        connections
-            .retain(|connection| connection.id != connection_id || connection.provider == "git");
-        if connections.len() != before {
-            providers.save(&connections)?;
-            removed_connection = true;
-        }
-    }
+    let removed_connection =
+        if linked_provider.as_deref() != Some("git") && still_used_by.is_empty() {
+            providers.update(|connections| {
+                let before = connections.len();
+                connections.retain(|connection| {
+                    connection.id != connection_id || connection.provider == "git"
+                });
+                Ok(connections.len() != before)
+            })?
+        } else {
+            false
+        };
     if !unlinked && !removed_connection {
         return Err(CheckoutError::NotFound(connection_id.into()).into());
     }
@@ -140,11 +141,10 @@ pub fn remove_provider_connection(
     connection_id: &str,
 ) -> Result<ConnectionRemoval, ConnectionRemovalError> {
     let checkouts = checkouts.lock_source_links()?;
-    let mut connections = providers.load()?;
-    let removed = connections
-        .iter()
-        .position(|connection| connection.id == connection_id)
-        .map(|index| connections.remove(index));
+    let removed = providers
+        .load()?
+        .into_iter()
+        .find(|connection| connection.id == connection_id);
     if removed
         .as_ref()
         .is_some_and(|connection| connection.provider == "git")
@@ -172,10 +172,18 @@ pub fn remove_provider_connection(
             Err(error) => return Err(error.into()),
         }
     }
-    if let Some(connection) = &removed {
-        providers.save(&connections)?;
-        report.kept_credential = credential_of(connection).map(str::to_owned);
-    }
+    let removed = providers.update(|connections| {
+        if let Some(index) = connections
+            .iter()
+            .position(|connection| connection.id == connection_id)
+        {
+            Ok(Some(connections.remove(index)))
+        } else {
+            Ok(None)
+        }
+    })?;
+    report.removed_connection = removed.is_some();
+    report.kept_credential = removed.as_ref().and_then(credential_of).map(str::to_owned);
     Ok(report)
 }
 

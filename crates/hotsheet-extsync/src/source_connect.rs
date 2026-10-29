@@ -79,8 +79,11 @@ pub fn connect_source(
     };
     let previous = connections.clone();
     let replacing = existing.as_ref().map(|item| item.id.as_str());
-    let updated = updated_connections(connections, connection.clone(), replacing)?;
-    providers.save(&updated)?;
+    providers.update(|current| {
+        let updated = updated_connections(std::mem::take(current), connection.clone(), replacing)?;
+        *current = updated;
+        Ok(())
+    })?;
     if let Some(link) = checkout {
         let linked = link.registry.add_registered_source(
             providers,
@@ -147,14 +150,26 @@ fn find_existing<'a>(
 
 /// Put back the record `connection_id` as it was in `previous` (or remove a new one).
 fn restore(providers: &ProviderConfigRegistry, previous: &[ProviderConnection], id: &str) {
-    let Ok(mut current) = providers.load() else {
-        return;
-    };
-    current.retain(|item| item.id != id);
-    current.extend(previous.iter().find(|item| item.id == id).cloned());
-    current.sort_by(|a, b| a.id.cmp(&b.id));
     // Best effort: the caller already reports the link failure.
-    let _ = providers.save(&current);
+    let _ = providers.update(|current| {
+        let active_webhook = current
+            .iter()
+            .find(|item| item.id == id)
+            .and_then(|item| item.settings.get("webhook"))
+            .cloned();
+        current.retain(|item| item.id != id);
+        if let Some(mut old) = previous.iter().find(|item| item.id == id).cloned() {
+            // Setup can complete between the provider update and a failed checkout
+            // link. Roll back that provider edit without erasing the newer key ref.
+            if let (Some(settings), Some(webhook)) = (old.settings.as_object_mut(), active_webhook)
+            {
+                settings.insert("webhook".into(), webhook);
+            }
+            current.push(old);
+        }
+        current.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(())
+    });
 }
 
 #[cfg(test)]
@@ -214,6 +229,29 @@ mod tests {
             providers,
             checkouts,
         }
+    }
+
+    #[test]
+    fn hs2_sgq183_failed_relink_keeps_concurrent_webhook_setup() {
+        let fixture = fixture();
+        let mut before = ProviderConnection {
+            id: "github-synthetic".into(),
+            provider: "github".into(),
+            locator: "synthetic/issues".into(),
+            name: Some("Before".into()),
+            default: false,
+            settings: serde_json::json!({"credential":{"secret":"api-key"}}),
+            disabled: false,
+        };
+        fixture.providers.save(&[before.clone()]).unwrap();
+        before.name = Some("Temporary edit".into());
+        fixture.providers.save(&[before.clone()]).unwrap();
+        crate::configure_webhook(&fixture.providers, "github-synthetic", "hook-key").unwrap();
+        before.name = Some("Before".into());
+        restore(&fixture.providers, &[before], "github-synthetic");
+        let [restored] = fixture.providers.load().unwrap().try_into().unwrap();
+        assert_eq!(restored.name.as_deref(), Some("Before"));
+        assert_eq!(restored.settings["webhook"]["secret"], "hook-key");
     }
 
     fn link(fixture: &Fixture, make_default: bool) -> Option<CheckoutLink<'_>> {

@@ -18,6 +18,7 @@ pub mod dist_work_loop;
 mod dto;
 mod events;
 pub mod github_app_config;
+mod github_webhooks;
 mod health_scan;
 mod hosting;
 mod image_crop_cache;
@@ -221,6 +222,8 @@ pub struct AppState {
     injected_providers: ProviderRegistry,
     /// Reuse live provider adapters so short-lived read caches span checkout requests.
     live_providers: LiveProviderCache,
+    /// Recent GitHub delivery ids and per-issue revisions, bounded in github_webhooks.
+    github_deliveries: github_webhooks::DeliveryState,
     /// Experimental durable Jira field-edit admission. None keeps every existing write synchronous.
     jira_outbox: Option<Arc<Mutex<ProviderOutbox>>>,
     /// One Keychain read per managed sign-in per metadata revision, shared by requests.
@@ -536,6 +539,7 @@ impl AppState {
             host,
             injected_providers: ProviderRegistry::default(),
             live_providers: Arc::default(),
+            github_deliveries: github_webhooks::DeliveryState::default(),
             jira_outbox: None,
             managed_secrets: ManagedSecretCache::default(),
             watchers: Arc::default(),
@@ -1291,6 +1295,10 @@ pub fn app(state: AppState) -> Router {
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
         .route("/stores", get(list_stores).post(add_store))
         .route("/providers", get(list_providers))
+        .route(
+            "/providers/{connection_id}/webhook",
+            get(github_webhooks::setup_instructions).put(github_webhooks::configure),
+        )
         .route("/provider-transfers/copy", post(provider_copy_route))
         .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
@@ -1849,6 +1857,12 @@ pub fn app(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        // GitHub authenticates with its per-hook HMAC, never the local server bearer.
+        .route(
+            "/webhooks/github/{connection_id}",
+            post(github_webhooks::receive)
+                .layer(DefaultBodyLimit::max(github_webhooks::MAX_WEBHOOK_BYTES)),
+        )
         .route("/ws/sync", get(ws_sync))
         // Long-poll fallback for clients that can't hold a WebSocket (HS2-P3P3CC). Like
         // `/ws/sync`, it authenticates via a `secret` query param (not a header) so the

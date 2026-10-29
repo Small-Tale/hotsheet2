@@ -402,32 +402,37 @@ pub(crate) async fn remove_unused_account_source(
 ) -> Result<StatusCode, ApiError> {
     tokio::task::spawn_blocking(move || {
         let providers = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-        let mut connections = providers.load().map_err(provider_transfer_error)?;
         let checkouts = state
             .checkout_registry
             .list()
             .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-        hotsheet_ticketing::accounts::take_unused_source(
-            &mut connections,
-            &checkouts,
-            &account,
-            &connection_id,
-        )
-        .map_err(|error| {
-            let status = match error {
-                hotsheet_ticketing::accounts::AccountError::SourceNotFound { .. } => {
-                    StatusCode::NOT_FOUND
-                }
-                hotsheet_ticketing::accounts::AccountError::SourceInUse { .. } => {
-                    StatusCode::CONFLICT
-                }
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-            ApiError::new(status, error.to_string())
-        })?;
         providers
-            .save(&connections)
-            .map_err(provider_transfer_error)?;
+            .update(|connections| {
+                let mut candidate = connections.clone();
+                let outcome = hotsheet_ticketing::accounts::take_unused_source(
+                    &mut candidate,
+                    &checkouts,
+                    &account,
+                    &connection_id,
+                );
+                if outcome.is_ok() {
+                    *connections = candidate;
+                }
+                Ok(outcome)
+            })
+            .map_err(provider_transfer_error)?
+            .map_err(|error| {
+                let status = match error {
+                    hotsheet_ticketing::accounts::AccountError::SourceNotFound { .. } => {
+                        StatusCode::NOT_FOUND
+                    }
+                    hotsheet_ticketing::accounts::AccountError::SourceInUse { .. } => {
+                        StatusCode::CONFLICT
+                    }
+                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                };
+                ApiError::new(status, error.to_string())
+            })?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

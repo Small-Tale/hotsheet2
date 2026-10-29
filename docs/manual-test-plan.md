@@ -1,5 +1,27 @@
 # Manual Test Plan
 
+### GitHub webhook reachability (HS2-SGQ183)
+
+1. With synthetic repository issues, configure a GitHub source and link it to a
+   checkout. Store a distinct random webhook secret with `hotsheet-cli key set`,
+   then run `hotsheet-cli github-webhook-setup` and repeat
+   `PUT /providers/{connection_id}/webhook` with that same key reference. Confirm
+   the shared configuration stays identical and `configured` is true.
+2. Configure the repository webhook with the returned path, JSON body, secret,
+   and only `issues` plus `issue_comment` events through a reachable HTTPS ingress.
+   Before delivery, `active` must be false. Edit an issue and verify one cursor
+   advance, an authoritative ticket refresh, and `active` true.
+3. Redeliver the same GUID from GitHub's Recent Deliveries. Confirm no second
+   cursor advance. Rotate the local webhook key value under the same reference;
+   confirm `watch` becomes false until a newly signed delivery succeeds. Disable
+   the source, send a signed delivery from another
+   repository, and send an invalid signature: each must leave the cursor fixed.
+4. Interrupt ingress, edit the synthetic issue, restore ingress, and manually
+   redeliver the failed delivery. Confirm normal refresh or explicit replay
+   overflow/full reconciliation. Check the client has zero idle network requests
+   beyond its held WebSocket or long-poll request and uses bounded reconnect delay.
+   Do not use customer issue content or live credentials in recorded evidence.
+
 For HS2-2Z11A5, create a synthetic source ticket and use its context action to
 create a follow-up in the shared composer. Inspect Code Review at wide, medium,
 and narrow widths, then return to wide: the count and qualified target link must

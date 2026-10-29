@@ -8,6 +8,7 @@ pub mod github_app_config;
 pub mod github_attachments;
 pub mod github_credential;
 pub mod github_device;
+pub mod github_webhook_setup;
 pub mod gitlab;
 pub mod jira;
 mod native_id;
@@ -18,7 +19,7 @@ pub use native_id::unqualified_native_id;
 
 pub use github::{
     GitHubConfig, GitHubProvider, GitHubTransport, GitHubWebhook, HttpResponse,
-    UreqGitHubTransport, parse_webhook,
+    UreqGitHubTransport, parse_webhook, verify_webhook_signature,
 };
 pub use github_attachments::GitHubAttachmentRepository;
 pub use github_credential::{
@@ -29,6 +30,7 @@ pub use github_device::{
     AppInstallation, DeviceAuthorization, DevicePoll, GitHubDeviceClient, GitHubDeviceError,
     GitHubTokenBundle, RepositoryAccess,
 };
+pub use github_webhook_setup::configure_webhook;
 pub use gitlab::{GitLabConfig, GitLabProvider};
 pub use jira::{JiraConfig, JiraProvider};
 pub use source_connect::{CheckoutLink, ConnectMode, ConnectSourceError, connect_source};
@@ -88,7 +90,7 @@ pub fn descriptor(connection: &ProviderConnection) -> Result<ProviderDescriptor,
 /// host. The caller persists the returned list and owns any checkout link changes.
 pub fn updated_connections(
     mut connections: Vec<ProviderConnection>,
-    connection: ProviderConnection,
+    mut connection: ProviderConnection,
     replacing: Option<&str>,
 ) -> Result<Vec<ProviderConnection>, ProviderError> {
     if connection.provider == "git" {
@@ -109,9 +111,24 @@ pub fn updated_connections(
                 .iter_mut()
                 .find(|candidate| candidate.id == id)
                 .ok_or_else(|| ProviderError::UnknownConnection(id.into()))?;
+            // The dedicated key-reference workflow owns webhook setup. A stale
+            // ordinary connection edit or headless reconnect must retain it.
+            if connection.provider == "github" {
+                if let Some(settings) = connection.settings.as_object_mut() {
+                    settings.remove("webhook");
+                    if let Some(webhook) = slot.settings.get("webhook") {
+                        settings.insert("webhook".into(), webhook.clone());
+                    }
+                }
+            }
             *slot = connection;
         }
         None => {
+            if connection.provider == "github" {
+                if let Some(settings) = connection.settings.as_object_mut() {
+                    settings.remove("webhook");
+                }
+            }
             if connections
                 .iter()
                 .any(|candidate| candidate.id == connection.id)
@@ -164,6 +181,21 @@ mod connection_tests {
             ),
             Err(ProviderError::UnknownConnection(_))
         ));
+    }
+
+    #[test]
+    fn hs2_sgq183_ordinary_edits_cannot_replace_webhook_key_reference() {
+        let mut existing = connection("github-one", "acme/one", false);
+        existing.settings["webhook"] = serde_json::json!({"secret":"verified-hook"});
+        let mut incoming = connection("github-one", "acme/one", false);
+        incoming.name = Some("Renamed".into());
+        incoming.settings["webhook"] = serde_json::json!({"secret":"stale-hook"});
+        let updated =
+            updated_connections(vec![existing], incoming.clone(), Some("github-one")).unwrap();
+        assert_eq!(updated[0].name.as_deref(), Some("Renamed"));
+        assert_eq!(updated[0].settings["webhook"]["secret"], "verified-hook");
+        let created = updated_connections(vec![], incoming, None).unwrap();
+        assert!(created[0].settings.get("webhook").is_none());
     }
 
     #[test]

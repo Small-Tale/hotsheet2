@@ -391,13 +391,12 @@ pub(crate) async fn remove_checkout_source(
     Path((reference, connection_id)): Path<(String, String)>,
 ) -> Result<Json<hotsheet_ticketing::connection_removal::SourceDetach>, ApiError> {
     tokio::task::spawn_blocking(move || {
-        hotsheet_ticketing::connection_removal::detach_source(
+        let detached = hotsheet_ticketing::connection_removal::detach_source(
             &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             &state.checkout_registry,
             &reference,
             &connection_id,
         )
-        .map(Json)
         .map_err(|error| match error {
             hotsheet_ticketing::connection_removal::ConnectionRemovalError::Checkout(
                 hotsheet_ticketing::checkouts::CheckoutError::NotFound(_),
@@ -406,7 +405,9 @@ pub(crate) async fn remove_checkout_source(
                 provider_transfer_error(error)
             }
             other => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
-        })
+        })?;
+        crate::github_webhooks::forget_connection(&state, &connection_id);
+        Ok(Json(detached))
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?

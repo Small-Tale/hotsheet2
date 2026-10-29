@@ -2203,8 +2203,11 @@ unknown-source error. Additional Git stores remain outside the selected local ob
 Older snapshots omit `source_support`; reading them defaults this field to an empty report,
 without changing the persisted pool schema or role versions. Foreign-source assignment
 replay, handoff, recovery, review-return and code/findings completion remain rejected before
-state mutation. GitHub/Jira/GitLab advertise `watch:false` until an actual authenticated
-host subscription exists; Git retains its implemented watch capability.
+state mutation. HS2-SGQ183 adds a signed GitHub ingress and manual callback setup,
+but headless coordination reports `event_subscription:false` for GitHub/Jira/GitLab
+until native event consumption and claim verification land. Server GitHub descriptors
+can report `watch:true` after a verified delivery; Git retains its implemented watch
+capability in coordination.
 This workflow adds no timer network polling. Remote CI completion needs an actual
 supported status/event route or human cue; without one the integrator reports the
 specific pending CI and unavailable wake route instead of reporting exhaustion.

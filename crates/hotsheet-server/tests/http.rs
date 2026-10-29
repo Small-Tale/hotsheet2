@@ -3389,6 +3389,30 @@ struct FakeGitHub {
     requests: Mutex<Vec<serde_json::Value>>,
 }
 
+struct SlowGitHub {
+    started: Arc<std::sync::atomic::AtomicBool>,
+    responses: Mutex<VecDeque<HttpResponse>>,
+}
+
+impl GitHubTransport for SlowGitHub {
+    fn request(
+        &self,
+        _: &str,
+        _: &str,
+        _: &[(&str, String)],
+        _: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        if !self.started.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| "unexpected GitHub request".into())
+    }
+}
+
 impl GitHubTransport for FakeGitHub {
     fn request(
         &self,
@@ -3452,6 +3476,422 @@ fn github_response(status: u16, body: serde_json::Value) -> HttpResponse {
         headers: HashMap::new(),
         body: body.to_string(),
     }
+}
+
+fn hs2_sgq183_signature(secret: &[u8], payload: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut key = [0_u8; 64];
+    key[..secret.len()].copy_from_slice(secret);
+    let mut inner = Sha256::new();
+    for byte in key {
+        inner.update([byte ^ 0x36]);
+    }
+    inner.update(payload);
+    let mut outer = Sha256::new();
+    for byte in key {
+        outer.update([byte ^ 0x5c]);
+    }
+    outer.update(inner.finalize());
+    format!("sha256={:x}", outer.finalize())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn hs2_sgq183_slow_authoritative_read_keeps_tokio_requests_responsive() {
+    const ENV_NAME: &str = "HOTSHEET_API_KEY_HS2_SGQ183_SLOW_HOOK";
+    const HOOK_SECRET: &str = "synthetic-slow-hook-secret";
+    unsafe { std::env::set_var(ENV_NAME, HOOK_SECRET) };
+    let (_store, st) = state();
+    let checkout_root = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let transport = Arc::new(SlowGitHub {
+        started: started.clone(),
+        responses: Mutex::new(
+            vec![
+                github_response(200, github_issue(7, "synthetic issue")),
+                github_response(200, serde_json::json!([])),
+            ]
+            .into(),
+        ),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-slow-test", "synthetic/issues", "synthetic-token"),
+        transport,
+    );
+    let st = st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider));
+    let router = app(st);
+    register_test_provider_records(&router, &[("github-slow-test", "synthetic/issues")]).await;
+    let checkout = router.clone().oneshot(authed(
+        "POST", "/checkouts", Some(&serde_json::json!({
+            "root":checkout_root.path(), "alias":"synthetic-slow-project",
+            "sources":[{"connection_id":"github-slow-test","provider":"github","locator":"synthetic/issues"}],
+            "default_source":"github-slow-test"
+        }).to_string()),
+    )).await.unwrap();
+    assert_eq!(checkout.status(), StatusCode::CREATED);
+    let setup = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/providers/github-slow-test/webhook",
+            Some(&serde_json::json!({"secret_ref":"hs2-sgq183-slow-hook"}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(setup.status(), StatusCode::OK);
+    let payload = serde_json::json!({
+        "action":"edited", "repository":{"full_name":"synthetic/issues"},
+        "issue":{"number":7,"updated_at":"2026-08-26T00:01:00Z"}
+    })
+    .to_string();
+    let signature = hs2_sgq183_signature(HOOK_SECRET.as_bytes(), payload.as_bytes());
+    let delivery = Request::builder()
+        .method("POST")
+        .uri("/webhooks/github/github-slow-test")
+        .header("x-hub-signature-256", signature)
+        .header("x-github-event", "issues")
+        .header("x-github-delivery", "slow-delivery")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(payload))
+        .unwrap();
+    let before = std::time::Instant::now();
+    let delivery_router = router.clone();
+    let delivery = tokio::spawn(async move { delivery_router.oneshot(delivery).await.unwrap() });
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !started.load(std::sync::atomic::Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let idle = router
+        .clone()
+        .oneshot(authed("GET", "/ws/poll?since=0&timeout_ms=0", None))
+        .await
+        .unwrap();
+    assert_eq!(idle.status(), StatusCode::OK);
+    assert!(
+        before.elapsed() < std::time::Duration::from_millis(500),
+        "idle request waited for blocking provider read"
+    );
+    assert_eq!(delivery.await.unwrap().status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn hs2_sgq183_webhook_setup_and_delivery_are_authenticated_and_source_bound() {
+    const KEY_NAME: &str = "hs2-sgq183-synthetic-hook";
+    const ENV_NAME: &str = "HOTSHEET_API_KEY_HS2_SGQ183_SYNTHETIC_HOOK";
+    const HOOK_SECRET: &str = "synthetic-webhook-secret";
+    // A unique test-only environment fallback avoids native keychain I/O.
+    unsafe { std::env::set_var(ENV_NAME, HOOK_SECRET) };
+    let (_store, st) = state();
+    let checkout_root = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, github_issue(7, "synthetic issue")),
+                github_response(200, serde_json::json!([])),
+                github_response(200, github_issue(7, "synthetic issue")),
+                github_response(200, serde_json::json!([])),
+                github_response(500, serde_json::json!({"message":"synthetic failure"})),
+                github_response(200, {
+                    let mut issue = github_issue(7, "synthetic issue updated");
+                    issue["updated_at"] = serde_json::json!("2026-08-26T00:02:00Z");
+                    issue
+                }),
+                github_response(200, serde_json::json!([])),
+                github_response(200, {
+                    let mut issue = github_issue(7, "synthetic issue reconnected");
+                    issue["updated_at"] = serde_json::json!("2026-08-26T00:03:00Z");
+                    issue
+                }),
+                github_response(200, serde_json::json!([])),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-hook-test", "synthetic/issues", "synthetic-token"),
+        transport,
+    );
+    let st = st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider));
+    let router = app(st.clone());
+    register_test_provider_records(&router, &[("github-hook-test", "synthetic/issues")]).await;
+    let checkout = router.clone().oneshot(authed(
+        "POST", "/checkouts", Some(&serde_json::json!({
+            "root": checkout_root.path(),
+            "alias": "synthetic-webhook-project",
+            "sources": [{"connection_id":"github-hook-test","provider":"github","locator":"synthetic/issues"}],
+            "default_source":"github-hook-test"
+        }).to_string()),
+    )).await.unwrap();
+    assert_eq!(checkout.status(), StatusCode::CREATED);
+    let checkout_id = body_json(checkout).await["id"].as_str().unwrap().to_owned();
+    let path = "/providers/github-hook-test/webhook";
+    let setup_body = serde_json::json!({"secret_ref":KEY_NAME}).to_string();
+    for _ in 0..2 {
+        let response = router
+            .clone()
+            .oneshot(authed("PUT", path, Some(&setup_body)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let setup = body_json(response).await;
+        assert_eq!(setup["configured"], true);
+        assert_eq!(setup["active"], false);
+        assert_eq!(setup["path"], "/webhooks/github/github-hook-test");
+    }
+    let before = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let before = body_json(before).await;
+    let source = before
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], false);
+    let payload = serde_json::json!({
+        "action":"edited",
+        "repository":{"full_name":"synthetic/issues"},
+        "issue":{"number":7,"updated_at":"2026-08-26T00:01:00Z"}
+    })
+    .to_string();
+    let signature = hs2_sgq183_signature(HOOK_SECRET.as_bytes(), payload.as_bytes());
+    let request = |sig: &str, delivery: &str, body: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/webhooks/github/github-hook-test")
+            .header("x-hub-signature-256", sig)
+            .header("x-github-event", "issues")
+            .header("x-github-delivery", delivery)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    };
+    let invalid = router
+        .clone()
+        .oneshot(request("sha256=bad", "delivery-1", &payload))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+    let oversized = router
+        .clone()
+        .oneshot(request(
+            &signature,
+            "too-large",
+            &"x".repeat(256 * 1024 + 1),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let wrong_source = payload.replace("synthetic/issues", "another/issues");
+    let wrong_signature = hs2_sgq183_signature(HOOK_SECRET.as_bytes(), wrong_source.as_bytes());
+    let forbidden = router
+        .clone()
+        .oneshot(request(&wrong_signature, "delivery-2", &wrong_source))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    let accepted = router
+        .clone()
+        .oneshot(request(&signature, "delivery-1", &payload))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::OK);
+    assert_eq!(body_json(accepted).await["cursor"], 1);
+    let replay = router
+        .clone()
+        .oneshot(authed("GET", "/ws/poll?since=0&timeout_ms=0", None))
+        .await
+        .unwrap();
+    let replay = body_json(replay).await;
+    assert_eq!(replay["overflow"], false);
+    assert_eq!(replay["events"][0]["kind"], "changed");
+    assert_eq!(replay["events"][0]["store"], "github-hook-test");
+    assert_eq!(replay["events"][0]["id"], "7");
+    let duplicate = router
+        .clone()
+        .oneshot(request(&signature, "delivery-1", &payload))
+        .await
+        .unwrap();
+    assert_eq!(body_json(duplicate).await["duplicate"], true);
+    let stale = payload.replace("2026-08-26T00:01:00Z", "2026-08-25T00:01:00Z");
+    let stale_signature = hs2_sgq183_signature(HOOK_SECRET.as_bytes(), stale.as_bytes());
+    let stale_receipt = router
+        .clone()
+        .oneshot(request(&stale_signature, "delivery-3", &stale))
+        .await
+        .unwrap();
+    assert_eq!(stale_receipt.status(), StatusCode::OK);
+    let stale_receipt = body_json(stale_receipt).await;
+    assert_eq!(stale_receipt["accepted"], false);
+    assert_eq!(stale_receipt["cursor"], 1);
+    let later = payload.replace("2026-08-26T00:01:00Z", "2026-08-26T00:02:00Z");
+    let later_signature = hs2_sgq183_signature(HOOK_SECRET.as_bytes(), later.as_bytes());
+    let failure = router
+        .clone()
+        .oneshot(request(&later_signature, "delivery-4", &later))
+        .await
+        .unwrap();
+    assert_eq!(failure.status(), StatusCode::BAD_GATEWAY);
+    let retry = router
+        .clone()
+        .oneshot(request(&later_signature, "delivery-4", &later))
+        .await
+        .unwrap();
+    assert_eq!(retry.status(), StatusCode::OK);
+    assert_eq!(body_json(retry).await["cursor"], 2);
+    let setup = router
+        .clone()
+        .oneshot(authed("GET", path, None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(setup).await["active"], true);
+    let after = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let after = body_json(after).await;
+    let source = after
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], true);
+    unsafe { std::env::set_var(ENV_NAME, "rotated-synthetic-webhook-secret") };
+    let rotated = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let rotated = body_json(rotated).await;
+    let source = rotated
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], false);
+    unsafe { std::env::set_var(ENV_NAME, HOOK_SECRET) };
+    let disabled = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/provider-connections/github-hook-test/disabled",
+            Some(r#"{"disabled":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(disabled.status(), StatusCode::OK);
+    let removed = router
+        .clone()
+        .oneshot(request(&signature, "delivery-after-disable", &payload))
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), StatusCode::NOT_FOUND);
+    let after_disable = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let after_disable = body_json(after_disable).await;
+    let source = after_disable
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], false);
+    let reenabled = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/provider-connections/github-hook-test/disabled",
+            Some(r#"{"disabled":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reenabled.status(), StatusCode::OK);
+    let after_reconnect = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let after_reconnect = body_json(after_reconnect).await;
+    let source = after_reconnect
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], false);
+    let reconnected_payload = payload.replace("2026-08-26T00:01:00Z", "2026-08-26T00:03:00Z");
+    let reconnected_signature =
+        hs2_sgq183_signature(HOOK_SECRET.as_bytes(), reconnected_payload.as_bytes());
+    let reconnected = router
+        .clone()
+        .oneshot(request(
+            &reconnected_signature,
+            "delivery-5",
+            &reconnected_payload,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reconnected.status(), StatusCode::OK);
+    assert_eq!(body_json(reconnected).await["cursor"], 3);
+    let after_reverified = router
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let after_reverified = body_json(after_reverified).await;
+    let source = after_reverified
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["connection_id"] == "github-hook-test")
+        .unwrap();
+    assert_eq!(source["capabilities"]["watch"], true);
+    let deleted_payload = reconnected_payload.replace("\"edited\"", "\"deleted\"");
+    let deleted_signature =
+        hs2_sgq183_signature(HOOK_SECRET.as_bytes(), deleted_payload.as_bytes());
+    let deleted = router
+        .clone()
+        .oneshot(request(&deleted_signature, "delivery-6", &deleted_payload))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert_eq!(body_json(deleted).await["cursor"], 4);
+    let removal = router
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/{checkout_id}/sources/github-hook-test"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(removal.status(), StatusCode::OK);
+    let after_removal = router
+        .clone()
+        .oneshot(request(&signature, "delivery-after-removal", &payload))
+        .await
+        .unwrap();
+    assert_eq!(after_removal.status(), StatusCode::NOT_FOUND);
+    unsafe { std::env::remove_var(ENV_NAME) };
 }
 
 #[tokio::test]
