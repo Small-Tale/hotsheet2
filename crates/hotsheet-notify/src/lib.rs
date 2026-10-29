@@ -13,6 +13,7 @@ pub mod config;
 pub mod dispatch;
 pub mod external;
 pub mod http;
+pub mod links;
 pub mod message;
 pub mod notifier;
 pub mod registry;

@@ -79,6 +79,14 @@ pub(crate) enum NotifyCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Set the client origin click-through links open (a LAN or public origin for phones);
+    /// with no URL, show it. Unset, links use the local client's origin.
+    LinkBase {
+        url: Option<String>,
+        /// Clear the configured origin.
+        #[arg(long, conflicts_with = "url")]
+        clear: bool,
+    },
     /// Show recent deliveries (ids and outcomes only).
     Deliveries {
         #[arg(long, default_value_t = 20)]
@@ -315,6 +323,24 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
                 }
             };
             report(&records, json)?;
+        }
+        NotifyCmd::LinkBase { url, clear } => {
+            if clear || url.is_some() {
+                admin::set_link_base(&home, &registry, url).map_err(admin_err)?;
+            }
+            let config = NotificationConfig::load(&home)?;
+            match (
+                &config.link_base,
+                hotsheet_notify::links::link_base(&home, &config),
+            ) {
+                (Some(base), _) => println!("Links open {base}"),
+                (None, Some(local)) => {
+                    println!("Links open the local client at {local} (no link base set)")
+                }
+                (None, None) => println!(
+                    "No link base set and no local client recorded; notifications carry no links"
+                ),
+            }
         }
         NotifyCmd::Deliveries { limit, json } => {
             let records = recent_deliveries(&home, limit.clamp(1, 500));

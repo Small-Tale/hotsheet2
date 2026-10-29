@@ -221,6 +221,10 @@ pub struct NotificationConfig {
     pub channels: Vec<ChannelConfig>,
     #[serde(default)]
     pub rules: Vec<Rule>,
+    /// The client origin click-through links use (HS2-04J8WS); a LAN or public origin
+    /// when notifications are read on another device. Unset: the local client's origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_base: Option<String>,
 }
 
 fn version() -> u32 {
@@ -233,6 +237,7 @@ impl Default for NotificationConfig {
             version: CONFIG_VERSION,
             channels: Vec::new(),
             rules: Vec::new(),
+            link_base: None,
         }
     }
 }
@@ -336,6 +341,11 @@ impl NotificationConfig {
                     "channel '{}': max_per_hour must be at least 1",
                     channel.id
                 )));
+            }
+        }
+        if let Some(base) = &self.link_base {
+            if !(base.starts_with("http://") || base.starts_with("https://")) {
+                return Err(invalid("link_base must be an http(s) origin"));
             }
         }
         let mut rules = std::collections::BTreeSet::new();

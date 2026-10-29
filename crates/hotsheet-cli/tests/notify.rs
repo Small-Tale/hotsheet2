@@ -733,3 +733,39 @@ fn hs2_4jg95g_quiet_hours_rate_limits_and_text_rules_from_the_cli() {
         .failure()
         .stderr(contains("--quiet expects HH:MM-HH:MM"));
 }
+
+#[test]
+fn hs2_04j8ws_link_base_is_set_shown_validated_and_cleared() {
+    let env = env();
+    hs(&env)
+        .args(["link-base"])
+        .assert()
+        .success()
+        .stdout(contains("notifications carry no links"));
+    std::fs::create_dir_all(&env.home).unwrap();
+    std::fs::write(
+        env.home.join("client.json"),
+        r#"{"url":"http://127.0.0.1:4174"}"#,
+    )
+    .unwrap();
+    hs(&env)
+        .args(["link-base"])
+        .assert()
+        .success()
+        .stdout(contains("local client at http://127.0.0.1:4174"));
+    hs(&env)
+        .args(["link-base", "https://hotsheet.lan:8443/"])
+        .assert()
+        .success()
+        .stdout(contains("Links open https://hotsheet.lan:8443"));
+    hs(&env)
+        .args(["link-base", "hotsheet.lan"])
+        .assert()
+        .failure()
+        .stderr(contains("link_base must be an http(s) origin"));
+    hs(&env)
+        .args(["link-base", "--clear"])
+        .assert()
+        .success()
+        .stdout(contains("local client at"));
+}

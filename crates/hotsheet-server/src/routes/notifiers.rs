@@ -206,6 +206,24 @@ pub(crate) async fn delete_notification_rule(
 }
 
 #[derive(Deserialize)]
+pub(crate) struct LinkBaseBody {
+    url: Option<String>,
+}
+
+/// Set (or, with `null`, clear) the client origin click-through links use (HS2-04J8WS).
+pub(crate) async fn put_notification_link_base(
+    State(state): State<AppState>,
+    Json(body): Json<LinkBaseBody>,
+) -> Result<StatusCode, ApiError> {
+    blocking(move || {
+        admin::set_link_base(state.machine_home(), &state.notifier_registry(), body.url)
+            .map(|()| StatusCode::NO_CONTENT)
+            .map_err(admin_error)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
 pub(crate) struct DeliveryQuery {
     limit: Option<usize>,
 }

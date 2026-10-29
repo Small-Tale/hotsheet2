@@ -280,6 +280,21 @@ pub fn remove_rule(home: &Path, registry: &Registry, rule: &str) -> Result<bool,
     Ok(true)
 }
 
+/// Set or clear the client origin click-through links use (HS2-04J8WS).
+pub fn set_link_base(
+    home: &Path,
+    registry: &Registry,
+    base: Option<String>,
+) -> Result<(), AdminError> {
+    let _lock = lock(home)?;
+    let mut config = load(home)?;
+    config.link_base = base
+        .map(|b| b.trim().trim_end_matches('/').to_string())
+        .filter(|b| !b.is_empty());
+    config.save(home, registry)?;
+    Ok(())
+}
+
 /// The fixed message `test` sends.
 pub fn test_message(channel: &str) -> Message {
     let mut message = Message::new(EventKind::Test, "Hot Sheet test notification");

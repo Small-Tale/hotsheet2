@@ -274,6 +274,23 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
     let _router_task =
         hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
 
+    // HS2-04J8WS: a configured client origin turns into a click-through deep link.
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/notification-link-base",
+        Some(json!({"url":"http://hotsheet.lan:4174/"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/notification-link-base",
+        Some(json!({"url":"ftp://nope"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = call(
         &router,
         "PATCH",
@@ -283,6 +300,13 @@ async fn ticket_transitions_permission_requests_and_published_notifications_reac
     .await;
     assert_eq!(status, StatusCode::OK);
     let sent = next(&h);
+    let click = header(&sent, "Click").unwrap();
+    assert!(
+        click.starts_with("http://hotsheet.lan:4174/?project="),
+        "{click}"
+    );
+    assert!(click.contains("demo.hs2&ticket="), "{click}");
+    assert!(click.ends_with(&format!("&ticket={slug}")), "{click}");
     assert_eq!(sent.url, "https://ntfy.sh/hs-e2e");
     assert_eq!(
         header(&sent, "Title"),

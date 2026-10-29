@@ -238,8 +238,15 @@ fn deliver(
         return Vec::new();
     }
     let dispatcher = state.notification_dispatcher();
+    let base = hotsheet_notify::links::link_base(state.machine_home(), config);
     let mut records = Vec::new();
-    for message in messages {
+    for mut message in messages {
+        link(&mut message, base.as_deref(), &|store| {
+            state
+                .host
+                .get(store)
+                .map(|entry| entry.store.root().display().to_string())
+        });
         for record in dispatcher.dispatch(config, &message) {
             if record.outcome == Outcome::Failed {
                 tracing::warn!(
@@ -253,6 +260,25 @@ fn deliver(
         }
     }
     records
+}
+
+/// Point the message at its project and ticket in the client (HS2-04J8WS). The client
+/// resolves a checkout id or a project or store path, so a store-scoped event without a
+/// linked checkout links by its store root (`store_root`). Without a client origin, no link.
+fn link(message: &mut Message, base: Option<&str>, store_root: &dyn Fn(&str) -> Option<String>) {
+    let Some(base) = base.filter(|_| message.url.is_none()) else {
+        return;
+    };
+    let project = message
+        .checkouts
+        .first()
+        .cloned()
+        .or_else(|| message.store.as_deref().and_then(store_root))
+        .or_else(|| message.project.clone());
+    if let Some(project) = project {
+        let ticket = message.ticket.as_ref().map(|t| t.slug.as_str());
+        message.url = Some(hotsheet_notify::links::deep_link(base, &project, ticket));
+    }
 }
 
 fn project_name(project: &str) -> String {
@@ -716,6 +742,43 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn links_prefer_a_checkout_and_keep_an_existing_url() {
+        let mut message = Message::new(EventKind::TicketBlocked, "t");
+        message.store = Some("store-1".into());
+        message.ticket = Some(TicketFacts {
+            slug: "HS2-9".into(),
+            ..TicketFacts::default()
+        });
+        let roots = |store: &str| (store == "store-1").then(|| "/work/demo.hs2".to_string());
+        link(&mut message, None, &roots);
+        assert_eq!(message.url, None, "no client origin, no link");
+        link(&mut message, Some("http://hs.test"), &roots);
+        assert_eq!(
+            message.url.as_deref(),
+            Some("http://hs.test/?project=%2Fwork%2Fdemo.hs2&ticket=HS2-9"),
+            "a store links by its root, which the client resolves"
+        );
+        message.url = None;
+        message.store = Some("unhosted".into());
+        message.project = Some("/work/project".into());
+        link(&mut message, Some("http://hs.test"), &roots);
+        assert_eq!(
+            message.url.as_deref(),
+            Some("http://hs.test/?project=%2Fwork%2Fproject&ticket=HS2-9")
+        );
+        message.url = None;
+        message.checkouts = vec!["rocket-ab12".into()];
+        link(&mut message, Some("http://hs.test"), &roots);
+        assert_eq!(
+            message.url.as_deref(),
+            Some("http://hs.test/?project=rocket-ab12&ticket=HS2-9")
+        );
+        message.url = Some("https://elsewhere.test".into());
+        link(&mut message, Some("http://hs.test"), &roots);
+        assert_eq!(message.url.as_deref(), Some("https://elsewhere.test"));
+    }
 
     #[test]
     fn labels_and_project_names_read_naturally() {

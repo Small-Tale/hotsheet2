@@ -295,6 +295,23 @@ hotsheet-cli notify channel add phone --notifier ntfy --set topic=hs-7f3k
 hotsheet-cli notify rule add stopped --event project.stopped --channel phone
 ```
 
+### 32.8.2 Click-through links (HS2-04J8WS)
+
+Routed messages link to their project and ticket in the client's deep-link form (docs/06,
+"Project and ticket deep links"): `<origin>/?project=<id-or-path>&ticket=<slug>`, URL-encoded.
+
+- **Origin.** The origin is `link_base` from `notifications.json`, set with
+  `hotsheet-cli notify link-base <URL>` or `PUT /notification-link-base`. Use a LAN or
+  public origin when notifications are read on another device. Unset, links use the local
+  client's origin recorded in `${HOTSHEET_HOME}/client.json`. With neither, messages carry
+  no link.
+- **Project.** The project is a linked checkout id when one exists. Otherwise it is the
+  store root or project path, which the client also resolves.
+- **Placement.** Notifiers with a click field (ntfy `Click`, the Slack button, the Teams
+  action, the webhook `url`) carry the link there; others append an Open in Hot Sheet link
+  to the body. Spoken output drops it.
+- A native `hotsheet://` scheme waits for the native app (docs/06).
+
 ## 32.9 Headless CLI and REST API
 
 Both call the same `hotsheet_notify::admin` workflow, and every operation is
@@ -313,6 +330,7 @@ idempotent.
 | `rule add <id> --event … --channel … [filters incl. --text] [--cooldown s]`                                                                         | `PUT /notification-rules/{id}`                               |
 | `rule remove <id>`                                                                                                                                  | `DELETE /notification-rules/{id}`                            |
 | `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                            | `POST /notifications` (published events route through rules) |
+| `link-base [URL] [--clear]` (show, set, or clear the link origin)                                                                                   | `PUT /notification-link-base` (`{"url": …}` or `null`)       |
 | `deliveries [--limit] [--json]`                                                                                                                     | `GET /notification-deliveries?limit=`                        |
 
 - `--set` values are parsed by the field's type; lists are comma-separated. A secret
@@ -381,7 +399,7 @@ idempotent.
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
 | Text, checkout, quiet-hour, and rate-limit filters                         | Shipped | HS2-4JG95G |
 | Saved-view rules and batched summaries of held messages                    | Planned | HS2-G8NXNC |
-| Click-through links                                                        | Planned | HS2-04J8WS |
+| Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server                                       | Planned | HS2-8VAXXA |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
