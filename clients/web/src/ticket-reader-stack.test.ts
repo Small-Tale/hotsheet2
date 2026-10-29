@@ -262,4 +262,37 @@ describe('layered ticket reader stack', () => {
     expect(cleared.feedbackChoiceSelections).toEqual({ FB1: [], FB2: ['b'] });
     expect(cleared.newNoteDraft).toBe('Half-typed note');
   });
+  it('HS2-VBFSZJ keeps an explicit response draft through repeated kind changes/removal and resets its purpose', () => {
+    const original = frame('one', 'alpha', 'HS2-SAME01');
+    const drafting = {
+      ...original,
+      edit: {
+        ...original.edit,
+        editingNoteId: 'request',
+        responseRequestId: 'request',
+        noteDraft: 'Unsent response',
+        noteBase: '',
+      },
+    };
+    const changed = {
+      ...original.ticket,
+      concurrency_token: 'fresh',
+      notes: [{ id: 'request', kind: 'regular' as const, text: 'Changed prompt', created_at: '', edited_at: '' }],
+    };
+    const first = reconcileTicketReaderFrame(drafting, changed);
+    expect(first.ticket.concurrency_token).toBe('fresh');
+    expect(first.edit.noteDraft).toBe('Unsent response');
+    expect(first.edit.noteBase).toBe('');
+    const removed = reconcileTicketReaderFrame(first, { ...changed, notes: [] });
+    expect(removed.edit.noteDraft).toBe('Unsent response');
+    expect(clearFrameFeedbackReply(removed.edit, 'other').responseRequestId).toBe('request');
+    expect(clearFrameFeedbackReply(removed.edit, 'other').noteDraft).toBe('Unsent response');
+    expect(clearFrameFeedbackReply(removed.edit, 'request').responseRequestId).toBeUndefined();
+    expect(clearFrameFeedbackReply(removed.edit, 'request')).toMatchObject({
+      editingNoteId: undefined,
+      noteDraft: '',
+      noteBase: '',
+    });
+    expect(ticketReaderEditState(changed).responseRequestId).toBeUndefined();
+  });
 });

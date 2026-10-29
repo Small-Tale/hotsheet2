@@ -28413,3 +28413,94 @@ async fn hs2_cv5nmc_remote_kind_edit_refuses_before_any_write_or_lookup() {
     );
     assert!(transport.requests.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn hs2_vbfszj_response_to_accepts_a_legacy_request_and_refuses_explicit_regular_notes() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Synthetic legacy target"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let patch = |body: serde_json::Value| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/tickets/{id}");
+        async move {
+            router
+                .oneshot(authed("PATCH", &uri, Some(&body.to_string())))
+                .await
+                .unwrap()
+        }
+    };
+    // An explicit Regular note mentioning the marker, then a legacy implicit marker note.
+    let explicit = body_json(
+        patch(serde_json::json!({"note":"FEEDBACK NEEDED was discussed; nothing pending.","note_kind":"regular"})).await,
+    )
+    .await["notes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store = FsStore::open(&ticket_store).unwrap();
+    let ulid = hotsheet_model::Ulid::from_string(&id).unwrap();
+    let mut ticket = store.read_ticket(&ulid).unwrap();
+    let legacy = hotsheet_model::Ulid::new();
+    let mut note = ticket.notes[0].clone();
+    note.id = legacy;
+    note.kind_explicit = false;
+    note.kind = hotsheet_model::NoteKind::Regular;
+    note.created_at = hotsheet_model::Timestamp::new("2999-01-01T00:00:00Z");
+    note.text = "FEEDBACK NEEDED: choose a synthetic option".into();
+    ticket.notes.push(note);
+    store.write_ticket(&ticket).unwrap();
+
+    let refused = patch(serde_json::json!({"note":"No response needed","note_kind":"regular","response_to":explicit})).await;
+    assert_eq!(refused.status(), axum::http::StatusCode::BAD_REQUEST);
+    let refused = body_json(refused).await;
+    assert!(
+        refused.get("code").is_none(),
+        "not a concurrency retry: {refused}"
+    );
+
+    let answered = patch(
+        serde_json::json!({"note":"No response needed","note_kind":"regular","response_to":legacy.to_string()}),
+    )
+    .await;
+    assert_eq!(answered.status(), axum::http::StatusCode::OK);
+    let answered = body_json(answered).await;
+    assert_eq!(answered["feedback_needed"], false);
+    let link = answered["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|note| note["response_to"] == legacy.to_string())
+        .count();
+    assert_eq!(link, 1);
+}

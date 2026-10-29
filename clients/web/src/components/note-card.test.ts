@@ -21,6 +21,48 @@ describe('NoteCard', () => {
     expect(markup).toContain('Body');
   });
 
+  it('HS2-VBFSZJ keeps local append purpose after correction/removal without a stale dismissal action', () => {
+    const props = {
+      id: 'request',
+      kind: 'regular' as const,
+      author: 'Hot Sheet',
+      time: 'Now',
+      body: 'Captured request',
+      readerMode: true,
+      editing: true,
+      draft: 'Unsent response',
+    };
+    const ordinary = String(NoteCard(props));
+    expect(ordinary).toContain('aria-label="Note body"');
+    const response = String(NoteCard({ ...props, responseDraft: true }));
+    expect(response).toContain('aria-label="Feedback response"');
+    expect(response).toContain('data-note-response="true"');
+    expect(response).toContain('No Response Needed');
+    const removed = String(
+      NoteCard({
+        ...props,
+        editing: false,
+        feedbackPrompt: true,
+        aiAuthored: true,
+        title: 'Unsent response to removed request',
+        responseDraft: true,
+        responseRemoved: true,
+      }),
+    );
+    expect(removed).toContain('Unsent response to removed request');
+    expect(removed).toContain('aria-label="Feedback response"');
+    expect(removed).toContain('Respond');
+    expect(removed).not.toContain('No Response Needed');
+    expect(removed).not.toContain('Edit Note');
+    expect(removed).not.toContain('data-ai-feedback-target');
+    const actualNote = String(
+      NoteCard({ ...props, editing: false, feedbackPrompt: true, aiAuthored: true, responseDraft: true }),
+    );
+    expect(actualNote).toContain('Edit Note');
+    expect(actualNote).toContain('data-ai-feedback-target');
+    expect(String(NoteCard(props))).not.toContain('data-note-response="true"');
+  });
+
   it('hides only the stored activity-distillation provenance from the reading view', () => {
     const body = 'Connected the client\nLoaded tickets.\n\n<!-- hotsheet:activity-distillation:v1:demo -->';
     const note = { id: 'summary', kind: 'activity' as const, author: 'Hot Sheet AI', time: 'Now', body };

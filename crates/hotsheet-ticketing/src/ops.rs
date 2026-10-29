@@ -1322,11 +1322,13 @@ pub fn add_note_with_metadata(
             })
             .transpose()?;
         if let Some(request_id) = response_to {
+            // Answerable targets are exactly the notes reads present as requests, including a
+            // legacy implicit marker note; an explicit Regular note never is (HS2-VBFSZJ).
             if kind != NoteKind::Regular
                 || !t
                     .notes
                     .iter()
-                    .any(|note| note.id == request_id && note.kind == NoteKind::FeedbackNeeded)
+                    .any(|note| note.id == request_id && note.is_feedback_needed_request())
             {
                 return Err(StoreError::InvalidFeedbackResponse(
                     "response_to must name a feedback request on this ticket",
@@ -5456,6 +5458,79 @@ mod tests {
         .unwrap();
         assert_eq!(ticket.notes[1].kind, NoteKind::Regular);
         assert!(!store.read_ticket(&id).unwrap().feedback_needed());
+    }
+
+    #[test]
+    fn hs2_vbfszj_response_to_accepts_exactly_the_presented_feedback_requests() {
+        let (_dir, store) = store();
+        let ticket = titled(&store, "Synthetic legacy feedback target");
+        let id = ticket.id;
+        let other = titled(&store, "Synthetic other ticket").id;
+        let legacy = Ulid::new();
+        let explicit = Ulid::new();
+        let foreign = Ulid::new();
+        // Legacy automation stored the marker as an implicit regular note; reads present it as
+        // a request, so it must be answerable. An explicit Regular note with the same text is not.
+        let mut t = store.read_ticket(&id).unwrap();
+        // The explicit note is older, so the legacy request is the latest sequential exchange.
+        for (note_id, explicit_kind, at) in [
+            (explicit, true, "2026-10-26T00:30:00Z"),
+            (legacy, false, "2026-10-26T01:00:00Z"),
+        ] {
+            t.notes.push(Note {
+                id: note_id,
+                created_at: ts(at),
+                edited_at: ts(at),
+                kind: NoteKind::Regular,
+                summary: None,
+                confidence: None,
+                feedback_for: None,
+                kind_explicit: explicit_kind,
+                feedback_request: false,
+                response_to: None,
+                ai_feedback: None,
+                human_edited: false,
+                actor: None,
+                text: "FEEDBACK NEEDED: choose a synthetic option".into(),
+            });
+        }
+        store.write_ticket(&t).unwrap();
+        add_note(
+            &store,
+            &other,
+            foreign,
+            ts("2026-10-26T01:00:00Z"),
+            NoteKind::FeedbackNeeded,
+            "FEEDBACK NEEDED: elsewhere".into(),
+        )
+        .unwrap();
+        let respond = |target: String| {
+            add_note_with_metadata(
+                &store,
+                &id,
+                Ulid::new(),
+                ts("2026-10-26T02:00:00Z"),
+                NoteKind::Regular,
+                NoteMetadataInput {
+                    kind_explicit: true,
+                    response_to: Some(target),
+                    ..Default::default()
+                },
+                "No response needed".into(),
+            )
+        };
+        let rejected = |result: Result<Ticket, StoreError>| {
+            matches!(result, Err(StoreError::InvalidFeedbackResponse(_)))
+        };
+        assert!(rejected(respond(explicit.to_string())));
+        assert!(rejected(respond(foreign.to_string())));
+        assert!(rejected(respond(Ulid::new().to_string())));
+        assert!(store.read_ticket(&id).unwrap().feedback_needed());
+        let answered = respond(legacy.to_string()).unwrap();
+        assert!(!answered.feedback_needed());
+        assert_eq!(answered.notes.last().unwrap().response_to, Some(legacy));
+        // A second dismissal of the same, now answered, legacy request stays a valid link.
+        assert!(respond(legacy.to_string()).is_ok());
     }
 
     #[test]

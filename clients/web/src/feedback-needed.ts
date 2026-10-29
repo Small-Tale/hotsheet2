@@ -84,3 +84,22 @@ export function presentedNoteKind(note: RelevantNote, notes: readonly RelevantNo
     ? 'regular'
     : note.kind;
 }
+
+/** The note body of the reader's No Response Needed action (HS2-VBFSZJ). */
+export const NO_RESPONSE_NEEDED_NOTE = 'No response needed';
+
+/**
+ * A captured No Response Needed action may stop after its exact request was resolved remotely.
+ * User-authored response text never grants dismissal intent, even when it matches the button's
+ * note body (HS2-VBFSZJ). The local request id must match the patch being retried.
+ */
+export function isStaleFeedbackDismissal(
+  dismissedRequestId: string | undefined,
+  patch: Record<string, unknown>,
+  notes: readonly RelevantNote[],
+): boolean {
+  const target = patch.response_to;
+  if (!dismissedRequestId || dismissedRequestId === DETAILS_FEEDBACK_ID || target !== dismissedRequestId) return false;
+  const request = notes.find((note) => note.id === target);
+  return !request || presentedNoteKind(request, notes) !== 'feedback_needed';
+}

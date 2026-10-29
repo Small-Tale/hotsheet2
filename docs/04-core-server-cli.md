@@ -980,8 +980,10 @@ code or fenced backtick code is rejected with guidance to use `--note-file`. Int
 literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
 form also accepts intentional literal sequences without needing the override.
 `edit` and `provider-edit` accept `--response-to <request-note-id>` when appending a
-regular reply or `No response needed` acknowledgement. The request must be a
-`feedback_needed` note on that ticket. The server PATCH routes and MCP
+regular reply or `No response needed` acknowledgement. The request must be a note on
+that ticket that reads present as a feedback request: a typed `feedback_needed` note or
+a legacy implicit regular note carrying the marker, never an explicit Regular note
+(HS2-VBFSZJ). An invalid target is a 400, not a stale-token conflict. The server PATCH routes and MCP
 `hotsheet_update` accept the same `response_to` JSON field; it is invalid on an
 edit or without note text. New feedback requests are independently tracked, while
 older notes without the linkage retain sequential review state (HS2-W1ENZD).

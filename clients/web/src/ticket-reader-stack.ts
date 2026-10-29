@@ -28,6 +28,8 @@ export interface TicketReaderEditState {
   detailsBase: string;
   detailsGeneration: number;
   editingNoteId?: string;
+  /** An append reply must not become a note edit after a refresh (HS2-VBFSZJ). */
+  responseRequestId?: string;
   noteDraft: string;
   noteBase: string;
   noteGeneration: number;
@@ -73,7 +75,12 @@ export function updateTicketReaderFrame(
 
 export function reconcileTicketReaderFrame(frame: TicketReaderFrame, ticket: FullTicket): TicketReaderFrame {
   const edit = frame.edit,
-    note = edit.editingNoteId ? ticket.notes.find((item) => item.id === edit.editingNoteId) : undefined;
+    note = edit.editingNoteId ? ticket.notes.find((item) => item.id === edit.editingNoteId) : undefined,
+    response = Boolean(
+      edit.responseRequestId &&
+      edit.responseRequestId === edit.editingNoteId &&
+      frame.ticket.qualified_id === ticket.qualified_id,
+    );
   return {
     ...frame,
     ticket,
@@ -87,8 +94,9 @@ export function reconcileTicketReaderFrame(frame: TicketReaderFrame, ticket: Ful
         edit.blockedReasonEditing && edit.blockedReasonDraft !== edit.blockedReasonBase
           ? edit.blockedReasonDraft
           : (ticket.blocked_reason ?? ''),
-      noteBase: note?.text ?? '',
-      noteDraft: edit.editingNoteId && edit.noteDraft !== edit.noteBase ? edit.noteDraft : (note?.text ?? ''),
+      noteBase: response ? edit.noteBase : (note?.text ?? ''),
+      noteDraft:
+        response || (edit.editingNoteId && edit.noteDraft !== edit.noteBase) ? edit.noteDraft : (note?.text ?? ''),
     },
   };
 }
@@ -196,6 +204,8 @@ export function startedPhasePatch(ticket: FullTicket | null | undefined, phase: 
 export function clearFrameFeedbackReply(edit: TicketReaderEditState, noteId: string): TicketReaderEditState {
   return {
     ...edit,
+    ...(edit.editingNoteId === noteId ? { editingNoteId: undefined, noteDraft: '', noteBase: '' } : {}),
+    responseRequestId: edit.responseRequestId === noteId ? undefined : edit.responseRequestId,
     inlineFeedbackReplies: { ...edit.inlineFeedbackReplies, [noteId]: [] },
     feedbackChoiceSelections: { ...edit.feedbackChoiceSelections, [noteId]: [] },
   };

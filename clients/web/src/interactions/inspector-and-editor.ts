@@ -30,6 +30,7 @@ import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
+import type { FeedbackResponseDrafts, FeedbackResponseOwner } from '../feedback-response-drafts';
 import { HostOnlyActionError } from '../host-only-actions';
 import { inlineEditorEscape } from '../inline-editor-escape';
 import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
@@ -112,6 +113,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly newNoteDraft: Signal<string>;
   readonly scheduleProjectSessionPersistence: () => void;
   readonly updateSelected: (patch: Record<string, unknown>) => Promise<boolean>;
+  readonly feedbackResponseDrafts: FeedbackResponseDrafts;
+  readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
   readonly noteAutosave: DebouncedAutosave<{ id: string; value: string }>;
   readonly readerInlineFeedbackReplies: Signal<Record<string, InlineFeedbackReply[]>>;
@@ -191,6 +194,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     newNoteDraft,
     scheduleProjectSessionPersistence,
     updateSelected,
+    dismissFeedbackRequest,
+    feedbackResponseDrafts,
     readerNoteAutosave,
     noteAutosave,
     readerInlineFeedbackReplies,
@@ -338,9 +343,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     detailsDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
       (reader ? readerDetailsDraft : detailsDraft).value = value;
     }),
-    noteDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
-      (reader ? readerNoteDraft : noteDraft).value = value;
-    }),
+    noteDraftInput = coalescedDraft<{ reader: boolean; value: string; responseOwner?: FeedbackResponseOwner }>(
+      ({ reader, value, responseOwner }) => {
+        if (responseOwner && !feedbackResponseDrafts.acceptsInput(responseOwner)) return;
+        (reader ? readerNoteDraft : noteDraft).value = value;
+      },
+    ),
     newNoteDraftInput = coalescedDraft<string>((value) => {
       newNoteDraft.value = value;
       scheduleProjectSessionPersistence();
@@ -359,12 +367,23 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         }));
       },
     ),
-    linkedNoteDraftInput = coalescedKeyedDraft<{ frameId: string; id: string; value: string }>(
+    linkedNoteDraftInput = coalescedKeyedDraft<{
+      frameId: string;
+      id: string;
+      value: string;
+      responseOwner?: FeedbackResponseOwner;
+    }>(
       ({ frameId, id }) => `${frameId}\u0000${id}`,
-      ({ frameId, id, value }) => {
+      ({ frameId, id, value, responseOwner }) => {
+        if (responseOwner && !feedbackResponseDrafts.acceptsInput(responseOwner)) return;
         replaceLinkedReaderFrame(frameId, (current) => ({
           ...current,
-          edit: { ...current.edit, editingNoteId: id, noteDraft: value },
+          edit: {
+            ...current.edit,
+            editingNoteId: id,
+            noteDraft: value,
+            ...(responseOwner ? { responseRequestId: id } : {}),
+          },
         }));
       },
     ),
@@ -660,6 +679,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame, feedbackPrompt = false) {
     const note = (frame?.ticket ?? selectedTicket.value)?.notes.find((item) => item.id === id);
     if (!note) return;
+    const scope = responseScope(frame);
+    if (scope) feedbackResponseDrafts.clear(feedbackResponseDrafts.get(scope));
     // A FEEDBACK NEEDED prompt is replied to with a new note from the reader's response editor
     // (HS2-MB2Q10); only the explicit Edit Note action opens the prompt itself (HS2-ZXGEFE).
     if (note.kind === 'feedback_needed' && !feedbackPrompt) return;
@@ -672,6 +693,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         edit: {
           ...current.edit,
           editingNoteId: id,
+          responseRequestId: undefined,
           noteDraft: restored?.draft ?? note.text,
           noteBase: restored?.base ?? note.text,
           noteGeneration: current.edit.noteGeneration + 1,
@@ -853,6 +875,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     return selections[noteId] ?? [];
   }
   function focusInlineFeedbackReply(noteId: string, offset: number, frameId?: string) {
+    captureResponse(noteId, frameId ? linkedReaderStack.value.find((frame) => frame.id === frameId) : undefined, true);
     const existing = feedbackReplies(noteId, frameId);
     if (!existing.some((reply) => reply.offset === offset))
       setFeedbackReplies(noteId, [...existing, { offset, text: '' }], frameId);
@@ -864,6 +887,31 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         : activeTicketSurface().querySelector<HTMLElement>(field)
       )?.focus(),
     );
+  }
+  function responseScope(frame?: TicketReaderFrame) {
+    const current = project(),
+      ticket = frame?.ticket ?? selectedTicket.value;
+    return ticket && (frame || current)
+      ? {
+          projectId: frame?.projectId ?? current!.id,
+          qualifiedId: ticket.qualified_id,
+          surface: frame?.id ?? 'workspace-reader',
+        }
+      : undefined;
+  }
+  function captureResponse(id: string, frame?: TicketReaderFrame, edited = false, draft?: string) {
+    const scope = responseScope(frame),
+      note = (frame?.ticket ?? selectedTicket.value)?.notes.find((item) => item.id === id);
+    if (!scope) return undefined;
+    const existing = feedbackResponseDrafts.get(scope);
+    // Description feedback is an existing regular append, not a note response_to authority (HS2-VBFSZJ).
+    if (id === DETAILS_FEEDBACK_ID) {
+      feedbackResponseDrafts.clear(existing);
+      return undefined;
+    }
+    if (existing?.request.id === id) return edited ? feedbackResponseDrafts.touch(existing, draft) : existing;
+    if (!note || note.kind !== 'feedback_needed') return undefined;
+    return feedbackResponseDrafts.begin(scope, note, draft);
   }
   function clearFeedbackReplyState(id: string, frameId?: string) {
     readerFeedbackChoiceAnchors.delete(choiceAnchorKey(id, frameId));
@@ -877,15 +925,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   /** Save or answer a note inside a linked reader frame, against that frame's own ticket. */
   function saveLinkedReaderNote(frame: TicketReaderFrame, target: HTMLElement) {
     inlineFeedbackReplyInput.flush();
-    const id = frame.edit.editingNoteId ?? data(target).noteId,
-      note = frame.ticket.notes.find((item) => item.id === id);
-    if (!id || !note) return;
-    const response = data(target).noteResponse === 'true' || note.kind === 'feedback_needed',
+    const id =
+      data(target).noteResponse === 'true' ? data(target).noteId : (frame.edit.editingNoteId ?? data(target).noteId);
+    if (!id) return;
+    const owner = captureResponse(id, frame),
+      note = frame.ticket.notes.find((item) => item.id === id) ?? owner?.request;
+    if (!note) return;
+    const response = data(target).noteResponse === 'true' || Boolean(owner) || note.kind === 'feedback_needed',
       value = response
         ? combineFeedbackReply(
             note.text,
             feedbackReplies(id, frame.id),
-            frame.edit.noteDraft,
+            owner ? (owner.draft ?? '') : frame.edit.noteDraft,
             feedbackChoiceSelection(id, frame.id),
           )
         : frame.edit.noteDraft;
@@ -893,7 +944,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     const saves = linkedReaderSaves(frame.id),
       saved = response ? saves.respond(value, id) : saves.note.flush();
     void saved.then((ok) => {
-      if (!ok) return;
+      if (!ok || (owner && feedbackResponseDrafts.get(owner) !== owner)) return;
+      if (owner) feedbackResponseDrafts.clear(owner);
       replaceLinkedReaderFrame(frame.id, (current) => ({
         ...current,
         edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
@@ -902,8 +954,15 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     });
   }
   function feedbackSource(noteId: string, frameId?: string) {
-    const ticket = frameId ? linkedReaderStack.value.find((item) => item.id === frameId)?.ticket : selectedTicket.value;
-    return noteId === DETAILS_FEEDBACK_ID ? ticket?.details : ticket?.notes.find((item) => item.id === noteId)?.text;
+    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined,
+      ticket = frame?.ticket ?? selectedTicket.value,
+      scope = responseScope(frame),
+      owner = scope ? feedbackResponseDrafts.get(scope) : undefined;
+    return noteId === DETAILS_FEEDBACK_ID
+      ? ticket?.details
+      : owner?.request.id === noteId
+        ? owner.request.text
+        : ticket?.notes.find((item) => item.id === noteId)?.text;
   }
   function inlineFeedbackClickOffset(event: MouseEvent, target: Element) {
     const start = Number(data(target).segmentStart),
@@ -970,6 +1029,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       'input',
       INSPECTOR_AND_EDITOR_TARGETS.inlineFeedbackResponseField.selector,
       (_event, target) => {
+        captureResponse(data(target).noteId!, linkedReaderFrame(target), true);
         inlineFeedbackReplyInput.schedule({
           noteId: data(target).noteId!,
           offset: Number(data(target).offset),
@@ -1008,8 +1068,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     modifiers: FeedbackChoiceModifiers,
     target: HTMLElement,
   ) {
-    const frameId = linkedReaderFrame(target)?.id,
-      source = feedbackSource(noteId, frameId),
+    const frame = linkedReaderFrame(target),
+      frameId = frame?.id;
+    captureResponse(noteId, frame, true);
+    const source = feedbackSource(noteId, frameId),
       choices = source && parseFeedbackChoices(source);
     if (!choices) return;
     const anchorKey = choiceAnchorKey(noteId, frameId),
@@ -1062,19 +1124,25 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target), true);
       },
       input: (field, id, response) => {
+        if (!field.isConnected) return;
         const frame = linkedReaderFrame(field),
           value = field.value;
         if (frame && id) {
-          linkedNoteDraftInput.schedule({ frameId: frame.id, id, value });
+          const responseOwner = response ? captureResponse(id, frame, true, value) : undefined;
+          if (response && !responseOwner && id !== DETAILS_FEEDBACK_ID) return;
+          linkedNoteDraftInput.schedule({ frameId: frame.id, id, value, responseOwner });
           // A feedback response is only a draft until Respond creates its own note (HS2-MB2Q10).
           if (!response) linkedReaderSaves(frame.id).note.schedule({ id, value });
           return;
         }
+        const responseOwner =
+          response && id && isReaderSurface(field) ? captureResponse(id, undefined, true, value) : undefined;
+        if (response && !responseOwner && id !== DETAILS_FEEDBACK_ID) return;
         const reader = isReaderSurface(field),
           editing = reader ? readerEditingNoteId : editingNoteId,
           autosave = reader ? readerNoteAutosave : noteAutosave;
         if (editing.value !== id) editing.value = id;
-        noteDraftInput.schedule({ reader, value });
+        noteDraftInput.schedule({ reader, value, responseOwner });
         const prompt =
           selectedTicket.value?.notes.find((item) => item.id === editing.value)?.kind === 'feedback_needed';
         // A prompt autosaves only while it is explicitly open for editing (HS2-ZXGEFE).
@@ -1134,28 +1202,34 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         const reader = isReaderSurface(target),
           editing = reader ? readerEditingNoteId : editingNoteId,
           draft = reader ? readerNoteDraft : noteDraft,
-          id = editing.value ?? data(target).noteId,
+          id = data(target).noteResponse === 'true' ? data(target).noteId : (editing.value ?? data(target).noteId),
           note = selectedTicket.value?.notes.find((item) => item.id === id),
           response =
             data(target).noteResponse === 'true' ||
             note?.kind === 'feedback_draft' ||
             (note?.kind === 'feedback_needed' && !isFeedbackPromptEdit(id)),
-          source = id ? feedbackSource(id) : undefined,
+          owner = response && reader && id ? captureResponse(id) : undefined,
+          source = (id ? feedbackSource(id) : undefined) ?? owner?.request.text,
           value =
             source && response
               ? combineFeedbackReply(
                   source,
                   readerInlineFeedbackReplies.value[id ?? ''] ?? [],
-                  draft.value,
+                  owner ? (owner.draft ?? '') : draft.value,
                   readerFeedbackChoiceSelections.value[id ?? ''] ?? [],
                 )
               : draft.value;
         if (!id || !value.trim()) return;
         const patch = response
-          ? { note: value, note_kind: 'regular', ...(note?.kind === 'feedback_needed' ? { response_to: id } : {}) }
+          ? {
+              note: value,
+              note_kind: 'regular',
+              ...(owner || note?.kind === 'feedback_needed' ? { response_to: owner?.request.id ?? id } : {}),
+            }
           : noteEditPatch(linkedReaderFrame(target)?.ticket ?? selectedTicket.value, id, value);
         void updateSelected(patch).then((saved) => {
-          if (saved) {
+          if (saved && (!owner || feedbackResponseDrafts.get(owner) === owner)) {
+            if (owner) feedbackResponseDrafts.clear(owner);
             endFeedbackPromptEdit(id);
             editing.value = undefined;
             draft.value = '';
@@ -1171,12 +1245,30 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       if (!id) return;
       inlineFeedbackReplyInput.cancel();
       const frame = linkedReaderFrame(target),
+        scope = responseScope(frame),
+        owner = scope ? feedbackResponseDrafts.get(scope) : undefined,
+        editingAtDismissal = frame ? frame.edit.editingNoteId : readerEditingNoteId.value,
         // A linked reader frame answers on its own ticket, not the workspace selection (HS2-04XTV5).
-        saved = frame
-          ? linkedReaderSaves(frame.id).respond('No response needed', id)
-          : updateSelected({ note: 'No response needed', note_kind: 'regular', response_to: id });
+        saved = dismissFeedbackRequest(id, frame?.id);
       void saved.then((ok) => {
-        if (ok) clearFeedbackReplyState(id, frame?.id);
+        if (!ok || !scope || feedbackResponseDrafts.get(scope) !== owner) return;
+        const currentFrame = frame ? linkedReaderStack.value.find((item) => item.id === frame.id) : undefined;
+        if (frame && !currentFrame?.open) return;
+        if (
+          !frame &&
+          (!readerOpen.value ||
+            project()?.id !== scope.projectId ||
+            selectedTicket.value?.qualified_id !== scope.qualifiedId)
+        )
+          return;
+        if (!owner && (frame ? currentFrame?.edit.editingNoteId : readerEditingNoteId.value) !== editingAtDismissal)
+          return;
+        feedbackResponseDrafts.clear(owner);
+        if (!frame && readerEditingNoteId.value === id) {
+          readerEditingNoteId.value = undefined;
+          readerNoteDraft.value = '';
+        }
+        clearFeedbackReplyState(id, frame?.id);
       });
     }),
   );

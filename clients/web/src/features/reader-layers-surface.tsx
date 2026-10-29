@@ -11,6 +11,7 @@ import {
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { type MarkdownEditorMode } from '../components/markdown-editor';
+import type { NoteCardProps } from '../components/note-card';
 import type {
   AttachmentContextMenuSurface,
   ChangeEvidenceSurface,
@@ -22,6 +23,7 @@ import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
+import type { FeedbackResponseDrafts } from '../feedback-response-drafts';
 import { type GallerySource, type Project } from '../interactions/types';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { linkedReaderCanUpdate, type TicketReaderFrame } from '../ticket-reader-stack';
@@ -96,6 +98,7 @@ export interface ReaderLayersSurfaceDependencies {
   readerInlineFeedbackReplies: Signal<Record<string, InlineFeedbackReply[]>>;
   readerLargeText: Signal<boolean>;
   readerNoteDraft: Signal<string>;
+  feedbackResponseDrafts: FeedbackResponseDrafts;
   readerOpen: Signal<boolean>;
   readerTab: Signal<InspectorTab>;
   selectedTicket: Signal<FullTicket | null>;
@@ -163,6 +166,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     readerInlineFeedbackReplies,
     readerLargeText,
     readerNoteDraft,
+    feedbackResponseDrafts,
     readerOpen,
     readerTab,
     selectedTicket,
@@ -202,7 +206,28 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
       linkedWritable = frame ? linkedReaderCanUpdate(frame, active) : false,
       canUpdate = frame ? linkedWritable : editable && canUpdateSelected(),
       titleOwner = editable || linkedWritable;
+    // Keep the existing coalesced publication reactive even while local purpose owns the draft (HS2-VBFSZJ).
+    const publishedNoteDraft = linked?.noteDraft ?? (editable ? readerNoteDraft.value : '');
     const readerScope = frame?.id ?? 'workspace-reader';
+    const responseOwner = feedbackResponseDrafts.get({
+      projectId: frame?.projectId ?? current.id,
+      qualifiedId: ticket.qualified_id,
+      surface: readerScope,
+    });
+    const renderedNotes: NoteCardProps[] = notes(ticket).map((note) => ({
+      ...note,
+      responseDraft: note.id === responseOwner?.request.id,
+    }));
+    if (responseOwner && !ticket.notes.some((note) => note.id === responseOwner.request.id)) {
+      const local = notes({ ...ticket, notes: [responseOwner.request] })[0];
+      renderedNotes.push({
+        ...local,
+        kind: 'regular',
+        title: 'Unsent response to removed request',
+        responseDraft: true,
+        responseRemoved: true,
+      });
+    }
     return (
       <ReaderLayerSurface
         slug={ticket.slug}
@@ -241,9 +266,11 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
           Boolean(linked && linked.detailsDraft !== ticket.details) ||
           (editable && readerDetailsDraft.value !== ticket.details)
         }
-        notes={notes(ticket)}
-        editingNoteId={linked?.editingNoteId ?? (editable ? readerEditingNoteId.value : undefined)}
-        noteDraft={linked?.noteDraft ?? (editable ? readerNoteDraft.value : '')}
+        notes={renderedNotes}
+        editingNoteId={
+          responseOwner?.request.id ?? linked?.editingNoteId ?? (editable ? readerEditingNoteId.value : undefined)
+        }
+        noteDraft={responseOwner ? (responseOwner.draft ?? '') : publishedNoteDraft}
         inlineFeedbackReplies={
           linked ? linked.inlineFeedbackReplies : editable ? readerInlineFeedbackReplies.value : {}
         }

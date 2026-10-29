@@ -35,6 +35,9 @@ export interface NoteCardProps {
   editing?: boolean;
   /** The edit open on this FEEDBACK NEEDED prompt is an explicit Edit Note, not a reply draft (HS2-ZXGEFE). */
   editingPrompt?: boolean;
+  /** Captured local response purpose survives a remote kind correction (HS2-VBFSZJ). */
+  responseDraft?: boolean;
+  responseRemoved?: boolean;
   draft?: string;
   readerMode?: boolean;
   /** The stored note is an AI FEEDBACK NEEDED prompt, even when an answer presents it as regular. */
@@ -267,6 +270,7 @@ export function NoteEditor({
   response = false,
   actions = false,
   placeholder,
+  dismissible = true,
 }: {
   id: string;
   source: string;
@@ -275,6 +279,7 @@ export function NoteEditor({
   /** Show the explicit submit actions (reader feedback editors). */
   actions?: boolean;
   placeholder?: string;
+  dismissible?: boolean;
 }) {
   return (
     <div class="note-card__editor">
@@ -290,7 +295,7 @@ export function NoteEditor({
       </textarea>
       {actions && (
         <Row hAlign="right" vAlign="middle" gap="xs">
-          {response && (
+          {response && dismissible && (
             <Button
               size="compact"
               emphasis="secondary"
@@ -341,6 +346,8 @@ export function NoteCard({
   deletable = true,
   editing = false,
   editingPrompt = false,
+  responseDraft = false,
+  responseRemoved = false,
   draft,
   readerMode = false,
   feedbackPrompt = kind === 'feedback_needed',
@@ -358,16 +365,17 @@ export function NoteCard({
   framed = true,
 }: NoteCardProps) {
   const presentation = presentations[kind];
-  const showAiAttribution = aiAuthored && hasAiAuthoredText(kind, body);
+  const showAiAttribution = !responseRemoved && aiAuthored && hasAiAuthoredText(kind, body);
   // Editing the prompt itself replaces the response editor with the ordinary note editor (HS2-ZXGEFE).
   const promptEdit = editing && editingPrompt && feedbackPrompt;
-  const feedbackEditor = readerMode && !promptEdit && (kind === 'feedback_needed' || kind === 'feedback_draft');
-  const feedbackResponse = readerMode && !promptEdit && kind === 'feedback_needed';
+  const feedbackEditor =
+    readerMode && !promptEdit && (responseDraft || kind === 'feedback_needed' || kind === 'feedback_draft');
+  const feedbackResponse = readerMode && !promptEdit && (responseDraft || kind === 'feedback_needed');
   const editorOpen = editing || feedbackEditor;
   // An AI FEEDBACK NEEDED prompt is answered with a new note, never rewritten by a plain click
   // (HS2-MB2Q10); only its explicit Edit Note action or a double-click opens it (HS2-ZXGEFE).
-  const editInPlace = editable && !feedbackPrompt;
-  const editPrompt = editable && feedbackPrompt && !editing;
+  const editInPlace = editable && !feedbackPrompt && !responseRemoved;
+  const editPrompt = editable && feedbackPrompt && !editing && !responseRemoved;
   const source = draft ?? (feedbackResponse ? '' : body);
   const choiceGroup = feedbackResponse ? parseFeedbackChoices(body) : undefined;
   const editAttributes =
@@ -468,6 +476,7 @@ export function NoteCard({
           source={source}
           response={feedbackResponse}
           actions={feedbackEditor}
+          dismissible={!responseRemoved}
           placeholder={
             feedbackResponse && choiceGroup
               ? 'Additional response (optional)'

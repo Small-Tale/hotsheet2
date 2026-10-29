@@ -992,6 +992,78 @@ for (const action of ['Respond', 'No Response Needed'] as const) {
   });
 }
 
+test('resolves a stale linked-frame No Response Needed without resending it (HS2-VBFSZJ)', async ({ page }) => {
+  await mockLayeredProjects(page);
+  const state = {
+    token: 1,
+    notes: [
+      {
+        id: 'FB1',
+        kind: 'feedback_needed',
+        created_at: '2026-09-11T00:02:00Z',
+        edited_at: '2026-09-11T00:02:00Z',
+        text: 'FEEDBACK NEEDED: should the synthetic frame keep its draft?',
+      } as Record<string, unknown>,
+    ],
+  };
+  const writes: Array<{ status: number; body: Record<string, unknown> }> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    blocked_reason: null,
+    concurrency_token: `token-target-${state.token}`,
+    notes: state.notes,
+    attachments: [],
+  });
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget**', async (route) => {
+    const request = route.request(),
+      path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path.endsWith('/code-review') || path.includes('/attachments')) return route.fallback();
+    if (request.method() === 'GET') return route.fulfill({ json: ticketJson() });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const body = request.postDataJSON() as Record<string, unknown>;
+    // The real server's typed stale-token refusal and response_to authority.
+    if (body.expected_token !== undefined && body.expected_token !== `token-target-${state.token}`) {
+      writes.push({ status: 409, body });
+      return route.fulfill({
+        status: 409,
+        json: { error: 'ticket changed since it was read', code: 'ticket_changed' },
+      });
+    }
+    if (!state.notes.some((note) => note.id === body.response_to && note.kind === 'feedback_needed')) {
+      writes.push({ status: 400, body });
+      return route.fulfill({ status: 400, json: { error: 'response_to must name a feedback request on this ticket' } });
+    }
+    writes.push({ status: 200, body });
+    return route.fulfill({ json: ticketJson() });
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' }),
+    card = reader.locator('article[data-note-id="FB1"]'),
+    dismiss = card.getByRole('button', { name: 'No Response Needed', exact: true });
+  await expect(dismiss).toBeVisible();
+  await card.getByRole('textbox', { name: 'Feedback response', exact: true }).fill('A local reply to discard');
+  // Another writer corrects the request to an explicit regular note while the frame editor stays open.
+  state.notes = [{ ...state.notes[0], kind: 'regular', kind_explicit: true }];
+  state.token += 1;
+  await dismiss.click();
+  await expect(
+    page.getByText('This feedback request was already resolved, so no response was sent.').first(),
+  ).toBeVisible();
+  await expect(dismiss).toHaveCount(0);
+  await expect(card.getByRole('textbox', { name: 'Feedback response', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('textbox', { name: 'Note body', exact: true })).toHaveCount(0);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  expect(writes.map((write) => [write.status, write.body.response_to])).toEqual([[409, 'FB1']]);
+  // The workspace selection is untouched by the frame's outcome.
+  await expect(page.locator('#app-right-rail [data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
+});
+
 /** A stateful target-ticket server: note adds, deletes, and started phases persist (HS2-ANRXAE). */
 async function statefulTargetTicket(page: Page, initialNotes: Array<Record<string, unknown>> = []) {
   const state = {

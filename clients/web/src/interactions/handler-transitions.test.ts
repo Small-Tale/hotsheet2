@@ -2,10 +2,14 @@ import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { MediaAnnotation } from '../api';
+import type { FullTicket, MediaAnnotation } from '../api';
 import { wireHotSheetInteractions } from '../app/wire-interactions';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
+import { flushDraftInputs } from '../draft-input-coalescing';
+import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
+import { createFeedbackResponseDrafts } from '../feedback-response-drafts';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import {
@@ -13,6 +17,10 @@ import {
   wireAttachmentAndGalleryInteractions,
 } from './attachments-and-gallery';
 import { type CommandAndAiInteractionsDependencies, wireCommandAndAiInteractions } from './commands-and-ai';
+import {
+  type InspectorAndEditorInteractionsDependencies,
+  wireInspectorAndEditorInteractions,
+} from './inspector-and-editor';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
 import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
@@ -679,5 +687,210 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     expect(signal.aborted).toBe(true);
     teardown();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HS2-VBFSZJ response input lifecycle', () => {
+  it('clears only the successful dismissal owner and fences later input or another project', async () => {
+    const request = {
+        id: 'request',
+        kind: 'feedback_needed',
+        text: 'Synthetic request',
+        created_at: '',
+        edited_at: '',
+      } as const,
+      scope = { projectId: 'alpha', qualifiedId: 'source:ticket', surface: 'workspace-reader' },
+      drafts = createFeedbackResponseDrafts(),
+      readerDraft = signal('Local response'),
+      editing = signal<string | undefined>(request.id),
+      selected = signal({ qualified_id: scope.qualifiedId, notes: [request] } as FullTicket);
+    let projectId = 'alpha',
+      finish: (ok: boolean) => void = () => {};
+    const dismissFeedbackRequest = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const dispose = wireInspectorAndEditorInteractions({
+      project: () => ({ id: projectId }),
+      selectedTicket: selected,
+      linkedReaderFrame: () => undefined,
+      linkedReaderStack: signal([]),
+      readerOpen: signal(true),
+      feedbackResponseDrafts: drafts,
+      readerEditingNoteId: editing,
+      readerNoteDraft: readerDraft,
+      noteDraft: signal(''),
+      readerInlineFeedbackReplies: signal({}),
+      readerFeedbackChoiceSelections: signal({}),
+      readerFeedbackChoiceAnchors: new Map(),
+      dismissFeedbackRequest,
+    } as unknown as InspectorAndEditorInteractionsDependencies);
+    const click = () =>
+      handler('click', INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.selector)(
+        new Event('click'),
+        target({ noteId: request.id }),
+      );
+    try {
+      const owner = drafts.begin(scope, request, readerDraft.value);
+      click();
+      finish(false);
+      await Promise.resolve();
+      expect(drafts.get(scope)).toBe(owner);
+      expect(readerDraft.value).toBe('Local response');
+      click();
+      finish(true);
+      await Promise.resolve();
+      expect(drafts.get(scope)).toBeUndefined();
+      expect(editing.value).toBeUndefined();
+      expect(readerDraft.value).toBe('');
+      // No owner at click time must not grant permission to clear one created while waiting.
+      click();
+      const newer = drafts.begin(scope, request, 'New response');
+      editing.value = request.id;
+      readerDraft.value = 'New response';
+      finish(true);
+      await Promise.resolve();
+      expect(drafts.get(scope)).toBe(newer);
+      expect(readerDraft.value).toBe('New response');
+      click();
+      const edited = drafts.touch(newer, 'Further input');
+      readerDraft.value = 'Further input';
+      finish(true);
+      await Promise.resolve();
+      expect(drafts.get(scope)).toBe(edited);
+      expect(readerDraft.value).toBe('Further input');
+      drafts.retain([]);
+      editing.value = undefined;
+      click();
+      projectId = 'beta';
+      selected.value = { ...selected.value, qualified_id: 'other:ticket' };
+      editing.value = request.id;
+      readerDraft.value = 'Another project draft';
+      finish(true);
+      await Promise.resolve();
+      expect(editing.value).toBe(request.id);
+      expect(readerDraft.value).toBe('Another project draft');
+    } finally {
+      dispose();
+    }
+  });
+  it('publishes queued general text after inline metadata changes but refuses a closed/reopened owner', () => {
+    vi.useFakeTimers();
+    const request = { id: 'request', kind: 'feedback_needed', text: 'Synthetic request' } as const,
+      scope = { projectId: 'alpha', qualifiedId: 'source:ticket', surface: 'workspace-reader' },
+      drafts = createFeedbackResponseDrafts(),
+      readerDraft = signal(''),
+      editing = signal<string | undefined>(undefined);
+    const dispose = wireInspectorAndEditorInteractions({
+      project: () => ({ id: 'alpha' }),
+      selectedTicket: signal({ qualified_id: scope.qualifiedId, notes: [request] } as FullTicket),
+      linkedReaderFrame: () => undefined,
+      linkedReaderStack: signal([]),
+      feedbackResponseDrafts: drafts,
+      readerEditingNoteId: editing,
+      readerNoteDraft: readerDraft,
+      noteDraft: signal(''),
+      readerInlineFeedbackReplies: signal({ request: [{ offset: 0, text: '' }] }),
+      scheduleProjectSessionPersistence: vi.fn(),
+    } as unknown as InspectorAndEditorInteractionsDependencies);
+    const field = (value: string, inline = false) =>
+      ({
+        isConnected: true,
+        value,
+        dataset: { noteId: request.id, noteResponse: 'true', ...(inline ? { offset: '0' } : {}) },
+        closest: (selector: string) => (selector === '[data-component="ticket-reader"]' ? {} : null),
+      }) as unknown as HTMLTextAreaElement;
+    const generalInput = handler('input', '[name="note-body"]'),
+      inlineInput = handler('input', '[name="inline-feedback-response"]');
+    try {
+      generalInput(new Event('input'), field('Pending general response'));
+      const queued = drafts.get(scope)!;
+      inlineInput(new Event('input'), field('An inline response', true));
+      expect(drafts.get(scope)).not.toBe(queued);
+      expect(readerDraft.value).toBe('');
+      vi.advanceTimersByTime(150);
+      expect(readerDraft.value).toBe('Pending general response');
+      // A new lifecycle with the same project/ticket/request must not accept a prior input callback.
+      generalInput(new Event('input'), field('Obsolete pending text'));
+      drafts.retain([]);
+      const reopened = drafts.begin(scope, { ...request, created_at: '', edited_at: '' }, 'New owner response');
+      readerDraft.value = 'New owner response';
+      flushDraftInputs();
+      expect(readerDraft.value).toBe('New owner response');
+      expect(drafts.get(scope)).toBe(reopened);
+    } finally {
+      flushDraftInputs();
+      dispose();
+      vi.useRealTimers();
+    }
+  });
+  it('keeps the existing description response as a regular append without note response authority', async () => {
+    vi.useFakeTimers();
+    const request = {
+        id: 'request',
+        kind: 'feedback_needed',
+        text: 'Synthetic request',
+        created_at: '',
+        edited_at: '',
+      } as const,
+      scope = { projectId: 'alpha', qualifiedId: 'source:ticket', surface: 'workspace-reader' },
+      drafts = createFeedbackResponseDrafts(),
+      readerDraft = signal(''),
+      updateSelected = vi.fn(async () => true);
+    const dispose = wireInspectorAndEditorInteractions({
+      project: () => ({ id: 'alpha' }),
+      selectedTicket: signal({
+        qualified_id: scope.qualifiedId,
+        details: 'FEEDBACK NEEDED: synthetic description.',
+        notes: [request],
+      } as FullTicket),
+      linkedReaderFrame: () => undefined,
+      linkedReaderStack: signal([]),
+      feedbackResponseDrafts: drafts,
+      readerEditingNoteId: signal<string | undefined>(undefined),
+      readerNoteDraft: readerDraft,
+      noteDraft: signal(''),
+      readerInlineFeedbackReplies: signal({}),
+      readerNoteAutosave: { flush: vi.fn(async () => true) },
+      readerFeedbackChoiceSelections: signal({}),
+      readerFeedbackChoiceAnchors: new Map(),
+      updateSelected,
+      scheduleProjectSessionPersistence: vi.fn(),
+    } as unknown as InspectorAndEditorInteractionsDependencies);
+    const field = (id: string, value: string) =>
+      ({
+        isConnected: true,
+        value,
+        dataset: { noteId: id, noteResponse: 'true' },
+        closest: (selector: string) => (selector === '[data-component="ticket-reader"]' ? {} : null),
+      }) as unknown as HTMLTextAreaElement;
+    try {
+      const input = handler('input', '[name="note-body"]');
+      input(new Event('input'), field(request.id, 'Earlier note response'));
+      flushDraftInputs();
+      expect(drafts.get(scope)?.request.id).toBe(request.id);
+      input(new Event('input'), field(DETAILS_FEEDBACK_ID, 'A description response'));
+      vi.advanceTimersByTime(150);
+      expect(readerDraft.value).toBe('A description response');
+      expect(drafts.get(scope)).toBeUndefined();
+      handler('focusout', '[name="note-body"]')(
+        new Event('focusout'),
+        field(DETAILS_FEEDBACK_ID, 'A description response'),
+      );
+      await Promise.resolve();
+      expect(readerDraft.value).toBe('A description response');
+      handler('click', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.selector)(
+        new Event('click'),
+        field(DETAILS_FEEDBACK_ID, 'A description response'),
+      );
+      expect(updateSelected).toHaveBeenCalledWith({ note: 'A description response', note_kind: 'regular' });
+      await Promise.resolve();
+    } finally {
+      flushDraftInputs();
+      dispose();
+      vi.useRealTimers();
+    }
   });
 });

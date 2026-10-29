@@ -4229,6 +4229,27 @@ unsupported, so they cannot create this state through Hot Sheet.
   keep it in the same action row, height, and centerline as the adjacent Respond action,
   and render the exact acknowledgement as a subtle ordinary note rather than another
   warning surface.
+  If another writer resolved the request while this editor stayed open (answered,
+  removed, or corrected to a regular note), the stale-token retry sees the refreshed
+  ticket, sends nothing, closes the editor, and says "This feedback request was already
+  resolved, so no response was sent." A typed response keeps the server's refusal and
+  its draft, including when its text is exactly "No response needed". Only the explicit
+  dismissal action carries local dismissal intent; reply text never selects that behavior.
+  If the current authoritative note state already resolves the request, explicit dismissal
+  sends no write. Successful dismissal clears only its matching general reply editor as
+  well as inline replies and choices; it never leaves the draft open as a Note body edit.
+  A later reply owner, newly typed input, or another project remains untouched.
+  A response append does not enter the existing-note edit rebase or merge interface.
+  Its local project, qualified ticket, request, and reader/frame owner retain response
+  purpose through authoritative refreshes and further typing/blur. Pending text survives
+  unrelated reader renders; inline response edits keep its existing 150 ms coalesced
+  publication, while a closed/reopened owner rejects obsolete input. Refusal never turns
+  it into an autosaved edit of the request. A removed request shows the local draft as
+  **Unsent response to removed request**, with its captured context and no dismissal
+  control; Respond still sends the original `response_to` and can be refused. Closing,
+  switching owners, or successful submission resets only that owner (HS2-VBFSZJ).
+  Description Respond retains its existing regular-note append without `response_to`;
+  the separate description dismissal limitation is tracked in HS2-M6ETWA.
 - **Feedback prompts may offer explicit choices.** Every uppercase `CHOICE` or `CHOICE:`
   line followed by a Markdown list (blank lines may separate the header from the list and
   loose list items; a switch between bullet and numbered markers ends the list) becomes a

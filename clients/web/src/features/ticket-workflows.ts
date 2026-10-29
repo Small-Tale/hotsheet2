@@ -40,7 +40,7 @@ import {
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { finishDraftSubmission } from '../draft-submission-state';
-import { presentedNoteKind } from '../feedback-needed';
+import { isStaleFeedbackDismissal, NO_RESPONSE_NEEDED_NOTE, presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
@@ -396,6 +396,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const typicalPhaseLoads = new Set<string>();
   /** Rebase-and-retry attempts after a stale-token rejection before an edit is reported as failed. */
   const MAX_CONCURRENT_EDIT_RETRIES = 4;
+  const FEEDBACK_ALREADY_RESOLVED = 'This feedback request was already resolved, so no response was sent.';
   let ticketCloseSearchGeneration = 0,
     ticketCloseSearchTimer: number | undefined,
     composerAttachmentEpoch = 0,
@@ -501,10 +502,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     }
     return { patch: next, recorded: { ...patch, ...adoptMergedDrafts(patch, next) } };
   }
-  async function applyTicketPatch(slug: string, patch: TicketPatch) {
+  async function applyTicketPatch(slug: string, patch: TicketPatch, dismissedRequestId?: string) {
     const current = project(),
-      ticket = tickets.value.find((item) => item.slug === slug);
+      ticket = tickets.value.find((item) => item.slug === slug),
+      // A response appends a new note; its draft must never rebase as an edit of the prompt (HS2-VBFSZJ).
+      responseAppend =
+        typeof patch.response_to === 'string' && typeof patch.note === 'string' && !Object.hasOwn(patch, 'note_id');
     if (!current || !ticket) return false;
+    const client = api();
     // HS2-E0H7S0: queued/retried origin writes cannot rebase another selection's editor recovery.
     const ownsDrafts = () => project()?.id === current.id && selectedTicket.value?.qualified_id === ticket.qualified_id;
     const interaction = Object.hasOwn(patch, 'up_next')
@@ -538,7 +543,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         let base =
           committedTickets.get(slug) ??
           selectedBefore ??
-          (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket;
+          (await client.checkoutTicket(current.id, ticket.qualified_id)).ticket;
         // A draft typed on top of an older value must merge with what the ticket holds now, or the save would
         // silently overwrite a concurrent edit to the same field (HS2-A4XCXE).
         const queuedFields = new Set(['title', 'details', 'category', 'priority', 'tags']);
@@ -547,7 +552,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           Object.keys(patch).length > 0 &&
           Object.keys(patch).every((field) => queuedFields.has(field)),
         );
-        const rebased = useQueue || !ownsDrafts() ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
+        const rebased =
+          useQueue || !ownsDrafts() || responseAppend ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
         if (rebased.conflict) {
           if (mutationGenerations.get(slug) === generation) {
             tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, base) : item));
@@ -571,11 +577,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         // Token drift from unrelated writes (an AI's notes, lease renewals) can land between a refetch and the
         // retry; rebase and retry a bounded number of times instead of failing the edit (HS2-A4XCXE).
         for (let attempt = 0; !updated; attempt += 1) {
+          if (isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes)) {
+            showToast(FEEDBACK_ALREADY_RESOLVED);
+            updated = base;
+            break;
+          }
           try {
             if (useQueue) {
               try {
                 updated = (
-                  await api().queueProviderUpdates(ticket.connection_id, [
+                  await client.queueProviderUpdates(ticket.connection_id, [
                     {
                       operation_id: operationId,
                       native_id: ticket.native_id,
@@ -587,12 +598,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                 if (isWriteBehindUnavailable(reason)) {
                   useQueue = false;
                 } else if (!(reason instanceof ApiHttpError)) {
-                  const accepted = (
-                    await api()
-                      .providerOutbox(ticket.connection_id)
-                      .catch(() => [])
-                  ).some((operation) => operation.operation_id === operationId);
-                  if (accepted) updated = (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket;
+                  const accepted = (await client.providerOutbox(ticket.connection_id).catch(() => [])).some(
+                    (operation) => operation.operation_id === operationId,
+                  );
+                  if (accepted) updated = (await client.checkoutTicket(current.id, ticket.qualified_id)).ticket;
                   else throw reason;
                 } else {
                   throw reason;
@@ -601,7 +610,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             }
             if (!updated) {
               updated = (
-                await api().updateCheckoutTicket(
+                await client.updateCheckoutTicket(
                   current.id,
                   ticket.qualified_id,
                   base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
@@ -615,15 +624,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             });
           } catch (reason) {
             if (!isTicketConcurrencyConflict(reason) || attempt >= MAX_CONCURRENT_EDIT_RETRIES) throw reason;
-            const remote = (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket,
+            const remote = (await client.checkoutTicket(current.id, ticket.qualified_id)).ticket,
               reconciled = reconcileTicketPatch(base, remote, pending);
             committedTickets.set(slug, remote);
             rollbackRow = ticketRowFromFull(ticket, remote);
-            rollbackSelected = remote;
+            if (!responseAppend) rollbackSelected = remote;
             if (mutationGenerations.get(slug) !== generation) return true;
             tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, remote) : item));
             publishOptimisticTicketRows(current.id);
-            if (selectedTicket.value?.slug === slug) reconcileRefreshedSelected(base, remote);
+            if (!responseAppend && selectedTicket.value?.slug === slug) reconcileRefreshedSelected(base, remote);
             const conflict = reconciled.conflicts[0];
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
             if (conflict) {
@@ -637,8 +646,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               });
               return false;
             }
-            if (ownsDrafts()) recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
-            if (Object.keys(reconciled.retry).length === 0) updated = remote;
+            if (!responseAppend && ownsDrafts())
+              recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
+            if (isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes)) {
+              showToast(FEEDBACK_ALREADY_RESOLVED);
+              updated = remote;
+            } else if (Object.keys(reconciled.retry).length === 0) updated = remote;
             else {
               base = remote;
               pending = reconciled.retry;
@@ -660,8 +673,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         }
         tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, updated) : item));
         publishOptimisticTicketRows(current.id);
-        if (selectedTicket.value?.slug === slug) selectedTicket.value = updated;
-        if (ownsDrafts()) recordCommittedDraftBases(recorded);
+        if (selectedTicket.value?.slug === slug && (!responseAppend || ownsDrafts())) selectedTicket.value = updated;
+        if (!responseAppend && ownsDrafts()) recordCommittedDraftBases(recorded);
         error.value = updated.warnings?.join('\n') ?? '';
         reportMutationTiming({
           slug,
@@ -675,7 +688,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (mutationGenerations.get(slug) === generation) {
           tickets.value = tickets.value.map((item) => (item.slug === slug ? rollbackRow : item));
           publishOptimisticTicketRows(current.id);
-          if (rollbackSelected && selectedTicket.value?.slug === slug) selectedTicket.value = rollbackSelected;
+          if (rollbackSelected && selectedTicket.value?.slug === slug && (!responseAppend || ownsDrafts()))
+            selectedTicket.value = rollbackSelected;
           error.value = reason instanceof Error ? reason.message : String(reason);
           reportMutationTiming({
             slug,
@@ -699,6 +713,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       : selectedTicket.value
         ? applyTicketPatch(selectedTicket.value.slug, patch)
         : false;
+  }
+  /** Capture dismissal intent separately from ordinary user-authored responses (HS2-VBFSZJ). */
+  function dismissFeedbackRequest(requestId: string, frameId?: string): Promise<boolean> {
+    const patch = { note: NO_RESPONSE_NEEDED_NOTE, note_kind: 'regular', response_to: requestId };
+    if (frameId) return updateLinkedReader(frameId, patch, requestId);
+    const ticket = selectedTicket.value;
+    return ticket ? applyTicketPatch(ticket.slug, patch, requestId) : Promise.resolve(false);
   }
   function history(projectId = project()?.id ?? '') {
     let value = histories.get(projectId);
@@ -928,7 +949,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function replaceLinkedReaderFrame(id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) {
     linkedReaderStack.value = updateTicketReaderFrame(linkedReaderStack.value, id, update);
   }
-  async function updateLinkedReader(frameId: string, patch: Record<string, unknown>) {
+  async function updateLinkedReader(frameId: string, patch: Record<string, unknown>, dismissedRequestId?: string) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
     if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
     const client = new Api(frame.apiPath);
@@ -938,6 +959,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       // Same field-aware rebase-and-retry as the workspace editor: unrelated remote writes and disjoint
       // edits to the same text merge instead of discarding the reader's edit (HS2-A4XCXE).
       for (let attempt = 0; ; attempt += 1) {
+        if (isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes)) {
+          showToast(FEEDBACK_ALREADY_RESOLVED);
+          flushDraftInputs();
+          replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, base));
+          return true;
+        }
         let ticket: FullTicket;
         try {
           ticket = (
@@ -951,6 +978,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           if (!isTicketConcurrencyConflict(reason) || attempt >= MAX_CONCURRENT_EDIT_RETRIES) throw reason;
           const remote = (await client.checkoutTicket(frame.projectId, frame.ticket.qualified_id)).ticket,
             reconciled = reconcileTicketPatch(base, remote, pending);
+          if (
+            typeof pending.response_to === 'string' &&
+            typeof pending.note === 'string' &&
+            !Object.hasOwn(pending, 'note_id')
+          ) {
+            // Install current authority while the frame's explicit append draft stays local (HS2-VBFSZJ).
+            flushDraftInputs();
+            replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, remote));
+          }
           if (reconciled.conflicts.length) {
             // Reconciling compares against the frame's draft, so typed text must be in it (HS2-WV0VPE).
             flushDraftInputs();
@@ -958,7 +994,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             error.value = `This linked ticket's ${ticketFieldLabel(reconciled.conflicts[0].field).toLocaleLowerCase()} changed remotely in the same place you edited. Your draft was preserved; review it and try again.`;
             return false;
           }
-          if (Object.keys(reconciled.retry).length) {
+          if (isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes)) showToast(FEEDBACK_ALREADY_RESOLVED);
+          else if (Object.keys(reconciled.retry).length) {
             base = remote;
             pending = reconciled.retry;
             continue;
@@ -2723,6 +2760,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     flushTicketDrafts,
     captureTicketDraftRecovery,
     updateSelected,
+    dismissFeedbackRequest,
     history,
     updateSelectedTracked,
     detailsAutosave,

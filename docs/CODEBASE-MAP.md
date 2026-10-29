@@ -234,6 +234,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/test-quarantine.ts   #   Vitest `quarantined(slug)` and Playwright `@quarantine` grepInvert helpers (HS2-3PX1E4; docs/test-quarantine.md)
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
+    src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
     src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open` (Kerf beta.51) and opens/closes marked Kerf DialogSurface `<dialog>`s with openDialog/closeDialog (beta.106)
     src/popup-menu-state.ts  #   Kerf PopupMenu open state (opener `aria-expanded`) and closing-panel `toggle` detection, replacing Web Awesome dropdown `open`/`wa-hide` (beta.106)
@@ -278,7 +279,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
-      ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
+      ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows; explicit local feedback-dismissal intent and response-append retry routing (HS2-VBFSZJ)
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
       notification-settings.ts # App Settings → Notifications controller: notifiers, channels, rules, deliveries, editors, and every change through the notifier REST admin routes (HS2-DPBJJA)

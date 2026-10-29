@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { fullTicketFeedbackNeeded, isFeedbackNeeded, presentedNoteKind, textRequestsFeedback } from './feedback-needed';
+import {
+  DETAILS_FEEDBACK_ID,
+  fullTicketFeedbackNeeded,
+  isFeedbackNeeded,
+  isStaleFeedbackDismissal,
+  NO_RESPONSE_NEEDED_NOTE,
+  presentedNoteKind,
+  textRequestsFeedback,
+} from './feedback-needed';
 
 const note = (id: string, kind: 'regular' | 'activity' | 'feedback_needed', created_at: string) => ({
   id,
@@ -96,5 +104,34 @@ describe('isFeedbackNeeded', () => {
     expect(
       fullTicketFeedbackNeeded({ feedback_needed: false, details: 'FEEDBACK NEEDED: choose one', notes: [] }),
     ).toBe(false);
+  });
+});
+
+describe('isStaleFeedbackDismissal (HS2-VBFSZJ)', () => {
+  const request = { id: 'R1', kind: 'feedback_needed' as const, created_at: '2026-10-27T00:00:00Z' };
+  const dismissal = { note: NO_RESPONSE_NEEDED_NOTE, note_kind: 'regular', response_to: 'R1' };
+
+  it('keeps an explicit dismissal of a still-open request', () => {
+    expect(isStaleFeedbackDismissal('R1', dismissal, [request])).toBe(false);
+  });
+
+  it('drops only an explicit dismissal whose exact request became regular, was removed, or was answered', () => {
+    expect(isStaleFeedbackDismissal('R1', dismissal, [{ ...request, kind: 'regular' }])).toBe(true);
+    expect(isStaleFeedbackDismissal('R1', dismissal, [])).toBe(true);
+    const answer = { id: 'A1', kind: 'regular' as const, created_at: '2026-10-27T00:01:00Z', response_to: 'R1' };
+    expect(isStaleFeedbackDismissal('R1', dismissal, [request, answer])).toBe(true);
+    expect(isStaleFeedbackDismissal('R2', dismissal, [])).toBe(false);
+  });
+
+  it('never infers dismissal from typed text, including the exact button body', () => {
+    expect(isStaleFeedbackDismissal(undefined, dismissal, [])).toBe(false);
+    expect(isStaleFeedbackDismissal(undefined, { ...dismissal, note: 'Use option B' }, [])).toBe(false);
+    expect(isStaleFeedbackDismissal('R1', { note: NO_RESPONSE_NEEDED_NOTE }, [])).toBe(false);
+    expect(isStaleFeedbackDismissal('R1', { note: NO_RESPONSE_NEEDED_NOTE, response_to: 7 }, [])).toBe(false);
+  });
+  it('does not mistake description feedback for a removed note target (HS2-M6ETWA)', () => {
+    expect(isStaleFeedbackDismissal(DETAILS_FEEDBACK_ID, { ...dismissal, response_to: DETAILS_FEEDBACK_ID }, [])).toBe(
+      false,
+    );
   });
 });

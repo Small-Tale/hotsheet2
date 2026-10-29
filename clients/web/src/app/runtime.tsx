@@ -143,6 +143,7 @@ import { createTicketWorkflows } from '../features/ticket-workflows';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from '../features/workspace-search';
 import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
+import { createFeedbackResponseDrafts } from '../feedback-response-drafts';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { createGuidanceSearchModel } from '../guidance-search-model';
 import {
@@ -951,6 +952,7 @@ export async function startHotSheetWebClient() {
     noteDraft = signal('');
   const readerEditingNoteId = signal<string | undefined>(undefined),
     readerNoteDraft = signal('');
+  const feedbackResponseDrafts = createFeedbackResponseDrafts();
   const readerInlineFeedbackReplies = signal<Record<string, InlineFeedbackReply[]>>({});
   const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({});
   const readerFeedbackChoiceAnchors = new Map<string, string>();
@@ -1384,6 +1386,19 @@ export async function startHotSheetWebClient() {
     void refreshTicketCollection(view);
   });
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
+  effect(() => {
+    const current = project(),
+      ticket = selectedTicket.value;
+    feedbackResponseDrafts.retain([
+      ...(readerOpen.value && current && ticket
+        ? [{ projectId: current.id, qualifiedId: ticket.qualified_id, surface: 'workspace-reader' }]
+        : []),
+      ...linkedReaderStack.value
+        .filter((frame) => frame.open)
+        .map((frame) => ({ projectId: frame.projectId, qualifiedId: frame.ticket.qualified_id, surface: frame.id })),
+    ]);
+  });
+
   // Machine-wide terminal limits (HS2-Y5DYC0): load them from the server the active project talks to,
   // once per server, so emulators mounted afterward use the configured, memory-aware history.
   const terminalLimitsSettings = createTerminalLimitsSettings({
@@ -3335,7 +3350,14 @@ export async function startHotSheetWebClient() {
       }
     }
     const readerNoteId = readerEditingNoteId.value;
-    if (readerNoteId && !readerNoteAutosave.pending()) {
+    const responseOwner = project()
+      ? feedbackResponseDrafts.get({
+          projectId: project()!.id,
+          qualifiedId: refreshed.qualified_id,
+          surface: 'workspace-reader',
+        })
+      : undefined;
+    if (readerNoteId && responseOwner?.request.id !== readerNoteId && !readerNoteAutosave.pending()) {
       const remote = refreshed.notes.find((note) => note.id === readerNoteId)?.text ?? '',
         previousNote = previous.notes.find((note) => note.id === readerNoteId)?.text ?? '',
         next = reconcileReaderNoteDraft(previous, refreshed, readerNoteId, readerNoteDraftBase, readerNoteDraft.value);
@@ -3718,6 +3740,7 @@ export async function startHotSheetWebClient() {
     flushTicketDrafts,
     captureTicketDraftRecovery,
     updateSelected,
+    dismissFeedbackRequest,
     history,
     updateSelectedTracked,
     detailsAutosave,
@@ -4481,6 +4504,7 @@ export async function startHotSheetWebClient() {
     readerEditingNoteId,
     readerFeedbackChoiceSelections,
     readerInlineFeedbackReplies,
+    feedbackResponseDrafts,
     readerLargeText,
     readerNoteDraft,
     readerOpen,
@@ -5243,9 +5267,11 @@ export async function startHotSheetWebClient() {
     selectConversationEffort,
     selectConversationPermissionMode,
     canAddNotes,
+    feedbackResponseDrafts,
     canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback),
     aiFeedbackDialog,
     updateSelected,
+    dismissFeedbackRequest,
     runCommand,
     commandDialogId,
     commandStopConfirmation,

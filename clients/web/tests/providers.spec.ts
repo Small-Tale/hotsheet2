@@ -35271,3 +35271,246 @@ test('sizes the magnified Workspace Grid terminal to its 80x24 aspect and fills 
     await page.screenshot({ path: `target/visual-captures/hs2-kr0c0b-magnified-${width}x${height}.png` });
   }
 });
+
+/** Proxy the demo checkout and providers to a real rebuilt server, recording every write and its status. */
+async function proxyRealServer(page: Page, server: Awaited<ReturnType<typeof realTicketServer>>) {
+  const writes: { method: string; path: string; body: Record<string, unknown>; status: number }[] = [];
+  const hold: { next?: Promise<void>; failNext?: boolean } = {};
+  await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+    const incoming = new URL(route.request().url());
+    const path = incoming.pathname.replace(
+      '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+      `/checkouts/${server.checkoutId}`,
+    );
+    const method = route.request().method();
+    if (method !== 'GET' && hold.failNext) {
+      hold.failNext = false;
+      writes.push({ method, path, body: route.request().postDataJSON() as Record<string, unknown>, status: 503 });
+      return route.fulfill({ status: 503, json: { error: 'synthetic write failure' } });
+    }
+    if (method !== 'GET' && hold.next) await hold.next;
+    const response = await route.fetch({
+      url: `${server.url}${path}${incoming.search}`,
+      headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+    });
+    if (method !== 'GET')
+      writes.push({
+        method,
+        path,
+        body: route.request().postDataJSON() as Record<string, unknown>,
+        status: response.status(),
+      });
+    await route.fulfill({ response });
+  });
+  await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+    const response = await route.fetch({
+      url: `${server.url}/providers`,
+      headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+    });
+    await route.fulfill({ response });
+  });
+  return { writes, hold };
+}
+
+test('resolves a stale No Response Needed without a doomed write after its request becomes regular (HS2-VBFSZJ)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic stale feedback editor' });
+    const path = `/tickets/${created.id}`;
+    const asked = await server.request<FullTicket>(path, 'PATCH', {
+      note: 'FEEDBACK NEEDED: pick a synthetic option.',
+    });
+    const request = asked.notes.find((note) => note.kind === 'feedback_needed')!;
+    await mockProject(page);
+    const { writes } = await proxyRealServer(page, server);
+    await page.setViewportSize({ width: 2048, height: 1128 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const inspector = page.locator('#app-right-rail');
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const dialog = page.getByRole('dialog');
+    const dismiss = dialog.getByRole('button', { name: 'No Response Needed' });
+    await expect(dismiss).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Feedback response', exact: true }).fill('A local reply to discard');
+    // Another writer corrects the request to an explicit regular note while this editor stays open.
+    const corrected = await server.request<FullTicket>(path, 'PATCH', { note_id: request.id, note_kind: 'regular' });
+    expect(corrected.feedback_needed).toBe(false);
+    await dismiss.click();
+    const resolved = page.getByText('This feedback request was already resolved, so no response was sent.').first();
+    await expect(resolved).toBeVisible();
+    await expect(dismiss).toHaveCount(0);
+    await expect(dialog.getByRole('textbox', { name: 'Feedback response', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('textbox', { name: 'Note body', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-component="app-error"]')).toHaveCount(0);
+    // Capture only the settled notification, matching the original report viewport.
+    await expect
+      .poll(() =>
+        resolved.evaluate((element) => {
+          for (let node: Element | null = element; node; node = node.parentElement)
+            if (Number(getComputedStyle(node).opacity) < 1) return false;
+          return true;
+        }),
+      )
+      .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+              ).length,
+        ),
+      )
+      .toBe(0);
+    // The after state of the reported capture: the same reader, an honest notice, no error banner.
+    await page.screenshot({ path: test.info().outputPath('hs2-vbfszj-after-wide.png') });
+    for (const [label, width] of [
+      ['medium', 1100],
+      ['narrow', 390],
+      ['wide-again', 2048],
+    ] as const) {
+      await page.setViewportSize({ width, height: width === 2048 ? 1128 : 900 });
+      await expect(dialog.locator(`article[data-note-id="${request.id}"]`)).toBeInViewport();
+      await expect
+        .poll(async () => {
+          const box = (await dialog.boundingBox())!;
+          return box.x >= 0 && Math.round(box.x + box.width) <= width;
+        })
+        .toBe(true);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+      await expect(dismiss).toHaveCount(0);
+      // A resize starts fresh notification/surface animations (HS2-VBFSZJ).
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document
+                .getAnimations()
+                .filter(
+                  (animation) =>
+                    animation.playState === 'running' && animation.effect?.getComputedTiming().iterations !== Infinity,
+                ).length,
+          ),
+        )
+        .toBe(0);
+      await page.screenshot({ path: test.info().outputPath(`hs2-vbfszj-resolved-${label}.png`) });
+    }
+    // One stale-token write, refused before any note was added; the dismissal is never resent.
+    expect(writes.map((write) => [write.method, write.status, write.body.response_to])).toEqual([
+      ['PATCH', 409, request.id],
+    ]);
+    expect(writes[0]?.path).toBe(`/checkouts/${server.checkoutId}/tickets/${encodeURIComponent(created.qualified_id)}`);
+    const stored = await server.request<FullTicket>(path);
+    expect(stored.notes.filter((note) => note.kind !== 'activity')).toHaveLength(1);
+    expect(stored.notes.some((note) => note.response_to)).toBe(false);
+    await expect(dialog.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+      'data-needs-review',
+      'false',
+    );
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    await expect(dialog.locator(`article[data-note-id="${request.id}"]`)).toBeVisible();
+    await expect(dismiss).toHaveCount(0);
+    expect(writes).toHaveLength(1);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('dismisses a legacy implicit feedback request through failure, retry, selection change and reload (HS2-VBFSZJ)', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic legacy feedback' });
+    const other = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic neighbor ticket' });
+    const path = `/tickets/${created.id}`;
+    const asked = await server.request<FullTicket>(path, 'PATCH', { note: 'FEEDBACK NEEDED: pick a legacy option.' });
+    const request = asked.notes.find((note) => note.kind === 'feedback_needed')!;
+    // Rewrite the stored note into the legacy shape early automation wrote: an implicit regular note
+    // that carries the marker. Reads still present it as a request.
+    const { readdir, readFile, writeFile } = await import('node:fs/promises');
+    const files = (await readdir(server.store, { recursive: true })).filter((file) =>
+      file.endsWith(`${created.id}.md`),
+    );
+    expect(files).toHaveLength(1);
+    const file = `${server.store}/${files[0]}`;
+    const original = await readFile(file, 'utf8');
+    const header = new RegExp(`(<!-- hotsheet:note:begin ${request.id}[^>]*?) kind: feedback_needed`);
+    expect(original).toMatch(header);
+    await writeFile(file, original.replace(header, '$1'));
+    await expect
+      .poll(async () => {
+        const presented = (await server.request<FullTicket>(path)).notes.find((note) => note.id === request.id);
+        return [presented?.kind, presented?.kind_explicit ?? false];
+      })
+      .toEqual(['feedback_needed', false]);
+    expect(await readFile(file, 'utf8')).not.toMatch(header);
+    await mockProject(page);
+    const { writes, hold } = await proxyRealServer(page, server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const inspector = page.locator('#app-right-rail');
+    const header2 = () => page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]');
+    // The list parent: the sidebar inspector's Respond to Feedback opens the reader editor.
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await inspector.getByRole('button', { name: 'Respond to Feedback' }).click();
+    const dialog = page.getByRole('dialog');
+    const dismiss = dialog.getByRole('button', { name: 'No Response Needed' });
+    await expect(dismiss).toBeVisible();
+    // A failed write reports the failure, keeps the request open, and stores nothing.
+    hold.failNext = true;
+    await dismiss.click();
+    const alert = page.locator('[data-component="app-error"]');
+    await expect(alert).toContainText('synthetic write failure');
+    await expect(dismiss).toBeVisible();
+    expect((await server.request<FullTicket>(path)).notes.some((note) => note.response_to)).toBe(false);
+    // Retry while the write is held, and move the selection to another ticket before it lands.
+    let release!: () => void;
+    hold.next = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await dismiss.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+    await page.locator(`[data-ticket-slug="${other.slug}"]`).first().click();
+    release();
+    hold.next = undefined;
+    await expect.poll(() => writes.length).toBe(2);
+    expect(writes.map((write) => [write.status, write.body.response_to, write.body.note])).toEqual([
+      [503, request.id, 'No response needed'],
+      [200, request.id, 'No response needed'],
+    ]);
+    for (const write of writes)
+      expect(write.path).toBe(`/checkouts/${server.checkoutId}/tickets/${encodeURIComponent(created.qualified_id)}`);
+    const stored = await server.request<FullTicket>(path);
+    expect(stored.feedback_needed).toBe(false);
+    expect(stored.notes.filter((note) => note.response_to === request.id)).toHaveLength(1);
+    await expect(alert).toHaveCount(0);
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(inspector.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(0);
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    await expect(dismiss).toHaveCount(0);
+    await expect(header2()).toHaveAttribute('data-needs-review', 'false');
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    await expect(dialog.locator(`article[data-note-id="${request.id}"]`)).toBeVisible();
+    await expect(dismiss).toHaveCount(0);
+    expect(writes).toHaveLength(2);
+  } finally {
+    await server.stop();
+  }
+});

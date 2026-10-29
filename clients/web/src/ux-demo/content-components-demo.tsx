@@ -160,6 +160,34 @@ export function NoteCardDemo() {
             ))}
         </List>
       </CatalogExample>
+      <CatalogExample label="Unsent Response After Request Changes (HS2-VBFSZJ)" viewport={{ layout: 'flex-column' }}>
+        <List gap="xs">
+          <NoteCard
+            id="changed-response"
+            kind="regular"
+            author="Hot Sheet"
+            time="Now"
+            body="Captured request context"
+            readerMode
+            editing
+            responseDraft
+            draft="An unsent reply"
+          />
+          <NoteCard
+            id="removed-response"
+            kind="regular"
+            author="Hot Sheet"
+            time="Now"
+            title="Unsent response to removed request"
+            body="Captured request context"
+            readerMode
+            editing
+            responseDraft
+            responseRemoved
+            draft="An unsent reply"
+          />
+        </List>
+      </CatalogExample>
       <CatalogExample label="Long Note Code" viewport={{ layout: 'flex-column' }}>
         <List gap="xs">
           <NoteCard id="long-regular" kind="regular" author="Codex" time="Now" body={longCode} />
