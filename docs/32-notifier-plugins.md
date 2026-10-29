@@ -265,8 +265,11 @@ before the command, diffs them after, and builds messages with the same
 `hotsheet_notify::transitions` the server router uses. When a server does host the store,
 the CLI stays quiet and the server's watcher routes the write, so nothing is sent twice.
 Read-only commands are not watched. A delivery failure is reported on stderr and never
-fails the ticket command. `project.stopped` needs the server's timers. Serverless MCP
-writes are HS2-FYZ5S9.
+fails the ticket command. `project.stopped` needs the server's timers. The serverless
+`hotsheet-mcp --path` backend wraps its writes with the same watch (HS2-FYZ5S9): a
+checkout-scoped or provider-qualified tool call is watched once, on the store it resolves
+to, and MCP reads are never watched. An MCP shim that proxies a server is already covered by
+the server router.
 Ticket, permission, and project events carry the checkout ids linked to their store,
 and a linked checkout's alias is the project name in the message (HS2-4JG95G).
 
@@ -464,7 +467,7 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server (CLI)                                 | Shipped | HS2-8VAXXA |
-| Transitions from serverless MCP writes                                     | Planned | HS2-FYZ5S9 |
+| Transitions from serverless MCP writes                                     | Shipped | HS2-FYZ5S9 |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
 | Idle-while-claimed and halted-session signals; configurable windows        | Shipped | HS2-P57XHV |

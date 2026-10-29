@@ -1,9 +1,10 @@
-//! Ticket-transition notifications for CLI writes when no server is running (HS2-8VAXXA,
-//! `docs/32-notifier-plugins.md` §32.8). A running server's store watcher already routes CLI
-//! writes, so this acts only when no live server hosts the store; that is what keeps a
-//! transition from being sent twice. The messages come from the same
-//! `hotsheet_notify::transitions` the server uses. A notification problem never fails the
-//! ticket command: it is reported on stderr and in the delivery log.
+//! Ticket-transition notifications for writes made when no server is running (HS2-8VAXXA,
+//! `docs/32-notifier-plugins.md` §32.8). `hotsheet-cli` ticket commands and the serverless
+//! `hotsheet-mcp` backend (HS2-FYZ5S9) both wrap their writes with a [`Watch`]. A running
+//! server's store watcher already routes those writes, so this acts only when no live server
+//! hosts the store; that is what keeps a transition from being sent twice. The messages come
+//! from the same `hotsheet_notify::transitions` the server uses. A notification problem never
+//! fails the write: it is reported on stderr and in the delivery log.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -13,30 +14,12 @@ use hotsheet_notify::transitions::{Origin, TicketFlags, TicketState, transition_
 use hotsheet_notify::{Dispatcher, EventKind, NotificationConfig, Outcome, Registry};
 use hotsheet_ticketing::{FsStore, KeyRegistry, OsKeychain, TicketRow};
 
-use crate::Cmd;
-
-/// The index rows a transition compares, captured before a ticket command runs.
-pub(crate) struct Watch {
+/// The index rows a transition compares, captured before a ticket write runs.
+pub struct Watch {
     home: PathBuf,
     store: FsStore,
     index_path: PathBuf,
     before: HashMap<String, TicketFlags>,
-}
-
-/// Commands that never write tickets need no watch.
-fn writes_tickets(cmd: &Cmd) -> bool {
-    use crate::dispatch::Group;
-    matches!(cmd.group(), Group::Tickets | Group::Claims)
-        && !matches!(
-            cmd,
-            Cmd::Ls { .. }
-                | Cmd::Show { .. }
-                | Cmd::Read { .. }
-                | Cmd::People { .. }
-                | Cmd::ConfidenceReport { .. }
-                | Cmd::PhaseReport { .. }
-                | Cmd::Metrics { .. }
-        )
 }
 
 fn wants_ticket_events(config: &NotificationConfig) -> bool {
@@ -76,7 +59,7 @@ fn process_is_alive(_pid: u64) -> bool {
 }
 
 /// Whether a live server registered itself as hosting `root` (`${HOTSHEET_HOME}/instances`).
-pub(crate) fn server_hosts(home: &Path, root: &Path) -> bool {
+pub fn server_hosts(home: &Path, root: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(home.join("instances")) else {
         return false;
     };
@@ -117,16 +100,9 @@ fn rows(store: &FsStore, index_path: &Path) -> anyhow::Result<Vec<TicketRow>> {
 }
 
 impl Watch {
-    /// Start watching when the command writes tickets, a rule wants ticket events, and no
-    /// live server hosts the store. `None` otherwise, or when the store cannot be read.
-    pub(crate) fn before(
-        cmd: &Cmd,
-        store_path: &Path,
-        index_path: impl FnOnce(&FsStore) -> anyhow::Result<PathBuf>,
-    ) -> Option<Watch> {
-        if !writes_tickets(cmd) {
-            return None;
-        }
+    /// Start watching a write to the store at `store_path` when a rule wants ticket events
+    /// and no live server hosts the store. `None` otherwise, or when the store cannot be read.
+    pub fn before(store_path: &Path) -> Option<Watch> {
         let home = hotsheet_plugins::hotsheet_home();
         let config = NotificationConfig::load(&home).ok()?;
         if !wants_ticket_events(&config) {
@@ -136,7 +112,7 @@ impl Watch {
         if server_hosts(&home, store.root()) {
             return None;
         }
-        let index_path = index_path(&store).ok()?;
+        let index_path = crate::default_index_path(&store).ok()?;
         let before = rows(&store, &index_path)
             .ok()?
             .iter()
@@ -150,8 +126,8 @@ impl Watch {
         })
     }
 
-    /// Diff the rows after the command and deliver each transition.
-    pub(crate) fn after(self) {
+    /// Diff the rows after the write and deliver each transition.
+    pub fn after(self) {
         if let Err(error) = self.deliver() {
             eprintln!("warning: ticket notifications were not sent: {error}");
         }

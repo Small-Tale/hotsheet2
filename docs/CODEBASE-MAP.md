@@ -574,7 +574,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       # (launch_safety + SafeTrigger/prepare_trigger moved to hotsheet-aitools so the server reuses them — HS2-1TY7GC)
       src/setup.rs           #   `hotsheet-cli setup <tool>` and read-only diagnosis planner: thin wrappers over hotsheet_plugins setup (adds the enabled-plugin filter from Settings)
       src/dispatch/setup_diagnose.rs # read-only CLI diagnosis: plugin plan, settings/worklist/registry path preview, MCP availability, and live terminal reports
-      src/notify_watch.rs #     HS2-8VAXXA: around ticket-writing commands, when a rule wants ticket events and no live server hosts the store, snapshot index rows, diff after, and deliver hotsheet_notify::transitions (server stays the router when it runs)
+      src/notify_watch.rs #     HS2-8VAXXA (library, shared with the serverless MCP backend by HS2-FYZ5S9): around ticket writes, when a rule wants ticket events and no live server hosts the store, snapshot index rows, diff after, and deliver hotsheet_notify::transitions (server stays the router when it runs)
       src/dispatch/notify.rs #   `hotsheet-cli notify` notifiers/config/channel add|secret|enable|disable|remove|trust|test/rule add|remove/link-base/project-timing/send/deliveries over hotsheet_notify::admin, no server needed (HS2-R5HTZN); E2E in tests/notify.rs with a real external plugin subprocess
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
@@ -640,6 +640,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D)
       tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server
+      tests/serverless_notifications.rs # real binary: serverless writes deliver ticket transitions through hotsheet_cli::notify_watch, reads send nothing, a live server suppresses (HS2-FYZ5S9)
       src/main.rs            #   stdio JSON-RPC loop; --project <code project> | --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash

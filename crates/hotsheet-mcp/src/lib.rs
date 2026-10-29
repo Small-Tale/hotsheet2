@@ -1955,7 +1955,25 @@ mod core_backend {
             Err(bad_request(format!("unsupported GET {path}")))
         }
 
+        /// HS2-FYZ5S9: with no live server hosting the store, a direct-to-disk write delivers
+        /// its own ticket transitions, like a `hotsheet-cli` write. Checkout-scoped and
+        /// provider-qualified paths are re-dispatched through `send` on the store they
+        /// resolve to, so only that final store call is watched and nothing is sent twice.
         fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            let watch = (!path.starts_with("/checkouts/")
+                && provider_ticket_suffix(path).is_none())
+            .then(|| hotsheet_cli::notify_watch::Watch::before(self.store.root()))
+            .flatten();
+            let result = self.route(method, path, body);
+            if let (Ok(_), Some(watch)) = (&result, watch) {
+                watch.after();
+            }
+            result
+        }
+    }
+
+    impl CoreBackend {
+        fn route(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
             if let Some((connection, suffix)) = provider_ticket_suffix(path) {
                 let expected = hotsheet_ticketing::git_connection_id(&self.store);
                 if connection != expected {

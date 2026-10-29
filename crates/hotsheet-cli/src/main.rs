@@ -7,7 +7,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 mod dispatch;
-mod notify_watch;
 
 use dispatch::coordination::CoordinationArgs;
 use dispatch::notify::NotifyCmd;
@@ -21,6 +20,8 @@ use dispatch::tickets::{AttachArgs, LsFilters, NewArgs, PeopleCmd, TicketEditArg
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use hotsheet_cli::default_index_path;
+use hotsheet_cli::notify_watch;
 use hotsheet_model::{
     CloseReason, Confidence, NoteKind, Priority, ReviewKind, Status, Ticket, Timestamp, Ulid,
 };
@@ -959,7 +960,9 @@ fn main() -> Result<()> {
         cwd,
     };
     // HS2-8VAXXA: with no live server for the store, the CLI routes its own transitions.
-    let watch = notify_watch::Watch::before(&cli.command, &ctx.path, default_index_path);
+    let watch = writes_tickets(&cli.command)
+        .then(|| notify_watch::Watch::before(&ctx.path))
+        .flatten();
     let result = dispatch::run(cli.command, &ctx);
     if let (Ok(()), Some(watch)) = (&result, watch) {
         watch.after();
@@ -968,6 +971,22 @@ fn main() -> Result<()> {
         refresh_checkout_worklists(&ctx.path, &ctx.cwd)?;
     }
     result
+}
+
+/// Commands that never write tickets need no notification watch.
+fn writes_tickets(cmd: &Cmd) -> bool {
+    use dispatch::Group;
+    matches!(cmd.group(), Group::Tickets | Group::Claims)
+        && !matches!(
+            cmd,
+            Cmd::Ls { .. }
+                | Cmd::Show { .. }
+                | Cmd::Read { .. }
+                | Cmd::People { .. }
+                | Cmd::ConfidenceReport { .. }
+                | Cmd::PhaseReport { .. }
+                | Cmd::Metrics { .. }
+        )
 }
 
 fn parse_cli() -> Result<Cli> {
@@ -993,19 +1012,6 @@ fn parse_review_kind(s: &str) -> Result<ReviewKind> {
         "fyi" => ReviewKind::Fyi,
         other => bail!("invalid review kind '{other}' (work|feedback|review|fyi)"),
     })
-}
-
-/// Default index DB path for a store — mirrors the server's `default_index_path` so the
-/// CLI and server share one index file (`${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite`).
-fn default_index_path(store: &FsStore) -> Result<PathBuf> {
-    let root = store
-        .root()
-        .canonicalize()
-        .unwrap_or_else(|_| store.root().to_path_buf());
-    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
-    let dir = hotsheet_plugins::hotsheet_home().join("index");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir.join(hotsheet_index::index_file_name(id)))
 }
 
 /// Percent-encode a terminal id for one URL path segment.

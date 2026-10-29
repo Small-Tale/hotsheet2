@@ -18,6 +18,7 @@ pub mod import;
 mod import_completion;
 pub mod import_recovery;
 pub mod migration_progress;
+pub mod notify_watch;
 pub use import_completion::verify_backup as verify_hs1_backup;
 // Launch-safety machinery lives in the shared `hotsheet-aitools` crate (so the server can
 // reuse it too, HS2-1TY7GC); re-exported here to keep the `hotsheet_cli::launch_safety` path.
@@ -52,6 +53,20 @@ pub fn print_revision_status_if_requested() -> bool {
 }
 
 pub use setup::{SetupReport, run_setup};
+
+/// Default index DB path for a store — mirrors the server's `default_index_path` so the
+/// CLI, MCP shim, and server share one index file
+/// (`${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite`).
+pub fn default_index_path(store: &hotsheet_ticketing::FsStore) -> anyhow::Result<PathBuf> {
+    let root = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf());
+    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(hotsheet_index::index_file_name(id)))
+}
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
