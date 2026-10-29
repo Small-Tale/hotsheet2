@@ -7122,17 +7122,15 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     .evaluateAll((headers) => headers.map((header) => header.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(4);
   for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left - menuHeaderLefts[0])).toBeLessThan(1);
-  // Kerf 5.0.0-beta.51 centers a ListHeader action on the shared trailing toolbar-action axis
-  // (KF-NRB76K): the Add view action sits under the sidebar toolbar control, not at the row edge.
+  // Beta.123 aligns ListHeader actions with the shared trailing edge (KF-78N7HE, HS2-T8SPNP).
   const viewActionAlignment = await sidebar.evaluate((node) => {
     const action = node
       .querySelector<HTMLElement>('.view-navigation [data-component="list-header"] button')!
       .getBoundingClientRect();
-    // The trailing toolbar-action axis: a 44px toolbar control inset by the shared 8px rail.
-    return { actionCenter: action.left + action.width / 2, axis: node.getBoundingClientRect().right - 8 - 22 };
+    const row = node.querySelector<HTMLElement>('.view-navigation .kui-list-item')!.getBoundingClientRect();
+    return { actionRight: action.right, rowRight: row.right };
   });
-  // The demo pane's 1px edge separator shifts the axis by at most one pixel.
-  expect(Math.abs(viewActionAlignment.actionCenter - viewActionAlignment.axis)).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(viewActionAlignment.actionRight - viewActionAlignment.rowRight)).toBeLessThanOrEqual(1);
   const alignedRows = await sidebar.evaluate((node) =>
     ['.repository-summary .kui-list-item', '.view-navigation .kui-list-item', '.command-navigation .kui-list-item']
       .map((selector) => node.querySelector(selector)!)

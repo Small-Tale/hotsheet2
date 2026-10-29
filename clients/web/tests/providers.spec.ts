@@ -14584,9 +14584,9 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   rail(side.x + side.width - rowBox.x - rowBox.width);
   rail(side.x + side.width - chatBox.x - chatBox.width);
   rail(side.x + side.width - hideBox.x - hideBox.width);
-  // Kerf 5.0.0-beta.51 centers a ListHeader action on the shared trailing toolbar-action axis
-  // (KF-NRB76K): the Add view action lines up under the sidebar's toolbar control, not the row edge.
-  expect(Math.abs(viewActionBox.x + viewActionBox.width / 2 - (hideBox.x + hideBox.width / 2))).toBeLessThanOrEqual(1);
+  // Beta.123 aligns ListHeader actions with the shared trailing edge (KF-78N7HE, HS2-T8SPNP).
+  rail(side.x + side.width - viewActionBox.x - viewActionBox.width);
+  expect(Math.abs(viewActionBox.x + viewActionBox.width - (rowBox.x + rowBox.width))).toBeLessThanOrEqual(1);
   // Beta.24 owns the 18px icon slot, with the same content inset and label gap.
   expect(iconBox.width).toBeCloseTo(18, 0);
   expect(iconBox.x - rowBox.x).toBeGreaterThanOrEqual(8);
