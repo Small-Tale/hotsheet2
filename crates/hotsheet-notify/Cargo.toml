@@ -1,0 +1,27 @@
+[package]
+name = "hotsheet-notify"
+description = "Hot Sheet 2 notifier plugins: capability-aware delivery of notifications to speech, ntfy, email, and external channels."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+ulid.workspace = true
+time.workspace = true
+base64.workspace = true
+sha2.workspace = true
+ureq.workspace = true
+hotsheet-ticketing.workspace = true
+hotsheet-sync.workspace = true
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls", "ring", "webpki-roots", "hostname"] }
+
+[dev-dependencies]
+tempfile.workspace = true

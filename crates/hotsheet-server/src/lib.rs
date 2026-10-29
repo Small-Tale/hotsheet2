@@ -25,6 +25,7 @@ pub mod lifecycle;
 pub mod mcp_presence;
 pub mod media;
 pub mod multistore;
+pub mod notification_router;
 pub mod notifications;
 mod presence;
 mod provider_overlay;
@@ -105,6 +106,11 @@ use routes::guidance::{
     get_checkout_guidance_review, get_checkout_guidance_rule_preview,
     get_checkout_guidance_updates, get_checkout_rulesync_updates, open_checkout_guidance_interview,
     review_checkout_guidance_batch, submit_checkout_guidance_interview, update_checkout_guidance,
+};
+use routes::notifiers::{
+    delete_notification_channel, delete_notification_rule, get_notification_config,
+    list_notification_deliveries, list_notifiers, put_notification_channel,
+    put_notification_channel_secret, put_notification_rule, test_notification_channel,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -352,6 +358,8 @@ pub struct AppState {
     cache_dir: Arc<std::path::PathBuf>,
     commands: commands::CommandManager,
     notifications: notifications::NotificationHub,
+    /// Notifier plugin routing state: cooldowns, ticket snapshots, test overrides (HS2-R5HTZN).
+    notification_delivery: notification_router::NotificationDelivery,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
     /// Who launched this server process, reported by `/health`, `/compatibility`, and every
@@ -573,6 +581,7 @@ impl AppState {
             cache_dir: Arc::new(media::default_cache_root()),
             commands,
             notifications: Default::default(),
+            notification_delivery: Default::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
             launcher: Arc::new(Mutex::new(UNSPECIFIED_LAUNCHER.to_owned())),
@@ -1728,6 +1737,30 @@ pub fn app(state: AppState) -> Router {
             get(list_notifications).post(publish_notification),
         )
         .route("/notifications/{id}/ack", post(acknowledge_notification))
+        // Notifier plugins (HS2-R5HTZN): installed notifiers, machine-local channels and
+        // rules, credential storage, test sends, and the delivery log.
+        .route("/notifiers", get(list_notifiers))
+        .route("/notification-config", get(get_notification_config))
+        .route(
+            "/notification-channels/{id}",
+            put(put_notification_channel).delete(delete_notification_channel),
+        )
+        .route(
+            "/notification-channels/{id}/secrets/{field}",
+            put(put_notification_channel_secret),
+        )
+        .route(
+            "/notification-channels/{id}/test",
+            post(test_notification_channel),
+        )
+        .route(
+            "/notification-rules/{id}",
+            put(put_notification_rule).delete(delete_notification_rule),
+        )
+        .route(
+            "/notification-deliveries",
+            get(list_notification_deliveries),
+        )
         .route("/tts/synthesize", post(synthesize_speech))
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.

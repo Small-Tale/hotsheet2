@@ -23,6 +23,7 @@ hotsheet-terminals.workspace = true
 hotsheet-process-journal.workspace = true
 hotsheet-tls.workspace = true
 hotsheet-sync.workspace = true
+hotsheet-notify.workspace = true
 # Structured diagnostics (HS2-PD8NJ6): the library emits events, the binary installs
 # the stderr subscriber.
 tracing.workspace = true

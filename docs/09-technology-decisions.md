@@ -349,6 +349,21 @@ authority; capability negotiation honestly handles tracker differences. Detail:
 
 ---
 
+## 9.16 Notifier delivery libraries: **`lettre` + `pulldown-cmark`, existing `ureq`** — **Decided** (HS2-R5HTZN, 2026-10-29)
+
+The `email` notifier needs SMTP with STARTTLS, implicit TLS, authentication, multipart
+alternative bodies and attachments; `lettre` 0.11 (blocking `SmtpTransport`, rustls with
+`ring` and `webpki-roots`, no OpenSSL or native-tls) provides exactly that and matches the
+workspace's existing rustls/ring choice. Hand-rolling SMTP and MIME would be a larger,
+riskier surface. Channels without Markdown need an HTML or plain-text rendering of the
+CommonMark body; `pulldown-cmark` (default features off, `html` on) is the small,
+widely used parser for that, and the renderer turns raw HTML events into text so ticket
+content cannot inject markup. HTTP notifiers (ntfy, later webhooks) reuse the existing
+`ureq` dependency. Each transport sits behind an injectable trait so tests never open a
+socket, speak aloud, or send mail. Detail: [32](32-notifier-plugins.md).
+
+---
+
 ## 9.11 Decision status
 
 **Resolved by the maintainer (2026-08-19):**
@@ -374,7 +389,8 @@ authority; capability negotiation honestly handles tracker differences. Detail:
 | —          | Git access                            | **gix local, git CLI network** — §9.13                                                                                                                                                 |
 | —          | Terminal topology                     | **Separable crate, one server + broker; split deferred** — §9.14                                                                                                                       |
 | —          | Ticket providers                      | **Normalized provider contract; git default; external trackers direct; no continuous mirroring** — §9.15 / [16](16-external-sync-interface.md)                                         |
-| —          | Plugin crates                         | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`) — [12](12-code-organization-and-testing.md) §12.2.1                                                           |
+| —          | Plugin crates                         | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`, `hotsheet-notify`) — [12](12-code-organization-and-testing.md) §12.2.1                                        |
+| —          | Notifier delivery                     | **`lettre` SMTP (rustls) + `pulldown-cmark`; HTTP via existing `ureq`** — §9.16 / [32](32-notifier-plugins.md)                                                                         |
 | —          | Deferred past v1                      | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4)                                                                                          |
 
 **Still open:**

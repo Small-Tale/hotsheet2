@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 mod dispatch;
 
 use dispatch::coordination::CoordinationArgs;
+use dispatch::notify::NotifyCmd;
 use dispatch::providers::{
     AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
 };
@@ -448,6 +449,12 @@ enum Cmd {
     Notifications {
         #[command(subcommand)]
         cmd: NotificationsCmd,
+    },
+    /// Notifier plugins: deliver Hot Sheet events to speech, ntfy, email, or external
+    /// channels (machine-wide; no server needed). See docs/32-notifier-plugins.md.
+    Notify {
+        #[command(subcommand)]
+        cmd: NotifyCmd,
     },
     /// Manage encrypted machine-local provider keys backed by one OS credential-store master.
     Key {

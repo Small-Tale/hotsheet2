@@ -9,6 +9,7 @@ pub(crate) mod checkouts;
 pub(crate) mod claims;
 pub(crate) mod guidance;
 pub(crate) mod mcp_presence;
+pub(crate) mod notifiers;
 pub(crate) mod permissions;
 pub(crate) mod project_tools;
 pub(crate) mod providers;

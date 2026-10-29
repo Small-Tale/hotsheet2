@@ -157,14 +157,16 @@ The numbered requirements docs (source of truth for behavior; status in
 - [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
 - [26-orchestration-projects.md](26-orchestration-projects.md) — Design-only orchestration project targets, bindings, links, and headless contracts (HS2-4JFP0S)
+- [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
 
 Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
 synchronized from `crates/hotsheet-server/src/lib.rs` by
 `clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
-`clients/web/tests/contracts.spec.ts`. All 165 current paths have typed
-operations; newly synchronized routes receive a `route-only` marker until their
-request and response DTOs are modeled (HS2-11BVBS).
+`clients/web/tests/contracts.spec.ts`. Every path has typed operations except newly synchronized routes, which carry a
+`route-only` marker until their request and response DTOs are modeled (HS2-11BVBS);
+the seven notifier administration paths (HS2-R5HTZN) are modeled with their web
+settings in HS2-DPBJJA.
 
 Portable client-state transition fixtures and their schema are under
 `docs/contracts/v1/client-state/`. The web runner
@@ -564,6 +566,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       # (launch_safety + SafeTrigger/prepare_trigger moved to hotsheet-aitools so the server reuses them — HS2-1TY7GC)
       src/setup.rs           #   `hotsheet-cli setup <tool>` and read-only diagnosis planner: thin wrappers over hotsheet_plugins setup (adds the enabled-plugin filter from Settings)
       src/dispatch/setup_diagnose.rs # read-only CLI diagnosis: plugin plan, settings/worklist/registry path preview, MCP availability, and live terminal reports
+      src/dispatch/notify.rs #   `hotsheet-cli notify` notifiers/config/channel add|secret|enable|disable|remove|test/rule add|remove/send/deliveries over hotsheet_notify::admin, no server needed (HS2-R5HTZN); E2E in tests/notify.rs with a real external plugin subprocess
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
@@ -592,6 +595,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/custom_views.rs    #   validated shared-settings persistence for named ordinary-search views
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
+      src/notification_router.rs # notifier delivery (HS2-R5HTZN): change-bus subscriber seeded from the index; ticket status/feedback/blocked transitions, permission_asked, and hub notifications → hotsheet-notify dispatch on blocking workers; AppState::with_notifiers test override
+      src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-channels/{id}[/secrets/{field}|/test], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
+      tests/notification_delivery.rs # E2E: admin routes + real bus events through the running router to a fake ntfy transport
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ) and optional failed-done provider message (HS2-AZVE3P); envelope `at_ms` + `in_flight_tool` (HS2-XV1VCR)
       src/blocking_offload.rs  # Router layer: run every non-streaming handler on the blocking pool so sync store work never starves async workers (HS2-9Z0Q8N; long-wait routes like `/permissions/ask` stay off it, slot waits are reported and `/health` shows `api_offload` (HS2-V3S89Q); a pending ask awaits the bridge asynchronously and parks no pool thread (HS2-43YT58))
@@ -627,6 +633,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/main.rs            #   stdio JSON-RPC loop; --project <code project> | --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
+    hotsheet-notify/         # Notifier plugins (HS2-R5HTZN, docs/32): Message/EventKind, Capabilities + typed settings schema, render (format choice, Markdown→HTML/plain, truncation, attachment limits), built-in speak/ntfy/email over injectable runner/HTTP/SMTP, external manifest+stdin/stdout plugins in ${HOTSHEET_HOME}/notifiers, notifications.json config + rules, Dispatcher (dedupe cooldown via memory + log, retry/backoff, shapes-only delivery log), admin workflow shared by CLI and server, testing fakes
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)

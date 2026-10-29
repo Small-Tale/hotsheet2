@@ -8,6 +8,7 @@
 mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
+pub(crate) mod notify;
 pub(crate) mod providers;
 pub(crate) mod server;
 pub(crate) mod setup;
@@ -40,6 +41,7 @@ enum Group {
     Server,
     Setup,
     Coordination,
+    Notify,
 }
 
 impl Cmd {
@@ -47,6 +49,7 @@ impl Cmd {
         use Cmd::*;
         match self {
             Coordination(_) => Group::Coordination,
+            Notify { .. } => Group::Notify,
             Init { .. }
             | Bootstrap { .. }
             | Link { .. }
@@ -153,6 +156,7 @@ impl Cmd {
                 | Cmd::PermissionDiscard { .. }
                 | Cmd::Processes
                 | Cmd::Guidance { .. }
+                | Cmd::Notify { .. }
                 | Cmd::Serve { list: true, .. }
         )
     }
@@ -177,6 +181,7 @@ impl Cmd {
                 | Cmd::TicketFlow
                 | Cmd::Activity { .. }
                 | Cmd::Notifications { .. }
+                | Cmd::Notify { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
@@ -205,6 +210,7 @@ pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Group::Server => server::run(cmd, ctx),
         Group::Setup => setup::run(cmd, ctx),
         Group::Coordination => coordination::run(cmd, ctx),
+        Group::Notify => notify::run(cmd, ctx),
     }
 }
 

@@ -329,6 +329,9 @@ async fn main() -> Result<()> {
 
     // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;
+    // Deliver matching bus events to configured notifier channels (HS2-R5HTZN).
+    let _notify =
+        hotsheet_server::notification_router::spawn_notification_router(state.clone()).await;
 
     // Aggressively sync each hosted store with its git remote in the background (HS2-19
     // follow-up): interval + kick-on-write + backoff. Held for the run.

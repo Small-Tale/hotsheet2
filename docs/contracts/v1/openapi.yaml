@@ -10411,6 +10411,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /notifiers:
+    get:
+      operationId: list_notifiers
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-config:
+    get:
+      operationId: get_notification_config
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-channels/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: put_notification_channel
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: delete_notification_channel
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-channels/{id}/secrets/{field}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: field
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: put_notification_channel_secret
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-channels/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: test_notification_channel
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: put_notification_rule
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+    delete:
+      operationId: delete_notification_rule
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
+  /notification-deliveries:
+    get:
+      operationId: list_notification_deliveries
+      x-hotsheet-contract-depth: route-only
+      responses:
+        default:
+          description: Response shape still follows the server handler and wire DTO.
 components:
   securitySchemes:
     HotsheetSecret:

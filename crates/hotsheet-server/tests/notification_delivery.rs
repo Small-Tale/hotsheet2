@@ -1,0 +1,405 @@
+//! HS2-R5HTZN E2E: notifier administration over HTTP, and real change-bus events (ticket
+//! transitions, permission requests, published notifications) delivered through the
+//! running notification router to a faithful fake ntfy transport.
+
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use hotsheet_notify::builtin::ntfy::Ntfy;
+use hotsheet_notify::http::{HttpRequest, HttpResponse, HttpTransport};
+use hotsheet_server::{AppState, app};
+use hotsheet_ticketing::{FsStore, StoreMetadata};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+const SECRET: &str = "test-secret";
+
+/// Records each request and wakes the waiting test, replying like ntfy.sh does.
+struct SignallingHttp {
+    sent: Mutex<mpsc::Sender<HttpRequest>>,
+}
+
+impl HttpTransport for SignallingHttp {
+    fn send(&self, request: &HttpRequest) -> Result<HttpResponse, String> {
+        let _ = self.sent.lock().unwrap().send(request.clone());
+        Ok(HttpResponse {
+            status: 200,
+            body: r#"{"id":"ntfy-1","event":"message"}"#.into(),
+        })
+    }
+}
+
+struct Harness {
+    _dir: tempfile::TempDir,
+    home: std::path::PathBuf,
+    state: AppState,
+    received: mpsc::Receiver<HttpRequest>,
+}
+
+fn harness() -> Harness {
+    hotsheet_aitools::enable_test_permission_vault();
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("demo.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let home = dir.path().join("machine-home");
+    let (tx, rx) = mpsc::channel();
+    let http = Arc::new(SignallingHttp {
+        sent: Mutex::new(tx),
+    });
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_default_codex_home(dir.path().join("no-codex-home"))
+        .with_machine_home(&home)
+        .with_notifiers(vec![Arc::new(Ntfy::with_transport(http))]);
+    Harness {
+        _dir: dir,
+        home,
+        state,
+        received: rx,
+    }
+}
+
+fn authed(method: &str, uri: &str, body: Option<Value>) -> Request<Body> {
+    let mut b = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("x-hotsheet-secret", SECRET);
+    if body.is_some() {
+        b = b.header(header::CONTENT_TYPE, "application/json");
+    }
+    b.body(body.map_or(Body::empty(), |v| Body::from(v.to_string())))
+        .unwrap()
+}
+
+async fn call(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let response = router
+        .clone()
+        .oneshot(authed(method, uri, body))
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+fn header<'a>(request: &'a HttpRequest, name: &str) -> Option<&'a str> {
+    request
+        .headers
+        .iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, v)| v.as_str())
+}
+
+/// Wait for the router's next delivery (event-driven; the timeout is only a failure bound).
+fn next(h: &Harness) -> HttpRequest {
+    h.received
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the router delivered a notification")
+}
+
+async fn configure(router: &axum::Router, events: Value) {
+    let (status, body) = call(
+        router,
+        "PUT",
+        "/notification-channels/phone",
+        Some(json!({"notifier":"ntfy","label":"Phone","settings":{"topic":"hs-e2e"}})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(
+        router,
+        "PUT",
+        "/notification-rules/everything",
+        Some(json!({"events": events, "channels":["phone"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn admin_routes_validate_store_secrets_by_reference_and_test_channels() {
+    let h = harness();
+    let router = app(h.state.clone());
+
+    let (status, list) = call(&router, "GET", "/notifiers", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<_> = list["notifiers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids, ["ntfy"]);
+    assert_eq!(
+        list["notifiers"][0]["capabilities"]["formats"],
+        json!(["markdown", "plain"])
+    );
+
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/notification-channels/phone",
+        Some(json!({"notifier":"ntfy","settings":{"topic":"t","token":"raw-token"}})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("credential reference"),
+        "{body}"
+    );
+
+    configure(&router, json!(["ticket.blocked"])).await;
+    let channel = format!("phone-{}", ulid::Ulid::new().to_string().to_lowercase());
+    let (status, _) = call(
+        &router,
+        "PUT",
+        &format!("/notification-channels/{channel}"),
+        Some(json!({"notifier":"ntfy","settings":{"topic":"hs-e2e"}})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(
+        &router,
+        "PUT",
+        &format!("/notification-channels/{channel}/secrets/token"),
+        Some(json!({"value":"tk-e2e"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, config) = call(&router, "GET", "/notification-config", None).await;
+    assert!(!config.to_string().contains("tk-e2e"), "{config}");
+    let stored = &config["channels"][1]["settings"]["token"]["secret"];
+    assert_eq!(stored, &json!(format!("notify-{channel}-token")));
+
+    let (status, record) = call(
+        &router,
+        "POST",
+        &format!("/notification-channels/{channel}/test"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{record}");
+    assert_eq!(record["outcome"], "delivered");
+    assert_eq!(record["event"], "test");
+    let sent = next(&h);
+    assert_eq!(header(&sent, "Authorization"), Some("Bearer tk-e2e"));
+    assert_eq!(header(&sent, "Title"), Some("Hot Sheet test notification"));
+
+    let (status, deliveries) = call(&router, "GET", "/notification-deliveries?limit=5", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(deliveries[0]["channel"], json!(channel));
+    assert!(
+        !deliveries.to_string().contains("test notification"),
+        "the log holds no message text"
+    );
+
+    let (status, removal) = call(
+        &router,
+        "DELETE",
+        &format!("/notification-channels/{channel}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        removal["deleted_secrets"],
+        json!([format!("notify-{channel}-token")])
+    );
+    let (status, _) = call(&router, "POST", "/notification-channels/missing/test", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(&router, "DELETE", "/notification-rules/missing", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(&router, "DELETE", "/notification-rules/everything", None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(h.home.join("notifications.json").is_file());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ticket_transitions_permission_requests_and_published_notifications_reach_channels() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(
+        &router,
+        json!([
+            "ticket.status_changed",
+            "ticket.blocked",
+            "ticket.feedback_needed",
+            "permission.requested",
+            "notification"
+        ]),
+    )
+    .await;
+    let (_, created) = call(
+        &router,
+        "POST",
+        "/tickets",
+        Some(json!({"title":"Ship the *notifier*"})),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    // The router has seeded its snapshots when this returns, so the status write below is
+    // a transition from the seeded state.
+    let _router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+
+    let (status, _) = call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"status":"started"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let sent = next(&h);
+    assert_eq!(sent.url, "https://ntfy.sh/hs-e2e");
+    assert_eq!(
+        header(&sent, "Title"),
+        Some(format!("{slug} is now Started").as_str())
+    );
+    let body = String::from_utf8(sent.body.clone()).unwrap();
+    assert!(body.contains("Ship the \\*notifier\\*"), "{body}");
+    assert!(body.contains("Not Started → Started"), "{body}");
+
+    // A write that changes neither status, feedback, nor blockers notifies nobody, so the
+    // next delivery must be the blocked transition below.
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"title":"Renamed"})),
+    )
+    .await;
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"blocked_reason":"waiting on review"})),
+    )
+    .await;
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some(format!("{slug} is blocked").as_str())
+    );
+    assert_eq!(header(&sent, "Priority"), Some("4"));
+    assert!(
+        String::from_utf8(sent.body)
+            .unwrap()
+            .contains("waiting on review")
+    );
+
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"note":"Pick A or B?","note_kind":"feedback_needed"})),
+    )
+    .await;
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some(format!("{slug} needs your feedback").as_str())
+    );
+
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/notifications",
+        Some(json!({"message":"Build finished\nAll **green**","severity":"success","dedupe_key":"build-1"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let sent = next(&h);
+    assert_eq!(header(&sent, "Title"), Some("Build finished"));
+    assert_eq!(header(&sent, "Tags"), Some("white_check_mark"));
+    assert_eq!(String::from_utf8(sent.body).unwrap(), "All **green**");
+
+    // Records are appended after each send returns, so the synchronous admin test covers
+    // the log; here each delivery was observed at the transport, in order.
+    assert!(h.received.try_recv().is_err(), "no extra deliveries");
+}
+
+#[test]
+fn permission_requests_and_unconfigured_events_route_synchronously() {
+    let h = harness();
+    let event = |kind: &str| hotsheet_server::ChangeEvent {
+        cursor: None,
+        store: "/work/demo.hs2".into(),
+        kind: kind.into(),
+        id: "perm-1".into(),
+        slug: "claude".into(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    };
+    // No configuration: nothing is routed and nothing is written.
+    assert!(
+        hotsheet_server::notification_router::route_change_event(
+            &h.state,
+            &event("permission_asked")
+        )
+        .is_empty()
+    );
+    let registry = hotsheet_notify::Registry::builtin_only();
+    hotsheet_notify::admin::put_channel(
+        &h.home,
+        &registry,
+        hotsheet_notify::ChannelConfig {
+            id: "phone".into(),
+            notifier: "ntfy".into(),
+            label: None,
+            enabled: true,
+            settings: serde_json::from_value(json!({"topic":"hs-e2e"})).unwrap(),
+        },
+    )
+    .unwrap();
+    hotsheet_notify::admin::put_rule(
+        &h.home,
+        &registry,
+        hotsheet_notify::Rule {
+            id: "perm".into(),
+            events: vec![hotsheet_notify::EventKind::PermissionRequested],
+            channels: vec!["phone".into()],
+            enabled: true,
+            filter: Default::default(),
+            cooldown_seconds: 600,
+        },
+    )
+    .unwrap();
+    let records = hotsheet_server::notification_router::route_change_event(
+        &h.state,
+        &event("permission_asked"),
+    );
+    assert_eq!(records.len(), 1);
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("claude needs permission in demo")
+    );
+    // The same request again is inside the rule's cooldown.
+    let records = hotsheet_server::notification_router::route_change_event(
+        &h.state,
+        &event("permission_asked"),
+    );
+    assert_eq!(records[0].outcome, hotsheet_notify::Outcome::Suppressed);
+    assert!(
+        hotsheet_server::notification_router::route_change_event(&h.state, &event("turn_event"))
+            .is_empty()
+    );
+}
