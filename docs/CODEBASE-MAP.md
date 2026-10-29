@@ -163,7 +163,7 @@ Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
 synchronized from `crates/hotsheet-server/src/lib.rs` by
 `clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
-`clients/web/tests/contracts.spec.ts`. All 177 current paths have typed
+`clients/web/tests/contracts.spec.ts`. All 178 current paths have typed
 operations, including the notifier administration routes (HS2-R5HTZN); newly
 synchronized routes receive a `route-only` marker until their request and response
 DTOs are modeled (HS2-11BVBS).
@@ -566,7 +566,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       # (launch_safety + SafeTrigger/prepare_trigger moved to hotsheet-aitools so the server reuses them — HS2-1TY7GC)
       src/setup.rs           #   `hotsheet-cli setup <tool>` and read-only diagnosis planner: thin wrappers over hotsheet_plugins setup (adds the enabled-plugin filter from Settings)
       src/dispatch/setup_diagnose.rs # read-only CLI diagnosis: plugin plan, settings/worklist/registry path preview, MCP availability, and live terminal reports
-      src/dispatch/notify.rs #   `hotsheet-cli notify` notifiers/config/channel add|secret|enable|disable|remove|test/rule add|remove/send/deliveries over hotsheet_notify::admin, no server needed (HS2-R5HTZN); E2E in tests/notify.rs with a real external plugin subprocess
+      src/dispatch/notify.rs #   `hotsheet-cli notify` notifiers/config/channel add|secret|enable|disable|remove|trust|test/rule add|remove/send/deliveries over hotsheet_notify::admin, no server needed (HS2-R5HTZN); E2E in tests/notify.rs with a real external plugin subprocess
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
@@ -597,7 +597,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
       src/notification_router.rs # notifier delivery (HS2-R5HTZN): change-bus subscriber seeded from the index; ticket status/feedback/blocked transitions, permission_asked, and hub notifications → hotsheet-notify dispatch on blocking workers; AppState::with_notifiers test override
       src/project_activity.rs #  pure claim-derived per-store activity tracker: active → released + grace → stopped, unrenewed lease → stalled; router arms one timer per store (HS2-2MM07G)
-      src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-channels/{id}[/secrets/{field}|/test], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
+      src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-channels/{id}[/secrets/{field}|/test|/trust], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
       tests/notification_delivery.rs # E2E: admin routes + real bus events through the running router to a fake ntfy transport
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ) and optional failed-done provider message (HS2-AZVE3P); envelope `at_ms` + `in_flight_tool` (HS2-XV1VCR)

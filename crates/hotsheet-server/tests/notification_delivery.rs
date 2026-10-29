@@ -224,6 +224,18 @@ async fn admin_routes_validate_store_secrets_by_reference_and_test_channels() {
         removal["deleted_secrets"],
         json!([format!("notify-{channel}-token")])
     );
+    // HS2-208RB1: a built-in channel needs no approval; trusting it records none.
+    let (status, trusted) = call(&router, "POST", "/notification-channels/phone/trust", None).await;
+    assert_eq!(status, StatusCode::OK, "{trusted}");
+    assert!(trusted.get("plugin_digest").is_none(), "{trusted}");
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/notification-channels/missing/trust",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _) = call(&router, "POST", "/notification-channels/missing/test", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _) = call(&router, "DELETE", "/notification-rules/missing", None).await;
@@ -371,6 +383,7 @@ fn permission_requests_and_unconfigured_events_route_synchronously() {
             label: None,
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs-e2e"})).unwrap(),
+            plugin_digest: None,
         },
     )
     .unwrap();

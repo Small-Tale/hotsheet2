@@ -45,6 +45,12 @@ pub trait Notifier: Send + Sync {
         rendered: &Rendered,
         settings: &Resolved,
     ) -> Result<Option<String>, DeliveryError>;
+
+    /// A digest of the code this notifier runs, for notifiers whose code can change
+    /// after a channel approved it (external plugins, HS2-208RB1). `None` for built-ins.
+    fn content_digest(&self) -> Option<Result<String, String>> {
+        None
+    }
 }
 
 /// The result of a finished child process.

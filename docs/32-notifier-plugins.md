@@ -189,8 +189,16 @@ tail is reported. A plugin that outlives its timeout is killed.
 - Built-in ids (`speak`, `ntfy`, `email`) win a collision.
 - A plugin directory that fails to load is listed in `load_errors` and does not hide
   the others.
-- A channel that names a plugin is the user's consent to run it. Digest pinning, as
-  for AI-tool plugins, is HS2-208RB1.
+- **Approval (HS2-208RB1).** Creating a channel that names an external plugin approves
+  the plugin as it is then: the channel records a SHA-256 digest of every file in the
+  plugin directory (`plugin_digest`). Before each delivery, Hot Sheet recomputes the
+  digest. If any file was added, removed, renamed, or edited, or the channel has no
+  approval, the delivery fails without running the plugin. The error names
+  `hotsheet-cli notify channel trust <id>`.
+- Re-adding a channel keeps its approval, so a scripted, idempotent `channel add` never
+  re-trusts changed code. Only `channel trust` (or `POST
+/notification-channels/{id}/trust`) approves the current content. `notify config`
+  marks channels whose plugin changed. Built-in notifiers need no approval.
 
 ## 32.7 Dispatch
 
@@ -284,6 +292,7 @@ idempotent.
 | `channel secret <id> <field>` (prompt or piped stdin)                    | `PUT /notification-channels/{id}/secrets/{field}`            |
 | `channel enable\|disable <id>`                                           | `PUT /notification-channels/{id}` with `enabled`             |
 | `channel remove <id>`                                                    | `DELETE /notification-channels/{id}`                         |
+| `channel trust <id>` (approve the external plugin as it is now)          | `POST /notification-channels/{id}/trust`                     |
 | `channel test <id> [--json]`                                             | `POST /notification-channels/{id}/test`                      |
 | `rule add <id> --event … --channel … [filters] [--cooldown s]`           | `PUT /notification-rules/{id}`                               |
 | `rule remove <id>`                                                       | `DELETE /notification-rules/{id}`                            |
@@ -335,7 +344,7 @@ idempotent.
 | Contract, rendering, built-ins, external plugins, rules, router, CLI, REST | Shipped | HS2-R5HTZN |
 | Web settings for channels and rules                                        | Planned | HS2-DPBJJA |
 | Webhook, Slack, Teams, SMS notifiers                                       | Planned | HS2-97ZHMM |
-| External plugin digest trust gate                                          | Planned | HS2-208RB1 |
+| External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
 | Saved-query, checkout, quiet-hour, and rate-limit filters                  | Planned | HS2-4JG95G |
 | Click-through links                                                        | Planned | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |

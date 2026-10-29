@@ -112,6 +112,7 @@ use routes::notifiers::{
     delete_notification_channel, delete_notification_rule, get_notification_config,
     list_notification_deliveries, list_notifiers, put_notification_channel,
     put_notification_channel_secret, put_notification_rule, test_notification_channel,
+    trust_notification_channel,
 };
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
@@ -1753,6 +1754,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/notification-channels/{id}/test",
             post(test_notification_channel),
+        )
+        .route(
+            "/notification-channels/{id}/trust",
+            post(trust_notification_channel),
         )
         .route(
             "/notification-rules/{id}",

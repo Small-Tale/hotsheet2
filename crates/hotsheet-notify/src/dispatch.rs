@@ -240,6 +240,27 @@ impl Dispatcher {
             record.error = Some(format!("notifier '{}' is not installed", channel.notifier));
             return self.finish(record);
         };
+        if let Some(current) = notifier.content_digest() {
+            let refusal = match (current, channel.plugin_digest.as_deref()) {
+                (Ok(current), Some(approved)) if current == approved => None,
+                (Ok(_), Some(_)) => Some(format!(
+                    "notifier plugin '{}' changed since channel '{channel_id}' approved it; review the plugin, then run `hotsheet-cli notify channel trust {channel_id}`",
+                    channel.notifier
+                )),
+                (Ok(_), None) => Some(format!(
+                    "channel '{channel_id}' has not approved notifier plugin '{}'; review the plugin, then run `hotsheet-cli notify channel trust {channel_id}`",
+                    channel.notifier
+                )),
+                (Err(error), _) => Some(format!(
+                    "cannot verify notifier plugin '{}': {error}",
+                    channel.notifier
+                )),
+            };
+            if let Some(refusal) = refusal {
+                record.error = Some(refusal);
+                return self.finish(record);
+            }
+        }
         let descriptor = notifier.descriptor();
         let resolved = match settings::resolve(
             &descriptor.settings,
@@ -438,6 +459,7 @@ mod tests {
                 json!({"topic": id, "token": {"secret":"ntfy-token"}}),
             )
             .unwrap(),
+            plugin_digest: None,
         }
     }
 

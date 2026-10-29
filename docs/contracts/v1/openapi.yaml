@@ -10681,6 +10681,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /notification-channels/{id}/trust:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: trust_notification_channel
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannel'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-rules/{id}:
     parameters:
       - name: id
@@ -16888,6 +16934,9 @@ components:
         settings:
           type: object
           description: 'Values by setting key; a secret setting holds only {"secret": "<key name>"}.'
+        plugin_digest:
+          type: string
+          description: For an external notifier, the plugin digest this channel approved (HS2-208RB1).
       additionalProperties: false
     NotificationChannelInput:
       type: object

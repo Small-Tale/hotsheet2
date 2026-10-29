@@ -261,6 +261,37 @@ fn headless_setup_send_test_and_removal_through_an_external_plugin() {
         .success()
         .stdout(contains("delivered to rec (recorder)"));
     assert_eq!(envelopes(&env).last().unwrap()["message"]["event"], "test");
+
+    // HS2-208RB1: an edited plugin is refused without running until the channel trusts it.
+    let script = env.home.join("notifiers/recorder/send.sh");
+    let mut text = std::fs::read_to_string(&script).unwrap();
+    text.push_str("# edited after approval\n");
+    std::fs::write(&script, text).unwrap();
+    let before = envelopes(&env).len();
+    hs(&env)
+        .args(["channel", "test", "rec"])
+        .assert()
+        .failure()
+        .stdout(contains("changed since channel 'rec' approved it"));
+    assert_eq!(
+        envelopes(&env).len(),
+        before,
+        "the changed plugin did not run"
+    );
+    hs(&env)
+        .args(["config"])
+        .assert()
+        .success()
+        .stdout(contains("[plugin changed: review it"));
+    hs(&env)
+        .args(["channel", "trust", "rec"])
+        .assert()
+        .success()
+        .stdout(contains(
+            "Approved notifier plugin recorder for channel rec",
+        ));
+    hs(&env).args(["channel", "test", "rec"]).assert().success();
+    assert_eq!(envelopes(&env).len(), before + 1);
     hs(&env)
         .args([
             "channel",
@@ -295,7 +326,17 @@ fn headless_setup_send_test_and_removal_through_an_external_plugin() {
         .iter()
         .map(|d| d["outcome"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(outcomes, ["failed", "delivered", "suppressed", "delivered"]);
+    assert_eq!(
+        outcomes,
+        [
+            "failed",
+            "delivered",
+            "failed",
+            "delivered",
+            "suppressed",
+            "delivered"
+        ]
+    );
     assert!(
         !deliveries.to_string().contains("stopped working"),
         "the log holds no message text"

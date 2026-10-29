@@ -114,6 +114,9 @@ pub(crate) enum ChannelCmd {
     Disable { id: String },
     /// Remove a channel, rules left without a channel, and its stored credentials.
     Remove { id: String },
+    /// Approve the channel's external notifier plugin as it is now. Delivery refuses a
+    /// plugin that changed since its channel approved it.
+    Trust { id: String },
     /// Send a test notification to the channel, even when it is disabled.
     Test {
         id: String,
@@ -220,9 +223,21 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
             if config.channels.is_empty() {
                 println!("(no channels; add one with `hotsheet-cli notify channel add`)");
             }
+            let trust = admin::trust_status(&config, &registry);
             for c in &config.channels {
                 let state = if c.enabled { "" } else { " [disabled]" };
-                println!("channel {} ({}){state}", c.id, c.notifier);
+                let changed = trust
+                    .iter()
+                    .any(|(id, status)| id == &c.id && *status == Some(false));
+                let changed = if changed {
+                    format!(
+                        " [plugin changed: review it, then `hotsheet-cli notify channel trust {}`]",
+                        c.id
+                    )
+                } else {
+                    String::new()
+                };
+                println!("channel {} ({}){state}{changed}", c.id, c.notifier);
             }
             for r in &config.rules {
                 let events: Vec<_> = r.events.iter().map(|e| e.as_str()).collect();
@@ -380,6 +395,7 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
                     label,
                     enabled: !disabled,
                     settings: parsed,
+                    plugin_digest: None,
                 },
             )
             .map_err(admin_err)?;
@@ -427,6 +443,20 @@ fn channel(home: &Path, registry: &Registry, cmd: ChannelCmd) -> Result<()> {
             }
             for secret in removal.deleted_secrets {
                 println!("  deleted credential {secret}");
+            }
+        }
+        ChannelCmd::Trust { id } => {
+            let trusted = admin::trust_channel(home, registry, &id).map_err(admin_err)?;
+            match trusted.plugin_digest {
+                Some(digest) => println!(
+                    "Approved notifier plugin {} for channel {id} (digest {})",
+                    trusted.notifier,
+                    &digest[..12]
+                ),
+                None => println!(
+                    "Channel {id} uses built-in notifier {}; nothing to approve",
+                    trusted.notifier
+                ),
             }
         }
         ChannelCmd::Test { id, json } => {

@@ -92,6 +92,7 @@ pub(crate) async fn put_notification_channel(
             label: body.label,
             enabled: body.enabled,
             settings: body.settings,
+            plugin_digest: None,
         };
         admin::put_channel(state.machine_home(), &state.notifier_registry(), channel)
             .map(Json)
@@ -148,6 +149,19 @@ pub(crate) async fn test_notification_channel(
 ) -> Result<Json<DeliveryRecord>, ApiError> {
     blocking(move || {
         admin::test_channel(state.machine_home(), &state.notification_dispatcher(), &id)
+            .map(Json)
+            .map_err(admin_error)
+    })
+    .await
+}
+
+/// Approve a channel's external notifier plugin as it is now (HS2-208RB1).
+pub(crate) async fn trust_notification_channel(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ChannelConfig>, ApiError> {
+    blocking(move || {
+        admin::trust_channel(state.machine_home(), &state.notifier_registry(), &id)
             .map(Json)
             .map_err(admin_error)
     })

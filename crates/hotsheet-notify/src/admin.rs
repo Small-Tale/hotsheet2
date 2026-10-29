@@ -84,6 +84,8 @@ pub fn put_channel(
             .filter(|c| c.notifier == channel.notifier),
         registry.get(&channel.notifier),
     ) {
+        // Re-adding keeps the approval; only an explicit trust re-approves changed code.
+        channel.plugin_digest = existing.plugin_digest.clone();
         for field in &notifier.descriptor().settings {
             if field.kind == SettingKind::Secret && !channel.settings.contains_key(&field.key) {
                 if let Some(reference) = existing.settings.get(&field.key) {
@@ -94,9 +96,62 @@ pub fn put_channel(
             }
         }
     }
+    if channel.plugin_digest.is_none() {
+        // Creating a channel for an external plugin approves the plugin as it is now.
+        channel.plugin_digest = current_digest(registry, &channel.notifier)?;
+    }
     config.upsert_channel(channel.clone());
     config.save(home, registry)?;
     Ok(channel)
+}
+
+fn current_digest(registry: &Registry, notifier: &str) -> Result<Option<String>, AdminError> {
+    registry
+        .get(notifier)
+        .and_then(|n| n.content_digest())
+        .transpose()
+        .map_err(AdminError::Invalid)
+}
+
+/// Approve a channel's external notifier plugin as it is now (HS2-208RB1). Built-in
+/// notifiers need no approval; trusting their channels is a no-op that succeeds.
+pub fn trust_channel(
+    home: &Path,
+    registry: &Registry,
+    channel: &str,
+) -> Result<ChannelConfig, AdminError> {
+    let _lock = lock(home)?;
+    let mut config = load(home)?;
+    let entry = config
+        .channels
+        .iter_mut()
+        .find(|c| c.id == channel)
+        .ok_or_else(|| AdminError::NotFound(format!("unknown channel '{channel}'")))?;
+    entry.plugin_digest = current_digest(registry, &entry.notifier)?;
+    let trusted = entry.clone();
+    config.save(home, registry)?;
+    Ok(trusted)
+}
+
+/// Whether each channel's external plugin still matches its approval: `None` for
+/// built-ins, `Some(true)` when approved and unchanged.
+pub fn trust_status(
+    config: &NotificationConfig,
+    registry: &Registry,
+) -> Vec<(String, Option<bool>)> {
+    config
+        .channels
+        .iter()
+        .map(|c| {
+            let current = registry.get(&c.notifier).and_then(|n| n.content_digest());
+            let status = current.map(|current| {
+                current
+                    .ok()
+                    .is_some_and(|d| c.plugin_digest.as_deref() == Some(d.as_str()))
+            });
+            (c.id.clone(), status)
+        })
+        .collect()
 }
 
 /// Store a credential for a channel's secret field in the key registry and point the
@@ -291,6 +346,7 @@ mod tests {
             label: Some("My phone".into()),
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs-test"})).unwrap(),
+            plugin_digest: None,
         }
     }
 
@@ -384,6 +440,94 @@ mod tests {
         let config = NotificationConfig::load(home.path()).unwrap();
         assert_eq!(config.channels.len(), 8);
         assert_eq!(config.rules.len(), 8);
+    }
+
+    #[test]
+    fn hs2_208rb1_changed_plugins_are_refused_until_trusted_again() {
+        use crate::notifier::ProcessOutput;
+        use crate::testing::RecordingRunner;
+        let home = tempfile::tempdir().unwrap();
+        let plugin = Registry::plugins_dir(home.path()).join("relay");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            "id = \"relay\"\ndisplay_name = \"Relay\"\ncommand = [\"send.sh\"]\n[capabilities]\nformats = [\"plain\"]\nmax_body_bytes = 500\n",
+        )
+        .unwrap();
+        std::fs::write(plugin.join("send.sh"), "v1").unwrap();
+        let runner = Arc::new(RecordingRunner::with_output(ProcessOutput {
+            success: true,
+            code: Some(0),
+            stdout: br#"{"ok":true}"#.to_vec(),
+            stderr: Vec::new(),
+        }));
+        let registry = || {
+            Registry::with_builtins(
+                Vec::new(),
+                Some(&Registry::plugins_dir(home.path())),
+                runner.clone(),
+            )
+        };
+        let relay = ChannelConfig {
+            id: "relay".into(),
+            notifier: "relay".into(),
+            label: None,
+            enabled: true,
+            settings: Default::default(),
+            plugin_digest: None,
+        };
+        // Creating the channel approves the plugin as it is.
+        let created = put_channel(home.path(), &registry(), relay.clone()).unwrap();
+        assert!(created.plugin_digest.is_some());
+        let dispatcher = || {
+            Dispatcher::new(
+                Arc::new(registry()),
+                Arc::new(MemorySecrets::default()),
+                Some(home.path()),
+            )
+        };
+        let send = || test_channel(home.path(), &dispatcher(), "relay").unwrap();
+        assert_eq!(send().outcome, Outcome::Delivered);
+        assert_eq!(runner.calls().len(), 1);
+        let config = NotificationConfig::load(home.path()).unwrap();
+        assert_eq!(
+            trust_status(&config, &registry()),
+            [("relay".to_string(), Some(true))]
+        );
+
+        // A changed plugin is refused without running it.
+        std::fs::write(plugin.join("send.sh"), "v2").unwrap();
+        let refused = send();
+        assert_eq!((refused.outcome, refused.attempts), (Outcome::Failed, 0));
+        assert!(
+            refused
+                .error
+                .unwrap()
+                .contains("notify channel trust relay")
+        );
+        assert_eq!(runner.calls().len(), 1);
+        assert_eq!(
+            trust_status(&config, &registry()),
+            [("relay".to_string(), Some(false))]
+        );
+
+        // Re-adding the channel does not re-approve; an explicit trust does.
+        put_channel(home.path(), &registry(), relay.clone()).unwrap();
+        assert_eq!(send().outcome, Outcome::Failed);
+        let trusted = trust_channel(home.path(), &registry(), "relay").unwrap();
+        assert_ne!(trusted.plugin_digest, created.plugin_digest);
+        assert_eq!(send().outcome, Outcome::Delivered);
+        assert_eq!(runner.calls().len(), 2);
+
+        // A channel saved before approvals existed is refused until trusted.
+        let mut config = NotificationConfig::load(home.path()).unwrap();
+        config.channels[0].plugin_digest = None;
+        config.save(home.path(), &registry()).unwrap();
+        assert!(send().error.unwrap().contains("has not approved"));
+        assert!(matches!(
+            trust_channel(home.path(), &registry(), "nope").unwrap_err(),
+            AdminError::NotFound(_)
+        ));
     }
 
     #[test]

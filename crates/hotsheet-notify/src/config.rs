@@ -29,6 +29,10 @@ pub struct ChannelConfig {
     pub enabled: bool,
     #[serde(default)]
     pub settings: Settings,
+    /// For an external notifier: the plugin digest this channel approved. Delivery is
+    /// refused when the plugin's current digest differs (HS2-208RB1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_digest: Option<String>,
 }
 
 /// Narrows which events a rule forwards. Empty lists match everything.
@@ -329,6 +333,7 @@ mod tests {
             label: None,
             enabled: true,
             settings: serde_json::from_value(json!({"topic":"hs"})).unwrap(),
+            plugin_digest: None,
         }
     }
 
