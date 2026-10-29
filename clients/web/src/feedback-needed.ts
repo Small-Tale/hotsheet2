@@ -103,3 +103,23 @@ export function isStaleFeedbackDismissal(
   const request = notes.find((note) => note.id === target);
   return !request || presentedNoteKind(request, notes) !== 'feedback_needed';
 }
+
+/** Description feedback has no request note ID; its current ticket state is the authority (HS2-M6ETWA). */
+export function isStaleDescriptionFeedbackDismissal(
+  dismissedRequestId: string | undefined,
+  patch: Record<string, unknown>,
+  ticket: FullFeedbackTicket,
+): boolean {
+  if (
+    dismissedRequestId !== DETAILS_FEEDBACK_ID ||
+    patch.response_to !== undefined ||
+    typeof patch.note !== 'string' ||
+    Object.hasOwn(patch, 'note_id')
+  )
+    return false;
+  return (
+    !fullTicketFeedbackNeeded(ticket) ||
+    !textRequestsFeedback(ticket.details) ||
+    ticket.notes.some((note) => note.kind === 'feedback_needed')
+  );
+}

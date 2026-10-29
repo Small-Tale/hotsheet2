@@ -40,7 +40,13 @@ import {
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { finishDraftSubmission } from '../draft-submission-state';
-import { isStaleFeedbackDismissal, NO_RESPONSE_NEEDED_NOTE, presentedNoteKind } from '../feedback-needed';
+import {
+  DETAILS_FEEDBACK_ID,
+  isStaleDescriptionFeedbackDismissal,
+  isStaleFeedbackDismissal,
+  NO_RESPONSE_NEEDED_NOTE,
+  presentedNoteKind,
+} from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
@@ -507,7 +513,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       ticket = tickets.value.find((item) => item.slug === slug),
       // A response appends a new note; its draft must never rebase as an edit of the prompt (HS2-VBFSZJ).
       responseAppend =
-        typeof patch.response_to === 'string' && typeof patch.note === 'string' && !Object.hasOwn(patch, 'note_id');
+        (typeof patch.response_to === 'string' || dismissedRequestId === DETAILS_FEEDBACK_ID) &&
+        typeof patch.note === 'string' &&
+        !Object.hasOwn(patch, 'note_id');
     if (!current || !ticket) return false;
     const client = api();
     // HS2-E0H7S0: queued/retried origin writes cannot rebase another selection's editor recovery.
@@ -577,7 +585,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         // Token drift from unrelated writes (an AI's notes, lease renewals) can land between a refetch and the
         // retry; rebase and retry a bounded number of times instead of failing the edit (HS2-A4XCXE).
         for (let attempt = 0; !updated; attempt += 1) {
-          if (isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes)) {
+          if (
+            isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes) ||
+            isStaleDescriptionFeedbackDismissal(dismissedRequestId, pending, base)
+          ) {
             showToast(FEEDBACK_ALREADY_RESOLVED);
             updated = base;
             break;
@@ -648,7 +659,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             }
             if (!responseAppend && ownsDrafts())
               recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
-            if (isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes)) {
+            if (
+              isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes) ||
+              isStaleDescriptionFeedbackDismissal(dismissedRequestId, pending, remote)
+            ) {
               showToast(FEEDBACK_ALREADY_RESOLVED);
               updated = remote;
             } else if (Object.keys(reconciled.retry).length === 0) updated = remote;
@@ -716,7 +730,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   /** Capture dismissal intent separately from ordinary user-authored responses (HS2-VBFSZJ). */
   function dismissFeedbackRequest(requestId: string, frameId?: string): Promise<boolean> {
-    const patch = { note: NO_RESPONSE_NEEDED_NOTE, note_kind: 'regular', response_to: requestId };
+    const patch = {
+      note: NO_RESPONSE_NEEDED_NOTE,
+      note_kind: 'regular',
+      ...(requestId === DETAILS_FEEDBACK_ID ? {} : { response_to: requestId }),
+    };
     if (frameId) return updateLinkedReader(frameId, patch, requestId);
     const ticket = selectedTicket.value;
     return ticket ? applyTicketPatch(ticket.slug, patch, requestId) : Promise.resolve(false);
@@ -959,7 +977,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       // Same field-aware rebase-and-retry as the workspace editor: unrelated remote writes and disjoint
       // edits to the same text merge instead of discarding the reader's edit (HS2-A4XCXE).
       for (let attempt = 0; ; attempt += 1) {
-        if (isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes)) {
+        if (
+          isStaleFeedbackDismissal(dismissedRequestId, pending, base.notes) ||
+          isStaleDescriptionFeedbackDismissal(dismissedRequestId, pending, base)
+        ) {
           showToast(FEEDBACK_ALREADY_RESOLVED);
           flushDraftInputs();
           replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, base));
@@ -979,7 +1000,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           const remote = (await client.checkoutTicket(frame.projectId, frame.ticket.qualified_id)).ticket,
             reconciled = reconcileTicketPatch(base, remote, pending);
           if (
-            typeof pending.response_to === 'string' &&
+            (typeof pending.response_to === 'string' || dismissedRequestId === DETAILS_FEEDBACK_ID) &&
             typeof pending.note === 'string' &&
             !Object.hasOwn(pending, 'note_id')
           ) {
@@ -994,7 +1015,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             error.value = `This linked ticket's ${ticketFieldLabel(reconciled.conflicts[0].field).toLocaleLowerCase()} changed remotely in the same place you edited. Your draft was preserved; review it and try again.`;
             return false;
           }
-          if (isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes)) showToast(FEEDBACK_ALREADY_RESOLVED);
+          if (
+            isStaleFeedbackDismissal(dismissedRequestId, pending, remote.notes) ||
+            isStaleDescriptionFeedbackDismissal(dismissedRequestId, pending, remote)
+          )
+            showToast(FEEDBACK_ALREADY_RESOLVED);
           else if (Object.keys(reconciled.retry).length) {
             base = remote;
             pending = reconciled.retry;

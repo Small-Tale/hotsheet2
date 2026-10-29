@@ -4,6 +4,7 @@ import {
   DETAILS_FEEDBACK_ID,
   fullTicketFeedbackNeeded,
   isFeedbackNeeded,
+  isStaleDescriptionFeedbackDismissal,
   isStaleFeedbackDismissal,
   NO_RESPONSE_NEEDED_NOTE,
   presentedNoteKind,
@@ -14,6 +15,36 @@ const note = (id: string, kind: 'regular' | 'activity' | 'feedback_needed', crea
   id,
   kind,
   created_at,
+});
+
+describe('isStaleDescriptionFeedbackDismissal (HS2-M6ETWA)', () => {
+  const current = { feedback_needed: true, details: 'FEEDBACK NEEDED: choose one', notes: [] };
+  const dismissal = { note: NO_RESPONSE_NEEDED_NOTE, note_kind: 'regular' };
+
+  it('keeps an explicit current description dismissal without manufacturing a response target', () => {
+    expect(isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, current)).toBe(false);
+    expect(isStaleDescriptionFeedbackDismissal(undefined, dismissal, { ...current, feedback_needed: false })).toBe(
+      false,
+    );
+    expect(isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, { ...dismissal, response_to: 'R1' }, current)).toBe(
+      false,
+    );
+  });
+
+  it('drops only the captured description action after the request is resolved or replaced', () => {
+    expect(
+      isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, { ...current, feedback_needed: false }),
+    ).toBe(true);
+    expect(
+      isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, { ...current, details: 'Resolved' }),
+    ).toBe(true);
+    expect(
+      isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, {
+        ...current,
+        notes: [{ id: 'R1', kind: 'feedback_needed', created_at: '2026-10-29T00:00:00Z' }],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('isFeedbackNeeded', () => {

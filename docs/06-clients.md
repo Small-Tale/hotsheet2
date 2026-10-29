@@ -4212,6 +4212,12 @@ unsupported, so they cannot create this state through Hot Sheet.
   edit of an AI-authored `feedback_needed` note is refused with 409 Conflict unless the
   request carries `edit_feedback_prompt: true`, which the client sends only for a prompt
   the user opened with Edit Note.
+- **Description feedback has no request note id** (HS2-M6ETWA). In the reader, Respond
+  appends a regular note with the user's text. No Response Needed appends a regular
+  "No response needed" note through the same qualified ticket route, without
+  `response_to`. A stale dismissal whose description was resolved or replaced by
+  another writer closes with an already-resolved notice and sends no retry. Note
+  feedback still uses an exact request-note `response_to`; the server validates it.
 - **Feedback prompts support user-chosen inline reply points.** In reader mode, the
   client maps a click in the rendered Markdown to the corresponding source-character
   boundary and inserts a focused reply field at that exact point. Enter/Space on the

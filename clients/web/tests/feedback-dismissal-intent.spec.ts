@@ -456,3 +456,109 @@ test('HS2-VBFSZJ preserves the real description response append and a further re
     }
   }
 });
+
+for (const surface of ['workspace', 'linked reader'] as const)
+  for (const stale of [false, true] as const)
+    test(`HS2-M6ETWA resolves ${stale ? 'stale' : 'current'} description feedback in the ${surface}`, async ({
+      page,
+    }) => {
+      const source = await realTicketServer(),
+        target = surface === 'workspace' ? source : await realTicketServer();
+      let releaseRefresh = () => {};
+      try {
+        const details = 'FEEDBACK NEEDED: choose a synthetic option.',
+          ticket = await target.request<FullTicket>('/tickets', 'POST', {
+            title: 'Synthetic description dismissal',
+            details,
+          }),
+          path = `/tickets/${ticket.id}`,
+          origin =
+            surface === 'workspace'
+              ? ticket
+              : await source.request<FullTicket>('/tickets', 'POST', {
+                  title: 'Synthetic linked description owner',
+                  details: `Open @${target.checkoutId}/${ticket.slug} for review.`,
+                });
+        let changed = false;
+        const opened = await openFeedbackProjects(page, source, target, async () => {
+          if (!stale || changed) return;
+          changed = true;
+          await target.request(path, 'PATCH', { details: 'The synthetic choice was resolved remotely.' });
+        });
+        releaseRefresh = opened.releaseRefresh;
+        await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${origin.slug}"]`).first().click();
+        if (surface === 'workspace')
+          await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+        else
+          await page
+            .locator('#app-right-rail')
+            .getByRole('link', { name: `@${target.checkoutId}/${ticket.slug}` })
+            .click();
+        const reader = page.locator('[data-reader-active="true"]'),
+          description = reader.locator('[data-details-feedback="true"]'),
+          response = description.getByRole('textbox', { name: 'Feedback response' });
+        await expect(response).toBeVisible();
+        await response.fill('An unsent synthetic reply');
+        await description.getByRole('button', { name: 'No Response Needed', exact: true }).click();
+        await expect.poll(() => opened.writes.map((write) => write.status)).toEqual(stale ? [409] : [200]);
+        for (const write of opened.writes) {
+          expect(write.project).toBe(target.checkoutId);
+          expect(write.path).toBe(`/checkouts/${target.checkoutId}/tickets/${ticket.qualified_id}`);
+          expect(write.body).toMatchObject({ note: 'No response needed', note_kind: 'regular' });
+          expect(write.body).not.toHaveProperty('response_to');
+          expect(write.body).not.toHaveProperty('note_id');
+          expect(write.body.expected_token).toBeTruthy();
+        }
+        await expect(response).toHaveCount(0);
+        if (process.env.HOTSHEET_M6ETWA_VISUAL_REVIEW && surface === 'workspace' && !stale) {
+          for (const [label, width] of [
+            ['wide', 2048],
+            ['medium', 1100],
+            ['narrow', 390],
+            ['wide-again', 2048],
+          ] as const) {
+            await page.setViewportSize({ width, height: 900 });
+            await expect(reader.getByText('No response needed')).toBeVisible();
+            await page.screenshot({ path: test.info().outputPath(`hs2-m6etwa-after-${label}.png`) });
+          }
+        }
+        const stored = await target.request<FullTicket>(path);
+        expect(stored.details).toBe(stale ? 'The synthetic choice was resolved remotely.' : details);
+        expect(stored.notes.map((note) => note.text)).toEqual(stale ? [] : ['No response needed']);
+        expect(stored.feedback_needed).toBe(false);
+        if (stale)
+          await expect(
+            page.getByText('This feedback request was already resolved, so no response was sent.').first(),
+          ).toBeVisible();
+        if (source !== target)
+          expect((await source.request<FullTicket>(`/tickets/${origin.id}`)).notes).toHaveLength(0);
+        if (surface === 'workspace' && !stale) {
+          const dismissalNote = stored.notes.find((note) => note.text === 'No response needed')!;
+          await target.request(`/tickets/${ticket.id}/notes/${dismissalNote.id}`, 'DELETE');
+          releaseRefresh();
+          await page.reload();
+          await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${ticket.slug}"]`).first().click();
+          await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+          const restored = page.locator('[data-reader-active="true"] [data-details-feedback="true"]'),
+            reply = restored.getByRole('textbox', { name: 'Feedback response' });
+          await expect(reply).toHaveValue('');
+          await reply.fill('No response needed');
+          await restored.getByRole('button', { name: 'Respond', exact: true }).click();
+          await expect.poll(() => opened.writes.map((write) => write.status)).toEqual([200, 200]);
+          expect(opened.writes[1]?.body).toMatchObject({ note: 'No response needed', note_kind: 'regular' });
+          expect(opened.writes[1]?.body).not.toHaveProperty('response_to');
+          await expect(reply).toHaveCount(0);
+          expect((await target.request<FullTicket>(path)).notes.map((note) => note.text)).toEqual([
+            'No response needed',
+          ]);
+        }
+      } finally {
+        releaseRefresh();
+        try {
+          await page.unrouteAll({ behavior: 'ignoreErrors' });
+        } finally {
+          if (target !== source) await target.stop();
+          await source.stop();
+        }
+      }
+    });
