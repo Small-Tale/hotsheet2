@@ -35,6 +35,8 @@ pub struct SafeTrigger {
     _shim: launch_safety::ShimDir,
     // The throwaway codex CODEX_HOME (app-server tools only), kept alive for every turn.
     _codex_home: Option<launch_safety::IsolatedCodexHome>,
+    // Claude's launch-scoped MCP config pins the same home as its CLI child.
+    _mcp_config_file: Option<tempfile::NamedTempFile>,
 }
 
 /// Resolve the tool, assemble the HS2-103 launch safety, and return a reusable
@@ -59,6 +61,7 @@ pub fn prepare_trigger(
             shared_daemon,
             journal_home: Some(hotsheet_plugins::hotsheet_home()),
             persistent_codex_home: None,
+            source_codex_home: None,
         },
     )
 }
@@ -78,6 +81,8 @@ pub struct TriggerOptions {
     pub persistent_codex_home: Option<PathBuf>,
     /// Explicit machine home for process provenance; tests may leave it absent.
     pub journal_home: Option<PathBuf>,
+    /// Optional source for Codex auth in an isolated home; defaults to the signed-in home.
+    pub source_codex_home: Option<PathBuf>,
 }
 
 /// One controlled turn's inputs for [`SafeTrigger::run_turn_controlled_with_options`].
@@ -132,6 +137,7 @@ pub fn prepare_trigger_with_home(
         shared_daemon,
         persistent_codex_home,
         journal_home,
+        source_codex_home,
     } = options;
     let plugin = hotsheet_plugins::find(tool)
         .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
@@ -146,6 +152,20 @@ pub fn prepare_trigger_with_home(
                 .with_context(|| format!("--env expects KEY=VALUE, got '{kv}'"))
         })
         .collect::<Result<_>>()?;
+    // Keep the CLI and its MCP child on one home even when a tool's app-server
+    // does not forward arbitrary parent environment variables (HS2-2KNVV0).
+    let hotsheet_home = env
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "HOTSHEET_HOME")
+        .map(|(_, value)| PathBuf::from(value))
+        .or_else(|| journal_home.clone())
+        .unwrap_or_else(hotsheet_plugins::hotsheet_home);
+    env.retain(|(key, _)| key != "HOTSHEET_HOME");
+    env.push((
+        "HOTSHEET_HOME".into(),
+        hotsheet_home.to_string_lossy().into_owned(),
+    ));
 
     // ---- HS2-103 launch safety (baked in so a bare `trigger`/`work` is safe) ----
     launch_safety::assert_trigger_project_safe(&cwd, store_path)?;
@@ -170,7 +190,7 @@ pub fn prepare_trigger_with_home(
         })?;
         let command = launch_safety::mcp_command(&plugin.manifest.mcp.command);
         let args = plugin.mcp_args(&store_abs.to_string_lossy());
-        let source = launch_safety::default_codex_home();
+        let source = source_codex_home.unwrap_or_else(launch_safety::default_codex_home);
         let name = &plugin.manifest.mcp.server_name;
         // For the shared daemon, the home must be daemon-ready (packages symlinked, short
         // socket path); otherwise the plain isolated home is enough for a direct app-server.
@@ -194,6 +214,7 @@ pub fn prepare_trigger_with_home(
             launch_safety::IsolatedCodexHome::create(&source, name, &command, &args)?
         };
         home.allow_linked_store_write(&store_abs)?;
+        home.set_mcp_hotsheet_home(name, &hotsheet_home, tool)?;
         env.push((
             "CODEX_HOME".to_string(),
             home.path().to_string_lossy().into_owned(),
@@ -250,6 +271,20 @@ pub fn prepare_trigger_with_home(
             }
         }
     };
+    let (mcp_config, mcp_config_file) = if plugin.manifest.mcp.format == "claude-json" {
+        let source = mcp_config
+            .as_ref()
+            .context("Claude MCP config is missing")?;
+        let file = launch_safety::pin_claude_mcp_home(
+            source,
+            &plugin.manifest.mcp.server_name,
+            &hotsheet_home,
+            tool,
+        )?;
+        (Some(file.path().to_path_buf()), Some(file))
+    } else {
+        (mcp_config, None)
+    };
 
     let permission_mode = launch_permission_mode(&plugin, permission_mode);
     Ok(SafeTrigger {
@@ -267,6 +302,7 @@ pub fn prepare_trigger_with_home(
         permission_bridge: None,
         _shim: shim,
         _codex_home: codex_home,
+        _mcp_config_file: mcp_config_file,
     })
 }
 
@@ -417,7 +453,92 @@ impl SafeTrigger {
 
 #[cfg(test)]
 mod tests {
-    use super::launch_permission_mode;
+    use super::{TriggerOptions, launch_permission_mode, prepare_trigger_with_home};
+
+    #[test]
+    fn hs2_2knvv0_trigger_pins_explicit_home_in_codex_and_claude_mcp_configs() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let store = root.path().join("project.hs2");
+        let codex_source = root.path().join("codex-source");
+        let selected_home = root.path().join("selected-home");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::create_dir(&codex_source).unwrap();
+        hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("TST"))
+            .unwrap();
+        let git = hotsheet_ticketing::git::launch("git")
+            .args(["init", "--quiet"])
+            .current_dir(&store)
+            .output()
+            .unwrap();
+        assert!(git.status.success());
+        std::fs::write(
+            project.join(".mcp.json"),
+            r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[],"env":{}}}}"#,
+        )
+        .unwrap();
+
+        for tool in ["codex", "claude"] {
+            let trigger = prepare_trigger_with_home(
+                &store,
+                tool,
+                TriggerOptions {
+                    project: Some(project.clone()),
+                    envs: vec![format!("HOTSHEET_HOME={}", selected_home.display())],
+                    journal_home: Some(root.path().join("wrong-journal-home")),
+                    source_codex_home: Some(codex_source.clone()),
+                    ..TriggerOptions::default()
+                },
+            )
+            .unwrap();
+            assert!(trigger.env.iter().any(|(key, value)| {
+                key == "HOTSHEET_HOME" && value == selected_home.to_str().unwrap()
+            }));
+            if tool == "codex" {
+                let home = trigger._codex_home.as_ref().unwrap();
+                let config: toml::Value = std::fs::read_to_string(home.path().join("config.toml"))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                assert_eq!(
+                    config["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_HOME"].as_str(),
+                    selected_home.to_str()
+                );
+                assert_eq!(
+                    config["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ID"].as_str(),
+                    Some("codex")
+                );
+            } else {
+                let config: serde_json::Value = serde_json::from_slice(
+                    &std::fs::read(trigger.mcp_config.as_ref().unwrap()).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    config["mcpServers"]["hotsheet"]["env"]["HOTSHEET_HOME"].as_str(),
+                    selected_home.to_str()
+                );
+                assert_eq!(
+                    config["mcpServers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ID"].as_str(),
+                    Some("claude")
+                );
+            }
+        }
+
+        let trigger = prepare_trigger_with_home(
+            &store,
+            "codex",
+            TriggerOptions {
+                project: Some(project),
+                journal_home: Some(selected_home.clone()),
+                source_codex_home: Some(codex_source),
+                ..TriggerOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(trigger.env.iter().any(|(key, value)| {
+            key == "HOTSHEET_HOME" && value == selected_home.to_str().unwrap()
+        }));
+    }
 
     #[test]
     fn launch_mode_prefers_the_request_then_the_plugin_default() {

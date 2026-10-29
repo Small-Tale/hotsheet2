@@ -3934,7 +3934,11 @@ async fn native_claude_connection_advertises_the_interrupt_action() {
     let (dir, base) = state();
     // Preparing a Claude drive requires the project's MCP config (HS2-103 isolation);
     // no `claude` binary is needed until a turn runs.
-    std::fs::write(dir.path().join(".mcp.json"), r#"{"mcpServers":{}}"#).unwrap();
+    std::fs::write(
+        dir.path().join(".mcp.json"),
+        r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
+    )
+    .unwrap();
     let router = app(base);
     let created = router
         .oneshot(authed(

@@ -19,6 +19,7 @@
 //! The primitives here are pure/injectable so they unit-test without launching anything.
 
 use std::collections::HashSet;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -143,6 +144,47 @@ pub struct IsolatedCodexHome {
     daemon_program: Option<String>,
 }
 
+/// Copy Claude's selected MCP config into a launch-scoped file with an explicit
+/// Hot Sheet home. The project config stays portable; the child cannot fall back
+/// to a different machine registry if Claude filters its environment (HS2-2KNVV0).
+pub fn pin_claude_mcp_home(
+    source: &Path,
+    server_name: &str,
+    home: &Path,
+    actor_id: &str,
+) -> Result<tempfile::NamedTempFile> {
+    let mut config: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(source).with_context(|| format!("reading {}", source.display()))?,
+    )
+    .with_context(|| format!("parsing {}", source.display()))?;
+    let server = config
+        .get_mut("mcpServers")
+        .and_then(serde_json::Value::as_object_mut)
+        .and_then(|servers| servers.get_mut(server_name))
+        .and_then(serde_json::Value::as_object_mut)
+        .context("Claude MCP config is missing the Hot Sheet server")?;
+    let env = server
+        .entry("env")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .context("Hot Sheet MCP environment must be an object")?;
+    env.insert(
+        "HOTSHEET_HOME".into(),
+        home.to_string_lossy().into_owned().into(),
+    );
+    env.insert("HOTSHEET_ACTOR_ROLE".into(), "ai".into());
+    env.insert("HOTSHEET_ACTOR_ID".into(), actor_id.into());
+    let mut output = tempfile::Builder::new()
+        .prefix("hs2-mcp-")
+        .suffix(".json")
+        .tempfile()
+        .context("creating launch-scoped Claude MCP config")?;
+    serde_json::to_writer_pretty(&mut output, &config)?;
+    output.write_all(b"\n")?;
+    output.flush()?;
+    Ok(output)
+}
+
 enum CodexHomeDir {
     Temporary(tempfile::TempDir),
     Persistent { _storage: PathBuf, runtime: PathBuf },
@@ -158,6 +200,43 @@ impl CodexHomeDir {
 }
 
 impl IsolatedCodexHome {
+    /// Pin the MCP shim to the same machine home as the launched tool. Codex may
+    /// sanitize the app-server environment before spawning MCP children (HS2-2KNVV0).
+    pub fn set_mcp_hotsheet_home(
+        &self,
+        server_name: &str,
+        home: &Path,
+        actor_id: &str,
+    ) -> Result<()> {
+        let config_path = self.path().join("config.toml");
+        let mut config: toml::Table = std::fs::read_to_string(&config_path)
+            .with_context(|| format!("reading {}", config_path.display()))?
+            .parse()
+            .context("parsing isolated Codex config")?;
+        let server = config
+            .get_mut("mcp_servers")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|servers| servers.get_mut(server_name))
+            .and_then(toml::Value::as_table_mut)
+            .context("isolated Codex config is missing the Hot Sheet MCP server")?;
+        let mut env = toml::Table::new();
+        env.insert(
+            "HOTSHEET_HOME".into(),
+            toml::Value::String(home.to_string_lossy().into_owned()),
+        );
+        env.insert(
+            "HOTSHEET_ACTOR_ROLE".into(),
+            toml::Value::String("ai".into()),
+        );
+        env.insert(
+            "HOTSHEET_ACTOR_ID".into(),
+            toml::Value::String(actor_id.into()),
+        );
+        server.insert("env".into(), toml::Value::Table(env));
+        std::fs::write(&config_path, toml::to_string_pretty(&config)?)
+            .with_context(|| format!("writing {}", config_path.display()))
+    }
+
     /// Let a driven Codex update its linked ticket store while keeping the rest of
     /// the machine under workspace-write. Git metadata needs its own root because
     /// Codex protects `.git` even when the surrounding store is writable.

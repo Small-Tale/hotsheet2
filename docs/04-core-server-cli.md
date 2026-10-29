@@ -1343,7 +1343,12 @@ or unrelated migration receipts fail closed. Codex reads its MCP servers from
 **auto-builds a throwaway MCP-free `CODEX_HOME`** for it (HS2-YRDQNX): a copy of the
 user's `auth.json` plus a `config.toml` whose only server is the Hot Sheet shim — so a
 bare `trigger codex` can't load the user's global MCP servers (pass `--env CODEX_HOME=…`
-to override). The safety primitives live in `crates/hotsheet-aitools/src/launch_safety.rs`.
+to override). The launch pins the selected `HOTSHEET_HOME` in both the tool environment
+and its Hot Sheet MCP server entry, so a tool that filters inherited environment
+variables cannot register the checkout in another machine home (HS2-2KNVV0). For
+Claude, a temporary copy of the selected MCP config carries that home; the portable
+project config stays unchanged. The safety primitives live in
+`crates/hotsheet-aitools/src/launch_safety.rs`.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
 

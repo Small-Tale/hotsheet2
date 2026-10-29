@@ -9,6 +9,100 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home() {
+    let root = tempfile::tempdir().unwrap();
+    let source_codex_home = root.path().join("codex-source");
+    let isolated_home = root.path().join("isolated-hotsheet-home");
+    let default_home = root.path().join("different-user-home");
+    let project = root.path().join("project");
+    let store_path = root.path().join("project.hs2");
+    std::fs::create_dir_all(&source_codex_home).unwrap();
+    std::fs::create_dir_all(&default_home).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::FsStore::init(&store_path, &hotsheet_ticketing::StoreMetadata::new("TST"))
+        .unwrap();
+
+    let codex_home = hotsheet_aitools::launch_safety::IsolatedCodexHome::create(
+        &source_codex_home,
+        "hotsheet",
+        "hotsheet-mcp",
+        &[],
+    )
+    .unwrap();
+    codex_home
+        .set_mcp_hotsheet_home("hotsheet", &isolated_home, "codex")
+        .unwrap();
+    let config: toml::Value = std::fs::read_to_string(codex_home.path().join("config.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mcp_env = config["mcp_servers"]["hotsheet"]["env"].as_table().unwrap();
+    assert_eq!(mcp_env["HOTSHEET_ACTOR_ROLE"].as_str(), Some("ai"));
+    assert_eq!(mcp_env["HOTSHEET_ACTOR_ID"].as_str(), Some("codex"));
+
+    // Cross a real CLI process boundary with a different HOME and no inherited
+    // HOTSHEET_HOME, as a tool runtime may sanitize its MCP child environment.
+    let mut child = hs(&store_path);
+    child
+        .env("HOME", &default_home)
+        .env_remove("HOTSHEET_HOME")
+        .env("HOTSHEET_HOME", mcp_env["HOTSHEET_HOME"].as_str().unwrap())
+        .args(["checkout", "register"])
+        .arg(&project)
+        .arg("--store")
+        .arg(&store_path)
+        .assert()
+        .success();
+
+    assert!(isolated_home.join("checkouts.json").is_file());
+    assert!(!default_home.join(".hotsheet2/checkouts.json").exists());
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(isolated_home.join("checkouts.json"));
+    assert_eq!(registry.list().unwrap().len(), 1);
+
+    let claude_config = root.path().join(".mcp.json");
+    std::fs::write(
+        &claude_config,
+        r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[],"env":{"HOTSHEET_ACTOR_ROLE":"ai"}}}}"#,
+    )
+    .unwrap();
+    let pinned = hotsheet_aitools::launch_safety::pin_claude_mcp_home(
+        &claude_config,
+        "hotsheet",
+        &isolated_home,
+        "claude",
+    )
+    .unwrap();
+    let config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(pinned.path()).unwrap()).unwrap();
+    let claude_env = &config["mcpServers"]["hotsheet"]["env"];
+    assert_eq!(claude_env["HOTSHEET_ACTOR_ID"], "claude");
+    let second_project = root.path().join("second-project");
+    std::fs::create_dir(&second_project).unwrap();
+    hs(&store_path)
+        .env("HOME", &default_home)
+        .env_remove("HOTSHEET_HOME")
+        .env(
+            "HOTSHEET_HOME",
+            claude_env["HOTSHEET_HOME"].as_str().unwrap(),
+        )
+        .args(["checkout", "register"])
+        .arg(&second_project)
+        .arg("--store")
+        .arg(&store_path)
+        .assert()
+        .success();
+    assert_eq!(registry.list().unwrap().len(), 2);
+    assert!(!default_home.join(".hotsheet2/checkouts.json").exists());
+    assert!(
+        !std::fs::read_to_string(&claude_config)
+            .unwrap()
+            .contains("HOTSHEET_HOME"),
+        "portable project config is unchanged"
+    );
+}
+
+#[test]
 fn hs2_2z11a5_cli_new_records_a_qualified_follow_up_after_creation() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

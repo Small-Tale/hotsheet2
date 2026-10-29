@@ -140,6 +140,12 @@ The source and generated Claude/Codex guidance names the MCP fallback for
 sibling-store `Operation not permitted (os error 1)`, plus approved unsandboxed
 browser-gate retry for EPERM or mach-port launch denials. The actual host
 sandbox behavior remains a manual launched-session check.
+HS2-2KNVV0 pins the launched MCP child's machine home and actor identity in
+Codex's isolated config and Claude's temporary config. The real-process CLI
+regression `hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home` runs with
+different synthetic default and selected homes and verifies that only the selected
+registry gains checkouts. The live model launch and browser recovery remain under
+HS2-NB2TTN's manual check.
 HS2-EM6YWP covers the exact MCP claim, renew, and release path after a project
 launch injects its checkout. `crates/hotsheet-mcp` route and serverless tests
 exercise a synthetic sibling store; the `hotsheet-server` HTTP regression checks
