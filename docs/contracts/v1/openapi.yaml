@@ -175,6 +175,129 @@ paths:
       responses:
         '201':
           $ref: '#/components/responses/FullTicket'
+  /providers/{connection_id}/webhook:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    get:
+      operationId: getGithubWebhookSetup
+      description: Return GitHub webhook setup instructions without revealing the secret value.
+      responses:
+        '200':
+          description: Current setup and process-local delivery readiness.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubWebhookSetup'
+        '404':
+          description: GitHub source unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: configureGithubWebhook
+      description: Idempotently associate an existing machine secret reference with a GitHub source.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubWebhookSetupRequest'
+      responses:
+        '200':
+          description: Updated setup; the secret value is never returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubWebhookSetup'
+        '400':
+          description: Invalid or unavailable secret reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: GitHub source unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /webhooks/github/{connection_id}:
+    parameters:
+      - $ref: '#/components/parameters/Connection'
+    post:
+      operationId: receiveGithubWebhook
+      description: Verify the HMAC of the raw body, then re-read the issue from GitHub before invalidating local state. Bodies are limited to 256 KiB.
+      security: []
+      parameters:
+        - name: x-hub-signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^sha256=[0-9a-fA-F]{64}$'
+        - name: x-github-event
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: x-github-delivery
+          in: header
+          description: Required for supported issue invalidation events.
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Signed GitHub event payload; only its identity and revision are used, and the issue is fetched again from GitHub.
+              additionalProperties: true
+      responses:
+        '200':
+          description: Delivery accepted, ignored, or identified as a duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubWebhookReceipt'
+        '400':
+          description: Missing header or invalid delivery payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Invalid webhook signature.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Source or checkout mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: GitHub source or webhook configuration unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '502':
+          description: GitHub issue re-read failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Local configuration or GitHub read unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /providers/{connection_id}/tickets/{id}:
     parameters:
       - $ref: '#/components/parameters/Connection'
@@ -13176,6 +13299,58 @@ components:
         settings: {}
         disabled:
           type: boolean
+      additionalProperties: false
+    GithubWebhookSetupRequest:
+      type: object
+      required:
+        - secret_ref
+      properties:
+        secret_ref:
+          type: string
+          minLength: 1
+          description: Name of an existing machine secret, not the secret value.
+      additionalProperties: false
+    GithubWebhookSetup:
+      type: object
+      required:
+        - path
+        - secret_ref
+        - events
+        - content_type
+        - configured
+        - active
+      properties:
+        path:
+          type: string
+        secret_ref:
+          type:
+            - string
+            - 'null'
+        events:
+          type: array
+          items:
+            type: string
+        content_type:
+          type: string
+        configured:
+          type: boolean
+        active:
+          type: boolean
+      additionalProperties: false
+    GithubWebhookReceipt:
+      type: object
+      required:
+        - accepted
+        - duplicate
+        - cursor
+      properties:
+        accepted:
+          type: boolean
+        duplicate:
+          type: boolean
+        cursor:
+          type: integer
+          minimum: 0
       additionalProperties: false
     ProviderConnections:
       type: array
