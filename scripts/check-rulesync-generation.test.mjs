@@ -96,6 +96,8 @@ test('HS2-VA97HW isolates fixture and generator children from a hook repository'
       process.execPath,
       [
         '--test',
+        // HS2-ST5M6V: the assertion below reads TAP; Node 26 defaults piped output to spec.
+        '--test-reporter=tap',
         '--test-name-pattern=^HS2-VA97HW (drafts offline|drafts with|the real pinned)',
         'scripts/gitgist-tooling.test.mjs',
         'scripts/check-rulesync-generation.test.mjs',
