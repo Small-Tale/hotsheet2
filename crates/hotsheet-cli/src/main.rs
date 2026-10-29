@@ -7,6 +7,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 mod dispatch;
+mod notify_watch;
 
 use dispatch::coordination::CoordinationArgs;
 use dispatch::notify::NotifyCmd;
@@ -950,7 +951,12 @@ fn main() -> Result<()> {
         path: cli.path,
         cwd,
     };
+    // HS2-8VAXXA: with no live server for the store, the CLI routes its own transitions.
+    let watch = notify_watch::Watch::before(&cli.command, &ctx.path, default_index_path);
     let result = dispatch::run(cli.command, &ctx);
+    if let (Ok(()), Some(watch)) = (&result, watch) {
+        watch.after();
+    }
     if result.is_ok() && refresh {
         refresh_checkout_worklists(&ctx.path, &ctx.cwd)?;
     }

@@ -20,6 +20,7 @@ pub mod registry;
 pub mod render;
 pub mod settings;
 pub mod testing;
+pub mod transitions;
 
 pub use capability::{BodyFormat, Capabilities, NotifierDescriptor, SettingField, SettingKind};
 pub use config::{ChannelConfig, ConfigError, NotificationConfig, Rule, RuleFilter};

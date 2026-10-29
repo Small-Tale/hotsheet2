@@ -256,7 +256,17 @@ The bus carries ids, not before/after states. Transitions are found by comparing
 changed ticket with a snapshot that is seeded from each store's index when the router
 starts, before it reads the bus. The first change in a store hosted after startup only
 records its baseline. An event with no enabled rule is dropped before any ticket is
-read. With no server running, only `hotsheet-cli notify send` delivers (HS2-8VAXXA).
+read.
+
+**Without a server (HS2-8VAXXA).** When no live server hosts a store, a
+`hotsheet-cli` ticket write delivers its own ticket transitions. A live server is one with
+an `instances` record for that store root and a live PID. The CLI snapshots the index rows
+before the command, diffs them after, and builds messages with the same
+`hotsheet_notify::transitions` the server router uses. When a server does host the store,
+the CLI stays quiet and the server's watcher routes the write, so nothing is sent twice.
+Read-only commands are not watched. A delivery failure is reported on stderr and never
+fails the ticket command. `project.stopped` needs the server's timers. Serverless MCP
+writes are HS2-FYZ5S9.
 Ticket, permission, and project events carry the checkout ids linked to their store,
 and a linked checkout's alias is the project name in the message (HS2-4JG95G).
 
@@ -420,7 +430,8 @@ idempotent.
 | Saved-view rules and batched summaries of held messages                    | Planned | HS2-G8NXNC |
 | Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
-| Transitions without a running server                                       | Planned | HS2-8VAXXA |
+| Transitions without a running server (CLI)                                 | Shipped | HS2-8VAXXA |
+| Transitions from serverless MCP writes                                     | Planned | HS2-FYZ5S9 |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
 | Idle-while-claimed and halted-session signals; configurable windows        | Shipped | HS2-P57XHV |

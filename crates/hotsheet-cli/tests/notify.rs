@@ -800,3 +800,126 @@ fn hs2_p57xhv_project_timing_is_shown_set_and_validated() {
         .failure()
         .stderr(contains("grace_seconds must be 1-86400"));
 }
+
+/// HS2-8VAXXA: with no live server for the store, CLI ticket writes deliver their own
+/// transitions; a live server's registration hands routing back to the server.
+#[test]
+fn hs2_8vaxxa_cli_writes_notify_without_a_server_and_defer_to_a_live_one() {
+    let env = env();
+    let (base, received) = loopback();
+    let store = env.home.parent().unwrap().join("demo.hs2");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let tickets = || {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.arg("--test-fixture-credentials")
+            .env("HOTSHEET_HOME", &env.home)
+            .env_remove("HOTSHEET_ACTOR_ROLE")
+            .env_remove("HOTSHEET_ACTOR_ID")
+            .env_remove("HOTSHEET_STORE")
+            .arg("-C")
+            .arg(&store);
+        cmd
+    };
+    hs(&env)
+        .args(["channel", "add", "hook", "--notifier", "webhook"])
+        .assert()
+        .success();
+    hs(&env)
+        .args(["channel", "secret", "hook", "url"])
+        .write_stdin(format!("{base}/hook\n"))
+        .assert()
+        .success();
+    hs(&env)
+        .args([
+            "rule",
+            "add",
+            "tickets",
+            "--event",
+            "ticket.status_changed",
+            "--event",
+            "ticket.blocked",
+            "--channel",
+            "hook",
+        ])
+        .assert()
+        .success();
+    hs(&env)
+        .args(["link-base", "http://hotsheet.lan:4174"])
+        .assert()
+        .success();
+
+    let out = tickets()
+        .args(["new", "Ship it"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let slug = String::from_utf8(out)
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .to_string();
+    tickets()
+        .args(["edit", &slug, "--status", "started"])
+        .assert()
+        .success();
+    let request = received
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .unwrap();
+    let body: Value = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(body["event"], "ticket.status_changed");
+    assert_eq!(body["title"], format!("{slug} is now Started"));
+    assert_eq!(body["project_name"], "demo");
+    assert!(
+        body["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("http://hotsheet.lan:4174/?project=")
+    );
+    assert!(
+        body["url"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("&ticket={slug}"))
+    );
+
+    // A read-only command sends nothing; a blocked edit sends exactly one message.
+    tickets().args(["ls"]).assert().success();
+    tickets()
+        .args(["edit", &slug, "--blocked-reason", "waiting on review"])
+        .assert()
+        .success();
+    let request = received
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .unwrap();
+    let body: Value = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(body["event"], "ticket.blocked");
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .is_err(),
+        "nothing else"
+    );
+
+    // A live server hosting the store owns routing: the CLI stays quiet.
+    let instances = env.home.join("instances");
+    std::fs::create_dir_all(&instances).unwrap();
+    std::fs::write(
+        instances.join("live.json"),
+        serde_json::json!({"pid": std::process::id(), "url": "http://127.0.0.1:1", "store_path": store, "started_at": "now"}).to_string(),
+    )
+    .unwrap();
+    tickets()
+        .args(["edit", &slug, "--status", "completed"])
+        .assert()
+        .success();
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_millis(800))
+            .is_err(),
+        "the server would send this"
+    );
+}

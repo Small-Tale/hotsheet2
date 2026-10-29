@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use hotsheet_model::{Ticket, Ulid};
 use hotsheet_notify::dispatch::Cooldowns;
+use hotsheet_notify::transitions::{Origin, TicketFlags, TicketState, escape, transition_messages};
 use hotsheet_notify::{
     DeliveryRecord, Dispatcher, EventKind, Message, NotificationConfig, Notifier, Outcome,
     Registry, Severity, TicketFacts,
@@ -33,17 +34,10 @@ const TICKET_KINDS: [&str; 9] = [
     "moved",
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Snapshot {
-    status: String,
-    feedback_needed: bool,
-    blocked: bool,
-}
-
 #[derive(Default)]
 struct Snapshots {
     seeded: HashSet<String>,
-    tickets: HashMap<(String, String), Snapshot>,
+    tickets: HashMap<(String, String), TicketFlags>,
 }
 
 /// Router state shared by every clone of [`AppState`].
@@ -179,7 +173,7 @@ fn seed_store(state: &AppState, store: &str) {
     for row in rows {
         snapshots.tickets.insert(
             (store.to_string(), row.id.clone()),
-            Snapshot {
+            TicketFlags {
                 status: row.status.unwrap_or_default(),
                 feedback_needed: row.feedback_needed,
                 blocked: row.blocked_reason.is_some_and(|r| !r.trim().is_empty())
@@ -398,22 +392,8 @@ fn wire(value: impl serde::Serialize) -> String {
         .unwrap_or_default()
 }
 
-fn label(status: &str) -> String {
-    status
-        .split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            chars
-                .next()
-                .map(|c| c.to_uppercase().chain(chars).collect::<String>())
-                .unwrap_or_default()
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn snapshot_of(ticket: &Ticket) -> Snapshot {
-    Snapshot {
+fn flags_of(ticket: &Ticket) -> TicketFlags {
+    TicketFlags {
         status: wire(ticket.status),
         feedback_needed: ticket.feedback_needed(),
         blocked: ticket
@@ -421,6 +401,20 @@ fn snapshot_of(ticket: &Ticket) -> Snapshot {
             .as_deref()
             .is_some_and(|r| !r.trim().is_empty())
             || !ticket.blocked_by.is_empty(),
+    }
+}
+
+/// A ticket as the shared transition logic reads it (HS2-8VAXXA).
+pub fn ticket_state(ticket: &Ticket) -> TicketState {
+    TicketState {
+        id: ticket.id.to_string(),
+        slug: ticket.slug.clone(),
+        title: ticket.title.clone(),
+        category: ticket.category.clone(),
+        priority: wire(ticket.priority),
+        tags: ticket.tags.clone(),
+        blocked_reason: ticket.blocked_reason.clone(),
+        flags: flags_of(ticket),
     }
 }
 
@@ -434,7 +428,7 @@ fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
     let Ok(ticket) = entry.store.read_ticket(&id) else {
         return Vec::new();
     };
-    let current = snapshot_of(&ticket);
+    let current = ticket_state(&ticket);
     let previous = {
         let mut snapshots = state.notification_delivery.snapshots.lock_or_recover();
         if !snapshots.seeded.contains(&event.store) {
@@ -443,84 +437,23 @@ fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             seed_store(state, &event.store);
             snapshots = state.notification_delivery.snapshots.lock_or_recover();
         }
-        snapshots
-            .tickets
-            .insert((event.store.clone(), event.id.clone()), current.clone())
+        snapshots.tickets.insert(
+            (event.store.clone(), event.id.clone()),
+            current.flags.clone(),
+        )
     };
-    let created = event.kind == "created";
-    let Some(previous) = previous.or_else(|| {
-        created.then(|| Snapshot {
-            status: current.status.clone(),
-            feedback_needed: false,
-            blocked: false,
-        })
-    }) else {
-        return Vec::new();
+    let (checkouts, project_name) = store_identity(state, &event.store);
+    let origin = Origin {
+        store: event.store.clone(),
+        checkouts,
+        project_name,
     };
-    let (checkouts, name) = store_identity(state, &event.store);
-    let facts = TicketFacts {
-        slug: ticket.slug.clone(),
-        title: Some(ticket.title.clone()),
-        status: Some(current.status.clone()),
-        previous_status: Some(previous.status.clone()),
-        category: Some(ticket.category.clone()),
-        priority: Some(wire(ticket.priority)),
-        tags: ticket.tags.clone(),
-    };
-    let base = |event_kind: EventKind, title: String, severity: Severity, key: String| {
-        let mut message = Message::new(event_kind, title);
-        message.body = format!("**{}**", escape(&ticket.title));
-        message.severity = severity;
-        message.project = Some(event.store.clone());
-        message.project_name = Some(name.clone());
-        message.checkouts = checkouts.clone();
-        message.store = Some(event.store.clone());
-        message.ticket = Some(facts.clone());
-        message.dedupe_key = Some(key);
-        message
-    };
-    let mut messages = Vec::new();
-    if previous.status != current.status {
-        let mut message = base(
-            EventKind::TicketStatusChanged,
-            format!("{} is now {}", ticket.slug, label(&current.status)),
-            Severity::Info,
-            format!("status:{}:{}:{}", event.store, event.id, current.status),
-        );
-        message.body.push_str(&format!(
-            "\n\n{} → {}",
-            label(&previous.status),
-            label(&current.status)
-        ));
-        messages.push(message);
-    }
-    if current.feedback_needed && !previous.feedback_needed {
-        messages.push(base(
-            EventKind::TicketFeedbackNeeded,
-            format!("{} needs your feedback", ticket.slug),
-            Severity::Warning,
-            format!("feedback:{}:{}", event.store, event.id),
-        ));
-    }
-    if current.blocked && !previous.blocked {
-        let mut message = base(
-            EventKind::TicketBlocked,
-            format!("{} is blocked", ticket.slug),
-            Severity::Warning,
-            format!("blocked:{}:{}", event.store, event.id),
-        );
-        if let Some(reason) = ticket
-            .blocked_reason
-            .as_deref()
-            .filter(|r| !r.trim().is_empty())
-        {
-            message
-                .body
-                .push_str(&format!("\n\n{}", escape(reason.trim())));
-        }
-        messages.push(message);
-    }
-    messages
+    transition_messages(
+        previous.as_ref(),
+        &current,
+        event.kind == "created",
+        &origin,
+    )
 }
 
 fn now() -> OffsetDateTime {
@@ -863,18 +796,6 @@ fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
         .collect()
 }
 
-/// Ticket text is quoted into Markdown; escape the characters that would restyle it.
-fn escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        if matches!(c, '*' | '_' | '`' | '[' | ']' | '<' | '>' | '\\' | '#') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -918,8 +839,6 @@ mod tests {
 
     #[test]
     fn labels_and_project_names_read_naturally() {
-        assert_eq!(label("not_started"), "Not Started");
-        assert_eq!(label("completed"), "Completed");
         assert_eq!(project_name("/work/hotsheet2.hs2"), "hotsheet2");
         assert_eq!(project_name("plain"), "plain");
         assert_eq!(escape("a*b_[c]"), "a\\*b\\_\\[c\\]");

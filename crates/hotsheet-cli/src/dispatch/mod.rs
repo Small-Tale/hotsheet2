@@ -33,7 +33,7 @@ pub(crate) struct Ctx {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Group {
+pub(crate) enum Group {
     Store,
     Tickets,
     Providers,
@@ -45,7 +45,7 @@ enum Group {
 }
 
 impl Cmd {
-    fn group(&self) -> Group {
+    pub(crate) fn group(&self) -> Group {
         use Cmd::*;
         match self {
             Coordination(_) => Group::Coordination,
