@@ -682,6 +682,24 @@ pub(crate) fn ai_terminal_tool(
         .map(str::to_string)
 }
 
+/// The claim worker id a terminal's session runs as (HS2-P57XHV), from the broker when
+/// terminals live there, else the in-process manager.
+pub(crate) async fn terminal_worker(state: &AppState, id: &str) -> Option<String> {
+    if let Some(tb) = &state.terminal_broker {
+        return match tb.call(hotsheet_terminals::BrokerRequest::List).await {
+            Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => terminals
+                .into_iter()
+                .find(|t| t.id == id)
+                .and_then(|t| t.worker),
+            _ => None,
+        };
+    }
+    state
+        .terminals
+        .get(&term_key(state, id))
+        .and_then(|t| t.worker_id().map(str::to_owned))
+}
+
 /// The terminal-manager key for a terminal id — the served store root is the project.
 pub(crate) fn term_key(state: &AppState, id: &str) -> hotsheet_terminals::TermKey {
     (state.store.root().display().to_string(), id.to_string())

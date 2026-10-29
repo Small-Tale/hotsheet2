@@ -295,6 +295,28 @@ pub fn set_link_base(
     Ok(())
 }
 
+/// Set the `project.stopped` grace and idle windows (HS2-P57XHV). `None` keeps a value;
+/// `Some(0)` idle minutes disables idle detection.
+pub fn set_project_timing(
+    home: &Path,
+    registry: &Registry,
+    grace_seconds: Option<u64>,
+    idle_minutes: Option<u64>,
+) -> Result<crate::config::ProjectTiming, AdminError> {
+    let _lock = lock(home)?;
+    let mut config = load(home)?;
+    let mut timing = config.project_activity.clone().unwrap_or_default();
+    if grace_seconds.is_some() {
+        timing.grace_seconds = grace_seconds;
+    }
+    if idle_minutes.is_some() {
+        timing.idle_minutes = idle_minutes;
+    }
+    config.project_activity = Some(timing.clone());
+    config.save(home, registry)?;
+    Ok(timing)
+}
+
 /// The fixed message `test` sends.
 pub fn test_message(channel: &str) -> Message {
     let mut message = Message::new(EventKind::Test, "Hot Sheet test notification");

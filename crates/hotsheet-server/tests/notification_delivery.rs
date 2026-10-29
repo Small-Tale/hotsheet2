@@ -661,3 +661,187 @@ async fn rules_match_linked_checkouts_and_use_their_alias() {
         Some("Hot Sheet project Rocket has stalled")
     );
 }
+
+fn claim_event(h: &Harness, kind: &str, id: &str) -> hotsheet_server::ChangeEvent {
+    hotsheet_server::ChangeEvent {
+        cursor: None,
+        store: h.store_id.clone(),
+        kind: kind.into(),
+        id: id.into(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    }
+}
+
+/// Route `events`, then run the activity check `minutes` from now, off the runtime.
+async fn route_then_check(
+    h: &Harness,
+    events: Vec<hotsheet_server::ChangeEvent>,
+    minutes: i64,
+) -> Vec<hotsheet_notify::DeliveryRecord> {
+    let state = h.state.clone();
+    let store = h.store_id.clone();
+    tokio::task::spawn_blocking(move || {
+        for event in &events {
+            hotsheet_server::notification_router::route_change_event(&state, event);
+        }
+        let later = time::OffsetDateTime::now_utc() + time::Duration::minutes(minutes);
+        hotsheet_server::notification_router::check_project_activity(&state, &store, later)
+    })
+    .await
+    .unwrap()
+}
+
+/// HS2-P57XHV regression: a server-side renewal moves the lease, so a renewed claim is
+/// not reported stalled at its original expiry.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_renewed_claim_is_not_reported_stalled() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let registry = hotsheet_notify::Registry::builtin_only();
+    hotsheet_notify::admin::set_project_timing(&h.home, &registry, None, Some(0)).unwrap();
+    let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Long"}))).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w1","lease_minutes":1})),
+    )
+    .await;
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/renew"),
+        Some(json!({"worker":"w1","lease_minutes":60})),
+    )
+    .await;
+    let records = route_then_check(
+        &h,
+        vec![
+            claim_event(&h, "claimed", &id),
+            claim_event(&h, "renewed", &id),
+        ],
+        2,
+    )
+    .await;
+    assert!(records.is_empty(), "{records:?}");
+}
+
+/// HS2-P57XHV: claims renewed without progress report "may be stuck" once.
+#[tokio::test(flavor = "multi_thread")]
+async fn held_claims_without_progress_report_the_project_may_be_stuck() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let (status, timing) = call(
+        &router,
+        "PUT",
+        "/notification-project-timing",
+        Some(json!({"idle_minutes":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{timing}");
+    assert_eq!(timing["idle_minutes"], 1);
+    let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Spin"}))).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w-spin","lease_minutes":60})),
+    )
+    .await;
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/renew"),
+        Some(json!({"worker":"w-spin","lease_minutes":60})),
+    )
+    .await;
+    let records = route_then_check(
+        &h,
+        vec![
+            claim_event(&h, "claimed", &id),
+            claim_event(&h, "renewed", &id),
+        ],
+        2,
+    )
+    .await;
+    assert_eq!(records.len(), 1);
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project demo may be stuck")
+    );
+    let body = String::from_utf8(sent.body).unwrap();
+    assert!(
+        body.contains(&format!("{slug}** (worker w-spin) is claimed")),
+        "{body}"
+    );
+    // Reported once per idle episode.
+    assert!(route_then_check(&h, Vec::new(), 3).await.is_empty());
+}
+
+/// HS2-P57XHV: a halt report from the terminal whose worker holds a claim reaches the
+/// running router and names the claim and the halt reason.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_halted_session_with_a_claim_reports_its_project() {
+    let h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let (_, created) = call(
+        &router,
+        "POST",
+        "/tickets",
+        Some(json!({"title":"Halting"})),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    let _router_task =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals",
+        Some(json!({"command":"cat","id":"halt-me"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"terminal-halt-me","lease_minutes":60})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/terminals/halt-me/halt",
+        Some(json!({"error_type":"overloaded","message":"Model at capacity","agent":"claude"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let sent = next(&h);
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project demo: an AI session halted")
+    );
+    assert_eq!(header(&sent, "Priority"), Some("5"));
+    let body = String::from_utf8(sent.body).unwrap();
+    assert!(
+        body.contains(&format!(
+            "{slug}** (worker terminal-halt-me) halted: Model at capacity"
+        )),
+        "{body}"
+    );
+    call(&router, "DELETE", "/terminals/halt-me", None).await;
+}

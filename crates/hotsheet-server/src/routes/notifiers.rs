@@ -224,6 +224,33 @@ pub(crate) async fn put_notification_link_base(
 }
 
 #[derive(Deserialize)]
+pub(crate) struct ProjectTimingBody {
+    #[serde(default)]
+    grace_seconds: Option<u64>,
+    #[serde(default)]
+    idle_minutes: Option<u64>,
+}
+
+/// Set the `project.stopped` grace and idle windows (HS2-P57XHV); omitted fields keep
+/// their values and `idle_minutes: 0` disables idle detection.
+pub(crate) async fn put_notification_project_timing(
+    State(state): State<AppState>,
+    Json(body): Json<ProjectTimingBody>,
+) -> Result<Json<hotsheet_notify::config::ProjectTiming>, ApiError> {
+    blocking(move || {
+        admin::set_project_timing(
+            state.machine_home(),
+            &state.notifier_registry(),
+            body.grace_seconds,
+            body.idle_minutes,
+        )
+        .map(Json)
+        .map_err(admin_error)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
 pub(crate) struct DeliveryQuery {
     limit: Option<usize>,
 }

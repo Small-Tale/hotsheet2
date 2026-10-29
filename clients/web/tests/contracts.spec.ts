@@ -32,7 +32,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(179); // HS2-2Z11A5 follow-up repair, HS2-PWNPM2 launch routes, HS2-R5HTZN/208RB1/04J8WS notifiers
+  expect(Object.keys(openapi.paths)).toHaveLength(180); // HS2-2Z11A5 follow-up repair, HS2-PWNPM2 launch routes, HS2-R5HTZN/208RB1/04J8WS/P57XHV notifiers
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -58,7 +58,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(179); // HS2-2Z11A5 follow-up repair, HS2-PWNPM2 launch routes, HS2-R5HTZN/208RB1/04J8WS notifiers
+  expect(Object.keys(openapi.paths)).toHaveLength(180); // HS2-2Z11A5 follow-up repair, HS2-PWNPM2 launch routes, HS2-R5HTZN/208RB1/04J8WS/P57XHV notifiers
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(

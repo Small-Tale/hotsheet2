@@ -27,8 +27,10 @@ use crate::events::ChangeEvent;
 use crate::project_activity::{ClaimObservation, ProjectActivity, StopReason, StopReport};
 
 /// Change kinds that mean a ticket file was written.
-const TICKET_KINDS: [&str; 8] = [
-    "created", "updated", "changed", "closed", "assigned", "claimed", "released", "moved",
+/// `renewed` moves a lease expiry; without it a renewed claim would read as stalled.
+const TICKET_KINDS: [&str; 9] = [
+    "created", "updated", "changed", "closed", "assigned", "claimed", "renewed", "released",
+    "moved",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,6 +58,10 @@ pub(crate) struct NotificationDelivery {
     activity_seeded: Arc<Mutex<HashSet<String>>>,
     /// The earliest pending activity check per store, so each store has one timer.
     activity_timers: Arc<Mutex<HashMap<String, OffsetDateTime>>>,
+    /// Test override of the release grace; configuration applies otherwise.
+    grace_override: Option<time::Duration>,
+    /// Last progress fingerprint per `(store, ticket)`, so a claim renewal is not progress.
+    fingerprints: Arc<Mutex<HashMap<(String, String), u64>>>,
 }
 
 impl AppState {
@@ -68,9 +74,10 @@ impl AppState {
 
     /// Shorten the idle grace before a project counts as stopped (tests).
     pub fn with_project_idle_grace(mut self, grace: std::time::Duration) -> Self {
-        self.notification_delivery.activity = Arc::new(Mutex::new(ProjectActivity::with_grace(
-            time::Duration::try_from(grace).unwrap_or(crate::project_activity::IDLE_GRACE),
-        )));
+        let grace = time::Duration::try_from(grace).unwrap_or(crate::project_activity::IDLE_GRACE);
+        self.notification_delivery.grace_override = Some(grace);
+        self.notification_delivery.activity =
+            Arc::new(Mutex::new(ProjectActivity::with_grace(grace)));
         self
     }
 
@@ -210,9 +217,25 @@ pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<Delivery
         "notification" if wants(&[EventKind::Notification]) => {
             hub_message(state, event).into_iter().collect()
         }
+        "activity" | "turn_event" if wants(&[EventKind::ProjectStopped]) => {
+            apply_windows(state, &config);
+            let next = state
+                .notification_delivery
+                .activity
+                .lock_or_recover()
+                .progress(&event.store, now());
+            if let Some(at) = next {
+                schedule_activity_check(state, &event.store, at);
+            }
+            Vec::new()
+        }
+        "terminal_halted" if event.message.is_some() && wants(&[EventKind::ProjectStopped]) => {
+            halt_messages(state, event)
+        }
         kind if TICKET_KINDS.contains(&kind) => {
             let mut messages = Vec::new();
             if wants(&[EventKind::ProjectStopped]) {
+                apply_windows(state, &config);
                 messages.extend(observe_activity(state, event));
             }
             if wants(&[
@@ -544,6 +567,7 @@ fn seed_activity(state: &AppState, store: &str) {
                 slug: row.slug,
                 claim,
                 completed: false,
+                progressed: false,
             };
             next = earliest(next, activity.observe(store, observation, now));
         }
@@ -586,6 +610,12 @@ fn observe_activity(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             .as_ref()
             .and_then(hotsheet_model::Timestamp::instant),
     );
+    let fingerprint = progress_fingerprint(&ticket);
+    let previous = state
+        .notification_delivery
+        .fingerprints
+        .lock_or_recover()
+        .insert((event.store.clone(), event.id.clone()), fingerprint);
     let observation = ClaimObservation {
         ticket: event.id.clone(),
         slug: ticket.slug.clone(),
@@ -594,6 +624,9 @@ fn observe_activity(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
             ticket.status,
             hotsheet_model::Status::Completed | hotsheet_model::Status::Verified
         ),
+        // The first sighting has no baseline; a write that changes the fingerprint is
+        // progress, a claim renewal alone is not.
+        progressed: previous.is_some_and(|p| p != fingerprint),
     };
     let (report, next) = {
         let mut activity = state.notification_delivery.activity.lock_or_recover();
@@ -659,6 +692,9 @@ pub fn check_project_activity(
     store: &str,
     now: OffsetDateTime,
 ) -> Vec<DeliveryRecord> {
+    if let Ok(config) = NotificationConfig::load(state.machine_home()) {
+        apply_windows(state, &config);
+    }
     let (report, next) = state
         .notification_delivery
         .activity
@@ -692,7 +728,21 @@ fn stop_message(state: &AppState, store: &str, report: &StopReport) -> Message {
             format!("Hot Sheet project {name} has stalled"),
             Severity::Error,
         ),
+        StopReason::Idle => (
+            format!("Hot Sheet project {name} may be stuck"),
+            Severity::Warning,
+        ),
+        StopReason::Halted => (
+            format!("Hot Sheet project {name}: an AI session halted"),
+            Severity::Error,
+        ),
     };
+    let held = report
+        .held
+        .iter()
+        .map(|(slug, worker)| format!("**{}** (worker {})", escape(slug), escape(worker)))
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut body = match report.reason {
         StopReason::Finished => "No AI session holds a ticket claim any more.".to_string(),
         StopReason::Stalled => {
@@ -706,8 +756,21 @@ fn stop_message(state: &AppState, store: &str, report: &StopReport) -> Message {
                 claims.join(", ")
             )
         }
+        StopReason::Idle => {
+            let minutes = report
+                .last_progress
+                .map(|at| (OffsetDateTime::now_utc() - at).whole_minutes().max(1))
+                .unwrap_or(0);
+            format!("No AI progress for about {minutes} minutes while {held} is claimed.")
+        }
+        StopReason::Halted => format!(
+            "The session working {held} halted: {}",
+            escape(report.detail.as_deref().unwrap_or("no reason given"))
+        ),
     };
-    if report.completed.is_empty() {
+    if matches!(report.reason, StopReason::Idle | StopReason::Halted) {
+        // The session is still running; a completion summary would be premature.
+    } else if report.completed.is_empty() {
         body.push_str("\n\nNo tickets were completed in this session.");
     } else {
         let slugs: Vec<String> = report.completed.iter().map(|s| escape(s)).collect();
@@ -720,11 +783,84 @@ fn stop_message(state: &AppState, store: &str, report: &StopReport) -> Message {
     message.project_name = Some(name);
     message.checkouts = checkouts;
     message.store = Some(store.to_string());
-    message.dedupe_key = Some(format!(
-        "project-stopped:{store}:{}",
-        report.active_since.unix_timestamp()
-    ));
+    message.dedupe_key = Some(match report.reason {
+        StopReason::Idle => format!(
+            "project-idle:{store}:{}",
+            report
+                .last_progress
+                .unwrap_or(report.active_since)
+                .unix_timestamp()
+        ),
+        _ => format!(
+            "project-stopped:{store}:{}",
+            report.active_since.unix_timestamp()
+        ),
+    });
     message
+}
+
+/// Apply the configured `project.stopped` windows, unless a test fixed the grace.
+fn apply_windows(state: &AppState, config: &NotificationConfig) {
+    let timing = config.project_activity.clone().unwrap_or_default();
+    let grace = state
+        .notification_delivery
+        .grace_override
+        .unwrap_or_else(|| {
+            timing
+                .grace_seconds
+                .map_or(crate::project_activity::IDLE_GRACE, |s| {
+                    time::Duration::seconds(s as i64)
+                })
+        });
+    let idle = match timing.idle_minutes {
+        Some(0) => None,
+        Some(minutes) => Some(time::Duration::minutes(minutes as i64)),
+        None => Some(crate::project_activity::IDLE_WINDOW),
+    };
+    state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .set_windows(grace, idle);
+}
+
+/// What counts as progress on a ticket: notes, status, phase, and title. A claim renewal
+/// changes none of them.
+fn progress_fingerprint(ticket: &Ticket) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    ticket.notes.len().hash(&mut hasher);
+    wire(ticket.status).hash(&mut hasher);
+    ticket.started_phase.map(wire).hash(&mut hasher);
+    ticket.title.hash(&mut hasher);
+    ticket.details.len().hash(&mut hasher);
+    hasher.finish()
+}
+
+/// A halted terminal: report every store where its worker holds a live claim.
+fn halt_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return Vec::new();
+    };
+    let Some(worker) =
+        runtime.block_on(crate::routes::terminals::terminal_worker(state, &event.id))
+    else {
+        return Vec::new();
+    };
+    let halt = event.message.clone().unwrap_or_default();
+    let reports = state
+        .notification_delivery
+        .activity
+        .lock_or_recover()
+        .halted(&worker, &halt, now());
+    reports
+        .into_iter()
+        .map(|(store, report)| {
+            let mut message = stop_message(state, &store, &report);
+            message.dedupe_key = Some(format!("project-halt:{store}:{}:{halt}", event.id));
+            message
+        })
+        .collect()
 }
 
 /// Ticket text is quoted into Markdown; escape the characters that would restyle it.

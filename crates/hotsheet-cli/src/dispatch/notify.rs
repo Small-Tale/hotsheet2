@@ -87,6 +87,14 @@ pub(crate) enum NotifyCmd {
         #[arg(long, conflicts_with = "url")]
         clear: bool,
     },
+    /// Show or set project.stopped timing: the release grace and the idle window while
+    /// claims are held (0 disables idle detection).
+    ProjectTiming {
+        #[arg(long)]
+        grace_seconds: Option<u64>,
+        #[arg(long)]
+        idle_minutes: Option<u64>,
+    },
     /// Show recent deliveries (ids and outcomes only).
     Deliveries {
         #[arg(long, default_value_t = 20)]
@@ -341,6 +349,25 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
                     "No link base set and no local client recorded; notifications carry no links"
                 ),
             }
+        }
+        NotifyCmd::ProjectTiming {
+            grace_seconds,
+            idle_minutes,
+        } => {
+            let timing = if grace_seconds.is_some() || idle_minutes.is_some() {
+                admin::set_project_timing(&home, &registry, grace_seconds, idle_minutes)
+                    .map_err(admin_err)?
+            } else {
+                NotificationConfig::load(&home)?
+                    .project_activity
+                    .unwrap_or_default()
+            };
+            let grace = timing.grace_seconds.unwrap_or(120);
+            let idle = match timing.idle_minutes.unwrap_or(30) {
+                0 => "off".to_string(),
+                minutes => format!("{minutes} min"),
+            };
+            println!("project.stopped grace: {grace} s; idle while claimed: {idle}");
         }
         NotifyCmd::Deliveries { limit, json } => {
             let records = recent_deliveries(&home, limit.clamp(1, 500));

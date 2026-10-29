@@ -285,8 +285,26 @@ start. A check runs before each new claim is recorded, so a period whose grace a
 ended is reported rather than continued. The tracker is seeded from each store's index
 when the router starts, but only if an enabled rule names `project.stopped`. Grace and
 lease deadlines are one event-driven server timer per store; no request polls. Sessions
-that never claim tickets produce no signal. Token-usage idleness, terminal halts, and a
-configurable grace are HS2-P57XHV.
+that never claim tickets produce no signal.
+
+Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
+
+- **May be stuck (idle).** Claims are held but nothing progressed for the idle window
+  (default 30 minutes). Progress is an `activity` or `turn_event` for the store, or a ticket
+  write that changes its notes, status, phase, title, or details. A claim renewal is not
+  progress, so a session that keeps renewing while doing nothing is still reported. The
+  message reads "Hot Sheet project _name_ may be stuck", has severity `warning`, and names
+  the held claims. Each idle episode is reported once, and progress re-arms it.
+- **Halted.** When a terminal reports a halt (`terminal_halted`, for example a model at
+  capacity), the router looks up the terminal's worker id. That is the id its session claims
+  with. Every store where that worker holds a live claim gets "Hot Sheet project _name_: an
+  AI session halted", with severity `error`, the ticket, the worker, and the halt reason.
+
+Set the windows with `hotsheet-cli notify project-timing [--grace-seconds S]
+[--idle-minutes M]` or `PUT /notification-project-timing`. `--idle-minutes 0` disables idle
+detection. They are stored as `project_activity` in `notifications.json`. Raw token counts
+are not used: per-turn usage records arrive after a turn ends, so they add nothing to
+activity and turn events as a liveness signal.
 
 For example, to push to a phone when any project stops:
 
@@ -331,6 +349,7 @@ idempotent.
 | `rule remove <id>`                                                                                                                                  | `DELETE /notification-rules/{id}`                            |
 | `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                            | `POST /notifications` (published events route through rules) |
 | `link-base [URL] [--clear]` (show, set, or clear the link origin)                                                                                   | `PUT /notification-link-base` (`{"url": …}` or `null`)       |
+| `project-timing [--grace-seconds S] [--idle-minutes M]`                                                                                             | `PUT /notification-project-timing`                           |
 | `deliveries [--limit] [--json]`                                                                                                                     | `GET /notification-deliveries?limit=`                        |
 
 - `--set` values are parsed by the field's type; lists are comma-separated. A secret
@@ -404,4 +423,4 @@ idempotent.
 | Transitions without a running server                                       | Planned | HS2-8VAXXA |
 | `digest` producer                                                          | Planned | HS2-D33WPH |
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
-| Token-idle and terminal-halt stuck signals; configurable grace             | Planned | HS2-P57XHV |
+| Idle-while-claimed and halted-session signals; configurable windows        | Shipped | HS2-P57XHV |

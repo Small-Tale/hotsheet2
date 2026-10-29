@@ -769,3 +769,34 @@ fn hs2_04j8ws_link_base_is_set_shown_validated_and_cleared() {
         .success()
         .stdout(contains("local client at"));
 }
+
+#[test]
+fn hs2_p57xhv_project_timing_is_shown_set_and_validated() {
+    let env = env();
+    hs(&env)
+        .args(["project-timing"])
+        .assert()
+        .success()
+        .stdout(contains("grace: 120 s; idle while claimed: 30 min"));
+    hs(&env)
+        .args([
+            "project-timing",
+            "--grace-seconds",
+            "300",
+            "--idle-minutes",
+            "0",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("grace: 300 s; idle while claimed: off"));
+    hs(&env)
+        .args(["project-timing", "--idle-minutes", "45"])
+        .assert()
+        .success()
+        .stdout(contains("grace: 300 s; idle while claimed: 45 min"));
+    hs(&env)
+        .args(["project-timing", "--grace-seconds", "0"])
+        .assert()
+        .failure()
+        .stderr(contains("grace_seconds must be 1-86400"));
+}

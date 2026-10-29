@@ -225,6 +225,19 @@ pub struct NotificationConfig {
     /// when notifications are read on another device. Unset: the local client's origin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link_base: Option<String>,
+    /// Windows for `project.stopped` detection (HS2-P57XHV).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_activity: Option<ProjectTiming>,
+}
+
+/// `project.stopped` timing: the release grace and the idle window (0 disables idle
+/// detection). Unset fields keep the defaults (120 s and 30 min).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectTiming {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grace_seconds: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_minutes: Option<u64>,
 }
 
 fn version() -> u32 {
@@ -238,6 +251,7 @@ impl Default for NotificationConfig {
             channels: Vec::new(),
             rules: Vec::new(),
             link_base: None,
+            project_activity: None,
         }
     }
 }
@@ -346,6 +360,14 @@ impl NotificationConfig {
         if let Some(base) = &self.link_base {
             if !(base.starts_with("http://") || base.starts_with("https://")) {
                 return Err(invalid("link_base must be an http(s) origin"));
+            }
+        }
+        if let Some(timing) = &self.project_activity {
+            if timing.grace_seconds.is_some_and(|g| g == 0 || g > 86_400) {
+                return Err(invalid("project grace_seconds must be 1-86400"));
+            }
+            if timing.idle_minutes.is_some_and(|m| m > 10_080) {
+                return Err(invalid("project idle_minutes must be 0-10080 (0 disables)"));
             }
         }
         let mut rules = std::collections::BTreeSet::new();

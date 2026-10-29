@@ -10533,6 +10533,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /notification-project-timing:
+    put:
+      operationId: put_notification_project_timing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationProjectTiming'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationProjectTiming'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-channels/{id}:
     parameters:
       - name: id
@@ -16959,6 +17005,8 @@ components:
         link_base:
           type: string
           description: Client origin for click-through links (HS2-04J8WS).
+        project_activity:
+          $ref: '#/components/schemas/NotificationProjectTiming'
       additionalProperties: false
     NotificationChannel:
       type: object
@@ -17051,6 +17099,17 @@ components:
             - type: string
             - type: 'null'
           description: An http(s) client origin for click-through links; null clears it.
+      additionalProperties: false
+    NotificationProjectTiming:
+      type: object
+      properties:
+        grace_seconds:
+          type: integer
+          minimum: 1
+        idle_minutes:
+          type: integer
+          minimum: 0
+          description: 0 disables idle detection.
       additionalProperties: false
     NotificationSecretInput:
       type: object
