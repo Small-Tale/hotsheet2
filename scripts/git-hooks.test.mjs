@@ -81,7 +81,7 @@ test('HS2-BND42N reserves main before gate and rejects direct main push', () => 
     const bin = resolve(f.root, 'bin');
     executable(
       resolve(bin, 'zsh'),
-      '#!/bin/sh\nif [ "$2" = "npm run format:check" ]; then exit 0; fi\nexec /bin/zsh "$@"\n',
+      '#!/bin/sh\nif [ "$2" = "npm run format:check" ]; then exit 0; fi\nexec /bin/sh "$@"\n',
     );
     executable(
       resolve(f.repo, 'scripts/check.sh'),
