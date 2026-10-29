@@ -22,7 +22,8 @@ pub(crate) use signals::{
     connect_terminal_ai, disconnect_terminal_ai, emit_permission_rules_changed, halt_terminal,
     kill_terminal, list_permission_rules, list_terminals, poll_terminal_question_answer,
     read_terminal, remember_permission_after_allow, rename_terminal, resolve_permission,
-    resolve_terminal_question, revoke_permission_rule, update_permission_rule, write_terminal,
+    resolve_terminal_question, revoke_permission_rule, try_live_terminal_infos,
+    update_permission_rule, write_terminal,
 };
 
 use crate::AppState;
@@ -512,7 +513,7 @@ pub(crate) async fn put_checkout_trash_settings(
 /// One terminal as reported by `GET /terminals`.
 #[derive(Serialize)]
 pub(crate) struct TerminalInfo {
-    id: String,
+    pub(crate) id: String,
     /// Immutable creation kind; never inferred from terminal output or command names.
     kind: hotsheet_terminals::TerminalKind,
     /// The PTY is still running.
@@ -571,7 +572,10 @@ pub enum TerminalHookSource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalAiConnection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    agent: Option<String>,
+    pub(crate) agent: Option<String>,
+    /// Explicit registered checkout binding for worker reads; never inferred from cwd.
+    #[serde(skip)]
+    pub(crate) checkout_id: Option<String>,
     /// RFC 3339 time the session reported in.
     #[serde(default)]
     at: String,

@@ -390,6 +390,11 @@ pub struct LiveClaim {
     pub ticket: TicketRef,
     pub worker: String,
     pub expires_at: i64,
+    /// Ticket phase and worker ETA belong to the authoritative claim snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_phase: Option<hotsheet_model::StartedPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eta_at: Option<String>,
 }
 
 pub struct WaitRequest {

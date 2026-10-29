@@ -365,6 +365,16 @@ fn base_tools_list() -> Value {
             }, "required": ["checkout"] }
         },
         {
+            "name": "hotsheet_workers",
+            "description": "Read the authoritative worker view for a registered checkout and linked source. Shows exact coordination sessions, assignments, claims, and unknown source coverage; it never registers a worker or claims a ticket.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("optional linked Git source id; required when no unambiguous default exists"),
+                "after": str_prop("optional worker snapshot cursor for event-backed long polling"),
+                "wait_ms": { "type": "integer", "description": "maximum long-poll wait, 0 to 30000 milliseconds" }
+            }, "required": ["checkout"] }
+        },
+        {
             "name": "hotsheet_claim",
             "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
             "inputSchema": { "type": "object", "properties": {
@@ -869,6 +879,31 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 &[],
             )
             .map_err(be_msg),
+        "hotsheet_workers" => {
+            let checkout = arg_str(args, "checkout")?;
+            let mut query = Vec::new();
+            if let Some(connection_id) = args.get("connection_id").and_then(Value::as_str) {
+                query.push(("connection_id".to_owned(), connection_id.to_owned()));
+            }
+            if let Some(after) = args.get("after").and_then(Value::as_str) {
+                query.push(("after".to_owned(), after.to_owned()));
+            }
+            if let Some(value) = args.get("wait_ms") {
+                let wait_ms = value
+                    .as_u64()
+                    .ok_or_else(|| "wait_ms must be a non-negative integer".to_owned())?;
+                query.push(("wait_ms".to_owned(), wait_ms.to_string()));
+            }
+            backend
+                .get(
+                    &format!(
+                        "/checkouts/{}/workers",
+                        encode_checkout_reference(&checkout)
+                    ),
+                    &query,
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_claim" => {
             let id = arg_str(args, "id")?;
             backend
@@ -1526,6 +1561,86 @@ mod core_backend {
                 return Ok(to_value(&hotsheet_ticketing::calibration::calibration(
                     &tickets,
                 )));
+            }
+            if let Some(reference) = path
+                .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/workers"))
+            {
+                let reference = decode_checkout_reference(reference)?;
+                let checkout = self
+                    .checkout_registry
+                    .resolve(&reference)
+                    .map_err(checkout_err)?;
+                let selected = query
+                    .iter()
+                    .find(|(key, _)| key == "connection_id")
+                    .map(|(_, value)| value.clone())
+                    .or_else(|| checkout.default_source.clone())
+                    .or_else(|| {
+                        let git: Vec<_> = checkout
+                            .sources
+                            .iter()
+                            .filter(|source| source.provider == "git")
+                            .collect();
+                        (git.len() == 1).then(|| git[0].connection_id.clone())
+                    })
+                    .ok_or_else(|| bad_request("select a linked Git source with connection_id"))?;
+                let source = checkout
+                    .source(&selected)
+                    .ok_or_else(|| bad_request("source is not linked to this checkout"))?;
+                if source.provider != "git" {
+                    return Err(bad_request(
+                        "worker coordination is unavailable for this source",
+                    ));
+                }
+                let store = checkout
+                    .verified_git_source(&selected)
+                    .map_err(checkout_err)?;
+                let now = OffsetDateTime::now_utc().unix_timestamp();
+                let registry_home = self
+                    .checkout_registry
+                    .path()
+                    .parent()
+                    .ok_or_else(|| bad_request("invalid checkout registry path"))?
+                    .to_path_buf();
+                let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+                    Path::new(&checkout.root),
+                    store.root(),
+                    registry_home,
+                )
+                .map_err(|error| bad_request(error.to_string()))?;
+                let after = query
+                    .iter()
+                    .find(|(key, _)| key == "after")
+                    .map(|(_, value)| value.as_str());
+                let wait_ms = query
+                    .iter()
+                    .find(|(key, _)| key == "wait_ms")
+                    .map(|(_, value)| value.parse::<u64>())
+                    .transpose()
+                    .map_err(|_| bad_request("invalid wait_ms"))?
+                    .unwrap_or(30_000);
+                if wait_ms > 30_000 || after.is_some_and(|value| value.len() > 160) {
+                    return Err(bad_request("invalid worker cursor or wait_ms"));
+                }
+                let snapshot = match after {
+                    Some(after) => coordinator.watch_worker_snapshot(
+                        hotsheet_cli::coordination::worker_view::WorkerView::coordination_cursor(
+                            after,
+                        ),
+                        std::time::Duration::from_millis(wait_ms),
+                    ),
+                    None => coordinator.snapshot(now),
+                }
+                .map_err(|error| bad_request(error.to_string()))?;
+                return Ok(to_value(
+                    &hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot(
+                        &snapshot,
+                        OffsetDateTime::now_utc().unix_timestamp(),
+                        &std::collections::BTreeMap::new(),
+                        false,
+                    ),
+                ));
             }
             // Repository size (HS2-R0131R): the server endpoint's and `checkout repo-size
             // --json`'s report, computed locally from git object counts.
@@ -5578,6 +5693,66 @@ mod tests {
         );
         assert!(
             fake.calls.borrow()[0].starts_with("GET /checkouts/web/repository/size"),
+            "{:?}",
+            fake.calls.borrow()
+        );
+    }
+
+    #[test]
+    fn hs2_dbecd0_worker_tool_matches_registered_headless_projection() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("code");
+        let source = root.path().join("tickets");
+        std::fs::create_dir(&project).unwrap();
+        assert!(
+            hotsheet_ticketing::git::launch("git")
+                .args(["init", "-q"])
+                .arg(&project)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let store = FsStore::init(&source, &StoreMetadata::new("HS")).unwrap();
+        let registry_path = root.path().join("home/checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+        let checkout = registry
+            .register(&project, Some("workers"), None, vec![source.clone()])
+            .unwrap();
+        let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+            &project,
+            &source,
+            registry_path.parent().unwrap().to_path_buf(),
+        )
+        .unwrap();
+        coordinator
+            .register(
+                hotsheet_cli::coordination::Role::Worker,
+                "worker-a",
+                "generation-a",
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+                120,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            )
+            .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        let view = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert_eq!(view["project_id"], checkout.id);
+        assert_eq!(view["workers"][0]["id"], "worker-a");
+        assert_eq!(view["workers"][0]["process_busy"], Value::Null);
+        let unchanged = call(
+            &backend,
+            "hotsheet_workers",
+            json!({"checkout":"workers", "after":view["cursor"], "wait_ms":0}),
+        );
+        assert_eq!(unchanged["cursor"], view["cursor"]);
+        let fake = FakeBackend::default();
+        call(
+            &fake,
+            "hotsheet_workers",
+            json!({"checkout":"workers", "connection_id":"source-a"}),
+        );
+        assert!(
+            fake.calls.borrow()[0].starts_with("GET /checkouts/workers/workers"),
             "{:?}",
             fake.calls.borrow()
         );

@@ -9,6 +9,7 @@
 //! passed in) so it's deterministic.
 
 use std::collections::HashMap;
+use tokio::sync::watch;
 
 use crate::drive::Transport;
 
@@ -49,17 +50,40 @@ pub struct ConnectionRegistry {
     entries: HashMap<String, Entry>,
     busy_window_ms: u64,
     next_generation: u64,
+    changes: watch::Sender<u64>,
 }
 
 impl ConnectionRegistry {
     /// A registry whose connections count as busy for `busy_window_ms` after their last
     /// heartbeat.
     pub fn new(busy_window_ms: u64) -> Self {
+        let (changes, _) = watch::channel(0);
         Self {
             entries: HashMap::new(),
             busy_window_ms,
             next_generation: 0,
+            changes,
         }
+    }
+
+    /// Observe explicit registration and busy-signal mutations without polling.
+    pub fn subscribe_changes(&self) -> watch::Receiver<u64> {
+        self.changes.subscribe()
+    }
+
+    fn changed(&self) {
+        let next = self.changes.borrow().wrapping_add(1);
+        self.changes.send_replace(next);
+    }
+
+    /// Earliest currently busy signal that will age out of the sliding window.
+    pub fn next_busy_expiry_ms(&self, now_ms: u64) -> Option<u64> {
+        self.entries
+            .values()
+            .filter_map(|entry| entry.last_activity_ms)
+            .map(|at| at.saturating_add(self.busy_window_ms))
+            .filter(|at| *at > now_ms)
+            .min()
     }
 
     /// Register (or replace) a connection; returns its id.
@@ -81,18 +105,24 @@ impl ConnectionRegistry {
                 last_activity_ms: None,
             },
         );
+        self.changed();
         (id, generation)
     }
 
     /// Remove a connection; returns whether it was present.
     pub fn unregister(&mut self, id: &str) -> bool {
-        self.entries.remove(id).is_some()
+        let removed = self.entries.remove(id).is_some();
+        if removed {
+            self.changed();
+        }
+        removed
     }
 
     /// Remove only the registration owned by this lifecycle monitor.
     pub fn unregister_if_generation(&mut self, id: &str, generation: u64) -> bool {
         if self.is_generation(id, generation) {
             self.entries.remove(id);
+            self.changed();
             true
         } else {
             false
@@ -124,6 +154,7 @@ impl ConnectionRegistry {
     pub fn note_activity(&mut self, id: &str, now_ms: u64) {
         if let Some(e) = self.entries.get_mut(id) {
             e.last_activity_ms = Some(now_ms);
+            self.changed();
         }
     }
 
@@ -131,6 +162,7 @@ impl ConnectionRegistry {
     pub fn set_idle(&mut self, id: &str) {
         if let Some(e) = self.entries.get_mut(id) {
             e.last_activity_ms = None;
+            self.changed();
         }
     }
 
@@ -165,6 +197,24 @@ mod tests {
             pid: Some(42),
             started_at_ms: 1_000,
         }
+    }
+
+    #[test]
+    fn hs2_dbecd0_registration_activity_and_removal_emit_replayable_changes() {
+        let mut registry = ConnectionRegistry::new(5_000);
+        let mut changes = registry.subscribe_changes();
+        registry.register(conn("a"));
+        assert!(changes.has_changed().unwrap());
+        changes.borrow_and_update();
+        registry.note_activity("a", 10_000);
+        assert!(changes.has_changed().unwrap());
+        assert_eq!(registry.next_busy_expiry_ms(10_000), Some(15_000));
+        changes.borrow_and_update();
+        registry.set_idle("a");
+        assert!(changes.has_changed().unwrap());
+        changes.borrow_and_update();
+        registry.unregister("a");
+        assert!(changes.has_changed().unwrap());
     }
 
     #[test]

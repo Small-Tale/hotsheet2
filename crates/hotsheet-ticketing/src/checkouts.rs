@@ -352,6 +352,11 @@ impl CheckoutRegistry {
         Self { path: path.into() }
     }
 
+    /// The host's injected registry path, used by read-only coordination watchers.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub fn list(&self) -> Result<Vec<Checkout>, CheckoutError> {
         let mut entries = self.read()?.checkouts;
         entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));

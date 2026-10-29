@@ -11245,6 +11245,61 @@ paths:
         required: true
         schema:
           type: string
+  /checkouts/{reference}/workers:
+    parameters:
+      - $ref: '#/components/parameters/CheckoutReference'
+    get:
+      operationId: getCheckoutWorkers
+      description: Read the authoritative worker projection for a registered checkout and linked Git source. A matching cursor waits for a change without fixed polling.
+      parameters:
+        - name: connection_id
+          in: query
+          description: Linked Git source id; required when no unambiguous default exists.
+          schema:
+            type: string
+        - name: after
+          in: query
+          description: Cursor returned by a prior worker view.
+          schema:
+            type: string
+            maxLength: 160
+        - name: wait_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 30000
+      responses:
+        '200':
+          description: Current worker view, including explicit coverage and unknown observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerView'
+        '400':
+          description: Invalid cursor or wait interval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Checkout or linked source unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Source selection or coordination state is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Worker coordination is unsupported for this source.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -13351,6 +13406,225 @@ components:
         cursor:
           type: integer
           minimum: 0
+      additionalProperties: false
+    WorkerTicketRef:
+      type: object
+      required: [connection_id, native_id]
+      properties:
+        connection_id:
+          type: string
+        native_id:
+          type: string
+      additionalProperties: false
+    WorkerHandoffEvidence:
+      oneOf:
+        - type: object
+          required: [kind, commit]
+          properties:
+            kind:
+              const: code
+            commit:
+              type: string
+          additionalProperties: false
+        - type: object
+          required: [kind, note_id]
+          properties:
+            kind:
+              const: findings
+            note_id:
+              type: string
+          additionalProperties: false
+    WorkerIntegrationSuspension:
+      type: object
+      required: [main_commit, prerequisite, failure_note]
+      properties:
+        main_commit:
+          type: string
+        prerequisite:
+          $ref: '#/components/schemas/WorkerTicketRef'
+        failure_note:
+          type: string
+        resumed:
+          type: object
+          required: [main_commit, tree, evidence_note]
+          properties:
+            main_commit:
+              type: string
+            tree:
+              type: string
+            evidence_note:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    WorkerTicket:
+      type: object
+      required:
+        [
+          ticket,
+          slug,
+          assignment_id,
+          assignment_phase,
+          assignment_generation,
+          handoff,
+          integration_suspension,
+          claim_expires_at,
+          started_phase,
+          eta_at,
+        ]
+      properties:
+        ticket:
+          $ref: '#/components/schemas/WorkerTicketRef'
+        slug:
+          type: [string, 'null']
+        assignment_id:
+          type: [string, 'null']
+        assignment_phase:
+          type: [string, 'null']
+          enum: [offered, accepted, handoff, verifying, integrating, suspended_integration, ci, done, blocked, null]
+        assignment_generation:
+          type: [string, 'null']
+        handoff:
+          anyOf:
+            - $ref: '#/components/schemas/WorkerHandoffEvidence'
+            - type: 'null'
+        integration_suspension:
+          anyOf:
+            - $ref: '#/components/schemas/WorkerIntegrationSuspension'
+            - type: 'null'
+        claim_expires_at:
+          type: [integer, 'null']
+        started_phase:
+          type: [string, 'null']
+          enum: [analyzing, planning, working, initial_testing, integrating, final_testing, null]
+        eta_at:
+          type: [string, 'null']
+      additionalProperties: false
+    WorkerRow:
+      type: object
+      required:
+        [
+          id,
+          role,
+          generation,
+          parent,
+          label,
+          tool,
+          connection_kind,
+          connection_role,
+          connection_id,
+          connection_available,
+          observed_alive,
+          process_busy,
+          availability,
+          lease_expires_at,
+          tickets,
+        ]
+      properties:
+        id:
+          type: string
+        role:
+          type: [string, 'null']
+          enum: [integrator, worker, dispatcher, null]
+        generation:
+          type: [string, 'null']
+        parent:
+          type: [string, 'null']
+        label:
+          type: string
+        tool:
+          type: [string, 'null']
+        connection_kind:
+          type: [string, 'null']
+        connection_role:
+          type: [string, 'null']
+        connection_id:
+          type: [string, 'null']
+        connection_available:
+          type: [boolean, 'null']
+        observed_alive:
+          type: [boolean, 'null']
+        process_busy:
+          type: [boolean, 'null']
+        availability:
+          type: string
+          enum: [live, disconnected, unresolved_claim_holder, unbound_connection]
+        lease_expires_at:
+          type: [integer, 'null']
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerTicket'
+      additionalProperties: false
+    WorkerSourceSupport:
+      type: object
+      required:
+        [
+          connection_id,
+          provider,
+          configuration,
+          capabilities,
+          native_query,
+          evidence_read,
+          queue_observed,
+          claim_verification,
+          event_subscription,
+          reasons,
+        ]
+      properties:
+        connection_id:
+          type: string
+        provider:
+          type: string
+        configuration:
+          type: string
+          enum: [ready, disabled, missing, invalid, reconfigured]
+        capabilities:
+          anyOf:
+            - $ref: '#/components/schemas/ProviderCapabilities'
+            - type: 'null'
+        native_query:
+          type: boolean
+        evidence_read:
+          type: boolean
+        queue_observed:
+          type: boolean
+        claim_verification:
+          type: boolean
+        event_subscription:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    WorkerView:
+      type: object
+      required:
+        [cursor, project_id, source_id, authority, workers, uncovered_sources, source_support, connection_coverage]
+      properties:
+        cursor:
+          type: string
+        project_id:
+          type: string
+        source_id:
+          type: string
+        authority:
+          type: string
+          enum: [integrator, dispatcher]
+        workers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerRow'
+        uncovered_sources:
+          type: array
+          items:
+            type: string
+        source_support:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerSourceSupport'
+        connection_coverage:
+          type: boolean
       additionalProperties: false
     ProviderConnections:
       type: array

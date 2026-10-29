@@ -469,6 +469,7 @@ pub(crate) async fn ask_permission(
             Path(terminal_id.to_owned()),
             Json(TerminalAiConnectionReq {
                 agent: body.agent.clone(),
+                checkout_id: None,
                 session_id: body.session_id.clone(),
                 codex_home: None,
                 source: TerminalHookSource::PermissionRequest,

@@ -1613,6 +1613,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-cli/tests/coordination_suspended_integration.rs # hs2_2d3099_suspended_integration_preserves_evidence_and_reacquires_the_fence` uses real CLI processes, synthetic tickets and Git worktrees, two separate unpushed suspension cycles, exact notes, missing/present gate receipts, push-before-CI refusals, same-phase CI replay after later work, and resume after each prerequisite integration.
 - Manual: a real independent failing gate and live multi-session AI pilot remain outside this synthetic process test; HS2-34PWSK does not contain historical role-bounded critical-section durations for a production before/after comparison.
 
+### Worker and background-agent read model (HS2-DBECD0)
+
+- Behavior: one projection retains exact coordination identities, each assignment operation, qualified claims, observed registered connection kind/role/liveness, disconnected retained work, and explicit source/connection coverage. Its cursor includes exact lease deadlines. The authenticated checkout route revalidates its registered source after waiting and replays coordination and connection changes without periodic network requests.
+- Unit: `crates/hotsheet-cli/src/coordination/worker_view.rs # hs2_dbecd0_*` covers claim/handoff/disconnect transitions, distinct operations for one ticket, exact lease-renewal replay, explicit terminal binding, and cancellation; `crates/hotsheet-aitools/src/registry.rs` covers registration/busy notification.
+- End to end: `crates/hotsheet-server/tests/http.rs # hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_replays_cursor` covers auth, registered scope, late session and connection registration, a real host-launched PTY, an explicitly bound external terminal hook, unbound hook exclusion, nested checkout isolation, connection/source removal, and idle long poll; `crates/hotsheet-cli/tests/coordination.rs # hs2_dbecd0_real_cli_workers_replays_qualified_claim_and_idle_session` covers the real CLI; `crates/hotsheet-mcp/src/lib.rs # hs2_dbecd0_worker_tool_matches_registered_headless_projection` covers MCP composition.
+- Manual: a connected multi-session Codex/Claude rollout remains HS2-K1QNGC; the Workers screen remains HS2-E9SR7R and HS2-1Z3T0Z.
+
 ### Deferred composer title focus (HS2-2QR67T)
 
 - Behavior: initial outside-to-title focus remains available on each opening, while delayed open/restore/attachment callbacks preserve a newer focus choice inside the composer. Existing project/surface epoch guards and draft/attachment ownership are unchanged.

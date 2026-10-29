@@ -63,6 +63,15 @@ enum CoordinationCmd {
     },
     /// Read durable workers, assignments, handoffs and local queue facts as JSON.
     Status,
+    /// Read the source-scoped worker view, including claim-only and disconnected rows.
+    Workers {
+        /// Cursor from a previous workers read. Wait for an event or lease deadline.
+        #[arg(long)]
+        after: Option<String>,
+        /// Maximum event wait (default 30 seconds, capped at 30 seconds).
+        #[arg(long)]
+        wait_ms: Option<u64>,
+    },
     /// Announce this live session without blocking (renew before long implementation/gates).
     Register(Registration),
     /// Announce and wait for a worker's exact assignment, or an integrator's changed snapshot.
@@ -319,6 +328,27 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             }
         }
         CoordinationCmd::Status => {}
+        CoordinationCmd::Workers { after, wait_ms } => {
+            let wait_ms = wait_ms.unwrap_or(30_000);
+            anyhow::ensure!(wait_ms <= 30_000, "wait_ms must be at most 30000");
+            let snapshot = match after {
+                Some(after) => coordinator.watch_worker_snapshot(
+                    hotsheet_cli::coordination::worker_view::WorkerView::coordination_cursor(
+                        &after,
+                    ),
+                    std::time::Duration::from_millis(wait_ms),
+                )?,
+                None => coordinator.snapshot(now)?,
+            };
+            let view = hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot(
+                &snapshot,
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+                &std::collections::BTreeMap::new(),
+                false,
+            );
+            println!("{}", serde_json::to_string_pretty(&view)?);
+            return Ok(());
+        }
         CoordinationCmd::Capabilities => unreachable!("handled before opening the pool"),
         CoordinationCmd::Preflight {
             worker,

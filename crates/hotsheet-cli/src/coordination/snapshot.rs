@@ -40,6 +40,8 @@ impl Coordinator {
                         },
                         worker: worker.clone(),
                         expires_at: expiry.unix_timestamp() + i64::from(expiry.nanosecond() != 0),
+                        started_phase: t.started_phase,
+                        eta_at: t.claim_eta_at.as_ref().map(|at| at.as_str().to_owned()),
                     })
                 })
                 .collect();
@@ -96,9 +98,7 @@ impl Coordinator {
             .filter(|s| !s.disabled)
             .map(|s| s.id.clone())
             .collect();
-        let registry = checkouts::CheckoutRegistry::new(
-            hotsheet_plugins::hotsheet_home().join("checkouts.json"),
-        );
+        let registry = checkouts::CheckoutRegistry::new(self.registry_home.join("checkouts.json"));
         let checkouts: Vec<_> = registry
             .list()?
             .into_iter()

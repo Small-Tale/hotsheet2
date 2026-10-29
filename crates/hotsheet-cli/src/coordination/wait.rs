@@ -40,7 +40,7 @@ impl Coordinator {
         // point, and durable state closes the watch/reconnect race.
         watcher.watch(&self.directory, RecursiveMode::NonRecursive)?;
         watcher.watch(&self.source, RecursiveMode::NonRecursive)?;
-        let registry_home = hotsheet_plugins::hotsheet_home();
+        let registry_home = self.registry_home.clone();
         std::fs::create_dir_all(&registry_home)?;
         watcher.watch(&registry_home, RecursiveMode::NonRecursive)?;
         let registry_file = registry_home.join("checkouts.json");

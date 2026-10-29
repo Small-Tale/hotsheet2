@@ -91,6 +91,7 @@ use routes::checkout_tickets::{
     update_checkout_ticket_attachment_markup, update_checkout_ticket_attachment_metadata,
     update_ticket_attachment_annotations,
 };
+use routes::checkout_workers::checkout_workers;
 use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
     checkout_repository_file_action, checkout_repository_files, checkout_repository_size,
@@ -1305,6 +1306,7 @@ pub fn app(state: AppState) -> Router {
         .route("/projects/open", post(open_project))
         .route("/checkouts/{reference}/close", post(close_checkout_session))
         .route("/checkouts/{reference}", get(resolve_checkout))
+        .route("/checkouts/{reference}/workers", get(checkout_workers))
         .route(
             "/checkouts/{reference}/commands",
             get(list_checkout_commands).put(save_checkout_commands),

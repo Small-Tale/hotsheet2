@@ -27,20 +27,27 @@ pub(crate) async fn list_terminals(State(state): State<AppState>) -> Json<Vec<Te
 
 /// Every live terminal this server reports, before saved names are applied.
 pub(crate) async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
+    try_live_terminal_infos(state).await.unwrap_or_default()
+}
+
+/// Unlike the legacy terminal list, callers that report coverage must retain a
+/// broker failure as unavailable rather than converting it to zero sessions.
+pub(crate) async fn try_live_terminal_infos(state: &AppState) -> Result<Vec<TerminalInfo>, String> {
     if let Some(tb) = &state.terminal_broker {
-        if let Ok(hotsheet_terminals::BrokerResponse::List { terminals }) =
-            tb.call(hotsheet_terminals::BrokerRequest::List).await
-        {
-            return terminals.into_iter().map(broker_info).collect();
-        }
-        return Vec::new();
+        return match tb.call(hotsheet_terminals::BrokerRequest::List).await {
+            Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => {
+                Ok(terminals.into_iter().map(broker_info).collect())
+            }
+            Ok(response) => Err(format!("terminal broker list unavailable: {response:?}")),
+            Err(error) => Err(format!("terminal broker list unavailable: {error}")),
+        };
     }
-    state
+    Ok(state
         .terminals
         .list()
         .into_iter()
         .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
-        .collect()
+        .collect())
 }
 
 /// Apply the project's saved terminal names (HS2-89FPV1). An unreadable settings file leaves
@@ -419,6 +426,9 @@ fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool
 pub(crate) struct TerminalAiConnectionReq {
     #[serde(default)]
     pub(crate) agent: Option<String>,
+    /// Registered checkout id supplied by an integrated tool or headless hook.
+    #[serde(default)]
+    pub(crate) checkout_id: Option<String>,
     #[serde(default)]
     pub(crate) session_id: Option<String>,
     /// The Codex session's `CODEX_HOME`, when set (HS2-FKM97G).
@@ -465,6 +475,27 @@ pub(crate) async fn connect_terminal_ai(
         .map(|agent| agent.trim().chars().take(64).collect::<String>())
         .filter(|agent| !agent.is_empty());
     let session_id = body.session_id.filter(|id| !id.is_empty());
+    let checkout_id = match body.checkout_id {
+        Some(id) => {
+            let checkout = state
+                .checkout_registry
+                .resolve(&id)
+                .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "checkout is not registered"))?;
+            if checkout.id != id {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "use a registered checkout id",
+                ));
+            }
+            Some(id)
+        }
+        None => state
+            .terminal_ai_connections
+            .lock_or_recover()
+            .get(&id)
+            .filter(|previous| session_id.is_some() && previous.session_id == session_id)
+            .and_then(|previous| previous.checkout_id.clone()),
+    };
     // A permission ask does not carry the home; keep the one the same session's SessionStart
     // reported, so messaging and halt detection still reach it (HS2-FKM97G, HS2-MN865E).
     let codex_home = body
@@ -501,6 +532,7 @@ pub(crate) async fn connect_terminal_ai(
         });
     let connection = TerminalAiConnection {
         agent: agent.clone(),
+        checkout_id,
         at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_default(),

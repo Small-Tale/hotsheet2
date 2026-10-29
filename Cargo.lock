@@ -1257,6 +1257,7 @@ dependencies = [
  "clap",
  "futures-util",
  "hotsheet-aitools",
+ "hotsheet-cli",
  "hotsheet-extsync",
  "hotsheet-index",
  "hotsheet-mcp",

@@ -2354,8 +2354,31 @@ The real-process tests prove this contract with separate CLI processes in dispos
 repositories; they are not the connected multi-session AI pilot, which HS2-K1QNGC owns, and
 no live pool is upgraded here.
 
-Tentative next plans (HS2-XCMAVT) and the worker read model (HS2-DBECD0) consume this
-authority when built; the live multi-session rollout remains HS2-K1QNGC.
+The worker read model (HS2-DBECD0) consumes this authority. Tentative next plans
+(HS2-XCMAVT) and the live multi-session rollout (HS2-K1QNGC) remain separate work.
+
+**Worker read model (HS2-DBECD0).** `coordination workers` and MCP
+`hotsheet_workers` read the same source-scoped coordination projection. The
+authenticated `GET /checkouts/{reference}/workers` route first resolves a
+registered checkout and linked Git source, then adds host-registered connections
+scoped by checkout id or an exact match to its registered root (the existing PTY
+connection identity). An external Codex or Claude terminal hook may supply that
+registered `checkout_id` when reporting `ai-connection`; only then can its
+terminal id join the project view. A hook without this binding remains unavailable
+to the project view, even if its cwd is inside the checkout. Its cursor includes
+exact lease deadlines and connection observations;
+long polling wakes on filesystem changes, connection registration/activity, and
+busy-window expiry without periodic requests. A connection without an explicit
+terminal return-route binding appears with its connection identity and an
+unresolved coordination role, separately from a live coordination lease. Each
+assignment operation and live claim remains a distinct row even for one ticket.
+Assignment rows expose typed handoff evidence and any integration suspension,
+including its main commit, without exposing raw prompts or credentials.
+Headless reads set `connection_coverage: false`;
+source coverage and unsupported provider capabilities remain explicit. Assignment
+phase, ticket Started phase, live claim, worker availability, and process busy are
+separate fields. Consumers should reconnect from the last applied cursor after a
+transient error with bounded backoff.
 
 #### Three-role guidance and setup (HS2-7E5R4A)
 

@@ -725,6 +725,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 ## Entry points
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
+  `coordination/worker_view.rs` projects exact sessions, assignments and claims;
+  `coordination workers` and MCP `hotsheet_workers` expose the headless read.
+  `crates/hotsheet-server/src/routes/checkout_workers.rs` adds authenticated
+  registered-checkout observations and an event-backed worker cursor (HS2-DBECD0).
   `parse_cli` isolates the large debug Clap builder on an explicit 8 MiB parser
   thread; dispatch remains on the original thread (HS2-H0MF53). The small-entry-stack
   process regression lives in `tests/coordination_portable.rs`.

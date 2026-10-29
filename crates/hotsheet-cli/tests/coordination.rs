@@ -14,6 +14,51 @@ use std::time::{Duration, Instant};
 use support::{Fixture, git};
 
 #[test]
+fn hs2_dbecd0_real_cli_workers_replays_qualified_claim_and_idle_session() {
+    let f = Fixture::new();
+    let ticket = f.ticket();
+    f.run(&[
+        "register",
+        "--role",
+        "worker",
+        "--id",
+        "worker-a",
+        "--session",
+        "generation-a",
+        "--route",
+        "human",
+    ]);
+    let args = f.coord(&["workers"]);
+    let view: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    assert_eq!(view["connection_coverage"], false);
+    assert_eq!(view["workers"][0]["id"], "worker-a");
+    assert_eq!(view["workers"][0]["tickets"].as_array().unwrap().len(), 0);
+    f.cli(&[
+        "claim",
+        &ticket.slug,
+        "--worker",
+        "worker-a",
+        "--eta",
+        "10m",
+    ]);
+    let after = view["cursor"].as_str().unwrap();
+    let args = f.coord(&["workers", "--after", after, "--wait-ms", "1000"]);
+    let claimed: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    assert_ne!(claimed["cursor"], view["cursor"]);
+    assert_eq!(
+        claimed["workers"][0]["tickets"][0]["ticket"]["native_id"],
+        ticket.id.to_string()
+    );
+    assert_eq!(
+        claimed["workers"][0]["tickets"][0]["ticket"]["connection_id"],
+        hotsheet_ticketing::git_connection_id(&f.store)
+    );
+    assert!(claimed["workers"][0]["tickets"][0]["claim_expires_at"].is_number());
+}
+
+#[test]
 fn hs2_76vmyg_worker_first_handoff_survives_absence_then_refills_from_new_main() {
     let f = Fixture::new();
     let first = f.ticket();

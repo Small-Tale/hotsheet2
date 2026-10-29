@@ -6392,6 +6392,395 @@ async fn checkout_registry_is_authenticated_and_resolvable() {
 }
 
 #[tokio::test]
+async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_replays_cursor() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("code");
+    let tickets = workspace.path().join("tickets");
+    std::fs::create_dir(&project).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&project)
+            .status()
+            .unwrap()
+            .success()
+    );
+    FsStore::init(&tickets, &StoreMetadata::new("VIEW")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let drives = st.drive_registry();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": project, "stores": [tickets]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    let source_id = opened["checkout"]["default_source"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let route = format!("/checkouts/{id}/workers");
+    let unauthorized = app
+        .clone()
+        .oneshot(Request::builder().uri(&route).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let initial = app
+        .clone()
+        .oneshot(authed("GET", &route, None))
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::OK);
+    let initial = body_json(initial).await;
+    assert_eq!(initial["project_id"], id);
+    assert_eq!(initial["workers"].as_array().unwrap().len(), 0);
+    let cursor = initial["cursor"].as_str().unwrap();
+    let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+        &project,
+        &tickets,
+        registry.path().to_path_buf(),
+    )
+    .unwrap();
+    coordinator
+        .register(
+            hotsheet_cli::coordination::Role::Worker,
+            "registered-agent",
+            "generation-one",
+            time::OffsetDateTime::now_utc().unix_timestamp(),
+            120,
+            hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+        )
+        .unwrap();
+    let updated = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("{route}?after={cursor}&wait_ms=1000"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated = body_json(updated).await;
+    assert_ne!(updated["cursor"], initial["cursor"]);
+    assert_eq!(updated["workers"][0]["id"], "registered-agent");
+    assert_eq!(updated["workers"][0]["availability"], "live");
+    assert_eq!(
+        updated["workers"][0]["process_busy"],
+        serde_json::Value::Null
+    );
+    assert_eq!(updated["connection_coverage"], true);
+    let cursor = updated["cursor"].as_str().unwrap().to_owned();
+    let waiting_app = app.clone();
+    let waiting_route = format!("{route}?after={cursor}&wait_ms=1000");
+    let waiting = tokio::spawn(async move {
+        waiting_app
+            .oneshot(authed("GET", &waiting_route, None))
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    drives
+        .lock()
+        .unwrap()
+        .register(hotsheet_aitools::Connection {
+            id: "external-session".into(),
+            project: id.clone(),
+            tool: "codex".into(),
+            role: hotsheet_aitools::Role::Worker,
+            transport: hotsheet_aitools::Transport::AppServer,
+            pid: None,
+            started_at_ms: 0,
+        });
+    let registered = body_json(waiting.await.unwrap()).await;
+    assert_ne!(registered["cursor"], updated["cursor"]);
+    assert!(registered["workers"].as_array().unwrap().iter().any(|row| {
+        row["id"] == "connection:external-session"
+            && row["tool"] == "codex"
+            && row["availability"] == "unbound_connection"
+            && row["connection_kind"] == "app_server"
+            && row["connection_role"] == "worker"
+            && row["observed_alive"].is_null()
+    }));
+    let now_ms =
+        u64::try_from(time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000).unwrap();
+    drives
+        .lock()
+        .unwrap()
+        .note_activity("external-session", now_ms);
+    let busy = app
+        .clone()
+        .oneshot(authed("GET", &route, None))
+        .await
+        .unwrap();
+    let busy = body_json(busy).await;
+    assert_ne!(busy["cursor"], registered["cursor"]);
+    assert!(
+        busy["workers"].as_array().unwrap().iter().any(|row| {
+            row["id"] == "connection:external-session" && row["process_busy"] == true
+        })
+    );
+    let cursor = busy["cursor"].as_str().unwrap().to_owned();
+    drives.lock().unwrap().unregister("external-session");
+    let removed = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("{route}?after={cursor}&wait_ms=1000"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let removed = body_json(removed).await;
+    assert_ne!(removed["cursor"], busy["cursor"]);
+    assert_eq!(removed["workers"].as_array().unwrap().len(), 1);
+    let cursor = removed["cursor"].as_str().unwrap().to_owned();
+    let started = std::time::Instant::now();
+    let idle = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("{route}?after={cursor}&wait_ms=100"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(idle).await["cursor"], removed["cursor"]);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(70));
+    // A host-launched PTY registers the canonical checkout root as its project.
+    // The worker read must accept that exact registered root without cwd-prefix matching.
+    let launched_pty = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(
+                &serde_json::json!({"command":"cat", "connect":"codex", "id":"host-pty", "cwd":project})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched_pty.status(), StatusCode::OK);
+    let pty_view = body_json(
+        app.clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(pty_view["workers"].as_array().unwrap().iter().any(|row| {
+        row["connection_id"] == "host-pty"
+            && row["connection_kind"] == "pty"
+            && row["tool"] == "codex"
+    }));
+    let _ = app
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/host-pty", None))
+        .await
+        .unwrap();
+    let opened_terminal = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(
+                &serde_json::json!({"command":"cat", "id":"hooked-shell", "cwd":project})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened_terminal.status(), StatusCode::OK);
+    let before_hook = body_json(
+        app.clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let hook_cursor = before_hook["cursor"].as_str().unwrap().to_owned();
+    let waiting_app = app.clone();
+    let waiting_route = format!("{route}?after={hook_cursor}&wait_ms=1000");
+    let waiting_hook = tokio::spawn(async move {
+        waiting_app
+            .oneshot(authed("GET", &waiting_route, None))
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let unbound_hook = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/hooked-shell/ai-connection",
+            Some(r#"{"agent":"codex"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unbound_hook.status(), StatusCode::NO_CONTENT);
+    let unbound_view = body_json(
+        app.clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        !unbound_view["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| { row["connection_id"] == "hooked-shell" })
+    );
+    let hook = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/hooked-shell/ai-connection",
+            Some(&serde_json::json!({"agent":"codex", "checkout_id":id}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(hook.status(), StatusCode::NO_CONTENT);
+    let hooked = body_json(waiting_hook.await.unwrap()).await;
+    assert_ne!(hooked["cursor"], before_hook["cursor"]);
+    assert!(
+        hooked["workers"].as_array().unwrap().iter().any(|row| {
+            row["id"] == "connection:hooked-shell"
+                && row["tool"] == "codex"
+                && row["connection_kind"] == "terminal_hook"
+                && row["observed_alive"] == true
+                && row["process_busy"].is_null()
+        }),
+        "worker rows: {}",
+        hooked["workers"]
+    );
+    let _ = app
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/hooked-shell", None))
+        .await
+        .unwrap();
+    let nested = project.join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&nested)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let nested_checkout = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        registry.path().join("checkouts.json"),
+    )
+    .register(&nested, Some("nested"), None, vec![tickets.clone()])
+    .unwrap();
+    let nested_terminal = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(
+                &serde_json::json!({"command":"cat", "id":"nested-hook", "cwd":nested}).to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(nested_terminal.status(), StatusCode::OK);
+    let nested_hook = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/nested-hook/ai-connection",
+            Some(
+                &serde_json::json!({"agent":"claude", "checkout_id":nested_checkout.id})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(nested_hook.status(), StatusCode::NO_CONTENT);
+    let parent = body_json(
+        app.clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        !parent["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["connection_id"] == "nested-hook")
+    );
+    let nested_view = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{}/workers", nested_checkout.id),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        nested_view["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| {
+                row["connection_id"] == "nested-hook"
+                    && row["tool"] == "claude"
+                    && row["observed_alive"] == true
+            })
+    );
+    let _ = app
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/nested-hook", None))
+        .await
+        .unwrap();
+    let invalid = app
+        .clone()
+        .oneshot(authed("GET", "/checkouts/unknown/workers", None))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::NOT_FOUND);
+    let last = body_json(
+        app.clone()
+            .oneshot(authed("GET", &route, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let cursor = last["cursor"].as_str().unwrap().to_owned();
+    let waiting_app = app.clone();
+    let waiting_route = format!("{route}?after={cursor}&wait_ms=1000");
+    let waiting_unlink = tokio::spawn(async move {
+        waiting_app
+            .oneshot(authed("GET", &waiting_route, None))
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(registry.path().join("checkouts.json"))
+        .remove_source(&id, &source_id)
+        .unwrap();
+    let unavailable = waiting_unlink.await.unwrap();
+    assert_ne!(unavailable.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

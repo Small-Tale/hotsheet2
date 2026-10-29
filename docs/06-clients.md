@@ -257,6 +257,8 @@ preview/download, server directory browser) are separate design work.
   tentative plans, HS2-E9SR7R owns the screen and phone composition, and
   HS2-1Z3T0Z owns lifecycle and rendered verification. The approved synthetic
   design captures are attached to HS2-T7EVFD; they do not establish shipped behavior.
+  HS2-DBECD0 supplies the authenticated worker snapshot and cursor read path for
+  that future view; this ticket does not add a Workers segment to the client.
 
 - **Responsive mobile layout.** The web client has a desktop size floor (the app-shell
   `min-width`, 1024px). At and above it the two side panels — the left project sidebar and

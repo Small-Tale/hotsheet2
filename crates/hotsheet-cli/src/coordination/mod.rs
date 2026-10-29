@@ -20,6 +20,7 @@ mod source_support_tests;
 #[cfg(test)]
 mod tests;
 mod wait;
+pub mod worker_view;
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -39,6 +40,7 @@ pub use contract::{
 pub struct Coordinator {
     pub(crate) directory: PathBuf,
     pub(crate) source: PathBuf,
+    pub(crate) registry_home: PathBuf,
     project_id: String,
     source_id: String,
     /// Deterministic interleaving point: runs once after a waiting dispatcher observes
@@ -67,6 +69,16 @@ impl Coordinator {
     /// Idempotent local setup. The directory is under the shipping checkout's private
     /// git directory, so worker worktrees share it and no local path enters a commit.
     pub fn open(project: &Path, source: &Path) -> Result<Self> {
+        Self::open_with_registry_home(project, source, hotsheet_plugins::hotsheet_home())
+    }
+
+    /// Use the host's injected machine home for registered checkout lookups.
+    /// A server must not consult a process-global checkout registry (HS2-DBECD0).
+    pub fn open_with_registry_home(
+        project: &Path,
+        source: &Path,
+        registry_home: PathBuf,
+    ) -> Result<Self> {
         let project = project.canonicalize()?;
         let output = hotsheet_ticketing::git::launch("git")
             .arg("-C")
@@ -87,6 +99,7 @@ impl Coordinator {
         let this = Self {
             directory,
             source: source.canonicalize()?,
+            registry_home,
             project_id,
             source_id: format!(
                 "{:x}",

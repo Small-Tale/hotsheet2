@@ -5,6 +5,7 @@ pub(crate) mod accounts;
 pub(crate) mod activity;
 pub(crate) mod auth;
 pub(crate) mod checkout_tickets;
+pub(crate) mod checkout_workers;
 pub(crate) mod checkouts;
 pub(crate) mod claims;
 pub(crate) mod guidance;
