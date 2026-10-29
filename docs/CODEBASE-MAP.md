@@ -163,10 +163,10 @@ Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
 synchronized from `crates/hotsheet-server/src/lib.rs` by
 `clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
-`clients/web/tests/contracts.spec.ts`. Every path has typed operations except newly synchronized routes, which carry a
-`route-only` marker until their request and response DTOs are modeled (HS2-11BVBS);
-the seven notifier administration paths (HS2-R5HTZN) are modeled with their web
-settings in HS2-DPBJJA.
+`clients/web/tests/contracts.spec.ts`. All 177 current paths have typed
+operations, including the notifier administration routes (HS2-R5HTZN); newly
+synchronized routes receive a `route-only` marker until their request and response
+DTOs are modeled (HS2-11BVBS).
 
 Portable client-state transition fixtures and their schema are under
 `docs/contracts/v1/client-state/`. The web runner

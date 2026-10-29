@@ -10414,17 +10414,83 @@ paths:
   /notifiers:
     get:
       operationId: list_notifiers
-      x-hotsheet-contract-depth: route-only
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifierList'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-config:
     get:
       operationId: get_notification_config
-      x-hotsheet-contract-depth: route-only
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationConfig'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-channels/{id}:
     parameters:
       - name: id
@@ -10434,16 +10500,88 @@ paths:
           type: string
     put:
       operationId: put_notification_channel
-      x-hotsheet-contract-depth: route-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationChannelInput'
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannel'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     delete:
       operationId: delete_notification_channel
-      x-hotsheet-contract-depth: route-only
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannelRemoval'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-channels/{id}/secrets/{field}:
     parameters:
       - name: id
@@ -10458,10 +10596,45 @@ paths:
           type: string
     put:
       operationId: put_notification_channel_secret
-      x-hotsheet-contract-depth: route-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSecretInput'
       responses:
+        '204':
+          description: Done; no body.
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-channels/{id}/test:
     parameters:
       - name: id
@@ -10471,10 +10644,43 @@ paths:
           type: string
     post:
       operationId: test_notification_channel
-      x-hotsheet-contract-depth: route-only
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDelivery'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-rules/{id}:
     parameters:
       - name: id
@@ -10484,23 +10690,133 @@ paths:
           type: string
     put:
       operationId: put_notification_rule
-      x-hotsheet-contract-depth: route-only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleInput'
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     delete:
       operationId: delete_notification_rule
-      x-hotsheet-contract-depth: route-only
       responses:
+        '204':
+          description: Done; no body.
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /notification-deliveries:
     get:
       operationId: list_notification_deliveries
-      x-hotsheet-contract-depth: route-only
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
       responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationDelivery'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
-          description: Response shape still follows the server handler and wire DTO.
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -16399,4 +16715,385 @@ components:
           oneOf:
             - const: exact
             - $ref: '#/components/schemas/PermissionPattern'
+      additionalProperties: false
+    NotifierList:
+      type: object
+      required:
+        - notifiers
+        - load_errors
+      properties:
+        notifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotifierDescriptor'
+        load_errors:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    NotifierDescriptor:
+      type: object
+      required:
+        - id
+        - display_name
+        - description
+        - capabilities
+        - settings
+        - source
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        capabilities:
+          $ref: '#/components/schemas/NotifierCapabilities'
+        settings:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotifierSettingField'
+        source:
+          type: object
+          required:
+            - kind
+          properties:
+            kind:
+              type: string
+              enum:
+                - built_in
+                - external
+            dir:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    NotifierCapabilities:
+      type: object
+      required:
+        - formats
+        - max_title_bytes
+        - max_body_bytes
+        - attachments
+        - priority
+        - click_url
+        - audio
+      properties:
+        formats:
+          type: array
+          items:
+            type: string
+            enum:
+              - markdown
+              - html
+              - plain
+        max_title_bytes:
+          type: integer
+          minimum: 0
+        max_body_bytes:
+          type: integer
+          minimum: 0
+        attachments:
+          type: object
+          required:
+            - max_count
+            - max_bytes
+            - max_total_bytes
+            - images_only
+          properties:
+            max_count:
+              type: integer
+              minimum: 0
+            max_bytes:
+              type: integer
+              minimum: 0
+            max_total_bytes:
+              type: integer
+              minimum: 0
+            images_only:
+              type: boolean
+          additionalProperties: false
+        priority:
+          type: boolean
+        click_url:
+          type: boolean
+        audio:
+          type: boolean
+      additionalProperties: false
+    NotifierSettingField:
+      type: object
+      required:
+        - key
+        - label
+        - type
+        - required
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum:
+            - string
+            - list
+            - number
+            - bool
+            - choice
+            - secret
+        choices:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+        default: {}
+        help:
+          type: string
+      additionalProperties: false
+    NotificationConfig:
+      type: object
+      required:
+        - version
+        - channels
+        - rules
+      properties:
+        version:
+          type: integer
+          minimum: 0
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationChannel'
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationRule'
+      additionalProperties: false
+    NotificationChannel:
+      type: object
+      required:
+        - id
+        - notifier
+        - enabled
+        - settings
+      properties:
+        id:
+          type: string
+        notifier:
+          type: string
+        label:
+          type: string
+        enabled:
+          type: boolean
+        settings:
+          type: object
+          description: 'Values by setting key; a secret setting holds only {"secret": "<key name>"}.'
+      additionalProperties: false
+    NotificationChannelInput:
+      type: object
+      required:
+        - notifier
+      properties:
+        notifier:
+          type: string
+        label:
+          anyOf:
+            - type: string
+            - type: 'null'
+        enabled:
+          type: boolean
+        settings:
+          type: object
+      additionalProperties: false
+    NotificationSecretInput:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          minLength: 1
+      additionalProperties: false
+    NotificationChannelRemoval:
+      type: object
+      required:
+        - removed
+        - removed_rules
+        - deleted_secrets
+      properties:
+        removed:
+          type: boolean
+        removed_rules:
+          type: array
+          items:
+            type: string
+        deleted_secrets:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    NotificationRuleFilter:
+      type: object
+      required: []
+      properties:
+        projects:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        statuses:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: string
+        priorities:
+          type: array
+          items:
+            type: string
+        min_severity:
+          type: string
+          enum:
+            - info
+            - success
+            - warning
+            - error
+      additionalProperties: false
+    NotificationRule:
+      type: object
+      required:
+        - id
+        - events
+        - channels
+        - enabled
+        - cooldown_seconds
+      properties:
+        id:
+          type: string
+        events:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - ticket.status_changed
+              - ticket.feedback_needed
+              - ticket.blocked
+              - permission.requested
+              - notification
+              - digest
+              - project.stopped
+              - test
+        channels:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        enabled:
+          type: boolean
+        filter:
+          $ref: '#/components/schemas/NotificationRuleFilter'
+        cooldown_seconds:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    NotificationRuleInput:
+      type: object
+      required:
+        - events
+        - channels
+      properties:
+        id:
+          type: string
+        events:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - ticket.status_changed
+              - ticket.feedback_needed
+              - ticket.blocked
+              - permission.requested
+              - notification
+              - digest
+              - project.stopped
+              - test
+        channels:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        enabled:
+          type: boolean
+        filter:
+          $ref: '#/components/schemas/NotificationRuleFilter'
+        cooldown_seconds:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    NotificationDelivery:
+      type: object
+      required:
+        - id
+        - at
+        - event
+        - channel
+        - notifier
+        - outcome
+        - attempts
+        - truncated
+        - omitted_attachments
+      properties:
+        id:
+          type: string
+        at:
+          type: string
+          description: RFC 3339 delivery time.
+        event:
+          type: string
+          enum:
+            - ticket.status_changed
+            - ticket.feedback_needed
+            - ticket.blocked
+            - permission.requested
+            - notification
+            - digest
+            - project.stopped
+            - test
+        channel:
+          type: string
+        notifier:
+          type: string
+        rule:
+          type: string
+        outcome:
+          type: string
+          enum:
+            - delivered
+            - failed
+            - suppressed
+        attempts:
+          type: integer
+          minimum: 0
+        error:
+          type: string
+        provider_id:
+          type: string
+        project:
+          type: string
+        ticket:
+          type: string
+        truncated:
+          type: boolean
+        omitted_attachments:
+          type: integer
+          minimum: 0
+        dedupe:
+          type: string
       additionalProperties: false
