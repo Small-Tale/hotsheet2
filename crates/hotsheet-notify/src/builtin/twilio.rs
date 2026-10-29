@@ -53,14 +53,14 @@ pub fn descriptor() -> NotifierDescriptor {
         },
         settings: vec![
             SettingField::new("account_sid", "Account SID", SettingKind::String).required(),
-            SettingField::new("auth_token", "Auth token", SettingKind::Secret).required(),
-            SettingField::new("from", "From number", SettingKind::String)
+            SettingField::new("auth_token", "Auth Token", SettingKind::Secret).required(),
+            SettingField::new("from", "From Number", SettingKind::String)
                 .required()
                 .help("A Twilio number or messaging service SID (MG…)."),
             SettingField::new("to", "Recipients", SettingKind::List)
                 .required()
                 .help("E.164 numbers, for example +15551234567."),
-            SettingField::new("api_base", "API base URL", SettingKind::String)
+            SettingField::new("api_base", "API Base URL", SettingKind::String)
                 .default_value(json!(DEFAULT_API_BASE)),
         ],
         source: NotifierSource::BuiltIn,

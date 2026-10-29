@@ -3210,6 +3210,70 @@
       }
     },
     {
+      "key": "hotsheet-web:notification-channel-dialog",
+      "package": "hotsheet-web",
+      "id": "notification-channel-dialog",
+      "name": "NotificationChannelDialog",
+      "kind": "component",
+      "purpose": "Add or edit a notifier channel with fields generated from the notifier settings schema and write-only credentials (HS2-DPBJJA).",
+      "publicExports": [
+        {
+          "name": "NotificationChannelDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-channel-dialog.tsx"
+      ],
+      "source": "src/components/notification-channel-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-channel-dialog.tsx",
+        "composition": "src/components/notification-channel-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:notification-navigation",
       "package": "hotsheet-web",
       "id": "notification-navigation",
@@ -3275,6 +3339,134 @@
       "provenance": {
         "selection": "src/components/notification-navigation.tsx",
         "composition": "src/components/notification-navigation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:notification-rule-dialog",
+      "package": "hotsheet-web",
+      "id": "notification-rule-dialog",
+      "name": "NotificationRuleDialog",
+      "kind": "component",
+      "purpose": "Add or edit a notification rule: events, channels, ticket filters, severity, and cooldown (HS2-DPBJJA).",
+      "publicExports": [
+        {
+          "name": "NotificationRuleDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-rule-dialog.tsx"
+      ],
+      "source": "src/components/notification-rule-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-rule-dialog.tsx",
+        "composition": "src/components/notification-rule-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:notification-settings",
+      "package": "hotsheet-web",
+      "id": "notification-settings",
+      "name": "NotificationSettings",
+      "kind": "component",
+      "purpose": "Machine-wide notifier delivery options, channels, rules, and recent deliveries (HS2-DPBJJA).",
+      "publicExports": [
+        {
+          "name": "NotificationSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-settings.tsx"
+      ],
+      "source": "src/components/notification-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-settings.tsx",
+        "composition": "src/components/notification-settings.tsx"
       }
     },
     {

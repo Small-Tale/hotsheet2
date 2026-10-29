@@ -48,6 +48,23 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   openLinkedTicket: action('open-linked-ticket'),
   selectTicketLinkMatch: action('select-ticket-link-match'),
   cancelTicketLinkChoice: action('cancel-ticket-link-choice'),
+  // App Settings → Notifications (HS2-DPBJJA).
+  saveNotificationOption: action('save-notification-option'),
+  addNotificationChannel: action('add-notification-channel'),
+  editNotificationChannel: action('edit-notification-channel'),
+  chooseNotificationNotifier: action('choose-notification-notifier'),
+  saveNotificationChannel: action('save-notification-channel'),
+  closeNotificationChannel: action('close-notification-channel'),
+  testNotificationChannel: action('test-notification-channel'),
+  toggleNotificationChannel: action('toggle-notification-channel'),
+  trustNotificationChannel: action('trust-notification-channel'),
+  removeNotificationChannel: action('remove-notification-channel'),
+  addNotificationRule: action('add-notification-rule'),
+  editNotificationRule: action('edit-notification-rule'),
+  saveNotificationRule: action('save-notification-rule'),
+  closeNotificationRule: action('close-notification-rule'),
+  removeNotificationRule: action('remove-notification-rule'),
+  refreshNotificationDeliveries: action('refresh-notification-deliveries'),
 } as const;
 
 /**
@@ -62,4 +79,6 @@ export const NOTIFICATIONS_AND_LINKS_TARGETS = {
   permissionRuleEditor: attr('data-dialog-component', 'permission-rule-editor'),
   permissionRuleEditorPattern: attr('name', 'permission-rule-editor-pattern'),
   permissionRulesSearch: attr('name', 'permission-rule-search'),
+  notificationChannelDialog: attr('data-dialog-component', 'notification-channel-dialog'),
+  notificationRuleDialog: attr('data-dialog-component', 'notification-rule-dialog'),
 } as const;

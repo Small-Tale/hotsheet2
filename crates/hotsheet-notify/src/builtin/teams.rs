@@ -50,7 +50,7 @@ pub fn descriptor() -> NotifierDescriptor {
             audio: false,
         },
         settings: vec![
-            SettingField::new("webhook_url", "Workflow webhook URL", SettingKind::Secret)
+            SettingField::new("webhook_url", "Workflow Webhook URL", SettingKind::Secret)
                 .required()
                 .help("From the Teams workflow \"Post to a channel when a webhook request is received\"."),
         ],

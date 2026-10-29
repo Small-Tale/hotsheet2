@@ -28,6 +28,17 @@ import type {
   GuidanceSourceReview,
   GuidanceSourceUpdate,
   MessageConnectionReceipt,
+  NotificationChannel,
+  NotificationChannelRemoval,
+  NotificationConfig,
+  NotificationDelivery,
+  NotificationProjectTiming,
+  NotificationQuietHours,
+  NotificationRule,
+  NotificationRuleFilter,
+  NotifierDescriptor,
+  NotifierList,
+  NotifierSettingField,
   PermissionRequest,
   PhaseReport,
   PollResponse,
@@ -932,6 +943,92 @@ export const parseTerminalLimits: ResponseParser<TerminalLimits> = (value) => {
   }
   return body as unknown as TerminalLimits;
 };
+
+/* ---- Notifier plugins (HS2-DPBJJA) ---------------------------------------------------- */
+
+const isSettingType: Check = (field) =>
+  typeof field === 'string' && ['string', 'list', 'number', 'bool', 'choice', 'secret'].includes(field);
+const parseNotifierSettingField = shape<NotifierSettingField>(
+  'notifier setting',
+  { key: isString, label: isString, type: isSettingType, required: isBoolean },
+  { choices: isStringArray, help: isString },
+);
+const parseNotifierDescriptor = shape<NotifierDescriptor>('notifier', {
+  id: isString,
+  display_name: isString,
+  description: isString,
+  capabilities: (value) => isRecord(value) && isStringArray(value.formats) && isNumber(value.max_body_bytes),
+  settings: listOf(parseNotifierSettingField.check),
+  source: (value) => isRecord(value) && (value.kind === 'built_in' || value.kind === 'external'),
+});
+export const parseNotifierList = shape<NotifierList>('notifier list', {
+  notifiers: listOf(parseNotifierDescriptor.check),
+  load_errors: isStringArray,
+});
+const parseQuietHours = shape<NotificationQuietHours>(
+  'quiet hours',
+  { start: isString, end: isString },
+  { utc_offset: isString, allow_errors: isBoolean },
+);
+export const parseNotificationChannel = shape<NotificationChannel>(
+  'notification channel',
+  { id: isString, notifier: isString, enabled: isBoolean, settings: isObject },
+  { label: isString, plugin_digest: isString, quiet_hours: parseQuietHours.check, max_per_hour: isNumber },
+);
+const isSeverity: Check = (field) =>
+  field === 'info' || field === 'success' || field === 'warning' || field === 'error';
+const parseRuleFilter = shape<NotificationRuleFilter>(
+  'notification rule filter',
+  {},
+  {
+    projects: isStringArray,
+    tags: isStringArray,
+    statuses: isStringArray,
+    categories: isStringArray,
+    priorities: isStringArray,
+    min_severity: isSeverity,
+    text: isString,
+  },
+);
+export const parseNotificationRule = shape<NotificationRule>(
+  'notification rule',
+  { id: isString, events: isStringArray, channels: isStringArray, enabled: isBoolean, cooldown_seconds: isNumber },
+  { filter: parseRuleFilter.check },
+);
+export const parseNotificationProjectTiming = shape<NotificationProjectTiming>(
+  'notification project timing',
+  {},
+  { grace_seconds: isNumber, idle_minutes: isNumber },
+);
+export const parseNotificationConfig = shape<NotificationConfig>(
+  'notification config',
+  {
+    version: isNumber,
+    channels: listOf(parseNotificationChannel.check),
+    rules: listOf(parseNotificationRule.check),
+  },
+  { link_base: isString, project_activity: parseNotificationProjectTiming.check },
+);
+export const parseNotificationDelivery = shape<NotificationDelivery>(
+  'notification delivery',
+  {
+    id: isString,
+    at: isString,
+    event: isString,
+    channel: isString,
+    notifier: isString,
+    outcome: (field) => field === 'delivered' || field === 'failed' || field === 'suppressed',
+    attempts: isNumber,
+    truncated: isBoolean,
+    omitted_attachments: isNumber,
+  },
+  { rule: isString, error: isString, provider_id: isString, project: isString, ticket: isString },
+);
+export const parseNotificationChannelRemoval = shape<NotificationChannelRemoval>('notification channel removal', {
+  removed: isBoolean,
+  removed_rules: isStringArray,
+  deleted_secrets: isStringArray,
+});
 
 export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
 export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge preview', {

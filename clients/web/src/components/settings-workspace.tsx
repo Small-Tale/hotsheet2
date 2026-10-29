@@ -21,6 +21,7 @@ import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
+import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
@@ -43,6 +44,8 @@ export interface SettingsWorkspaceProps {
   terminals: { inheritGlobalShellHistory: boolean; message: string };
   /** App Settings → Terminal memory (HS2-Y5DYC0). */
   terminalMemory?: TerminalMemorySettingsProps;
+  /** App Settings → Notifications (HS2-DPBJJA). */
+  notifications?: NotificationSettingsProps;
   permissions: {
     automation: PermissionAutomation;
     delays: readonly number[];
@@ -73,6 +76,7 @@ export function SettingsWorkspace({
   lifecycle,
   terminals,
   terminalMemory = {},
+  notifications = {},
   permissions,
   columns,
   general,
@@ -92,6 +96,7 @@ export function SettingsWorkspace({
           {category === 'sources' && <TicketSourcesSettings {...sources} />}
           {category === 'accounts' && <AccountsSettings {...accounts} />}
           {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
+          {category === 'notifications' && <NotificationSettings {...notifications} />}
           {category === 'ai' && (
             <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
           )}

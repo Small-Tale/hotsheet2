@@ -281,6 +281,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
+      notification-settings.ts # App Settings → Notifications controller: notifiers, channels, rules, deliveries, editors, and every change through the notifier REST admin routes (HS2-DPBJJA)
       terminal-viewports.ts   # Observed viewport identity, one live instance moved between drawer and grid tiles (HS2-EYD24K), progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
@@ -390,6 +391,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/tab-cycle.ts # Pure next/previous wrap-around cycling over an ordered tab-id list, shared by the project-tab and drawer-tab keyboard shortcuts (HS2-9SHYWD)
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/components/terminal-memory-settings.tsx # App Settings → Terminal memory: history, server replay buffer, and warm-terminal limit selects with memory-derived defaults (HS2-Y5DYC0)
+    src/components/notification-settings.tsx # App Settings → Notifications: delivery options, channel and rule ListActionRows with menus, recent deliveries ValueTable (HS2-DPBJJA)
+    src/components/notification-channel-dialog.tsx # Add/edit channel DialogSurface with fields generated from the notifier settings schema; write-only credentials (HS2-DPBJJA)
+    src/components/notification-rule-dialog.tsx # Add/edit rule DialogSurface: events, channels, filters, severity, cooldown (HS2-DPBJJA)
+    src/components/notification-settings-interactions.ts # wireNotificationSettings: the delegated handlers the app and the catalog demo share (HS2-DPBJJA)
+    src/notification-settings-model.ts # Pure schema-to-form mapping, form-to-request parsing, rule summaries, notifier icons (HS2-DPBJJA)
     src/components/ticket-sources-settings.tsx # Project Settings → Ticket sources (only this project's own sources: default choice, edit, remove-from-this-project) and App Settings → Accounts (machine-wide sign-ins with their sources/projects, Sign out when unused), HS2-3SCH1K/HS2-SM9PM8
     src/tracked-size-observer.ts # ResizeObserver that re-binds to whichever element currently renders a slot and ignores 0x0 hidden/detached reports (drawer + workspace grid bounds, HS2-0PF13V)
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts

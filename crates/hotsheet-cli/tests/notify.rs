@@ -102,8 +102,8 @@ fn headless_setup_send_test_and_removal_through_an_external_plugin() {
         .args(["notifiers"])
         .assert()
         .success()
-        .stdout(contains("speak — Speak aloud"))
-        .stdout(contains("ntfy — ntfy push"))
+        .stdout(contains("speak — Speak Aloud"))
+        .stdout(contains("ntfy — ntfy Push"))
         .stdout(contains("email — Email"))
         .stdout(contains("recorder — Recorder"));
 

@@ -70,7 +70,7 @@ pub fn descriptor() -> NotifierDescriptor {
                 },
             )
             .default_value(json!("POST")),
-            SettingField::new("signing_secret", "Signing secret", SettingKind::Secret).help(
+            SettingField::new("signing_secret", "Signing Secret", SettingKind::Secret).help(
                 "When set, X-Hotsheet-Signature carries sha256=<hex HMAC-SHA256 of \"<timestamp>.<body>\">.",
             ),
         ],

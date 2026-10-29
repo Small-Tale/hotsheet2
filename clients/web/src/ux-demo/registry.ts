@@ -24,6 +24,7 @@ import { demoModule as listHeader } from './list-header-demo';
 import { demoModule as listItem } from './list-item-demo';
 import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
+import { demoModule as notificationSettings } from './notification-settings-demo';
 import { demoModule as permissionComponents } from './permission-components-demo';
 import { demoModule as projectDialog } from './project-dialog-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
@@ -73,6 +74,7 @@ export const demoModules: readonly DemoModule[] = [
   aiConversation,
   connectionDetails,
   setupSettings,
+  notificationSettings,
   tagChip,
   statusBadge,
   confidenceCalibration,

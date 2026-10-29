@@ -175,6 +175,9 @@ describe('UX demo catalog', () => {
       'keyboard-settings',
       'trash-settings',
       'terminal-memory-settings',
+      'notification-settings',
+      'notification-channel-dialog',
+      'notification-rule-dialog',
       'permission-rules-settings',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');

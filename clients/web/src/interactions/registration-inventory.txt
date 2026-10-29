@@ -319,6 +319,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="open-linke
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-ticket-link-match"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'
 notifications-and-links	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="ticket-link-choice-dialog"]'
+notifications-and-links	wireNotificationSettings	document.body
 search-and-composer	wireTicketSearchFields	document.body
 search-and-composer	wireSearchFields	document.body
 search-and-composer	document.addEventListener	'pointerdown'

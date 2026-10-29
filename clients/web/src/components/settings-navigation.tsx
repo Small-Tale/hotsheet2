@@ -7,6 +7,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   ArchiveRestore,
+  Bell,
   BookOpen,
   Bot,
   CircleUserRound,
@@ -32,6 +33,7 @@ export type SettingsCategory =
   | 'columns'
   | 'general'
   | 'accounts'
+  | 'notifications'
   | 'terminal-memory'
   | 'keyboard';
 
@@ -51,6 +53,8 @@ const appCategories = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
   // Machine-wide provider sign-ins; ticket sources themselves belong to projects (HS2-SM9PM8).
   { id: 'accounts', label: 'Accounts', icon: CircleUserRound, iconName: 'circle-user-round' },
+  // Machine-wide notifier channels, rules, and delivery options (HS2-DPBJJA).
+  { id: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
   // Machine-wide terminal history, replay, and warm-terminal limits (HS2-Y5DYC0).
   { id: 'terminal-memory', label: 'Terminal memory', icon: MemoryStick, iconName: 'memory-stick' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
@@ -94,6 +98,11 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
   general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
   accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],
+  notifications: [
+    { control: 'Channels, rules, and delivery options', server: '/notification-config' },
+    { control: 'Installed notifiers', server: '/notifiers' },
+    { control: 'Recent deliveries', server: '/notification-deliveries' },
+  ],
   'terminal-memory': [{ control: 'History, replay buffer, and warm terminals', server: '/terminal-limits' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
 };

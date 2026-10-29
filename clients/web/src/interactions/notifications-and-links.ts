@@ -3,6 +3,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
+import { wireNotificationSettings } from '../components/notification-settings-interactions';
 import {
   rememberedPermissionPreview,
   reviewedPermissionPattern,
@@ -11,6 +12,7 @@ import {
   toggleRememberedPermissionSuggestion,
 } from '../components/permission-request-card';
 import { type PermissionRuleFilters } from '../components/permission-rules-settings';
+import type { NotificationSettings } from '../features/notification-settings';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
@@ -112,6 +114,8 @@ export interface NotificationAndLinkInteractionsDependencies {
   >;
   readonly openTicketLinkMatch: (match: TicketLinkMatch) => Promise<void>;
   readonly cancelTicketLinkChoice: () => void;
+  /** App Settings → Notifications (HS2-DPBJJA); absent in compositions without it. */
+  readonly notificationSettings?: NotificationSettings;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -162,6 +166,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ticketLinkChoice,
     openTicketLinkMatch,
     cancelTicketLinkChoice,
+    notificationSettings,
   } = dependencies;
   const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
   lifetime.add(permissionRuleEditorFocus.dispose);
@@ -793,6 +798,8 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       },
     ),
   );
+  // App Settings → Notifications (HS2-DPBJJA): the same handlers the catalog demo installs.
+  if (notificationSettings) lifetime.add(wireNotificationSettings(document.body, notificationSettings));
   return () => {
     lifetime.dispose();
   };

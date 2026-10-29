@@ -52,7 +52,7 @@ pub fn descriptor() -> NotifierDescriptor {
             audio: false,
         },
         settings: vec![
-            SettingField::new("webhook_url", "Incoming webhook URL", SettingKind::Secret)
+            SettingField::new("webhook_url", "Incoming Webhook URL", SettingKind::Secret)
                 .required()
                 .help("From a Slack app's Incoming Webhooks page; it is the credential."),
         ],

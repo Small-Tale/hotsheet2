@@ -108,21 +108,21 @@ pub fn descriptor() -> NotifierDescriptor {
         },
         settings: vec![
             SettingField::new("to", "Recipients", SettingKind::List).required(),
-            SettingField::new("from", "From address", SettingKind::String).required(),
-            SettingField::new("smtp_host", "SMTP host", SettingKind::String).required(),
-            SettingField::new("smtp_port", "SMTP port", SettingKind::Number)
+            SettingField::new("from", "From Address", SettingKind::String).required(),
+            SettingField::new("smtp_host", "SMTP Host", SettingKind::String).required(),
+            SettingField::new("smtp_port", "SMTP Port", SettingKind::Number)
                 .default_value(json!(587)),
             SettingField::new(
                 "security",
-                "Connection security",
+                "Connection Security",
                 SettingKind::Choice {
                     choices: ["starttls", "tls", "none"].map(String::from).to_vec(),
                 },
             )
             .default_value(json!("starttls"))
             .help("'none' sends credentials and mail unencrypted; use it only for a local relay."),
-            SettingField::new("username", "SMTP username", SettingKind::String),
-            SettingField::new("password", "SMTP password", SettingKind::Secret),
+            SettingField::new("username", "SMTP Username", SettingKind::String),
+            SettingField::new("password", "SMTP Password", SettingKind::Secret),
         ],
         source: NotifierSource::BuiltIn,
     }

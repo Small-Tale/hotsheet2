@@ -113,7 +113,7 @@ mod tests {
         assert_eq!(ids, ["ntfy", "speak"]);
         assert_eq!(
             registry.get("ntfy").unwrap().descriptor().display_name,
-            "ntfy push"
+            "ntfy Push"
         );
         assert!(registry.load_errors[0].contains("already provided"));
         let live: Vec<_> = Registry::live(home.path())

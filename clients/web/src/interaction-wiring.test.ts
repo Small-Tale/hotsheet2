@@ -73,6 +73,7 @@ const registrations = new Set([
   'wireRepositoryBrowser',
   'wireTicketCollection',
   'wireCommandSettingsEditor',
+  'wireNotificationSettings',
   'wireBulkTicketDialog',
   'wireAiConversation',
   'wireTicketTitleEditor',

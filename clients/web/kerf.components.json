@@ -6612,6 +6612,195 @@
       }
     },
     {
+      "id": "notification-settings",
+      "name": "NotificationSettings",
+      "kind": "component",
+      "purpose": "Machine-wide notifier delivery options, channels, rules, and recent deliveries (HS2-DPBJJA).",
+      "source": "src/components/notification-settings.tsx",
+      "publicExports": [
+        {
+          "name": "NotificationSettings"
+        }
+      ],
+      "sourceLinks": ["src/components/notification-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-settings.tsx",
+        "composition": "src/components/notification-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs App Settings for notifier channels and rules."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific NotificationSettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "notification-channel-dialog",
+      "name": "NotificationChannelDialog",
+      "kind": "component",
+      "purpose": "Add or edit a notifier channel with fields generated from the notifier settings schema and write-only credentials (HS2-DPBJJA).",
+      "source": "src/components/notification-channel-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "NotificationChannelDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/notification-channel-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-channel-dialog.tsx",
+        "composition": "src/components/notification-channel-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs to add or edit one notifier channel."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific NotificationChannelDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "notification-rule-dialog",
+      "name": "NotificationRuleDialog",
+      "kind": "component",
+      "purpose": "Add or edit a notification rule: events, channels, ticket filters, severity, and cooldown (HS2-DPBJJA).",
+      "source": "src/components/notification-rule-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "NotificationRuleDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/notification-rule-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-rule-dialog.tsx",
+        "composition": "src/components/notification-rule-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs to add or edit one notification rule."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific NotificationRuleDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",

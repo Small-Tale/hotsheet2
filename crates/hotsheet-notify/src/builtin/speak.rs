@@ -102,7 +102,7 @@ impl Speak {
 pub fn descriptor() -> NotifierDescriptor {
     NotifierDescriptor {
         id: "speak".into(),
-        display_name: "Speak aloud".into(),
+        display_name: "Speak Aloud".into(),
         description: "Reads notifications aloud on this machine with its text-to-speech voice.".into(),
         capabilities: Capabilities {
             formats: vec![BodyFormat::Plain],
@@ -116,10 +116,10 @@ pub fn descriptor() -> NotifierDescriptor {
         settings: vec![
             SettingField::new("voice", "Voice", SettingKind::String)
                 .help("A voice name the system speech command accepts; empty uses the default voice."),
-            SettingField::new("rate", "Rate (words per minute)", SettingKind::Number),
-            SettingField::new("command", "Custom command", SettingKind::List)
+            SettingField::new("rate", "Rate (Words per Minute)", SettingKind::Number),
+            SettingField::new("command", "Custom Command", SettingKind::List)
                 .help("Program and arguments to run instead of the platform default; the text is appended as the last argument."),
-            SettingField::new("timeout_seconds", "Timeout (seconds)", SettingKind::Number)
+            SettingField::new("timeout_seconds", "Timeout (Seconds)", SettingKind::Number)
                 .default_value(json!(60)),
         ],
         source: NotifierSource::BuiltIn,

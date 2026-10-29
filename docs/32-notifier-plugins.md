@@ -1,9 +1,9 @@
 # 32 — Notifier Plugins
 
-**Status:** Partial. The core contract, the `speak`, `ntfy`, and `email` built-ins,
+**Status:** Shipped. The core contract, the `speak`, `ntfy`, and `email` built-ins,
 external plugins, rules, the server router, REST administration, and the headless CLI
 shipped in HS2-R5HTZN. The `webhook`, `slack`, `teams`, and `twilio` built-ins shipped in
-HS2-97ZHMM. The web settings surface is HS2-DPBJJA.
+HS2-97ZHMM. App Settings → Notifications in the web client shipped in HS2-DPBJJA (§32.9.1).
 
 Hot Sheet raises events that a person may need to hear about when they are not
 looking at the app: a ticket finished or became blocked, an AI asked for feedback or
@@ -370,6 +370,39 @@ idempotent.
   `notify-<channel>-<field>` credentials Hot Sheet stored for it.
 - `send` and `channel test` exit non-zero when a delivery fails.
 
+### 32.9.1 Web settings (HS2-DPBJJA)
+
+App Settings → **Notifications** (Lucide `bell`) sits with the app categories, because the
+configuration is machine-wide. It runs the same REST administration as the CLI. Top to
+bottom, it shows:
+
+- **Delivery options.** Link origin, "stopped after" seconds, and "stuck after" minutes,
+  each saved on change.
+- **Channels.** Each row has the notifier icon, the channel name, the notifier, and a
+  Disabled badge. Its menu offers Send Test, Edit…, Enable or Disable, Approve Plugin (for
+  an external plugin), and Remove.
+- **Rules.** Each row shows the event names and a "To …" summary of channels and filters.
+  Its menu offers Edit… and Remove.
+- **Recent deliveries.** The last 20 records, with outcome icons and a Refresh action.
+
+**Channel dialog.** Add Channel… and Edit… open a modal dialog whose fields are generated
+from the notifier's settings schema:
+
+- text, number, or comma-separated list inputs;
+- a switch for a boolean;
+- a select for a choice;
+- a password input for a credential.
+
+A credential input never shows a stored value ("Stored; leave empty to keep it"), and it is
+written only through the secret route. Quiet hours and the hourly limit sit below.
+
+**Rule dialog.** Choose events and channels with checkboxes; filter by ticket text, tags,
+statuses, and projects, a minimum severity, and a cooldown.
+
+**Saving and refresh.** Both dialogs submit explicitly, because the server validates the
+whole channel or rule. A refusal stays in the dialog with its reason. The category
+re-reads from the server when it opens and after each change, and nothing polls.
+
 ## 32.10 Built-in notifiers
 
 | Notifier  | Formats                | Limits                                                      | Settings                                                                                                   |
@@ -422,7 +455,7 @@ idempotent.
 | Item                                                                       | Status  | Ticket     |
 | -------------------------------------------------------------------------- | ------- | ---------- |
 | Contract, rendering, built-ins, external plugins, rules, router, CLI, REST | Shipped | HS2-R5HTZN |
-| Web settings for channels and rules                                        | Planned | HS2-DPBJJA |
+| Web settings for channels and rules                                        | Shipped | HS2-DPBJJA |
 | Webhook, Slack, Teams, SMS notifiers                                       | Shipped | HS2-97ZHMM |
 | MMS image attachments through Twilio                                       | Planned | HS2-K57DK0 |
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |

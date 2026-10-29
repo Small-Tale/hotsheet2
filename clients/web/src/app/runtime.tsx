@@ -109,6 +109,7 @@ import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
+import { createNotificationSettings } from '../features/notification-settings';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -1390,6 +1391,20 @@ export async function startHotSheetWebClient() {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
     },
+  });
+  // App Settings → Notifications (HS2-DPBJJA): machine-wide channels and rules, loaded each time the
+  // category opens; every change re-reads what the server stored. Nothing polls.
+  const notificationSettings = createNotificationSettings({
+    api: () => {
+      const current = project();
+      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+    },
+  });
+  let notificationSettingsShown = false;
+  effect(() => {
+    const shown = selectedSettingsCategory.value === 'notifications' && Boolean(project());
+    if (shown && !notificationSettingsShown) void notificationSettings.refresh();
+    notificationSettingsShown = shown;
   });
   // The runtime lives as long as the page, so this subscription needs no teardown.
   onTerminalLimitsChange(() => {
@@ -4279,6 +4294,16 @@ export async function startHotSheetWebClient() {
     terminalLimits: terminalLimitsSettings.limits,
     terminalLimitsMessage: terminalLimitsSettings.message,
     terminalLimitDeviceDefaults: () => terminalLimitsSettings.deviceDefaults(),
+    notificationSettings: () => ({
+      notifiers: notificationSettings.notifiers.value,
+      config: notificationSettings.config.value,
+      deliveries: notificationSettings.deliveries.value,
+      message: notificationSettings.message.value,
+      status: notificationSettings.status.value,
+      busyChannels: notificationSettings.busyChannels.value,
+      channelEditor: notificationSettings.channelEditor.value,
+      ruleEditor: notificationSettings.ruleEditor.value,
+    }),
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
@@ -5254,6 +5279,7 @@ export async function startHotSheetWebClient() {
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,
+    notificationSettings,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,

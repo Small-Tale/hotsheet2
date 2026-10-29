@@ -43,7 +43,7 @@ impl Ntfy {
 pub fn descriptor() -> NotifierDescriptor {
     NotifierDescriptor {
         id: "ntfy".into(),
-        display_name: "ntfy push".into(),
+        display_name: "ntfy Push".into(),
         description: "Sends push notifications to phones and desktops subscribed to an ntfy topic.".into(),
         capabilities: Capabilities {
             formats: vec![BodyFormat::Markdown, BodyFormat::Plain],
@@ -66,7 +66,7 @@ pub fn descriptor() -> NotifierDescriptor {
             SettingField::new("topic", "Topic", SettingKind::String)
                 .required()
                 .help("Letters, digits, '-' and '_'. Anyone who knows a public topic can read it; choose a hard-to-guess name or use an access token."),
-            SettingField::new("token", "Access token", SettingKind::Secret)
+            SettingField::new("token", "Access Token", SettingKind::Secret)
                 .help("Optional bearer token for a protected topic."),
             SettingField::new(
                 "priority",

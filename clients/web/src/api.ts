@@ -38,6 +38,13 @@ import {
   parseLegacyPermissionDiscardOutcome,
   parseLegacyPermissionPreview,
   parseMessageConnectionReceipt,
+  parseNotificationChannel,
+  parseNotificationChannelRemoval,
+  parseNotificationConfig,
+  parseNotificationDelivery,
+  parseNotificationProjectTiming,
+  parseNotificationRule,
+  parseNotifierList,
   parsePermissionDecision,
   parsePermissionRequest,
   parsePermissionRule,
@@ -1042,6 +1049,103 @@ export interface TerminalLimits {
   configured: { history_lines: number | null; replay_bytes: number | null; warm_terminals: number | null };
   effective: TerminalLimitValues;
 }
+/** Notifier plugins (`/notifiers`, docs/32, HS2-DPBJJA). */
+export type NotifierSettingType = 'string' | 'list' | 'number' | 'bool' | 'choice' | 'secret';
+export interface NotifierSettingField {
+  key: string;
+  label: string;
+  type: NotifierSettingType;
+  choices?: string[];
+  required: boolean;
+  default?: unknown;
+  help?: string;
+}
+export interface NotifierDescriptor {
+  id: string;
+  display_name: string;
+  description: string;
+  capabilities: {
+    formats: string[];
+    max_title_bytes: number;
+    max_body_bytes: number;
+    attachments: { max_count: number; max_bytes: number; max_total_bytes: number; images_only: boolean };
+    priority: boolean;
+    click_url: boolean;
+    audio: boolean;
+  };
+  settings: NotifierSettingField[];
+  source: { kind: 'built_in' | 'external'; dir?: string };
+}
+export interface NotifierList {
+  notifiers: NotifierDescriptor[];
+  load_errors: string[];
+}
+export interface NotificationQuietHours {
+  start: string;
+  end: string;
+  utc_offset?: string;
+  allow_errors?: boolean;
+}
+/** A configured channel; a secret setting holds only `{ secret: "<key name>" }`. */
+export interface NotificationChannel {
+  id: string;
+  notifier: string;
+  label?: string;
+  enabled: boolean;
+  settings: Record<string, unknown>;
+  plugin_digest?: string;
+  quiet_hours?: NotificationQuietHours;
+  max_per_hour?: number;
+}
+export interface NotificationRuleFilter {
+  projects?: string[];
+  tags?: string[];
+  statuses?: string[];
+  categories?: string[];
+  priorities?: string[];
+  min_severity?: 'info' | 'success' | 'warning' | 'error';
+  text?: string;
+}
+export interface NotificationRule {
+  id: string;
+  events: string[];
+  channels: string[];
+  enabled: boolean;
+  filter?: NotificationRuleFilter;
+  cooldown_seconds: number;
+}
+export interface NotificationProjectTiming {
+  grace_seconds?: number;
+  idle_minutes?: number;
+}
+export interface NotificationConfig {
+  version: number;
+  channels: NotificationChannel[];
+  rules: NotificationRule[];
+  link_base?: string;
+  project_activity?: NotificationProjectTiming;
+}
+export interface NotificationDelivery {
+  id: string;
+  at: string;
+  event: string;
+  channel: string;
+  notifier: string;
+  rule?: string;
+  outcome: 'delivered' | 'failed' | 'suppressed';
+  attempts: number;
+  error?: string;
+  provider_id?: string;
+  project?: string;
+  ticket?: string;
+  truncated: boolean;
+  omitted_attachments: number;
+}
+export interface NotificationChannelRemoval {
+  removed: boolean;
+  removed_rules: string[];
+  deleted_secrets: string[];
+}
 export interface TrashSettings {
   trash_cleanup_days: number;
 }
@@ -1885,6 +1989,47 @@ export class Api {
   terminalLimits = () => this.parsed(parseTerminalLimits, '/terminal-limits');
   saveTerminalLimits = (value: TerminalLimits['configured']) =>
     this.parsed(parseTerminalLimits, '/terminal-limits', { method: 'PUT', body: JSON.stringify(value) });
+  // Notifier plugins (HS2-DPBJJA): machine-wide channels, rules, and delivery log.
+  notifiers = () => this.parsed(parseNotifierList, '/notifiers');
+  notificationConfig = () => this.parsed(parseNotificationConfig, '/notification-config');
+  saveNotificationChannel = (id: string, body: Omit<NotificationChannel, 'id' | 'plugin_digest'>) =>
+    this.parsed(parseNotificationChannel, `/notification-channels/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  removeNotificationChannel = (id: string) =>
+    this.parsed(parseNotificationChannelRemoval, `/notification-channels/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  saveNotificationChannelSecret = (id: string, field: string, value: string) =>
+    this.parsed(ignoreBody, `/notification-channels/${encodeURIComponent(id)}/secrets/${encodeURIComponent(field)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  testNotificationChannel = (id: string) =>
+    this.parsed(parseNotificationDelivery, `/notification-channels/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    });
+  trustNotificationChannel = (id: string) =>
+    this.parsed(parseNotificationChannel, `/notification-channels/${encodeURIComponent(id)}/trust`, {
+      method: 'POST',
+    });
+  saveNotificationRule = (id: string, rule: Omit<NotificationRule, 'id'>) =>
+    this.parsed(parseNotificationRule, `/notification-rules/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(rule),
+    });
+  removeNotificationRule = (id: string) =>
+    this.parsed(ignoreBody, `/notification-rules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  notificationDeliveries = (limit = 20) =>
+    this.parsed(parseNotificationDelivery.list, `/notification-deliveries?limit=${limit}`);
+  saveNotificationLinkBase = (url: string | null) =>
+    this.parsed(ignoreBody, '/notification-link-base', { method: 'PUT', body: JSON.stringify({ url }) });
+  saveNotificationProjectTiming = (timing: NotificationProjectTiming) =>
+    this.parsed(parseNotificationProjectTiming, '/notification-project-timing', {
+      method: 'PUT',
+      body: JSON.stringify(timing),
+    });
   trashSettings = (checkoutId: string) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
   trashPurgePreview = (checkoutId: string, days: number) =>
