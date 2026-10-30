@@ -134,6 +134,7 @@ import {
 import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
+import { reconcileWorkerTicketSelection } from '../worker-ticket-refresh';
 import type { WorkerTicketDetails } from '../worker-view-model';
 import type { StoredPendingAttachment } from '../workspace-session';
 
@@ -415,6 +416,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const activeNotWorkingScreenings = new Set<symbol>();
   /** Recently viewed ticket details rendered without a loading view on reopen (HS2-4Q04Z9). */
   const detailCache = createTicketDetailCache();
+  function reconcileWorkerSelection(projectId: string, ticket: FullTicket) {
+    reconcileWorkerTicketSelection({
+      projectId,
+      ticket,
+      selectedProjectId: project()?.id,
+      selectedTicket: selectedTicket.value,
+      cache: detailCache,
+      reconcile: reconcileRefreshedSelected,
+    });
+  }
   interface DraftSlot {
     base: () => string;
     draft: Signal<string>;
@@ -2846,6 +2857,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     addAttachments,
     selectionOrder,
     presentTicket,
+    reconcileWorkerSelection,
     cancelTicketDrafts,
     selectTickets,
     openTicketReader,

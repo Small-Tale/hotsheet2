@@ -1,7 +1,13 @@
 import { signal } from 'kerfjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CheckoutTicketCounts, CheckoutTicketQuery, CorruptTicket, FullTicket, TicketRow } from '../api';
+import {
+  type CheckoutTicketCounts,
+  type CheckoutTicketQuery,
+  type CorruptTicket,
+  type FullTicket,
+  type TicketRow,
+} from '../api';
 import type { BoardColumnPage } from '../board-pagination';
 import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
@@ -11,7 +17,22 @@ import { createRefreshBarrier } from '../refresh-barrier';
 import type { TicketView } from '../ticket-views';
 import { type CachedProjectProjection, createProjectRefresh, sameTicketQuery } from './project-refresh';
 
-const load = vi.hoisted(() => vi.fn<() => Promise<ProjectTicketRefresh>>());
+const { load, readDetail } = vi.hoisted(() => ({
+  load: vi.fn<() => Promise<ProjectTicketRefresh>>(),
+  readDetail: vi.fn<(checkout: string, id: string) => Promise<{ store: string; ticket: FullTicket }>>(),
+}));
+vi.mock('../api', async (original) => {
+  const actual = await original<typeof import('../api')>();
+  return {
+    ...actual,
+    Api: class extends actual.Api {
+      override checkoutTicket = async (checkout: string, id: string) => {
+        const result = await readDetail(checkout, id);
+        return { ...result, ticket: { ...result.ticket, store: result.store } };
+      };
+    },
+  };
+});
 vi.mock('../project-ticket-refresh', async (original) => ({
   ...(await original<typeof import('../project-ticket-refresh')>()),
   loadProjectTicketRefresh: load,
@@ -49,6 +70,7 @@ function owner() {
     commandRuns: signal([]),
     projectProjectionById: signal<Record<string, CachedProjectProjection>>({}),
   };
+  const reconcile = vi.fn();
   const refresh = createProjectRefresh({
     ...bindings,
     localTicketMutationBarrier: barrier,
@@ -68,12 +90,13 @@ function owner() {
     markProjectWarm: vi.fn(),
     recordAuthoritativeTicketTrend: vi.fn(),
     scheduleClaimLeaseExpiry: vi.fn(),
-    reconcileRefreshedSelected: vi.fn(),
+    reconcileRefreshedSelected: reconcile,
   });
   return {
     refresh,
     bindings,
     barrier,
+    reconcile,
     anchor: () => anchor,
     switchProject: () => {
       current = { id: 'p2', apiPath: '/api/p2' } as Project;
@@ -85,9 +108,93 @@ function owner() {
 
 beforeEach(() => {
   load.mockReset();
+  readDetail.mockReset();
 });
 
 describe('selected project refresh owner (HS2-BSSWGV)', () => {
+  it('HS2-J118P3 reconciles against the current same-ticket state instead of a captured previous object', async () => {
+    const { refresh, bindings, reconcile } = owner();
+    const previous = row('A') as FullTicket;
+    bindings.selectedTicketSlugs.value = ['A'];
+    bindings.selectedTicket.value = previous;
+    load.mockResolvedValue({ tickets: [row('A')] });
+    let release!: (result: { store: string; ticket: FullTicket }) => void;
+    const detail = readDetail.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = refresh.refreshProject();
+    await vi.waitFor(() => {
+      expect(detail).toHaveBeenCalled();
+    });
+    const shown = { ...previous, title: 'current shown state' },
+      refreshed = { ...previous, title: 'refreshed' };
+    bindings.selectedTicket.value = shown;
+    release({ store: 'git', ticket: refreshed });
+    await pending;
+    expect(reconcile).toHaveBeenCalledExactlyOnceWith(shown, expect.objectContaining(refreshed));
+  });
+  it('HS2-J118P3 keeps newer Worker detail when an older ordinary read finishes, and clears loading', async () => {
+    const { refresh, bindings, reconcile } = owner();
+    const previous = { ...row('A'), title: 'before' } as FullTicket;
+    const newer = { ...previous, title: 'newer Worker detail', concurrency_token: 'worker-new' };
+    bindings.selectedTicketSlugs.value = ['A'];
+    bindings.selectedTicket.value = previous;
+    load.mockResolvedValue({ tickets: [row('A')], ticketCounts: counts });
+    let release!: (result: { store: string; ticket: FullTicket }) => void;
+    const detail = readDetail.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = refresh.refreshProject();
+    await vi.waitFor(() => {
+      expect(detail).toHaveBeenCalledWith('p1', 'git:A');
+    });
+    refresh.invalidateSelectedDetail();
+    bindings.selectedTicket.value = newer;
+    release({ store: 'git', ticket: { ...previous, title: 'older ordinary response' } });
+    await pending;
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(bindings.selectedTicket.value).toBe(newer);
+    expect(bindings.loading.value).toBe(false);
+    expect(bindings.tickets.value).toEqual([row('A')]);
+    detail.mockResolvedValue({ store: 'git', ticket: newer });
+    await refresh.refreshProject();
+    expect(reconcile).toHaveBeenCalledWith(newer, expect.objectContaining(newer));
+  });
+
+  it('HS2-J118P3 rejects ordinary detail after a duplicate-slug selection or project change', async () => {
+    for (const changeProject of [false, true]) {
+      const { refresh, bindings, reconcile, switchProject } = owner();
+      const previous = row('A') as FullTicket;
+      bindings.selectedTicketSlugs.value = ['A'];
+      bindings.selectedTicket.value = previous;
+      load.mockResolvedValue({ tickets: [row('A')] });
+      let release!: (result: { store: string; ticket: FullTicket }) => void;
+      const detail = readDetail.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const pending = refresh.refreshProject();
+      await vi.waitFor(() => {
+        expect(detail).toHaveBeenCalled();
+      });
+      const next = { ...previous, qualified_id: 'another:A' };
+      bindings.selectedTicket.value = next;
+      if (changeProject) switchProject();
+      release({ store: 'git', ticket: previous });
+      await pending;
+      expect(reconcile).not.toHaveBeenCalled();
+      expect(bindings.selectedTicket.value).toBe(next);
+      detail.mockReset();
+    }
+  });
   it('applies the authoritative rows, counts, and projection and prunes a vanished selection', async () => {
     const { refresh, bindings, anchor } = owner();
     load.mockResolvedValue({ tickets: [row('A'), row('B')], ticketCounts: counts, nextCursor: 'c2' });

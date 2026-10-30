@@ -132,6 +132,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
     reconcileRefreshedSelected,
   } = dependencies;
   let projectRefreshGeneration = 0;
+  let selectedDetailGeneration = 0;
   async function refreshProject({
     showLoading = true,
     quiet = false,
@@ -285,9 +286,17 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
         // During an active search the selected ticket may legitimately be absent from the base-view page; keep
         // it selected and still reconcile its latest fields into the open inspector (HS2-6AXG6Z).
         if (matching || searchActive) {
+          const detailGeneration = selectedDetailGeneration;
           const refreshed = (await client.checkoutTicket(current.id, previous.qualified_id)).ticket;
-          if (active() && selectedTicketSlugs.value.includes(refreshed.slug))
-            reconcileRefreshedSelected(previous, refreshed);
+          const shown = selectedTicket.peek();
+          if (
+            active() &&
+            detailGeneration === selectedDetailGeneration &&
+            shown?.qualified_id === previous.qualified_id &&
+            refreshed.qualified_id === previous.qualified_id &&
+            selectedTicketSlugs.value.includes(refreshed.slug)
+          )
+            reconcileRefreshedSelected(shown, refreshed);
         }
       }
       if (searchActive) void refreshTicketSearch();
@@ -302,6 +311,10 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
     /** Drop any refresh already past the mutation barrier (a local write is about to apply). */
     invalidate() {
       projectRefreshGeneration += 1;
+    },
+    /** HS2-J118P3: a newer Worker detail supersedes only the inspector read, not collection/loading. */
+    invalidateSelectedDetail() {
+      selectedDetailGeneration += 1;
     },
   };
 }

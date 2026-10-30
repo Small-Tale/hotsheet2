@@ -22,6 +22,7 @@ import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', async ({ page }) => {
   await mockProject(page);
+  await page.setViewportSize({ width: 1440, height: 844 });
   const view = {
     cursor: 'worker-cursor-1',
     project_id: project.id,
@@ -88,7 +89,55 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   let workerCursor = 'worker-cursor-1';
   let otherTitle = 'Other source ticket';
   let otherStatus = 'started';
+  let otherRevision = 1;
   let otherDetailReads = 0;
+  let localDetailReads = 0;
+  let localFull = { ...full };
+  const patches: Record<string, unknown>[] = [];
+  const workerWaiters = new Set<() => void>();
+  const advanceWorkers = (cursor: string) => {
+    workerCursor = cursor;
+    for (const resolve of workerWaiters) resolve();
+    workerWaiters.clear();
+  };
+  const detailGates = new Map<string, { entered: () => void; wait: Promise<void> }>();
+  const holdNextDetail = (qualified: string) => {
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    detailGates.set(qualified, { entered, wait });
+    return { started, release };
+  };
+  const respondDetail = async (route: Route, qualified: string, response: Record<string, unknown>) => {
+    const gate = detailGates.get(qualified);
+    if (gate) {
+      detailGates.delete(qualified);
+      gate.entered();
+      await gate.wait;
+    }
+    await route.fulfill({ json: response });
+  };
+  let sourceCursor = 0;
+  const sourcePolls: Route[] = [];
+  await page.route('**/ws/poll*', (route) => {
+    if (!new URL(route.request().url()).searchParams.has('since'))
+      return route.fulfill({ json: { cursor: sourceCursor, events: [], overflow: false } });
+    sourcePolls.push(route);
+  });
+  const emitSourceChange = async () => {
+    await expect.poll(() => sourcePolls.length).toBeGreaterThan(0);
+    await sourcePolls.shift()!.fulfill({
+      json: {
+        cursor: ++sourceCursor,
+        events: [{ store: 'git-other', kind: 'updated', id: '01', slug: row.slug }],
+        overflow: false,
+      },
+    });
+  };
   await page.route('**/__hotsheet/project-api/demo-checkout/providers', (route) =>
     route.fulfill({
       json: ['git-local', 'git-other'].map((connectionId, index) => ({
@@ -104,7 +153,10 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   await page.route('**/checkouts/demo-checkout/workers?*', async (route) => {
     const request = new URL(route.request().url()),
       source = request.searchParams.get('connection_id');
-    if (request.searchParams.has('after')) await new Promise((resolve) => setTimeout(resolve, 500));
+    if (request.searchParams.get('after') === workerCursor)
+      await new Promise<void>((resolve) => {
+        workerWaiters.add(resolve);
+      });
     await route.fulfill({
       json: {
         ...view,
@@ -114,20 +166,26 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
       },
     });
   });
-  await page.route('**/checkouts/demo-checkout/tickets/git-local%3A01', (route) =>
-    route.fulfill({ json: { store: 'git-local', ...full } }),
-  );
+  await page.route('**/checkouts/demo-checkout/tickets/git-local%3A01', (route) => {
+    if (route.request().method() === 'GET') localDetailReads += 1;
+    if (route.request().method() === 'PATCH') {
+      const patch = route.request().postDataJSON() as Record<string, unknown>;
+      patches.push(patch);
+      localFull = { ...localFull, ...patch, updated_at: '2026-10-30T01:00:09Z', concurrency_token: 'local-saved' };
+    }
+    return respondDetail(route, 'git-local:01', { store: 'git-local', ...localFull });
+  });
   await page.route('**/checkouts/demo-checkout/tickets/git-other%3A01', (route) => {
     otherDetailReads += 1;
-    return route.fulfill({
-      json: {
-        store: 'git-other',
-        ...full,
-        connection_id: 'git-other',
-        qualified_id: 'git-other:01',
-        title: otherTitle,
-        status: otherStatus,
-      },
+    return respondDetail(route, 'git-other:01', {
+      store: 'git-other',
+      ...full,
+      connection_id: 'git-other',
+      qualified_id: 'git-other:01',
+      title: otherTitle,
+      status: otherStatus,
+      updated_at: `2026-10-30T01:00:0${otherRevision}Z`,
+      concurrency_token: `other-${otherRevision}`,
     });
   });
   await page.goto('/');
@@ -140,15 +198,64 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   await expect(columns).toContainText('Integrating');
   await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toBeVisible();
   await columns.locator('[data-ticket-qualified-id="git-local:01"]').click();
-  await expect(page.getByRole('complementary', { name: 'Inspector rail' })).toContainText(row.title);
+  const inspector = page.getByRole('complementary', { name: 'Inspector rail' });
+  await expect(inspector).toContainText(row.title);
   await columns.locator('[data-ticket-qualified-id="git-other:01"]').click();
   await expect(page.getByRole('complementary', { name: 'Inspector rail' })).toContainText('Other source ticket');
   otherTitle = 'Updated other source ticket';
   otherStatus = 'completed';
-  workerCursor = 'worker-cursor-2';
+  otherRevision = 2;
+  advanceWorkers('worker-cursor-2');
   await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
   await expect(columns.locator('[data-ticket-qualified-id="git-other:01"][data-status="completed"]')).toBeVisible();
+  // HS2-J118P3: cursor-only refresh reconciles the exact selected inspector too.
+  await expect(inspector).toContainText(otherTitle);
+  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
+  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toContainText(row.title);
   expect(otherDetailReads).toBeGreaterThan(1);
+  // An older worker response must not undo a newer ordinary source-event refresh.
+  const oldWorkerRead = holdNextDetail('git-other:01');
+  otherTitle = 'Older worker response';
+  otherRevision = 3;
+  advanceWorkers('worker-cursor-3');
+  await oldWorkerRead.started;
+  otherTitle = 'Newer source event';
+  otherRevision = 4;
+  await emitSourceChange();
+  await expect(inspector).toContainText(otherTitle);
+  oldWorkerRead.release();
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
+  await expect(inspector).toContainText(otherTitle);
+  // Inverse order: an older ordinary detail cannot undo accepted newer Worker detail.
+  const oldOrdinaryRead = holdNextDetail('git-other:01');
+  otherTitle = 'Older ordinary response';
+  otherRevision = 5;
+  await emitSourceChange();
+  await oldOrdinaryRead.started;
+  otherTitle = 'Newer worker detail';
+  otherRevision = 6;
+  advanceWorkers('worker-cursor-4');
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
+  await expect(inspector).toContainText(otherTitle);
+  const ordinaryResponse = page.waitForResponse((response) => response.url().includes('tickets/git-other%3A01'));
+  oldOrdinaryRead.release();
+  await (await ordinaryResponse).finished();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(inspector).toContainText(otherTitle);
+  // A late response can update its card/cache, but cannot follow a duplicate-slug selection.
+  const otherSelectionRead = holdNextDetail('git-other:01');
+  otherTitle = 'Late other source response';
+  otherRevision = 7;
+  advanceWorkers('worker-cursor-5');
+  await otherSelectionRead.started;
+  await columns.locator('[data-ticket-qualified-id="git-local:01"]').click();
+  await expect(inspector).toContainText(row.title);
+  otherSelectionRead.release();
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
+  await expect(inspector).toContainText(row.title);
+  await columns.locator('[data-ticket-qualified-id="git-other:01"]').click();
+  await expect(inspector).toContainText(otherTitle);
+  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
     for (const width of [1440, 900, 390, 1440]) {
@@ -162,6 +269,35 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
       await page.screenshot({ path: test.info().outputPath(`workers-${theme}-${width}.png`) });
     }
   }
+  // A status-only cursor refresh preserves the focused unsaved edit and its edit-start base.
+  await columns.locator('[data-ticket-qualified-id="git-local:01"]').click();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
+  const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  await editor.fill('Unsaved worker details');
+  localFull = {
+    ...localFull,
+    status: 'completed',
+    updated_at: '2026-10-30T01:00:07Z',
+    concurrency_token: 'local-remote',
+  };
+  advanceWorkers('worker-cursor-6');
+  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"][data-status="completed"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-info-panel__status-field')).toContainText('Completed');
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('Unsaved worker details');
+  expect(patches).toEqual([]);
+  // A worker read captured before blur/save cannot restore that older full ticket afterward.
+  const beforeSave = holdNextDetail('git-local:01');
+  advanceWorkers('worker-cursor-7');
+  await beforeSave.started;
+  const readsBeforeSave = localDetailReads;
+  await editor.blur();
+  await expect.poll(() => patches.length).toBe(1);
+  await expect(inspector.getByRole('button', { name: 'Edit Ticket details' })).toContainText('Unsaved worker details');
+  beforeSave.release();
+  await expect.poll(() => localDetailReads).toBeGreaterThan(readsBeforeSave);
+  await expect(inspector.getByRole('button', { name: 'Edit Ticket details' })).toContainText('Unsaved worker details');
+  expect(patches[0]).toMatchObject({ details: 'Unsaved worker details', expected_token: 'local-remote' });
 });
 
 test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9SR7R)', async ({ page }) => {

@@ -11,6 +11,17 @@ cursor-driven title/status refresh; the authenticated real-server browser path
 checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
 on the ticket.
 
+HS2-J118P3 covers cursor coalescing, idle snapshots, save-barrier waiting and
+invalidation/retry, ordinary-refresh ordering, disposal, and exact project/source
+selection in `clients/web/src/worker-ticket-refresh.test.ts`. The shipped mocked
+Workers parent in `clients/web/tests/providers.spec.ts` asserts matching card and
+inspector title/status, duplicate-slug late selection, both worker/ordinary source
+refresh completion orders, focused unsaved Details, and overlapping blur/save.
+`features/project-refresh.test.ts` pins detail-only invalidation, ordinary loading
+cleanup, qualified project/selection guards, and current reconciliation bases.
+Synthetic detail revisions advance with their content. Existing draft merge and
+conflict tests remain the authority for text reconciliation.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

@@ -236,6 +236,7 @@ import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
+import { createWorkerTicketRefresh } from '../worker-ticket-refresh';
 import { qualifiedWorkerTicket, type WorkerTicketDetails, type WorkerView } from '../worker-view-model';
 import { startWorkerViewStream } from '../worker-view-stream';
 import {
@@ -1395,6 +1396,7 @@ export async function startHotSheetWebClient() {
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
   let workerStreamKey = '',
     workerStreamStop: (() => void) | undefined,
+    workerDetailRefresh: ReturnType<typeof createWorkerTicketRefresh> | undefined,
     workerStreamGeneration = 0;
   effect(() => {
     const current = project(),
@@ -1406,6 +1408,7 @@ export async function startHotSheetWebClient() {
           : '';
     if (key === workerStreamKey) return;
     workerStreamStop?.();
+    workerDetailRefresh?.dispose();
     workerStreamStop = undefined;
     workerStreamKey = key;
     const generation = ++workerStreamGeneration;
@@ -1423,28 +1426,19 @@ export async function startHotSheetWebClient() {
     workerLoading.value = pending.size > 0;
     if (gitSources.length === 0) return;
     const client = new Api(current.apiPath, '', { trackBusy: false });
-    const pendingDetails = new Set<string>();
-    const desiredDetailCursor = new Map<string, string>();
-    const refreshWorkerDetail = (qualified: string) => {
-      if (pendingDetails.has(qualified)) return;
-      const desired = desiredDetailCursor.get(qualified);
-      if (!desired) return;
-      pendingDetails.add(qualified);
-      void client
-        .checkoutTicket(current.id, qualified)
-        .then(({ ticket }) => {
-          if (generation !== workerStreamGeneration || desiredDetailCursor.get(qualified) !== desired) return;
-          workerDetails.value = { ...workerDetails.value, [qualified]: ticket };
-        })
-        .catch(() => {
-          // Keep the previous card visible; a later cursor change retries the detail read.
-        })
-        .finally(() => {
-          pendingDetails.delete(qualified);
-          if (generation === workerStreamGeneration && desiredDetailCursor.get(qualified) !== desired)
-            refreshWorkerDetail(qualified);
+    const detailRefresh = createWorkerTicketRefresh({
+      load: async (qualified) => (await client.checkoutTicket(current.id, qualified)).ticket,
+      waitUntilSafe: () => localTicketMutationBarrier.wait(),
+      publish: (ticket) => {
+        if (generation !== workerStreamGeneration || project()?.id !== current.id) return;
+        if (selectedTicket.peek()?.qualified_id === ticket.qualified_id) projectRefresh.invalidateSelectedDetail();
+        batch(() => {
+          workerDetails.value = { ...workerDetails.value, [ticket.qualified_id]: ticket };
+          reconcileWorkerSelection(current.id, ticket);
         });
-    };
+      },
+    });
+    workerDetailRefresh = detailRefresh;
     workerStreamStop = startWorkerViewStream({
       client,
       checkout: current.id,
@@ -1468,8 +1462,7 @@ export async function startHotSheetWebClient() {
           const qualified = qualifiedWorkerTicket(ref);
           if (seen.has(qualified)) continue;
           seen.add(qualified);
-          desiredDetailCursor.set(qualified, `${source}:${snapshot.cursor}`);
-          refreshWorkerDetail(qualified);
+          detailRefresh.request(qualified, `${source}:${snapshot.cursor}`);
         }
       },
       onError: (source, reason) => {
@@ -3544,7 +3537,11 @@ export async function startHotSheetWebClient() {
     scheduleClaimLeaseExpiry: () => {
       scheduleClaimLeaseExpiry();
     },
-    reconcileRefreshedSelected,
+    reconcileRefreshedSelected: (previous, refreshed) => {
+      // HS2-J118P3: an older worker read cannot undo an accepted ordinary source refresh.
+      workerDetailRefresh?.invalidate();
+      reconcileRefreshedSelected(previous, refreshed);
+    },
   });
   // A hoisted entry point: earlier-built owners and handlers call it before this line runs.
   function refreshProject(options?: ProjectRefreshOptions) {
@@ -3803,7 +3800,9 @@ export async function startHotSheetWebClient() {
     // ticket snapshot. Invalidate that active-project response before applying
     // optimistic rows; later refreshes still wait for the mutation to settle.
     projectRefresh.invalidate();
-    return localTicketMutationBarrier.begin();
+    const release = localTicketMutationBarrier.begin();
+    workerDetailRefresh?.invalidate();
+    return release;
   }
   function beginLocalTicketCreation() {
     const release = beginLocalTicketMutation();
@@ -3885,6 +3884,7 @@ export async function startHotSheetWebClient() {
     addAttachments,
     selectionOrder,
     presentTicket,
+    reconcileWorkerSelection,
     cancelTicketDrafts,
     selectTickets,
     openTicketReader,
@@ -5898,6 +5898,8 @@ export async function startHotSheetWebClient() {
       haltedSessionsController.dispose();
       permissionsController.dispose();
       disposeClaimClock();
+      workerStreamStop?.();
+      workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
       terminalDashboardController.dispose();
     },

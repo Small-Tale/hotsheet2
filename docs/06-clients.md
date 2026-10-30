@@ -258,7 +258,12 @@ preview/download, server directory browser) are separate design work.
   HS2-1Z3T0Z owns lifecycle and rendered verification. The approved synthetic
   design captures are attached to HS2-T7EVFD. The client reads each linked Git
   source through the authenticated cursor endpoint and reports unsupported or
-  unavailable source coverage. Wider lifecycle validation remains HS2-1Z3T0Z.
+  unavailable source coverage. Accepted cursor-driven ticket details also reconcile
+  the exact source-qualified selected inspector, preserving focused drafts and their
+  edit-start merge bases (HS2-J118P3). Detail reads wait for local saves; reads made
+  stale by a save or a newer ordinary source refresh retry before publishing, without
+  requiring another worker cursor. Responses from a previous project or selection
+  cannot replace the current inspector. Wider lifecycle validation remains HS2-1Z3T0Z.
 
 - **Responsive mobile layout.** The web client has a desktop size floor (the app-shell
   `min-width`, 1024px). At and above it the two side panels — the left project sidebar and
