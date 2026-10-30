@@ -106,6 +106,12 @@ only after successful verification. Push and its hook call the same executor;
 before opening the remote connection; the hook reuses valid evidence. A successful
 covering main CI run is still required before ticket completion.
 
+The main publishing reservation reads its Git ref once and then reads the captured
+immutable object (HS2-W110HQ). A release or replacement between those reads cannot
+turn a valid snapshot into an ambiguous-ref failure or substitute another owner's
+record. An absent ref permits admission; Git failures and malformed records remain
+errors. Compare-and-swap acquisition, renewal and release still decide ownership.
+
 ## Timing history (HS2-TCCKRZ)
 
 `scripts/check.sh --timings` prints recent stage and test-file cost estimates as

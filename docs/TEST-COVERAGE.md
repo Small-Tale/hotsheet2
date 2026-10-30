@@ -218,7 +218,10 @@ changes during the gate, pool-file immutability, and ticket phase boundaries. Th
 synthetic local Git tests, including a selection-keyed full receipt in the push hook;
 real multi-machine throughput remains measured by the integration
 baseline and CI. `docs/12-code-organization-and-testing.md` records the local
-setup command and reservation workflow.
+setup command and reservation workflow. HS2-W110HQ adds deterministic real Git-object
+tests for reservation release/replacement immediately after lookup, absent refs,
+Git errors and malformed records; the existing independent-process serialization
+case retains its strict stale-writer rejection.
 
 HS2-5A6JNS covers machine secret consolidation in
 `crates/hotsheet-ticketing/src/secrets/machine_secrets.rs`: three legacy

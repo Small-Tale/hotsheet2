@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   copyFileSync,
@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { verifyMainPush } from './main-integration-window.mjs';
+import { readWindow, verifyMainPush } from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = (program, args, cwd, env = process.env, input) =>
@@ -130,6 +130,70 @@ async function waitForFile(path) {
   }
   throw new Error('Timed out waiting for the first gate to start');
 }
+
+test('HS2-W110HQ release or replacement after lookup preserves one immutable reservation snapshot', () => {
+  const f = fixture();
+  const ref = 'refs/hotsheet/main-integration-window';
+  try {
+    const value = {
+      version: 1,
+      token: 'synthetic-original',
+      pid: process.pid,
+      expiresAt: Date.now() + 60_000,
+      phase: 'gating',
+      remote: 'origin',
+      target: 'refs/heads/main',
+      head: run('git', ['rev-parse', 'HEAD'], f.repo),
+      tree: run('git', ['rev-parse', 'HEAD^{tree}'], f.repo),
+    };
+    const oid = run('git', ['hash-object', '-w', '--stdin'], f.repo, f.env, JSON.stringify(value));
+    const replacement = run(
+      'git',
+      ['hash-object', '-w', '--stdin'],
+      f.repo,
+      f.env,
+      JSON.stringify({ ...value, token: 'synthetic-replacement' }),
+    );
+    for (const next of [null, replacement]) {
+      run('git', ['update-ref', ref, oid], f.repo);
+      let lookups = 0;
+      const snapshot = readWindow(f.repo, (repo, args) => {
+        lookups++;
+        const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
+        if (next) run('git', ['update-ref', ref, next, oid], repo);
+        else run('git', ['update-ref', '-d', ref, oid], repo);
+        return result;
+      });
+      assert.deepEqual(snapshot, { oid, value });
+      assert.equal(lookups, 1);
+      assert.equal(readWindow(f.repo)?.value.token ?? null, next ? 'synthetic-replacement' : null);
+    }
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-W110HQ absent reservations differ from Git failures and malformed snapshots', () => {
+  const f = fixture();
+  try {
+    assert.equal(readWindow(f.repo), null);
+    assert.throws(() => readWindow(f.repo, () => ({ status: 128, stderr: 'synthetic failure' })), /Cannot read/);
+    assert.throws(
+      () => readWindow(f.repo, () => ({ status: null, error: new Error('synthetic spawn failure') })),
+      /Cannot read/,
+    );
+    assert.throws(() => readWindow(f.repo, () => ({ status: 0, stdout: 'not-an-object-id' })), /invalid object id/);
+    const ref = 'refs/hotsheet/main-integration-window';
+    for (const contents of ['not json', JSON.stringify({ version: 99 })]) {
+      const oid = run('git', ['hash-object', '-w', '--stdin'], f.repo, f.env, contents);
+      run('git', ['update-ref', ref, oid], f.repo);
+      assert.throws(() => readWindow(f.repo));
+    }
+  } finally {
+    f.dispose();
+  }
+});
 
 test('HS2-BND42N expired owner is replaced and its ref is released', () => {
   const f = fixture();

@@ -45,11 +45,13 @@ function snapshot(repo, requested = 'HEAD') {
   return { head, tree };
 }
 
-function readWindow(repo) {
-  const resolved = gitResult(repo, ['show-ref', '--verify', '--quiet', ref]);
+export function readWindow(repo, query = gitResult) {
+  // HS2-W110HQ: release/replacement may follow this lookup; only read its immutable oid.
+  const resolved = query(repo, ['rev-parse', '--verify', '--quiet', ref]);
   if (resolved.status === 1) return null;
   if (resolved.error || resolved.status !== 0) throw new Error('Cannot read main integration ref');
-  const oid = git(repo, ['rev-parse', ref]);
+  const oid = resolved.stdout.trim();
+  if (!fullSha.test(oid)) throw new Error('Cannot read main integration ref: invalid object id');
   const value = JSON.parse(git(repo, ['cat-file', 'blob', oid]));
   if (
     value.version !== 1 ||
