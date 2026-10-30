@@ -1667,3 +1667,10 @@ discard flow remains covered by its existing real-router test.
 - Unit: `clients/web/src/components/quick-ticket-composer.test.ts # HS2-2QR67T` covers outside/title/Details/metadata/null/missing-input decisions and reset/reopen focus; `clients/web/src/ux-demo/workspace-components-demo.test.ts` retains the existing live title helper contract.
 - End to end: `clients/web/tests/composer-activation-restore.spec.ts # HS2-2QR67T` holds the actual animation-frame callbacks across same-project cancel/reopen, attachment PUT and an older held refresh, confirms Details focus and real keyboard input before release, then verifies retained focus, further Details typing, unchanged title, visible reference and exact uploaded bytes. The full existing40J transition cases retain their draft/restore assertions.
 - Visual: the same real-parent flow can capture wide/medium/narrow/wide-return states with `HOTSHEET_2QR_FOCUS_QA=1`; these captures supplement the focus/keyboard assertions. Native packaged-host verification is not claimed.
+
+### Browser-test server ownership and cleanup (HS2-BJ00D1, HS2-0BQ8J9)
+
+- Behavior: a browser-test Vite server answers only its run's identity, refuses an occupied port, and never stops another run. Its isolated cache is removed only after the owned child and inherited output pipes close, even if the parent already exited.
+- Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server.
+- End to end: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-BJ00D1` runs actual Vite servers on owned loopback ports, proves identity isolation and taken-port refusal, then stops one while the other keeps serving. This is a headless process test; no browser or user host is used.
+- Manual: none; lifecycle synchronization and isolation are automated.

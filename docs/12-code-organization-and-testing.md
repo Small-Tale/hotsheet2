@@ -1262,6 +1262,13 @@ another worker's or the user's server.
 - a second server on the same port exits
 - stopping one leaves the other serving
 
+Its owned-process helper attaches both exit and close promises at launch. Cache removal waits
+for close, including when the Vite parent has already exited: esbuild inherits the parent's
+stderr pipe and can outlive its exit event (HS2-0BQ8J9; the same boundary as HS2-RTW97Q).
+A deterministic real descendant writes only after an explicit release, proving both running
+and already-exited parents cannot permit cache deletion before inherited pipes close.
+Deletion errors remain failures; no removal retries or longer shutdown timeouts are used.
+
 `src/playwright-config.test.ts` pins the readiness URL and `reuseExistingServer: false`.
 
 ## 12.8 Cross-references

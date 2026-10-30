@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, it } from 'vitest';
+
+import { stopServerProcess, trackServerProcess } from './playwright-server-process.mjs';
 
 // Two real Vite servers launched the way Playwright's webServer launches them: each answers only its
 // own test-server identity, a second server on a taken port refuses instead of sharing it, and
@@ -17,7 +19,7 @@ const directories = [];
 
 afterEach(async () => {
   // Only the servers this test started are stopped; nothing else on the machine is touched.
-  await Promise.all(owned.splice(0).map(stop));
+  await Promise.all(owned.splice(0).map(stopServerProcess));
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
@@ -38,7 +40,8 @@ async function launch(port, id) {
     env: { ...process.env, HOTSHEET_VITE_CACHE_DIR: cacheDir, HOTSHEET_WEB_TEST_SERVER_ID: id },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  owned.push(child);
+  const lifetime = trackServerProcess(child);
+  owned.push(lifetime);
   let output = '';
   child.stdout.on('data', (chunk) => {
     output += chunk;
@@ -46,20 +49,7 @@ async function launch(port, id) {
   child.stderr.on('data', (chunk) => {
     output += chunk;
   });
-  const exited = new Promise((resolveExit) => child.once('exit', (code) => resolveExit(code)));
-  return { child, exited, output: () => output };
-}
-
-async function stop(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise((resolveExit) => child.once('exit', resolveExit));
-  child.kill('SIGTERM');
-  const force = setTimeout(() => child.kill('SIGKILL'), 10_000);
-  try {
-    await exited;
-  } finally {
-    clearTimeout(force);
-  }
+  return { ...lifetime, output: () => output };
 }
 
 async function identity(port, id) {
@@ -105,7 +95,62 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   const second = await launch(separate, 'run-b');
   await ready(second, separate, 'run-b');
   expect(await identity(separate, 'run-a')).toBe(404);
-  await stop(first.child);
+  await stopServerProcess(first);
   expect(await identity(shared, 'run-a')).toBe('refused');
   expect(await identity(separate, 'run-b')).toBe(200);
 }, 60_000);
+
+it.each(['already exited', 'running'])(
+  'waits for a %s parent’s inherited-pipe writer before removing its cache (HS2-0BQ8J9)',
+  async (state) => {
+    const cacheDir = await mkdtemp(resolve(tmpdir(), 'hotsheet-identity-writer-'));
+    directories.push(cacheDir);
+    // Like esbuild's service, this real descendant inherits the parent's output pipes. A separate
+    // inherited control pipe holds its final cache write until the test releases it, without sleeps.
+    const writer = `
+    import { createReadStream } from 'node:fs';
+    import { writeFile } from 'node:fs/promises';
+    import { resolve } from 'node:path';
+    createReadStream(null, { fd: 3 }).once('data', async () => {
+      await writeFile(resolve(process.argv[1], 'writer-finished'), 'finished');
+      process.exit(0);
+    });
+    process.stdout.write('writer-ready\\n');
+  `;
+    const parent = `
+    import { spawn } from 'node:child_process';
+    spawn(process.execPath, ['--input-type=module', '-e', process.argv[1], process.argv[2]], {
+      stdio: ['ignore', 'inherit', 'inherit', 3],
+    }).once('spawn', () => { if (process.argv[3] === 'already exited') process.exit(0); });
+  `;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', parent, writer, cacheDir, state], {
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    });
+    const server = trackServerProcess(child);
+    owned.push(server);
+    const writerReady = new Promise((resolveReady) => {
+      child.stdout.on('data', (chunk) => {
+        if (chunk.toString().includes('writer-ready')) resolveReady();
+      });
+    });
+    let stopFinished = false;
+    try {
+      await writerReady;
+      if (state === 'already exited') expect(await server.exited).toBe(0);
+      const stopping = stopServerProcess(server).then(() => {
+        stopFinished = true;
+      });
+      await server.exited;
+      // Give an incorrectly resolved stop its promise turn; the writer remains event-gated.
+      await new Promise(setImmediate);
+      expect(stopFinished).toBe(false);
+      child.stdio[3].end('release');
+      await stopping;
+      expect(await readFile(resolve(cacheDir, 'writer-finished'), 'utf8')).toBe('finished');
+      await rm(cacheDir, { recursive: true, force: true });
+    } finally {
+      if (!child.stdio[3].writableEnded) child.stdio[3].end('release');
+      await server.closed;
+    }
+  },
+);
