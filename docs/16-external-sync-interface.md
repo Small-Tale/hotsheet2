@@ -700,8 +700,13 @@ each host. Operators configure those public IDs on the server as a JSON origin m
 example `HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS='{"https://github.example.com":"Iv…"}'`.
 Configure its installation slug separately with
 `HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS='{"https://github.example.com":"enterprise-app"}'`.
-Origins normalize case and trailing slashes but match only the configured host. A missing
-slug mapping explains that operator setup when no installation can supply its URL;
+Origins normalize case and trailing slashes but match only the configured host. Device
+authorization, token refresh, account/repository API reads and installation URLs use the
+same normalized origin (HS2-K0D3TJ). Exactly `https://github.com` uses `https://api.github.com`;
+other configured origins use their own `/api/v3`. An explicitly supplied port remains part
+of the origin, including a default port; it is not silently collapsed. Invalid device-client
+origins fail before a transport request. A missing slug mapping explains that operator setup
+when no installation can supply its URL;
 an existing installation-derived URL remains usable without the mapping. Public App
 configuration never substitutes for a missing Enterprise App.
 Existing installation grants and reachable repositories remain available if optional

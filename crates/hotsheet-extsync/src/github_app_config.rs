@@ -121,7 +121,7 @@ fn parse_enterprise_client_ids(value: &str) -> Result<HashMap<String, String>, S
         .collect()
 }
 
-fn normalize_web_base(value: &str) -> Result<String, String> {
+pub(crate) fn normalize_web_base(value: &str) -> Result<String, String> {
     let normalized = value.trim().trim_end_matches('/').to_ascii_lowercase();
     if !normalized.starts_with("https://") && !normalized.starts_with("http://") {
         return Err("GitHub web base must be an absolute http(s) URL".into());

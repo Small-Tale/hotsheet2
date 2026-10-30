@@ -45,6 +45,8 @@ pub enum DevicePoll {
 pub enum GitHubDeviceError {
     #[error("GitHub App sign-in is not configured (missing client id)")]
     MissingClientId,
+    #[error("GitHub web base is invalid: {0}")]
+    InvalidWebBase(String),
     #[error("GitHub authorization request failed: {0}")]
     Transport(String),
     #[error("GitHub authorization returned HTTP {status}: {message}")]
@@ -76,7 +78,7 @@ pub struct AppInstallation {
 
 pub struct GitHubDeviceClient {
     client_id: String,
-    web_base: String,
+    web_base: Result<String, String>,
     transport: Arc<dyn GitHubTransport>,
 }
 
@@ -90,9 +92,10 @@ impl GitHubDeviceClient {
         web_base: impl Into<String>,
         transport: Arc<dyn GitHubTransport>,
     ) -> Self {
+        let web_base = web_base.into();
         Self {
             client_id: client_id.into(),
-            web_base: web_base.into().trim_end_matches('/').to_owned(),
+            web_base: crate::github_app_config::normalize_web_base(&web_base),
             transport,
         }
     }
@@ -144,7 +147,7 @@ impl GitHubDeviceClient {
             ("X-GitHub-Api-Version", "2022-11-28".into()),
             ("User-Agent", "hotsheet2".into()),
         ];
-        let (user, _) = self.get_json_page(&format!("{}/user", self.api_base()), &headers)?;
+        let (user, _) = self.get_json_page(&format!("{}/user", self.api_base()?), &headers)?;
         user.get("login")
             .and_then(Value::as_str)
             .filter(|login| !login.trim().is_empty())
@@ -169,7 +172,7 @@ impl GitHubDeviceClient {
         &self,
         access_token: &str,
     ) -> Result<RepositoryAccess, GitHubDeviceError> {
-        let api_base = self.api_base();
+        let api_base = self.api_base()?;
         let headers = [
             ("Accept", "application/vnd.github+json".into()),
             ("Authorization", format!("Bearer {access_token}")),
@@ -215,8 +218,9 @@ impl GitHubDeviceClient {
         }
         access.repositories.sort_by_key(|name| name.to_lowercase());
         access.repositories.dedup();
+        let web_base = self.web_base()?;
         access.install_url =
-            app_slug.map(|slug| format!("{}/apps/{slug}/installations/new", self.web_base));
+            app_slug.map(|slug| format!("{web_base}/apps/{slug}/installations/new"));
         Ok(access)
     }
 
@@ -254,20 +258,28 @@ impl GitHubDeviceClient {
         }
     }
 
-    fn api_base(&self) -> String {
-        if self.web_base == "https://github.com" {
+    fn web_base(&self) -> Result<&str, GitHubDeviceError> {
+        self.web_base
+            .as_deref()
+            .map_err(|error| GitHubDeviceError::InvalidWebBase(error.clone()))
+    }
+
+    fn api_base(&self) -> Result<String, GitHubDeviceError> {
+        let web_base = self.web_base()?;
+        Ok(if web_base == "https://github.com" {
             "https://api.github.com".to_owned()
         } else {
-            format!("{}/api/v3", self.web_base)
-        }
+            format!("{web_base}/api/v3")
+        })
     }
 
     fn post(&self, path: &str, body: Value) -> Result<Value, GitHubDeviceError> {
+        let web_base = self.web_base()?;
         let response = self
             .transport
             .request(
                 "POST",
-                &format!("{}{path}", self.web_base),
+                &format!("{web_base}{path}"),
                 &[("Accept", "application/json".into())],
                 Some(&body),
             )
@@ -526,3 +538,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "github_device_origin_tests.rs"]
+mod origin_tests;

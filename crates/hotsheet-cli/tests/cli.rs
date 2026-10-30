@@ -10242,6 +10242,8 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
     let dir = tempfile::tempdir().unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    // HS2-K0D3TJ: headless sign-in shares the protocol/configuration origin contract.
+    let supplied_origin = format!(" {}/// ", origin.to_ascii_uppercase());
     let server = std::thread::spawn(move || {
         for index in 0..2 {
             let (mut stream, _) = listener.accept().unwrap();
@@ -10267,7 +10269,7 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
             "HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS",
             format!(r#"{{"{origin}":"enterprise-app"}}"#),
         )
-        .args(["github-sign-in", "--web-base", &origin])
+        .args(["github-sign-in", "--web-base", &supplied_origin])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
