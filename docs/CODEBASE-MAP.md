@@ -641,6 +641,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
                              #     (provider-aware providers/query/get/create/update/close/assign plus annotation replacement/batch/exact-claim/claim-next/release/renew/copy/move):
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
+      tests/http_redirects.rs # synthetic two-listener HttpBackend GET/mutation/health/workers-poll and real stdio proxy redirect confinement (HS2-0BTSX8)
       src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D)
       tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server
       tests/serverless_notifications.rs # real binary: serverless writes deliver ticket transitions through hotsheet_cli::notify_watch, reads send nothing, a live server suppresses (HS2-FYZ5S9)

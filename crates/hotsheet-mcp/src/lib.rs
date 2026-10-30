@@ -3377,7 +3377,8 @@ impl HttpBackend {
         Self {
             base: base.into().trim_end_matches('/').to_string(),
             secret: secret.into(),
-            agent: ureq::agent(),
+            // HS2-0BTSX8: ureq's standard auth filtering does not cover our custom bearer.
+            agent: ureq::AgentBuilder::new().redirects(0).build(),
         }
     }
 }
@@ -3412,6 +3413,10 @@ impl HttpBackend {
         res: Result<ureq::Response, ureq::Error>,
     ) -> Result<Value, BackendError> {
         match res {
+            Ok(resp) if (300..400).contains(&resp.status()) => Err(BackendError {
+                status: Some(resp.status()),
+                message: "Hot Sheet server returned a redirect; configure --server with its trusted final address".into(),
+            }),
             Ok(resp) => {
                 let partial = resp.header("x-hotsheet-partial") == Some("true");
                 let truncated = resp.header("x-hotsheet-truncated") == Some("true");
@@ -3435,6 +3440,7 @@ impl HttpBackend {
                         .get(&format!("{}/health", self.base))
                         .call()
                         .ok()
+                        .filter(|response| (200..300).contains(&response.status()))
                         .and_then(|r| r.into_string().ok())
                         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
                     auth_mismatch_message(&self.base, health.as_ref(), &fallback)

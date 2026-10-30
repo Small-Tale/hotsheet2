@@ -1674,3 +1674,11 @@ discard flow remains covered by its existing real-router test.
 - Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server.
 - End to end: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-BJ00D1` runs actual Vite servers on owned loopback ports, proves identity isolation and taken-port refusal, then stops one while the other keeps serving. This is a headless process test; no browser or user host is used.
 - Manual: none; lifecycle synchronization and isolation are automated.
+
+### Generic MCP HTTP redirect confinement (HS2-0BTSX8)
+
+- Behavior: generic proxied tool GETs and mutations reject every 3xx before decoding a body, preserve the original status, and never follow the Location. The anonymous auth-diagnostic health probe uses the same no-redirect agent and accepts only 2xx metadata. CoreBackend and existing success/error/partial/truncated contracts remain unchanged. Separate startup/presence owners are HS2-081PXN.
+- Real transport: `crates/hotsheet-mcp/tests/http_redirects.rs # hs2_0btsx8_*` uses synthetic selected/foreign loopback listeners for GET/mutation status matrices, relative/same-origin/missing/malformed Location, gated unread redirect bodies, anonymous redirected health, and the real workers long-poll tool composition. It records routing/header presence rather than bearer values and asserts zero foreign requests.
+- End to end: `crates/hotsheet-mcp/tests/http_redirects.rs # hs2_0btsx8_stdio_proxy_rejects_a_workers_poll_redirect` runs the actual stdio proxy, initializes it with normal selected-origin presence handling, then verifies a redirecting workers call returns an error without a foreign request.
+- Existing contract coverage: `crates/hotsheet-mcp/src/lib.rs # http_backend_probes_health_after_an_auth_failure`, `hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch`, and `hs2_9dv32q_http_checkout_query_reports_partial_and_truncated` retain auth/404/partial/truncated behavior.
+- Manual: none; no live account or rendered UI is required.

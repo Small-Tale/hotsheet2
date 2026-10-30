@@ -1866,6 +1866,14 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > - **`--server <url> --secret <s>` → proxy** a running `hotsheet-server` over HTTP,
 >   for index-backed reads + instant broadcast.
 
+> Generic proxied tool requests, including worker long polling and mutations, do not
+> follow HTTP redirects (HS2-0BTSX8). Every 3xx is an explicit tool error with its
+> original status; configure the trusted final server address instead. Redirect
+> locations and response bodies are not included in that error. Anonymous health
+> diagnostics after a 401/403 also refuse redirects and accept only successful 2xx
+> metadata. Startup project-open and presence transport hardening is tracked separately
+> by HS2-081PXN.
+
 > Checkout-scoped MCP calls accept a checkout id, alias, or canonical path. The shim
 > encodes a path as one HTTP route segment, and the serverless backend resolves the
 > same reference after decoding it. An empty 404 from a checkout route reports a
