@@ -960,6 +960,12 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
     a socket whose liveness is uncertain.
     Lock files remain in place to avoid unlink/recreate races; they hold no durable
     application data and the operating system releases their lock on process exit.
+    If initial broker readiness exhausts its existing probe window, its diagnostic names
+    the spawned PID, observed exit status or still-running state, and last probe error
+    kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
+    logged. A healthy Pong still succeeds even if this launch's contender exited; startup
+    does not change ownership or shorten/extend its readiness window. The intermittent
+    historical failure's cause remains tracked separately in HS2-2ETGGC.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
   child shells — HS1 §22.13.1). Every launched process also drops the inherited
   repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;

@@ -51,7 +51,7 @@ impl TerminalBroker {
         let project = hotsheet_tls::project_id(store_path);
         let socket = Self::socket_for(&project)?;
 
-        match is_live(&socket) {
+        let mut child = match is_live(&socket) {
             Ok(true) => {
                 return Ok(Self {
                     socket,
@@ -62,20 +62,14 @@ impl TerminalBroker {
             }
             Ok(false) => spawn_broker(&socket, &project)?,
             Err(error) => return Err(error.into()),
-        }
-        // Wait (briefly) for the freshly-spawned broker to bind + accept.
-        for _ in 0..40 {
-            if is_live(&socket).unwrap_or(false) {
-                return Ok(Self {
-                    socket,
-                    project,
-                    restart: Arc::new(tokio::sync::Mutex::new(())),
-                    legacy_list_only: Arc::default(),
-                });
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        anyhow::bail!("terminal broker did not come up on {}", socket.display())
+        };
+        wait_for_broker_startup(&socket, &mut child)?;
+        Ok(Self {
+            socket,
+            project,
+            restart: Arc::new(tokio::sync::Mutex::new(())),
+            legacy_list_only: Arc::default(),
+        })
     }
 
     /// Return the already-running broker for `store_path` without spawning one.
@@ -125,7 +119,7 @@ impl TerminalBroker {
     /// infrequent, so a pooled connection isn't worth the complexity yet).
     pub async fn call(&self, req: BrokerRequest) -> std::io::Result<BrokerResponse> {
         let mut client = self
-            .connect_or_restart(|| spawn_broker(&self.socket, &self.project))
+            .connect_or_restart(|| spawn_broker(&self.socket, &self.project).map(|_| ()))
             .await?;
         client.request(&req).await
     }
@@ -189,6 +183,39 @@ impl TerminalBroker {
     }
 }
 
+fn wait_for_broker_startup(
+    socket: &Path,
+    child: &mut hotsheet_process_journal::TrackedChild,
+) -> anyhow::Result<()> {
+    let mut last_probe = None;
+    for _ in 0..40 {
+        last_probe = Some(match is_live(socket) {
+            Ok(true) => return Ok(()),
+            Ok(false) => "absent".to_owned(),
+            Err(error) => format!("{:?} (os error {:?})", error.kind(), error.raw_os_error()),
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    // HS2-C8J6WS: only observe the contender after failure. An exited contender must
+    // never prevent adoption of another healthy broker during the existing window.
+    let child_state = match child.try_wait() {
+        Ok(Some(status)) => format!("child exited: {status}"),
+        Ok(None) => "child still running".to_owned(),
+        Err(error) => format!(
+            "child status unavailable: {:?} (os error {:?})",
+            error.kind(),
+            error.raw_os_error()
+        ),
+    };
+    anyhow::bail!(
+        "terminal broker did not come up on {} (spawned pid {}; {}; last probe: {})",
+        socket.display(),
+        child.id(),
+        child_state,
+        last_probe.as_deref().unwrap_or("not observed")
+    )
+}
+
 /// A missing/refused socket is confirmed absent. Connect timeout, permission errors,
 /// and an accepting but unresponsive listener remain uncertain (HS2-YDD60V).
 fn is_live(socket: &Path) -> std::io::Result<bool> {
@@ -232,7 +259,10 @@ fn is_live(socket: &Path) -> std::io::Result<bool> {
 /// Spawn the broker detached with stdio disconnected from the server. Prefer the dedicated
 /// sibling binary; a server-only development build falls back to the server's hidden broker
 /// process mode so making detached hosting the default does not add a packaging footgun.
-fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
+fn spawn_broker(
+    socket: &Path,
+    project: &str,
+) -> std::io::Result<hotsheet_process_journal::TrackedChild> {
     hotsheet_terminals::broker_socket::prepare_parent(socket)?;
     let current = std::env::current_exe().ok();
     let (executable, self_hosted) = broker_launch(current);
@@ -262,8 +292,9 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
         session_id: None,
         binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
     }
-    .detached(&mut command)?; // not waited on → outlives this server (reparented on exit)
-    Ok(())
+    // Retaining the handle permits startup diagnostics. Dropping it does not wait or
+    // kill: the broker keeps its existing detached lifetime on successful startup.
+    .spawn(&mut command)
 }
 
 fn broker_launch(current: Option<PathBuf>) -> (PathBuf, bool) {
@@ -282,6 +313,10 @@ fn broker_launch(current: Option<PathBuf>) -> (PathBuf, bool) {
         (PathBuf::from("hotsheet-terminal-broker"), false)
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "terminal_broker_startup_tests.rs"]
+mod startup_diagnostic_tests;
 
 #[cfg(test)]
 mod tests {

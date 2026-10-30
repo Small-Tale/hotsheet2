@@ -1682,3 +1682,10 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-mcp/tests/http_redirects.rs # hs2_0btsx8_stdio_proxy_rejects_a_workers_poll_redirect` runs the actual stdio proxy, initializes it with normal selected-origin presence handling, then verifies a redirecting workers call returns an error without a foreign request.
 - Existing contract coverage: `crates/hotsheet-mcp/src/lib.rs # http_backend_probes_health_after_an_auth_failure`, `hs2_vhwwa6_empty_checkout_route_404_explains_server_mismatch`, and `hs2_9dv32q_http_checkout_query_reports_partial_and_truncated` retain auth/404/partial/truncated behavior.
 - Manual: none; no live account or rendered UI is required.
+
+### Detached broker startup diagnostics (HS2-C8J6WS)
+
+- Behavior: failure after the existing initial readiness window identifies the owned spawned PID, exit/still-running status and last probe kind/numeric OS error. It records no raw child output, arguments or environment. All 40 probes, Pong adoption, detached lifetime and socket ownership are preserved. This is diagnostic evidence retention; the intermittent historical failure is not claimed fixed (HS2-2ETGGC).
+- Unit/real process: `crates/hotsheet-server/src/terminal_broker_startup_tests.rs # hs2_c8j6ws_*` covers an already-exited synthetic child and absent socket, an exited contender with a healthy Pong winner, and an accepting non-Pong peer with a still-running owned child, including all 40 attempts.
+- End to end: `crates/hotsheet-server/tests/broker_startup.rs # long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_restart` retains its actual self-hosted broker, private short namespace, same-inode restart, PTY output persistence and owned cleanup assertions.
+- Manual: inspect the status/probe metadata if the historical failure recurs; no live user-host probe is required.
