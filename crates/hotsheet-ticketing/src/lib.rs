@@ -33,6 +33,7 @@ pub mod pricing;
 pub mod provider;
 pub mod provider_outbox;
 pub mod registry;
+pub mod remote_servers;
 pub mod roster;
 pub mod saved_views;
 pub mod secrets;
@@ -74,7 +75,8 @@ pub use provider::{
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
 pub use secrets::{
-    KeyMetadata, KeyRegistry, OsKeychain, SecretError, SecretStore, resolve_setting_secret,
+    KeyMetadata, KeyRegistry, OsKeychain, ScopedOsKeychain, SecretError, SecretStore,
+    resolve_setting_secret,
 };
 pub use settings::{
     DEFAULT_TRASH_CLEANUP_DAYS, Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING,

@@ -54,6 +54,12 @@ projects under different ids and grants. A target checkout can still have its ow
 orchestration declaration. Cycle detection belongs to dispatch planning, not
 target registration; a cycle never triggers recursive work automatically.
 
+The headless remote-server identity/registry boundary is implemented separately by
+HS2-1Y45MZ ([08](08-distributed-and-remote.md) §8.2.1). It exposes reviewed server/CA
+identity and fresh path-free checkout discovery; this document's target declaration,
+binding and dispatch remain separate implementation work. Cached remote observations
+never authorize target resolution or mutation.
+
 ## 26.3 Ticket relationships and identity
 
 An orchestration ticket can link zero or more target tickets. Each link is a

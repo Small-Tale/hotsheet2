@@ -77,6 +77,29 @@ pub trait SecretStore {
 /// Native process adapter. Arguments never contain secret material; writes use stdin.
 pub struct OsKeychain;
 
+/// The same native master/envelopes, with an explicit machine home rather than process globals.
+pub struct ScopedOsKeychain {
+    home: PathBuf,
+}
+
+#[cfg(test)]
+#[path = "secrets/scope_tests.rs"]
+mod scope_tests;
+
+impl SecretStore for ScopedOsKeychain {
+    fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
+        machine_secrets::with_machine_store_at(self.home.clone(), |store| {
+            store.set(account, secret)
+        })
+    }
+    fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
+        machine_secrets::with_machine_store_at(self.home.clone(), |store| store.get(account))
+    }
+    fn delete(&self, account: &str) -> Result<bool, SecretError> {
+        machine_secrets::with_machine_store_at(self.home.clone(), |store| store.delete(account))
+    }
+}
+
 impl SecretStore for OsKeychain {
     fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
         machine_secrets::with_machine_store(|store| store.set(account, secret))
@@ -92,6 +115,10 @@ impl SecretStore for OsKeychain {
 }
 
 impl OsKeychain {
+    /// HS2-1Y45MZ: remote registry adapters must honor their injected machine home.
+    pub fn at(home: impl Into<PathBuf>) -> ScopedOsKeychain {
+        ScopedOsKeychain { home: home.into() }
+    }
     /// Explicit backup of the machine master. The caller must handle the returned
     /// value as a secret; normal settings and diagnostics never include it.
     pub fn export_machine_master(&self) -> Result<String, SecretError> {

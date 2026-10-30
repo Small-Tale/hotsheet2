@@ -13,6 +13,7 @@ use dispatch::notify::NotifyCmd;
 use dispatch::providers::{
     AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
 };
+use dispatch::remotes::RemoteArgs;
 use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
 use dispatch::setup::{AiSettingsCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
 use dispatch::store::CheckoutCmd;
@@ -77,6 +78,8 @@ impl Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Register, review and discover explicitly paired remote Hot Sheet servers.
+    Remote(RemoteArgs),
     /// Coordinate independent local integrator/worker sessions with durable exact assignments.
     Coordination(CoordinationArgs),
     /// Initialize a git-backed store here, or create and link a standalone one.

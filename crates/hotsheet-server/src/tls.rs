@@ -1,8 +1,8 @@
 //! Tier-1 **mTLS** server config (`docs/04` §4.6, HS2-VT3JMF): a rustls `ServerConfig` that
 //! **requires** a client certificate, verifies it chains to the project CA, and rejects any
 //! cert whose fingerprint is on the revocation list. The CA + cert material comes from
-//! [`hotsheet_tls`]; this module is the rustls half (kept out of that crate so the CLI can
-//! issue certs without linking rustls).
+//! [`hotsheet_tls`]; this module is the server transport half. Certificate issuance
+//! stays independent of transport; the CLI's remote adapter supplies client-side rustls.
 //!
 //! Chain verification is delegated to rustls's own [`WebPkiClientVerifier`] — we do **not**
 //! hand-roll certificate-path validation. We only add a revocation gate on top: reject early
@@ -90,7 +90,7 @@ pub async fn serve_tls_with_acl(
     loop {
         tokio::select! {
             accepted = listener.accept() => {
-                let Ok((stream, _peer)) = accepted else { continue };
+                let Ok((stream, peer)) = accepted else { continue };
                 let acceptor = acceptor.clone();
                 let app = app.clone();
                 let acl_file = acl_file.clone();
@@ -105,7 +105,7 @@ pub async fn serve_tls_with_acl(
                         .peer_certificates()
                         .and_then(|certs| certs.first())
                         .map(|cert| hotsheet_tls::fingerprint_of_der(cert.as_ref()));
-                    let access = client_access(acl_file.as_deref(), fingerprint.as_deref());
+                    let access = client_access(acl_file.as_deref(), fingerprint.as_deref(), peer.ip().is_loopback());
                     let app = app
                         .layer(axum::middleware::from_fn(enforce_client_access))
                         .layer(axum::Extension(access));
@@ -137,9 +137,16 @@ pub async fn serve_tls_with_acl(
 }
 
 #[derive(Clone, Copy)]
-struct ClientAccess(hotsheet_tls::DeviceRole);
+struct ClientAccess {
+    role: hotsheet_tls::DeviceRole,
+    loopback: bool,
+}
 
-fn client_access(acl_file: Option<&std::path::Path>, fingerprint: Option<&str>) -> ClientAccess {
+fn client_access(
+    acl_file: Option<&std::path::Path>,
+    fingerprint: Option<&str>,
+    loopback: bool,
+) -> ClientAccess {
     let role = match acl_file {
         None => hotsheet_tls::DeviceRole::ReadWrite,
         Some(path) => match hotsheet_tls::load_acl_file(path) {
@@ -150,7 +157,7 @@ fn client_access(acl_file: Option<&std::path::Path>, fingerprint: Option<&str>) 
             Err(_) => hotsheet_tls::DeviceRole::Deny,
         },
     };
-    ClientAccess(role)
+    ClientAccess { role, loopback }
 }
 
 async fn enforce_client_access(
@@ -159,8 +166,19 @@ async fn enforce_client_access(
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
+    // HS2-1Y45MZ: remote enrollment manages this machine's secrets; mounted peers
+    // may discover its identity/checkouts, but cannot administer its other bindings.
+    if !access.loopback
+        && (request.uri().path() == "/remotes" || request.uri().path().starts_with("/remotes/"))
+    {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "remote registry administration requires a loopback connection",
+        )
+            .into_response();
+    }
     let safe = read_only_request_allowed(request.method(), request.uri().path());
-    match access.0 {
+    match access.role {
         hotsheet_tls::DeviceRole::ReadWrite => next.run(request).await,
         hotsheet_tls::DeviceRole::ReadOnly if safe => next.run(request).await,
         hotsheet_tls::DeviceRole::ReadOnly => (
@@ -257,6 +275,59 @@ fn load_key(path: &std::path::Path) -> anyhow::Result<PrivateKeyDer<'static>> {
 mod tests {
     use super::*;
     use hotsheet_tls::{init_ca, issue_device, revoke_device};
+
+    #[tokio::test]
+    async fn hs2_1y45mz_off_box_registry_administration_is_denied_even_for_a_writer() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+        for (loopback, role, method, expected) in [
+            (
+                false,
+                hotsheet_tls::DeviceRole::ReadWrite,
+                "GET",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                false,
+                hotsheet_tls::DeviceRole::ReadOnly,
+                "GET",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                true,
+                hotsheet_tls::DeviceRole::ReadOnly,
+                "POST",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                true,
+                hotsheet_tls::DeviceRole::ReadWrite,
+                "GET",
+                StatusCode::OK,
+            ),
+        ] {
+            let router = axum::Router::new()
+                .route(
+                    "/remotes",
+                    axum::routing::get(|| async { StatusCode::OK })
+                        .post(|| async { StatusCode::OK }),
+                )
+                .layer(axum::middleware::from_fn(enforce_client_access))
+                .layer(axum::Extension(ClientAccess { role, loopback }));
+            let response = router
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/remotes")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+        }
+    }
 
     /// Decode the first certificate in a PEM to DER (test/verify helper).
     fn pem_first_der(pem: &str) -> CertificateDer<'static> {

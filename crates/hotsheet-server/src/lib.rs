@@ -202,6 +202,7 @@ type LiveProviderCache = Arc<
 
 #[derive(Clone)]
 pub struct AppState {
+    remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
     store: FsStore,
     /// Identity of the primary store at startup. An unscoped route must never silently
     /// switch to a different store placed at the same path (HS2-34XE8B).
@@ -532,6 +533,7 @@ impl AppState {
             }));
         Self {
             store,
+            remote_runtime: None,
             primary_instance_id,
             secret,
             events,
@@ -752,6 +754,16 @@ impl AppState {
         self.plugin_dirs = Arc::new(vec![home.join("plugins")]);
         self.machine_home = Arc::new(home);
         self.managed_secrets = ManagedSecretCache::default();
+        self.remote_runtime = None;
+        self
+    }
+
+    /// Explicit remote ports for isolated credential/transport tests (HS2-1Y45MZ).
+    pub fn with_remote_runtime(
+        mut self,
+        runtime: hotsheet_cli::remote_servers::RemoteRuntime,
+    ) -> Self {
+        self.remote_runtime = Some(Arc::new(runtime));
         self
     }
 
@@ -1712,6 +1724,17 @@ pub fn app(state: AppState) -> Router {
         // Authenticated application/protocol negotiation. `/health` intentionally remains
         // a small unauthenticated liveness probe.
         .route("/compatibility", get(compatibility))
+        .route("/remote-identity", get(routes::remotes::identity))
+        .route("/remote-checkouts", get(routes::remotes::hosted_checkouts))
+        .route(
+            "/remotes",
+            get(routes::remotes::list).post(routes::remotes::register),
+        )
+        .route(
+            "/remotes/{id}",
+            axum::routing::put(routes::remotes::review).delete(routes::remotes::revoke),
+        )
+        .route("/remotes/{id}/checkouts", get(routes::remotes::discover))
         // A client may supervise this process but never owns it: restart is accepted only
         // after mutation admission closes and all server-owned work is proven quiescent.
         .route("/lifecycle/quiescence", get(lifecycle_quiescence))

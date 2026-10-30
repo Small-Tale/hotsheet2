@@ -29,9 +29,11 @@ change the hosting decisions below.
 
 The model carried from HS1's shipped remote-client work (§112) already fits:
 
-- A client holds a **machine-global registry of remote servers** (`~/.hotsheet2/
-remotes.json`): `{ servers: [{ origin, label, deviceClientId, projects: [{ id,
-secret, name }] }] }`.
+- A client uses the **machine-global registry of remote servers** at
+  `${HOTSHEET_HOME}/remotes.json` (HS2-1Y45MZ). It records reviewed server/CA identity,
+  origin, label, revision and opaque credential references; bearer secrets and device
+  keys stay in the existing machine-secret store. The headless boundary is below;
+  a multi-server graphical picker is separate client work.
 - Each project tab carries a server `(origin, secret)` — a **local** project's
   origin is this machine's own server (`https?://127.0.0.1:<port>`), a **remote**
   project's is another device's. Every tab is server-backed; there is no
@@ -58,6 +60,120 @@ over mTLS (real-time; it drives the AI tools _there_). That is the one path.
 > - **O3 — cross-machine work: git-native decentralized self-claim, no central
 >   coordinator.** See §8.5 — workers on any machine self-claim over the shared git
 >   remote via an atomic-push CAS, so there is no coordinator process to build.
+
+### 8.2.1 Headless remote registry foundation (HS2-1Y45MZ)
+
+`hotsheet-cli remote identity` creates/reads this machine's durable random server
+identity in `server-identity.json`. It is independent of PID, store instance,
+checkout id, path and build revision. `/remote-identity` returns that identity only
+after ordinary server authentication. An id obtained over unauthenticated health
+or from a label is never sufficient to pair a server.
+
+The machine-local version-1 `remotes.json` contains immutable registration ULIDs,
+labels, normalized origins, reviewed server ids and CA fingerprints, revisions,
+bounded review history and last-confirmed checkout observations. It contains no
+certificate/key/bearer material. A write-ahead cleanup list records opaque secret
+references before credential storage, so an interrupted registration cannot leave
+an active binding with incomplete credentials. Corrupt or newer registries fail
+without overwriting them. Registry changes use a stable file lock and synced
+atomic replacement; concurrent reviews require the exact previous revision and
+reviewed identity.
+
+The unpublished version-1 format bounds the total of active credential references
+and pending cleanup/write-ahead references to 256. Registration and review must
+reserve one free obligation before writing a new secret; an exhausted registry
+preserves its active bindings and performs no new secret write. Activation moves
+the reserved reference to active and the prior active reference to cleanup.
+Revocation only transfers an active reference to cleanup, so it remains possible
+at capacity even when secret deletion fails. Later successful cleanup restores
+capacity. The same validation applies when reading and before every atomic write.
+
+Each binding also persists a private opaque `observation_generation`. Discovery,
+explicit review and an idempotent registration capture that generation, binding
+revision and credential reference before probing, then compare them under the
+registry lock.
+A superseded probe returns a conflict without overwriting newer observations or
+returning live checkout authority. Concurrent creation of a previously absent id
+likewise conflicts rather than reusing the earlier probe. Committed success or
+failure observations, explicit review and revoke replace the generation. A fresh
+retry after failure can recover normally; equal or backward wall-clock timestamps
+do not determine authority. The generation is absent from public DTOs and does not
+change the user-visible review revision contract.
+Review still requires the exact expected revision and previous identity. A newer
+observation can invalidate an in-flight review without changing that public
+revision; the operator must deliberately retry, which captures a fresh internal
+generation. A concurrent revocation also requires its new public revision before
+an explicit review may restore access.
+A repeated revoke keeps that public revision but replaces the private generation,
+invalidating a pending reactivation; a fresh review at the same public revision
+may then proceed.
+
+The operator supplies the expected server id and an explicit CA/device credential
+bundle through a private JSON file or stdin, never secret command arguments:
+
+```sh
+hotsheet-cli remote register --label "Remote workstation" --origin https://server.example.test --expected-server-id <paired-server-ulid> --credentials-file <private-bundle.json>
+hotsheet-cli remote list
+hotsheet-cli remote checkouts <registration-ulid>
+hotsheet-cli remote review <registration-ulid> --expected-revision <revision> --previous-server-id <old-server-ulid> --previous-ca-fingerprint <old-ca-sha256> --label "Remote workstation" --origin https://server.example.test --expected-server-id <reviewed-server-ulid> --credentials-file <private-bundle.json>
+hotsheet-cli remote revoke <registration-ulid> --expected-revision <revision>
+```
+
+The input bundle has `bearer_secret`; HTTPS additionally requires `ca_pem`,
+`client_certificate_pem` and `client_key_pem` from the existing manual `cert`
+enrollment workflow. `--credentials-file -` reads bounded stdin. A repeated
+registration with the same origin/configuration/credentials preserves its id and
+revision; `--id` permits an explicit idempotent operation. Changed credentials,
+origin or identity require review. Registration probes before activating a binding;
+failed verification preserves an existing reviewed binding. Secret values are stored
+through the existing native-master/encrypted-envelope adapter rooted at the selected
+machine home. The registry, returned DTOs, diagnostics and shared checkout files
+never contain them.
+
+Off-box origins require HTTPS with normal hostname/chain verification against the
+explicit CA and a supplied device certificate/key, in addition to the server bearer.
+There is no redirect, insecure TLS fallback or trust-on-first-use. Only literal
+loopback IP origins may use HTTP. Remote URL normalization uses the URL parser's
+canonical origin, including normal default-port canonicalization; it does not alter
+the separate GitHub provider configuration identity contract. Probes bound time,
+response size and checkout count. They read authenticated `/remote-identity`,
+`/remote-checkouts`, then confirm the identity again. Unsupported legacy peers and
+partial/truncated responses cannot become usable targets.
+
+Listing performs no network requests and marks cached checkout observations stale.
+Explicit discovery returns live checkouts only on successful authenticated identity
+verification. Unreachable, unauthorized, missing-credential, unsupported, changed-id
+and trust-failure observations retain last-confirmed identifiers/timestamps but return
+no live checkout authority. A changed, untrusted CA is a failed trust check rather
+than an authenticated claim about a new peer; accepting it requires explicit review.
+Same-CA server-leaf renewal and restart with the same durable identity reconnect
+without rebinding. Each discovered checkout carries an available, inaccessible or
+identity-changed state and source connection/provider ids, without remote filesystem
+paths or credentials.
+
+Local revoke disables a binding before credential cleanup and is safe to repeat.
+Failed cleanup remains explicit/retryable, and reactivation requires review. This
+does not revoke the remote-issued device certificate: use `hotsheet-cli cert revoke`
+on the issuing machine for that operation. Failed/interrupted credential creation is
+recovered by repeating the registration/review; cleanup intent is persisted before
+writing the secret and never deletes an active reference.
+
+Authenticated `/remotes`, `/remotes/{id}` and `/remotes/{id}/checkouts` expose the
+same registry workflow. Administration is loopback-only; an off-box mTLS client,
+including a write-capable one, cannot administer this machine's other bindings.
+Read-only/denied certificate roles retain their normal restrictions. The serverless,
+local-HTTP and generated `--project` MCP `hotsheet_remotes` tool supports identity/
+list/register/review/revoke/checkouts. Machine-wide enrollment does not inherit the
+project shim's checkout selector. The shim checks its cached literal-loopback origin
+without launching a server, and the HTTP adapter rechecks the actual origin before
+sending. It imports a local `credentials_file` rather than placing values
+in model arguments, and refuses nonlocal backends before reading the file. MCP's
+new registry requests refuse redirects; HS2-0BTSX8 separately owns the pre-existing
+generic MCP HTTP redirect guard gap.
+
+This foundation supplies reviewed, authenticated identities for HS2-4J6V46 target
+bindings and HS2-42B2FD aggregate views. It adds no automatic clone, UI picker,
+orchestration manifest, queue fan-out or second claim coordinator.
 
 ## 8.3 Mobile (iOS) configuration & connection
 

@@ -25,6 +25,7 @@ pub use import_completion::verify_backup as verify_hs1_backup;
 pub use hotsheet_aitools::launch_safety;
 pub mod permission_hook;
 pub mod plugin;
+pub mod remote_servers;
 pub mod setup;
 #[path = "../../hotsheet-server/src/source_revision.rs"]
 #[allow(dead_code)]

@@ -10,6 +10,7 @@ pub(crate) mod claims;
 pub(crate) mod coordination;
 pub(crate) mod notify;
 pub(crate) mod providers;
+pub(crate) mod remotes;
 pub(crate) mod server;
 pub(crate) mod setup;
 pub(crate) mod store;
@@ -34,6 +35,7 @@ pub(crate) struct Ctx {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Group {
+    Remote,
     Store,
     Tickets,
     Providers,
@@ -48,6 +50,7 @@ impl Cmd {
     pub(crate) fn group(&self) -> Group {
         use Cmd::*;
         match self {
+            Remote(_) => Group::Remote,
             Coordination(_) => Group::Coordination,
             Notify { .. } => Group::Notify,
             Init { .. }
@@ -149,6 +152,7 @@ impl Cmd {
         !matches!(
             self,
             Cmd::Init { .. }
+                | Cmd::Remote(_)
                 | Cmd::Bootstrap { .. }
                 | Cmd::Link { .. }
                 | Cmd::Checkout { .. }
@@ -171,6 +175,7 @@ impl Cmd {
         !matches!(
             self,
             Cmd::ClaimRun { .. }
+                | Cmd::Remote(_)
                 | Cmd::Init { .. }
                 | Cmd::Coordination(_)
                 | Cmd::Bootstrap { .. }
@@ -204,6 +209,7 @@ impl Cmd {
 /// Run one parsed command through its group's handler.
 pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     match cmd.group() {
+        Group::Remote => remotes::run(cmd, ctx),
         Group::Store => store::run(cmd, ctx),
         Group::Tickets => tickets::run(cmd, ctx),
         Group::Providers => providers::run(cmd, ctx),

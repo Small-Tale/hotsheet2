@@ -45,7 +45,6 @@ struct Envelope {
 pub(super) fn with_machine_store<T>(
     f: impl FnOnce(&MachineSecrets<NativeKeychain>) -> Result<T, SecretError>,
 ) -> Result<T, SecretError> {
-    static CACHE: OnceLock<RootCache> = OnceLock::new();
     let home = std::env::var_os("HOTSHEET_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -54,6 +53,14 @@ pub(super) fn with_machine_store<T>(
                 .unwrap_or_else(std::env::temp_dir)
                 .join(".hotsheet2")
         });
+    with_machine_store_at(home, f)
+}
+
+pub(super) fn with_machine_store_at<T>(
+    home: PathBuf,
+    f: impl FnOnce(&MachineSecrets<NativeKeychain>) -> Result<T, SecretError>,
+) -> Result<T, SecretError> {
+    static CACHE: OnceLock<RootCache> = OnceLock::new();
     f(&MachineSecrets::with_cache(
         home,
         NativeKeychain,

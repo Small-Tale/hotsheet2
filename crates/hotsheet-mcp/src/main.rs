@@ -225,6 +225,13 @@ impl ProjectBackend {
 }
 
 impl Backend for ProjectBackend {
+    fn machine_local(&self) -> bool {
+        // HS2-1Y45MZ: capability preflight reads the cached origin without launching
+        // or relocating a server. HttpBackend rechecks the actual route before sending.
+        self.route.lock().ok().is_some_and(|route| {
+            hotsheet_ticketing::remote_servers::remote_registry_origin_is_loopback(&route.0)
+        })
+    }
     fn get(
         &self,
         path: &str,
@@ -313,5 +320,36 @@ mod tests {
             resolve_store_path("/explicit/store".into(), &nested, None),
             PathBuf::from("/explicit/store")
         );
+    }
+    #[test]
+    fn hs2_1y45mz_project_registry_preflight_accepts_only_cached_literal_loopback() {
+        for (origin, allowed) in [
+            ("http://127.0.0.1:1234", true),
+            ("https://[::1]:1234", true),
+            ("http://localhost:1234", false),
+            ("https://remote.example.test", false),
+            ("not an origin", false),
+        ] {
+            let backend = ProjectBackend {
+                root: PathBuf::from("unused-synthetic-project"),
+                home: PathBuf::from("unused-synthetic-home"),
+                route: Mutex::new((origin.into(), "synthetic".into(), Vec::new())),
+            };
+            assert_eq!(backend.machine_local(), allowed);
+        }
+        let backend = ProjectBackend {
+            root: PathBuf::new(),
+            home: PathBuf::new(),
+            route: Mutex::new((
+                "http://127.0.0.1:1234".into(),
+                "synthetic".into(),
+                Vec::new(),
+            )),
+        };
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = backend.route.lock().unwrap();
+            panic!("synthetic lock interruption");
+        });
+        assert!(!backend.machine_local());
     }
 }

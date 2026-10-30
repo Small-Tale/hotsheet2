@@ -225,6 +225,7 @@ pub(crate) async fn compatibility(State(state): State<AppState>) -> Json<serde_j
         "store_schema": { "min": 1, "max": hotsheet_ticketing::STORE_SCHEMA_VERSION },
         "capabilities": {
             "lifecycle_restart": true,
+            "remote_registry_v1": true,
             "lifecycle_quiescence": true
         },
         "started_at": started_at,

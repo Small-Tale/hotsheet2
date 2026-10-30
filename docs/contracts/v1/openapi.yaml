@@ -18,6 +18,154 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Compatibility'
+  /remote-identity:
+    get:
+      operationId: getRemoteIdentity
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteIdentity'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-checkouts:
+    get:
+      operationId: listHostedRemoteCheckouts
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RemoteCheckout'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remotes:
+    description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
+      role authorization.
+    get:
+      operationId: listRemoteServers
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RemoteView'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      operationId: registerRemoteServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRemote'
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDiscovery'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remotes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Immutable remote registration ULID.
+    put:
+      operationId: reviewRemoteServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRemote'
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDiscovery'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: revokeRemoteServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeRemote'
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteView'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remotes/{id}/checkouts:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Immutable remote registration ULID.
+    get:
+      operationId: discoverRemoteCheckouts
+      responses:
+        '200':
+          description: Explicit authenticated machine registry result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDiscovery'
+        default:
+          description: Fixed diagnostic with no peer body or credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /checkouts/{reference}/tickets:
     parameters:
       - $ref: '#/components/parameters/CheckoutReference'
@@ -11422,6 +11570,238 @@ components:
           schema:
             $ref: '#/components/schemas/Ticket'
   schemas:
+    RemoteIdentity:
+      type: object
+      required:
+        - generation
+        - protocol
+        - server_id
+      properties:
+        generation:
+          const: hs2
+        protocol:
+          const: 1
+        server_id:
+          type: string
+      additionalProperties: true
+    RemoteSource:
+      type: object
+      required:
+        - connection_id
+        - provider
+      properties:
+        connection_id:
+          type: string
+        provider:
+          type: string
+      additionalProperties: true
+    RemoteCheckout:
+      type: object
+      required:
+        - id
+        - name
+        - sources
+        - state
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSource'
+        state:
+          enum:
+            - available
+            - inaccessible
+            - identity_changed
+      additionalProperties: true
+    ReviewedRemoteIdentity:
+      type: object
+      required:
+        - server_id
+        - ca_fingerprint
+      properties:
+        server_id:
+          type: string
+        ca_fingerprint:
+          type:
+            - string
+            - 'null'
+      additionalProperties: true
+    RemoteReview:
+      type: object
+      required:
+        - revision
+        - origin
+        - identity
+        - reviewed_at_ms
+      properties:
+        revision:
+          type: integer
+        origin:
+          type: string
+        identity:
+          $ref: '#/components/schemas/ReviewedRemoteIdentity'
+        reviewed_at_ms:
+          type: integer
+      additionalProperties: true
+    RemoteView:
+      type: object
+      description: Path-free public metadata. list always marks cached observations stale and performs no requests.
+      required:
+        - id
+        - label
+        - origin
+        - identity
+        - revision
+        - revoked
+        - last_failure
+        - checked_at_ms
+        - confirmed_at_ms
+        - last_confirmed_checkouts
+        - stale
+        - credential_cleanup_pending
+        - review_history
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        origin:
+          type: string
+        identity:
+          $ref: '#/components/schemas/ReviewedRemoteIdentity'
+        revision:
+          type: integer
+        revoked:
+          type: boolean
+        last_failure:
+          type:
+            - string
+            - 'null'
+          enum:
+            - unreachable
+            - unauthorized
+            - missing_credentials
+            - unsupported
+            - identity_changed
+            - trust_failed
+            - redirect
+            - response_limit
+            - invalid_response
+            - null
+        checked_at_ms:
+          type:
+            - integer
+            - 'null'
+        confirmed_at_ms:
+          type:
+            - integer
+            - 'null'
+        last_confirmed_checkouts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteCheckout'
+        stale:
+          type: boolean
+        credential_cleanup_pending:
+          type: boolean
+        review_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteReview'
+      additionalProperties: true
+    RemoteDiscovery:
+      type: object
+      description: checkouts is null on any failure or revocation. Cached observations are diagnostic only.
+      required:
+        - remote
+        - checkouts
+      properties:
+        remote:
+          $ref: '#/components/schemas/RemoteView'
+        checkouts:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/RemoteCheckout'
+      additionalProperties: true
+    RemoteCredentials:
+      type: object
+      writeOnly: true
+      description: Explicit pairing material imported locally into SecretStore. Never returned by registry APIs.
+      required:
+        - bearer_secret
+      properties:
+        bearer_secret:
+          type: string
+        ca_pem:
+          type:
+            - string
+            - 'null'
+        client_certificate_pem:
+          type:
+            - string
+            - 'null'
+        client_key_pem:
+          type:
+            - string
+            - 'null'
+      additionalProperties: false
+    RegisterRemote:
+      type: object
+      required:
+        - id
+        - label
+        - origin
+        - expected_server_id
+        - credentials
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        origin:
+          type: string
+        expected_server_id:
+          type: string
+        credentials:
+          $ref: '#/components/schemas/RemoteCredentials'
+      additionalProperties: false
+    ReviewRemote:
+      type: object
+      required:
+        - expected_revision
+        - previous_identity
+        - label
+        - origin
+        - expected_server_id
+        - credentials
+      properties:
+        expected_revision:
+          type: integer
+        previous_identity:
+          $ref: '#/components/schemas/ReviewedRemoteIdentity'
+        label:
+          type: string
+        origin:
+          type: string
+        expected_server_id:
+          type: string
+        credentials:
+          $ref: '#/components/schemas/RemoteCredentials'
+      additionalProperties: false
+    RevokeRemote:
+      type: object
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+      additionalProperties: false
     Compatibility:
       type: object
       required:
@@ -11461,6 +11841,8 @@ components:
             - lifecycle_restart
             - lifecycle_quiescence
           properties:
+            remote_registry_v1:
+              type: boolean
             lifecycle_restart:
               type: boolean
             lifecycle_quiescence:
@@ -18249,5 +18631,6 @@ components:
           type: string
         held:
           type: boolean
-          description: Suppressed by quiet hours or the hourly limit, and reported by a later notifications.held summary (HS2-CFMSP2).
+          description: Suppressed by quiet hours or the hourly limit, and reported by a later notifications.held summary
+            (HS2-CFMSP2).
       additionalProperties: false

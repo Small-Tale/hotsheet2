@@ -11,6 +11,7 @@
 //!   index-backed reads + instant broadcast when a server is up.
 
 pub mod presence;
+mod remote_tools;
 
 use serde_json::{Value, json};
 
@@ -19,6 +20,10 @@ pub const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// The HTTP backend a tool call proxies to (real in the binary; faked in tests).
 pub trait Backend {
+    /// File-based enrollment must never copy local credentials to a remote backend.
+    fn machine_local(&self) -> bool {
+        false
+    }
     fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError>;
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError>;
 }
@@ -130,6 +135,7 @@ fn tools_list() -> Value {
 fn base_tools_list() -> Value {
     let str_prop = |desc: &str| json!({ "type": "string", "description": desc });
     json!({ "tools": [
+        remote_tools::definition(),
         {
             "name": "hotsheet_providers",
             "description": "List configured ticket-provider connections and their structured capabilities.",
@@ -509,7 +515,11 @@ fn call_tool(
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    if let (Some(checkout), Some(object)) = (checkout, args.as_object_mut()) {
+    // HS2-1Y45MZ: machine-wide enrollment is independent of a project selector.
+    if let (Some(checkout), Some(object)) = (
+        checkout.filter(|_| name != "hotsheet_remotes"),
+        args.as_object_mut(),
+    ) {
         if !object.contains_key("checkout") && !object.contains_key("connection") {
             object.insert("checkout".to_owned(), Value::String(checkout.to_owned()));
         }
@@ -540,6 +550,7 @@ fn render_result(value: &Value) -> String {
 
 /// Tools that change state; each accepts `actor_role` / `actor_id` (HS2-RD4M29).
 const MUTATING_TOOLS: &[&str] = &[
+    "hotsheet_remotes",
     "hotsheet_annotate_attachment",
     "hotsheet_rename_attachment",
     "hotsheet_delete_attachment",
@@ -617,6 +628,9 @@ struct ActorBackend<'a> {
 }
 
 impl Backend for ActorBackend<'_> {
+    fn machine_local(&self) -> bool {
+        self.inner.machine_local()
+    }
     fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
         self.inner.get(path, query)
     }
@@ -650,6 +664,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 
 fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
+        "hotsheet_remotes" => remote_tools::dispatch(args, backend),
         "hotsheet_annotate_attachment" => {
             if args.get("connection").is_some() {
                 return Err("media annotations require a git-backed ticket".into());
@@ -1229,7 +1244,9 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 // ---- direct-core backend (serverless) --------------------------------------------
 
 mod core_backend {
-    use super::{Backend, BackendError, checkout_array_result, decode_checkout_reference};
+    use super::{
+        Backend, BackendError, checkout_array_result, decode_checkout_reference, remote_tools,
+    };
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
@@ -1248,6 +1265,7 @@ mod core_backend {
     /// server's watcher still picks up whatever this writes. Time + id minting go
     /// through injected closures so tests can be deterministic.
     pub struct CoreBackend {
+        remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
         store: FsStore,
         /// Explicit project identity for checkout-scoped calls. Store-only/serverless
         /// calls leave this absent and retain legacy store-owned settings behavior.
@@ -1267,6 +1285,7 @@ mod core_backend {
         pub fn new(store: FsStore) -> Self {
             Self {
                 store,
+                remote_runtime: None,
                 checkout: None,
                 checkout_registry: checkout_registry(),
                 now: Box::new(default_now),
@@ -1281,6 +1300,7 @@ mod core_backend {
         ) -> Self {
             Self {
                 checkout: Some(checkout),
+                remote_runtime: self.remote_runtime.clone(),
                 checkout_registry: self.checkout_registry.clone(),
                 store,
                 now: Box::new(default_now),
@@ -1296,6 +1316,34 @@ mod core_backend {
         ) -> Self {
             self.checkout_registry = checkout_registry;
             self
+        }
+
+        pub fn with_remote_runtime(
+            mut self,
+            runtime: hotsheet_cli::remote_servers::RemoteRuntime,
+        ) -> Self {
+            self.remote_runtime = Some(Arc::new(runtime));
+            self
+        }
+
+        fn remote_runtime(
+            &self,
+        ) -> Result<Arc<hotsheet_cli::remote_servers::RemoteRuntime>, BackendError> {
+            if let Some(runtime) = &self.remote_runtime {
+                return Ok(Arc::clone(runtime));
+            }
+            let home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .ok_or_else(|| BackendError {
+                    status: Some(500),
+                    message: "machine registry home is unavailable".into(),
+                })?;
+            Ok(Arc::new(hotsheet_cli::remote_servers::RemoteRuntime::live(
+                home,
+            )))
         }
 
         /// Override the clock + minter (deterministic tests).
@@ -1611,7 +1659,16 @@ mod core_backend {
     }
 
     impl Backend for CoreBackend {
+        fn machine_local(&self) -> bool {
+            true
+        }
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+            if remote_tools::is_registry_path(path) {
+                return self
+                    .remote_runtime()?
+                    .request("GET", path, &serde_json::Value::Null)
+                    .map_err(remote_tools::backend_error);
+            }
             if path == "/providers" {
                 let descriptor = hotsheet_ticketing::GitProvider::new(
                     hotsheet_ticketing::git_connection_id(&self.store),
@@ -1974,6 +2031,12 @@ mod core_backend {
 
     impl CoreBackend {
         fn route(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            if remote_tools::is_registry_path(path) {
+                return self
+                    .remote_runtime()?
+                    .request(method, path, body)
+                    .map_err(remote_tools::backend_error);
+            }
             if let Some((connection, suffix)) = provider_ticket_suffix(path) {
                 let expected = hotsheet_ticketing::git_connection_id(&self.store);
                 if connection != expected {
@@ -3384,9 +3447,13 @@ impl HttpBackend {
 }
 
 impl Backend for HttpBackend {
+    fn machine_local(&self) -> bool {
+        hotsheet_ticketing::remote_servers::remote_registry_origin_is_loopback(&self.base)
+    }
     fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
-        let mut req = self
-            .agent
+        self.guard_registry_origin(path)?;
+        let agent = self.remote_registry_agent(path);
+        let mut req = agent
             .get(&format!("{}{path}", self.base))
             .set("X-Hotsheet-Secret", &self.secret);
         for (k, v) in query {
@@ -3396,8 +3463,9 @@ impl Backend for HttpBackend {
     }
 
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
-        let req = self
-            .agent
+        self.guard_registry_origin(path)?;
+        let agent = self.remote_registry_agent(path);
+        let req = agent
             .request(method, &format!("{}{path}", self.base))
             .set("X-Hotsheet-Secret", &self.secret)
             .set("Content-Type", "application/json");
@@ -3407,6 +3475,26 @@ impl Backend for HttpBackend {
 }
 
 impl HttpBackend {
+    fn guard_registry_origin(&self, path: &str) -> Result<(), BackendError> {
+        if remote_tools::is_registry_path(path) && !self.machine_local() {
+            return Err(BackendError {
+                status: Some(403),
+                message: "remote registry administration requires a machine-local backend".into(),
+            });
+        }
+        Ok(())
+    }
+    fn remote_registry_agent(&self, path: &str) -> ureq::Agent {
+        if remote_tools::is_registry_path(path) {
+            // HS2-1Y45MZ: enrollment must not leave its explicitly selected local service.
+            ureq::AgentBuilder::new()
+                .redirects(0)
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+        } else {
+            self.agent.clone()
+        }
+    }
     fn exec(
         &self,
         path: &str,
