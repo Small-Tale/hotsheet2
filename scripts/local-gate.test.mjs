@@ -316,6 +316,28 @@ test('HS2-P9A21R selects phone navigation and resize after workspace chrome chan
   );
 });
 
+test('HS2-P9A21R selects bounded search-title remeasurement for every workspace chrome owner', () => {
+  for (const path of [
+    'clients/web/src/components/workspace-controls.tsx',
+    'clients/web/src/components/app-shell.css',
+    'clients/web/src/workspace-toolbar-visibility.ts',
+    'clients/web/src/features/hot-sheet-shell.tsx',
+  ]) {
+    const stages = browserStages([path], false);
+    const search = stages.filter((stage) => stage.command.includes('tests/search-scope.spec.ts'));
+    assert.equal(search.length, 1, path);
+    assert.ok(
+      search[0].command.includes("--grep 'keeps the workspace title whole when a search changes it to a longer title'"),
+    );
+    assert.ok(search[0].reasons.some((reason) => reason.startsWith('HS2-P9A21R:')));
+  }
+  assert.ok(
+    !browserStages(['clients/web/src/ticket-timeline-data.ts'], false).some((stage) =>
+      stage.command.includes('tests/search-scope.spec.ts'),
+    ),
+  );
+});
+
 test('HS2-RS0FFT identifies a changed parent in a browser file larger than the default subprocess buffer', (t) => {
   const f = fixture(t);
   const path = 'clients/web/tests/providers.spec.ts';

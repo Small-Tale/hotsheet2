@@ -394,7 +394,7 @@ const titleFits = (page: Page) =>
     return text.scrollWidth <= text.clientWidth;
   });
 
-test('keeps the workspace title whole when a search changes it to a longer title at 1280px (HS2-2RD2M9)', async ({
+test('keeps the workspace title whole when a search changes it to a longer title at its toolbar-fit boundary (HS2-2RD2M9)', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 820 });
@@ -402,17 +402,48 @@ test('keeps the workspace title whole when a search changes it to a longer title
   const title = page.locator('#workspace-page-title'),
     utility = page.getByRole('group', { name: 'View Actions' }),
     more = page.getByRole('button', { name: 'More Workspace Controls' });
+  const expectOverflowActions = async () => {
+    await more.click();
+    await expect(page.getByRole('menuitem', { name: /^Toggle Up Next/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Show Selected Ticket Actions…', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+  };
+  const resize = async (width: number) => {
+    await page.setViewportSize({ width, height: 820 });
+    // Let the ResizeObserver apply the measured fit before sampling visibility.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  };
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('badge');
   await expect(title).toHaveText('Queue');
+  await expect.poll(() => titleFits(page)).toBe(true);
+  // HS2-P9A21R: five workspace modes already overflow actions at 1280px. They remain reachable.
+  await expect(utility).toBeHidden();
+  await expect(more).toBeVisible();
+  await expectOverflowActions();
+  // Find the rendered short-title boundary within our representative desktop widths, rather
+  // than pinning a pixel threshold that changes whenever a legitimate toolbar control is added.
+  let overflowing = 1280,
+    fitting = 1440;
+  await resize(fitting);
   await expect(utility).toBeVisible();
+  while (fitting - overflowing > 1) {
+    const width = Math.floor((overflowing + fitting) / 2);
+    await resize(width);
+    if (await utility.isVisible()) fitting = width;
+    else overflowing = width;
+  }
+  await resize(fitting);
+  await expect(utility).toBeVisible();
+  await expect.poll(() => titleFits(page)).toBe(true);
   // All Tickets changes only the title's text; the header remeasures and yields actions to More.
   await page.getByRole('toolbar', { name: 'Search Scope' }).getByRole('button', { name: 'All Tickets' }).click();
   await expect(title).toHaveText('All Tickets');
   await expect.poll(() => titleFits(page)).toBe(true);
   await expect(utility).toBeHidden();
   await expect(more).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-2rd2m9-all-tickets-search-1280.png' });
+  await expectOverflowActions();
+  await page.screenshot({ path: 'target/visual-captures/hs2-p9a21r-all-tickets-search-fit-boundary.png' });
   // Back to the shorter title, every action returns.
   await page.getByRole('toolbar', { name: 'Search Scope' }).getByRole('button', { name: 'Queue' }).click();
   await expect(title).toHaveText('Queue');
@@ -425,6 +456,9 @@ test('keeps the workspace title whole when a search changes it to a longer title
     .click();
   await expect(title).toHaveText('Release blockers for the spring launch');
   await expect.poll(() => titleFits(page)).toBe(true);
+  await expectOverflowActions();
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await resize(1280);
+  await expect.poll(() => titleFits(page)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-2rd2m9-long-view-search-1280.png' });
 });

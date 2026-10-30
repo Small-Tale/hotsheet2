@@ -136,7 +136,7 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       path,
     ),
   );
-  if (workspaceChromeChanged)
+  if (workspaceChromeChanged) {
     scoped.push({
       cwd: 'clients/web',
       group: 'web',
@@ -145,6 +145,15 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
         "npx playwright test 'tests/mobile-layout.spec.ts' --grep 'mobile viewport uses a single-column layout|resizing from mobile back to desktop'",
       reasons: ['HS2-P9A21R: workspace navigation must retain reachable phone toggles through resize'],
     });
+    scoped.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      command:
+        "npx playwright test 'tests/search-scope.spec.ts' --grep 'keeps the workspace title whole when a search changes it to a longer title'",
+      reasons: ['HS2-P9A21R: title-only search transitions must remeasure workspace action overflow'],
+    });
+  }
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
   if (workspaceChromeChanged) patterns.push('projects Kerf workspace segments through mode transitions');
