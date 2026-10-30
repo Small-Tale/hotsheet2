@@ -2617,6 +2617,32 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "worker-columns",
+      "name": "WorkerColumns",
+      "kind": "composition",
+      "purpose": "Observed worker columns with source-qualified assigned and tentative planned tickets.",
+      "useWhen": [
+        "Hot Sheet needs worker activity and next-plan visibility in the project workspace."
+      ],
+      "avoidWhen": [
+        "The surface is a status board or ordinary ticket list."
+      ],
+      "publicClasses": [
+        "worker-columns"
+      ],
+      "publicTokens": [],
+      "source": "src/components/worker-columns.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The Workbench positions the Workers view; ColumnTrack owns horizontal scrolling and paging."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "workspace-controls",
       "name": "WorkspaceControls",
       "kind": "composition",

@@ -35,6 +35,8 @@ export type TicketRowListEdge = 'start' | 'end' | 'only';
 
 export interface TicketRowProps {
   slug: string;
+  /** Source-qualified identity for views that can show same-slug tickets from several providers. */
+  qualifiedId?: string;
   title: string;
   status: TicketStatus;
   startedPhase?: StartedPhase;
@@ -70,6 +72,7 @@ export interface TicketRowProps {
   pendingSyncState?: 'queued' | 'sending' | 'rate_limited' | 'needs_attention';
   cutPending?: boolean;
   presentation?: TicketRowPresentation;
+  draggable?: boolean;
   listEdge?: TicketRowListEdge;
 }
 
@@ -171,7 +174,7 @@ export function TicketRow(raw: TicketRowProps) {
   return (
     <div
       class="ticket-row ticket-list-row-container"
-      data-key={`ticket:${props.slug}`}
+      data-key={`ticket:${props.qualifiedId ?? props.slug}`}
       data-component="ticket-list-row-container"
       data-row-presentation={props.presentation}
       data-row-selected={String(props.selected)}
@@ -184,11 +187,12 @@ export function TicketRow(raw: TicketRowProps) {
         selected={props.selected}
         dimmed={props.presentation === 'list' && (props.status === 'completed' || props.status === 'verified')}
         rail={rail}
-        draggable
+        draggable={props.draggable ?? true}
         ariaLabel={`${props.slug}: ${props.title}`}
         rootAttributes={{
           'data-status': props.status,
           'data-ticket-slug': props.slug,
+          'data-ticket-qualified-id': props.qualifiedId,
           'data-attachment-drop-target': 'true',
           'data-busy': String(props.busy),
           'data-cut-pending': String(Boolean(props.cutPending)),

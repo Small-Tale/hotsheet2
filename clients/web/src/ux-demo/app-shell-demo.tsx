@@ -60,6 +60,7 @@ import {
 } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
 import { collectionTickets } from './ticket-collections-demo';
+import { DemoWorkerColumns } from './worker-columns-demo';
 import {
   composerCategory,
   composerDetails,
@@ -474,6 +475,8 @@ export function AppShellDemo() {
         );
       case 'board':
         return <TicketBoard columns={workspaceColumns()} label="Project board" />;
+      case 'workers':
+        return <DemoWorkerColumns />;
       case 'notifications':
       case 'list':
         return <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />;

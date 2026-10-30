@@ -20,6 +20,217 @@ import { realTicketServer } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
+test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', async ({ page }) => {
+  await mockProject(page);
+  const view = {
+    cursor: 'worker-cursor-1',
+    project_id: project.id,
+    source_id: 'git-local',
+    connection_coverage: true,
+    uncovered_sources: [],
+    workers: [
+      {
+        id: 'codex-test',
+        role: 'integrator',
+        generation: 'g1',
+        parent: null,
+        label: 'Codex integrator',
+        tool: 'Codex',
+        connection_kind: 'terminal',
+        connection_id: 'terminal-1',
+        connection_available: true,
+        observed_alive: true,
+        process_busy: false,
+        availability: 'live',
+        lease_expires_at: 1999999999,
+        tickets: [
+          {
+            ticket: { connection_id: 'git-local', native_id: '01' },
+            slug: row.slug,
+            assignment_id: 'assignment-1',
+            assignment_phase: 'integrating',
+            claim_expires_at: 1999999999,
+            started_phase: null,
+            eta_at: null,
+          },
+        ],
+        planned: [],
+      },
+      {
+        id: 'codex-background',
+        role: 'worker',
+        generation: 'g1',
+        parent: 'codex-test',
+        label: 'Background worker',
+        tool: 'Codex',
+        connection_kind: 'terminal',
+        connection_id: 'terminal-2',
+        connection_available: true,
+        observed_alive: true,
+        process_busy: false,
+        availability: 'live',
+        lease_expires_at: 1999999999,
+        tickets: [
+          {
+            ticket: { connection_id: 'git-other', native_id: '01' },
+            slug: row.slug,
+            assignment_id: 'assignment-2',
+            assignment_phase: 'offered',
+            claim_expires_at: null,
+            started_phase: null,
+            eta_at: null,
+          },
+        ],
+        planned: [],
+      },
+    ],
+  };
+  let workerCursor = 'worker-cursor-1';
+  let otherTitle = 'Other source ticket';
+  let otherStatus = 'started';
+  let otherDetailReads = 0;
+  await page.route('**/__hotsheet/project-api/demo-checkout/providers', (route) =>
+    route.fulfill({
+      json: ['git-local', 'git-other'].map((connectionId, index) => ({
+        connection_id: connectionId,
+        provider: 'git',
+        display_name: 'Hot Sheet Git',
+        locator: index === 0 ? project.stores[0] : '/work/other.hs2',
+        default: index === 0,
+        capabilities: gitProviderCapabilities,
+      })),
+    }),
+  );
+  await page.route('**/checkouts/demo-checkout/workers?*', async (route) => {
+    const request = new URL(route.request().url()),
+      source = request.searchParams.get('connection_id');
+    if (request.searchParams.has('after')) await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fulfill({
+      json: {
+        ...view,
+        cursor: workerCursor,
+        source_id: source,
+        workers: source === 'git-local' ? [view.workers[0]] : [view.workers[1]],
+      },
+    });
+  });
+  await page.route('**/checkouts/demo-checkout/tickets/git-local%3A01', (route) =>
+    route.fulfill({ json: { store: 'git-local', ...full } }),
+  );
+  await page.route('**/checkouts/demo-checkout/tickets/git-other%3A01', (route) => {
+    otherDetailReads += 1;
+    return route.fulfill({
+      json: {
+        store: 'git-other',
+        ...full,
+        connection_id: 'git-other',
+        qualified_id: 'git-other:01',
+        title: otherTitle,
+        status: otherStatus,
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workers' }).click();
+  const columns = page.locator('.worker-columns');
+  await expect(columns).toBeVisible();
+  await expect(columns).toContainText('Codex integrator');
+  await expect(columns).toContainText('Integrating');
+  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toBeVisible();
+  await columns.locator('[data-ticket-qualified-id="git-local:01"]').click();
+  await expect(page.getByRole('complementary', { name: 'Inspector rail' })).toContainText(row.title);
+  await columns.locator('[data-ticket-qualified-id="git-other:01"]').click();
+  await expect(page.getByRole('complementary', { name: 'Inspector rail' })).toContainText('Other source ticket');
+  otherTitle = 'Updated other source ticket';
+  otherStatus = 'completed';
+  workerCursor = 'worker-cursor-2';
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toContainText(otherTitle);
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"][data-status="completed"]')).toBeVisible();
+  expect(otherDetailReads).toBeGreaterThan(1);
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const width of [1440, 900, 390, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(columns).toBeVisible();
+      await page.waitForTimeout(300);
+      const cardWidth = await columns
+        .locator('[data-ticket-qualified-id="git-local:01"]')
+        .evaluate((node) => node.getBoundingClientRect().width);
+      expect(cardWidth).toBeLessThan(width);
+      await page.screenshot({ path: test.info().outputPath(`workers-${theme}-${width}.png`) });
+    }
+  }
+});
+
+test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9SR7R)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer({
+    seed: async ({ root, env }) => {
+      const initialized = spawnSync('git', ['-C', root, 'init'], { env, encoding: 'utf8' });
+      expect(initialized.status, initialized.stderr).toBe(0);
+      const committed = spawnSync(
+        'git',
+        [
+          '-C',
+          root,
+          '-c',
+          'user.name=Hot Sheet fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'Seed code checkout',
+        ],
+        { env, encoding: 'utf8' },
+      );
+      expect(committed.status, committed.stderr).toBe(0);
+    },
+  });
+  try {
+    const providers = await server.request<Array<{ connection_id: string; provider: string }>>('/providers');
+    const realGitSource = providers.find((item) => item.provider === 'git')?.connection_id;
+    expect(realGitSource).toBeTruthy();
+    await mockProject(page);
+    const workerStatuses: number[] = [];
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/workers?*', async (route) => {
+      const incoming = new URL(route.request().url());
+      incoming.searchParams.set('connection_id', realGitSource!);
+      try {
+        const response = await route.fetch({
+          url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 35_000,
+        });
+        workerStatuses.push(response.status());
+        await route.fulfill({ response });
+      } catch {
+        await route.abort().catch(() => undefined);
+      }
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Workers' }).click();
+    await expect(page.locator('.worker-columns')).toBeVisible();
+    await expect(page.locator('.worker-columns__zero')).toContainText('No workers are registered');
+    expect(workerStatuses).toContain(200);
+    expect(workerStatuses.every((status) => status === 200)).toBe(true);
+  } finally {
+    await page.goto('about:blank').catch(() => undefined);
+    await server.stop();
+  }
+});
+
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
 const fixturePermissionKey = 'private-test-fixture-key-for-remembered-rules';

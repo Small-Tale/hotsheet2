@@ -80,6 +80,7 @@ import {
 } from './server-response-parsers';
 import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
+import { parseWorkerView } from './worker-view-model';
 
 export interface GuidanceOverview {
   owner: 'builtin' | 'rulesync';
@@ -1566,6 +1567,17 @@ export class Api {
       },
     );
     return { items, partial, truncated };
+  };
+  /** Authenticated, source-scoped worker snapshot; `after` is a cursor long poll with no idle busy state. */
+  checkoutWorkers = (checkout: string, connectionId: string, after?: string, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ connection_id: connectionId, wait_ms: after ? '25000' : '0' });
+    if (after) query.set('after', after);
+    return this.parsed(
+      parseWorkerView,
+      `/checkouts/${encodeURIComponent(checkout)}/workers?${query}`,
+      { signal },
+      false,
+    );
   };
   checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) =>
     this.parsed(

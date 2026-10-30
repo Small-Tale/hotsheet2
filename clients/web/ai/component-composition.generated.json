@@ -7868,6 +7868,77 @@
       }
     },
     {
+      "key": "hotsheet-web:worker-columns",
+      "package": "hotsheet-web",
+      "id": "worker-columns",
+      "name": "WorkerColumns",
+      "kind": "composition",
+      "purpose": "Observed worker columns with source-qualified assigned and tentative planned tickets.",
+      "publicExports": [
+        {
+          "name": "WorkerColumns"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/worker-columns.tsx"
+      ],
+      "source": "src/components/worker-columns.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The Workbench positions the Workers view; ColumnTrack owns horizontal scrolling and paging."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "worker-columns"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "worker-columns"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/worker-columns.tsx",
+        "composition": "src/components/worker-columns.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:workspace-controls",
       "package": "hotsheet-web",
       "id": "workspace-controls",

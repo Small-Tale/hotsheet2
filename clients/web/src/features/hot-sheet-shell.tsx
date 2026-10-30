@@ -465,6 +465,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return notificationViewTitle(notificationView.value);
         case 'settings':
           return settingsCategoryTitle(settingsCategory());
+        case 'workers':
+          return 'Workers';
         case 'board':
         case 'list':
           // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S) unless
@@ -484,7 +486,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           : settingsCategory() === 'commands'
             ? { kind: 'command-settings', size: viewportMobile.value ? 'compact' : 'default' }
             : undefined;
-    const headingAction = !['settings', 'notifications'].includes(viewMode.value)
+    const headingAction = !['settings', 'notifications', 'workers'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
       : settingsAction;
     // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
@@ -515,6 +517,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return notificationInspectorSurfacePanel();
         case 'settings':
           return inspectorPlaceholderPanel({ selectionCount: 0 });
+        case 'workers':
         case 'board':
         case 'list':
           if (corruptKey)
@@ -635,7 +638,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           ) : undefined
         }
         workspacePresentation={
-          viewMode.value === 'board' && selectedView.value !== 'errors'
+          (viewMode.value === 'board' && selectedView.value !== 'errors') || viewMode.value === 'workers'
             ? 'edge-to-edge'
             : viewMode.value === 'settings' && settingsCategory() === 'guidance'
               ? 'guidance'

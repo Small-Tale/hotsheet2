@@ -87,6 +87,7 @@ describe('UX demo catalog', () => {
       'ticket-row',
       'ticket-board',
       'ticket-board-column',
+      'worker-columns',
       'ticket-inspector',
       'ticket-inspector-skeleton',
       'corrupt-ticket-inspector',
@@ -187,7 +188,11 @@ describe('UX demo catalog', () => {
     expect(findDemo('menu-header')).toBeUndefined();
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']);
     expect(demosUsing('tag-chip').map((entry) => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
-    expect(demosUsing('ticket-row').map((entry) => entry.id)).toEqual(['ticket-list', 'ticket-board-column']);
+    expect(demosUsing('ticket-row').map((entry) => entry.id)).toEqual([
+      'ticket-list',
+      'ticket-board-column',
+      'worker-columns',
+    ]);
     expect(findDemo('ticket-board')?.uses).toEqual(['ticket-board-column']);
     expect(findDemo('workspace-header')?.uses).toEqual([
       'toolbar-text',
@@ -273,6 +278,7 @@ describe('UX demo catalog', () => {
               'badge',
               'button',
               'checkbox',
+              'column-track',
               'list',
               'list-action-row',
               'loading-spinner',
@@ -307,6 +313,7 @@ describe('UX demo catalog', () => {
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Used by').map((entry) => entry.id)).toEqual([
       'ticket-list',
       'ticket-board-column',
+      'worker-columns',
     ]);
     expect(
       sections

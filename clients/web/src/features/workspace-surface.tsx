@@ -16,6 +16,7 @@ import type { PermissionHistoryItem, PermissionItem } from '../permission-notifi
 import { BOARD_COLUMN_PAGE_SIZE } from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
 import { type TicketScope, type TicketView } from '../ticket-views';
+import type { WorkerTicketDetails, WorkerView } from '../worker-view-model';
 
 /** Live application bindings createWorkspaceSurface reads (HS2-K0VC2C). */
 export interface WorkspaceSurfaceDependencies {
@@ -51,6 +52,12 @@ export interface WorkspaceSurfaceDependencies {
   viewportMobile: Signal<boolean>;
   visibleTickets: () => WireTicketRow[];
   workspaceSearchActive: () => boolean;
+  workerViews: Signal<Record<string, WorkerView>>;
+  workerDetails: Signal<WorkerTicketDetails>;
+  workerErrors: Signal<Record<string, string>>;
+  workerUnsupportedSources: Signal<string[]>;
+  workerLoading: Signal<boolean>;
+  selectedTicketQualifiedId: () => string | undefined;
   /** The search's scope: the selected view, or All Tickets (HS2-4J6764). */
   searchScope: () => TicketScope;
 }
@@ -93,6 +100,12 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     viewportMobile,
     visibleTickets,
     workspaceSearchActive,
+    workerViews,
+    workerDetails,
+    workerErrors,
+    workerUnsupportedSources,
+    workerLoading,
+    selectedTicketQualifiedId,
     searchScope,
   } = dependencies;
   function workspaceEmptyState(): TicketEmptyStateProps | undefined {
@@ -142,6 +155,20 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
       case 'settings':
         if (current) return { kind: 'settings', content: settingsWorkspace(current) };
         break;
+      case 'workers':
+        return {
+          kind: 'workers',
+          workers: {
+            views: Object.values(workerViews.value),
+            details: workerDetails.value,
+            ticketRow: row,
+            selectedQualifiedId: selectedTicketQualifiedId(),
+            loading: workerLoading.value,
+            sourceErrors: Object.values(workerErrors.value),
+            unsupportedSources: workerUnsupportedSources.value,
+            layout: viewportMobile.value ? 'paged' : 'grid',
+          },
+        };
       case 'board':
       case 'list':
         break;

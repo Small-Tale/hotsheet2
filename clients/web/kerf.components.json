@@ -1561,6 +1561,50 @@
       }
     },
     {
+      "id": "worker-columns",
+      "name": "WorkerColumns",
+      "kind": "composition",
+      "purpose": "Observed worker columns with source-qualified assigned and tentative planned tickets.",
+      "source": "src/components/worker-columns.tsx",
+      "publicExports": [{ "name": "WorkerColumns" }],
+      "sourceLinks": ["src/components/worker-columns.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": {
+          "roles": ["structure"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child",
+            "notes": ["The Workbench positions the Workers view; ColumnTrack owns horizontal scrolling and paging."]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["worker-columns"],
+        "publicTokens": [],
+        "placeableClasses": ["worker-columns"]
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/worker-columns.tsx",
+        "composition": "src/components/worker-columns.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs worker activity and next-plan visibility in the project workspace."],
+        "avoidWhen": ["The surface is a status board or ordinary ticket list."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "ticket-board",
       "name": "TicketBoard",
       "kind": "composition",

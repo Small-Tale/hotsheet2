@@ -1,5 +1,17 @@
 # Manual Test Plan
 
+### Workers workspace (HS2-E9SR7R)
+
+With a rebuilt client and synthetic tickets, open Workers at wide, medium, and
+narrow widths, then return to wide. Confirm the integrator is first, background
+agents follow their parent, each column retains its scroll position, and phone
+columns page with a visible next-column peek. Activate two tickets with the same
+slug in different sources and confirm each opens its own inspector. Check offered,
+working, planned, handoff, remote CI, disconnected, idle, and zero-worker states;
+an unavailable external source must show unknown coverage. Observe an idle minute:
+the cursor long poll remains held without fixed-interval requests. Interrupt the
+connection and verify bounded reconnect and cursor replay.
+
 ### GitHub webhook reachability (HS2-SGQ183)
 
 1. With synthetic repository issues, configure a GitHub source and link it to a

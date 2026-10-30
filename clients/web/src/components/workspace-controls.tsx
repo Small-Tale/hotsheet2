@@ -31,6 +31,7 @@ import {
   Settings,
   Star,
   Trash2,
+  UsersRound,
   WandSparkles,
 } from 'lucide';
 
@@ -40,7 +41,7 @@ import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TicketSearchField } from './ticket-search-field';
 
-export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
+export type WorkspaceViewMode = 'list' | 'board' | 'workers' | 'notifications' | 'settings';
 export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
@@ -231,6 +232,7 @@ function workspaceModeChoices(
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'List', icon: List, iconName: 'list' },
     { value: 'board', label: 'Columns', icon: Columns3, iconName: 'columns-3' },
+    { value: 'workers', label: 'Workers', icon: UsersRound, iconName: 'users-round' },
     { value: 'notifications', label: 'Notifications', icon: Bell, iconName: 'bell' },
     { value: 'settings', label: 'Settings', icon: Settings, iconName: 'settings' },
   ];
@@ -342,6 +344,7 @@ function WorkspaceOverflowControls({
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
     { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
+    { value: 'workers', label: 'Show Workers View', icon: UsersRound, iconName: 'users-round' },
     {
       value: 'notifications',
       label: `Show Notifications${notificationCount ? ` (${notificationCount} pending)` : ''}`,
@@ -478,8 +481,8 @@ export function WorkspaceControls({
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
-  const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
-  const searchDisabled = projectActionsDisabled && !guidanceSearch;
+  const projectActionsDisabled = mode === 'settings' || mode === 'notifications' || mode === 'workers';
+  const searchDisabled = (projectActionsDisabled && !guidanceSearch) || mode === 'workers';
   const visibleSearchOpen = searchOpen && !searchDisabled;
   const selectedActionsDisabled = projectActionsDisabled || selectedTicketCount === 0;
   const ticketActionsDisabled = selectedActionsDisabled || !selectedTicketsMutable;

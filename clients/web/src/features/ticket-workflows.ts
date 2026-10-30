@@ -134,6 +134,7 @@ import {
 import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
+import type { WorkerTicketDetails } from '../worker-view-model';
 import type { StoredPendingAttachment } from '../workspace-session';
 
 interface TicketWorkflowMutableState {
@@ -157,6 +158,7 @@ export interface TicketWorkflowDependencies {
   projects: Signal<Project[]>;
   selectedProjectId: Signal<string>;
   tickets: Signal<WireTicketRow[]>;
+  workerDetails: Signal<WorkerTicketDetails>;
   ticketRowsByProject: Signal<Record<string, WireTicketRow[]>>;
   ticketCountsByProject: Signal<Record<string, CheckoutTicketCounts>>;
   selectedTicket: Signal<FullTicket | null>;
@@ -290,6 +292,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     projects,
     selectedProjectId,
     tickets,
+    workerDetails,
     ticketRowsByProject,
     ticketCountsByProject,
     selectedTicket,
@@ -1149,6 +1152,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   function selectedRows() {
     const selected = new Set(selectedTicketSlugs.value);
+    const selectedQualified = selectedTicket.value?.qualified_id;
+    if (selected.size === 1 && selectedQualified && workerDetails.value[selectedQualified])
+      return [workerDetails.value[selectedQualified]];
     return tickets.value.filter((ticket) => selected.has(ticket.slug));
   }
   function pruneSelectionForCurrentView() {
@@ -2074,19 +2080,26 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     fieldConflict.value = undefined;
     fieldConflictResolution.value = '';
   }
+  let latestQualifiedSelection: string | undefined;
   function selectTickets(
     slug: string,
     intent: { range?: boolean; toggle?: boolean } = {},
     ordered = visibleTickets().map((ticket) => ticket.slug),
+    qualifiedId?: string,
   ) {
+    const selectionIntent = qualifiedId ? {} : intent;
     const loaded = selectedTicket.value;
-    if (isPlainTicketReselection(selectedTicketSlugs.value, loaded?.slug, slug, intent)) return Promise.resolve(loaded);
+    if (
+      (!qualifiedId || loaded?.qualified_id === qualifiedId) &&
+      isPlainTicketReselection(selectedTicketSlugs.value, loaded?.slug, slug, selectionIntent)
+    )
+      return Promise.resolve(loaded);
     const finishTiming = beginInteractionTiming('ticket-selection', { slug }),
       next = updateTicketSelection(
         ordered,
         { anchor: state.ticketSelectionAnchor, selected: new Set(selectedTicketSlugs.value) },
         slug,
-        intent,
+        selectionIntent,
       ),
       selected = [...next.selected];
     state.ticketSelectionAnchor = next.anchor;
@@ -2094,21 +2107,27 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       selectedCorruptKey.value = undefined;
       selectedTicketSlugs.value = selected;
       cancelTicketDrafts();
-      if (selected.length !== 1) selectedTicket.value = null;
+      if (selected.length !== 1 || (qualifiedId && loaded?.qualified_id !== qualifiedId)) selectedTicket.value = null;
     });
     scheduleProjectSessionPersistence();
     finishTiming();
     if (selected.length !== 1) return Promise.resolve(undefined);
-    const ticket = tickets.value.find((item) => item.slug === selected[0]),
+    const ticket = qualifiedId
+        ? workerDetails.value[qualifiedId]
+        : tickets.value.find((item) => item.slug === selected[0]),
       current = project();
     if (!ticket || !current) return Promise.resolve(undefined);
+    latestQualifiedSelection = ticket.qualified_id;
     // Remember the outgoing detail (it carries any edits made while it was open), then render a recently
     // viewed ticket immediately and refresh it in the background without a loading view (HS2-4Q04Z9).
     if (loaded && loaded.qualified_id !== ticket.qualified_id) detailCache.put(current.id, loaded);
     const cached = detailCache.get(current.id, ticket);
     if (cached) presentTicket(cached.ticket);
     const stillSelected = (slug: string) =>
-      project()?.id === current.id && selectedTicketSlugs.value.length === 1 && selectedTicketSlugs.value[0] === slug;
+      project()?.id === current.id &&
+      selectedTicketSlugs.value.length === 1 &&
+      selectedTicketSlugs.value[0] === slug &&
+      latestQualifiedSelection === ticket.qualified_id;
     const refresh = api()
       .checkoutTicket(current.id, ticket.qualified_id)
       .then((result) => {
@@ -2141,7 +2160,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     );
   }
   async function openTicketReader(slug: string, ordered?: string[], trigger?: HTMLElement) {
-    const ticket = await selectTickets(slug, {}, ordered);
+    const ticket = await selectTickets(slug, {}, ordered, trigger?.dataset.ticketQualifiedId);
     if (!ticket) return;
     presentTicketReaderDialog('workspace-reader', trigger, () => {
       readerOpen.value = true;

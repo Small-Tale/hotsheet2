@@ -86,6 +86,8 @@ import {
   ticketSearchDemoRowOpen,
   toggleDemoHelp,
 } from './ticket-search-field-demo';
+import { WorkerColumnsCatalogDemo } from './worker-columns-catalog-demo';
+import { DemoWorkerColumns } from './worker-columns-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 function workspaceHeadingTitle(mode: WorkspaceViewMode): string {
@@ -94,6 +96,8 @@ function workspaceHeadingTitle(mode: WorkspaceViewMode): string {
       return 'Project Settings';
     case 'notifications':
       return 'Notifications';
+    case 'workers':
+      return 'Workers';
     case 'board':
     case 'list':
       return 'Queue';
@@ -267,6 +271,7 @@ export function TerminalTicketRailDemo() {
       case 'board':
         return 'board';
       case 'settings':
+      case 'workers':
       case 'list':
         return 'list';
       default:
@@ -442,6 +447,7 @@ function WorkspaceContent() {
         />
       </DemoSettingsPreview>
     );
+  if (workspaceMode.value === 'workers') return <DemoWorkerColumns />;
   return workspaceMode.value === 'list' ? (
     <TicketList tickets={tickets} label="Workspace tickets" />
   ) : (
@@ -1113,6 +1119,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
+    'worker-columns': { catalogExamples: true, Demo: WorkerColumnsCatalogDemo },
     'workspace-header': { catalogExamples: true, Demo: WorkspaceHeaderDemo },
     'quick-ticket-composer': {
       catalogExamples: true,

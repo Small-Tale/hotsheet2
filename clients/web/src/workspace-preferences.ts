@@ -3,7 +3,7 @@ import type { WorkspaceSort, WorkspaceSortDirection, WorkspaceViewMode } from '.
 export interface WorkspacePreferences {
   viewMode: WorkspaceViewMode;
   /** The list or columns view the user last had open; Notifications and Settings never replace it. */
-  ticketViewMode: SortableWorkspaceViewMode;
+  ticketViewMode: TicketWorkspaceViewMode;
   sorts: WorkspaceSortPreferences;
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -12,6 +12,7 @@ export interface WorkspacePreferences {
 }
 
 export type SortableWorkspaceViewMode = 'list' | 'board';
+export type TicketWorkspaceViewMode = SortableWorkspaceViewMode | 'workers';
 export interface WorkspaceSortPreference {
   sort: WorkspaceSort;
   sortDirection: WorkspaceSortDirection;
@@ -32,7 +33,7 @@ export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
 };
 
 const STORAGE_KEY = 'hotsheet.layout.workspace-preferences.v1';
-const viewModes: readonly WorkspaceViewMode[] = ['list', 'board', 'notifications', 'settings'];
+const viewModes: readonly WorkspaceViewMode[] = ['list', 'board', 'workers', 'notifications', 'settings'];
 const sorts: readonly WorkspaceSort[] = ['updated', 'priority', 'title', 'status'];
 const directions: readonly WorkspaceSortDirection[] = ['ascending', 'descending'];
 
@@ -108,10 +109,10 @@ export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): Wor
     viewMode,
     // A record saved before the ticket view was remembered derives it from a persisted list/board view.
     ticketViewMode:
-      record.ticketViewMode === 'list' || record.ticketViewMode === 'board'
+      record.ticketViewMode === 'list' || record.ticketViewMode === 'board' || record.ticketViewMode === 'workers'
         ? record.ticketViewMode
-        : viewMode === 'board'
-          ? 'board'
+        : viewMode === 'board' || viewMode === 'workers'
+          ? viewMode
           : DEFAULT_WORKSPACE_PREFERENCES.ticketViewMode,
     sorts: {
       list: validatedSortPreference(storedSorts?.list, legacy),

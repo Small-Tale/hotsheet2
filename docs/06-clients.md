@@ -234,8 +234,8 @@ preview/download, server directory browser) are separate design work.
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
-- **Worker view (approved design, not yet shipped; HS2-T7EVFD).** Add a Workers
-  segment beside List and Columns in the project workspace. Show one column per
+- **Worker view (HS2-T7EVFD, HS2-E9SR7R).** The Workers
+  segment sits beside List and Columns in the project workspace. Show one column per
   observed worker, with a card naming the worker, tool or kind, observed availability,
   and a quiet detail such as last seen or the background parent. Keep the integrator
   in the first column. A supported, registered background agent gets an adjacent
@@ -256,9 +256,9 @@ preview/download, server directory browser) are separate design work.
   HS2-DBECD0 owns the authoritative worker/coverage read model, HS2-XCMAVT owns
   tentative plans, HS2-E9SR7R owns the screen and phone composition, and
   HS2-1Z3T0Z owns lifecycle and rendered verification. The approved synthetic
-  design captures are attached to HS2-T7EVFD; they do not establish shipped behavior.
-  HS2-DBECD0 supplies the authenticated worker snapshot and cursor read path for
-  that future view; this ticket does not add a Workers segment to the client.
+  design captures are attached to HS2-T7EVFD. The client reads each linked Git
+  source through the authenticated cursor endpoint and reports unsupported or
+  unavailable source coverage. Wider lifecycle validation remains HS2-1Z3T0Z.
 
 - **Responsive mobile layout.** The web client has a desktop size floor (the app-shell
   `min-width`, 1024px). At and above it the two side panels — the left project sidebar and

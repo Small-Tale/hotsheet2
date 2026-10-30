@@ -31,6 +31,7 @@ export interface TicketSelectionInteractionsDependencies {
     slug: string,
     intent?: { range?: boolean; toggle?: boolean },
     ordered?: string[],
+    qualifiedId?: string,
   ) => Promise<FullTicket | null> | Promise<(FullTicket & { store: string }) | undefined>;
   readonly selectionOrder: (target: Element) => string[];
   readonly selectedTicketSlugs: Signal<string[]>;
@@ -165,7 +166,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           })
         )
           revealInspectorOverlay();
-        const loading = selectTickets(slug, intent, ordered),
+        const loading = selectTickets(slug, intent, ordered, row.dataset.ticketQualifiedId),
           single = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined;
         // The rail pushes the detail at once; an uncached ticket shows its row-backed partial while
         // the full detail loads (HS2-1ABEYX). A failed read pops back to the list.

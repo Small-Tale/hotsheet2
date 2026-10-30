@@ -86,6 +86,7 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
   );
   lifetime.add(
     delegate(root, 'contextmenu', rowSelector, (event, target) => {
+      if (target.closest('[data-worker-view]')) return;
       event.preventDefault();
       const pointer = event as MouseEvent,
         row = target as HTMLElement,

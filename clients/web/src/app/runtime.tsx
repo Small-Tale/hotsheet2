@@ -236,11 +236,13 @@ import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
+import { qualifiedWorkerTicket, type WorkerTicketDetails, type WorkerView } from '../worker-view-model';
+import { startWorkerViewStream } from '../worker-view-stream';
 import {
   loadWorkspacePreferences,
   saveWorkspacePreferences,
   sortableWorkspaceView,
-  type SortableWorkspaceViewMode,
+  type TicketWorkspaceViewMode,
 } from '../workspace-preferences';
 import {
   activeProjectRoot,
@@ -284,6 +286,11 @@ export async function startHotSheetWebClient() {
     providerOutboxOperations = signal<Record<string, ProviderOutboxOperation | undefined>>({}),
     corruptTickets = signal<CorruptTicket[]>([]),
     selectedTicket = signal<FullTicket | null>(null);
+  const workerViews = signal<Record<string, WorkerView>>({}),
+    workerDetails = signal<WorkerTicketDetails>({}),
+    workerErrors = signal<Record<string, string>>({}),
+    workerUnsupportedSources = signal<string[]>([]),
+    workerLoading = signal(false);
   const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
     project: () => project(),
     corruptTickets,
@@ -693,7 +700,7 @@ export async function startHotSheetWebClient() {
     refreshError = signal(''),
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
     // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
-    ticketViewMode = signal<SortableWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
+    ticketViewMode = signal<TicketWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
     selectedView = signal<TicketView>('all'),
     ticketCollectionState = signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>(
       undefined,
@@ -1386,6 +1393,96 @@ export async function startHotSheetWebClient() {
     void refreshTicketCollection(view);
   });
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
+  let workerStreamKey = '',
+    workerStreamStop: (() => void) | undefined,
+    workerStreamGeneration = 0;
+  effect(() => {
+    const current = project(),
+      sources = current ? defaultProviders.value[current.id]?.sources : undefined,
+      gitSources = sources?.filter((source) => source.provider === 'git').map((source) => source.connectionId) ?? [],
+      key =
+        current && viewMode.value === 'workers' && sources
+          ? `${current.id}:${current.apiPath}:${gitSources.join(',')}`
+          : '';
+    if (key === workerStreamKey) return;
+    workerStreamStop?.();
+    workerStreamStop = undefined;
+    workerStreamKey = key;
+    const generation = ++workerStreamGeneration;
+    workerViews.value = {};
+    workerDetails.value = {};
+    workerErrors.value = {};
+    workerUnsupportedSources.value = sources
+      ? sources.filter((source) => source.provider !== 'git').map((source) => source.name)
+      : current && viewMode.value === 'workers'
+        ? ['Ticket sources unavailable']
+        : [];
+    workerLoading.value = false;
+    if (!key || !current || !sources) return;
+    const pending = new Set(gitSources);
+    workerLoading.value = pending.size > 0;
+    if (gitSources.length === 0) return;
+    const client = new Api(current.apiPath, '', { trackBusy: false });
+    const pendingDetails = new Set<string>();
+    const desiredDetailCursor = new Map<string, string>();
+    const refreshWorkerDetail = (qualified: string) => {
+      if (pendingDetails.has(qualified)) return;
+      const desired = desiredDetailCursor.get(qualified);
+      if (!desired) return;
+      pendingDetails.add(qualified);
+      void client
+        .checkoutTicket(current.id, qualified)
+        .then(({ ticket }) => {
+          if (generation !== workerStreamGeneration || desiredDetailCursor.get(qualified) !== desired) return;
+          workerDetails.value = { ...workerDetails.value, [qualified]: ticket };
+        })
+        .catch(() => {
+          // Keep the previous card visible; a later cursor change retries the detail read.
+        })
+        .finally(() => {
+          pendingDetails.delete(qualified);
+          if (generation === workerStreamGeneration && desiredDetailCursor.get(qualified) !== desired)
+            refreshWorkerDetail(qualified);
+        });
+    };
+    workerStreamStop = startWorkerViewStream({
+      client,
+      checkout: current.id,
+      sources: gitSources,
+      onSnapshot: (source, snapshot) => {
+        if (generation !== workerStreamGeneration) return;
+        pending.delete(source);
+        workerLoading.value = pending.size > 0;
+        const previous = workerViews.value[source] as WorkerView | undefined;
+        if (previous?.cursor === snapshot.cursor) return;
+        workerErrors.value = Object.fromEntries(Object.entries(workerErrors.value).filter(([id]) => id !== source));
+        workerViews.value = { ...workerViews.value, [source]: snapshot };
+        const refs = [
+          ...snapshot.workers.flatMap((worker) => [
+            ...worker.tickets.map((item) => item.ticket),
+            ...worker.planned.map((item) => item.entry.ticket),
+          ]),
+        ];
+        const seen = new Set<string>();
+        for (const ref of refs) {
+          const qualified = qualifiedWorkerTicket(ref);
+          if (seen.has(qualified)) continue;
+          seen.add(qualified);
+          desiredDetailCursor.set(qualified, `${source}:${snapshot.cursor}`);
+          refreshWorkerDetail(qualified);
+        }
+      },
+      onError: (source, reason) => {
+        if (generation !== workerStreamGeneration) return;
+        pending.delete(source);
+        workerLoading.value = pending.size > 0;
+        workerErrors.value = {
+          ...workerErrors.value,
+          [source]: `${sources.find((item) => item.connectionId === source)?.name ?? source}: ${reason instanceof Error ? reason.message : String(reason)}`,
+        };
+      },
+    });
+  });
   effect(() => {
     const current = project(),
       ticket = selectedTicket.value;
@@ -2285,7 +2382,7 @@ export async function startHotSheetWebClient() {
   }
   effect(() => {
     const mode = viewMode.value;
-    if (mode === 'list' || mode === 'board') ticketViewMode.value = mode;
+    if (mode === 'list' || mode === 'board' || mode === 'workers') ticketViewMode.value = mode;
   });
   function persistWorkspacePreferences() {
     saveWorkspacePreferences(localStorage, {
@@ -3876,6 +3973,7 @@ export async function startHotSheetWebClient() {
     projects,
     selectedProjectId,
     tickets,
+    workerDetails,
     ticketRowsByProject,
     ticketCountsByProject,
     selectedTicket,
@@ -4551,6 +4649,12 @@ export async function startHotSheetWebClient() {
     viewportMobile,
     visibleTickets,
     workspaceSearchActive,
+    workerViews,
+    workerDetails,
+    workerErrors,
+    workerUnsupportedSources,
+    workerLoading,
+    selectedTicketQualifiedId: () => selectedTicket.value?.qualified_id,
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
     activeWorkspaceSort,

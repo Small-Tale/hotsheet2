@@ -121,6 +121,11 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('ticket-board-column', ['ticket-row', 'ticket-page-more']),
         ],
       },
+      {
+        id: 'worker-columns',
+        name: 'Workers',
+        demos: [cataloged('worker-columns', ['column-track', 'ticket-row', 'state-banner'])],
+      },
     ],
   },
   {

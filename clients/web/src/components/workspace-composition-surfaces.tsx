@@ -24,6 +24,7 @@ import {
 import { TerminalTicketRail, terminalTicketRailPanel, type TerminalTicketRailProps } from './terminal-ticket-rail';
 import { TicketBoard } from './ticket-board';
 import { TicketList } from './ticket-list';
+import { WorkerColumns, type WorkerColumnsProps } from './worker-columns';
 
 type NotificationCenterProps = Parameters<typeof NotificationCenter>[0];
 type TicketBoardProps = Parameters<typeof TicketBoard>[0];
@@ -62,6 +63,7 @@ export type WorkspaceSurfaceProps =
   | { kind: 'settings'; content: SafeHtml }
   | { kind: 'errors'; list: TicketListProps }
   | { kind: 'board'; board: TicketBoardProps }
+  | { kind: 'workers'; workers: WorkerColumnsProps }
   | { kind: 'list'; list: TicketListProps; more?: SafeHtml };
 
 export function WorkspaceSurface(props: WorkspaceSurfaceProps) {
@@ -69,6 +71,7 @@ export function WorkspaceSurface(props: WorkspaceSurfaceProps) {
   if (props.kind === 'settings') return props.content;
   if (props.kind === 'errors') return <TicketList {...props.list} />;
   if (props.kind === 'board') return <TicketBoard {...props.board} />;
+  if (props.kind === 'workers') return <WorkerColumns {...props.workers} />;
   return (
     <>
       <TicketList {...props.list} />

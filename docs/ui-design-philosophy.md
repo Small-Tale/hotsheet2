@@ -26,7 +26,7 @@ does not fork Kerf's guidance.
 - Use Lucide through the shared icon renderer on every client; each actionable
   context-menu item carries an icon. See [design-guidelines.md](design-guidelines.md)
   §9 for platform-specific Hot Sheet decisions.
-- The planned Workers workspace view (HS2-T7EVFD) uses one column per observed
+- The Workers workspace view (HS2-T7EVFD, HS2-E9SR7R) uses one column per observed
   worker, with the integrator first and supported background agents adjacent to
   their named parent. Phone columns page like the ticket board. Separate offered,
   live, planned, handoff, and remote CI states; label disconnected retained work

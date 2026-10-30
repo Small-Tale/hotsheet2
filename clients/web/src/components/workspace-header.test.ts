@@ -72,15 +72,29 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('>Queue</span>');
   });
   it('projects all modes, resets, and edits through canonical native segments', () => {
-    const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
-    for (const mode of ['list', 'board', 'notifications', 'settings', 'list', 'board'] satisfies WorkspaceViewMode[]) {
+    const icons = {
+      list: 'list',
+      board: 'columns-3',
+      workers: 'users-round',
+      notifications: 'bell',
+      settings: 'settings',
+    };
+    for (const mode of [
+      'list',
+      'board',
+      'workers',
+      'notifications',
+      'settings',
+      'list',
+      'board',
+    ] satisfies WorkspaceViewMode[]) {
       const markup = String(WorkspaceControls({ mode }));
       expect(markup.match(/aria-label="View mode"/g)).toHaveLength(1);
       expect(markup).toContain('data-component="segmented-control"');
       expect(markup).toContain('data-appearance="toolbar" data-shape="pill"');
       expect(markup).toContain('data-layout="content"');
       const buttons = [...markup.matchAll(/<button[^>]*data-segment-value="([^"]+)"[^>]*>[\s\S]*?<\/button>/g)];
-      expect(buttons).toHaveLength(4);
+      expect(buttons).toHaveLength(5);
       for (const [button, value] of buttons) {
         expect(button).toContain('data-action="set-view-mode"');
         expect(button).toContain('tabindex="0"');
@@ -106,7 +120,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-shape="rounded"');
     expect(markup).toContain('data-layout="equal"');
     // The rail pages a Columns view like the phone board; Settings stays in the main workspace (HS2-656Q43).
-    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(3);
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
     expect(markup).toContain('data-segment-value="board"');
     expect(markup).toContain('data-workspace-overflow');
     expect(markup).not.toContain('data-segment-value="settings"');
@@ -307,7 +321,7 @@ describe('WorkspaceHeader', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }));
     expect(markup).toContain('data-segment-value="board" data-selected="true" aria-label="Columns View"');
     expect(markup).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
-    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(5);
   });
 
   it('delegates the collapsed find state to the canonical SearchField trigger', () => {
@@ -331,7 +345,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('aria-label="Search syntax"');
     expect(markup).toContain('aria-label="Notifications View, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
-    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
+    expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(5);
     expect(markup).not.toContain('data-workspace-search="true"');
     const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(css).toMatch(

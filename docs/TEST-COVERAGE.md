@@ -1,5 +1,16 @@
 # Feature Coverage Matrix
 
+HS2-E9SR7R covers the Workers read projection, source-qualified and operation-aware merge and state
+grouping in `clients/web/src/worker-view-model.test.ts`; cursor replay, cancellation,
+and bounded failure backoff in `worker-view-stream.test.ts`; and shared summary,
+coverage, and narrow paging composition in `components/worker-columns.test.ts`.
+`components/workspace-header.test.ts` and `ux-demo/catalog.test.ts` pin the
+workspace segment and catalog registration. The real-parent browser path checks
+duplicate slugs across two source snapshots, inspector activation, and a live
+cursor-driven title/status refresh; the authenticated real-server browser path
+checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
+on the ticket.
+
 HS2-SGQ183 has synthetic HMAC and repository parsing tests in
 `crates/hotsheet-extsync/src/github.rs`, a shared CLI/HTTP idempotent setup test
 in `crates/hotsheet-extsync/src/github_webhook_setup.rs`, concurrent setup and

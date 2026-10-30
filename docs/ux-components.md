@@ -1000,6 +1000,13 @@ always retain native clipboard behavior.
 - keyboard and pointer movement between columns
 - explicit mutation preview/error handling when a provider lacks the target field
 
+- `WorkerColumns` (HS2-E9SR7R) — **production and demo built**: composes the
+  same `TicketRow` summary within Kerf `ColumnTrack`. The integrator precedes
+  worker columns; each card reports observed availability, and grouped tickets
+  distinguish offered, working, planned, handoff, integration, and remote CI.
+  Source-qualified row identity drives inspector activation. A coverage banner
+  and unknown state prevent incomplete provider observations from looking empty.
+
 Comprehensive platform-aware keyboard shortcuts are planned in HS2-KTHGVE. They must
 follow macOS conventions on Apple platforms and standard web/OS conventions elsewhere,
 remain discoverable, avoid editable-field conflicts, and receive unit plus browser
