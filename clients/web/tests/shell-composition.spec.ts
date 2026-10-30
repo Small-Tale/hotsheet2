@@ -224,3 +224,34 @@ test('tracks the phone bottom edge and dedicated-terminal clipping through the d
     .poll(() => workspace.evaluate((node) => parseFloat(getComputedStyle(node).paddingBottom)))
     .toBe(ordinary);
 });
+
+test('HS2-P9A21R keeps the phone sidebar toggle reachable with Workers in navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openProject(page);
+  const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+  await expect(showSidebar).toBeVisible();
+  await expect(page.getByRole('group', { name: 'View mode' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-p9a21r-list-390.png', animations: 'disabled' });
+  await showSidebar.click();
+  await expect(page.locator('#app-left-rail')).toBeVisible();
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+
+  const more = page.getByRole('button', { name: 'More Workspace Controls' });
+  await more.click();
+  const workers = page.locator('[data-workspace-overflow-action="set-view-mode"][data-view-mode="workers"]');
+  await expect(workers).toBeVisible();
+  await workers.click();
+  await expect(page.locator('.worker-columns')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-p9a21r-workers-390.png', animations: 'disabled' });
+  await showSidebar.click();
+  await expect(page.locator('#app-left-rail')).toBeVisible();
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  for (const width of [900, 1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator('.worker-columns')).toBeVisible();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-p9a21r-workers-${width}-after-resize.png`,
+      animations: 'disabled',
+    });
+  }
+});

@@ -261,8 +261,10 @@ export function AppShell({
             : {
                 label: WORKSPACE_TOOLBAR_LABEL,
                 dividerSides: '',
-                // Search stays in this row; width-aware controls yield space to it.
-                responsive: workspaceSearchOpen ? 'none' : 'trailing-priority',
+                // Five view tabs plus both relocated rail toggles exceed a phone row; wrap the
+                // trailing controls below the left toggle so every button stays clickable (HS2-P9A21R).
+                // Expanded search stays in its measured row.
+                responsive: workspaceSearchOpen ? 'none' : mobile ? 'wrap' : 'trailing-priority',
                 responsiveAt: 'narrow',
                 safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
                 // The collapsed left rail's toggle leads this zone and the collapsed right rail's toggle

@@ -302,6 +302,17 @@ test('HS2-RS0FFT bounded browser selection includes affected terminal and timeli
   assert.ok(shared.some((stage) => stage.command.includes('providers.spec.ts')));
 });
 
+test('HS2-P9A21R selects phone navigation and resize after workspace chrome changes', () => {
+  const stages = browserStages(['clients/web/src/components/workspace-controls.tsx'], false);
+  assert.ok(
+    stages.some(
+      (stage) =>
+        stage.command.includes('tests/mobile-layout.spec.ts') &&
+        stage.command.includes('resizing from mobile back to desktop'),
+    ),
+  );
+});
+
 test('HS2-RS0FFT identifies a changed parent in a browser file larger than the default subprocess buffer', (t) => {
   const f = fixture(t);
   const path = 'clients/web/tests/providers.spec.ts';

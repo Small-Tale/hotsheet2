@@ -11,6 +11,13 @@ cursor-driven title/status refresh; the authenticated real-server browser path
 checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
 on the ticket.
 
+HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
+through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
+`mobile-layout.spec.ts` keeps overlay and resize navigation in the affected
+browser plan; the previously failing Terminal memory, touch editor, Drive, and
+notification flows are rerun at phone size. `ux-demo.spec.ts` checks the
+five-view overflow count and remaining search width.
+
 HS2-SGQ183 has synthetic HMAC and repository parsing tests in
 `crates/hotsheet-extsync/src/github.rs`, a shared CLI/HTTP idempotent setup test
 in `crates/hotsheet-extsync/src/github_webhook_setup.rs`, concurrent setup and

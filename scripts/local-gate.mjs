@@ -131,6 +131,21 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     if (/terminal|dashboard/.test(path)) files.add('tests/terminal-feedback.spec.ts');
     if (/timeline/.test(path)) files.add('tests/ticket-timeline-usage.spec.ts');
   }
+  if (
+    changes.some((path) =>
+      /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
+        path,
+      ),
+    )
+  )
+    scoped.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      command:
+        "npx playwright test 'tests/mobile-layout.spec.ts' --grep 'mobile viewport uses a single-column layout|resizing from mobile back to desktop'",
+      reasons: ['HS2-P9A21R: workspace navigation must retain reachable phone toggles through resize'],
+    });
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
   patterns.push(...providerTitles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

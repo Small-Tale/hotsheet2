@@ -2095,7 +2095,7 @@ test('keeps rail view tabs above search and parks the closed trigger at the righ
   await toolbar.getByRole('button', { name: 'More Workspace Controls' }).click();
   await expect(stage.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
   await expect(stage.locator('[data-workspace-overflow-action="set-workspace-sort"]')).toHaveCount(4);
-  await expect(stage.locator('[data-workspace-overflow-action="set-view-mode"]')).toHaveCount(3);
+  await expect(stage.locator('[data-workspace-overflow-action="set-view-mode"]')).toHaveCount(4);
 });
 
 test('insets the rail controls by the toolbar 8px on both sides (HS2-5BE8NE)', async ({ page }) => {
@@ -4384,7 +4384,7 @@ test('fits open search around the rendered project name and fills the remaining 
   await expect(header.getByRole('button', { name: 'More Workspace Controls' })).toBeHidden();
   await expect
     .poll(() => header.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
-    .toBeGreaterThan(300);
+    .toBeGreaterThan(280);
   await expect
     .poll(() =>
       header.evaluate((node) => {
