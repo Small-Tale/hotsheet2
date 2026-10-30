@@ -269,6 +269,14 @@ fn rule_marker(name: &str, version: u64) -> String {
     }
 }
 
+fn valid_cached_rule_body(name: &str, body: &str) -> bool {
+    if name == "hotsheet-workflow" {
+        body.starts_with("<!-- hotsheet-instructions-version: ")
+    } else {
+        body.starts_with("<!-- hotsheet:")
+    }
+}
+
 fn valid_minimum_version(minimum: Option<&str>) -> bool {
     minimum.is_none_or(|value| semver::Version::parse(value).is_ok())
 }
@@ -650,7 +658,7 @@ pub fn validate(config: &GuidanceConfig) -> Result<(), GuidanceSourceError> {
                 || rule
                     .known_bodies
                     .iter()
-                    .any(|body| !body.starts_with("<!-- hotsheet:"))
+                    .any(|body| !valid_cached_rule_body(&rule.name, body))
             {
                 return Err(GuidanceSourceError::Invalid("invalid cached rule".into()));
             }
@@ -1199,6 +1207,29 @@ mod tests {
         })).unwrap()).unwrap();
     }
 
+    fn write_workflow_rule(repository: &Path, version: u64) -> String {
+        let body = format!(
+            "<!-- hotsheet-instructions-version: {version} -->\n\n## Hot Sheet workflow\n\nVersion {version}.\n"
+        );
+        fs::create_dir_all(repository.join("rules")).unwrap();
+        fs::write(
+            repository.join("rules/hotsheet-workflow.md"),
+            format!("---\nroot: true\ntargets: [\"*\"]\ndescription: \"Workflow\"\n---\n\n{body}"),
+        )
+        .unwrap();
+        fs::write(
+            repository.join("rules-manifest.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "rules": [{"name": "hotsheet-workflow", "path": "rules/hotsheet-workflow.md",
+                    "version": version, "sha256": digest(body.as_bytes()), "owner": "hotsheet", "tags": ["workflow"]}]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        body
+    }
+
     fn commit(repository: &Path) -> String {
         git(repository, &["add", "."]).unwrap();
         let output = hotsheet_ticketing::git::command_in(repository)
@@ -1622,5 +1653,36 @@ mod tests {
         let per_tool = fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
         assert!(per_tool.contains("## Hot Sheet workflow"));
         assert!(!per_tool.contains("<!-- BEGIN hotsheet:agents-md -->"));
+    }
+
+    #[test]
+    fn hs2_83s1ea_registers_changed_workflow_and_keeps_valid_prior_body() {
+        let source = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        git(source.path(), &["init", "-q"]).unwrap();
+        let previous = write_workflow_rule(source.path(), 64);
+        let first = commit(source.path());
+        let repository = source.path().to_str().unwrap();
+        register(project.path(), "test", repository, &first).unwrap();
+        select(project.path(), "test", &["hotsheet-workflow".into()], &[]).unwrap();
+        let current = write_workflow_rule(source.path(), 65);
+        let second = commit(source.path());
+        let refreshed =
+            register_checked(project.path(), "test", repository, &second, Some(&second)).unwrap();
+        let rule = &refreshed.sources[0].rules[0];
+        assert_eq!(rule.body, current);
+        assert!(rule.known_bodies.contains(&previous));
+        assert_eq!(rule.historical_versions[0].body, previous);
+        assert_eq!(load(project.path()).unwrap(), refreshed);
+        crate::setup::apply_selected_guidance_in(project.path()).unwrap();
+        assert_eq!(
+            installed_version(project.path(), "hotsheet-workflow"),
+            Some(65)
+        );
+        let mut invalid = refreshed;
+        invalid.sources[0].rules[0]
+            .known_bodies
+            .push("unmarked cached body".into());
+        assert!(validate(&invalid).is_err());
     }
 }
