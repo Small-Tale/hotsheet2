@@ -130,28 +130,37 @@ impl Default for HttpPresence {
     fn default() -> Self {
         Self {
             agent: ureq::AgentBuilder::new()
+                .redirects(0)
                 .timeout(Duration::from_secs(5))
                 .build(),
         }
     }
 }
 
+// HS2-081PXN: classify headers only. A no-follow 3xx is still Ok in ureq, but
+// cannot establish a lease or successful cleanup and its body has no authority.
+fn request_succeeded(result: Result<ureq::Response, ureq::Error>) -> bool {
+    result.is_ok_and(|response| !(300..400).contains(&response.status()))
+}
+
 impl PresenceTransport for HttpPresence {
     fn upsert(&self, target: &PresenceTarget) -> bool {
-        self.agent
-            .post(&format!("{}/mcp-presence", target.base))
-            .set("X-Hotsheet-Secret", &target.secret)
-            .set("Content-Type", "application/json")
-            .send_string(&target.body.to_string())
-            .is_ok()
+        request_succeeded(
+            self.agent
+                .post(&format!("{}/mcp-presence", target.base))
+                .set("X-Hotsheet-Secret", &target.secret)
+                .set("Content-Type", "application/json")
+                .send_string(&target.body.to_string()),
+        )
     }
 
     fn release(&self, target: &PresenceTarget) {
-        let _ = self
-            .agent
-            .delete(&format!("{}/mcp-presence/{}", target.base, target.lease_id))
-            .set("X-Hotsheet-Secret", &target.secret)
-            .call();
+        let _ = request_succeeded(
+            self.agent
+                .delete(&format!("{}/mcp-presence/{}", target.base, target.lease_id))
+                .set("X-Hotsheet-Secret", &target.secret)
+                .call(),
+        );
     }
 }
 
@@ -586,3 +595,7 @@ mod tests {
         assert!(!is_initialize(&json!({"id": 1})));
     }
 }
+
+#[cfg(test)]
+#[path = "presence/redirect_tests.rs"]
+mod redirect_tests;

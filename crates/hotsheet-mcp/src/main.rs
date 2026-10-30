@@ -169,10 +169,17 @@ fn main() -> Result<()> {
 }
 
 fn open_project(root: &Path, url: &str, secret: &str) -> Result<String> {
-    let response = ureq::post(&format!("{url}/projects/open"))
+    // HS2-081PXN: project identity and the custom bearer stay on the selected origin.
+    let response = ureq::AgentBuilder::new()
+        .redirects(0)
+        .build()
+        .post(&format!("{url}/projects/open"))
         .set("X-Hotsheet-Secret", secret)
         .set("Content-Type", "application/json")
         .send_string(&serde_json::json!({"root":root}).to_string())?;
+    if (300..400).contains(&response.status()) {
+        bail!("project-open redirect refused (HTTP {})", response.status());
+    }
     let response: serde_json::Value = serde_json::from_str(&response.into_string()?)?;
     response["checkout"]["id"]
         .as_str()

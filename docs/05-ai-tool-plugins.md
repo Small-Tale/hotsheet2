@@ -1877,8 +1877,9 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > original status; configure the trusted final server address instead. Redirect
 > locations and response bodies are not included in that error. Anonymous health
 > diagnostics after a 401/403 also refuse redirects and accept only successful 2xx
-> metadata. Startup project-open and presence transport hardening is tracked separately
-> by HS2-081PXN.
+> metadata. Project-open startup/reopen requests also refuse every 3xx before reading
+> the body, with a fixed original-status diagnostic (HS2-081PXN). Redirect Location
+> never changes the trusted project server or cached route.
 
 > Checkout-scoped MCP calls accept a checkout id, alias, or canonical path. The shim
 > encodes a path as one HTTP route segment, and the serverless backend resolves the
@@ -1927,6 +1928,15 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > `connected`/`disconnected`), so heartbeats add no change-stream traffic. This is separate
 > from the hook-reported `ai_connection`, which means permission prompts are routed.
 > A serverless shim with no known server reports nothing.
+>
+> Presence requests retain a five-second per-request timeout and never follow
+> redirects (HS2-081PXN). A 3xx is a failed upsert or unsuccessful best-effort
+> cleanup; it neither establishes a lease nor becomes a stdio shutdown error. A
+> failed upsert may still consult the existing trusted instance registry and
+> immediately register at a newly selected URL/secret with the same lease/body.
+> The Location header has no authority in that relocation. The 15-second heartbeat
+> and initialize/EOF lifecycle are unchanged. Shutdown may wait for an in-flight
+> upsert and a release, so the per-request timeout is not a total shutdown promise.
 >
 > **Which shim the config launches (HS2-HNXE38 reopen).** Presence needs a current
 > `hotsheet-mcp`. For a wholly Hot Sheet-owned local config, `setup` records an

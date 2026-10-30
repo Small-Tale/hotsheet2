@@ -8,7 +8,10 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use hotsheet_ticketing::{FsStore, StoreMetadata};
+#[path = "support/git.rs"]
+mod git_fixture;
+
+use hotsheet_ticketing::StoreMetadata;
 use serde_json::{Value, json};
 
 /// A request the loopback ntfy server received: its request line and `Title` header.
@@ -74,7 +77,7 @@ fn hs2_fyz5s9_serverless_mcp_writes_notify_and_defer_to_a_live_server() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let store = root.path().join("demo.hs2");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    git_fixture::init(&store, &StoreMetadata::new("HS"));
     let (base, received) = loopback();
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(
