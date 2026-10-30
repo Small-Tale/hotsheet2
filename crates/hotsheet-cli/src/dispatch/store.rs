@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{CloseReason, Ulid, parse_file, to_file_string};
-use hotsheet_ticketing::{FsStore, ProviderConfigRegistry, StoreMetadata, ops};
+use hotsheet_ticketing::{FsStore, ProviderConfigRegistry, StoreMetadata, ops, saved_views};
 
 use crate::{
     Cmd, binary_on_path, default_index_path, local_checkout_root, now_ts, settings_for_cli,
@@ -859,6 +859,56 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 &new_connection_id,
             )?)?
         ),
+        CheckoutCmd::Views { reference } => {
+            let settings = registry.resolve(&reference)?.settings();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&saved_views::from_settings(&settings)?)?
+            );
+        }
+        CheckoutCmd::SetView {
+            reference,
+            id,
+            name,
+            query,
+        } => {
+            let checkout = registry.resolve(&reference)?;
+            let settings = checkout.settings();
+            let mut views = saved_views::from_settings(&settings)?;
+            let existing = views.iter().position(|v| v.id.eq_ignore_ascii_case(&id));
+            let view = saved_views::SavedView {
+                id: existing.map_or_else(|| id.trim().to_owned(), |i| views[i].id.clone()),
+                name: name
+                    .map(|n| n.trim().to_owned())
+                    .or_else(|| existing.map(|i| views[i].name.clone()))
+                    .unwrap_or_else(|| id.trim().to_owned()),
+                query: query.trim().to_owned(),
+            };
+            if existing.is_some_and(|i| views[i] == view) {
+                println!("Saved view {} is unchanged in {}", view.id, checkout.id);
+                return Ok(());
+            }
+            match existing {
+                Some(i) => views[i] = view.clone(),
+                None => views.push(view.clone()),
+            }
+            saved_views::validate(&views).map_err(|e| anyhow::anyhow!(e))?;
+            saved_views::replace(&settings, &views)?;
+            println!("Saved view {} in {}", view.id, checkout.id);
+        }
+        CheckoutCmd::RemoveView { reference, id } => {
+            let checkout = registry.resolve(&reference)?;
+            let settings = checkout.settings();
+            let mut views = saved_views::from_settings(&settings)?;
+            let before = views.len();
+            views.retain(|v| !v.id.eq_ignore_ascii_case(&id));
+            if views.len() == before {
+                println!("No saved view {id} in {}", checkout.id);
+            } else {
+                saved_views::replace(&settings, &views)?;
+                println!("Removed saved view {id} from {}", checkout.id);
+            }
+        }
         CheckoutCmd::SourceColor {
             reference,
             connection_id,
@@ -1129,6 +1179,22 @@ pub(crate) enum CheckoutCmd {
         connection_id: String,
         new_connection_id: String,
     },
+    /// List a checkout's saved views as JSON (HS2-JHHXJM).
+    Views { reference: String },
+    /// Create or update one saved view by id; repeating the same values changes nothing.
+    SetView {
+        reference: String,
+        /// Letters, numbers, or hyphens; matched ignoring case.
+        id: String,
+        /// Display name, unique ignoring case. Defaults to the existing name or the id.
+        #[arg(long)]
+        name: Option<String>,
+        /// The search query, in the search bar's language (`docs/32-notifier-plugins.md` §32.5).
+        #[arg(long)]
+        query: String,
+    },
+    /// Remove one saved view by id; removing a missing view is a no-op.
+    RemoveView { reference: String, id: String },
     /// Inspect a linked source's project-local color as JSON.
     SourceColor {
         reference: String,

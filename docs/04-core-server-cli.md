@@ -844,6 +844,9 @@ hotsheet checkout remove-source web github-main [--json]  # this project only; d
 hotsheet checkout source-color web github-main              # JSON: checkout_id, connection_id, effective color
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
+hotsheet checkout views web                # JSON: this project's saved views (HS2-JHHXJM)
+hotsheet checkout set-view web docs --name Docs --query 'tag:docs AND is:open' # create or update; idempotent
+hotsheet checkout remove-view web docs     # no-op when absent
 hotsheet checkout review-source web <git-source-id> [--store <path>] [--yes] # review/record a Git store identity; writes only with --yes
 hotsheet checkout repo-size web [--json]  # code repo + each store: git objects, attachments, GitHub-limit level (HS2-QF44T7)
 hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
@@ -858,6 +861,12 @@ different accents. Both color commands emit the same JSON object with `checkout_
 `connection_id`, and `color`; an unset color reads as Gray (`#6b7280`). The write command
 accepts the same palette as the checkout color API and rejects an unlinked source or
 unsupported value.
+
+Saved views are the checkout's shared `views` setting, the same list the `/views` routes and
+the web client edit. `set-view` matches ids ignoring case, keeps the stored id spelling and
+name unless `--name` is given, and applies the route's validation (ids of letters, numbers,
+and hyphens; unique names; a non-empty query). Notification rules name views by these ids
+([32](32-notifier-plugins.md) §32.5).
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
