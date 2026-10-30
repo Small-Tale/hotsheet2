@@ -8,10 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use axum::Json;
 use axum::extract::{Path as RoutePath, Query, State};
 use axum::http::StatusCode;
-use hotsheet_cli::coordination::Coordinator;
 use hotsheet_cli::coordination::worker_view::{ConnectionObservation, WorkerView};
+use hotsheet_cli::coordination::{Assignment, Coordinator, NextPlanEntry, PlanEvent};
 use hotsheet_sync::LockExt;
 use serde::Deserialize;
+use serde::Serialize;
 
 use crate::AppState;
 use crate::api_error::ApiError;
@@ -279,4 +280,139 @@ fn in_checkout(checkout: &hotsheet_ticketing::checkouts::Checkout, project: &str
 fn now_millis() -> u64 {
     u64::try_from(time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000)
         .unwrap_or_default()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PlanReplaceBody {
+    authority: String,
+    generation: String,
+    expected_revision: u64,
+    entries: Vec<NextPlanEntry>,
+    #[serde(default)]
+    all_participants_upgraded: bool,
+    connection_id: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PlanRevision {
+    plan_revision: u64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PlanEventsQuery {
+    connection_id: String,
+    after_revision: u64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PlanDispatchBody {
+    authority: String,
+    generation: String,
+    expected_revision: u64,
+    operation: String,
+    base: String,
+    connection_id: String,
+}
+
+fn registered_coordinator(
+    state: &AppState,
+    reference: &str,
+    source_id: &str,
+) -> Result<Coordinator, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(checkout_lookup_error)?;
+    let source = checkout.source(source_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "source is not linked to this checkout",
+        )
+    })?;
+    if source.provider != "git" {
+        return Err(ApiError::new(
+            StatusCode::NOT_IMPLEMENTED,
+            "worker planning is unavailable for this source",
+        ));
+    }
+    let store = checkout
+        .verified_git_source(source_id)
+        .map_err(checkout_lookup_error)?;
+    let registry_home = state
+        .checkout_registry
+        .path()
+        .parent()
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid checkout registry path",
+            )
+        })?
+        .to_path_buf();
+    Coordinator::open_with_registry_home(Path::new(&checkout.root), store.root(), registry_home)
+        .map_err(worker_error)
+}
+
+pub(crate) async fn replace_worker_plan(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Json(body): Json<PlanReplaceBody>,
+) -> Result<Json<PlanRevision>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let coordinator = registered_coordinator(&state, &reference, &body.connection_id)?;
+        let revision = coordinator
+            .replace_next_plan(
+                &body.authority,
+                &body.generation,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
+                body.expected_revision,
+                body.entries,
+                body.all_participants_upgraded,
+            )
+            .map_err(worker_error)?;
+        Ok(Json(PlanRevision {
+            plan_revision: revision,
+        }))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+pub(crate) async fn worker_plan_events(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Query(query): Query<PlanEventsQuery>,
+) -> Result<Json<Vec<PlanEvent>>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let coordinator = registered_coordinator(&state, &reference, &query.connection_id)?;
+        coordinator
+            .next_plan_events(query.after_revision)
+            .map(Json)
+            .map_err(worker_error)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+pub(crate) async fn dispatch_worker_plan(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Json(body): Json<PlanDispatchBody>,
+) -> Result<Json<Assignment>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let coordinator = registered_coordinator(&state, &reference, &body.connection_id)?;
+        coordinator
+            .dispatch_next_plan(
+                &body.authority,
+                &body.generation,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
+                body.expected_revision,
+                &body.operation,
+                &body.base,
+            )
+            .map(Json)
+            .map_err(worker_error)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }

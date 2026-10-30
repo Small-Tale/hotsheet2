@@ -219,6 +219,45 @@ pub struct Assignment {
     pub transitions: Vec<AssignmentTransition>,
 }
 
+/// Tentative ordered intent. An operation id identifies one proposed placement,
+/// never a reservation or ticket claim (HS2-XCMAVT).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NextPlanEntry {
+    pub operation: String,
+    pub worker: String,
+    pub generation: String,
+    pub ticket: TicketRef,
+    pub slug: String,
+    #[serde(default)]
+    pub priority_at_plan: Option<hotsheet_model::Priority>,
+    #[serde(default)]
+    pub updated_at_plan: Option<String>,
+    #[serde(default)]
+    pub scope: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanEventKind {
+    Replaced,
+    Assigned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanEvent {
+    pub revision: u64,
+    pub kind: PlanEventKind,
+    /// A replacement includes the entire ordered plan; assignment consumes one operation.
+    pub entries: Vec<NextPlanEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlannedTicket {
+    pub entry: NextPlanEntry,
+    /// Empty only when the selected local source is known dispatchable now.
+    pub reasons: Vec<String>,
+}
+
 impl Assignment {
     pub fn record_transition(
         &mut self,
@@ -265,6 +304,17 @@ pub struct State {
     pub dispatcher: Option<Session>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integration: Option<IntegrationReport>,
+    /// Schema seven (HS2-XCMAVT). Older executables refuse the bumped schema.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_plan: Vec<NextPlanEntry>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub plan_revision: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_events: Vec<PlanEvent>,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 impl State {
@@ -281,6 +331,9 @@ impl State {
             authority: Authority::Integrator,
             dispatcher: None,
             integration: None,
+            next_plan: Vec::new(),
+            plan_revision: 0,
+            plan_events: Vec::new(),
         }
     }
 
@@ -324,6 +377,8 @@ pub struct Snapshot {
     /// Default permits reading snapshots from older CLI executables (HS2-FG7ZMF).
     #[serde(default)]
     pub source_support: Vec<SourceSupport>,
+    #[serde(default)]
+    pub planned: Vec<PlannedTicket>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -376,8 +431,13 @@ mod snapshot_compatibility_tests {
         let mut encoded = serde_json::to_value(&current).unwrap();
         assert!(!encoded["source_support"].as_array().unwrap().is_empty());
         let old: BeforeSourceSupport = serde_json::from_value(encoded.clone()).unwrap();
-        // Additive reports, including HS2-TWZW7X's dispatcher fields, are all an old reader drops.
-        for field in ["source_support", "live_dispatcher", "dispatch_blockers"] {
+        // Additive reports, including dispatcher and next-plan fields, are all an old reader drops.
+        for field in [
+            "source_support",
+            "live_dispatcher",
+            "dispatch_blockers",
+            "planned",
+        ] {
             encoded.as_object_mut().unwrap().remove(field);
         }
         assert_eq!(serde_json::to_value(old).unwrap(), encoded);

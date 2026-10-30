@@ -6765,7 +6765,9 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
     .await;
     let cursor = last["cursor"].as_str().unwrap().to_owned();
     let waiting_app = app.clone();
-    let waiting_route = format!("{route}?after={cursor}&wait_ms=1000");
+    // The full suite can delay watcher startup; leave enough time for the
+    // unlink event to arrive instead of racing the request's idle timeout.
+    let waiting_route = format!("{route}?after={cursor}&wait_ms=10000");
     let waiting_unlink = tokio::spawn(async move {
         waiting_app
             .oneshot(authed("GET", &waiting_route, None))
@@ -29474,4 +29476,174 @@ async fn hs2_vbfszj_response_to_accepts_a_legacy_request_and_refuses_explicit_re
         .filter(|note| note["response_to"] == legacy.to_string())
         .count();
     assert_eq!(link, 1);
+}
+
+#[tokio::test]
+async fn hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim() {
+    let (_primary, state) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("code");
+    let tickets = workspace.path().join("tickets");
+    std::fs::create_dir(&project).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&project)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let store = FsStore::init(&tickets, &StoreMetadata::new("PLAN")).unwrap();
+    let now = time::OffsetDateTime::now_utc();
+    let ticket = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "PLAN",
+        hotsheet_model::Timestamp::from_datetime(now),
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic next task".into(),
+            up_next: true,
+            ..hotsheet_ticketing::NewTicket::default()
+        },
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":project,"stores":[tickets]}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let source = opened["checkout"]["default_source"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+        &project,
+        &tickets,
+        registry.path().to_path_buf(),
+    )
+    .unwrap();
+    for (role, id) in [
+        (hotsheet_cli::coordination::Role::Integrator, "integrator"),
+        (hotsheet_cli::coordination::Role::Worker, "worker"),
+    ] {
+        coordinator
+            .register(
+                role,
+                id,
+                "generation",
+                now.unix_timestamp(),
+                120,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            )
+            .unwrap();
+    }
+    let route = format!("/checkouts/{checkout}/worker-plan");
+    let entry = serde_json::json!({"operation":"next-1","worker":"worker","generation":"generation","ticket":{"connection_id":source,"native_id":ticket.id.to_string()},"slug":ticket.slug,"scope":[]});
+    let body = serde_json::json!({"authority":"integrator","generation":"generation","expected_revision":0,"entries":[entry],"all_participants_upgraded":true,"connection_id":source});
+    let unauthenticated = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(&route)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+    let created = app
+        .clone()
+        .oneshot(authed("PUT", &route, Some(&body.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    assert_eq!(body_json(created).await["plan_revision"], 1);
+    let stale = app
+        .clone()
+        .oneshot(authed("PUT", &route, Some(&body.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let view = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout}/workers"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(view["plan_revision"], 1);
+    let worker = view["workers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "worker")
+        .unwrap();
+    assert_eq!(worker["planned"].as_array().unwrap().len(), 1);
+    assert!(
+        worker["planned"][0]["reasons"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(store.read_ticket(&ticket.id).unwrap().claimed_by, None);
+    let events = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("{route}/events?connection_id={source}&after_revision=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(events[0]["kind"], "replaced");
+    let dispatch = serde_json::json!({"authority":"integrator","generation":"generation","expected_revision":1,"operation":"next-1","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","connection_id":source});
+    let assigned = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("{route}/dispatch"),
+            Some(&dispatch.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(assigned.status(), StatusCode::OK);
+    assert_eq!(body_json(assigned).await["id"], "next-1");
+    let after = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout}/workers"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(after["plan_revision"], 2);
+    let worker = after["workers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "worker")
+        .unwrap();
+    assert!(worker["planned"].as_array().unwrap().is_empty());
+    assert_eq!(worker["tickets"][0]["assignment_id"], "next-1");
+    assert_eq!(store.read_ticket(&ticket.id).unwrap().claimed_by, None);
 }

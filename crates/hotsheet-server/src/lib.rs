@@ -91,7 +91,9 @@ use routes::checkout_tickets::{
     update_checkout_ticket_attachment_markup, update_checkout_ticket_attachment_metadata,
     update_ticket_attachment_annotations,
 };
-use routes::checkout_workers::checkout_workers;
+use routes::checkout_workers::{
+    checkout_workers, dispatch_worker_plan, replace_worker_plan, worker_plan_events,
+};
 use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
     checkout_repository_file_action, checkout_repository_files, checkout_repository_size,
@@ -1307,6 +1309,18 @@ pub fn app(state: AppState) -> Router {
         .route("/checkouts/{reference}/close", post(close_checkout_session))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route("/checkouts/{reference}/workers", get(checkout_workers))
+        .route(
+            "/checkouts/{reference}/worker-plan",
+            axum::routing::put(replace_worker_plan),
+        )
+        .route(
+            "/checkouts/{reference}/worker-plan/events",
+            get(worker_plan_events),
+        )
+        .route(
+            "/checkouts/{reference}/worker-plan/dispatch",
+            post(dispatch_worker_plan),
+        )
         .route(
             "/checkouts/{reference}/commands",
             get(list_checkout_commands).put(save_checkout_commands),

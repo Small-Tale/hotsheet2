@@ -2354,8 +2354,29 @@ The real-process tests prove this contract with separate CLI processes in dispos
 repositories; they are not the connected multi-session AI pilot, which HS2-K1QNGC owns, and
 no live pool is upgraded here.
 
-The worker read model (HS2-DBECD0) consumes this authority. Tentative next plans
-(HS2-XCMAVT) and the live multi-session rollout (HS2-K1QNGC) remain separate work.
+The worker read model (HS2-DBECD0) consumes this authority. The tentative next
+plan (HS2-XCMAVT) uses the same coordination artifact; the live multi-session
+rollout (HS2-K1QNGC) remains separate work.
+
+**Tentative worker next plan (HS2-XCMAVT).** An authority may replace an ordered
+plan through `coordination plan-replace`, authenticated
+`PUT /checkouts/{reference}/worker-plan`, or MCP `hotsheet_worker_plan_replace`.
+Each row has a stable operation id, exact worker session generation, qualified
+ticket reference, and optional file scope. The first write requires an explicit
+schema-seven participant upgrade. Replacement requires the current plan revision;
+duplicate operations and duplicate ticket placements are rejected. The plan and
+its bounded revisioned event history survive process restart. Consumers can replay
+events through `plan-events`, authenticated `GET .../worker-plan/events`, or MCP
+`hotsheet_worker_plan_events`; an overflow requires a fresh workers snapshot.
+The worker view includes planned rows and current readiness reasons, including
+priority changes, claims, open dependencies, source limitations, worker replacement,
+active assignments, overlapping scopes, and integration state. Planning does not
+claim tickets or create assignment cards. `plan-dispatch`, authenticated
+`POST .../worker-plan/dispatch`, and MCP `hotsheet_worker_plan_dispatch` promote
+one row through the existing serialized assignment checks. A manual assignment of
+the same ticket consumes its planned row and emits an event. The worker still takes
+its own ticket claim after accepting an offer. External provider dispatch remains
+explicitly unsupported until its source can be verified at the transaction boundary.
 
 **Worker read model (HS2-DBECD0).** `coordination workers` and MCP
 `hotsheet_workers` read the same source-scoped coordination projection. The

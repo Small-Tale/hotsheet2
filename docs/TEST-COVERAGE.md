@@ -1620,6 +1620,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-server/tests/http.rs # hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_replays_cursor` covers auth, registered scope, late session and connection registration, a real host-launched PTY, an explicitly bound external terminal hook, unbound hook exclusion, nested checkout isolation, connection/source removal, and idle long poll; `crates/hotsheet-cli/tests/coordination.rs # hs2_dbecd0_real_cli_workers_replays_qualified_claim_and_idle_session` covers the real CLI; `crates/hotsheet-mcp/src/lib.rs # hs2_dbecd0_worker_tool_matches_registered_headless_projection` covers MCP composition.
 - Manual: a connected multi-session Codex/Claude rollout remains HS2-K1QNGC; the Workers screen remains HS2-E9SR7R and HS2-1Z3T0Z.
 
+### Tentative worker next plan (HS2-XCMAVT)
+
+- Behavior: a fenced authority replaces one ordered, revisioned plan without creating claims or assignments. Qualified tickets, exact worker generations and stable operation ids survive restart. Snapshot readiness reports changed priority, blocked dependencies, live claims, source limits, worker replacement and scope conflicts. Serialized dispatch rechecks ticket eligibility and consumes the plan row; manual assignment consumes the same ticket's row. Bounded events replay each revision or require a fresh snapshot after overflow.
+- Unit: `crates/hotsheet-cli/src/coordination/next_plan_tests.rs # hs2_xcmavt_*` covers duplicate placement, schema/revision conflict, manual assignment, restart and dispatch.
+- End to end: `crates/hotsheet-cli/tests/coordination.rs # hs2_xcmavt_real_cli_plan_revision_and_dispatch_replay`, `crates/hotsheet-server/tests/http.rs # hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim`, and `crates/hotsheet-mcp/src/lib.rs # hs2_dbecd0_worker_tool_matches_registered_headless_projection` exercise the real CLI, authenticated server and MCP surfaces.
+- Manual: connected multi-session Codex/Claude pilot and app UI remain HS2-K1QNGC, HS2-E9SR7R and HS2-1Z3T0Z.
+
 ### Deferred composer title focus (HS2-2QR67T)
 
 - Behavior: initial outside-to-title focus remains available on each opening, while delayed open/restore/attachment callbacks preserve a newer focus choice inside the composer. Existing project/surface epoch guards and draft/attachment ownership are unchanged.

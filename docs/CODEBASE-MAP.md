@@ -982,7 +982,11 @@ and `tests/coordination_dispatcher.rs` its real multi-process boundaries. It als
 schema-six suspension evidence until the explicit participant upgrade. `scope.rs` owns the
 scope grammar, reviewed shared-section overlap, keyed Markdown sections and the code-handoff
 scope review behind the schema-five fence (HS2-YHYNJ6); `scope_tests.rs` and
-`tests/coordination_shared_scope.rs` pin them. `source_support.rs` produces additive, registry-only per-source
+`tests/coordination_shared_scope.rs` pin them. `next_plan.rs` owns ordered, revisioned
+tentative worker intent, bounded event replay, manual-assignment reconciliation and
+verified dispatch under the schema-seven fence (HS2-XCMAVT); `next_plan_tests.rs`
+and real CLI, HTTP and MCP tests pin its transitions.
+`source_support.rs` produces additive, registry-only per-source
 capability/limitation diagnostics without adapter or secret resolution (HS2-FG7ZMF);
 `source_support_tests.rs` and `tests/support/source_support.rs` pin metadata transitions,
 zero external requests and exact unchanged state on rejected foreign transitions.

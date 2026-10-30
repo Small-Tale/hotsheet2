@@ -14,6 +14,89 @@ use std::time::{Duration, Instant};
 use support::{Fixture, git};
 
 #[test]
+fn hs2_xcmavt_real_cli_plan_revision_and_dispatch_replay() {
+    let f = Fixture::new();
+    let ticket = f.ticket();
+    f.run(&[
+        "register",
+        "--role",
+        "integrator",
+        "--id",
+        "integrator",
+        "--session",
+        "generation",
+    ]);
+    f.run(&[
+        "register",
+        "--role",
+        "worker",
+        "--id",
+        "worker",
+        "--session",
+        "generation",
+    ]);
+    let entries = serde_json::json!([{
+        "operation":"planned-cli",
+        "worker":"worker",
+        "generation":"generation",
+        "ticket":{"connection_id":hotsheet_ticketing::git_connection_id(&f.store),"native_id":ticket.id.to_string()},
+        "slug":ticket.slug,
+        "scope":[]
+    }]);
+    let plan_file = f.root.path().join("plan.json");
+    std::fs::write(&plan_file, entries.to_string()).unwrap();
+    let args = f.coord(&[
+        "plan-replace",
+        "--id",
+        "integrator",
+        "--session",
+        "generation",
+        "--expected-revision",
+        "0",
+        "--entries-file",
+        plan_file.to_str().unwrap(),
+        "--all-participants-upgraded",
+    ]);
+    let result: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    assert_eq!(result["plan_revision"], 1);
+    let status = f.run(&["status"]);
+    assert_eq!(status.planned[0].entry.operation, "planned-cli");
+    assert!(status.planned[0].reasons.is_empty());
+    let args = f.coord(&["plan-events", "--after-revision", "0"]);
+    let events: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    assert_eq!(events[0]["kind"], "replaced");
+    let base = git(&f.project, &["rev-parse", "HEAD"]);
+    let args = f.coord(&[
+        "plan-dispatch",
+        "--id",
+        "integrator",
+        "--session",
+        "generation",
+        "--expected-revision",
+        "1",
+        "--operation",
+        "planned-cli",
+        "--base",
+        &base,
+    ]);
+    let assignment: Value =
+        serde_json::from_str(&f.cli(&args.iter().map(String::as_str).collect::<Vec<_>>())).unwrap();
+    assert_eq!(assignment["id"], "planned-cli");
+    let after = f.run(&["status"]);
+    assert!(after.planned.is_empty());
+    assert_eq!(after.state.plan_revision, 2);
+    assert_eq!(
+        ops::resolve(&f.store, &ticket.slug)
+            .unwrap()
+            .unwrap()
+            .claimed_by,
+        None
+    );
+}
+
+#[test]
 fn hs2_dbecd0_real_cli_workers_replays_qualified_claim_and_idle_session() {
     let f = Fixture::new();
     let ticket = f.ticket();

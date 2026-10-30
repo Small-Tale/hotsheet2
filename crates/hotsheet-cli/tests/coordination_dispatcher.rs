@@ -497,12 +497,13 @@ fn hs2_twzw7x_capabilities_never_open_and_legacy_pools_stay_schema_three() {
     let reported: serde_json::Value = serde_json::from_str(&capabilities).unwrap();
     assert_eq!(
         reported["schemas_read"],
-        serde_json::json!([1, 2, 3, 4, 5, 6])
+        serde_json::json!([1, 2, 3, 4, 5, 6, 7])
     );
     assert_eq!(reported["schema_written_with_integrator_authority"], 3);
     // HS2-YHYNJ6: reviewed shared sections are schema five, reported without opening.
     assert_eq!(reported["schema_written_with_shared_sections"], 5);
     assert_eq!(reported["schema_written_with_suspended_integration"], 6);
+    assert_eq!(reported["schema_written_with_next_plan"], 7);
     assert_eq!(
         reported["scope_section_kinds"],
         serde_json::json!(["row", "heading"])

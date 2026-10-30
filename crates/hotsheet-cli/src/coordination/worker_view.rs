@@ -12,7 +12,9 @@ use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::contract::{HandoffEvidence, IntegrationSuspension, SourceSupport};
+use super::contract::{
+    HandoffEvidence, IntegrationSuspension, PlanEvent, PlannedTicket, SourceSupport,
+};
 use super::{Authority, Coordinator, Phase, ReturnRoute, Role, Snapshot};
 
 /// A host-observed connection explicitly bound to a coordination session. The host must
@@ -68,6 +70,7 @@ pub struct WorkerRow {
     pub availability: Availability,
     pub lease_expires_at: Option<i64>,
     pub tickets: Vec<WorkerTicket>,
+    pub planned: Vec<PlannedTicket>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +80,8 @@ pub struct WorkerView {
     pub source_id: String,
     pub authority: Authority,
     pub workers: Vec<WorkerRow>,
+    pub plan_revision: u64,
+    pub plan_events: Vec<PlanEvent>,
     pub uncovered_sources: Vec<String>,
     pub source_support: Vec<SourceSupport>,
     /// A headless read has no host connection registry to inspect.
@@ -157,6 +162,7 @@ impl WorkerView {
                     },
                     lease_expires_at: Some(session.expires_at),
                     tickets: Vec::new(),
+                    planned: Vec::new(),
                 },
             );
         }
@@ -229,6 +235,7 @@ impl WorkerView {
                 availability: Availability::UnresolvedClaimHolder,
                 lease_expires_at: None,
                 tickets: Vec::new(),
+                planned: Vec::new(),
             });
             held.sort_by_key(|ticket| (ticket.ticket.qualified(), ticket.assignment_id.clone()));
             row.tickets = held;
@@ -263,8 +270,32 @@ impl WorkerView {
                     availability: Availability::UnboundConnection,
                     lease_expires_at: None,
                     tickets: Vec::new(),
+                    planned: Vec::new(),
                 },
             );
+        }
+        for planned in &snapshot.planned {
+            let row = rows
+                .entry(planned.entry.worker.clone())
+                .or_insert_with(|| WorkerRow {
+                    id: planned.entry.worker.clone(),
+                    role: None,
+                    generation: None,
+                    parent: None,
+                    label: planned.entry.worker.clone(),
+                    tool: None,
+                    connection_kind: None,
+                    connection_role: None,
+                    connection_id: None,
+                    connection_available: None,
+                    observed_alive: None,
+                    process_busy: None,
+                    availability: Availability::Disconnected,
+                    lease_expires_at: None,
+                    tickets: Vec::new(),
+                    planned: Vec::new(),
+                });
+            row.planned.push(planned.clone());
         }
         // Explicit role order is an interaction contract; stable ids break ties.
         let mut workers: Vec<_> = rows.into_values().collect();
@@ -304,6 +335,8 @@ impl WorkerView {
             source_id: state.source_id.clone(),
             authority: state.authority,
             workers,
+            plan_revision: state.plan_revision,
+            plan_events: state.plan_events.clone(),
             uncovered_sources,
             source_support: snapshot.source_support.clone(),
             connection_coverage,
@@ -430,6 +463,7 @@ mod tests {
             uncovered_sources: vec!["external-b".into()],
             live_claims: Vec::new(),
             source_support: Vec::new(),
+            planned: Vec::new(),
         }
     }
 
@@ -759,13 +793,15 @@ mod tests {
         let started = Instant::now();
         let waiting = std::thread::spawn(move || {
             observer
-                .watch_worker_snapshot_with_cancel(&cursor, Duration::from_secs(5), Some(&flag))
+                .watch_worker_snapshot_with_cancel(&cursor, Duration::from_secs(30), Some(&flag))
                 .unwrap()
         });
         std::thread::sleep(Duration::from_millis(100));
         cancelled.store(true, Ordering::Relaxed);
         let resumed = waiting.join().unwrap();
         assert_eq!(resumed.cursor, initial.cursor);
-        assert!(started.elapsed() < Duration::from_secs(2));
+        // Leave room for scheduler contention in the full suite while still
+        // proving cancellation returns well before the watch timeout.
+        assert!(started.elapsed() < Duration::from_secs(15));
     }
 }

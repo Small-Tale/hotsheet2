@@ -227,7 +227,9 @@ paths:
       - $ref: '#/components/parameters/Connection'
     post:
       operationId: receiveGithubWebhook
-      description: Verify the HMAC of the raw body, then re-read the issue from GitHub before invalidating local state. Bodies are limited to 256 KiB.
+      description:
+        Verify the HMAC of the raw body, then re-read the issue from GitHub before invalidating local state. Bodies
+        are limited to 256 KiB.
       security: []
       parameters:
         - name: x-hub-signature-256
@@ -235,7 +237,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '^sha256=[0-9a-fA-F]{64}$'
+            pattern: ^sha256=[0-9a-fA-F]{64}$
         - name: x-github-event
           in: header
           required: true
@@ -253,7 +255,9 @@ paths:
           application/json:
             schema:
               type: object
-              description: Signed GitHub event payload; only its identity and revision are used, and the issue is fetched again from GitHub.
+              description:
+                Signed GitHub event payload; only its identity and revision are used, and the issue is fetched again from
+                GitHub.
               additionalProperties: true
       responses:
         '200':
@@ -11250,7 +11254,9 @@ paths:
       - $ref: '#/components/parameters/CheckoutReference'
     get:
       operationId: getCheckoutWorkers
-      description: Read the authoritative worker projection for a registered checkout and linked Git source. A matching cursor waits for a change without fixed polling.
+      description:
+        Read the authoritative worker projection for a registered checkout and linked Git source. A matching cursor
+        waits for a change without fixed polling.
       parameters:
         - name: connection_id
           in: query
@@ -11300,6 +11306,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/worker-plan:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: replace_worker_plan
+      description: Replace ordered tentative worker intent at an expected plan revision under the live assignment authority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerPlanReplace'
+      responses:
+        '200':
+          description: Current plan revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerPlanRevision'
+        '409':
+          description: Stale revision, authority, generation, or unsupported source.
+  /checkouts/{reference}/worker-plan/events:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: worker_plan_events
+      description: Replay bounded plan events after the given revision; overflow requires a fresh workers snapshot.
+      parameters:
+        - name: connection_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: after_revision
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Ordered events after the revision.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkerPlanEvent'
+        '409':
+          description: Replay overflow or future revision.
+  /checkouts/{reference}/worker-plan/dispatch:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: dispatch_worker_plan
+      description: Promote one exact planned operation through the existing verified assignment transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerPlanDispatch'
+      responses:
+        '200':
+          description: Offered assignment; claiming the ticket is a separate worker action.
+        '409':
+          description: Stale plan or failed assignment eligibility.
 components:
   securitySchemes:
     HotsheetSecret:
@@ -13409,7 +13494,9 @@ components:
       additionalProperties: false
     WorkerTicketRef:
       type: object
-      required: [connection_id, native_id]
+      required:
+        - connection_id
+        - native_id
       properties:
         connection_id:
           type: string
@@ -13419,7 +13506,9 @@ components:
     WorkerHandoffEvidence:
       oneOf:
         - type: object
-          required: [kind, commit]
+          required:
+            - kind
+            - commit
           properties:
             kind:
               const: code
@@ -13427,7 +13516,9 @@ components:
               type: string
           additionalProperties: false
         - type: object
-          required: [kind, note_id]
+          required:
+            - kind
+            - note_id
           properties:
             kind:
               const: findings
@@ -13436,7 +13527,10 @@ components:
           additionalProperties: false
     WorkerIntegrationSuspension:
       type: object
-      required: [main_commit, prerequisite, failure_note]
+      required:
+        - main_commit
+        - prerequisite
+        - failure_note
       properties:
         main_commit:
           type: string
@@ -13446,7 +13540,10 @@ components:
           type: string
         resumed:
           type: object
-          required: [main_commit, tree, evidence_note]
+          required:
+            - main_commit
+            - tree
+            - evidence_note
           properties:
             main_commit:
               type: string
@@ -13459,30 +13556,46 @@ components:
     WorkerTicket:
       type: object
       required:
-        [
-          ticket,
-          slug,
-          assignment_id,
-          assignment_phase,
-          assignment_generation,
-          handoff,
-          integration_suspension,
-          claim_expires_at,
-          started_phase,
-          eta_at,
-        ]
+        - ticket
+        - slug
+        - assignment_id
+        - assignment_phase
+        - assignment_generation
+        - handoff
+        - integration_suspension
+        - claim_expires_at
+        - started_phase
+        - eta_at
       properties:
         ticket:
           $ref: '#/components/schemas/WorkerTicketRef'
         slug:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         assignment_id:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         assignment_phase:
-          type: [string, 'null']
-          enum: [offered, accepted, handoff, verifying, integrating, suspended_integration, ci, done, blocked, null]
+          type:
+            - string
+            - 'null'
+          enum:
+            - offered
+            - accepted
+            - handoff
+            - verifying
+            - integrating
+            - suspended_integration
+            - ci
+            - done
+            - blocked
+            - null
         assignment_generation:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         handoff:
           anyOf:
             - $ref: '#/components/schemas/WorkerHandoffEvidence'
@@ -13492,84 +13605,251 @@ components:
             - $ref: '#/components/schemas/WorkerIntegrationSuspension'
             - type: 'null'
         claim_expires_at:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
         started_phase:
-          type: [string, 'null']
-          enum: [analyzing, planning, working, initial_testing, integrating, final_testing, null]
+          type:
+            - string
+            - 'null'
+          enum:
+            - analyzing
+            - planning
+            - working
+            - initial_testing
+            - integrating
+            - final_testing
+            - null
         eta_at:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
       additionalProperties: false
     WorkerRow:
       type: object
       required:
-        [
-          id,
-          role,
-          generation,
-          parent,
-          label,
-          tool,
-          connection_kind,
-          connection_role,
-          connection_id,
-          connection_available,
-          observed_alive,
-          process_busy,
-          availability,
-          lease_expires_at,
-          tickets,
-        ]
+        - id
+        - role
+        - generation
+        - parent
+        - label
+        - tool
+        - connection_kind
+        - connection_role
+        - connection_id
+        - connection_available
+        - observed_alive
+        - process_busy
+        - availability
+        - lease_expires_at
+        - tickets
+        - planned
       properties:
         id:
           type: string
         role:
-          type: [string, 'null']
-          enum: [integrator, worker, dispatcher, null]
+          type:
+            - string
+            - 'null'
+          enum:
+            - integrator
+            - worker
+            - dispatcher
+            - null
         generation:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         parent:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         label:
           type: string
         tool:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         connection_kind:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         connection_role:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         connection_id:
-          type: [string, 'null']
+          type:
+            - string
+            - 'null'
         connection_available:
-          type: [boolean, 'null']
+          type:
+            - boolean
+            - 'null'
         observed_alive:
-          type: [boolean, 'null']
+          type:
+            - boolean
+            - 'null'
         process_busy:
-          type: [boolean, 'null']
+          type:
+            - boolean
+            - 'null'
         availability:
           type: string
-          enum: [live, disconnected, unresolved_claim_holder, unbound_connection]
+          enum:
+            - live
+            - disconnected
+            - unresolved_claim_holder
+            - unbound_connection
         lease_expires_at:
-          type: [integer, 'null']
+          type:
+            - integer
+            - 'null'
         tickets:
           type: array
           items:
             $ref: '#/components/schemas/WorkerTicket'
+        planned:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerPlannedTicket'
+      additionalProperties: false
+    WorkerPlanEntry:
+      type: object
+      required:
+        - operation
+        - worker
+        - generation
+        - ticket
+        - slug
+      properties:
+        operation:
+          type: string
+        worker:
+          type: string
+        generation:
+          type: string
+        ticket:
+          $ref: '#/components/schemas/WorkerTicketRef'
+        slug:
+          type: string
+        priority_at_plan:
+          type:
+            - string
+            - 'null'
+        updated_at_plan:
+          type:
+            - string
+            - 'null'
+        scope:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    WorkerPlannedTicket:
+      type: object
+      required:
+        - entry
+        - reasons
+      properties:
+        entry:
+          $ref: '#/components/schemas/WorkerPlanEntry'
+        reasons:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    WorkerPlanEvent:
+      type: object
+      required:
+        - revision
+        - kind
+        - entries
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+            - replaced
+            - assigned
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerPlanEntry'
+      additionalProperties: false
+    WorkerPlanRevision:
+      type: object
+      required:
+        - plan_revision
+      properties:
+        plan_revision:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    WorkerPlanReplace:
+      type: object
+      required:
+        - connection_id
+        - authority
+        - generation
+        - expected_revision
+        - entries
+      properties:
+        connection_id:
+          type: string
+        authority:
+          type: string
+        generation:
+          type: string
+        expected_revision:
+          type: integer
+          minimum: 0
+        all_participants_upgraded:
+          type: boolean
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerPlanEntry'
+      additionalProperties: false
+    WorkerPlanDispatch:
+      type: object
+      required:
+        - connection_id
+        - authority
+        - generation
+        - expected_revision
+        - operation
+        - base
+      properties:
+        connection_id:
+          type: string
+        authority:
+          type: string
+        generation:
+          type: string
+        expected_revision:
+          type: integer
+          minimum: 0
+        operation:
+          type: string
+        base:
+          type: string
       additionalProperties: false
     WorkerSourceSupport:
       type: object
       required:
-        [
-          connection_id,
-          provider,
-          configuration,
-          capabilities,
-          native_query,
-          evidence_read,
-          queue_observed,
-          claim_verification,
-          event_subscription,
-          reasons,
-        ]
+        - connection_id
+        - provider
+        - configuration
+        - capabilities
+        - native_query
+        - evidence_read
+        - queue_observed
+        - claim_verification
+        - event_subscription
+        - reasons
       properties:
         connection_id:
           type: string
@@ -13577,7 +13857,12 @@ components:
           type: string
         configuration:
           type: string
-          enum: [ready, disabled, missing, invalid, reconfigured]
+          enum:
+            - ready
+            - disabled
+            - missing
+            - invalid
+            - reconfigured
         capabilities:
           anyOf:
             - $ref: '#/components/schemas/ProviderCapabilities'
@@ -13600,7 +13885,16 @@ components:
     WorkerView:
       type: object
       required:
-        [cursor, project_id, source_id, authority, workers, uncovered_sources, source_support, connection_coverage]
+        - cursor
+        - project_id
+        - source_id
+        - authority
+        - workers
+        - plan_revision
+        - plan_events
+        - uncovered_sources
+        - source_support
+        - connection_coverage
       properties:
         cursor:
           type: string
@@ -13610,11 +13904,20 @@ components:
           type: string
         authority:
           type: string
-          enum: [integrator, dispatcher]
+          enum:
+            - integrator
+            - dispatcher
         workers:
           type: array
           items:
             $ref: '#/components/schemas/WorkerRow'
+        plan_revision:
+          type: integer
+          minimum: 0
+        plan_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerPlanEvent'
         uncovered_sources:
           type: array
           items:

@@ -21,17 +21,19 @@ pub struct Capabilities {
     pub schema_written_with_shared_sections: u32,
     /// Suspended integration and prerequisite gate evidence (HS2-2D3099).
     pub schema_written_with_suspended_integration: u32,
+    pub schema_written_with_next_plan: u32,
     pub scope_section_kinds: &'static [&'static str],
     pub assignment_authorities: &'static [&'static str],
     pub roles: &'static [&'static str],
 }
 
 pub const CAPABILITIES: Capabilities = Capabilities {
-    schemas_read: &[1, 2, 3, 4, 5, 6],
+    schemas_read: &[1, 2, 3, 4, 5, 6, 7],
     schema_written_with_integrator_authority: 3,
     schema_written_with_dispatcher_authority: 4,
     schema_written_with_shared_sections: 5,
     schema_written_with_suspended_integration: 6,
+    schema_written_with_next_plan: 7,
     scope_section_kinds: scope::SECTION_KINDS,
     assignment_authorities: &["integrator", "dispatcher"],
     roles: &["integrator", "worker", "dispatcher"],
@@ -41,6 +43,14 @@ impl Coordinator {
     /// Schema three must stay exactly what a schema-three artifact writes, and schema four
     /// exactly what a schema-four artifact can read without dropping shared sections.
     pub(super) fn schema_fence(state: &State) -> Result<()> {
+        if state.version < 7 {
+            ensure!(
+                state.next_plan.is_empty()
+                    && state.plan_revision == 0
+                    && state.plan_events.is_empty(),
+                "next plans require schema seven; upgrade every participant first"
+            );
+        }
         if state.version < 6 {
             ensure!(
                 state.assignments.values().all(|a| {
@@ -262,7 +272,7 @@ impl Coordinator {
                         all_participants_upgraded || state.version >= 4,
                         "stop old waiters and switch every participant to a schema-four artifact, then pass --all-participants-upgraded"
                     );
-                    state.version = 4;
+                    state.version = state.version.max(4);
                     state.authority = Authority::Dispatcher;
                 }
                 Authority::Integrator => {

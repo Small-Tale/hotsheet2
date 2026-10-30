@@ -15,6 +15,7 @@ impl Coordinator {
         let live_dispatcher = state.dispatcher.as_ref().is_some_and(|s| s.live(now));
         let mut live_claims = Vec::new();
         let mut selected_connection = None;
+        let mut selected_tickets = None;
         let local_queue = if self
             .source
             .join(hotsheet_ticketing::STORE_METADATA_FILE)
@@ -27,6 +28,7 @@ impl Coordinator {
                 time::OffsetDateTime::from_unix_timestamp(now)?,
             );
             let mut tickets = store.list_tickets()?;
+            selected_tickets = Some(tickets.clone());
             live_claims = tickets
                 .iter()
                 .filter(|t| !ops::claim_available(t, &now))
@@ -138,6 +140,20 @@ impl Coordinator {
         .to_owned();
         let dispatch_blockers =
             Self::dispatch_blockers(&state, now, &live_workers, local_queue.is_some());
+        let planned = state
+            .next_plan
+            .iter()
+            .map(|entry| contract::PlannedTicket {
+                entry: entry.clone(),
+                reasons: plan_reasons(
+                    &state,
+                    entry,
+                    selected_connection.as_deref(),
+                    selected_tickets.as_deref(),
+                    now,
+                ),
+            })
+            .collect::<Vec<_>>();
         let cursor = format!(
             "{:x}",
             Sha256::digest(serde_json::to_vec(&(
@@ -160,6 +176,7 @@ impl Coordinator {
             uncovered_sources,
             live_claims,
             source_support,
+            planned,
         })
     }
 
@@ -179,4 +196,148 @@ impl Coordinator {
             Sha256::digest(serde_json::to_vec(&semantic)?)
         ))
     }
+}
+
+fn plan_reasons(
+    state: &State,
+    entry: &contract::NextPlanEntry,
+    selected_connection: Option<&str>,
+    selected_tickets: Option<&[hotsheet_model::Ticket]>,
+    now: i64,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    match state.workers.get(&entry.worker) {
+        None => reasons.push("worker_departed".into()),
+        Some(session) if session.generation != entry.generation => {
+            reasons.push("worker_replaced".into())
+        }
+        Some(session) if !session.live(now) => reasons.push("worker_disconnected".into()),
+        _ => {}
+    }
+    if state.active_assignment(&entry.worker).is_some() {
+        reasons.push("worker_has_active_assignment".into());
+    }
+    if state.assignments.values().any(|assignment| {
+        assignment.ticket == entry.ticket
+            && assignment.phase.pending()
+            && !assignment.returned_for_review()
+    }) {
+        reasons.push("ticket_already_assigned".into());
+    }
+    if selected_connection != Some(entry.ticket.connection_id.as_str()) {
+        reasons.push("source_capability_or_availability_unknown".into());
+        return reasons;
+    }
+    let Some(tickets) = selected_tickets else {
+        reasons.push("source_unavailable".into());
+        return reasons;
+    };
+    let Some(ticket) = tickets
+        .iter()
+        .find(|ticket| ticket.id.to_string() == entry.ticket.native_id)
+    else {
+        reasons.push("ticket_missing".into());
+        return reasons;
+    };
+    if !ticket.up_next {
+        reasons.push("not_up_next".into());
+    }
+    if !ops::is_open(ticket) {
+        reasons.push("ticket_closed".into());
+    }
+    if ticket.slug != entry.slug {
+        reasons.push("ticket_slug_changed".into());
+    }
+    if ticket
+        .blocked_reason
+        .as_ref()
+        .is_some_and(|reason| !reason.trim().is_empty())
+    {
+        reasons.push("ticket_blocked".into());
+    }
+    if entry
+        .priority_at_plan
+        .is_some_and(|priority| priority != ticket.priority)
+    {
+        reasons.push("priority_changed".into());
+    }
+    let at = hotsheet_model::Timestamp::from_datetime(
+        time::OffsetDateTime::from_unix_timestamp(now).expect("valid snapshot time"),
+    );
+    if !ops::claim_available(ticket, &at) {
+        reasons.push("ticket_claim_held".into());
+    }
+    if tickets.iter().any(|candidate| {
+        candidate.claimed_by.as_deref() == Some(&entry.worker)
+            && !ops::claim_available(candidate, &at)
+    }) {
+        reasons.push("worker_claim_held".into());
+    }
+    for dependency in &ticket.blocked_by {
+        if !tickets
+            .iter()
+            .find(|candidate| candidate.id == *dependency)
+            .is_some_and(|candidate| !ops::is_open(candidate))
+        {
+            reasons.push("dependency_open_or_unknown".into());
+            break;
+        }
+    }
+    if state.authority == Authority::Dispatcher {
+        match &state.integration {
+            None => reasons.push("safe_base_unpublished".into()),
+            Some(report) => {
+                if !state.integrator.as_ref().is_some_and(|session| {
+                    session.id == report.integrator && session.generation == report.generation
+                }) {
+                    reasons.push("safe_base_stale".into());
+                }
+                if report.blocked.contains(&entry.ticket) {
+                    reasons.push("integrator_blocked".into());
+                }
+                if entry.scope.is_empty() {
+                    reasons.push("scope_missing".into());
+                }
+                if entry.scope.iter().any(|path| {
+                    report
+                        .in_flight
+                        .iter()
+                        .any(|held| scope::scopes_overlap(path, held))
+                }) {
+                    reasons.push("scope_in_flight".into());
+                }
+            }
+        }
+        if entry.scope.iter().any(|path| {
+            state
+                .assignments
+                .values()
+                .filter(|assignment| {
+                    assignment.phase.pending() && !assignment.returned_for_review()
+                })
+                .any(|assignment| {
+                    assignment
+                        .scope
+                        .iter()
+                        .any(|held| scope::scopes_overlap(path, held))
+                })
+        }) {
+            reasons.push("scope_assigned".into());
+        }
+        if entry.scope.iter().any(|path| {
+            state
+                .next_plan
+                .iter()
+                .filter(|other| other.operation != entry.operation && other.worker != entry.worker)
+                .any(|other| {
+                    other
+                        .scope
+                        .iter()
+                        .any(|held| scope::scopes_overlap(path, held))
+                })
+        }) {
+            reasons.push("scope_planned_elsewhere".into());
+        }
+    }
+    reasons
 }

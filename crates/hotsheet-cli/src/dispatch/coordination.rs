@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::{
     Assignment, Authority, CAPABILITIES, Coordinator, HandoffEvidence, IntegrationSuspension,
-    Phase, PrerequisiteGate, ReservationCheck, ReturnRoute, Role, WaitRequest,
+    NextPlanEntry, Phase, PrerequisiteGate, ReservationCheck, ReturnRoute, Role, WaitRequest,
 };
 use hotsheet_ticketing::TicketRef;
 use hotsheet_ticketing::{FsStore, git_connection_id, ops};
@@ -71,6 +71,35 @@ enum CoordinationCmd {
         /// Maximum event wait (default 30 seconds, capped at 30 seconds).
         #[arg(long)]
         wait_ms: Option<u64>,
+    },
+    /// Replace ordered tentative intent; this never claims or changes a ticket.
+    PlanReplace {
+        #[command(flatten)]
+        authority: Identity,
+        #[arg(long)]
+        expected_revision: u64,
+        /// JSON array of qualified plan entries.
+        #[arg(long)]
+        entries_file: PathBuf,
+        /// Required before the first schema-seven plan write.
+        #[arg(long)]
+        all_participants_upgraded: bool,
+    },
+    /// Replay bounded, ordered plan revisions; overflow requires a fresh workers read.
+    PlanEvents {
+        #[arg(long)]
+        after_revision: u64,
+    },
+    /// Promote one planned operation through the existing verified reservation path.
+    PlanDispatch {
+        #[command(flatten)]
+        authority: Identity,
+        #[arg(long)]
+        expected_revision: u64,
+        #[arg(long)]
+        operation: String,
+        #[arg(long)]
+        base: String,
     },
     /// Announce this live session without blocking (renew before long implementation/gates).
     Register(Registration),
@@ -328,6 +357,49 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             }
         }
         CoordinationCmd::Status => {}
+        CoordinationCmd::PlanReplace {
+            authority,
+            expected_revision,
+            entries_file,
+            all_participants_upgraded,
+        } => {
+            let entries: Vec<NextPlanEntry> =
+                serde_json::from_slice(&std::fs::read(entries_file)?)?;
+            let revision = coordinator.replace_next_plan(
+                &authority.id,
+                &authority.session,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
+                expected_revision,
+                entries,
+                all_participants_upgraded,
+            )?;
+            println!("{}", serde_json::json!({"plan_revision": revision}));
+            return Ok(());
+        }
+        CoordinationCmd::PlanEvents { after_revision } => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&coordinator.next_plan_events(after_revision)?)?
+            );
+            return Ok(());
+        }
+        CoordinationCmd::PlanDispatch {
+            authority,
+            expected_revision,
+            operation,
+            base,
+        } => {
+            let assigned = coordinator.dispatch_next_plan(
+                &authority.id,
+                &authority.session,
+                &|| time::OffsetDateTime::now_utc().unix_timestamp(),
+                expected_revision,
+                &operation,
+                &base,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&assigned)?);
+            return Ok(());
+        }
         CoordinationCmd::Workers { after, wait_ms } => {
             let wait_ms = wait_ms.unwrap_or(30_000);
             anyhow::ensure!(wait_ms <= 30_000, "wait_ms must be at most 30000");

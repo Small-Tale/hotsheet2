@@ -444,8 +444,8 @@ fn hs2_twzw7x_newer_schemas_and_smuggled_fields_are_refused() {
     raw["authority"] = "dispatcher".into();
     fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
     assert!(error(c.state()).contains("enabling dispatcher authority"));
-    // Schema six is the newest this executable reads (HS2-2D3099); seven is refused.
-    raw["version"] = 7.into();
+    // Schema seven is the newest this executable reads (HS2-XCMAVT); eight is refused.
+    raw["version"] = 8.into();
     fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
     let project = root.path().join("project");
     let store = root.path().join("store");

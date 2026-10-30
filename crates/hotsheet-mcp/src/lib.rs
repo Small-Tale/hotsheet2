@@ -375,6 +375,41 @@ fn base_tools_list() -> Value {
             }, "required": ["checkout"] }
         },
         {
+            "name": "hotsheet_worker_plan_replace",
+            "description": "Replace ordered tentative worker intent at an exact plan revision; no ticket is claimed or changed.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("linked Git source id"),
+                "authority": str_prop("active assignment authority id"),
+                "generation": str_prop("active authority generation"),
+                "expected_revision": {"type":"integer"},
+                "entries": {"type":"array", "items":{"type":"object"}},
+                "all_participants_upgraded": {"type":"boolean"}
+            }, "required": ["checkout","connection_id","authority","generation","expected_revision","entries"] }
+        },
+        {
+            "name": "hotsheet_worker_plan_events",
+            "description": "Replay ordered plan events after a revision; an overflow requires a fresh workers snapshot.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("linked Git source id"),
+                "after_revision": {"type":"integer"}
+            }, "required": ["checkout","connection_id","after_revision"] }
+        },
+        {
+            "name": "hotsheet_worker_plan_dispatch",
+            "description": "Recheck and reserve one exact planned operation through the authoritative coordinator. The worker must claim the ticket separately.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("linked Git source id"),
+                "authority": str_prop("active assignment authority id"),
+                "generation": str_prop("active authority generation"),
+                "expected_revision": {"type":"integer"},
+                "operation": str_prop("planned operation id"),
+                "base": str_prop("full safe shipping SHA")
+            }, "required": ["checkout","connection_id","authority","generation","expected_revision","operation","base"] }
+        },
+        {
             "name": "hotsheet_claim",
             "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
             "inputSchema": { "type": "object", "properties": {
@@ -904,6 +939,48 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
+        "hotsheet_worker_plan_replace" | "hotsheet_worker_plan_dispatch" => {
+            let checkout = arg_str(args, "checkout")?;
+            let endpoint = if name == "hotsheet_worker_plan_replace" {
+                "worker-plan"
+            } else {
+                "worker-plan/dispatch"
+            };
+            backend
+                .send(
+                    if name == "hotsheet_worker_plan_replace" {
+                        "PUT"
+                    } else {
+                        "POST"
+                    },
+                    &format!(
+                        "/checkouts/{}/{endpoint}",
+                        encode_checkout_reference(&checkout)
+                    ),
+                    &without_many(args, &["checkout"]),
+                )
+                .map_err(be_msg)
+        }
+        "hotsheet_worker_plan_events" => {
+            let checkout = arg_str(args, "checkout")?;
+            let connection_id = arg_str(args, "connection_id")?;
+            let after_revision = args
+                .get("after_revision")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "after_revision must be a non-negative integer".to_owned())?;
+            backend
+                .get(
+                    &format!(
+                        "/checkouts/{}/worker-plan/events",
+                        encode_checkout_reference(&checkout)
+                    ),
+                    &[
+                        ("connection_id".into(), connection_id),
+                        ("after_revision".into(), after_revision.to_string()),
+                    ],
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_claim" => {
             let id = arg_str(args, "id")?;
             backend
@@ -1274,6 +1351,41 @@ mod core_backend {
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((checkout, stores))
         }
+
+        fn worker_plan_coordinator(
+            &self,
+            reference: &str,
+            source_id: &str,
+        ) -> Result<hotsheet_cli::coordination::Coordinator, BackendError> {
+            let reference = decode_checkout_reference(reference)?;
+            let checkout = self
+                .checkout_registry
+                .resolve(&reference)
+                .map_err(checkout_err)?;
+            let source = checkout
+                .source(source_id)
+                .ok_or_else(|| bad_request("source is not linked to this checkout"))?;
+            if source.provider != "git" {
+                return Err(bad_request(
+                    "worker planning is unavailable for this source",
+                ));
+            }
+            let store = checkout
+                .verified_git_source(source_id)
+                .map_err(checkout_err)?;
+            let registry_home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .ok_or_else(|| bad_request("invalid checkout registry path"))?
+                .to_path_buf();
+            hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+                Path::new(&checkout.root),
+                store.root(),
+                registry_home,
+            )
+            .map_err(|error| bad_request(error.to_string()))
+        }
     }
 
     impl CoreBackend {
@@ -1564,6 +1676,26 @@ mod core_backend {
             }
             if let Some(reference) = path
                 .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/worker-plan/events"))
+            {
+                let connection_id = query
+                    .iter()
+                    .find(|(key, _)| key == "connection_id")
+                    .map(|(_, value)| value.as_str())
+                    .ok_or_else(|| bad_request("connection_id is required"))?;
+                let after_revision = query
+                    .iter()
+                    .find(|(key, _)| key == "after_revision")
+                    .and_then(|(_, value)| value.parse::<u64>().ok())
+                    .ok_or_else(|| bad_request("after_revision is required"))?;
+                let coordinator = self.worker_plan_coordinator(reference, connection_id)?;
+                return coordinator
+                    .next_plan_events(after_revision)
+                    .map(|events| to_value(&events))
+                    .map_err(|error| plan_conflict(error.to_string()));
+            }
+            if let Some(reference) = path
+                .strip_prefix("/checkouts/")
                 .and_then(|rest| rest.strip_suffix("/workers"))
             {
                 let reference = decode_checkout_reference(reference)?;
@@ -1843,6 +1975,71 @@ mod core_backend {
                 return self.send(method, &format!("/tickets/{suffix}"), body);
             }
             if let Some(rest) = path.strip_prefix("/checkouts/") {
+                if let Some(reference) = rest.strip_suffix("/worker-plan")
+                    && method == "PUT"
+                {
+                    let connection_id = str_field(body, "connection_id")
+                        .ok_or_else(|| bad_request("connection_id is required"))?;
+                    let coordinator = self.worker_plan_coordinator(reference, &connection_id)?;
+                    let authority = str_field(body, "authority")
+                        .ok_or_else(|| bad_request("authority is required"))?;
+                    let generation = str_field(body, "generation")
+                        .ok_or_else(|| bad_request("generation is required"))?;
+                    let expected_revision =
+                        body.get("expected_revision")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| bad_request("expected_revision is required"))?;
+                    let entries: Vec<hotsheet_cli::coordination::NextPlanEntry> =
+                        serde_json::from_value(
+                            body.get("entries")
+                                .cloned()
+                                .ok_or_else(|| bad_request("entries are required"))?,
+                        )
+                        .map_err(|error| bad_request(error.to_string()))?;
+                    let revision = coordinator
+                        .replace_next_plan(
+                            &authority,
+                            &generation,
+                            &|| OffsetDateTime::now_utc().unix_timestamp(),
+                            expected_revision,
+                            entries,
+                            body.get("all_participants_upgraded")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false),
+                        )
+                        .map_err(|error| plan_conflict(error.to_string()))?;
+                    return Ok(serde_json::json!({"plan_revision": revision}));
+                }
+                if let Some(reference) = rest.strip_suffix("/worker-plan/dispatch")
+                    && method == "POST"
+                {
+                    let connection_id = str_field(body, "connection_id")
+                        .ok_or_else(|| bad_request("connection_id is required"))?;
+                    let coordinator = self.worker_plan_coordinator(reference, &connection_id)?;
+                    let authority = str_field(body, "authority")
+                        .ok_or_else(|| bad_request("authority is required"))?;
+                    let generation = str_field(body, "generation")
+                        .ok_or_else(|| bad_request("generation is required"))?;
+                    let expected_revision =
+                        body.get("expected_revision")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| bad_request("expected_revision is required"))?;
+                    let operation = str_field(body, "operation")
+                        .ok_or_else(|| bad_request("operation is required"))?;
+                    let base =
+                        str_field(body, "base").ok_or_else(|| bad_request("base is required"))?;
+                    let assignment = coordinator
+                        .dispatch_next_plan(
+                            &authority,
+                            &generation,
+                            &|| OffsetDateTime::now_utc().unix_timestamp(),
+                            expected_revision,
+                            &operation,
+                            &base,
+                        )
+                        .map_err(|error| plan_conflict(error.to_string()))?;
+                    return Ok(to_value(&assignment));
+                }
                 if let Some(reference) = rest.strip_suffix("/follow-up-links") {
                     let (checkout, stores) = self.checkout_context(reference)?;
                     return self
@@ -3097,6 +3294,13 @@ mod core_backend {
     fn bad_request(message: impl Into<String>) -> BackendError {
         BackendError {
             status: Some(400),
+            message: message.into(),
+        }
+    }
+
+    fn plan_conflict(message: impl Into<String>) -> BackendError {
+        BackendError {
+            status: Some(409),
             message: message.into(),
         }
     }
@@ -5745,6 +5949,63 @@ mod tests {
             json!({"checkout":"workers", "after":view["cursor"], "wait_ms":0}),
         );
         assert_eq!(unchanged["cursor"], view["cursor"]);
+        coordinator
+            .register(
+                hotsheet_cli::coordination::Role::Integrator,
+                "integrator",
+                "generation-a",
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+                120,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            )
+            .unwrap();
+        let source_store = FsStore::open(&source).unwrap();
+        let created = hotsheet_ticketing::ops::create(
+            &source_store,
+            hotsheet_model::Ulid::new(),
+            "HS",
+            hotsheet_model::Timestamp::from_datetime(time::OffsetDateTime::now_utc()),
+            hotsheet_ticketing::NewTicket {
+                title: "Synthetic MCP plan".into(),
+                up_next: true,
+                ..hotsheet_ticketing::NewTicket::default()
+            },
+        )
+        .unwrap();
+        let connection_id = hotsheet_ticketing::git_connection_id(&source_store);
+        let replacement = call(
+            &backend,
+            "hotsheet_worker_plan_replace",
+            json!({
+                "checkout":"workers", "connection_id":connection_id,
+                "authority":"integrator", "generation":"generation-a", "expected_revision":0,
+                "all_participants_upgraded":true,
+                "entries":[{"operation":"mcp-next","worker":"worker-a","generation":"generation-a","ticket":{"connection_id":connection_id,"native_id":created.id.to_string()},"slug":created.slug,"scope":[]}]
+            }),
+        );
+        assert_eq!(replacement["plan_revision"], 1, "{replacement}");
+        let planned = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert_eq!(
+            planned["workers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["id"] == "worker-a")
+                .unwrap()["planned"][0]["entry"]["operation"],
+            "mcp-next"
+        );
+        let events = call(
+            &backend,
+            "hotsheet_worker_plan_events",
+            json!({"checkout":"workers","connection_id":connection_id,"after_revision":0}),
+        );
+        assert_eq!(events[0]["kind"], "replaced");
+        let assignment = call(
+            &backend,
+            "hotsheet_worker_plan_dispatch",
+            json!({"checkout":"workers","connection_id":connection_id,"authority":"integrator","generation":"generation-a","expected_revision":1,"operation":"mcp-next","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}),
+        );
+        assert_eq!(assignment["id"], "mcp-next", "{assignment}");
         let fake = FakeBackend::default();
         call(
             &fake,

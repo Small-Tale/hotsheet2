@@ -7,6 +7,9 @@ mod authority_tests;
 pub mod contract;
 #[cfg(test)]
 mod findings_review_return_tests;
+mod next_plan;
+#[cfg(test)]
+mod next_plan_tests;
 mod review_return;
 #[cfg(test)]
 mod review_return_tests;
@@ -33,8 +36,9 @@ use sha2::{Digest, Sha256};
 pub use authority::{CAPABILITIES, Capabilities};
 pub use contract::{
     Assignment, AssignmentTransition, Authority, HandoffEvidence, IntegrationReport,
-    IntegrationSuspension, Phase, PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State,
-    TransitionActor, TransitionKind, WaitRequest,
+    IntegrationSuspension, NextPlanEntry, Phase, PlanEvent, PlanEventKind, PlannedTicket,
+    PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind,
+    WaitRequest,
 };
 
 pub struct Coordinator {
@@ -137,7 +141,7 @@ impl Coordinator {
         // reviewed shared documents (HS2-YHYNJ6); schema six only after the live
         // integrator suspends a gate-blocked integration (HS2-2D3099). Newer is refused.
         ensure!(
-            matches!(state.version, 1..=6) && state.project_id == self.project_id,
+            matches!(state.version, 1..=7) && state.project_id == self.project_id,
             "incompatible coordination state"
         );
         let before = state.clone();
@@ -409,6 +413,7 @@ impl Coordinator {
                 state
                     .assignments
                     .insert(offered.id.clone(), offered.clone());
+                Self::consume_planned_assignment(state, &offered);
                 Ok(offered)
             })
         };
@@ -641,7 +646,7 @@ impl Coordinator {
                 state.version >= 6 || all_participants_upgraded,
                 "stop old participants and switch every participant to a schema-six artifact, then pass --all-participants-upgraded"
             );
-            state.version = 6;
+            state.version = state.version.max(6);
             a.phase = Phase::SuspendedIntegration;
             if let Some(previous) = a.suspension.replace(evidence) {
                 ensure!(

@@ -379,7 +379,7 @@ fn hs2_aebjyn_schema_two_migration_preserves_findings_code_ci_and_returned_evide
     // Schema four is dispatcher authority (HS2-TWZW7X) and five reviewed shared sections
     // (HS2-YHYNJ6), and six is suspended integration (HS2-2D3099), so seven is unknown.
     let mut future = migrated;
-    future.version = 7;
+    future.version = 8;
     let bytes = serde_json::to_vec(&future).unwrap();
     fs::write(&path, &bytes).unwrap();
     assert!(Coordinator::open(&root.path().join("project"), &c.source).is_err());
