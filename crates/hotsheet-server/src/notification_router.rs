@@ -489,8 +489,17 @@ fn ticket_messages(
     // HS2-G8NXNC: which saved views a rule names that this ticket is in.
     let checkouts = linked(state, entry.store.root());
     let at = now();
-    current.views =
-        hotsheet_notify::views::memberships(config, &checkouts, |q| q.matches(&ticket, at));
+    current.views = hotsheet_notify::views::memberships(config, &checkouts, |checkout, q| {
+        // HS2-VPG8XA: `has:commit` scans this checkout's repository, only when evaluated.
+        let has_commit = || {
+            crate::code_review::slugs_with_commits(
+                std::path::Path::new(&checkout.root),
+                std::slice::from_ref(&ticket.slug),
+            )
+            .is_ok_and(|found| !found.is_empty())
+        };
+        q.matches_with_commits(&ticket, at, &has_commit)
+    });
     let previous = {
         let mut snapshots = state.notification_delivery.snapshots.lock_or_recover();
         if !snapshots.seeded.contains(&event.store) {

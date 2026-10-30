@@ -979,3 +979,90 @@ async fn held_deliveries_are_flushed_as_one_summary() {
     .await
     .expect("HS2-CFMSP2 router shutdown released scheduled delivery state");
 }
+
+/// HS2-VPG8XA: a saved view using `has:commit` matches, in the server router, only the
+/// ticket a commit in the checkout's repository names.
+#[tokio::test(flavor = "multi_thread")]
+async fn saved_view_rules_answer_has_commit_from_the_checkout_repository() {
+    fn git(path: &std::path::Path, args: &[&str]) {
+        assert!(
+            hotsheet_ticketing::git::command()
+                .arg("-C")
+                .arg(path)
+                .args([
+                    "-c",
+                    "user.name=Hot Sheet Test",
+                    "-c",
+                    "user.email=test@localhost"
+                ])
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    let mut h = harness();
+    let project = h._dir.path().join("rocket-src");
+    std::fs::create_dir_all(&project).unwrap();
+    git(&project, &["init", "-q"]);
+    let registry_path = h._dir.path().join("checkouts.json");
+    let checkout = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&project, None, None, vec![h._dir.path().join("demo.hs2")])
+        .unwrap();
+    hotsheet_ticketing::saved_views::replace(
+        &checkout.settings(),
+        &[hotsheet_ticketing::saved_views::SavedView {
+            id: "committed".into(),
+            name: "Committed".into(),
+            query: "has:commit".into(),
+        }],
+    )
+    .unwrap();
+    let state = h.state.clone().with_checkout_registry(&registry_path);
+    let router = app(state.clone());
+    configure(&router, json!(["ticket.status_changed"])).await;
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/notification-rules/everything",
+        Some(
+            json!({"events":["ticket.status_changed"],"channels":["phone"],
+                    "filter":{"views":[{"checkout": checkout.id, "view":"committed"}]}}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mut tickets = Vec::new();
+    for title in ["Not yet", "Already built"] {
+        let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title": title}))).await;
+        tickets.push((
+            created["id"].as_str().unwrap().to_string(),
+            created["slug"].as_str().unwrap().to_string(),
+        ));
+    }
+    std::fs::write(project.join("main.rs"), "fn main() {}\n").unwrap();
+    git(&project, &["add", "main.rs"]);
+    let subject = format!("{} Build the launcher", tickets[1].1);
+    git(&project, &["commit", "-q", "-m", &subject]);
+
+    let _router_task = hotsheet_server::notification_router::spawn_notification_router(state).await;
+    for (id, _) in &tickets {
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/tickets/{id}"),
+            Some(json!({"status":"started"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let sent = next(&mut h).await;
+    let expected = format!("{} is now Started", tickets[1].1);
+    assert_eq!(header(&sent, "Title"), Some(expected.as_str()));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(800), h.received.recv())
+            .await
+            .is_err(),
+        "the ticket without a commit sends nothing"
+    );
+}

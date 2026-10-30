@@ -141,9 +141,13 @@ The delivery record notes `truncated` and `omitted_attachments`.
   - Any other term is a case-insensitive substring of the slug, title, tags, details,
     notes, or attachment names.
   - Differences from the client: a date written without a zone is read as UTC, and
-    locale-ordered dates are text. `has:commit` never matches, because it needs a repository
-    scan (HS2-VPG8XA). `has:`, `attachment:`, and date terms inside a Boolean expression are
-    read structurally here, where the client still reads them as text (HS2-DE9CMP).
+    locale-ordered dates are text. `has:`, `attachment:`, and date terms inside a Boolean
+    expression are read structurally here, where the client still reads them as text
+    (HS2-DE9CMP).
+  - `has:commit` (HS2-VPG8XA): the server router answers it with the same repository scan
+    as the checkout listing (the checkout's code repository has a commit whose subject or
+    `Refs:` line names the ticket), run only when the term is evaluated. Serverless CLI and
+    MCP writes have no repository scan, so for them `has:commit` never matches.
 - A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a fixed `utc_offset`
   such as `+09:00`, and `allow_errors`, default true) and `max_per_hour`. Adjust the
   offset when daylight saving time changes.

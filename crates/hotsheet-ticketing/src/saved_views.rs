@@ -453,12 +453,50 @@ impl ViewQuery {
         &self.source
     }
 
-    /// Whether `ticket` is in the view at `now` (relative dates and live claims use it).
-    pub fn matches(&self, ticket: &Ticket, now: OffsetDateTime) -> bool {
+    /// Whether the query has a `has:commit` term, which needs a repository scan.
+    pub fn uses_commits(&self) -> bool {
+        let probe = OffsetDateTime::UNIX_EPOCH;
+        let commit = |raw: &String| classify(raw, probe) == Term::HasCommit;
+        fn walk(expr: &Expr, commit: &dyn Fn(&String) -> bool) -> bool {
+            match expr {
+                Expr::Term(raw) => commit(raw),
+                Expr::Not(inner) => walk(inner, commit),
+                Expr::And(left, right) | Expr::Or(left, right) => {
+                    walk(left, commit) || walk(right, commit)
+                }
+            }
+        }
         match &self.shape {
-            Shape::Expression(expr) => eval(expr, ticket, now),
+            Shape::Expression(expr) => walk(expr, &commit),
+            Shape::Terms { terms, .. } => terms.iter().any(commit),
+            Shape::Text(_) => false,
+        }
+    }
+
+    /// Whether `ticket` is in the view at `now` (relative dates and live claims use it).
+    /// `has:commit` never matches here; see [`ViewQuery::matches_with_commits`].
+    pub fn matches(&self, ticket: &Ticket, now: OffsetDateTime) -> bool {
+        self.matches_with_commits(ticket, now, &|| false)
+    }
+
+    /// [`ViewQuery::matches`], answering `has:commit` with `has_commit`: whether the
+    /// project's repository has a commit naming the ticket (HS2-VPG8XA). It is called only
+    /// when a `has:commit` term is evaluated.
+    pub fn matches_with_commits(
+        &self,
+        ticket: &Ticket,
+        now: OffsetDateTime,
+        has_commit: &dyn Fn() -> bool,
+    ) -> bool {
+        let at = At {
+            ticket,
+            now,
+            has_commit,
+        };
+        match &self.shape {
+            Shape::Expression(expr) => eval(expr, &at),
             Shape::Terms { terms, phrase } => {
-                terms.iter().all(|t| term_matches(t, ticket, now))
+                terms.iter().all(|t| term_matches(t, &at))
                     && phrase
                         .as_deref()
                         .is_none_or(|p| crate::ops::matches_text(ticket, &p.to_lowercase()))
@@ -468,24 +506,30 @@ impl ViewQuery {
     }
 }
 
-fn eval(expr: &Expr, ticket: &Ticket, now: OffsetDateTime) -> bool {
+/// What one evaluation reads: the ticket, the time, and the commit lookup.
+struct At<'a> {
+    ticket: &'a Ticket,
+    now: OffsetDateTime,
+    has_commit: &'a dyn Fn() -> bool,
+}
+
+fn eval(expr: &Expr, at: &At<'_>) -> bool {
     match expr {
-        Expr::Term(raw) => term_matches(raw, ticket, now),
-        Expr::Not(inner) => !eval(inner, ticket, now),
-        Expr::And(left, right) => eval(left, ticket, now) && eval(right, ticket, now),
-        Expr::Or(left, right) => eval(left, ticket, now) || eval(right, ticket, now),
+        Expr::Term(raw) => term_matches(raw, at),
+        Expr::Not(inner) => !eval(inner, at),
+        Expr::And(left, right) => eval(left, at) && eval(right, at),
+        Expr::Or(left, right) => eval(left, at) || eval(right, at),
     }
 }
 
-fn term_matches(raw: &str, t: &Ticket, now: OffsetDateTime) -> bool {
+fn term_matches(raw: &str, at: &At<'_>) -> bool {
+    let (t, now) = (at.ticket, at.now);
     match classify(raw, now) {
         Term::Tag(name) => t.tags.iter().any(|tag| tag.eq_ignore_ascii_case(&name)),
         Term::Is(state) => is_state(&state, t, now),
         Term::HasAttachment => !t.attachments.is_empty(),
         Term::HasMediaAnnotation => t.attachments.iter().any(|a| !a.annotations.is_empty()),
-        // Commit references need a repository scan the server does per listing; a single
-        // ticket evaluation does not have one.
-        Term::HasCommit => false,
+        Term::HasCommit => (at.has_commit)(),
         Term::Attachment(pattern) => t
             .attachments
             .iter()
@@ -707,6 +751,34 @@ mod tests {
         assert!(!matches("attachment:*.pdf", &t));
         assert!(!matches("has:media-annotation", &t));
         assert!(!matches("has:commit", &t), "needs a repository scan");
+    }
+
+    #[test]
+    fn hs2_vpg8xa_has_commit_asks_the_lookup_only_when_evaluated() {
+        let t = ticket();
+        let now = at("2026-10-30T00:00:00Z");
+        let asked = std::cell::Cell::new(0);
+        let yes = || {
+            asked.set(asked.get() + 1);
+            true
+        };
+        let q = |s: &str| ViewQuery::parse(s);
+        assert!(q("has:commit").uses_commits());
+        assert!(q("tag:docs OR NOT has:COMMIT").uses_commits());
+        assert!(q("has:commit login").uses_commits());
+        assert!(!q("tag:docs AND login").uses_commits());
+        assert!(
+            !q("(has:commit").uses_commits(),
+            "unparseable: whole-query text"
+        );
+        assert!(q("has:commit").matches_with_commits(&t, now, &yes));
+        assert!(!q("has:commit").matches_with_commits(&t, now, &|| false));
+        assert!(!q("has:commit").matches(&t, now), "no lookup, no commit");
+        assert!(q("NOT has:commit").matches(&t, now));
+        assert!(q("tag:docs OR has:commit").matches_with_commits(&t, now, &yes));
+        assert_eq!(asked.get(), 1, "OR stops at the tag");
+        assert!(q("has:commit login").matches_with_commits(&t, now, &yes));
+        assert!(q("tag:docs").matches_with_commits(&t, now, &|| panic!("not asked")));
     }
 
     #[test]

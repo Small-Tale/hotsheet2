@@ -192,10 +192,11 @@ impl Watch {
             if previous == Some(&current.flags) {
                 continue;
             }
-            // HS2-G8NXNC: the full ticket is read only when a rule names a saved view.
+            // HS2-G8NXNC: the full ticket is read only when a rule names a saved view. Without
+            // the server's repository scan, `has:commit` does not match here (HS2-VPG8XA).
             let ticket = std::cell::OnceCell::new();
             let now = time::OffsetDateTime::now_utc();
-            current.views = hotsheet_notify::views::memberships(&config, &linked, |query| {
+            current.views = hotsheet_notify::views::memberships(&config, &linked, |_, query| {
                 ticket
                     .get_or_init(|| {
                         hotsheet_model::Ulid::from_string(&row.id)

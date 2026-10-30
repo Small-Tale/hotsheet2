@@ -26,12 +26,13 @@ fn wanted(config: &NotificationConfig) -> Vec<&ViewRef> {
 
 /// Which views named by an enabled rule contain the ticket, among the views of `checkouts`
 /// (the checkouts linked to the ticket's store). `contains` tests the ticket against one
-/// view's query, typically `|q| q.matches(&ticket, now)`. A checkout whose settings cannot be
-/// read, or a view that no longer exists, contains nothing.
+/// checkout's view query, typically `|_, q| q.matches(&ticket, now)`; the checkout lets a
+/// caller answer `has:commit` from that project's repository. A checkout whose settings
+/// cannot be read, or a view that no longer exists, contains nothing.
 pub fn memberships(
     config: &NotificationConfig,
     checkouts: &[Checkout],
-    contains: impl Fn(&ViewQuery) -> bool,
+    contains: impl Fn(&Checkout, &ViewQuery) -> bool,
 ) -> Vec<ViewRef> {
     let wanted = wanted(config);
     if wanted.is_empty() {
@@ -53,7 +54,7 @@ pub fn memberships(
             let matched = views
                 .iter()
                 .find(|v| v.id.eq_ignore_ascii_case(&wanted.view))
-                .is_some_and(|v| contains(&ViewQuery::parse(&v.query)));
+                .is_some_and(|v| contains(checkout, &ViewQuery::parse(&v.query)));
             if matched {
                 out.push((*wanted).clone());
             }
@@ -110,7 +111,8 @@ mod tests {
             view: view.into(),
         };
         let asked = std::cell::RefCell::new(Vec::new());
-        let contains = |q: &ViewQuery| {
+        let contains = |c: &Checkout, q: &ViewQuery| {
+            assert_eq!(c.id, checkout.id);
             asked.borrow_mut().push(q.source().to_owned());
             q.source() == "in view"
         };
