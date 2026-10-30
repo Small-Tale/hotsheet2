@@ -55,3 +55,16 @@ test('HS2-39D5YS requires an explicit integration record before worker cleanup',
   assert.match(integrator, /before proposing\s+completion or deleting the worker branch/);
   assert.match(integrator, /integration record is durable/);
 });
+
+test('HS2-MFD44D runs notification process transitions on native Windows', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const start = workflow.indexOf('  windows-credential-store:');
+  const end = workflow.indexOf('\n  check:', start);
+  assert.ok(start >= 0 && end > start, 'the native Windows job must exist');
+  const native = workflow.slice(start, end);
+  assert.match(native, /runs-on: windows-latest/);
+  assert.ok(
+    /run: cargo test -p hotsheet-notify hs2_mfd44d(?:\r?\n|$)/.test(native),
+    'native Windows must run the notifier process regressions',
+  );
+});

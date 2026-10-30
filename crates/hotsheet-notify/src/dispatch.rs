@@ -3,7 +3,6 @@
 //! a blocking worker so retries never hold a request.
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -12,15 +11,13 @@ use hotsheet_sync::LockExt;
 use serde::{Deserialize, Serialize};
 
 use crate::config::NotificationConfig;
+use crate::delivery_log::{self, Journal};
 use crate::message::{EventKind, Message};
 use crate::registry::Registry;
 use crate::render::render;
 use crate::settings::{self, SecretLookup};
 
 pub const LOG_FILE: &str = "notification-deliveries.jsonl";
-/// The log is compacted to [`LOG_KEEP`] records once it passes this many lines.
-const LOG_COMPACT_AT: usize = 1000;
-const LOG_KEEP: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -69,10 +66,6 @@ pub struct DeliveryRecord {
 /// Slugs listed per event kind in a held summary before "and N more".
 const SUMMARY_SLUGS: usize = 10;
 
-/// One process flushes held summaries at a time, so the router and the server's timer never
-/// send the same summary twice.
-static FLUSH: Mutex<()> = Mutex::new(());
-
 /// Retry schedule for retryable failures: one attempt plus one per backoff entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetryPolicy {
@@ -101,7 +94,6 @@ pub struct Dispatcher {
     retry: RetryPolicy,
     sleeper: Sleeper,
     recent: Cooldowns,
-    log_lock: Mutex<()>,
     clock: Clock,
     /// Delivery times per channel, for rate limits when there is no delivery log.
     sent: Mutex<HashMap<String, Vec<time::OffsetDateTime>>>,
@@ -122,7 +114,6 @@ impl Dispatcher {
             recent: Cooldowns::default(),
             clock: Arc::new(time::OffsetDateTime::now_utc),
             sent: Mutex::new(HashMap::new()),
-            log_lock: Mutex::new(()),
         }
     }
 
@@ -187,41 +178,56 @@ impl Dispatcher {
         records
     }
 
-    /// Send each enabled channel that is no longer holding one summary of the deliveries
-    /// its quiet hours or hourly limit held since its last summary (HS2-CFMSP2). The
-    /// delivery log is the record of both, so this survives restarts and separate CLI runs;
-    /// without a log nothing was kept to summarize. A failed summary is logged and not
-    /// retried, so a broken channel is not resent the same summary on every call.
+    /// Send each enabled channel one summary of the deliveries its quiet hours or hourly
+    /// limit held. Process-shared locks and durable exact-ID reservations prevent a server
+    /// timer and serverless writer from sending the same interval (HS2-MFD44D). An
+    /// interrupted send is recovered as unknown/failed, never silently resent.
     pub fn flush_held(&self, config: &NotificationConfig) -> Vec<DeliveryRecord> {
+        match self.try_flush_held(config) {
+            Ok(records) => records,
+            Err(error) => {
+                eprintln!("hotsheet-notify: could not flush held summaries: {error}");
+                Vec::new()
+            }
+        }
+    }
+
+    fn try_flush_held(&self, config: &NotificationConfig) -> std::io::Result<Vec<DeliveryRecord>> {
         let Some(path) = &self.log_path else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
-        let _flushing = FLUSH.lock_or_recover();
-        let records: Vec<DeliveryRecord> = {
-            let _guard = self.log_lock.lock_or_recover();
-            std::fs::read_to_string(path)
-                .unwrap_or_default()
-                .lines()
-                .filter_map(|line| serde_json::from_str(line).ok())
-                .collect()
+        // Lock order is flush -> journal. No journal lock crosses a notifier call.
+        let Some(_flushing) = delivery_log::lock_flush(path)? else {
+            return Ok(Vec::new());
         };
-        let mut sent = Vec::new();
-        for channel in config.channels.iter().filter(|c| c.enabled) {
-            let mine: Vec<&DeliveryRecord> =
-                records.iter().filter(|r| r.channel == channel.id).collect();
-            let since = mine
-                .iter()
-                .rposition(|r| r.event == EventKind::HeldSummary)
-                .map_or(0, |i| i + 1);
-            let held: Vec<&DeliveryRecord> =
-                mine[since..].iter().copied().filter(|r| r.held).collect();
-            if held.is_empty() || self.held(channel, crate::message::Severity::Info).is_some() {
+        let mut sent = Journal::open(path)?.recover_interrupted()?;
+        for channel in config.channels.iter().filter(|channel| channel.enabled) {
+            if self.held(channel, crate::message::Severity::Info).is_some() {
                 continue;
             }
-            let message = held_summary(&held);
-            sent.push(self.deliver(config, &channel.id, None, &message));
+            let (message, record) = {
+                let mut journal = Journal::open(path)?;
+                let held = journal.held(&channel.id);
+                if held.is_empty() {
+                    continue;
+                }
+                let message = held_summary(&held.iter().collect::<Vec<_>>());
+                let record = self.record(
+                    &message,
+                    &channel.id,
+                    &channel.notifier,
+                    None,
+                    Outcome::Failed,
+                );
+                // Failure to persist/sync the reservation stops before any transport work.
+                journal.reserve(&record, &held)?;
+                (message, record)
+            };
+            let record = self.attempt_delivery(config, &channel.id, &message, record);
+            Journal::open(path)?.append_record(&record)?;
+            sent.push(record);
         }
-        sent
+        Ok(sent)
     }
 
     /// Deliver to one named channel regardless of rules or its enabled flag (a test or an
@@ -259,11 +265,9 @@ impl Dispatcher {
         let since = now - time::Duration::hours(1);
         let count = match &self.log_path {
             Some(path) => {
-                let _guard = self.log_lock.lock_or_recover();
-                std::fs::read_to_string(path)
+                delivery_log::read_records(path)
                     .unwrap_or_default()
-                    .lines()
-                    .filter_map(|line| serde_json::from_str::<DeliveryRecord>(line).ok())
+                    .into_iter()
                     // A held summary reports on the limit; counting it would hold the next
                     // message and start another summary.
                     .filter(|r| {
@@ -318,14 +322,13 @@ impl Dispatcher {
         let Some(path) = &self.log_path else {
             return false;
         };
-        let _guard = self.log_lock.lock_or_recover();
-        let Ok(text) = std::fs::read_to_string(path) else {
+        let Ok(records) = delivery_log::read_records(path) else {
             return false;
         };
         let now = (self.clock)();
-        text.lines()
+        records
+            .into_iter()
             .rev()
-            .filter_map(|line| serde_json::from_str::<DeliveryRecord>(line).ok())
             .filter(|r| {
                 r.channel == channel
                     && r.outcome == Outcome::Delivered
@@ -348,16 +351,29 @@ impl Dispatcher {
         let channel = config
             .channel(channel_id)
             .expect("caller checked the channel");
-        let mut record = self.record(
+        let record = self.record(
             message,
             channel_id,
             &channel.notifier,
             rule,
             Outcome::Failed,
         );
+        self.finish(self.attempt_delivery(config, channel_id, message, record))
+    }
+
+    fn attempt_delivery(
+        &self,
+        config: &NotificationConfig,
+        channel_id: &str,
+        message: &Message,
+        mut record: DeliveryRecord,
+    ) -> DeliveryRecord {
+        let channel = config
+            .channel(channel_id)
+            .expect("caller checked the channel");
         let Some(notifier) = self.registry.get(&channel.notifier) else {
             record.error = Some(format!("notifier '{}' is not installed", channel.notifier));
-            return self.finish(record);
+            return record;
         };
         if let Some(current) = notifier.content_digest() {
             let refusal = match (current, channel.plugin_digest.as_deref()) {
@@ -377,7 +393,7 @@ impl Dispatcher {
             };
             if let Some(refusal) = refusal {
                 record.error = Some(refusal);
-                return self.finish(record);
+                return record;
             }
         }
         let descriptor = notifier.descriptor();
@@ -389,7 +405,7 @@ impl Dispatcher {
             Ok(resolved) => resolved,
             Err(error) => {
                 record.error = Some(error);
-                return self.finish(record);
+                return record;
             }
         };
         let rendered = render(message, &descriptor.capabilities);
@@ -409,13 +425,13 @@ impl Dispatcher {
                     record.outcome = Outcome::Delivered;
                     record.provider_id = provider_id;
                     record.error = None;
-                    return self.finish(record);
+                    return record;
                 }
                 Err(error) => {
                     record.error = Some(error.message.clone());
                     match backoff.next() {
                         Some(delay) if error.retryable => (self.sleeper)(*delay),
-                        _ => return self.finish(record),
+                        _ => return record,
                     }
                 }
             }
@@ -454,8 +470,7 @@ impl Dispatcher {
 
     fn finish(&self, record: DeliveryRecord) -> DeliveryRecord {
         if let Some(path) = &self.log_path {
-            let _guard = self.log_lock.lock_or_recover();
-            if let Err(error) = append_log(path, &record) {
+            if let Err(error) = delivery_log::append_record(path, &record) {
                 eprintln!(
                     "hotsheet-notify: could not write {}: {error}",
                     path.display()
@@ -527,39 +542,12 @@ fn dedupe_hash(key: &str) -> String {
         .collect()
 }
 
-fn append_log(path: &Path, record: &DeliveryRecord) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    writeln!(
-        file,
-        "{}",
-        serde_json::to_string(record).expect("serializable")
-    )?;
-    drop(file);
-    let text = std::fs::read_to_string(path)?;
-    let lines: Vec<&str> = text.lines().collect();
-    if lines.len() > LOG_COMPACT_AT {
-        let keep = lines[lines.len() - LOG_KEEP..].join("\n") + "\n";
-        let tmp = path.with_extension(format!("{}.tmp", ulid::Ulid::new()));
-        std::fs::write(&tmp, keep)?;
-        std::fs::rename(&tmp, path)?;
-    }
-    Ok(())
-}
-
 /// The newest `limit` delivery records, newest first. Unparseable lines are skipped.
 pub fn recent_deliveries(home: &Path, limit: usize) -> Vec<DeliveryRecord> {
-    let Ok(text) = std::fs::read_to_string(home.join(LOG_FILE)) else {
-        return Vec::new();
-    };
-    text.lines()
+    delivery_log::read_records(&home.join(LOG_FILE))
+        .unwrap_or_default()
+        .into_iter()
         .rev()
-        .filter_map(|line| serde_json::from_str(line).ok())
         .take(limit)
         .collect()
 }
@@ -1135,17 +1123,17 @@ mod tests {
         let path = home.path().join(LOG_FILE);
         let h = harness(vec![ok()]);
         let mut record = h.dispatcher.dispatch(&config(0), &blocked()).remove(0);
-        for i in 0..=LOG_COMPACT_AT {
+        for i in 0..=delivery_log::COMPACT_AT {
             record.id = i.to_string();
-            append_log(&path, &record).unwrap();
+            delivery_log::append_record(&path, &record).unwrap();
         }
         assert_eq!(
             std::fs::read_to_string(&path).unwrap().lines().count(),
-            LOG_KEEP
+            delivery_log::KEEP
         );
         assert_eq!(
             recent_deliveries(home.path(), 1)[0].id,
-            LOG_COMPACT_AT.to_string()
+            delivery_log::COMPACT_AT.to_string()
         );
     }
 }

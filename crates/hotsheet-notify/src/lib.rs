@@ -10,6 +10,7 @@ pub mod admin;
 pub mod builtin;
 pub mod capability;
 pub mod config;
+mod delivery_log;
 pub mod dispatch;
 pub mod external;
 pub mod http;

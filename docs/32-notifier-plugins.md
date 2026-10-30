@@ -255,6 +255,22 @@ tail is reported. A plugin that outlives its timeout is killed.
   is the watermark for the next one, so it survives restarts. It does not count toward
   `max_per_hour`. A failed summary is logged and not resent. Without a delivery log (a
   host with no machine home) nothing is kept to summarize.
+  **Process coordination (HS2-MFD44D):** one process reserves a summary before calling
+  its notifier. A concurrent flush skips the busy reservation; ordinary writes continue,
+  including a ticket write synchronously triggered by a custom notifier. The private
+  journal entry records the exact held delivery IDs, so a new hold arriving during a
+  send remains pending for the next summary. Reservation persistence is synced before
+  transport; a lock, journal or reservation error prevents that summary from being sent.
+  After process exit, the next flush records an unresolved reservation as failed with
+  an explicit unknown/interrupted outcome and does not resend it, even if its channel
+  was disabled or removed. This is at-most-once summary admission, not a guarantee of
+  exactly-once provider delivery: an interrupted send may or may not have reached the
+  provider. Bounded transport retries retain their existing semantics. Legacy delivery
+  records remain readable; tagged private reservation entries are not public delivery
+  records. Process-shared journal locks serialize append/compaction, retaining any
+  reservation needed by a retained held/final record and every unresolved reservation.
+  All active dispatchers must use the updated implementation; an older running binary
+  does not participate in these locks.
 - **Cooldown.** With a dedupe key and `cooldown_seconds > 0`, a repeat to the same
   channel inside the window is recorded as `suppressed` and not sent. The check reads
   memory and the delivery log, so it survives a server restart and separate CLI runs.

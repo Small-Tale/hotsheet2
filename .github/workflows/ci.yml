@@ -133,6 +133,12 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-ticketing --test file_lock_process
 
+      # HS2-MFD44D: shared lock coverage does not prove notifier journal transitions.
+      - name: Exercise held-summary process coordination on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-notify hs2_mfd44d
+
       - name: Exercise native coordination waits reconnect and handoff on Windows
         env:
           CC: cl
