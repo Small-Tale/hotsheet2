@@ -122,9 +122,28 @@ The delivery record notes `truncated` and `omitted_attachments`.
   - `statuses` matches the new status;
   - `categories` and `priorities` match the ticket's values;
   - `min_severity` sets the lowest severity that passes;
-  - `text` matches a case-insensitive substring of the ticket slug, title, or a tag.
-- Any ticket filter, including `text`, requires ticket facts. Rules that name a saved
-  view are HS2-G8NXNC.
+  - `text` matches a case-insensitive substring of the ticket slug, title, or a tag;
+  - `views` lists saved views as `{"checkout": "<checkout id>", "view": "<view id>"}` and
+    matches a ticket in any one of them (HS2-G8NXNC, below).
+- Any ticket filter, including `text` and `views`, requires ticket facts.
+- **Saved-view filters (HS2-G8NXNC).** The process that notices a ticket change (the
+  server router, or a serverless `hotsheet-cli` or `hotsheet-mcp` write) looks up each
+  view an enabled rule names among the checkouts linked to the ticket's store, tests the
+  ticket against the view's query (`hotsheet_ticketing::saved_views`), and records the
+  views it is in on the message's ticket facts. A view that was deleted, or a checkout that
+  is not linked to the store, contains nothing. The query language is the web client's:
+  - `AND`, `OR`, `NOT`, and parentheses, with implicit `AND`. Without any of them the
+    plain words form one phrase, as in the search bar; with an operator, each word is a
+    term.
+  - `tag:`, `is:` (`up-next`, `active`, `needs-review`, `open`, `closed`, `duplicate`,
+    and the statuses), `has:attachment`, `has:media-annotation`, `attachment:` with `*`
+    globs, and `created|updated|completed|verified|started|archived-before|after:` dates.
+  - Any other term is a case-insensitive substring of the slug, title, tags, details,
+    notes, or attachment names.
+  - Differences from the client: a date written without a zone is read as UTC, and
+    locale-ordered dates are text. `has:commit` never matches, because it needs a repository
+    scan (HS2-VPG8XA). `has:`, `attachment:`, and date terms inside a Boolean expression are
+    read structurally here, where the client still reads them as text (HS2-DE9CMP).
 - A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a fixed `utc_offset`
   such as `+09:00`, and `allow_errors`, default true) and `max_per_hour`. Adjust the
   offset when daylight saving time changes.
@@ -220,7 +239,7 @@ tail is reported. A plugin that outlives its timeout is killed.
   messages still go out while `allow_errors` holds. Past `max_per_hour` deliveries in
   the last hour, a delivery is `suppressed` with the reason. The count reads the
   delivery log, so the limit survives restarts. Tests and explicit sends bypass both.
-  Batching held messages into a summary is HS2-G8NXNC.
+  Batching held messages into a summary is HS2-CFMSP2.
 - **Cooldown.** With a dedupe key and `cooldown_seconds > 0`, a repeat to the same
   channel inside the window is recorded as `suppressed` and not sent. The check reads
   memory and the delivery log, so it survives a server restart and separate CLI runs.
@@ -358,7 +377,7 @@ idempotent.
 | `channel remove <id>`                                                                                                                               | `DELETE /notification-channels/{id}`                         |
 | `channel trust <id>` (approve the external plugin as it is now)                                                                                     | `POST /notification-channels/{id}/trust`                     |
 | `channel test <id> [--json]`                                                                                                                        | `POST /notification-channels/{id}/test`                      |
-| `rule add <id> --event … --channel … [filters incl. --text] [--cooldown s]`                                                                         | `PUT /notification-rules/{id}`                               |
+| `rule add <id> --event … --channel … [filters incl. --text, --view] [--cooldown s]`                                                                 | `PUT /notification-rules/{id}`                               |
 | `rule remove <id>`                                                                                                                                  | `DELETE /notification-rules/{id}`                            |
 | `send --title … [--body\|--body-file] [--channel] [--event] [--attach]…`                                                                            | `POST /notifications` (published events route through rules) |
 | `link-base [URL] [--clear]` (show, set, or clear the link origin)                                                                                   | `PUT /notification-link-base` (`{"url": …}` or `null`)       |
@@ -400,7 +419,9 @@ A credential input never shows a stored value ("Stored; leave empty to keep it")
 written only through the secret route. Quiet hours and the hourly limit sit below.
 
 **Rule dialog.** Choose events and channels with checkboxes; filter by ticket text, tags,
-statuses, and projects, a minimum severity, and a cooldown.
+statuses, and projects, a minimum severity, and a cooldown. Filters the dialog does not
+show (categories, priorities, and saved views) are kept when a rule is edited, and saved
+views appear in the rule summary (HS2-G8NXNC). Choosing them in the dialog is HS2-DNQFB8.
 
 **Saving and refresh.** Both dialogs submit explicitly, because the server validates the
 whole channel or rule. A refusal stays in the dialog with its reason. The category
@@ -463,7 +484,9 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | MMS image attachments through Twilio                                       | Planned | HS2-K57DK0 |
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
 | Text, checkout, quiet-hour, and rate-limit filters                         | Shipped | HS2-4JG95G |
-| Saved-view rules and batched summaries of held messages                    | Planned | HS2-G8NXNC |
+| Saved-view rules                                                           | Shipped | HS2-G8NXNC |
+| Batched summaries of held messages                                         | Planned | HS2-CFMSP2 |
+| Choosing saved views, categories, and priorities in the web rule dialog    | Planned | HS2-DNQFB8 |
 | Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server (CLI)                                 | Shipped | HS2-8VAXXA |

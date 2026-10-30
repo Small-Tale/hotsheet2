@@ -189,11 +189,16 @@ export function channelIdFrom(label: string, taken: readonly string[]): string {
   return id;
 }
 
-/** Read the rule form into a request body, or explain the first invalid value. */
+/**
+ * Read the rule form into a request body, or explain the first invalid value. Filters the form
+ * does not show (categories, priorities, saved views) are kept from `kept`, the edited rule's
+ * filter, so saving here never drops them (HS2-G8NXNC).
+ */
 export function ruleFromForm(
   values: FormValues,
   eventValues: readonly string[],
   channelValues: readonly string[],
+  kept?: NotificationRuleFilter,
 ): Omit<NotificationRule, 'id'> | { error: string } {
   if (eventValues.length === 0) return { error: 'Choose at least one event.' };
   if (channelValues.length === 0) return { error: 'Choose at least one channel.' };
@@ -201,6 +206,9 @@ export function ruleFromForm(
   const cooldown = cooldownText ? Number(cooldownText) : 0;
   if (!Number.isInteger(cooldown) || cooldown < 0) return { error: 'Cooldown must be a whole number of seconds.' };
   const filter: NotificationRuleFilter = {};
+  if (kept?.categories?.length) filter.categories = kept.categories;
+  if (kept?.priorities?.length) filter.priorities = kept.priorities;
+  if (kept?.views?.length) filter.views = kept.views;
   const tags = list(text(values, RULE_FIELD.tags)),
     statuses = list(text(values, RULE_FIELD.statuses)),
     projects = list(text(values, RULE_FIELD.projects)),
@@ -232,6 +240,7 @@ export function ruleSummary(rule: NotificationRule, channels: readonly Notificat
   if (f?.tags?.length) filters.push(`tag ${f.tags.join(', ')}`);
   if (f?.statuses?.length) filters.push(`status ${f.statuses.join(', ')}`);
   if (f?.projects?.length) filters.push(`project ${f.projects.join(', ')}`);
+  if (f?.views?.length) filters.push(`view ${f.views.map((v) => `${v.checkout}/${v.view}`).join(', ')}`);
   if (f?.min_severity) filters.push(`${f.min_severity} or higher`);
   if (rule.cooldown_seconds) filters.push(`cooldown ${rule.cooldown_seconds}s`);
   return `To ${names.join(', ')}${filters.length ? ` · ${filters.join(' · ')}` : ''}`;

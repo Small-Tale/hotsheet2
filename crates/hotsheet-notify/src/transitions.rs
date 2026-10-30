@@ -23,6 +23,8 @@ pub struct TicketState {
     pub tags: Vec<String>,
     pub blocked_reason: Option<String>,
     pub flags: TicketFlags,
+    /// Saved views named by a rule that contain the ticket ([`crate::views::memberships`]).
+    pub views: Vec<crate::config::ViewRef>,
 }
 
 /// Where the ticket lives: the store id (rule `projects` and dedupe keys), linked checkout
@@ -86,6 +88,7 @@ pub fn transition_messages(
         category: Some(current.category.clone()),
         priority: Some(current.priority.clone()),
         tags: current.tags.clone(),
+        views: current.views.clone(),
     };
     let base = |kind: EventKind, title: String, severity: Severity, key: String| {
         let mut message = Message::new(kind, title);
@@ -166,6 +169,7 @@ mod tests {
             tags: vec!["release".into()],
             blocked_reason: Some(" waiting on <review> ".into()),
             flags: f,
+            views: Vec::new(),
         }
     }
 

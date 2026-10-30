@@ -209,7 +209,8 @@ export function createNotificationSettings(dependencies: { api: () => Notificati
     const editor = ruleEditor.value,
       api = dependencies.api();
     if (!editor || !api) return;
-    const rule = ruleFromForm(values, events, channels);
+    const kept = editor.id ? config.value?.rules.find((item) => item.id === editor.id)?.filter : undefined;
+    const rule = ruleFromForm(values, events, channels, kept);
     if ('error' in rule) {
       ruleEditor.value = { ...editor, error: rule.error };
       return;

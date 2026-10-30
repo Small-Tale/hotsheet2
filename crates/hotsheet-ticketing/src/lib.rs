@@ -34,6 +34,7 @@ pub mod provider;
 pub mod provider_outbox;
 pub mod registry;
 pub mod roster;
+pub mod saved_views;
 pub mod secrets;
 pub mod settings;
 pub mod store;

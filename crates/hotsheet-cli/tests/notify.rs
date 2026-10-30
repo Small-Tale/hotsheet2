@@ -923,3 +923,132 @@ fn hs2_8vaxxa_cli_writes_notify_without_a_server_and_defer_to_a_live_one() {
         "the server would send this"
     );
 }
+
+/// HS2-G8NXNC: a rule naming a checkout's saved view forwards only transitions of tickets in
+/// that view, evaluated by the serverless CLI write path; `--view` resolves and checks the view.
+#[test]
+fn hs2_g8nxnc_saved_view_rules_forward_only_tickets_in_the_view() {
+    let env = env();
+    let (base, received) = loopback();
+    let root = env.home.parent().unwrap();
+    let store = root.join("demo.hs2");
+    let project = root.join("demo");
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(env.home.join("checkouts.json"))
+            .register(&project, None, None, vec![store.clone()])
+            .unwrap();
+    hotsheet_ticketing::saved_views::replace(
+        &checkout.settings(),
+        &[hotsheet_ticketing::saved_views::SavedView {
+            id: "started-docs".into(),
+            name: "Started docs".into(),
+            query: "tag:docs AND is:started".into(),
+        }],
+    )
+    .unwrap();
+    let tickets = || {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.arg("--test-fixture-credentials")
+            .env("HOTSHEET_HOME", &env.home)
+            .env_remove("HOTSHEET_ACTOR_ROLE")
+            .env_remove("HOTSHEET_ACTOR_ID")
+            .env_remove("HOTSHEET_STORE")
+            .arg("-C")
+            .arg(&store);
+        cmd
+    };
+    hs(&env)
+        .args(["channel", "add", "hook", "--notifier", "webhook"])
+        .assert()
+        .success();
+    hs(&env)
+        .args(["channel", "secret", "hook", "url"])
+        .write_stdin(format!("{base}/hook\n"))
+        .assert()
+        .success();
+    let rule = |view: &str| {
+        let mut cmd = hs(&env);
+        cmd.args([
+            "rule",
+            "add",
+            "docs",
+            "--event",
+            "ticket.status_changed",
+            "--channel",
+            "hook",
+            "--view",
+            view,
+        ]);
+        cmd
+    };
+    rule("no-slash")
+        .assert()
+        .failure()
+        .stderr(contains("CHECKOUT/VIEW"));
+    rule(&format!("{}/missing", checkout.id))
+        .assert()
+        .failure()
+        .stderr(contains("saved views: started-docs"));
+    // The alias resolves to the checkout id; the view id is matched ignoring case.
+    rule("demo/STARTED-DOCS").assert().success();
+    let config = std::fs::read_to_string(env.home.join("notifications.json")).unwrap();
+    let config: Value = serde_json::from_str(&config).unwrap();
+    assert_eq!(
+        config["rules"][0]["filter"]["views"],
+        serde_json::json!([{"checkout": checkout.id, "view": "started-docs"}])
+    );
+
+    let slug = |out: Vec<u8>| {
+        String::from_utf8(out)
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    };
+    let docs = slug(
+        tickets()
+            .args(["new", "Write the guide", "--tag", "docs"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    );
+    let other = slug(
+        tickets()
+            .args(["new", "Fix a crash"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    );
+    tickets()
+        .args(["edit", &other, "--status", "started"])
+        .assert()
+        .success();
+    tickets()
+        .args(["edit", &docs, "--status", "started"])
+        .assert()
+        .success();
+    let request = received
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .unwrap();
+    let body: Value = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(body["title"], format!("{docs} is now Started"));
+    // Completing leaves the view (it is no longer started), so nothing more is sent.
+    tickets()
+        .args(["edit", &docs, "--status", "completed"])
+        .assert()
+        .success();
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_millis(800))
+            .is_err(),
+        "only the docs ticket's start is in the view"
+    );
+}

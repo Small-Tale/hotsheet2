@@ -113,6 +113,10 @@ pub struct TicketFacts {
     pub priority: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Saved views a rule names that the ticket is in, filled by the process that noticed the
+    /// change (HS2-G8NXNC).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<crate::config::ViewRef>,
 }
 
 /// One binary attachment. Rendering may drop it when a channel cannot carry it.

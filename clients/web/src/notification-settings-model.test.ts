@@ -163,6 +163,24 @@ describe('rules (HS2-DPBJJA)', () => {
     });
   });
 
+  it('keeps filters the form does not show when a rule is edited (HS2-G8NXNC)', () => {
+    const kept = {
+      tags: ['old'],
+      categories: ['bug'],
+      priorities: ['high'],
+      views: [{ checkout: 'web-1a2b', view: 'needs-docs' }],
+    };
+    expect(ruleFromForm({ [RULE_FIELD.tags]: 'new' }, ['ticket.blocked'], ['phone'], kept)).toMatchObject({
+      filter: {
+        tags: ['new'],
+        categories: ['bug'],
+        priorities: ['high'],
+        views: [{ checkout: 'web-1a2b', view: 'needs-docs' }],
+      },
+    });
+    expect(ruleFromForm({}, ['ticket.blocked'], ['phone'], { tags: ['old'] })).toMatchObject({ filter: undefined });
+  });
+
   it('summarizes a rule with channel labels and filters', () => {
     expect(
       ruleSummary(
@@ -171,12 +189,16 @@ describe('rules (HS2-DPBJJA)', () => {
           events: ['ticket.blocked'],
           channels: ['phone', 'gone'],
           enabled: true,
-          filter: { tags: ['release'], min_severity: 'error' },
+          filter: {
+            tags: ['release'],
+            min_severity: 'error',
+            views: [{ checkout: 'web-1a2b', view: 'needs-docs' }],
+          },
           cooldown_seconds: 60,
         },
         [phone],
       ),
-    ).toBe('To My Phone, gone · tag release · error or higher · cooldown 60s');
+    ).toBe('To My Phone, gone · tag release · view web-1a2b/needs-docs · error or higher · cooldown 60s');
   });
 
   it('maps notifiers to icons with a plugin fallback', () => {

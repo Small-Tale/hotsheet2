@@ -1106,6 +1106,12 @@ export interface NotificationRuleFilter {
   priorities?: string[];
   min_severity?: 'info' | 'success' | 'warning' | 'error';
   text?: string;
+  /** Saved views the ticket must be in, any one (HS2-G8NXNC). */
+  views?: NotificationViewRef[];
+}
+export interface NotificationViewRef {
+  checkout: string;
+  view: string;
 }
 export interface NotificationRule {
   id: string;

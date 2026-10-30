@@ -178,7 +178,7 @@ impl Watch {
         let mut failed = Vec::new();
         for row in &after {
             let previous = self.before.get(&row.id);
-            let current = TicketState {
+            let mut current = TicketState {
                 id: row.id.clone(),
                 slug: row.slug.clone(),
                 title: row.title.clone(),
@@ -187,10 +187,24 @@ impl Watch {
                 tags: row.tags.clone(),
                 blocked_reason: row.blocked_reason.clone(),
                 flags: flags(row),
+                views: Vec::new(),
             };
             if previous == Some(&current.flags) {
                 continue;
             }
+            // HS2-G8NXNC: the full ticket is read only when a rule names a saved view.
+            let ticket = std::cell::OnceCell::new();
+            let now = time::OffsetDateTime::now_utc();
+            current.views = hotsheet_notify::views::memberships(&config, &linked, |query| {
+                ticket
+                    .get_or_init(|| {
+                        hotsheet_model::Ulid::from_string(&row.id)
+                            .ok()
+                            .and_then(|id| self.store.read_ticket(&id).ok())
+                    })
+                    .as_ref()
+                    .is_some_and(|t| query.matches(t, now))
+            });
             for mut message in transition_messages(previous, &current, previous.is_none(), &origin)
             {
                 if let Some(base) = &base {

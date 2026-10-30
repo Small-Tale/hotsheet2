@@ -19,6 +19,7 @@ use hotsheet_notify::{
     Registry, Severity, TicketFacts,
 };
 use hotsheet_sync::LockExt;
+use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::ops::TicketQuery;
 use time::OffsetDateTime;
 use tokio::sync::broadcast::error::RecvError;
@@ -245,7 +246,7 @@ pub fn route_change_event(state: &AppState, event: &ChangeEvent) -> Vec<Delivery
                 EventKind::TicketFeedbackNeeded,
                 EventKind::TicketBlocked,
             ]) {
-                messages.extend(ticket_messages(state, event));
+                messages.extend(ticket_messages(state, &config, event));
             }
             messages
         }
@@ -315,11 +316,12 @@ fn project_name(project: &str) -> String {
         .unwrap_or_else(|| project.to_string())
 }
 
-/// The checkouts that link `root` (a store or project path): their ids, for rule
-/// `projects` filters, and the first alias, as the project's display name (HS2-4JG95G).
-fn linked_checkouts(state: &AppState, root: &std::path::Path) -> (Vec<String>, Option<String>) {
-    let checkouts = state.checkout_registry.list().unwrap_or_default();
-    let linked: Vec<_> = checkouts
+/// The checkouts that link `root` (a store or project path).
+fn linked(state: &AppState, root: &std::path::Path) -> Vec<Checkout> {
+    state
+        .checkout_registry
+        .list()
+        .unwrap_or_default()
         .into_iter()
         .filter(|c| {
             crate::watcher::same_path(std::path::Path::new(&c.root), root)
@@ -327,7 +329,13 @@ fn linked_checkouts(state: &AppState, root: &std::path::Path) -> (Vec<String>, O
                     .iter()
                     .any(|s| crate::watcher::same_path(std::path::Path::new(s), root))
         })
-        .collect();
+        .collect()
+}
+
+/// The checkouts that link `root`: their ids, for rule `projects` filters, and the first
+/// alias, as the project's display name (HS2-4JG95G).
+fn linked_checkouts(state: &AppState, root: &std::path::Path) -> (Vec<String>, Option<String>) {
+    let linked = linked(state, root);
     let alias = linked
         .iter()
         .map(|c| c.alias.trim())
@@ -423,10 +431,15 @@ pub fn ticket_state(ticket: &Ticket) -> TicketState {
         tags: ticket.tags.clone(),
         blocked_reason: ticket.blocked_reason.clone(),
         flags: flags_of(ticket),
+        views: Vec::new(),
     }
 }
 
-fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
+fn ticket_messages(
+    state: &AppState,
+    config: &NotificationConfig,
+    event: &ChangeEvent,
+) -> Vec<Message> {
     let Ok(id) = Ulid::from_string(&event.id) else {
         return Vec::new();
     };
@@ -436,7 +449,12 @@ fn ticket_messages(state: &AppState, event: &ChangeEvent) -> Vec<Message> {
     let Ok(ticket) = entry.store.read_ticket(&id) else {
         return Vec::new();
     };
-    let current = ticket_state(&ticket);
+    let mut current = ticket_state(&ticket);
+    // HS2-G8NXNC: which saved views a rule names that this ticket is in.
+    let checkouts = linked(state, entry.store.root());
+    let at = now();
+    current.views =
+        hotsheet_notify::views::memberships(config, &checkouts, |q| q.matches(&ticket, at));
     let previous = {
         let mut snapshots = state.notification_delivery.snapshots.lock_or_recover();
         if !snapshots.seeded.contains(&event.store) {

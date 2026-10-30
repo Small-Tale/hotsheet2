@@ -128,6 +128,23 @@ pub struct RuleFilter {
     /// Case-insensitive substring of the ticket's slug, title, or a tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// The ticket must be in at least one of these saved views (HS2-G8NXNC).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<ViewRef>,
+}
+
+/// A checkout's saved view, by checkout id and view id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ViewRef {
+    pub checkout: String,
+    pub view: String,
+}
+
+impl ViewRef {
+    /// The same view: checkout ids exactly, view ids ignoring case (they are unique that way).
+    pub fn same(&self, other: &ViewRef) -> bool {
+        self.checkout == other.checkout && self.view.eq_ignore_ascii_case(&other.view)
+    }
 }
 
 /// Routes matching events to channels.
@@ -184,6 +201,7 @@ impl Rule {
             && f.statuses.is_empty()
             && f.categories.is_empty()
             && f.priorities.is_empty()
+            && f.views.is_empty()
             && text.is_none());
         if !ticket_filters {
             return true;
@@ -199,6 +217,10 @@ impl Rule {
             && any_eq(&f.statuses, ticket.status.as_deref())
             && any_eq(&f.categories, ticket.category.as_deref())
             && any_eq(&f.priorities, ticket.priority.as_deref())
+            && (f.views.is_empty()
+                || f.views
+                    .iter()
+                    .any(|v| ticket.views.iter().any(|m| m.same(v))))
             && text.is_none_or(|needle| {
                 ticket.slug.to_lowercase().contains(&needle)
                     || ticket
@@ -399,6 +421,17 @@ impl NotificationConfig {
                     rule.id
                 )));
             }
+            if rule
+                .filter
+                .views
+                .iter()
+                .any(|v| v.checkout.trim().is_empty() || v.view.trim().is_empty())
+            {
+                return Err(invalid(format!(
+                    "rule '{}': a saved view needs a checkout and a view id",
+                    rule.id
+                )));
+            }
             for channel in &rule.channels {
                 if !seen.contains(channel.as_str()) {
                     return Err(invalid(format!(
@@ -550,6 +583,27 @@ mod tests {
         assert!(!by_checkout.matches(&m));
         m.checkouts = vec!["other-1".into(), "hotsheet2-ab12".into()];
         assert!(by_checkout.matches(&m));
+    }
+
+    #[test]
+    fn hs2_g8nxnc_view_filters_need_a_recorded_membership() {
+        let view = |checkout: &str, view: &str| ViewRef {
+            checkout: checkout.into(),
+            view: view.into(),
+        };
+        let mut r = rule(vec![EventKind::TicketStatusChanged]);
+        r.filter.views = vec![view("co-1", "Release"), view("co-2", "docs")];
+        let mut m = ticket_message("started", &[]);
+        assert!(!r.matches(&m), "no membership recorded");
+        m.ticket.as_mut().unwrap().views = vec![view("co-1", "other"), view("co-3", "docs")];
+        assert!(!r.matches(&m), "same view id in another checkout");
+        m.ticket.as_mut().unwrap().views = vec![view("co-1", "release")];
+        assert!(r.matches(&m), "any one view, ids ignoring case");
+        r.filter.tags = vec!["urgent".into()];
+        assert!(!r.matches(&m), "other filters still apply");
+        m.ticket = None;
+        r.filter.tags.clear();
+        assert!(!r.matches(&m), "an event without a ticket is in no view");
     }
 
     #[test]

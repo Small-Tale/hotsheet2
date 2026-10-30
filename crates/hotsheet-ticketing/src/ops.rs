@@ -367,7 +367,7 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
     Ok(tickets)
 }
 
-fn filename_glob_matches(pattern: &str, filename: &str) -> bool {
+pub(crate) fn filename_glob_matches(pattern: &str, filename: &str) -> bool {
     let pattern = pattern.to_lowercase();
     let filename = filename.to_lowercase();
     if !pattern.contains('*') {
@@ -439,7 +439,7 @@ pub fn resolve(store: &FsStore, needle: &str) -> Result<Option<Ticket>, StoreErr
     store.find_ticket_by_slug(needle)
 }
 
-fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
+pub(crate) fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
     t.slug.to_lowercase().contains(needle_lower)
         || t.title.to_lowercase().contains(needle_lower)
         || t.tags

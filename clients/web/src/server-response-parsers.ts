@@ -977,6 +977,7 @@ export const parseNotificationChannel = shape<NotificationChannel>(
 );
 const isSeverity: Check = (field) =>
   field === 'info' || field === 'success' || field === 'warning' || field === 'error';
+const viewRef = shape<{ checkout: string; view: string }>('saved view', { checkout: isString, view: isString });
 const parseRuleFilter = shape<NotificationRuleFilter>(
   'notification rule filter',
   {},
@@ -988,6 +989,7 @@ const parseRuleFilter = shape<NotificationRuleFilter>(
     priorities: isStringArray,
     min_severity: isSeverity,
     text: isString,
+    views: listOf(viewRef.check),
   },
 );
 export const parseNotificationRule = shape<NotificationRule>(

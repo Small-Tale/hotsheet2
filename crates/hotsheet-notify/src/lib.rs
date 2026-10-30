@@ -21,9 +21,10 @@ pub mod render;
 pub mod settings;
 pub mod testing;
 pub mod transitions;
+pub mod views;
 
 pub use capability::{BodyFormat, Capabilities, NotifierDescriptor, SettingField, SettingKind};
-pub use config::{ChannelConfig, ConfigError, NotificationConfig, Rule, RuleFilter};
+pub use config::{ChannelConfig, ConfigError, NotificationConfig, Rule, RuleFilter, ViewRef};
 pub use dispatch::{DeliveryRecord, Dispatcher, Outcome, recent_deliveries};
 pub use message::{Attachment, EventKind, Message, Severity, TicketFacts};
 pub use notifier::{DeliveryError, Notifier};

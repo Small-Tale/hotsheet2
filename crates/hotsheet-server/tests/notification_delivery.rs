@@ -850,3 +850,80 @@ async fn a_halted_session_with_a_claim_reports_its_project() {
     );
     call(&router, "DELETE", "/terminals/halt-me", None).await;
 }
+
+/// HS2-G8NXNC: a rule naming a linked checkout's saved view (set through the REST route)
+/// forwards a ticket transition only when the server router finds the ticket in that view.
+#[tokio::test(flavor = "multi_thread")]
+async fn saved_view_rules_forward_only_tickets_in_the_view() {
+    let mut h = harness();
+    let project = h._dir.path().join("rocket-src");
+    std::fs::create_dir_all(&project).unwrap();
+    let registry_path = h._dir.path().join("checkouts.json");
+    let checkout = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&project, None, None, vec![h._dir.path().join("demo.hs2")])
+        .unwrap();
+    hotsheet_ticketing::saved_views::replace(
+        &checkout.settings(),
+        &[hotsheet_ticketing::saved_views::SavedView {
+            id: "release".into(),
+            name: "Release".into(),
+            query: "tag:release OR \"ship it\"".into(),
+        }],
+    )
+    .unwrap();
+    let state = h.state.clone().with_checkout_registry(&registry_path);
+    let router = app(state.clone());
+    configure(&router, json!(["ticket.status_changed"])).await;
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/notification-rules/everything",
+        Some(
+            json!({"events":["ticket.status_changed"],"channels":["phone"],
+                    "filter":{"views":[{"checkout": checkout.id, "view":"release"}]}}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["filter"]["views"][0]["view"], "release", "{body}");
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/notification-rules/broken",
+        Some(
+            json!({"events":["ticket.status_changed"],"channels":["phone"],
+                    "filter":{"views":[{"checkout": "", "view":"release"}]}}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let mut ids = Vec::new();
+    for title in ["Fix a crash", "Ship it this week"] {
+        let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title": title}))).await;
+        ids.push((
+            created["id"].as_str().unwrap().to_string(),
+            created["slug"].as_str().unwrap().to_string(),
+        ));
+    }
+    let _router_task = hotsheet_server::notification_router::spawn_notification_router(state).await;
+    for (id, _) in &ids {
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/tickets/{id}"),
+            Some(json!({"status":"started"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let sent = next(&mut h).await;
+    let expected = format!("{} is now Started", ids[1].1);
+    assert_eq!(header(&sent, "Title"), Some(expected.as_str()));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(800), h.received.recv())
+            .await
+            .is_err(),
+        "the ticket outside the view sends nothing"
+    );
+}

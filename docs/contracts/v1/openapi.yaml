@@ -18095,6 +18095,24 @@ components:
         text:
           type: string
           description: Case-insensitive substring of the ticket slug, title, or a tag.
+        views:
+          type: array
+          description: The ticket must be in at least one of these saved views (HS2-G8NXNC).
+          items:
+            $ref: '#/components/schemas/NotificationViewRef'
+      additionalProperties: false
+    NotificationViewRef:
+      type: object
+      required:
+        - checkout
+        - view
+      properties:
+        checkout:
+          type: string
+          description: Checkout id.
+        view:
+          type: string
+          description: Saved view id in that checkout.
       additionalProperties: false
     NotificationRule:
       type: object

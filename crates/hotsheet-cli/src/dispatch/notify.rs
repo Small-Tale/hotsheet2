@@ -12,7 +12,7 @@ use clap::Subcommand;
 use hotsheet_notify::admin::{self, AdminError};
 use hotsheet_notify::{
     Attachment, ChannelConfig, DeliveryRecord, Dispatcher, EventKind, Message, NotificationConfig,
-    Outcome, Registry, Rule, RuleFilter, SettingKind, Severity, recent_deliveries,
+    Outcome, Registry, Rule, RuleFilter, SettingKind, Severity, ViewRef, recent_deliveries,
 };
 use hotsheet_ticketing::{KeyRegistry, OsKeychain};
 use serde_json::{Value, json};
@@ -190,11 +190,50 @@ pub(crate) struct RuleAddArgs {
     /// Only tickets whose slug, title, or a tag contains this text (case-insensitive).
     #[arg(long)]
     pub(crate) text: Option<String>,
+    /// Only tickets in this saved view, as CHECKOUT/VIEW (checkout id, alias, or path, then the
+    /// view id); repeatable, any one matches.
+    #[arg(long = "view", value_name = "CHECKOUT/VIEW")]
+    pub(crate) views: Vec<String>,
     /// Suppress repeats of the same event per channel for this many seconds.
     #[arg(long, default_value_t = 0)]
     pub(crate) cooldown: u64,
     #[arg(long)]
     pub(crate) disabled: bool,
+}
+
+/// Resolve `CHECKOUT/VIEW` to a registered checkout's id and one of its saved views. The view
+/// id is the part after the last `/`, so a checkout path may contain slashes.
+fn view_ref(home: &Path, reference: &str) -> Result<ViewRef> {
+    let (checkout, view) = reference
+        .rsplit_once('/')
+        .filter(|(c, v)| !c.trim().is_empty() && !v.trim().is_empty())
+        .ok_or_else(|| anyhow!("--view expects CHECKOUT/VIEW, got '{reference}'"))?;
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+            .resolve(checkout.trim())
+            .map_err(|e| anyhow!("--view {reference}: {e}"))?;
+    let views = hotsheet_ticketing::saved_views::from_settings(&checkout.settings())
+        .map_err(|e| anyhow!("--view {reference}: {e}"))?;
+    let saved = views
+        .iter()
+        .find(|v| v.id.eq_ignore_ascii_case(view.trim()))
+        .ok_or_else(|| {
+            let known: Vec<_> = views.iter().map(|v| v.id.as_str()).collect();
+            anyhow!(
+                "checkout {} has no saved view '{}' (saved views: {})",
+                checkout.id,
+                view.trim(),
+                if known.is_empty() {
+                    "none".into()
+                } else {
+                    known.join(", ")
+                }
+            )
+        })?;
+    Ok(ViewRef {
+        checkout: checkout.id,
+        view: saved.id.clone(),
+    })
 }
 
 fn home() -> PathBuf {
@@ -640,9 +679,14 @@ fn rule(home: &Path, registry: &Registry, cmd: RuleCmd) -> Result<()> {
                 priorities,
                 min_severity,
                 text,
+                views,
                 cooldown,
                 disabled,
             } = *args;
+            let views = views
+                .iter()
+                .map(|reference| view_ref(home, reference))
+                .collect::<Result<Vec<_>>>()?;
             let events = events
                 .iter()
                 .map(|e| EventKind::parse(e).ok_or_else(|| anyhow!("unknown event '{e}'")))
@@ -660,6 +704,7 @@ fn rule(home: &Path, registry: &Registry, cmd: RuleCmd) -> Result<()> {
                     priorities,
                     min_severity: min_severity.as_deref().map(parse_severity).transpose()?,
                     text,
+                    views,
                 },
                 cooldown_seconds: cooldown,
             };

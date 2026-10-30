@@ -169,6 +169,28 @@ describe('notification settings controller (HS2-DPBJJA)', () => {
     expect(settings.config.value).toMatchObject({ channels: [], rules: [] });
   });
 
+  it('editing a rule keeps its saved-view filter (HS2-G8NXNC)', async () => {
+    const fake = fakeApi();
+    const settings = createNotificationSettings({ api: () => fake.api });
+    await settings.refresh();
+    await addPhone(settings);
+    const views = [{ checkout: 'web-1a2b', view: 'needs-docs' }];
+    fake.config.rules = [
+      {
+        id: 'docs',
+        events: ['ticket.status_changed'],
+        channels: ['phone'],
+        enabled: true,
+        filter: { views },
+        cooldown_seconds: 0,
+      },
+    ];
+    await settings.refresh();
+    settings.openRuleEditor('docs');
+    await settings.saveRule({ [RULE_FIELD.tags]: 'release' }, ['ticket.status_changed'], ['phone']);
+    expect(fake.config.rules).toEqual([expect.objectContaining({ id: 'docs', filter: { tags: ['release'], views } })]);
+  });
+
   it('validates and saves delivery options', async () => {
     const fake = fakeApi();
     const settings = createNotificationSettings({ api: () => fake.api });
