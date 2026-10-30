@@ -3773,6 +3773,64 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
   expect(number!.x - (icon!.x + icon!.width)).toBeLessThanOrEqual(6);
 });
 
+test('links the first GitHub installation and refreshes granted repositories (HS2-FDTJ98)', async ({ page }) => {
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+  );
+  await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
+  await page.route('**/github-auth/device/auth-1', (route) =>
+    route.fulfill({ json: { state: 'authorized', credential_reference: 'github-app-auth-1' } }),
+  );
+  let installed = false;
+  const installUrl = 'https://github.test/apps/hot-sheet-2/installations/new';
+  await page.route('**/github-auth/device/auth-1/repositories', (route) =>
+    route.fulfill({
+      json: {
+        repositories: installed ? ['demo/first-repository'] : [],
+        installations: installed ? [{ account: 'demo', selection: 'all', settings_url: null }] : [],
+        install_url: installUrl,
+      },
+    }),
+  );
+  await page
+    .context()
+    .route('https://github.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Synthetic GitHub App installation</title>' }),
+    );
+  await page.goto('/');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await setup.getByRole('button', { name: 'Sign in with GitHub' }).click();
+  const access = setup.getByRole('region', { name: 'GitHub Repository Access' });
+  await expect(access).toContainText('not installed on any account yet');
+  const install = access.getByRole('link', { name: 'Install Hot Sheet on GitHub' });
+  await expect(install).toHaveAttribute('href', installUrl);
+  await expect(install).toHaveAttribute('rel', 'noopener');
+  for (const width of [1280, 900, 420, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(install).toBeVisible();
+    await expect.poll(() => setup.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`hs2-fdtj98-first-install-${width}.png`) });
+  }
+  const popup = page.waitForEvent('popup');
+  await install.click();
+  const opened = await popup;
+  await expect.poll(() => opened.url()).toBe(installUrl);
+  await opened.close();
+  installed = true;
+  await access.getByRole('button', { name: 'Refresh list' }).click();
+  await expect(setup.locator('#provider-setup-repository-listbox [data-value="demo/first-repository"]')).toHaveCount(1);
+  await expect(access.getByRole('link', { name: 'Add another account or organization' })).toHaveAttribute(
+    'href',
+    installUrl,
+  );
+  await expect(access.getByRole('link', { name: 'Install Hot Sheet on GitHub' })).toHaveCount(0);
+});
+
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);

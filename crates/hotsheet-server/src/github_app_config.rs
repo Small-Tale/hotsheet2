@@ -2,6 +2,14 @@
 //! and embeds the public GitHub.com Client ID; the CLI embeds the same source file.
 
 pub const BUNDLED_GITHUB_DOT_COM_CLIENT_ID: &str = env!("HOTSHEET_BUNDLED_GITHUB_APP_CLIENT_ID");
+pub const BUNDLED_GITHUB_DOT_COM_APP_SLUG: &str = env!("HOTSHEET_BUNDLED_GITHUB_APP_SLUG");
+
+pub fn install_url_for_web_base(web_base: &str) -> Result<String, String> {
+    hotsheet_extsync::github_app_config::install_url_for_web_base(
+        BUNDLED_GITHUB_DOT_COM_APP_SLUG,
+        web_base,
+    )
+}
 
 pub fn client_id_for_web_base(web_base: &str) -> Result<String, String> {
     hotsheet_extsync::github_app_config::client_id_for_web_base(

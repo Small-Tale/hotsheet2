@@ -749,3 +749,12 @@ unreadable records remain visible/removable and block submission until recovered
 ### In-app prompt replacements (HS2-WMZ6Z5)
 
 In the packaged Tauri application, rename an attachment from its item menu in the inspector and modal reader. Verify Enter/blur finish, Escape cancellation, blank/no-change behavior, failure retention and a later edit. Create and cancel a command group in project settings, including a duplicate name. Option/Alt-click an AI drawer choice; verify initial values, unknown-provider validation, blank model and Provider Default effort, effort-select reset and unsupported-model disable, and that Cancel/Escape starts nothing. Run an explicitly chosen real provider only in an authorized native smoke session. Check keyboard focus and wide/medium/phone/wide transitions. No browser-native prompt should open.
+
+### GitHub first installation (HS2-FDTJ98)
+
+With a synthetic/new GitHub sign-in that has no installations, open Connect GitHub Issues.
+Check the Install Hot Sheet on GitHub link at wide, medium and phone widths, then return
+wide. Open it and verify the selected host's registered App page. After granting a
+repository on GitHub, use Refresh list and confirm the repository is offered and the
+link changes to Add another account or organization. Repeat for a configured Enterprise
+origin; without its slug map, confirm operator instructions and no guessed public App URL.

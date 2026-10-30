@@ -678,12 +678,18 @@ installed on, so the list response also reports each installation's account, whe
 `all` or `selected` repositories, and its settings page; the dialog explains a missing
 repository, links to **Change access** for limited installations and to **Add another account
 or organization** (the app's `installations/new` page, derived from the installations'
-`app_slug`), and offers **Refresh list** after the user changes access on GitHub. The first-party public
+`app_slug`), and offers **Refresh list** after the user changes access on GitHub. With no
+installation yet, **Install Hot Sheet on GitHub** links to the bundled first-party App
+`hot-sheet-2`; refresh then loads the repositories granted by the new installation
+(HS2-FDTJ98). The first-party public
 GitHub.com Client ID (`Iv23lialgSTESydkTreA`) is bundled into development and release server
 builds; it is an identifier, not a secret. `HOTSHEET_GITHUB_APP_CLIENT_ID` may override it
 for development builds. The server build fails clearly if neither the override nor the
 tracked `crates/hotsheet-server/github-app-client-id.txt` contains a valid GitHub App Client
 ID, so an unconfigured release cannot silently ship.
+The App slug is also build-validated from `crates/hotsheet-server/github-app-slug.txt`;
+`HOTSHEET_GITHUB_APP_SLUG` selects a custom public App. Slugs accept only lowercase
+letters, numbers, and interior hyphens. Both bundled files participate in source freshness.
 
 The first-party app is registered for any-account installation with Device Flow enabled,
 webhooks disabled, Metadata read-only, and Issues read/write. Assets-repository uploads
@@ -692,6 +698,16 @@ described above. Permission changes require installation owner approval.
 GitHub Enterprise Server installations require a separately registered app and Client ID on
 each host. Operators configure those public IDs on the server as a JSON origin map, for
 example `HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS='{"https://github.example.com":"Iv…"}'`.
+Configure its installation slug separately with
+`HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS='{"https://github.example.com":"enterprise-app"}'`.
+Origins normalize case and trailing slashes but match only the configured host. A missing
+slug mapping explains that operator setup when no installation can supply its URL;
+an existing installation-derived URL remains usable without the mapping. Public App
+configuration never substitutes for a missing Enterprise App.
+Existing installation grants and reachable repositories remain available if optional
+App-slug metadata is absent and no fallback slug is configured; only their optional
+installation link is omitted. A genuinely empty first-install state still explains
+the missing operator configuration (HS2-FDTJ98).
 An attempted Enterprise sign-in without an exact host entry fails before contacting GitHub
 and explains how to provision it. Windows credential storage is tracked by HS2-N3R18X.
 

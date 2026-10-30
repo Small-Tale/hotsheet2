@@ -10263,6 +10263,10 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
             "HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS",
             format!(r#"{{"{origin}":"IvTest12345678"}}"#),
         )
+        .env(
+            "HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS",
+            format!(r#"{{"{origin}":"enterprise-app"}}"#),
+        )
         .args(["github-sign-in", "--web-base", &origin])
         .assert()
         .failure()
@@ -10270,6 +10274,10 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
             "Open: https://github.test/login/device",
         ))
         .stdout(predicate::str::contains("Enter code: ABCD-EFGH"))
+        .stdout(predicate::str::contains(format!(
+            "{origin}/apps/enterprise-app/installations/new"
+        )))
+        .stdout(predicate::str::contains("then run github-connect"))
         .stderr(predicate::str::contains("GitHub sign-in was denied"));
     server.join().unwrap();
 }

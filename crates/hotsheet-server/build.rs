@@ -7,9 +7,11 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-env-changed=HOT_SHEET_BUILD_REVISION");
     println!("cargo:rerun-if-env-changed=HOTSHEET_GITHUB_APP_CLIENT_ID");
+    println!("cargo:rerun-if-env-changed=HOTSHEET_GITHUB_APP_SLUG");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=github-app-client-id.txt");
+    println!("cargo:rerun-if-changed=github-app-slug.txt");
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=../../Cargo.toml");
     println!("cargo:rerun-if-changed=../../Cargo.lock");
@@ -27,6 +29,24 @@ fn main() {
         "Hot Sheet GitHub App Client ID is missing or invalid; set HOTSHEET_GITHUB_APP_CLIENT_ID or restore crates/hotsheet-server/github-app-client-id.txt"
     );
     println!("cargo:rustc-env=HOTSHEET_BUNDLED_GITHUB_APP_CLIENT_ID={bundled_github_client_id}");
+    let slug = std::env::var("HOTSHEET_GITHUB_APP_SLUG")
+        .unwrap_or_else(|_| include_str!("github-app-slug.txt").trim().to_owned());
+    assert!(
+        !slug.is_empty()
+            && slug
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            && slug
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && slug
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric),
+        "Hot Sheet GitHub App slug is missing or invalid; set HOTSHEET_GITHUB_APP_SLUG or restore crates/hotsheet-server/github-app-slug.txt"
+    );
+    println!("cargo:rustc-env=HOTSHEET_BUNDLED_GITHUB_APP_SLUG={slug}");
 
     if let Some(revision) = source_revision::explicit_build_revision(
         std::env::var_os("HOT_SHEET_BUILD_REVISION").as_deref(),

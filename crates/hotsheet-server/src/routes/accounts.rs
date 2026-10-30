@@ -254,16 +254,38 @@ async fn github_repository_access(
     web_base: String,
     access_token: String,
 ) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
-    let client = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base);
+    let client = hotsheet_extsync::GitHubDeviceClient::live(client_id, &web_base);
     let access = tokio::task::spawn_blocking(move || client.repository_access(&access_token))
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
-    Ok(Json(GitHubRepositoriesResponse {
+    repository_access_response(access, || {
+        github_app_config::install_url_for_web_base(&web_base)
+    })
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, error))
+}
+
+// Shared by newly authorized sessions and reused accounts. Do not require an
+// Enterprise fallback when GitHub already supplied its registered App URL.
+// HS2-FDTJ98: optional link metadata must not hide existing grants or repositories.
+fn repository_access_response(
+    access: hotsheet_extsync::RepositoryAccess,
+    configured_install_url: impl FnOnce() -> Result<String, String>,
+) -> Result<GitHubRepositoriesResponse, String> {
+    let install_url = match access.install_url {
+        Some(url) => Some(url),
+        None => match configured_install_url() {
+            Ok(url) => Some(url),
+            Err(_) if !access.installations.is_empty() || !access.repositories.is_empty() => None,
+            Err(error) => return Err(error),
+        },
+    };
+    Ok(GitHubRepositoriesResponse {
         repositories: access.repositories,
         installations: access.installations,
-        install_url: access.install_url,
-    }))
+        install_url,
+    })
 }
 
 pub(crate) fn account_listing_inputs(
@@ -482,4 +504,232 @@ pub(crate) async fn list_account_github_repositories(
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     github_repository_access(client_id, web_base, token).await
+}
+
+#[cfg(test)]
+mod installation_url_tests {
+    use super::*;
+
+    // Restore overrides even after assertion failures; never read or write the keychain.
+    struct SyntheticEnvironment(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+    impl SyntheticEnvironment {
+        fn set(&mut self, key: &'static str, value: String) {
+            self.0.push((key, std::env::var_os(key)));
+            unsafe { std::env::set_var(key, value) };
+        }
+    }
+
+    impl Drop for SyntheticEnvironment {
+        fn drop(&mut self) {
+            for (key, value) in self.0.iter().rev() {
+                unsafe {
+                    match value {
+                        Some(value) => std::env::set_var(key, value),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn hs2_fdtj98_http_fresh_and_saved_accounts_offer_first_installation() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let upstream_calls = calls.clone();
+        let existing_installation = Arc::new(AtomicBool::new(false));
+        let upstream_existing = existing_installation.clone();
+        let repository_calls = calls.clone();
+        let upstream = axum::Router::new()
+            .route(
+                "/api/v3/user/installations",
+                axum::routing::get(move |headers: axum::http::HeaderMap| async move {
+                    assert_eq!(headers["authorization"], "Bearer synthetic-fdtj98-token");
+                    upstream_calls.fetch_add(1, Ordering::SeqCst);
+                    let installations = if upstream_existing.load(Ordering::SeqCst) {
+                        serde_json::json!([{
+                            "id": 7, "account": {"login": "synthetic"},
+                            "repository_selection": "selected"
+                        }])
+                    } else {
+                        serde_json::json!([])
+                    };
+                    Json(serde_json::json!({"installations": installations}))
+                }),
+            )
+            .route(
+                "/api/v3/user/installations/7/repositories",
+                axum::routing::get(move |headers: axum::http::HeaderMap| async move {
+                    assert_eq!(headers["authorization"], "Bearer synthetic-fdtj98-token");
+                    repository_calls.fetch_add(1, Ordering::SeqCst);
+                    Json(serde_json::json!({"repositories": [{"full_name": "synthetic/repository"}]}))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let upstream_task = tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
+        let mut environment = SyntheticEnvironment(Vec::new());
+        environment.set(
+            "HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS",
+            serde_json::json!({&origin: "synthetic-app"}).to_string(),
+        );
+        let credential = "github-app-hs2-fdtj98-http";
+        environment.set(
+            "HOTSHEET_API_KEY_GITHUB_APP_HS2_FDTJ98_HTTP",
+            serde_json::json!({
+                "kind": "github_app", "client_id": "synthetic-client", "web_base": origin,
+                "token": {"access_token": "synthetic-fdtj98-token"}
+            })
+            .to_string(),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let store = hotsheet_ticketing::FsStore::init(
+            dir.path().join("store"),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let state = AppState::new(store, "synthetic-server-token".into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home"))
+            .with_machine_home(dir.path().join("machine-home"));
+        // Start at the post-authorization boundary: OAuth approval itself is external.
+        let (status, _) = tokio::sync::watch::channel(GitHubAuthStatus::Authorized {
+            credential_reference: credential.into(),
+        });
+        state.github_auth_sessions.lock_or_recover().insert(
+            "synthetic-session".into(),
+            Arc::new(GitHubAuthSession {
+                status,
+                client_id: "synthetic-client".into(),
+                web_base: origin.clone(),
+                credential_reference: credential.into(),
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_origin = format!("http://{}", listener.local_addr().unwrap());
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, crate::app(state)).await.unwrap();
+        });
+        let paths = [
+            "/github-auth/device/synthetic-session/repositories".to_owned(),
+            format!("/accounts/{credential}/github-repositories"),
+        ];
+        for (configured, installed) in [(true, false), (false, false), (false, true)] {
+            existing_installation.store(installed, Ordering::SeqCst);
+            if !configured {
+                environment.set("HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS", "{}".into());
+            }
+            for path in &paths {
+                let url = format!("{server_origin}{path}");
+                let (status, body) = tokio::task::spawn_blocking(move || {
+                    let agent = ureq::AgentBuilder::new()
+                        .timeout(Duration::from_secs(5))
+                        .build();
+                    let response = match agent
+                        .get(&url)
+                        .set("x-hotsheet-secret", "synthetic-server-token")
+                        .call()
+                    {
+                        Ok(response) | Err(ureq::Error::Status(_, response)) => response,
+                        Err(error) => panic!("synthetic HTTP request failed: {error}"),
+                    };
+                    (
+                        response.status(),
+                        serde_json::from_reader::<_, serde_json::Value>(response.into_reader())
+                            .unwrap(),
+                    )
+                })
+                .await
+                .unwrap();
+                if installed {
+                    assert_eq!(status, 200, "{path}: {body}");
+                    assert_eq!(
+                        body["repositories"],
+                        serde_json::json!(["synthetic/repository"])
+                    );
+                    assert_eq!(body["installations"].as_array().unwrap().len(), 1);
+                    assert!(body["install_url"].is_null());
+                } else if configured {
+                    assert_eq!(status, 200, "{path}: {body}");
+                    assert_eq!(body["repositories"], serde_json::json!([]));
+                    assert_eq!(body["installations"], serde_json::json!([]));
+                    assert_eq!(
+                        body["install_url"],
+                        format!("{origin}/apps/synthetic-app/installations/new")
+                    );
+                } else {
+                    assert_eq!(status, 503, "{path}: {body}");
+                    assert!(
+                        body.to_string()
+                            .contains("HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS")
+                    );
+                    assert!(body.to_string().contains(&origin));
+                }
+            }
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 8);
+        server_task.abort();
+        upstream_task.abort();
+    }
+
+    #[test]
+    fn hs2_fdtj98_existing_access_survives_missing_installation_metadata() {
+        for access in [
+            hotsheet_extsync::RepositoryAccess {
+                repositories: vec!["synthetic/repository".into()],
+                ..Default::default()
+            },
+            hotsheet_extsync::RepositoryAccess {
+                installations: vec![hotsheet_extsync::AppInstallation {
+                    account: "synthetic".into(),
+                    selection: "selected".into(),
+                    settings_url: None,
+                }],
+                ..Default::default()
+            },
+        ] {
+            let expected = access.clone();
+            let response = repository_access_response(access, || {
+                Err("Configure HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS".into())
+            })
+            .unwrap();
+            assert_eq!(response.repositories, expected.repositories);
+            assert_eq!(response.installations, expected.installations);
+            assert!(response.install_url.is_none());
+        }
+    }
+
+    #[test]
+    fn hs2_fdtj98_zero_installations_use_fallback_and_existing_urls_win() {
+        let response = repository_access_response(Default::default(), || {
+            Ok("https://github.com/apps/hot-sheet-2/installations/new".into())
+        })
+        .unwrap();
+        assert!(response.repositories.is_empty() && response.installations.is_empty());
+        assert_eq!(
+            response.install_url.as_deref(),
+            Some("https://github.com/apps/hot-sheet-2/installations/new")
+        );
+        let existing = "https://enterprise.test/apps/registered-app/installations/new";
+        let response = repository_access_response(
+            hotsheet_extsync::RepositoryAccess {
+                install_url: Some(existing.into()),
+                ..Default::default()
+            },
+            || panic!("existing Enterprise installation must not require slug configuration"),
+        )
+        .unwrap();
+        assert_eq!(response.install_url.as_deref(), Some(existing));
+        assert!(
+            repository_access_response(Default::default(), || Err(
+                "Configure HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS".into()
+            ))
+            .unwrap_err()
+            .contains("HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS")
+        );
+    }
 }

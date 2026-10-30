@@ -141,13 +141,13 @@ fn source_fingerprint(root: &Path) -> io::Result<(Vec<PathBuf>, SourceFingerprin
         if root.join("Cargo.lock").is_file() {
             files.push(PathBuf::from("Cargo.lock"));
         }
-        if root
-            .join("crates/hotsheet-server/github-app-client-id.txt")
-            .is_file()
-        {
-            files.push(PathBuf::from(
-                "crates/hotsheet-server/github-app-client-id.txt",
-            ));
+        for bundled in [
+            "crates/hotsheet-server/github-app-client-id.txt",
+            "crates/hotsheet-server/github-app-slug.txt",
+        ] {
+            if root.join(bundled).is_file() {
+                files.push(PathBuf::from(bundled));
+            }
         }
         for bundled in [
             "plugins",
@@ -255,6 +255,19 @@ mod tests {
         )
         .unwrap();
         root
+    }
+
+    #[test]
+    fn hs2_fdtj98_bundled_app_slug_changes_the_source_fingerprint() {
+        let root = source_tree();
+        fs::create_dir_all(root.path().join("crates/hotsheet-server/src")).unwrap();
+        let slug = root
+            .path()
+            .join("crates/hotsheet-server/github-app-slug.txt");
+        fs::write(&slug, "hot-sheet-2\n").unwrap();
+        let before = revision_for_source_root(root.path()).unwrap();
+        fs::write(&slug, "custom-app\n").unwrap();
+        assert_ne!(before, revision_for_source_root(root.path()).unwrap());
     }
 
     #[test]

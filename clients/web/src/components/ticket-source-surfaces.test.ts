@@ -105,9 +105,16 @@ describe('ticket source surfaces', () => {
     expect(limited).toContain('Add another account or organization');
     expect(limited).toContain('data-action="refresh-github-repositories"');
     expect(limited).not.toContain('<select');
-    const none = form({ repositories: [], installations: [] });
+    const none = form({
+      repositories: [],
+      installations: [],
+      installUrl: 'https://github.com/apps/hot-sheet-2/installations/new',
+    });
     expect(none).toContain('not installed on any account yet');
     expect(none).toContain('0 repositories available.');
+    expect(none).toContain('Install Hot Sheet on GitHub');
+    expect(none).toContain('href="https://github.com/apps/hot-sheet-2/installations/new"');
+    expect(none).not.toContain('Add another account or organization');
     expect(form({ repositories: ['a/b'], installations: [], refreshing: true })).toMatch(
       /refresh-github-repositories" disabled[\s\S]*?Refreshing…/,
     );

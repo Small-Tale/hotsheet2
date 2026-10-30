@@ -440,7 +440,9 @@ export function ProviderSetupForm({
                       target="_blank"
                       rel="noopener"
                     >
-                      Add another account or organization{' '}
+                      {auth.installations?.length
+                        ? 'Add another account or organization'
+                        : 'Install Hot Sheet on GitHub'}{' '}
                       <LucideIcon size={14} icon={ExternalLink} name="external-link" />
                     </a>
                   ) : (

@@ -274,6 +274,7 @@ pub(crate) fn cmd_github_webhook_setup(
 
 pub(crate) fn cmd_github_sign_in(web_base: &str) -> Result<()> {
     const BUNDLED_ID: &str = include_str!("../../../hotsheet-server/github-app-client-id.txt");
+    const BUNDLED_SLUG: &str = include_str!("../../../hotsheet-server/github-app-slug.txt");
     let client_id =
         hotsheet_extsync::github_app_config::client_id_for_web_base(BUNDLED_ID, web_base)
             .map_err(anyhow::Error::msg)?;
@@ -282,6 +283,15 @@ pub(crate) fn cmd_github_sign_in(web_base: &str) -> Result<()> {
     let authorization = client.start()?;
     println!("Open: {}", authorization.verification_uri);
     println!("Enter code: {}", authorization.user_code);
+    match hotsheet_extsync::github_app_config::install_url_for_web_base(BUNDLED_SLUG, web_base) {
+        Ok(url) => println!(
+            "Install the Hot Sheet GitHub App on the account or organization that owns your repositories: {url}"
+        ),
+        Err(instructions) => println!("Installation setup: {instructions}"),
+    }
+    println!(
+        "Choose the repositories to grant, then run github-connect with the printed credential reference after sign-in completes."
+    );
     std::io::stdout().flush()?;
     let deadline =
         std::time::Instant::now() + std::time::Duration::from_secs(authorization.expires_in);

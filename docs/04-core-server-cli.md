@@ -951,7 +951,13 @@ store. Checkout and hosted-store routes for unrelated projects remain available
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;
 it never prints the access or refresh token. Use `--web-base https://github.example.com`
 for Enterprise after configuring that origin's public Client ID in
-`HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS`. `github-connect` stores the non-secret
+`HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS`.
+For the installation step, the command prints the selected App's installation URL and
+asks the user to grant repositories before `github-connect` (HS2-FDTJ98). GitHub.com
+uses bundled slug `hot-sheet-2` or `HOTSHEET_GITHUB_APP_SLUG`; Enterprise uses the exact
+origin entry in `HOTSHEET_GITHUB_ENTERPRISE_APP_SLUGS`. If that slug is missing, sign-in
+still works and the command prints the exact operator configuration instructions.
+`github-connect` stores the non-secret
 connection in `providers.json` and optionally links a registered checkout. Repeating it
 for the same repository keeps the existing connection id and checkout source; `--id`
 selects a specific existing id for a name or credential update. It accepts a keychain

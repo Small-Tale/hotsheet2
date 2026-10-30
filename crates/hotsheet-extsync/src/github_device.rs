@@ -492,6 +492,23 @@ mod tests {
     }
 
     #[test]
+    fn hs2_fdtj98_zero_installations_do_not_guess_an_app_slug() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(VecDeque::from([HttpResponse {
+                status: 200,
+                headers: HashMap::new(),
+                body: json!({"installations": []}).to_string(),
+            }])),
+            requests: Mutex::new(vec![]),
+        });
+        let access = GitHubDeviceClient::new("client", "https://github.test", fake.clone())
+            .repository_access("token")
+            .unwrap();
+        assert_eq!(access, RepositoryAccess::default());
+        assert_eq!(fake.requests.lock_or_recover().len(), 1);
+    }
+
+    #[test]
     fn reports_expiry_denial_and_missing_configuration() {
         let fake = Arc::new(Fake {
             responses: Mutex::new(VecDeque::from([
