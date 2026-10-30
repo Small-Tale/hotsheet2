@@ -229,7 +229,11 @@ export function ruleFromForm(
   };
 }
 
-export const eventLabel = (event: string) => NOTIFICATION_EVENTS.find((item) => item.value === event)?.label ?? event;
+/** The summary a channel sends of what its quiet hours or hourly limit held (HS2-CFMSP2); not a rule event. */
+export const HELD_SUMMARY_EVENT = { value: 'notifications.held', label: 'Held Notifications' } as const;
+
+export const eventLabel = (event: string) =>
+  [...NOTIFICATION_EVENTS, HELD_SUMMARY_EVENT].find((item) => item.value === event)?.label ?? event;
 
 /** "Blocked, Status Changed → Phone · tag release" */
 export function ruleSummary(rule: NotificationRule, channels: readonly NotificationChannel[]): string {

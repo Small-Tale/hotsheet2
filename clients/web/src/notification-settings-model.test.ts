@@ -6,6 +6,7 @@ import {
   channelDraftFromForm,
   channelFormFields,
   channelIdFrom,
+  eventLabel,
   notifierIconName,
   RULE_FIELD,
   ruleFromForm,
@@ -199,6 +200,12 @@ describe('rules (HS2-DPBJJA)', () => {
         [phone],
       ),
     ).toBe('To My Phone, gone · tag release · view web-1a2b/needs-docs · error or higher · cooldown 60s');
+  });
+
+  it('labels rule events and the held-notification summary (HS2-CFMSP2)', () => {
+    expect(eventLabel('ticket.blocked')).toBe('Blocked');
+    expect(eventLabel('notifications.held')).toBe('Held Notifications');
+    expect(eventLabel('custom.event')).toBe('custom.event');
   });
 
   it('maps notifiers to icons with a plugin fallback', () => {

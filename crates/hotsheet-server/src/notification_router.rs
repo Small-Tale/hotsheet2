@@ -120,17 +120,42 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
     if let Err(error) = tokio::task::spawn_blocking(seed).await {
         tracing::warn!(%error, "notification snapshot seeding failed");
     }
-    let (queued, mut pending) = tokio::sync::mpsc::unbounded_channel::<ChangeEvent>();
+    // HS2-CFMSP2: a quiet window or hourly limit can end with no new event to flush it.
+    enum Work {
+        Change(Box<ChangeEvent>),
+        FlushHeld,
+    }
+    let (queued, mut pending) = tokio::sync::mpsc::unbounded_channel::<Work>();
     tokio::task::spawn_blocking(move || {
-        while let Some(event) = pending.blocking_recv() {
-            route_change_event(&state, &event);
+        while let Some(work) = pending.blocking_recv() {
+            match work {
+                Work::Change(event) => {
+                    route_change_event(&state, &event);
+                }
+                Work::FlushHeld => {
+                    flush_held(&state);
+                }
+            }
         }
     });
     tokio::spawn(async move {
+        // The timer belongs to this router task so aborting the returned handle
+        // also stops scheduled deliveries and releases the application state.
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            match events.recv().await {
+            let event = tokio::select! {
+                event = events.recv() => event,
+                _ = tick.tick() => {
+                    if queued.send(Work::FlushHeld).is_err() {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match event {
                 Ok(event) => {
-                    if queued.send(event).is_err() {
+                    if queued.send(Work::Change(Box::new(event))).is_err() {
                         break;
                     }
                 }
@@ -141,6 +166,17 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
             }
         }
     })
+}
+
+/// Send each channel whose quiet hours or hourly limit has ended a summary of what it held
+/// (HS2-CFMSP2). The router's timer calls this every minute; dispatches also flush first.
+pub fn flush_held(state: &AppState) -> Vec<DeliveryRecord> {
+    match NotificationConfig::load(state.machine_home()) {
+        Ok(config) if !config.channels.is_empty() => {
+            state.notification_dispatcher().flush_held(&config)
+        }
+        _ => Vec::new(),
+    }
 }
 
 fn wants(config: &NotificationConfig, kind: impl Fn(&EventKind) -> bool) -> bool {

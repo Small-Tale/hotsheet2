@@ -38,6 +38,7 @@ struct Harness {
     store_id: String,
     state: AppState,
     received: tokio::sync::mpsc::UnboundedReceiver<HttpRequest>,
+    transport: std::sync::Weak<SignallingHttp>,
 }
 
 fn harness() -> Harness {
@@ -50,6 +51,7 @@ fn harness() -> Harness {
     let http = Arc::new(SignallingHttp {
         sent: Mutex::new(tx),
     });
+    let transport = Arc::downgrade(&http);
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_default_codex_home(dir.path().join("no-codex-home"))
@@ -63,6 +65,7 @@ fn harness() -> Harness {
         store_id,
         state,
         received: rx,
+        transport,
     }
 }
 
@@ -926,4 +929,53 @@ async fn saved_view_rules_forward_only_tickets_in_the_view() {
             .is_err(),
         "the ticket outside the view sends nothing"
     );
+}
+
+/// HS2-CFMSP2: the server flushes a summary of deliveries a channel held, from the shared
+/// delivery log, once the channel is no longer holding; the summary then shows in the
+/// deliveries route and is not sent again.
+#[tokio::test(flavor = "multi_thread")]
+async fn held_deliveries_are_flushed_as_one_summary() {
+    let mut h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["ticket.blocked"])).await;
+    let held = |slug: &str| {
+        json!({"id": format!("held-{slug}"), "at": "2026-10-29T23:00:00Z", "event": "ticket.blocked",
+               "channel": "phone", "notifier": "ntfy", "rule": "everything", "outcome": "suppressed",
+               "attempts": 0, "error": "quiet hours 22:00-07:00 (+00:00)", "ticket": slug,
+               "truncated": false, "omitted_attachments": 0, "held": true})
+        .to_string()
+    };
+    std::fs::create_dir_all(&h.home).unwrap();
+    std::fs::write(
+        h.home.join("notification-deliveries.jsonl"),
+        format!("{}\n{}\n", held("HS-1"), held("HS-2")),
+    )
+    .unwrap();
+    // Exercise the real scheduled path: the interval's first tick flushes the log
+    // without a new ticket event or an explicit call to flush_held.
+    let routing =
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
+    let sent = next(&mut h).await;
+    assert_eq!(header(&sent, "Title"), Some("2 notifications were held"));
+    let state = h.state.clone();
+    let flush = move || hotsheet_server::notification_router::flush_held(&state);
+    assert!(tokio::task::spawn_blocking(flush).await.unwrap().is_empty());
+    let (status, deliveries) = call(&router, "GET", "/notification-deliveries", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(deliveries[0]["event"], "notifications.held", "{deliveries}");
+    assert_eq!(deliveries[1]["held"], true, "{deliveries}");
+    // Aborting the returned task must stop its timer too. The transport's weak
+    // reference detects a detached timer retaining AppState after shutdown.
+    routing.abort();
+    assert!(routing.await.unwrap_err().is_cancelled());
+    drop(router);
+    drop(h.state);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while h.transport.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("HS2-CFMSP2 router shutdown released scheduled delivery state");
 }

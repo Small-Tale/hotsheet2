@@ -409,6 +409,12 @@ impl NotificationConfig {
                     rule.id
                 )));
             }
+            if rule.events.contains(&EventKind::HeldSummary) {
+                return Err(invalid(format!(
+                    "rule '{}': held-notification summaries are sent by the channel itself",
+                    rule.id
+                )));
+            }
             if rule.events.contains(&EventKind::Test) {
                 return Err(invalid(format!(
                     "rule '{}': test notifications go only to the channel being tested",

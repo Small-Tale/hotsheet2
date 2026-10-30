@@ -1147,6 +1147,8 @@ export interface NotificationDelivery {
   ticket?: string;
   truncated: boolean;
   omitted_attachments: number;
+  /** Held by quiet hours or the hourly limit and reported in a later summary (HS2-CFMSP2). */
+  held?: boolean;
 }
 export interface NotificationChannelRemoval {
   removed: boolean;

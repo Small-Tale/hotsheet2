@@ -32,7 +32,7 @@ A message carries:
 
 - **`event`**: one of `ticket.status_changed`, `ticket.feedback_needed`,
   `ticket.blocked`, `permission.requested`, `notification`, `digest`, `project.stopped`,
-  or `test`;
+  `test`, or `notifications.held` (a channel's summary of held deliveries, HS2-CFMSP2);
 - **`title`** and a CommonMark **`body`**;
 - **`severity`**: `info` < `success` < `warning` < `error`;
 - the **project** (a checkout id, store id, or project path), the project's display
@@ -147,7 +147,8 @@ The delivery record notes `truncated` and `omitted_attachments`.
 - A channel may set `quiet_hours` (`start` and `end` as `HH:MM`, a fixed `utc_offset`
   such as `+09:00`, and `allow_errors`, default true) and `max_per_hour`. Adjust the
   offset when daylight saving time changes.
-- `test` cannot be a rule event; tests go only to the channel being tested.
+- `test` and `notifications.held` cannot be rule events; tests go only to the channel
+  being tested, and a summary only to the channel that held the deliveries.
 - Saving validates everything: unique ids, installed notifiers, settings against the
   schema, rule references, and no inline secrets. An invalid change is refused and
   nothing is written.
@@ -239,7 +240,17 @@ tail is reported. A plugin that outlives its timeout is killed.
   messages still go out while `allow_errors` holds. Past `max_per_hour` deliveries in
   the last hour, a delivery is `suppressed` with the reason. The count reads the
   delivery log, so the limit survives restarts. Tests and explicit sends bypass both.
-  Batching held messages into a summary is HS2-CFMSP2.
+  Such deliveries are logged with `held: true`; a cooldown repeat is not.
+- **Held summaries (HS2-CFMSP2).** Once a channel is no longer holding (its quiet window
+  has ended and it is under `max_per_hour`), it receives one `notifications.held` message
+  for everything held since its last summary: "4 notifications were held", then a line
+  per event kind with its count and up to ten ticket slugs, and the reasons. The log keeps
+  identifiers only, so the summary names no ticket titles. Each dispatch flushes first, so
+  the summary arrives before the next message (this covers serverless CLI and MCP writes),
+  and the server also flushes every minute. The summary is logged like any delivery and
+  is the watermark for the next one, so it survives restarts. It does not count toward
+  `max_per_hour`. A failed summary is logged and not resent. Without a delivery log (a
+  host with no machine home) nothing is kept to summarize.
 - **Cooldown.** With a dedupe key and `cooldown_seconds > 0`, a repeat to the same
   channel inside the window is recorded as `suppressed` and not sent. The check reads
   memory and the delivery log, so it survives a server restart and separate CLI runs.
@@ -485,7 +496,7 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | External plugin digest trust gate                                          | Shipped | HS2-208RB1 |
 | Text, checkout, quiet-hour, and rate-limit filters                         | Shipped | HS2-4JG95G |
 | Saved-view rules                                                           | Shipped | HS2-G8NXNC |
-| Batched summaries of held messages                                         | Planned | HS2-CFMSP2 |
+| Batched summaries of held messages                                         | Shipped | HS2-CFMSP2 |
 | Choosing saved views, categories, and priorities in the web rule dialog    | Planned | HS2-DNQFB8 |
 | Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |

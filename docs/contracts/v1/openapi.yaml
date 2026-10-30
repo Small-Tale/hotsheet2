@@ -18216,6 +18216,7 @@ components:
             - digest
             - project.stopped
             - test
+            - notifications.held
         channel:
           type: string
         notifier:
@@ -18246,4 +18247,7 @@ components:
           minimum: 0
         dedupe:
           type: string
+        held:
+          type: boolean
+          description: Suppressed by quiet hours or the hourly limit, and reported by a later notifications.held summary (HS2-CFMSP2).
       additionalProperties: false

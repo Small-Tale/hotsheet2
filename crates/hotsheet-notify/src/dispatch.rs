@@ -60,7 +60,18 @@ pub struct DeliveryRecord {
     /// without the log holding the key text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dedupe: Option<String>,
+    /// Suppressed by the channel's quiet hours or hourly limit (not a cooldown repeat), so a
+    /// later [`Dispatcher::flush_held`] summary reports it (HS2-CFMSP2).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
 }
+
+/// Slugs listed per event kind in a held summary before "and N more".
+const SUMMARY_SLUGS: usize = 10;
+
+/// One process flushes held summaries at a time, so the router and the server's timer never
+/// send the same summary twice.
+static FLUSH: Mutex<()> = Mutex::new(());
 
 /// Retry schedule for retryable failures: one attempt plus one per backoff entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,9 +150,11 @@ impl Dispatcher {
     /// channel receives one copy even when several rules match. `Test` messages go
     /// nowhere here; use [`Dispatcher::deliver_to`].
     pub fn dispatch(&self, config: &NotificationConfig, message: &Message) -> Vec<DeliveryRecord> {
-        if message.event == EventKind::Test {
+        if matches!(message.event, EventKind::Test | EventKind::HeldSummary) {
             return Vec::new();
         }
+        // A channel whose hold has ended reports what it held before this message.
+        let mut records = self.flush_held(config);
         let mut targets: Vec<(&str, &str, u64)> = Vec::new();
         for rule in config.rules.iter().filter(|r| r.matches(message)) {
             for channel in &rule.channels {
@@ -150,28 +163,65 @@ impl Dispatcher {
                 }
             }
         }
-        targets
-            .into_iter()
-            .filter_map(|(channel, rule, cooldown)| {
-                let channel = config.channel(channel).filter(|c| c.enabled)?;
-                let reason = self.held(channel, message).or_else(|| {
-                    self.suppressed(&channel.id, message, cooldown)
-                        .then(|| "a repeat inside the rule's cooldown".to_string())
-                });
-                if let Some(reason) = reason {
-                    let mut record = self.record(
-                        message,
-                        &channel.id,
-                        &channel.notifier,
-                        Some(rule),
-                        Outcome::Suppressed,
-                    );
-                    record.error = Some(reason);
-                    return Some(self.finish(record));
-                }
-                Some(self.deliver(config, &channel.id, Some(rule), message))
-            })
-            .collect()
+        records.extend(targets.into_iter().filter_map(|(channel, rule, cooldown)| {
+            let channel = config.channel(channel).filter(|c| c.enabled)?;
+            let held = self.held(channel, message.severity);
+            let reason = held.clone().or_else(|| {
+                self.suppressed(&channel.id, message, cooldown)
+                    .then(|| "a repeat inside the rule's cooldown".to_string())
+            });
+            if let Some(reason) = reason {
+                let mut record = self.record(
+                    message,
+                    &channel.id,
+                    &channel.notifier,
+                    Some(rule),
+                    Outcome::Suppressed,
+                );
+                record.error = Some(reason);
+                record.held = held.is_some();
+                return Some(self.finish(record));
+            }
+            Some(self.deliver(config, &channel.id, Some(rule), message))
+        }));
+        records
+    }
+
+    /// Send each enabled channel that is no longer holding one summary of the deliveries
+    /// its quiet hours or hourly limit held since its last summary (HS2-CFMSP2). The
+    /// delivery log is the record of both, so this survives restarts and separate CLI runs;
+    /// without a log nothing was kept to summarize. A failed summary is logged and not
+    /// retried, so a broken channel is not resent the same summary on every call.
+    pub fn flush_held(&self, config: &NotificationConfig) -> Vec<DeliveryRecord> {
+        let Some(path) = &self.log_path else {
+            return Vec::new();
+        };
+        let _flushing = FLUSH.lock_or_recover();
+        let records: Vec<DeliveryRecord> = {
+            let _guard = self.log_lock.lock_or_recover();
+            std::fs::read_to_string(path)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect()
+        };
+        let mut sent = Vec::new();
+        for channel in config.channels.iter().filter(|c| c.enabled) {
+            let mine: Vec<&DeliveryRecord> =
+                records.iter().filter(|r| r.channel == channel.id).collect();
+            let since = mine
+                .iter()
+                .rposition(|r| r.event == EventKind::HeldSummary)
+                .map_or(0, |i| i + 1);
+            let held: Vec<&DeliveryRecord> =
+                mine[since..].iter().copied().filter(|r| r.held).collect();
+            if held.is_empty() || self.held(channel, crate::message::Severity::Info).is_some() {
+                continue;
+            }
+            let message = held_summary(&held);
+            sent.push(self.deliver(config, &channel.id, None, &message));
+        }
+        sent
     }
 
     /// Deliver to one named channel regardless of rules or its enabled flag (a test or an
@@ -188,12 +238,16 @@ impl Dispatcher {
         Ok(self.deliver(config, channel, None, message))
     }
 
-    /// Why a rule-routed delivery to `channel` is held right now: quiet hours or the hourly
-    /// limit (HS2-4JG95G). Tests and explicit sends bypass both.
-    fn held(&self, channel: &crate::config::ChannelConfig, message: &Message) -> Option<String> {
+    /// Why a rule-routed delivery of `severity` to `channel` is held right now: quiet hours
+    /// or the hourly limit (HS2-4JG95G). Tests and explicit sends bypass both.
+    fn held(
+        &self,
+        channel: &crate::config::ChannelConfig,
+        severity: crate::message::Severity,
+    ) -> Option<String> {
         let now = (self.clock)();
         if let Some(quiet) = &channel.quiet_hours {
-            let urgent = quiet.allow_errors && message.severity >= crate::message::Severity::Error;
+            let urgent = quiet.allow_errors && severity >= crate::message::Severity::Error;
             if quiet.contains(now) && !urgent {
                 return Some(format!(
                     "quiet hours {}-{} ({})",
@@ -210,7 +264,13 @@ impl Dispatcher {
                     .unwrap_or_default()
                     .lines()
                     .filter_map(|line| serde_json::from_str::<DeliveryRecord>(line).ok())
-                    .filter(|r| r.channel == channel.id && r.outcome == Outcome::Delivered)
+                    // A held summary reports on the limit; counting it would hold the next
+                    // message and start another summary.
+                    .filter(|r| {
+                        r.channel == channel.id
+                            && r.outcome == Outcome::Delivered
+                            && r.event != EventKind::HeldSummary
+                    })
                     .filter_map(|r| {
                         time::OffsetDateTime::parse(
                             &r.at,
@@ -388,6 +448,7 @@ impl Dispatcher {
             truncated: false,
             omitted_attachments: 0,
             dedupe: message.dedupe_key.as_deref().map(dedupe_hash),
+            held: false,
         }
     }
 
@@ -403,6 +464,57 @@ impl Dispatcher {
         }
         record
     }
+}
+
+/// "3 notifications were held": a count and ticket slugs per event kind, then the reasons.
+/// The log keeps identifiers only, so the summary names no ticket titles.
+fn held_summary(held: &[&DeliveryRecord]) -> Message {
+    let count = held.len();
+    let mut message = Message::new(
+        EventKind::HeldSummary,
+        if count == 1 {
+            "1 notification was held".to_string()
+        } else {
+            format!("{count} notifications were held")
+        },
+    );
+    let mut kinds: Vec<EventKind> = Vec::new();
+    for record in held {
+        if !kinds.contains(&record.event) {
+            kinds.push(record.event);
+        }
+    }
+    let mut lines = Vec::new();
+    for kind in kinds {
+        let of_kind: Vec<_> = held.iter().filter(|r| r.event == kind).collect();
+        let mut slugs: Vec<&str> = Vec::new();
+        for slug in of_kind.iter().filter_map(|r| r.ticket.as_deref()) {
+            if !slugs.contains(&slug) {
+                slugs.push(slug);
+            }
+        }
+        let mut line = format!("- {} ×{}", kind.label(), of_kind.len());
+        if !slugs.is_empty() {
+            let shown = slugs.len().min(SUMMARY_SLUGS);
+            line.push_str(&format!(": {}", slugs[..shown].join(", ")));
+            if slugs.len() > shown {
+                line.push_str(&format!(" and {} more", slugs.len() - shown));
+            }
+        }
+        lines.push(line);
+    }
+    let mut reasons: Vec<&str> = Vec::new();
+    for reason in held.iter().filter_map(|r| r.error.as_deref()) {
+        if !reasons.contains(&reason) {
+            reasons.push(reason);
+        }
+    }
+    message.body = format!(
+        "{}\n\nHeld by {}.",
+        lines.join("\n"),
+        crate::transitions::escape(&reasons.join("; "))
+    );
+    message
 }
 
 /// The first 16 hex digits of the key's SHA-256.
@@ -746,13 +858,185 @@ mod tests {
         );
         *clock.lock_or_recover() = utc(7, 0);
         assert_eq!(
-            d.dispatch(&c, &blocked()).remove(0).outcome,
+            d.dispatch(&c, &blocked()).pop().unwrap().outcome,
             Outcome::Delivered
         );
         assert!(
             recent_deliveries(h.home.path(), 1)[0]
                 .at
                 .starts_with("2026-10-29T07:00:00")
+        );
+    }
+
+    fn quiet(c: &mut NotificationConfig) {
+        c.channels[0].quiet_hours = Some(crate::config::QuietHours {
+            start: "22:00".into(),
+            end: "07:00".into(),
+            utc_offset: "+00:00".into(),
+            allow_errors: true,
+        });
+    }
+
+    fn ticket(event: EventKind, slug: &str) -> Message {
+        let mut m = Message::new(event, format!("{slug} changed"));
+        m.ticket = Some(crate::message::TicketFacts {
+            slug: slug.into(),
+            ..Default::default()
+        });
+        m
+    }
+
+    fn summaries(h: &Harness) -> Vec<DeliveryRecord> {
+        recent_deliveries(h.home.path(), 100)
+            .into_iter()
+            .filter(|r| r.event == EventKind::HeldSummary)
+            .collect()
+    }
+
+    #[test]
+    fn hs2_cfmsp2_quiet_hours_end_with_one_summary_of_what_was_held() {
+        let h = harness(vec![ok()]);
+        let clock = Arc::new(Mutex::new(utc(23, 0)));
+        let d = at(&h, clock.clone(), true);
+        let mut c = one_channel(600);
+        c.rules[0].events = vec![EventKind::TicketBlocked, EventKind::TicketStatusChanged];
+        quiet(&mut c);
+        for (event, slug) in [
+            (EventKind::TicketBlocked, "HS2-1"),
+            (EventKind::TicketBlocked, "HS2-2"),
+            (EventKind::TicketBlocked, "HS2-1"),
+            (EventKind::TicketStatusChanged, "HS2-3"),
+        ] {
+            let held = d.dispatch(&c, &ticket(event, slug)).pop().unwrap();
+            assert!(held.held && held.outcome == Outcome::Suppressed);
+        }
+        // Still quiet: nothing is summarized yet.
+        assert!(d.flush_held(&c).is_empty());
+        assert!(h.http.requests().is_empty());
+
+        // After the window a fresh dispatcher (a restart, or another CLI run) reads the log.
+        *clock.lock_or_recover() = utc(7, 5);
+        let fresh = at(&h, clock.clone(), true);
+        let sent = fresh.flush_held(&c);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            (sent[0].event, sent[0].outcome, sent[0].rule.as_deref()),
+            (EventKind::HeldSummary, Outcome::Delivered, None)
+        );
+        let request = h.http.requests().remove(0);
+        let header = |name: &str| {
+            request
+                .headers
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.clone())
+        };
+        assert_eq!(
+            header("Title").as_deref(),
+            Some("4 notifications were held")
+        );
+        let body = String::from_utf8(request.body).unwrap();
+        assert!(body.contains("Blocked ×3: HS2-1, HS2-2"), "{body}");
+        assert!(body.contains("Status Changed ×1: HS2-3"), "{body}");
+        assert!(
+            body.contains("Held by quiet hours 22:00-07:00 (+00:00)."),
+            "{body}"
+        );
+
+        // Once summarized, nothing repeats; a later message is delivered on its own.
+        assert!(fresh.flush_held(&c).is_empty());
+        let next = fresh.dispatch(&c, &ticket(EventKind::TicketBlocked, "HS2-9"));
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].outcome, Outcome::Delivered);
+        assert_eq!(summaries(&h).len(), 1);
+    }
+
+    #[test]
+    fn hs2_cfmsp2_rate_limit_recovery_summarizes_before_the_next_message() {
+        let h = harness(vec![ok()]);
+        let clock = Arc::new(Mutex::new(utc(9, 0)));
+        let d = at(&h, clock.clone(), true);
+        let mut c = one_channel(0);
+        c.channels[0].max_per_hour = Some(1);
+        let m = |slug: &str| ticket(EventKind::TicketBlocked, slug);
+        assert_eq!(d.dispatch(&c, &m("HS2-1"))[0].outcome, Outcome::Delivered);
+        let held = d.dispatch(&c, &m("HS2-2")).remove(0);
+        assert!(held.held, "{held:?}");
+        assert_eq!(
+            held.error.as_deref(),
+            Some("rate limit of 1 per hour reached")
+        );
+        // Over the limit, a dispatch flushes nothing and holds again.
+        assert!(d.dispatch(&c, &m("HS2-3"))[0].held);
+
+        *clock.lock_or_recover() = utc(10, 1);
+        let records = d.dispatch(&c, &m("HS2-4"));
+        assert_eq!(
+            records
+                .iter()
+                .map(|r| (r.event, r.outcome))
+                .collect::<Vec<_>>(),
+            [
+                (EventKind::HeldSummary, Outcome::Delivered),
+                (EventKind::TicketBlocked, Outcome::Delivered),
+            ],
+            "the summary does not use up the hour's budget"
+        );
+        let titles: Vec<_> = h
+            .http
+            .requests()
+            .into_iter()
+            .filter_map(|r| r.headers.into_iter().find(|(n, _)| n == "Title"))
+            .map(|(_, v)| v)
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "HS2-1 changed",
+                "2 notifications were held",
+                "HS2-4 changed"
+            ]
+        );
+    }
+
+    #[test]
+    fn hs2_cfmsp2_cooldown_repeats_disabled_channels_and_failures_are_not_resummarized() {
+        let h = harness(vec![status(400)]);
+        let clock = Arc::new(Mutex::new(utc(12, 0)));
+        let d = at(&h, clock.clone(), true);
+        let mut c = one_channel(600);
+        // A cooldown repeat is suppressed but not held, so it is never summarized.
+        d.dispatch(&c, &blocked());
+        let repeat = d.dispatch(&c, &blocked()).remove(0);
+        assert!(repeat.outcome == Outcome::Suppressed && !repeat.held);
+        assert!(d.flush_held(&c).is_empty());
+
+        quiet(&mut c);
+        *clock.lock_or_recover() = utc(23, 0);
+        d.dispatch(&c, &ticket(EventKind::TicketBlocked, "HS2-5"));
+        *clock.lock_or_recover() = utc(8, 0);
+        c.channels[0].enabled = false;
+        assert!(d.flush_held(&c).is_empty(), "a disabled channel waits");
+        c.channels[0].enabled = true;
+        let failed = d.flush_held(&c);
+        assert_eq!(
+            (failed[0].event, failed[0].outcome),
+            (EventKind::HeldSummary, Outcome::Failed)
+        );
+        assert!(
+            d.flush_held(&c).is_empty(),
+            "a failed summary is not resent"
+        );
+        // No log, no memory of what was held.
+        let unlogged = at(&h, clock, false);
+        assert!(unlogged.flush_held(&c).is_empty());
+        // Rules cannot choose the summary event.
+        c.rules[0].events = vec![EventKind::HeldSummary];
+        assert!(
+            c.validate(&Registry::builtin_only())
+                .unwrap_err()
+                .to_string()
+                .contains("held-notification summaries")
         );
     }
 
@@ -766,7 +1050,8 @@ mod tests {
             c.channels[0].max_per_hour = Some(2);
             let mut m = blocked();
             m.dedupe_key = None;
-            let outcomes = |d: &Dispatcher| d.dispatch(&c, &m).remove(0);
+            // The message's own record is last; a held summary may precede it.
+            let outcomes = |d: &Dispatcher| d.dispatch(&c, &m).pop().unwrap();
             assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
             *clock.lock_or_recover() = utc(9, 30);
             assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
@@ -787,7 +1072,8 @@ mod tests {
             *clock.lock_or_recover() = utc(10, 1);
             assert_eq!(outcomes(&d).outcome, Outcome::Delivered);
             assert_eq!(outcomes(&d).outcome, Outcome::Suppressed);
-            assert_eq!(h.http.requests().len(), 3);
+            // With a log, the 10:01 dispatch first summarizes the held one (HS2-CFMSP2).
+            assert_eq!(h.http.requests().len(), if log { 4 } else { 3 });
         }
     }
 

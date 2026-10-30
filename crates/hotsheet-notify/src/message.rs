@@ -30,10 +30,14 @@ pub enum EventKind {
     /// A user-initiated channel test; delivered only to the named channel.
     #[serde(rename = "test")]
     Test,
+    /// One channel's summary of deliveries its quiet hours or hourly limit held back
+    /// (HS2-CFMSP2); sent by the dispatcher, never chosen by a rule.
+    #[serde(rename = "notifications.held")]
+    HeldSummary,
 }
 
 impl EventKind {
-    pub const ALL: [EventKind; 8] = [
+    pub const ALL: [EventKind; 9] = [
         EventKind::TicketStatusChanged,
         EventKind::TicketFeedbackNeeded,
         EventKind::TicketBlocked,
@@ -42,6 +46,7 @@ impl EventKind {
         EventKind::Digest,
         EventKind::ProjectStopped,
         EventKind::Test,
+        EventKind::HeldSummary,
     ];
 
     /// The wire name (`ticket.status_changed`, …).
@@ -55,6 +60,22 @@ impl EventKind {
             EventKind::Digest => "digest",
             EventKind::ProjectStopped => "project.stopped",
             EventKind::Test => "test",
+            EventKind::HeldSummary => "notifications.held",
+        }
+    }
+
+    /// A short human label (`Status Changed`), as the web settings name events.
+    pub fn label(self) -> &'static str {
+        match self {
+            EventKind::TicketStatusChanged => "Status Changed",
+            EventKind::TicketFeedbackNeeded => "Feedback Needed",
+            EventKind::TicketBlocked => "Blocked",
+            EventKind::PermissionRequested => "Permission Requested",
+            EventKind::Notification => "Published Notification",
+            EventKind::Digest => "Digest",
+            EventKind::ProjectStopped => "Project Stopped or Stuck",
+            EventKind::Test => "Test",
+            EventKind::HeldSummary => "Held Notifications",
         }
     }
 
