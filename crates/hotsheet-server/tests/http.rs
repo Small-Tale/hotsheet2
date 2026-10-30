@@ -6765,9 +6765,7 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
     .await;
     let cursor = last["cursor"].as_str().unwrap().to_owned();
     let waiting_app = app.clone();
-    // The full suite can delay watcher startup; leave enough time for the
-    // unlink event to arrive instead of racing the request's idle timeout.
-    let waiting_route = format!("{route}?after={cursor}&wait_ms=10000");
+    let waiting_route = format!("{route}?after={cursor}&wait_ms=1000");
     let waiting_unlink = tokio::spawn(async move {
         waiting_app
             .oneshot(authed("GET", &waiting_route, None))
@@ -6778,8 +6776,39 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(registry.path().join("checkouts.json"))
         .remove_source(&id, &source_id)
         .unwrap();
-    let unavailable = waiting_unlink.await.unwrap();
-    assert_ne!(unavailable.status(), StatusCode::OK);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut unavailable = tokio::time::timeout_at(deadline, waiting_unlink)
+        .await
+        .expect("worker-view unlink response exceeded deadline")
+        .unwrap();
+    let mut replayed = Vec::new();
+    for _ in 0..3 {
+        if unavailable.status() != StatusCode::OK {
+            break;
+        }
+        // An earlier worker event or an idle timeout may answer first. Replay its
+        // cursor so the assertion tests the unlinked source, not one response order.
+        let body = body_json(unavailable).await;
+        let next = body["cursor"].as_str().expect("worker view cursor");
+        replayed.push(next.to_owned());
+        unavailable = tokio::time::timeout_at(
+            deadline,
+            app.clone().oneshot(authed(
+                "GET",
+                &format!("{route}?after={next}&wait_ms=1000"),
+                None,
+            )),
+        )
+        .await
+        .expect("worker-view replay exceeded deadline")
+        .unwrap();
+    }
+    assert_ne!(
+        unavailable.status(),
+        StatusCode::OK,
+        "unlinked worker source still returned OK after {} replay(s): {replayed:?}",
+        replayed.len()
+    );
 }
 
 #[tokio::test]
