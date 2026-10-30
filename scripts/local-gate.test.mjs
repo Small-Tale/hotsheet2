@@ -305,6 +305,9 @@ test('HS2-RS0FFT bounded browser selection includes affected terminal and timeli
 test('HS2-P9A21R selects phone navigation and resize after workspace chrome changes', () => {
   const stages = browserStages(['clients/web/src/components/workspace-controls.tsx'], false);
   assert.ok(
+    stages.some((stage) => stage.command.includes('projects Kerf workspace segments through mode transitions')),
+  );
+  assert.ok(
     stages.some(
       (stage) =>
         stage.command.includes('tests/mobile-layout.spec.ts') &&
@@ -328,6 +331,44 @@ test('HS2-RS0FFT identifies a changed parent in a browser file larger than the d
   assert.ok(
     result.checks.some((stage) => stage.command.includes('--grep') && stage.command.includes('large fixture parent')),
   );
+});
+
+test('HS2-P9A21R selects every generated theme case through a stable title prefix', (t) => {
+  const f = fixture(t);
+  const path = 'clients/web/tests/providers.spec.ts';
+  const content =
+    'for (const theme of ["light", "dark"]) {\n' +
+    '  test(`workspace mode transitions in ${theme}`, async () => {\n    const count = 4;\n  });\n}\n';
+  f.put(path, content);
+  f.git('add', path);
+  f.git('commit', '--quiet', '-m', 'synthetic theme cases');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put(path, content.replace('count = 4', 'count = 5'));
+  f.git('commit', '--quiet', '-am', 'changed generated cases');
+  const result = prepare(f.repo, undefined, false, f.options.versions);
+  const provider = result.checks.filter((stage) => stage.command.includes('providers.spec.ts'));
+  assert.equal(provider.length, 1);
+  assert.ok(provider[0].command.includes('--grep'));
+  assert.ok(provider[0].command.includes('workspace mode transitions in '));
+});
+
+test('HS2-P9A21R keeps shared edits after an indented test on full-file coverage', (t) => {
+  const f = fixture(t);
+  const path = 'clients/web/tests/providers.spec.ts';
+  const content =
+    'for (const theme of ["light", "dark"]) {\n' +
+    '  test(`workspace mode transitions in ${theme}`, async () => {\n    const count = 4;\n  });\n' +
+    '  const shared = 1;\n}\n';
+  f.put(path, content);
+  f.git('add', path);
+  f.git('commit', '--quiet', '-m', 'synthetic shared fixture');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put(path, content.replace('shared = 1', 'shared = 2'));
+  f.git('commit', '--quiet', '-am', 'changed shared fixture');
+  const result = prepare(f.repo, undefined, false, f.options.versions);
+  const provider = result.checks.filter((stage) => stage.command.includes('providers.spec.ts'));
+  assert.equal(provider.length, 1);
+  assert.equal(provider[0].command.includes('--grep'), false);
 });
 
 test('HS2-5PTT2Y a sandboxed failure names the sandbox; a pass or an unsandboxed failure does not', (t) => {

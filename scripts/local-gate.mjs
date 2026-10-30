@@ -131,13 +131,12 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     if (/terminal|dashboard/.test(path)) files.add('tests/terminal-feedback.spec.ts');
     if (/timeline/.test(path)) files.add('tests/ticket-timeline-usage.spec.ts');
   }
-  if (
-    changes.some((path) =>
-      /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
-        path,
-      ),
-    )
-  )
+  const workspaceChromeChanged = changes.some((path) =>
+    /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
+      path,
+    ),
+  );
+  if (workspaceChromeChanged)
     scoped.push({
       cwd: 'clients/web',
       group: 'web',
@@ -148,6 +147,7 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     });
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
+  if (workspaceChromeChanged) patterns.push('projects Kerf workspace segments through mode transitions');
   patterns.push(...providerTitles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   if (changes.includes('clients/web/tests/providers.spec.ts') && !providerTitles.length) {
     files.add('tests/providers.spec.ts');
@@ -266,9 +266,14 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     let shared = false;
     for (const line of diff.split('\n')) {
       if (/^(---|\+\+\+|@@|diff |index )/.test(line)) continue;
-      const match = /^[ +]test\('((?:\\.|[^'\\])*)'/.exec(line);
+      const match = /^[ +]\s*test\('((?:\\.|[^'\\])*)'/.exec(line);
+      const template = /^[ +]\s*test\(`((?:\\.|[^`\\$]|\$(?!\{))*)/.exec(line);
       if (match) current = match[1].replace(/\\(.)/g, '$1');
-      else if (/^[ +]test\(/.test(line)) current = null;
+      // HS2-P9A21R: a stable template prefix covers every generated theme/size case.
+      else if (template && template[1].length >= 12) current = template[1].replace(/\\(.)/g, '$1');
+      else if (/^[ +]\s*test\(/.test(line)) current = null;
+      // HS2-P9A21R: after a closing scope, uncertain edits require the whole file.
+      else if (/^[ +]\s*}[);,\s]*$/.test(line)) current = null;
       else if (/^[ +](?:export )?(?:async )?(?:function |class |const |let )/.test(line)) current = null;
       if (/^[+-]/.test(line)) {
         if (current) titles.push(current);

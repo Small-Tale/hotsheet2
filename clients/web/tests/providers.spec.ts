@@ -5214,7 +5214,13 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     const segments = toolbar.getByRole('group', { name: 'View mode', exact: true });
-    const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
+    const icons = {
+      list: 'list',
+      board: 'columns-3',
+      workers: 'users-round',
+      notifications: 'bell',
+      settings: 'settings',
+    };
     const expectMode = async (group: Locator, selected: keyof typeof icons, modes = Object.keys(icons)) => {
       await expect(group).toHaveAttribute('data-component', 'segmented-control');
       await expect(group).toHaveAttribute('data-appearance', 'toolbar');
@@ -5269,24 +5275,24 @@ for (const theme of ['light', 'dark'] as const) {
     const rail = page.locator('#app-right-rail');
     const railSegments = rail.getByRole('group', { name: 'View mode', exact: true });
     // The rail mirrors the shared view mode and offers Columns too (HS2-656Q43).
-    await expectMode(railSegments, 'board', ['list', 'board', 'notifications']);
+    await expectMode(railSegments, 'board', ['list', 'board', 'workers', 'notifications']);
     await expect(railSegments).toHaveAttribute('data-layout', 'equal');
     await expect(railSegments).toHaveAttribute('data-shape', 'rounded');
     const widths = await railSegments
       .getByRole('button')
       .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().width));
-    expect(widths[0]).toBeCloseTo(widths[1], 0);
-    expect(widths[0]).toBeGreaterThan(100);
+    for (const width of widths) expect(width).toBeCloseTo(widths[0], 0);
+    expect(widths[0]).toBeGreaterThanOrEqual(44);
     await railSegments.getByRole('button', { name: 'Notifications View' }).click();
-    await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
+    await expectMode(railSegments, 'notifications', ['list', 'board', 'workers', 'notifications']);
     await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
     await railSegments.getByRole('button', { name: 'List View' }).click();
-    await expectMode(railSegments, 'list', ['list', 'board', 'notifications']);
+    await expectMode(railSegments, 'list', ['list', 'board', 'workers', 'notifications']);
     await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
     await rail.screenshot({ path: `target/visual-captures/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
     await page.setViewportSize({ width: 1024, height: 600 });
     await railSegments.getByRole('button', { name: 'Notifications View' }).click();
-    await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
+    await expectMode(railSegments, 'notifications', ['list', 'board', 'workers', 'notifications']);
     await page.screenshot({
       path: `target/visual-captures/hs2-f29qat-rail-${theme}-narrow.png`,
       animations: 'disabled',
