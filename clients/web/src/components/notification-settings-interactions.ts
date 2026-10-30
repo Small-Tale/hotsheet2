@@ -134,7 +134,12 @@ export function wireNotificationSettings(root: HTMLElement, settings: Notificati
       const dialog = target.closest(NOTIFICATIONS_AND_LINKS_TARGETS.notificationRuleDialog.selector);
       if (!dialog) return;
       const { values, checked } = dialogValues(dialog);
-      void settings.saveRule(values, checked[RULE_FIELD.events] ?? [], checked[RULE_FIELD.channels] ?? []);
+      void settings.saveRule(
+        values,
+        checked[RULE_FIELD.events] ?? [],
+        checked[RULE_FIELD.channels] ?? [],
+        checked[RULE_FIELD.views],
+      );
     }),
   );
   lifetime.add(

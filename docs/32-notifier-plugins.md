@@ -434,9 +434,11 @@ A credential input never shows a stored value ("Stored; leave empty to keep it")
 written only through the secret route. Quiet hours and the hourly limit sit below.
 
 **Rule dialog.** Choose events and channels with checkboxes; filter by ticket text, tags,
-statuses, and projects, a minimum severity, and a cooldown. Filters the dialog does not
-show (categories, priorities, and saved views) are kept when a rule is edited, and saved
-views appear in the rule summary (HS2-G8NXNC). Choosing them in the dialog is HS2-DNQFB8.
+statuses, categories, priorities, and projects, a minimum severity, and a cooldown. **In
+Saved Views** lists every open project's saved views ("Project · View"); checking several
+matches any of them (HS2-DNQFB8). A view the rule names that no open project offers, such as
+one set from the CLI for a closed project, stays listed by its `checkout/view` id, so editing
+keeps or removes it deliberately. The rule summary lists categories, priorities, and views.
 
 **Saving and refresh.** Both dialogs submit explicitly, because the server validates the
 whole channel or rule. A refusal stays in the dialog with its reason. The category
@@ -501,7 +503,7 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | Text, checkout, quiet-hour, and rate-limit filters                         | Shipped | HS2-4JG95G |
 | Saved-view rules                                                           | Shipped | HS2-G8NXNC |
 | Batched summaries of held messages                                         | Shipped | HS2-CFMSP2 |
-| Choosing saved views, categories, and priorities in the web rule dialog    | Planned | HS2-DNQFB8 |
+| Choosing saved views, categories, and priorities in the web rule dialog    | Shipped | HS2-DNQFB8 |
 | Click-through links                                                        | Shipped | HS2-04J8WS |
 | Configuration write lock                                                   | Shipped | HS2-YGNDET |
 | Transitions without a running server (CLI)                                 | Shipped | HS2-8VAXXA |

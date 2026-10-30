@@ -106,7 +106,7 @@ function fixtureConfig(): NotificationConfig {
         events: ['ticket.feedback_needed', 'permission.requested'],
         channels: ['phone'],
         enabled: true,
-        filter: { min_severity: 'warning' },
+        filter: { min_severity: 'warning', views: [{ checkout: 'rocket-1a2b', view: 'release' }] },
         cooldown_seconds: 600,
       },
       {
@@ -204,7 +204,20 @@ const demoApi: NotificationSettingsApi = {
   },
 };
 
-const settings = createNotificationSettings({ api: () => demoApi });
+const settings = createNotificationSettings({
+  api: () => demoApi,
+  savedViews: () =>
+    Promise.resolve([
+      {
+        checkout: 'rocket-1a2b',
+        project: 'Rocket',
+        views: [
+          { id: 'release', name: 'Release', query: 'tag:release' },
+          { id: 'needs-docs', name: 'Needs Docs', query: 'tag:docs AND is:open' },
+        ],
+      },
+    ]),
+});
 
 function resetNotificationSettingsDemo() {
   config = fixtureConfig();
@@ -225,6 +238,7 @@ function liveProps() {
     busyChannels: settings.busyChannels.value,
     channelEditor: settings.channelEditor.value,
     ruleEditor: settings.ruleEditor.value,
+    viewChoices: settings.viewChoices.value,
   };
 }
 

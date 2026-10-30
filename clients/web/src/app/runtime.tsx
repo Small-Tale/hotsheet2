@@ -1511,6 +1511,17 @@ export async function startHotSheetWebClient() {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
     },
+    // HS2-DNQFB8: a rule may name any open project's saved views.
+    savedViews: async () => {
+      const answers = await Promise.allSettled(
+        projects.value.map(async (open) => ({
+          checkout: open.id,
+          project: open.name,
+          views: await new Api(open.apiPath, '', { trackBusy: false }).customViews(),
+        })),
+      );
+      return answers.flatMap((answer) => (answer.status === 'fulfilled' ? [answer.value] : []));
+    },
   });
   let notificationSettingsShown = false;
   effect(() => {
@@ -4424,6 +4435,7 @@ export async function startHotSheetWebClient() {
       busyChannels: notificationSettings.busyChannels.value,
       channelEditor: notificationSettings.channelEditor.value,
       ruleEditor: notificationSettings.ruleEditor.value,
+      viewChoices: notificationSettings.viewChoices.value,
     }),
     permissionAutomation,
     permissionRules,

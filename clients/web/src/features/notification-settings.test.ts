@@ -191,6 +191,32 @@ describe('notification settings controller (HS2-DPBJJA)', () => {
     expect(fake.config.rules).toEqual([expect.objectContaining({ id: 'docs', filter: { tags: ['release'], views } })]);
   });
 
+  it('offers open projects saved views and saves the checked ones (HS2-DNQFB8)', async () => {
+    const fake = fakeApi();
+    const settings = createNotificationSettings({
+      api: () => fake.api,
+      savedViews: () =>
+        Promise.resolve([
+          { checkout: 'web-1a2b', project: 'Web', views: [{ id: 'docs', name: 'Needs Docs', query: 'tag:docs' }] },
+          { checkout: 'api-9z', project: 'API', views: [] },
+        ]),
+    });
+    await settings.refresh();
+    expect(settings.viewChoices.value).toEqual([{ value: 'web-1a2b/docs', label: 'Web · Needs Docs' }]);
+    await addPhone(settings);
+    settings.openRuleEditor();
+    await settings.saveRule({ [RULE_FIELD.label]: 'Docs' }, ['ticket.blocked'], ['phone'], ['web-1a2b/docs']);
+    expect(fake.config.rules[0]?.filter).toEqual({ views: [{ checkout: 'web-1a2b', view: 'docs' }] });
+
+    const failing = createNotificationSettings({
+      api: () => fake.api,
+      savedViews: () => Promise.reject(new Error('x')),
+    });
+    await failing.refresh();
+    expect(failing.viewChoices.value).toEqual([]);
+    expect(failing.message.value).toBe('');
+  });
+
   it('validates and saves delivery options', async () => {
     const fake = fakeApi();
     const settings = createNotificationSettings({ api: () => fake.api });

@@ -182,6 +182,29 @@ describe('rules (HS2-DPBJJA)', () => {
     expect(ruleFromForm({}, ['ticket.blocked'], ['phone'], { tags: ['old'] })).toMatchObject({ filter: undefined });
   });
 
+  it('reads categories, priorities, and checked saved views when the form shows them (HS2-DNQFB8)', () => {
+    const kept = { categories: ['old'], priorities: ['low'], views: [{ checkout: 'a-1', view: 'x' }] };
+    const read = (values: Record<string, string>, views?: string[]) =>
+      ruleFromForm(values, ['ticket.blocked'], ['phone'], kept, views);
+    expect(
+      read({ [RULE_FIELD.categories]: 'bug, feature', [RULE_FIELD.priorities]: 'high' }, [
+        'web-1a2b/needs-docs',
+        'bad',
+        '/x',
+        'y/',
+      ]),
+    ).toMatchObject({
+      filter: {
+        categories: ['bug', 'feature'],
+        priorities: ['high'],
+        views: [{ checkout: 'web-1a2b', view: 'needs-docs' }],
+      },
+    });
+    // Shown but empty clears; absent keeps.
+    expect(read({ [RULE_FIELD.categories]: '', [RULE_FIELD.priorities]: '' }, [])).toMatchObject({ filter: undefined });
+    expect(read({})).toMatchObject({ filter: kept });
+  });
+
   it('summarizes a rule with channel labels and filters', () => {
     expect(
       ruleSummary(

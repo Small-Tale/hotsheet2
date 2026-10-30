@@ -1,6 +1,7 @@
 import { signal } from 'kerfjs';
 
 import type {
+  CustomView,
   NotificationChannel,
   NotificationChannelRemoval,
   NotificationConfig,
@@ -15,6 +16,7 @@ import {
   type FormValues,
   RULE_FIELD,
   ruleFromForm,
+  viewChoiceValue,
 } from '../notification-settings-model';
 
 /** The server calls the notification settings controller makes (HS2-DPBJJA). */
@@ -43,6 +45,17 @@ export interface ChannelEditorState {
   busy: boolean;
   error?: string;
 }
+/** One open project's saved views, for the rule dialog's saved-view choices (HS2-DNQFB8). */
+export interface ProjectSavedViews {
+  checkout: string;
+  project: string;
+  views: readonly CustomView[];
+}
+/** A saved-view choice: `value` is `<checkout>/<view>`, `label` names the project and view. */
+export interface SavedViewChoice {
+  value: string;
+  label: string;
+}
 export interface RuleEditorState {
   id?: string;
   busy: boolean;
@@ -56,7 +69,11 @@ const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message
  * rules, and recent deliveries, and runs every change through the same REST admin workflow the CLI
  * uses. A refresh happens when the category opens and after each change; nothing polls.
  */
-export function createNotificationSettings(dependencies: { api: () => NotificationSettingsApi | undefined }) {
+export function createNotificationSettings(dependencies: {
+  api: () => NotificationSettingsApi | undefined;
+  /** Saved views of the open projects; a project that fails to answer is left out. */
+  savedViews?: () => Promise<readonly ProjectSavedViews[]>;
+}) {
   const notifiers = signal<NotifierList | undefined>(undefined),
     config = signal<NotificationConfig | undefined>(undefined),
     deliveries = signal<NotificationDelivery[] | undefined>(undefined),
@@ -64,7 +81,8 @@ export function createNotificationSettings(dependencies: { api: () => Notificati
     status = signal(''),
     channelEditor = signal<ChannelEditorState | undefined>(undefined),
     ruleEditor = signal<RuleEditorState | undefined>(undefined),
-    busyChannels = signal<readonly string[]>([]);
+    busyChannels = signal<readonly string[]>([]),
+    viewChoices = signal<readonly SavedViewChoice[]>([]);
   let generation = 0;
 
   async function refresh() {
@@ -81,6 +99,14 @@ export function createNotificationSettings(dependencies: { api: () => Notificati
       notifiers.value = list;
       config.value = current;
       deliveries.value = recent;
+      const projects = (await dependencies.savedViews?.().catch(() => [])) ?? [];
+      if (request !== generation) return;
+      viewChoices.value = projects.flatMap((project) =>
+        project.views.map((view) => ({
+          value: viewChoiceValue({ checkout: project.checkout, view: view.id }),
+          label: `${project.project} · ${view.name}`,
+        })),
+      );
     } catch (reason) {
       if (request === generation) message.value = messageOf(reason);
     }
@@ -205,12 +231,18 @@ export function createNotificationSettings(dependencies: { api: () => Notificati
     ruleEditor.value = undefined;
   }
 
-  async function saveRule(values: FormValues, events: readonly string[], channels: readonly string[]) {
+  /** `views` is the checked saved-view values, or undefined when the dialog showed no choices. */
+  async function saveRule(
+    values: FormValues,
+    events: readonly string[],
+    channels: readonly string[],
+    views?: readonly string[],
+  ) {
     const editor = ruleEditor.value,
       api = dependencies.api();
     if (!editor || !api) return;
     const kept = editor.id ? config.value?.rules.find((item) => item.id === editor.id)?.filter : undefined;
-    const rule = ruleFromForm(values, events, channels, kept);
+    const rule = ruleFromForm(values, events, channels, kept, views);
     if ('error' in rule) {
       ruleEditor.value = { ...editor, error: rule.error };
       return;
@@ -260,6 +292,7 @@ export function createNotificationSettings(dependencies: { api: () => Notificati
     channelEditor,
     ruleEditor,
     busyChannels,
+    viewChoices,
     refresh,
     openChannelEditor,
     chooseNotifier,

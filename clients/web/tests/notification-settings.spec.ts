@@ -167,3 +167,111 @@ test('manages notifier channels and rules through App Settings → Notifications
     await server.stop();
   }
 });
+
+interface RuleFilter {
+  categories?: string[];
+  priorities?: string[];
+  views?: { checkout: string; view: string }[];
+}
+
+// HS2-DNQFB8: the rule dialog names open projects' saved views and filters by category and priority;
+// editing a rule changes or clears them, and a view no open project offers stays listed by its id.
+test('chooses saved views, categories, and priorities in the rule dialog', async ({ page }) => {
+  const server = await realTicketServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await installTerminalFixture(page);
+    await routeNotifierApi(page, server);
+    await page.route(
+      (url) => url.pathname.endsWith('/project-api/terminal-feedback/views'),
+      (route) =>
+        route.fulfill({
+          json: [
+            { id: 'release', name: 'Release', query: 'tag:release' },
+            { id: 'needs-docs', name: 'Needs Docs', query: 'tag:docs AND is:open' },
+          ],
+        }),
+    );
+    await server.request('/notification-channels/desk-voice', 'PUT', {
+      notifier: 'speak',
+      label: 'Desk Voice',
+      settings: { command: ['true'] },
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+    const settings = page.locator('[data-component="notification-settings"]');
+    await expect(settings.getByText('Desk Voice').first()).toBeVisible();
+
+    await settings.getByRole('button', { name: 'Add Rule…' }).click();
+    const add = page.getByRole('dialog', { name: 'Add Rule' });
+    await add.getByLabel('Name').fill('Release blockers');
+    await add.getByRole('checkbox', { name: 'Blocked' }).check();
+    await add.getByRole('checkbox', { name: 'Desk Voice' }).check();
+    const views = add.getByRole('group', { name: 'In Saved Views' });
+    await expect(views.getByRole('checkbox')).toHaveCount(2);
+    await views.getByRole('checkbox', { name: 'Terminal feedback · Release' }).check();
+    await add.getByLabel('Categories').fill('bug, feature');
+    await add.getByLabel('Priorities').fill('high');
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 900],
+      ['narrow', 420],
+    ] as const) {
+      await page.setViewportSize({ width, height: 860 });
+      await settled(page);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `${label}: no horizontal page scroll`).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `target/visual-captures/hs2-dnqfb8-rule-dialog-${label}.png` });
+    }
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await settled(page);
+    await add.getByRole('button', { name: 'Add Rule' }).click();
+    await expect(add).toBeHidden();
+    const filter = async () =>
+      (await server.request<{ rules: { id: string; filter?: RuleFilter }[] }>('/notification-config')).rules[0]?.filter;
+    await expect.poll(filter).toEqual({
+      categories: ['bug', 'feature'],
+      priorities: ['high'],
+      views: [{ checkout: 'terminal-feedback', view: 'release' }],
+    });
+    await expect(
+      settings.getByText('To Desk Voice · category bug, feature · priority high · view terminal-feedback/release'),
+    ).toBeVisible();
+
+    // A view no open project offers (from the CLI, say) stays listed and checked by its id.
+    await server.request('/notification-rules/release-blockers', 'PUT', {
+      events: ['ticket.blocked'],
+      channels: ['desk-voice'],
+      filter: {
+        categories: ['bug'],
+        views: [
+          { checkout: 'terminal-feedback', view: 'release' },
+          { checkout: 'elsewhere-9z', view: 'ops' },
+        ],
+      },
+    });
+    // The category re-reads the server when it opens.
+    await page.getByRole('button', { name: 'Keyboard', exact: true }).click();
+    await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+    await expect(settings.getByText(/view terminal-feedback\/release, elsewhere-9z\/ops/)).toBeVisible();
+    await rowMenu(page, 'Blocked', 'Edit…');
+    const edit = page.getByRole('dialog', { name: 'Edit Rule' });
+    const editViews = edit.getByRole('group', { name: 'In Saved Views' });
+    await expect(editViews.getByRole('checkbox', { name: 'elsewhere-9z/ops' })).toBeChecked();
+    await expect(editViews.getByRole('checkbox', { name: 'Terminal feedback · Release' })).toBeChecked();
+    await expect(edit.getByLabel('Categories')).toHaveValue('bug');
+    // Unchecking every view and clearing categories removes those filters.
+    await editViews.getByRole('checkbox', { name: 'elsewhere-9z/ops' }).uncheck();
+    await editViews.getByRole('checkbox', { name: 'Terminal feedback · Release' }).uncheck();
+    await edit.getByLabel('Categories').fill('');
+    await edit.getByLabel('Priorities').fill('highest');
+    await edit.getByRole('button', { name: 'Save Rule' }).click();
+    await expect(edit).toBeHidden();
+    await expect.poll(filter).toEqual({ priorities: ['highest'] });
+  } finally {
+    await server.stop();
+  }
+});

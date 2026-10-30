@@ -33,7 +33,7 @@ import {
 } from 'lucide';
 
 import type { NotificationChannel, NotificationConfig, NotificationDelivery, NotifierList } from '../api';
-import type { ChannelEditorState, RuleEditorState } from '../features/notification-settings';
+import type { ChannelEditorState, RuleEditorState, SavedViewChoice } from '../features/notification-settings';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { eventLabel, notifierIconName, OPTIONS_FIELD, ruleSummary } from '../notification-settings-model';
 import { NotificationChannelDialog } from './notification-channel-dialog';
@@ -53,6 +53,8 @@ export interface NotificationSettingsProps {
   busyChannels?: readonly string[];
   channelEditor?: ChannelEditorState;
   ruleEditor?: RuleEditorState;
+  /** The open projects' saved views a rule can name (HS2-DNQFB8). */
+  viewChoices?: readonly SavedViewChoice[];
 }
 
 const ICONS = {
@@ -99,6 +101,7 @@ export function NotificationSettings({
   busyChannels = [],
   channelEditor,
   ruleEditor,
+  viewChoices = [],
 }: NotificationSettingsProps) {
   const loading = !config || !notifiers,
     channels = config?.channels ?? [],
@@ -344,6 +347,7 @@ export function NotificationSettings({
         <NotificationRuleDialog
           editor={ruleEditor}
           channels={channels}
+          viewChoices={viewChoices}
           rule={rules.find((rule) => rule.id === ruleEditor.id)}
         />
       ) : null}

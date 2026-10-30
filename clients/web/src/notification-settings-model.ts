@@ -9,6 +9,7 @@ import type {
   NotificationQuietHours,
   NotificationRule,
   NotificationRuleFilter,
+  NotificationViewRef,
   NotifierDescriptor,
   NotifierSettingField,
 } from './api';
@@ -44,6 +45,9 @@ export const RULE_FIELD = {
   tags: 'notification-rule-tags',
   statuses: 'notification-rule-statuses',
   projects: 'notification-rule-projects',
+  categories: 'notification-rule-categories',
+  priorities: 'notification-rule-priorities',
+  views: 'notification-rule-views',
   minSeverity: 'notification-rule-min-severity',
   cooldown: 'notification-rule-cooldown',
 } as const;
@@ -189,16 +193,26 @@ export function channelIdFrom(label: string, taken: readonly string[]): string {
   return id;
 }
 
+/** A saved-view checkbox value: `<checkout id>/<view id>` (neither contains a slash). */
+export const viewChoiceValue = (view: NotificationViewRef) => `${view.checkout}/${view.view}`;
+const viewRefOf = (value: string): NotificationViewRef | undefined => {
+  const slash = value.indexOf('/');
+  return slash > 0 && slash < value.length - 1
+    ? { checkout: value.slice(0, slash), view: value.slice(slash + 1) }
+    : undefined;
+};
+
 /**
- * Read the rule form into a request body, or explain the first invalid value. Filters the form
- * does not show (categories, priorities, saved views) are kept from `kept`, the edited rule's
- * filter, so saving here never drops them (HS2-G8NXNC).
+ * Read the rule form into a request body, or explain the first invalid value. A filter the form
+ * did not show (an absent field, or `viewValues` undefined) is kept from `kept`, the edited rule's
+ * filter, so saving here never drops it (HS2-G8NXNC, HS2-DNQFB8).
  */
 export function ruleFromForm(
   values: FormValues,
   eventValues: readonly string[],
   channelValues: readonly string[],
   kept?: NotificationRuleFilter,
+  viewValues?: readonly string[],
 ): Omit<NotificationRule, 'id'> | { error: string } {
   if (eventValues.length === 0) return { error: 'Choose at least one event.' };
   if (channelValues.length === 0) return { error: 'Choose at least one channel.' };
@@ -206,9 +220,13 @@ export function ruleFromForm(
   const cooldown = cooldownText ? Number(cooldownText) : 0;
   if (!Number.isInteger(cooldown) || cooldown < 0) return { error: 'Cooldown must be a whole number of seconds.' };
   const filter: NotificationRuleFilter = {};
-  if (kept?.categories?.length) filter.categories = kept.categories;
-  if (kept?.priorities?.length) filter.priorities = kept.priorities;
-  if (kept?.views?.length) filter.views = kept.views;
+  const shown = (name: string) => typeof values[name] === 'string';
+  const categories = shown(RULE_FIELD.categories) ? list(text(values, RULE_FIELD.categories)) : kept?.categories,
+    priorities = shown(RULE_FIELD.priorities) ? list(text(values, RULE_FIELD.priorities)) : kept?.priorities,
+    views = viewValues ? viewValues.flatMap((value) => viewRefOf(value) ?? []) : kept?.views;
+  if (categories?.length) filter.categories = categories;
+  if (priorities?.length) filter.priorities = priorities;
+  if (views?.length) filter.views = views;
   const tags = list(text(values, RULE_FIELD.tags)),
     statuses = list(text(values, RULE_FIELD.statuses)),
     projects = list(text(values, RULE_FIELD.projects)),
@@ -244,7 +262,9 @@ export function ruleSummary(rule: NotificationRule, channels: readonly Notificat
   if (f?.tags?.length) filters.push(`tag ${f.tags.join(', ')}`);
   if (f?.statuses?.length) filters.push(`status ${f.statuses.join(', ')}`);
   if (f?.projects?.length) filters.push(`project ${f.projects.join(', ')}`);
-  if (f?.views?.length) filters.push(`view ${f.views.map((v) => `${v.checkout}/${v.view}`).join(', ')}`);
+  if (f?.categories?.length) filters.push(`category ${f.categories.join(', ')}`);
+  if (f?.priorities?.length) filters.push(`priority ${f.priorities.join(', ')}`);
+  if (f?.views?.length) filters.push(`view ${f.views.map(viewChoiceValue).join(', ')}`);
   if (f?.min_severity) filters.push(`${f.min_severity} or higher`);
   if (rule.cooldown_seconds) filters.push(`cooldown ${rule.cooldown_seconds}s`);
   return `To ${names.join(', ')}${filters.length ? ` · ${filters.join(' · ')}` : ''}`;
