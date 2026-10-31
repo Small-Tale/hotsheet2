@@ -16506,8 +16506,22 @@ test('answers identical permission requests for this chat and revokes the rememb
   await expect(popup).toContainText('Exact action only');
   await popup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await popup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-390.png' });
+  // HS2-XM04W9: capture only after the responsive render relocates and presents the review dialog.
+  const shell = page.locator('[data-component="app-shell"]');
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  const phonePopup = shell.locator(':scope > [data-component="permission-request-popup"]:popover-open');
+  await expect(phonePopup).toHaveCount(1);
+  await expect(phonePopup).toBeVisible();
+  await expect(phonePopup.getByRole('group', { name: 'Confirm remembered permission' })).toBeVisible();
+  await expect(phonePopup).toContainText(secretAction);
+  await expect(phonePopup).toContainText('This AI session only');
+  await expect(phonePopup).toContainText('Exact action only');
+  await expect(phonePopup.getByRole('button', { name: 'Confirm Allow This AI Session' })).toBeEnabled();
+  await phonePopup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-390.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(shell).toHaveAttribute('data-mobile', 'false');
+  await expect(popup.getByRole('group', { name: 'Confirm remembered permission' })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Back', exact: true })).toBeEnabled();
   expect(answers).toEqual([]);
   await popup.getByRole('button', { name: 'Back' }).click();
   await expect(popup).not.toContainText('Review the rule to remember');
