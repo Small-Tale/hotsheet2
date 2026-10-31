@@ -475,6 +475,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         editable = isEditableEvent(event);
       if (matchesShortcut('open-search', event, overrides, appleShortcutPlatform)) {
         event.preventDefault();
+        if (dependencies.viewportMobile.value) setInspectorVisible(false);
         searchOpen.value = true;
         focusWorkspaceSearch();
         return;

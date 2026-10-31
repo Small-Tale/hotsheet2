@@ -97,6 +97,24 @@ async function mockSearchProject(page: Page, views: Array<{ id: string; name: st
           },
         ],
       });
+    // HS2-CSP42A: the real inspector/reader parent requests a qualified ticket detail.
+    const ticketId = decodeURIComponent(path).match(/\/tickets\/([^/]+)$/)?.[1];
+    if (ticketId && request.method() === 'GET') {
+      const ticket = rows.find((item) => [item.id, item.native_id, item.qualified_id].includes(ticketId));
+      return ticket
+        ? route.fulfill({
+            json: {
+              ...ticket,
+              store: ticket.connection_id,
+              details: 'Synthetic search overlay ticket details.',
+              blocked_reason: null,
+              concurrency_token: `token-${ticket.id}`,
+              notes: [],
+              attachments: [],
+            },
+          })
+        : route.fulfill({ status: 404, json: { error: 'Synthetic ticket not found' } });
+    }
     if (path.endsWith('/tickets') && request.method() === 'GET') {
       const text = (url.searchParams.get('text') ?? '').toLowerCase();
       if (text) searches.push(url.searchParams.get('status') ?? url.searchParams.get('collection') ?? 'queue');
@@ -165,6 +183,111 @@ async function closeOverlaySidebar(page: Page) {
 }
 const viewCount = (navigation: Locator, view: string) =>
   navigation.getByRole('button', { name: new RegExp(`^${view}`) }).locator('.view-navigation__count');
+
+/** HS2-CSP42A: visibility/focus alone passes even when the compact rail paints over search. */
+async function expectReachableWorkspaceSearch(page: Page) {
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await expect(search).toBeVisible();
+  await expect(search).toBeFocused();
+  await expect
+    .poll(() =>
+      search.evaluate((node) => {
+        const box = node.getBoundingClientRect(),
+          x = box.x + box.width / 2,
+          y = box.y + box.height / 2;
+        if (box.width <= 0 || box.height <= 0 || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+        let hit = document.elementFromPoint(x, y);
+        while (hit?.shadowRoot) {
+          const inner = hit.shadowRoot.elementFromPoint(x, y);
+          if (!inner || inner === hit) break;
+          hit = inner;
+        }
+        return hit === node || node.contains(hit);
+      }),
+    )
+    .toBe(true);
+  return search;
+}
+
+for (const width of [1280, 940, 390]) {
+  test(`HS2-CSP42A reveals reachable workspace search from the inspector at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const rail = page.locator('#app-right-rail'),
+      ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-QUEUE1"]').first(),
+      compact = width < 1024;
+    await test.step('Open the synthetic project and its ticket inspector', async () => {
+      await mockSearchProject(page);
+      await ticket.click({ timeout: 10_000 });
+      if (!compact && (await rail.getAttribute('data-collapsed')) === 'true')
+        await page.getByRole('button', { name: 'Show Ticket Inspector' }).click({ timeout: 10_000 });
+      await expect(rail).toHaveAttribute('data-collapsed', 'false');
+    });
+
+    // A real modal must continue to suppress the global shortcut without dismissing its rail.
+    const reader = page.locator('[data-reader-dialog][open]');
+    await test.step('Preserve native reader shortcut suppression and close it', async () => {
+      await rail.getByRole('button', { name: 'Open Ticket Reader' }).click({ timeout: 10_000 });
+      await expect(reader).toBeVisible();
+      await page.keyboard.press('ControlOrMeta+k');
+      await expect(reader).toBeVisible();
+      await expect(rail).toHaveAttribute('data-collapsed', 'false');
+      await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      // This locator selects only open native dialogs; a retained closed frame is also acceptable.
+      await expect(reader).toHaveCount(0);
+      await expect(page.locator('dialog:modal')).toHaveCount(0);
+    });
+
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(rail).toHaveAttribute('data-collapsed', compact ? 'true' : 'false');
+    const search = await expectReachableWorkspaceSearch(page);
+    if (width === 390)
+      await page.screenshot({ path: 'target/visual-captures/HS2-CSP42A-after-reader-390.png', animations: 'disabled' });
+    await search.pressSequentially('badge');
+    await expect(ticket).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-QUEUE2"]')).toHaveCount(0);
+
+    // Selecting a result reopens the phone inspector; a second search intent preserves its query.
+    await ticket.click({ timeout: 10_000 });
+    await expect(rail).toHaveAttribute('data-collapsed', 'false');
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(rail).toHaveAttribute('data-collapsed', compact ? 'true' : 'false');
+    await expect(await expectReachableWorkspaceSearch(page)).toHaveText('badge');
+    await page.screenshot({ path: `target/visual-captures/HS2-CSP42A-search-${width}.png`, animations: 'disabled' });
+  });
+}
+
+test('HS2-CSP42A compact search dismissal preserves the wide inspector preference through resize', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockSearchProject(page);
+  const rail = page.locator('#app-right-rail'),
+    ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-QUEUE1"]').first();
+  await ticket.click({ timeout: 10_000 });
+  if ((await rail.getAttribute('data-collapsed')) === 'true')
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click({ timeout: 10_000 });
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  for (const width of [940, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(rail).toHaveAttribute('data-presentation', 'overlay');
+    await expect(rail).toHaveAttribute('data-collapsed', 'true');
+    await ticket.click({ timeout: 10_000 });
+    await expect(rail).toHaveAttribute('data-collapsed', 'false');
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(rail).toHaveAttribute('data-collapsed', 'true');
+    await expectReachableWorkspaceSearch(page);
+    await page.screenshot({
+      path: `target/visual-captures/HS2-CSP42A-search-resize-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(rail).toHaveAttribute('data-presentation', 'inline');
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  await page.keyboard.press('ControlOrMeta+k');
+  await expectReachableWorkspaceSearch(page);
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  await page.screenshot({ path: 'target/visual-captures/HS2-CSP42A-search-returned-wide.png', animations: 'disabled' });
+});
 
 for (const width of [1280, 390]) {
   test(`searching from Trash searches and counts only Trash at ${width}px (HS2-S6TXSW)`, async ({ page }) => {

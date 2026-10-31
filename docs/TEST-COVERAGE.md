@@ -1746,3 +1746,17 @@ discard flow remains covered by its existing real-router test.
   covers ordinary/native and linked-reader focus return through the shipped parent.
 - Visual review uses the real-app keyboard and pointer captures, including medium,
   narrow and returned-wide states; the sign-in batch shares the same rebuilt app.
+
+### Compact inspector search reveal (HS2-CSP42A)
+
+- End to end: `clients/web/tests/search-scope.spec.ts # HS2-CSP42A`
+  opens the real inspector and native reader, preserves modal shortcut suppression,
+  then requires keyboard search to dismiss compact overlays while leaving a wide
+  inspector open. The field must be focused and hit-testable at its visible center;
+  typing filters synthetic rows and a repeated intent retains the query.
+- The resize case crosses wide, medium and phone layouts and returns wide to verify
+  that compact dismissal preserves the desktop inspector preference. All four cases
+  passed in Chromium and WebKit on 2026-10-31, within the complete search parent and
+  focused sign-in/reader batch (22 cases per engine). Matching real-application
+  wide, medium, phone, after-reader and resize captures were visually reviewed;
+  compact search is unobscured and the desktop inspector returns.

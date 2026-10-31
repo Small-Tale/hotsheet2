@@ -394,8 +394,13 @@ preview/download, server directory browser) are separate design work.
   the mobile toolbar (HS2-0SARDD): the redundant project name is dropped from the main toolbar (the
   project Select already carries it), both the project and view Selects are borderless and sized to
   their selected label rather than stretching, and while search is open the view-mode segmented
-  control is hidden so the search field gets the full toolbar row. The project combobox has the
-  stable accessible name `Project`, independent of selected project text and migration status;
+  control is hidden so the search field gets the full toolbar row.
+  Open-search keyboard intent dismisses the compact inspector overlay before focusing workspace
+  search, so the field is reachable rather than merely focused behind a panel (HS2-CSP42A).
+  It preserves an existing query and desktop panel preferences, and remains suppressed while
+  a modal dialog is open.
+  The project combobox has the stable accessible name `Project`, independent of selected project
+  text and migration status;
   Kerf owns forwarding that name to the actual Web Awesome shadow control without adding a
   visible label or changing the compact geometry (HS2-Q6EM0B). The name survives project
   changes and switching between desktop tabs and the mobile Select.
