@@ -4,6 +4,8 @@ HS2-2N8324 compared one bounded serialized discovery observation with the retain
 
 All observation times below are UTC on 2026-10-30. The report date is the following local day.
 
+The preceding [startup process-query attribution](nextest-startup-attribution-2026-10-31.md) (HS2-WJYRE6) records the retained gate-stop comparison, ten-check diagnostic selection and post-spawn wait evidence, including the unrun fixture suites and unresolved cause.
+
 ## Observations
 
 | Observation             | Default LIST (WJYRE6)                                     | Serialized LIST (2N8324)                                                        |
