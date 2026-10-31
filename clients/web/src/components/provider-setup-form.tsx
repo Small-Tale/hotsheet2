@@ -200,7 +200,7 @@ export function ProviderSetupForm({
           ) : signedIn ? (
             <Text flush role="status">
               {auth.account ? 'Using your GitHub account on ' : 'Signed in to '}
-              {auth.enterpriseUrl ? new URL(auth.enterpriseUrl).host : 'GitHub'}.{' '}
+              {auth.enterpriseUrl ? auth.enterpriseUrl.replace(/^https?:\/\//i, '') : 'GitHub'}.{' '}
               {auth.repositories ? 'Choose a repository for this project below.' : 'Loading your repositories…'}
             </Text>
           ) : auth?.enterprise ? (

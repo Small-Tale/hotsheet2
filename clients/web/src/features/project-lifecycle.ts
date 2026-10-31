@@ -15,6 +15,7 @@ import { resolveTicketSourceColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { githubAttachmentSettings } from '../github-attachment-settings';
+import { githubSignInOrigin } from '../github-sign-in-origin';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
 import { localBridge } from '../local-bridge-client';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
@@ -847,15 +848,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
 
   /** The Enterprise web origin typed in the form: `https://host[:port]`, or an error message. */
   function enterpriseOrigin(form: HTMLFormElement): { origin: string } | { error: string } {
-    const raw = form.querySelector<Control>('[name="github-enterprise-url"]')?.value.trim() ?? '';
-    try {
-      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-      if (!raw || !url.hostname.includes('.')) throw new Error('missing host');
-      if (url.hostname === 'github.com' || url.hostname === 'api.github.com') return { origin: 'https://github.com' };
-      return { origin: url.origin };
-    } catch {
-      return { error: 'Enter your GitHub Enterprise server address, such as https://github.example.com.' };
-    }
+    const origin = githubSignInOrigin(form.querySelector<Control>('[name="github-enterprise-url"]')?.value ?? '');
+    return origin
+      ? { origin }
+      : { error: 'Enter your GitHub Enterprise server address, such as https://github.example.com.' };
   }
 
   let githubPopup: Window | null = null;

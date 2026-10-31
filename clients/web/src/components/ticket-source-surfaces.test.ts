@@ -79,6 +79,29 @@ describe('ticket source surfaces', () => {
     expect(dialog(undefined, true)).not.toMatch(/<button(?=[^>]*data-action="submit-provider-setup")(?=[^>]*disabled)/);
   });
 
+  it.each([
+    ['https://ghe.test:443', 'ghe.test:443'],
+    ['http://ghe.test:80', 'ghe.test:80'],
+    ['https://ghe.test:8443', 'ghe.test:8443'],
+    ['https://ghe.test', 'ghe.test'],
+    [undefined, 'GitHub'],
+  ])('HS2-CG78BN confirmation retains configured authority %s', (enterpriseUrl, authority) => {
+    const markup = String(
+      ProviderSetupForm({
+        kind: 'github',
+        auth: {
+          session: 'synthetic-session',
+          userCode: 'SYNTHETIC-CODE',
+          verificationUri: 'https://github.test',
+          state: 'authorized',
+          enterpriseUrl,
+          repositories: [],
+        },
+      }),
+    );
+    expect(markup).toContain(`Signed in to ${authority}.`);
+  });
+
   it('lists every reachable repository for search and explains missing ones (HS2-27T5WT)', () => {
     const form = (auth: Partial<import('./provider-setup-form').GithubAuthState>) =>
       String(

@@ -650,6 +650,13 @@ Safari still treats them as user-initiated); the dialog shows the code with **Co
 succeeds. GitHub Enterprise has an explicit **Use GitHub Enterprise…** path that asks for the
 server address before sign-in and stores `{origin}/api/v3` as the connection's API base; the
 dialog no longer has an API-base field for GitHub, and editing keeps the existing base.
+The typed sign-in address preserves its scheme and explicit port, including a default
+port (HS2-VKNA12). Only normalized `https://github.com` selects the public default;
+other origins, including `api.github.com` and public-host addresses with a port, retain
+their configured identity. Host-only input defaults to HTTPS. Reject paths, credentials,
+queries and fragments before opening a popup or requesting authorization.
+The signed-in confirmation displays the configured authority, including an explicit
+default or custom port, and keeps the ordinary public GitHub label (HS2-CG78BN).
 
 GitHub App device authorization is the default interactive setup path. The browser starts
 an authorization session and performs one blocking wait; only the user code, verification

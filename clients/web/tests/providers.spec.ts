@@ -4732,6 +4732,117 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
   expect(creates[0].settings).toMatchObject({ api_base: 'https://ghe.test/api/v3' });
 });
 
+for (const [typed, origin] of [
+  ['HTTPS://GITHUB.COM:443/', 'https://github.com:443'],
+  ['GHE.EXAMPLE.TEST:8443/', 'https://ghe.example.test:8443'],
+  ['HTTP://GITHUB.COM:80/', 'http://github.com:80'],
+  ['https://api.github.com', 'https://api.github.com'],
+  [' HTTPS://GITHUB.COM/ ', 'https://github.com'],
+]) {
+  test(`HS2-VKNA12 sign-in form preserves configured origin ${origin}`, async ({ page }) => {
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.route('**/__hotsheet/projects/open', (route) =>
+      route.fulfill({ status: 201, json: { ...project, root: '/work/origin', stores: [], needsTicketSetup: true } }),
+    );
+    await page
+      .context()
+      .route('https://github.test/**', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<title>Device</title>' }),
+      );
+    const starts: unknown[] = [],
+      creates: Array<{ settings: Record<string, unknown> }> = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === 'POST' && path.endsWith('/github-auth/device')) starts.push(request.postDataJSON());
+      if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const setup = page.locator('[data-ticket-source-setup-dialog]'),
+      form = setup.locator('[data-action="save-provider-connection"]');
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
+    await form.getByLabel('GitHub Enterprise Server URL').fill(typed);
+    const opened = page.waitForEvent('popup');
+    await form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).click();
+    await opened;
+    await expect(form.getByText(/^Signed in to /)).toBeVisible();
+    expect(starts).toEqual([{ web_base: origin }]);
+    // HS2-CG78BN: the visible confirmation must retain the configured authority too.
+    await expect(form.getByText(/^Signed in to /)).toContainText(
+      `Signed in to ${origin === 'https://github.com' ? 'GitHub' : origin.replace(/^https?:\/\//, '')}.`,
+    );
+    if (origin === 'https://github.com:443') {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(form.getByText(/^Signed in to /)).toBeVisible();
+      await page.screenshot({
+        path: 'target/visual-captures/HS2-VKNA12-signed-in-port-wide.png',
+        animations: 'disabled',
+      });
+    }
+    await form.locator('input[name="connection-locator"]').fill('small-tale/hotsheet2');
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect(setup).not.toHaveAttribute('open');
+    expect(creates).toHaveLength(1);
+    expect(creates[0].settings.api_base).toBe(origin === 'https://github.com' ? undefined : `${origin}/api/v3`);
+  });
+}
+
+test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request', async ({ page }) => {
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, root: '/work/origin', stores: [], needsTicketSetup: true } }),
+  );
+  await page
+    .context()
+    .route('https://github.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Device</title>' }),
+    );
+  const starts: unknown[] = [],
+    popups: unknown[] = [];
+  page.on('popup', (popup) => popups.push(popup));
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/github-auth/device')) {
+      starts.push(request.postDataJSON());
+    }
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]'),
+    form = setup.locator('[data-action="save-provider-connection"]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
+  for (const typed of ['https://ghe.test/path', 'https://user@ghe.test', 'https://ghe.test?query', 'ftp://ghe.test']) {
+    await form.getByLabel('GitHub Enterprise Server URL').fill(typed);
+    await form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).click();
+    await expect(form.getByRole('alert')).toContainText('Enter your GitHub Enterprise server address');
+    expect(starts).toEqual([]);
+    expect(popups).toEqual([]);
+  }
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const [width, state] of [
+      [1440, 'wide'],
+      [900, 'medium'],
+      [390, 'narrow'],
+      [1440, 'wide-return'],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(form.getByLabel('GitHub Enterprise Server URL')).toHaveValue('ftp://ghe.test');
+      await expect(form.getByRole('alert')).toContainText('Enter your GitHub Enterprise server address');
+      await expect(form.getByRole('button', { name: 'Sign in with GitHub Enterprise' })).toBeInViewport();
+      expect(starts).toEqual([]);
+      expect(popups).toEqual([]);
+      await page.screenshot({
+        path: `target/visual-captures/HS2-VKNA12-validation-${colorScheme}-${state}.png`,
+        animations: 'disabled',
+      });
+    }
+  }
+});
+
 test('blocks a new ticket store before an older project server can accept it', async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });
   await mockProject(page, true, false, 0, 0, 0, true);
