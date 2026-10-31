@@ -1710,7 +1710,7 @@ discard flow remains covered by its existing real-router test.
 - Initial foundation verification (2026-10-30): 108 focused unit/transition checks and 7 real remote/mTLS integration checks passed; strict affected clippy, web lint/typecheck/catalog/doctor, and headless validation of 194 OpenAPI routes/264 schemas passed. These counts predate the corrective transitions.
 - Corrective verification (2026-10-30, source `ea69030e`): the legacy-behavior scaffold compiled and executed all 10 transition cases with 7 expected assertion failures and 3 passes; rebuilt corrected source passed all 10. The full all-features ticketing library passed 492 tests, CLI/server/MCP siblings were rebuilt, the CLI passed the explicit isolated-credential capability assertion, real remote/mTLS flows passed 7 tests, the affected adapter/TLS selection passed 9 tests (451 other tests filtered), and MCP binary/portable-project tests passed 4 tests. Strict four-crate all-targets/all-features clippy passed. Each green phase used fresh private state under resource supervision and finished with child/outer status 0, no stop, and a fresh sampler identity proof. Raw logs, JUnit reports and prior evidence remain preserved in the ticket handoff. The full integrated gate and covering main CI remain the integrator's responsibility. No customer content is used.
 
-### GitHub sign-in origin identity (HS2-VKNA12, HS2-CG78BN)
+### GitHub sign-in origin identity (HS2-VKNA12, HS2-CG78BN, HS2-338S9K)
 
 - Unit: `clients/web/src/github-sign-in-origin.test.ts` covers 26 cases (11 accepted,
   15 invalid), including ASCII-only case normalization that preserves non-ASCII host
@@ -1721,6 +1721,8 @@ discard flow remains covered by its existing real-router test.
   origins through authorization, visible confirmation and source creation, plus invalid-input
   no-popup/no-request behavior. The validation state retains its value and error across
   wide, medium, narrow and returned-wide layouts in both color schemes. Chromium and
-  WebKit exercise the same real production-form parent.
+  WebKit exercise the same real production-form parent. The HS2-338S9K geometry
+  assertion requires separation between the hint, both wrapped sign-in actions and
+  validation message before each capture; viewport containment alone does not suffice.
 - Visual review: inspect the matching real-application signed-in and responsive validation
   captures attached to the tickets. Saved-account endpoint reuse is separate (HS2-WV6QCR).

@@ -1,6 +1,8 @@
 /* The form column: two 240px columns plus the gap fit; a third never does (HS2-7XX356). */
 .provider-setup-form {
   display: grid;
+  /* Wrapped hints and actions need their content height in WebKit (HS2-338S9K). */
+  grid-auto-rows: max-content;
   max-width: remify(640px);
   gap: var(--wa-space-m);
 }

@@ -657,6 +657,8 @@ their configured identity. Host-only input defaults to HTTPS. Reject paths, cred
 queries and fragments before opening a popup or requesting authorization.
 The signed-in confirmation displays the configured authority, including an explicit
 default or custom port, and keeps the ordinary public GitHub label (HS2-CG78BN).
+The address hint, sign-in actions and validation message remain separated when the
+dialog narrows and returns to its wide layout (HS2-338S9K).
 
 GitHub App device authorization is the default interactive setup path. The browser starts
 an authorization session and performs one blocking wait; only the user code, verification

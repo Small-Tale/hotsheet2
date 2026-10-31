@@ -4789,7 +4789,7 @@ for (const [typed, origin] of [
   });
 }
 
-test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request', async ({ page }) => {
+test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request (HS2-338S9K)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
   await page.route('**/__hotsheet/projects/open', (route) =>
     route.fulfill({ status: 201, json: { ...project, root: '/work/origin', stores: [], needsTicketSetup: true } }),
@@ -4835,6 +4835,58 @@ test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request
       await expect(form.getByRole('button', { name: 'Sign in with GitHub Enterprise' })).toBeInViewport();
       expect(starts).toEqual([]);
       expect(popups).toEqual([]);
+      // HS2-338S9K: viewport containment alone misses overlapping wrapped controls in WebKit.
+      let firstGeometry = true;
+      await expect
+        .poll(
+          async () => {
+            const [hint, signIn, publicSignIn, alert] = await Promise.all([
+              form
+                .getByText('The address you use to open GitHub Enterprise in a browser.', { exact: true })
+                .boundingBox(),
+              form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).boundingBox(),
+              form.getByRole('button', { name: 'Use GitHub.com Instead' }).boundingBox(),
+              form.getByRole('alert').boundingBox(),
+            ]);
+            if (!hint || !signIn || !publicSignIn || !alert) return -1;
+            const hintGap = Math.min(signIn.y, publicSignIn.y) - (hint.y + hint.height);
+            const alertGap = alert.y - Math.max(signIn.y + signIn.height, publicSignIn.y + publicSignIn.height);
+            if (firstGeometry) {
+              const layout = await form.getByRole('region', { name: 'GitHub Sign In' }).evaluate((panel) => {
+                const measure = (element: Element) => {
+                  const bounds = element.getBoundingClientRect(),
+                    style = getComputedStyle(element);
+                  return {
+                    component: element.getAttribute('data-component'),
+                    y: bounds.y,
+                    height: bounds.height,
+                    scrollHeight: element.scrollHeight,
+                    clientHeight: element.clientHeight,
+                    display: style.display,
+                    flexShrink: style.flexShrink,
+                    gridTemplateRows: style.gridTemplateRows,
+                    gap: style.gap,
+                  };
+                };
+                const parentForm = panel.closest('form'),
+                  row = panel.querySelector('[data-component="row"]');
+                return {
+                  panel: measure(panel),
+                  form: parentForm ? measure(parentForm) : null,
+                  children: [...panel.children].map(measure),
+                  actions: row ? [...row.children].map(measure) : [],
+                };
+              });
+              console.log(
+                JSON.stringify({ event: 'HS2-338S9K geometry', width, colorScheme, hintGap, alertGap, layout }),
+              );
+              firstGeometry = false;
+            }
+            return Math.min(hintGap, alertGap);
+          },
+          { message: 'HS2-338S9K hint, wrapped actions and validation remain separated' },
+        )
+        .toBeGreaterThanOrEqual(-0.5);
       await page.screenshot({
         path: `target/visual-captures/HS2-VKNA12-validation-${colorScheme}-${state}.png`,
         animations: 'disabled',
