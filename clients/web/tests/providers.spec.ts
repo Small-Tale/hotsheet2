@@ -16489,16 +16489,28 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.screenshot({ path: 'target/visual-captures/hs2-at46vg-popup-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(popup).toBeVisible();
+  // HS2-XM04W9: measure only the current phone branch after relocation and native presentation.
+  const shell = page.locator('[data-component="app-shell"]');
+  const phonePopup = shell.locator(':scope > [data-component="permission-request-popup"]:popover-open');
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect(phonePopup).toHaveCount(1);
+  await expect(phonePopup).toBeVisible();
+  await expect(phonePopup).toContainText('2 identical requests are waiting');
+  await expect(phonePopup).toContainText(secretAction);
   for (const name of ['Deny', 'Allow This AI Session', 'Always Allow', 'Allow Once']) {
-    const bounds = await popup.getByRole('button', { name, exact: true }).boundingBox();
+    const button = phonePopup.getByRole('button', { name, exact: true });
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+    const bounds = await button.boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
-    const label = popup.getByRole('button', { name, exact: true }).locator('.kui-button__label');
+    const label = button.locator('.kui-button__label');
     expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   }
   await page.screenshot({ path: 'target/visual-captures/hs2-at46vg-popup-390.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(shell).toHaveAttribute('data-mobile', 'false');
   await popup.getByRole('button', { name: 'Allow This AI Session', exact: true }).click();
   await expect(popup).toContainText('Review the rule to remember');
   await expect(popup).toContainText(secretAction);
@@ -16507,9 +16519,7 @@ test('answers identical permission requests for this chat and revokes the rememb
   await popup.screenshot({ path: 'target/visual-captures/hs2-at46vg-review-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   // HS2-XM04W9: capture only after the responsive render relocates and presents the review dialog.
-  const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toHaveAttribute('data-mobile', 'true');
-  const phonePopup = shell.locator(':scope > [data-component="permission-request-popup"]:popover-open');
   await expect(phonePopup).toHaveCount(1);
   await expect(phonePopup).toBeVisible();
   await expect(phonePopup.getByRole('group', { name: 'Confirm remembered permission' })).toBeVisible();
