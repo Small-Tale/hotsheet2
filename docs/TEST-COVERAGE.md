@@ -1574,6 +1574,12 @@ discard flow remains covered by its existing real-router test.
 - End to end: `clients/web/tests/providers.spec.ts # HS2-7T5GPN` checks real application preview, dialog, and confirmation at wide, medium, and phone widths, including wide-to-phone-to-wide transition.
 - Manual: `docs/manual-test-plan.md # Remembered permission owner` covers shared stores and changed provider defaults in live projects.
 
+### Permission Settings capture readiness (HS2-GVTZSM)
+
+- Browser: the existing HS2-JNHAYB remembered-permission parent in `clients/web/tests/providers.spec.ts` waits for the current collapsed phone rail's finite transition and painted content to clear its clipping edge before capturing Settings.
+- Assertions: the actual title, automation controls and remembered row must fit horizontally and have no positive-area intersection with the rail, before and after the original row scroll. Existing grouping, review, clipboard, answer and revoke assertions remain intact.
+- Scope: fixture readiness only; no application layout change or animation suppression. Complete Chromium clipboard proof is retained. Faithful full-parent WebKit clipboard coverage remains tracked by HS2-K46X8W.
+
 ### Checkout path routing in MCP (HS2-VHWWA6)
 
 - Behavior: checkout-scoped MCP reads encode an absolute path as one HTTP route segment and resolve the same path in serverless mode. An empty route-level 404 explains a possible server mismatch without falling back to another source.

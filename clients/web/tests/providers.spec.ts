@@ -16563,12 +16563,91 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  // HS2-GVTZSM: aria-hidden and pointer-events change before the rail finishes painting its slide.
+  const expectPhoneSettingsClear = async () => {
+    await expect(shell).toHaveAttribute('data-mobile', 'true');
+    await expect(shell).toHaveAttribute('data-sidebar-visible', 'false');
+    const rail = shell.locator('[data-workbench-rail="left"]');
+    const content = rail.locator(':scope > [data-workbench-panel-content]');
+    await expect(rail).toHaveCount(1);
+    await expect(content).toHaveCount(1);
+    await expect(rail).toHaveAttribute('data-collapsed', 'true');
+    await expect(rail).toHaveAttribute('data-presentation', 'overlay');
+    await expect
+      .poll(() =>
+        content.evaluate((element) => {
+          const panel = element.parentElement;
+          const currentShell = panel?.closest('[data-component="app-shell"]');
+          if (
+            !panel ||
+            !currentShell ||
+            !panel.matches('[data-workbench-rail="left"][data-collapsed="true"][data-presentation="overlay"]') ||
+            currentShell.getAttribute('data-mobile') !== 'true' ||
+            currentShell.getAttribute('data-sidebar-visible') !== 'false'
+          )
+            return false;
+          const moving = element.getAnimations().some((animation) => {
+            const end = animation.effect?.getComputedTiming().endTime;
+            return (
+              typeof end === 'number' &&
+              Number.isFinite(end) &&
+              (animation.pending || animation.playState === 'running' || animation.playState === 'paused')
+            );
+          });
+          const bounds = element.getBoundingClientRect();
+          const clip = panel.getBoundingClientRect();
+          return !moving && bounds.width > 0 && bounds.height > 0 && bounds.right <= clip.left + 1;
+        }),
+      )
+      .toBe(true);
+    const panelBounds = await rail.boundingBox();
+    const contentBounds = await content.boundingBox();
+    const workBounds = await shell.locator('[data-key="app-shell-work-area"]').boundingBox();
+    expect(panelBounds).not.toBeNull();
+    expect(contentBounds).not.toBeNull();
+    expect(workBounds).not.toBeNull();
+    for (const target of [
+      shell.locator('#workspace-page-title'),
+      shell.locator('[name="permission-automation-action"]'),
+      shell.locator('[name="permission-automation-delay"]'),
+      row,
+    ]) {
+      await expect(target).toHaveCount(1);
+      const bounds = await target.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.width).toBeGreaterThan(0);
+      expect(bounds!.height).toBeGreaterThan(0);
+      expect(bounds!.x).toBeGreaterThanOrEqual(Math.max(0, workBounds!.x));
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(Math.min(390, workBounds!.x + workBounds!.width));
+      const overlapWidth = Math.max(
+        0,
+        Math.min(
+          bounds!.x + bounds!.width,
+          contentBounds!.x + contentBounds!.width,
+          panelBounds!.x + panelBounds!.width,
+          390,
+        ) - Math.max(bounds!.x, contentBounds!.x, panelBounds!.x, 0),
+      );
+      const overlapHeight = Math.max(
+        0,
+        Math.min(
+          bounds!.y + bounds!.height,
+          contentBounds!.y + contentBounds!.height,
+          panelBounds!.y + panelBounds!.height,
+          844,
+        ) - Math.max(bounds!.y, contentBounds!.y, panelBounds!.y, 0),
+      );
+      expect(overlapWidth * overlapHeight).toBe(0);
+    }
+  };
+  await expectPhoneSettingsClear();
   await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
   await expect(row).toBeVisible();
   // The settings sidebar slides away; wait until the page column has settled at the screen edge.
   await expect.poll(async () => (await remembered.boundingBox())?.x ?? -1).toBeGreaterThanOrEqual(8);
   expect(await remembered.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await row.scrollIntoViewIfNeeded();
+  await expectPhoneSettingsClear();
   await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-390.png' });
   await page.screenshot({ path: 'target/visual-captures/hs2-4mf2m1-remembered-rules-390.png' });
   await row.locator('[data-action="select-permission-rule-row"]').click();
