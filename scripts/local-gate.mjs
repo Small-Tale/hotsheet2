@@ -444,6 +444,7 @@ export function runGate(options = {}) {
     ({ selection, before } = reused);
   }
   const gateStarted = Date.now();
+  const budgetLabel = before.budgetMs === null ? 'none' : `${before.budgetMs}ms`;
   const receiptPath = join(before.cache, `${before.key}.json`);
   const compatibility = resolve(repo, git(repo, ['rev-parse', '--git-path', 'hotsheet-root-gate']));
   const marker = join(compatibility, before.tree);
@@ -461,9 +462,7 @@ export function runGate(options = {}) {
   if (existing?.key === before.key && existing.tree === before.tree) {
     mkdirSync(compatibility, { recursive: true });
     writeFileSync(marker, `${before.tree}\n`);
-    log(
-      `Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${before.budgetMs ?? 'none'}ms`,
-    );
+    log(`Local gate already passed for tree ${before.tree}; reused exact receipt for budget ${budgetLabel}`);
     return 0;
   }
   rmSync(marker, { force: true });
@@ -489,9 +488,7 @@ export function runGate(options = {}) {
     });
     results.push(...result.results);
     if (result.status !== 0) {
-      log(
-        `Local gate failed after ${Date.now() - gateStarted}ms; budget ${before.budgetMs ?? 'none'}ms. No receipt recorded.`,
-      );
+      log(`Local gate failed after ${Date.now() - gateStarted}ms; budget ${budgetLabel}. No receipt recorded.`);
       const notice = sandboxFailureNotice(env);
       if (notice) log(notice.trim());
       return result.status;
@@ -530,7 +527,7 @@ export function runGate(options = {}) {
     console.warn(`Gate passed, but timing history was unavailable: ${error.message}`);
   }
   log(
-    `Local ${before.mode} gate passed for tree ${before.tree}; actual ${Date.now() - gateStarted}ms, budget ${before.budgetMs ?? 'none'}ms${before.floorOverBudget ? ' (mandatory floor exceeded budget)' : ''}`,
+    `Local ${before.mode} gate passed for tree ${before.tree}; actual ${Date.now() - gateStarted}ms, budget ${budgetLabel}${before.floorOverBudget ? ' (mandatory floor exceeded budget)' : ''}`,
   );
   return 0;
 }

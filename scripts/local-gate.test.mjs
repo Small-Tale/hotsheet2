@@ -89,6 +89,72 @@ test('HS2-GN06JT budget and analyzed set are exact receipt inputs', (t) => {
   );
 });
 
+test('HS2-PANVH5 emits unitless uncapped and millisecond numeric budgets on failure, success and reuse', (t) => {
+  for (const { selection, label } of [
+    { selection: { tier: 'T2', analyzed: ['clients/web::npm run build'] }, label: 'none' },
+    { selection: { tier: 'T1', budgetMs: 300000 }, label: '300000ms' },
+  ]) {
+    const f = fixture(t),
+      messages = [],
+      options = { ...f.options, ...selection, log: (line) => messages.push(line) };
+    let executions = 0;
+    assert.equal(
+      runGate({
+        ...options,
+        runner: () => {
+          executions += 1;
+          return { status: 7 };
+        },
+      }),
+      7,
+    );
+    assert.equal(executions, 1);
+    assert.match(
+      messages.find((line) => line.startsWith('Local gate failed after ')),
+      new RegExp(`^Local gate failed after \\d+ms; budget ${label}\\. No receipt recorded\\.$`),
+    );
+
+    messages.length = 0;
+    assert.equal(
+      runGate({
+        ...options,
+        runner: () => {
+          executions += 1;
+          return { status: 0 };
+        },
+      }),
+      0,
+    );
+    assert.ok(executions > 1);
+    assert.match(
+      messages.at(-1),
+      new RegExp(
+        `^Local selected gate passed for tree [a-f0-9]+; actual \\d+ms, budget ${label}(?: \\(mandatory floor exceeded budget\\))?$`,
+      ),
+    );
+
+    const completedExecutions = executions;
+    messages.length = 0;
+    assert.equal(
+      runGate({
+        ...options,
+        verify: true,
+        runner: () => {
+          executions += 1;
+          return { status: 0 };
+        },
+      }),
+      0,
+    );
+    assert.equal(executions, completedExecutions);
+    assert.equal(messages.length, 1);
+    assert.match(
+      messages[0],
+      new RegExp(`^Local gate already passed for tree [a-f0-9]+; reused exact receipt for budget ${label}$`),
+    );
+  }
+});
+
 test('HS2-GN06JT gate and config changes keep the full fallback', (t) => {
   const f = fixture(t);
   f.put('scripts/gate-budget.json', JSON.stringify({ defaultBudgetMs: 600000 }));
