@@ -1679,6 +1679,17 @@ are installed, enabled, or trusted. Use Codex `/hooks` to inspect their trust an
 After server restart, a live session must report again before its connection can be shown. A
 successful interactive permission prompt reaching Hot Sheet also proves the bridge is live.
 
+Terminal attribution remains exact (HS2-HBA9Z8). A permission request with an absent or
+stale terminal id can appear in the inbox without connecting either live terminal; the
+server does not guess from a shared directory, tool name or recent activity. A correctly
+attributed trusted hook establishes that terminal's `ai_connection` and `last_hook_report`,
+but the combined badge remains `mcp_missing` until a live MCP lease names that same terminal.
+Project-level `GET /mcp-presence.connected` or a lease attributed to another terminal does
+not satisfy it. The `missing` tooltip describes absent active hook reporting; the
+`mcp_missing` tooltip separately explains that permissions route while terminal MCP is
+unavailable. These possible states do not establish the cause of a particular reported
+incident without its contemporaneous terminal fields and hook diagnosis.
+
 **Codex session address (HS2-FKM97G, HS2-MN865E).** Codex's `SessionStart` report also carries
 `codex_home` when `CODEX_HOME` is set; an unset home means the user's default. The server keeps
 it and the thread id (`session_id`) internal on the terminal's connection. A permission ask from

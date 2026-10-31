@@ -764,3 +764,21 @@ origin; without its slug map, confirm operator instructions and no guessed publi
 Use only disposable homes and synthetic issued device credentials. Read `remote identity` on the peer, then `remote register` with its explicit server id and a private credential bundle file. Confirm `remote list` works while the peer is stopped, reports stale cached observations and never exposes secrets or paths. `remote checkouts` must withhold usable checkouts on outage, identity change, invalid certificates and local revocation. Restart with the same home and renew a server leaf under the same CA: discovery must recover without review. Replace the machine home or CA: discovery must fail until `remote review` explicitly supplies the old revision/identity and new pairing material. Repeat registration and revocation, try a stale review revision, and confirm the authenticated service and `hotsheet_remotes` tool observe the same machine registry. Test remote device revocation separately from local registry revocation.
 
 The synthetic automated CLI/service/MCP and TLS lifecycle cases passed on 2026-10-30. The operator enrollment checklist above was not performed with real devices or credentials. There is no rendered UI in this foundation.
+
+### Hook and MCP terminal attribution (HS2-HBA9Z8)
+
+Use an isolated rebuilt server and two synthetic AI terminals sharing one directory.
+After the startup grace, inspect the drawer and dashboard `missing` tooltip. Raise an
+authenticated synthetic permission for the intended terminal and keep it pending:
+its trusted report must already appear in `/terminals` and the change stream, while the
+combined badge says `mcp_missing`. Register a live synthetic MCP lease first without a
+terminal id, then for the other terminal, then for the intended terminal. Only the last
+step makes the intended badge `connected`; project connectivity alone does not. Ignore
+the popup presentation while retaining the pending request to inspect the badge, then
+deny the synthetic request. Remove/re-add MCP presence and clear/re-report the hook;
+check both directions without reloading. Repeat an ask with absent/stale terminal
+attribution: the inbox may show it while neither terminal acquires a hook connection.
+Inspect wide/medium/phone/returned-wide states and match the original tab component
+capture. For a real incident, record the exact tooltip, terminal snapshot and read-only
+hook diagnosis at the same time; synthetic state reproduction alone does not identify
+that incident's cause. Never use the running user host or real customer actions.

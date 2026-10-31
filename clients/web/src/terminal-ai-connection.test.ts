@@ -144,4 +144,39 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
     expect(state({ mcp_connected: false }, 22_000)).toBe('missing');
     expect(state({ ai_connection: connection, mcp_connected: true }, 23_000)).toBe('connected');
   });
+
+  it('keeps two terminals independent through hook and MCP attribution changes (HS2-HBA9Z8)', () => {
+    const firstSeen = new Map<string, number>();
+    const states = (hook: boolean, targetMcp: boolean, otherMcp: boolean, now: number) =>
+      deriveAiConnectionStates(
+        [
+          {
+            projectId: 'synthetic-project',
+            sessions: [
+              {
+                id: 'target',
+                kind: 'ai' as const,
+                alive: true,
+                mcp_connected: targetMcp,
+                ...(hook ? { ai_connection: { ...connection, source: 'permission_request' as const } } : {}),
+              },
+              { id: 'other', kind: 'ai' as const, alive: true, mcp_connected: otherMcp },
+            ],
+          },
+        ],
+        firstSeen,
+        now,
+      ).groups[0].sessions.map((session) => (session as { aiConnection?: string }).aiConnection);
+    expect(states(false, false, false, 0)).toEqual([undefined, undefined]);
+    expect(states(false, false, false, AI_CONNECTION_GRACE_MS)).toEqual(['missing', 'missing']);
+    expect(states(true, false, false, 16_000)).toEqual(['mcp_missing', 'missing']);
+    expect(states(true, false, true, 17_000)).toEqual(['mcp_missing', 'missing']);
+    expect(states(true, true, false, 18_000)).toEqual(['connected', 'missing']);
+    expect(states(true, false, false, 19_000)).toEqual(['mcp_missing', 'missing']);
+    expect(states(false, true, false, 20_000)).toEqual(['missing', 'missing']);
+    expect(states(true, true, false, 21_000)).toEqual(['connected', 'missing']);
+    deriveAiConnectionStates([], firstSeen, 22_000);
+    expect(firstSeen.size).toBe(0);
+    expect(states(false, false, false, 23_000)).toEqual([undefined, undefined]);
+  });
 });

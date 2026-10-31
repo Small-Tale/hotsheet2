@@ -162,3 +162,14 @@ fn is_current(state: &AppState, id: &str, session_id: &str) -> bool {
                 && connection.session_id.as_deref() == Some(session_id)
         })
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn hs2_hba9z8_synthetic_session_does_not_name_a_daemon_thread() {
+        // The attribution fixture reports a hook without addressing an installed daemon.
+        // Keep its synthetic id outside the UUID boundary checked before home discovery.
+        assert!(!super::is_uuid("synthetic-session"));
+        assert!(super::is_uuid("00000000-0000-0000-0000-000000000001"));
+    }
+}
