@@ -1726,3 +1726,23 @@ discard flow remains covered by its existing real-router test.
   validation message before each capture; viewport containment alone does not suffice.
 - Visual review: inspect the matching real-application signed-in and responsive validation
   captures attached to the tickets. Saved-account endpoint reuse is separate (HS2-WV6QCR).
+
+### Deferred reader return focus (HS2-FRFPA5)
+
+- Unit: `clients/web/src/ticket-reader-focus.test.ts` covers deferred opener return,
+  newer visible focus, interleaved requests and a further close; absent, body/root,
+  hidden and disconnected focus; visible-row/inspector/workspace fallback, removal
+  and refill. Existing initial-reader-focus cases remain separate.
+- End to end: `clients/web/tests/providers.spec.ts # HS2-FRFPA5` holds only the
+  identified production return callback during a native reader close, then uses a
+  real keyboard search or pointer-opened composer at wide/narrow sizes. New focus
+  survives callback release; further edits, responsive presentation and an ordinary
+  close/reopen follow after the control is retired. Empty-search blur still collapses it.
+  The original HS2-FW4PYZ modal shortcut regression remains unchanged.
+- The test-only delivery owner is `clients/web/tests/reader-return-focus-delivery.ts`;
+  it restores native scheduling at the dialog target phase, preserves callback
+  arguments/this, requires unique ownership and removes its listener on disposal.
+  It never injects application search state. `tests/ticket-reader-stack.spec.ts`
+  covers ordinary/native and linked-reader focus return through the shipped parent.
+- Visual review uses the real-app keyboard and pointer captures, including medium,
+  narrow and returned-wide states; the sign-in batch shares the same rebuilt app.

@@ -207,7 +207,7 @@ import {
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
 import { waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
-import { focusTopTicketReader } from '../ticket-reader-focus';
+import { focusTopTicketReader, restoreTicketReaderFocus } from '../ticket-reader-focus';
 import {
   activeTicketReaderProject,
   popTicketReaderFrame,
@@ -3131,27 +3131,7 @@ export async function startHotSheetWebClient() {
   function focusAfterTicketReader(id: string, slug: string) {
     const trigger = readerReturnFocus.get(id);
     readerReturnFocus.delete(id);
-    setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus({ preventScroll: true });
-        return;
-      }
-      const row = [
-        ...document.querySelectorAll<HTMLElement>(
-          `[data-action="select-ticket-row"][data-ticket-slug="${CSS.escape(slug)}"]`,
-        ),
-      ].find((item) => item.offsetParent !== null);
-      if (row) {
-        row.focus({ preventScroll: true });
-        return;
-      }
-      const inspector = document.querySelector<HTMLElement>('#app-right-rail [data-action="open-ticket-reader"]');
-      if (inspector) {
-        inspector.focus({ preventScroll: true });
-        return;
-      }
-      document.querySelector<HTMLElement>('[data-work-area-focus-owner]')?.focus({ preventScroll: true });
-    }, 0);
+    restoreTicketReaderFocus(trigger, slug);
   }
   async function openTicketLinkMatch(match: TicketLinkMatch) {
     const target = projects.value.find((item) => item.id === match.projectId);

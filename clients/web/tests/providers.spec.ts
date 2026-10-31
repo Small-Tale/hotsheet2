@@ -17,6 +17,7 @@ import { isFeedbackNeeded } from '../src/feedback-needed';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
+import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
@@ -24401,6 +24402,146 @@ test('suppresses background app shortcuts while a modal dialog is open (HS2-FW4P
   await page.keyboard.press('ControlOrMeta+k');
   await expect(searchField).toBeVisible();
 });
+
+for (const width of [1280, 390])
+  for (const intent of ['keyboard', 'pointer'] as const) {
+    test(`preserves newer ${intent} focus when reader return arrives late at ${width}px (HS2-FRFPA5)`, async ({
+      page,
+    }) => {
+      const delivery = await holdReaderReturnFocus(page);
+      try {
+        await mockProject(page);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Open Project' }).click();
+        await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+        const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
+        await test.step('Select the workspace ticket', () => row.click({ timeout: 10_000 }));
+        const opener = page.getByRole('button', { name: 'Open Ticket Reader', exact: true });
+        await test.step('Open the selected ticket reader', () => opener.click({ timeout: 10_000 }));
+        const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+        await expect(reader).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(reader).toBeHidden();
+        await expect
+          .poll(delivery.state)
+          .toMatchObject({ captures: 1, closeEvents: 1, pending: true, released: false, restored: true });
+        await expect
+          .poll(() => page.evaluate(() => !document.querySelector('wa-dialog[open], dialog:modal')))
+          .toBe(true);
+        // HS2-CSP42A separately covers invoking search from the compact inspector.
+        // This case exercises newer intent in a workspace the user has revealed.
+        if (width === 390)
+          await test.step('Reveal the phone workspace after reader close', async () => {
+            await page.getByRole('button', { name: 'Hide Ticket Inspector', exact: true }).click({ timeout: 10_000 });
+          });
+        await test.step(`Open the newer ${intent} editor`, async () => {
+          if (intent === 'keyboard') await page.keyboard.press('ControlOrMeta+k');
+          else await page.getByRole('button', { name: 'New ticket…', exact: true }).click({ timeout: 10_000 });
+        });
+        const editor =
+          intent === 'keyboard'
+            ? page.getByRole('searchbox', { name: 'Search tickets' })
+            : page.locator('[data-action="create-ticket-form"]').getByRole('textbox', { name: 'Ticket Title' });
+        await expect(editor).toBeVisible();
+        await expect(editor).toBeFocused();
+        console.log(
+          JSON.stringify({
+            event: 'HS2-FRFPA5 newer editor focused before old reader callback',
+            intent,
+            width,
+            ...(await delivery.state()),
+          }),
+        );
+        await delivery.release();
+        console.log(
+          JSON.stringify({
+            event: 'HS2-FRFPA5 old reader callback released',
+            intent,
+            width,
+            ...(await delivery.state()),
+          }),
+        );
+        await expect(editor).toBeVisible();
+        await expect(editor).toBeFocused();
+        await page.screenshot({
+          path: `target/visual-captures/HS2-FRFPA5-${intent}-${width}.png`,
+          animations: 'disabled',
+        });
+        // Retire the delivery control before exercising a further unmodified close.
+        await delivery.restore();
+        if (intent === 'keyboard') {
+          await editor.fill('feature');
+          await expect(editor).toContainText('feature');
+          if (width === 1280)
+            for (const [resizeWidth, state] of [
+              [900, 'medium'],
+              [390, 'narrow'],
+              [1280, 'wide-return'],
+            ] as const) {
+              await page.setViewportSize({ width: resizeWidth, height: 900 });
+              await expect(editor).toBeVisible();
+              await expect(editor).toContainText('feature');
+              await page.screenshot({
+                path: `target/visual-captures/HS2-FRFPA5-keyboard-${state}.png`,
+                animations: 'disabled',
+              });
+            }
+          await editor.fill('');
+          await test.step('Leave the empty composed search field', async () => {
+            await row.click({ timeout: 10_000 });
+            await expect
+              .poll(() => page.evaluate(() => !document.activeElement?.closest('[data-component="search-field"]')))
+              .toBe(true);
+            await expect(editor).toBeHidden();
+          });
+        } else {
+          await editor.fill('Synthetic draft after reader close');
+          await expect(editor).toHaveValue('Synthetic draft after reader close');
+          if (width === 1280)
+            for (const [resizeWidth, state] of [
+              [900, 'medium'],
+              [390, 'narrow'],
+              [1280, 'wide-return'],
+            ] as const) {
+              await page.setViewportSize({ width: resizeWidth, height: 900 });
+              await expect(editor).toBeVisible();
+              await expect(editor).toHaveValue('Synthetic draft after reader close');
+              await page.screenshot({
+                path: `target/visual-captures/HS2-FRFPA5-pointer-${state}.png`,
+                animations: 'disabled',
+              });
+            }
+          await page
+            .locator('[data-action="create-ticket-form"]')
+            .getByRole('button', { name: 'Cancel', exact: true })
+            .click({ timeout: 10_000 });
+          await expect(editor).toBeHidden();
+        }
+        if (width === 390) {
+          const hideInspector = page.getByRole('button', { name: 'Hide Ticket Inspector', exact: true });
+          if (await hideInspector.isVisible()) await hideInspector.click({ timeout: 10_000 });
+        }
+        await test.step('Select the workspace ticket', () => row.click({ timeout: 10_000 }));
+        await test.step('Open the selected ticket reader', () => opener.click({ timeout: 10_000 }));
+        await expect(reader).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(reader).toBeHidden();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                document.activeElement?.matches(
+                  '[data-action="open-ticket-reader"], [data-action="select-ticket-row"]',
+                ) ?? false,
+            ),
+          )
+          .toBe(true);
+      } finally {
+        await delivery.restore();
+      }
+    });
+  }
 
 test('renders canonical attachment references for filenames containing backticks', async ({ page }) => {
   await mockProject(page);
