@@ -16,7 +16,9 @@ type ControlledWindow = Window & { __hs2Frfpa5ReaderFocus?: ReaderFocusControl }
 /** HS2-FRFPA5: delay only the real reader's close-event return-focus delivery. */
 export async function holdReaderReturnFocus(page: Page) {
   await page.addInitScript(() => {
-    const nativeTimeout = window.setTimeout.bind(window);
+    // Keep this browser script on DOM timer signatures when the runner also loads Node types.
+    const browserWindow: Window = window;
+    const nativeTimeout = browserWindow.setTimeout.bind(browserWindow);
     let pending: (() => void) | undefined;
     const control: ReaderFocusControl = {
       captures: 0,
@@ -35,7 +37,7 @@ export async function holdReaderReturnFocus(page: Page) {
         callback();
       },
       restore: () => {
-        window.setTimeout = nativeTimeout;
+        browserWindow.setTimeout = nativeTimeout;
         control.restored = true;
       },
       dispose: () => {
@@ -51,7 +53,7 @@ export async function holdReaderReturnFocus(page: Page) {
       control.restored = false;
       // Capture the actual application callback by its two fallback selectors,
       // not an arbitrary timer. Unrelated close-event timers retain native delivery.
-      window.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+      browserWindow.setTimeout = (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
         if (typeof handler === 'function' && delay === 0) {
           const source = Function.prototype.toString.call(handler);
           const signature = {
@@ -61,21 +63,17 @@ export async function holdReaderReturnFocus(page: Page) {
           if (control.zeroDelayCallbacks.length < 8) control.zeroDelayCallbacks.push(signature);
           if (signature.row && signature.workspace) {
             control.captures++;
-            return nativeTimeout.call(
-              window,
-              () => {
-                if (pending || control.captures !== 1) throw new Error('Ambiguous reader focus delivery');
-                pending = () => {
-                  Reflect.apply(handler, window, args);
-                };
-                control.pending = true;
-              },
-              delay,
-            );
+            return nativeTimeout(() => {
+              if (pending || control.captures !== 1) throw new Error('Ambiguous reader focus delivery');
+              pending = () => {
+                Reflect.apply(handler, window, args);
+              };
+              control.pending = true;
+            }, delay);
           }
         }
-        return nativeTimeout.call(window, handler, delay, ...args);
-      }) as typeof window.setTimeout;
+        return nativeTimeout(handler, delay, ...args);
+      };
       // Native event listener microtasks are not an after-ancestor-capture boundary.
       // Restore at the target, after the app's body capture handler has run.
       event.target.addEventListener('close', control.restore, { once: true });
