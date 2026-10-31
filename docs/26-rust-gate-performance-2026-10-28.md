@@ -1,5 +1,7 @@
 # Rust gate test profile — 2026-10-28 (HS2-Z1NY93)
 
+Startup and discovery observations are recorded separately in the [2026-10-31 supervised Nextest investigation](nextest-discovery-2026-10-31.md) (HS2-2N8324).
+
 The required `cargo nextest run --all-features` gate ran in 101–138 seconds in the prior warm profile at `cc20c7ca`, with 32 tests above five seconds accounting for 264 seconds of summed test time. This change targets four 500-row boundary tests. Their fixtures each need 501 parseable ticket files to exercise overflow, truncation, filtering, and paging. The tests still use real `FsStore` reads and the same assertions.
 
 ## Focused comparison
