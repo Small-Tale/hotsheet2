@@ -8,6 +8,7 @@ pub mod github_app_config;
 pub mod github_attachments;
 pub mod github_credential;
 pub mod github_device;
+mod github_pagination;
 pub mod github_webhook_setup;
 pub mod gitlab;
 pub mod jira;

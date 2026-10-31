@@ -37,6 +37,8 @@ controlled-close flush for large pending draft strings (HS2-E0H7S0). See the
 > **Open** (genuinely undecided, needs a decision) · **Deferred** (out of the
 > first pass).
 
+**GitHub pagination boundary (HS2-TAG2ZP):** selected API origins and explicit ports constrain authenticated next-page requests; Enterprise cursor path scope remains enforced, with explicit cycle and request-budget errors. See [external provider requirements](16-external-sync-interface.md).
+
 ## Why a rewrite
 
 Hot Sheet 1 is a mature, feature-rich Node/TypeScript app (188 requirement

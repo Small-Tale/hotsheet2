@@ -510,6 +510,193 @@ pub(crate) async fn list_account_github_repositories(
 mod installation_url_tests {
     use super::*;
 
+    #[tokio::test]
+    async fn hs2_tag2zp_actual_account_http_pagination_is_complete_or_explicitly_rejected() {
+        use axum::response::IntoResponse;
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        let foreign_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let foreign_origin = format!("http://{}", foreign_listener.local_addr().unwrap());
+        let foreign_calls = Arc::new(AtomicUsize::new(0));
+        let observed_foreign = foreign_calls.clone();
+        let foreign_task = tokio::spawn(async move {
+            axum::serve(
+                foreign_listener,
+                axum::Router::new().fallback(move || {
+                    observed_foreign.fetch_add(1, Ordering::SeqCst);
+                    async { Json(serde_json::json!({"installations": []})) }
+                }),
+            )
+            .await
+            .unwrap();
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let reject = Arc::new(AtomicBool::new(false));
+        let installation_origin = origin.clone();
+        let repository_origin = origin.clone();
+        let repository_reject = reject.clone();
+        let upstream_calls = Arc::new(AtomicUsize::new(0));
+        let installation_calls = upstream_calls.clone();
+        let repository_calls = upstream_calls.clone();
+        let upstream = axum::Router::new()
+            .route(
+                "/api/v3/user/installations",
+                axum::routing::get(
+                    move |headers: axum::http::HeaderMap,
+                          query: axum::extract::Query<std::collections::HashMap<String, String>>| {
+                        assert_eq!(headers["authorization"], "Bearer synthetic-tag2zp-token");
+                        let origin = installation_origin.clone();
+                        installation_calls.fetch_add(1, Ordering::SeqCst);
+                        async move {
+                            let second = query.contains_key("page");
+                            let installation = if second {
+                                serde_json::json!({"id":8,"app_slug":"synthetic-app","account":{"login":"synthetic-beta"},"repository_selection":"all"})
+                            } else {
+                                serde_json::json!({"id":7,"app_slug":"synthetic-app","account":{"login":"synthetic-alpha"},"repository_selection":"selected"})
+                            };
+                            let mut response = Json(serde_json::json!({"installations":[installation]})).into_response();
+                            if !second {
+                                response.headers_mut().insert(
+                                    "link",
+                                    format!("<{origin}/api/v3/user/installations?page=2>; rel=\"next\"").parse().unwrap(),
+                                );
+                            }
+                            response
+                        }
+                    },
+                ),
+            )
+            .route(
+                "/api/v3/user/installations/{installation}/repositories",
+                axum::routing::get(
+                    move |axum::extract::Path(installation): axum::extract::Path<u64>,
+                          headers: axum::http::HeaderMap,
+                          query: axum::extract::Query<std::collections::HashMap<String, String>>| {
+                        assert_eq!(headers["authorization"], "Bearer synthetic-tag2zp-token");
+                        let origin = repository_origin.clone();
+                        let foreign = foreign_origin.clone();
+                        let rejected = repository_reject.load(Ordering::SeqCst);
+                        repository_calls.fetch_add(1, Ordering::SeqCst);
+                        async move {
+                            let second = query.contains_key("page");
+                            let names = match (installation, second) {
+                                (7, false) => vec!["synthetic/Zeta", "synthetic/Alpha"],
+                                (7, true) => vec!["synthetic/Shared"],
+                                (8, false) => vec!["synthetic/Beta"],
+                                (8, true) => vec!["synthetic/Gamma", "synthetic/Shared"],
+                                _ => panic!("unexpected synthetic installation"),
+                            };
+                            let repositories = names.into_iter().map(|name| serde_json::json!({"full_name":name})).collect::<Vec<_>>();
+                            let mut response = Json(serde_json::json!({"repositories":repositories})).into_response();
+                            let next = if !second {
+                                Some(format!("{origin}/api/v3/user/installations/{installation}/repositories?page=2"))
+                            } else if installation == 8 && rejected {
+                                // HS2-TAG2ZP: reject after prior pages have accumulated rows.
+                                Some(format!("{foreign}/api/v3/user/installations/8/repositories?page=3"))
+                            } else {
+                                None
+                            };
+                            if let Some(next) = next {
+                                response.headers_mut().insert("link", format!("<{next}>; rel=\"next\"").parse().unwrap());
+                            }
+                            response
+                        }
+                    },
+                ),
+            );
+        let upstream_task = tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
+        let mut environment = SyntheticEnvironment(Vec::new());
+        let credential = "github-app-hs2-tag2zp-http";
+        environment.set(
+            "HOTSHEET_API_KEY_GITHUB_APP_HS2_TAG2ZP_HTTP",
+            serde_json::json!({
+                "kind": "github_app", "client_id": "synthetic-client", "web_base": origin,
+                "token": {"access_token": "synthetic-tag2zp-token"}
+            })
+            .to_string(),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let store = hotsheet_ticketing::FsStore::init(
+            dir.path().join("store"),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let state = AppState::new(store, "synthetic-server-token".into())
+            .unwrap()
+            .with_default_codex_home(dir.path().join("no-codex-home"))
+            .with_machine_home(dir.path().join("machine-home"));
+        let server_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!(
+            "http://{}/accounts/{credential}/github-repositories",
+            server_listener.local_addr().unwrap()
+        );
+        let server_task = tokio::spawn(async move {
+            axum::serve(server_listener, crate::app(state))
+                .await
+                .unwrap();
+        });
+        // Accepted walk, rejected walk, then refill: a failure cannot poison a later read.
+        for rejected in [false, true, false] {
+            reject.store(rejected, Ordering::SeqCst);
+            let url = url.clone();
+            let before = upstream_calls.load(Ordering::SeqCst);
+            let (status, body) = tokio::task::spawn_blocking(move || {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout(Duration::from_secs(5))
+                    .build();
+                let response = match agent
+                    .get(&url)
+                    .set("x-hotsheet-secret", "synthetic-server-token")
+                    .call()
+                {
+                    Ok(response) | Err(ureq::Error::Status(_, response)) => response,
+                    Err(error) => panic!("synthetic HTTP request failed: {error}"),
+                };
+                (response.status(), response.into_string().unwrap())
+            })
+            .await
+            .unwrap();
+            assert_eq!(status, if rejected { 502 } else { 200 }, "{body}");
+            if rejected {
+                assert!(body.contains("selected API origin"));
+                assert!(
+                    serde_json::from_str::<serde_json::Value>(&body)
+                        .unwrap()
+                        .get("repositories")
+                        .is_none()
+                );
+            } else {
+                let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+                assert_eq!(
+                    body["repositories"],
+                    serde_json::json!([
+                        "synthetic/Alpha",
+                        "synthetic/Beta",
+                        "synthetic/Gamma",
+                        "synthetic/Shared",
+                        "synthetic/Zeta"
+                    ])
+                );
+                assert_eq!(body["installations"].as_array().unwrap().len(), 2);
+                assert_eq!(body["installations"][0]["account"], "synthetic-alpha");
+                assert_eq!(body["installations"][1]["account"], "synthetic-beta");
+                assert_eq!(body["installations"][0]["selection"], "selected");
+                assert_eq!(body["installations"][1]["selection"], "all");
+            }
+            assert_eq!(upstream_calls.load(Ordering::SeqCst) - before, 6);
+            assert_eq!(foreign_calls.load(Ordering::SeqCst), 0);
+        }
+        server_task.abort();
+        upstream_task.abort();
+        foreign_task.abort();
+        for task in [server_task, upstream_task, foreign_task] {
+            assert!(task.await.unwrap_err().is_cancelled());
+        }
+    }
+
     // Restore overrides even after assertion failures; never read or write the keychain.
     struct SyntheticEnvironment(Vec<(&'static str, Option<std::ffi::OsString>)>);
 

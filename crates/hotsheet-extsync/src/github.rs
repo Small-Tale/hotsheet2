@@ -26,12 +26,18 @@ use hotsheet_ticketing::wire::ApiAttachment;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
+/// HS2-TAG2ZP: bound malformed walks without the device API's small account limit.
+const ISSUE_PAGE_REQUEST_LIMIT: usize = 10_000;
 /// Coalesce the summary and status-scoped board reads issued together by one project refresh.
 const ISSUE_LIST_CACHE_TTL: Duration = Duration::from_secs(10);
 /// Reconcile removals, which GitHub's `since` filter cannot report.
 const ISSUE_LIST_FULL_REFRESH_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
 const API_VERSION: &str = "2022-11-28";
+
+#[cfg(test)]
+#[path = "github_pagination_tests.rs"]
+mod pagination_tests;
 
 #[derive(Debug, Clone)]
 pub struct GitHubConfig {
@@ -815,14 +821,7 @@ impl GitHubProvider {
         limit: usize,
     ) -> Result<GitHubIssuePage, ProviderError> {
         let mut url = if let Some(cursor) = cursor {
-            let api_prefix = format!("{}/", self.config.api_base.trim_end_matches('/'));
-            if !cursor.starts_with(&api_prefix) || !cursor.contains("/issues?") {
-                return Err(ProviderError::Conflict {
-                    ticket: self.config.connection_id.clone(),
-                    message: "invalid GitHub page cursor".into(),
-                });
-            }
-            cursor.to_owned()
+            self.page_cursor(cursor)?
         } else {
             self.endpoint(&format!(
                 "issues?state=all&direction=asc&per_page={}",
@@ -835,6 +834,8 @@ impl GitHubProvider {
                 url.push_str(since);
             }
         }
+        let url = crate::github_pagination::target(&self.config.api_base, &url)
+            .map_err(|error| self.pagination_error(error))?;
         let response = self.request("GET", &url, None)?;
         let server_time = response
             .headers
@@ -849,7 +850,52 @@ impl GitHubProvider {
             .into_iter()
             .filter(|issue| issue.pull_request.is_none())
             .collect();
+        let next = next.map(|next| self.page_cursor(&next)).transpose()?;
+        if next.as_deref() == Some(url.as_str()) {
+            return Err(self.pagination_error("GitHub pagination cycle detected"));
+        }
         Ok((issues, next, server_time))
+    }
+
+    fn pagination_error(&self, message: &str) -> ProviderError {
+        ProviderError::Conflict {
+            ticket: self.config.connection_id.clone(),
+            message: message.into(),
+        }
+    }
+
+    fn page_cursor(&self, cursor: &str) -> Result<String, ProviderError> {
+        let cursor = crate::github_pagination::target(&self.config.api_base, cursor)
+            .map_err(|error| self.pagination_error(error))?;
+        let api_prefix = crate::github_pagination::target(
+            &self.config.api_base,
+            &format!("{}/", self.config.api_base.trim_end_matches('/')),
+        )
+        .map_err(|error| self.pagination_error(error))?;
+        let issue_resource =
+            crate::github_pagination::target(&self.config.api_base, &self.endpoint("issues"))
+                .map_err(|error| self.pagination_error(error))?;
+        // HS2-TAG2ZP: a query value containing /issues? cannot grant resource scope.
+        let is_issue_page = cursor
+            .split_once('?')
+            .is_some_and(|(path, _)| path == issue_resource);
+        if !cursor.starts_with(&api_prefix) || !is_issue_page {
+            return Err(self.pagination_error("invalid GitHub page cursor"));
+        }
+        Ok(cursor)
+    }
+
+    fn enter_page_walk(
+        &self,
+        walk: &mut crate::github_pagination::Walk,
+        cursor: Option<&str>,
+    ) -> Result<(), ProviderError> {
+        let url = match cursor {
+            Some(cursor) => self.page_cursor(cursor)?,
+            None => self.endpoint("issues?state=all&direction=asc&per_page=100"),
+        };
+        walk.enter(&url)
+            .map_err(|error| self.pagination_error(error))
     }
 
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
@@ -900,7 +946,9 @@ impl GitHubProvider {
         let mut cursor = None;
         let mut issues = Vec::new();
         let mut server_watermark = None;
+        let mut walk = crate::github_pagination::Walk::new(ISSUE_PAGE_REQUEST_LIMIT);
         loop {
+            self.enter_page_walk(&mut walk, cursor.as_deref())?;
             let (page, next, server_time) =
                 self.issue_page(cursor.as_deref(), updated_after, 100)?;
             if cursor.is_none() {
@@ -1101,7 +1149,15 @@ impl TicketProvider for GitHubProvider {
             ));
         }
         self.check_query_filters(query)?;
+        let mut walk = crate::github_pagination::Walk::new(ISSUE_PAGE_REQUEST_LIMIT);
+        let mut restart_allowed = resume.is_some();
         keyset_page_from_native_pages(query, after, resume, limit, |cursor| {
+            // An obsolete resume hint legitimately falls back to a new walk at page one.
+            if cursor.is_none() && restart_allowed {
+                walk = crate::github_pagination::Walk::new(ISSUE_PAGE_REQUEST_LIMIT);
+                restart_allowed = false;
+            }
+            self.enter_page_walk(&mut walk, cursor)?;
             let (issues, next, _) =
                 self.issue_page(cursor, query.updated_after.as_deref(), NATIVE_KEYSET_PAGE)?;
             Ok((
@@ -2282,10 +2338,11 @@ pub(crate) fn next_link(header: &str) -> Option<String> {
     header.split(',').find_map(|part| {
         let (url, relation) = part.trim().split_once(';')?;
         (relation.trim() == "rel=\"next\"").then(|| {
-            url.trim()
-                .trim_start_matches('<')
-                .trim_end_matches('>')
-                .to_string()
+            let url = url.trim();
+            url.strip_prefix('<')
+                .and_then(|url| url.strip_suffix('>'))
+                .unwrap_or(url)
+                .to_owned()
         })
     })
 }

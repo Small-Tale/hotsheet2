@@ -682,6 +682,20 @@ every repository the app can reach, gathered across all of the user's app instal
 using its saved account; both the issue repository and optional attachment assets repository
 offer those choices while
 retaining their current values. A failed lookup leaves manual path entry available (HS2-Y5588D).
+
+GitHub pagination targets must be absolute HTTP(S) URLs on the selected API origin
+(HS2-TAG2ZP). Scheme and host casing are normalized; an explicit port remains significant,
+including an explicit default port. Relative/query-only/network-path links, credentials,
+fragments, whitespace/control characters, backslashes and path traversal are rejected before
+another authenticated request. Ticket cursors additionally retain the configured API path
+prefix (including Enterprise `/api/v3`) and the selected repository's issue-list path;
+`/issues?` text inside a query value cannot grant that path scope. A malformed or foreign next
+target fails the read explicitly rather than presenting a truncated success. Account lists
+retain their 100-request bound per walk; issue aggregation and native keyset walks allow
+10,000 requests per walk (up to one million issues at the native page size). Cycles and
+exhausted bounds return errors. Independent page reads remain stateless, and an obsolete
+keyset resume hint may restart a fresh walk at the first page.
+
 GitHub only exposes repositories the app is
 installed on, so the list response also reports each installation's account, whether it grants
 `all` or `selected` repositories, and its settings page; the dialog explains a missing

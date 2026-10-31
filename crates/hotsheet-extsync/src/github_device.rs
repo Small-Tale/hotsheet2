@@ -233,9 +233,13 @@ impl GitHubDeviceClient {
     ) -> Result<Vec<Value>, GitHubDeviceError> {
         let mut items = Vec::new();
         let mut next = Some(url.to_owned());
-        // A bound keeps a misbehaving `Link` header from looping forever.
-        for _ in 0..100 {
-            let Some(url) = next.take() else { break };
+        let api_base = self.api_base()?;
+        let mut walk = crate::github_pagination::Walk::new(100);
+        while let Some(url) = next.take() {
+            let url = crate::github_pagination::target(&api_base, &url)
+                .map_err(|error| GitHubDeviceError::Invalid(error.into()))?;
+            walk.enter(&url)
+                .map_err(|error| GitHubDeviceError::Invalid(error.into()))?;
             let (value, link) = self.get_json_page(&url, headers)?;
             items.extend(
                 value
@@ -451,7 +455,7 @@ mod tests {
             responses: Mutex::new(VecDeque::from([
                 page(
                     json!({"installations":[{"id":1,"app_slug":"hot-sheet","repository_selection":"selected","html_url":"https://github.test/settings/installations/1","account":{"login":"westphal"}}]}),
-                    Some("https://api.test/user/installations?page=2"),
+                    Some("https://github.test/api/v3/user/installations?page=2"),
                 ),
                 page(
                     json!({"installations":[{"id":2,"repository_selection":"all","account":{"login":"Small-Tale"}}]}),
@@ -459,7 +463,7 @@ mod tests {
                 ),
                 page(
                     json!({"repositories":[{"full_name":"westphal/Zeta"}]}),
-                    Some("https://api.test/user/installations/1/repositories?page=2"),
+                    Some("https://github.test/api/v3/user/installations/1/repositories?page=2"),
                 ),
                 page(
                     json!({"repositories":[{"full_name":"westphal/alpha"}]}),
