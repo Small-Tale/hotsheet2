@@ -1766,3 +1766,18 @@ discard flow remains covered by its existing real-router test.
   focused sign-in/reader batch (22 cases per engine). Matching real-application
   wide, medium, phone, after-reader and resize captures were visually reviewed;
   compact search is unobscured and the desktop inspector returns.
+
+### Held-summary publication boundary (HS2-NPBQX5)
+
+The existing scheduled held-notification parent test now holds the fake transport
+return after request receipt, proving a busy second flush
+can return empty before the summary log is published. It then releases the send and
+awaits the real authenticated deliveries endpoint's publication predicate within the
+same original 20-second deadline. Exact title, one summary plus two held rows,
+no-duplicate transport/flush and five-second router-release assertions remain.
+Other harnesses have no transport gate. The separate controlled-prerequisite red
+checkpoint retained the original premature assertion and failed with only the two
+held rows while transport return was withheld. The corrected focused case and all
+12 `notification_delivery` tests passed with retries disabled. Production flush
+locking and timeouts are unchanged; this verifies the fixture boundary, not a
+production persistence defect.

@@ -3,7 +3,7 @@
 //! running notification router to a faithful fake ntfy transport.
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -20,11 +20,46 @@ const SECRET: &str = "test-secret";
 /// Records each request and wakes the waiting test, replying like ntfy.sh does.
 struct SignallingHttp {
     sent: Mutex<tokio::sync::mpsc::UnboundedSender<HttpRequest>>,
+    // HS2-NPBQX5: absent in ordinary harnesses; one controlled send return only.
+    return_gate: Mutex<Option<SendReturnGate>>,
+}
+
+struct SendReturnGate {
+    released: std::sync::mpsc::Receiver<()>,
+    deadline: Instant,
+}
+
+struct ReleaseSend(Option<std::sync::mpsc::Sender<()>>);
+
+impl ReleaseSend {
+    fn release(&mut self) {
+        self.0
+            .take()
+            .expect("owned send gate is released once")
+            .send(())
+            .expect("owned send gate remains within its deadline");
+    }
+}
+
+impl Drop for ReleaseSend {
+    fn drop(&mut self) {
+        if let Some(release) = self.0.take() {
+            let _ = release.send(());
+        }
+    }
 }
 
 impl HttpTransport for SignallingHttp {
     fn send(&self, request: &HttpRequest) -> Result<HttpResponse, String> {
         let _ = self.sent.lock().unwrap().send(request.clone());
+        let gate = self.return_gate.lock().unwrap().take();
+        if let Some(gate) = gate {
+            gate.released
+                .recv_timeout(gate.deadline.saturating_duration_since(Instant::now()))
+                .map_err(|_| {
+                    "HS2-NPBQX5 owned send return exceeded delivery deadline".to_string()
+                })?;
+        }
         Ok(HttpResponse {
             status: 200,
             body: r#"{"id":"ntfy-1","event":"message"}"#.into(),
@@ -41,6 +76,20 @@ struct Harness {
     transport: std::sync::Weak<SignallingHttp>,
 }
 
+impl Harness {
+    fn hold_next_send(&self, deadline: Instant) -> ReleaseSend {
+        let transport = self
+            .transport
+            .upgrade()
+            .expect("owned fake transport is live");
+        let (release, released) = std::sync::mpsc::channel();
+        let mut gate = transport.return_gate.lock().unwrap();
+        assert!(gate.is_none(), "one owned send return gate at a time");
+        *gate = Some(SendReturnGate { released, deadline });
+        ReleaseSend(Some(release))
+    }
+}
+
 fn harness() -> Harness {
     hotsheet_aitools::enable_test_permission_vault();
     let dir = tempfile::tempdir().unwrap();
@@ -50,6 +99,7 @@ fn harness() -> Harness {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let http = Arc::new(SignallingHttp {
         sent: Mutex::new(tx),
+        return_gate: Mutex::new(None),
     });
     let transport = Arc::downgrade(&http);
     let state = AppState::new(store, SECRET.into())
@@ -954,17 +1004,93 @@ async fn held_deliveries_are_flushed_as_one_summary() {
     .unwrap();
     // Exercise the real scheduled path: the interval's first tick flushes the log
     // without a new ticket event or an explicit call to flush_held.
-    let routing =
-        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
-    let sent = next(&mut h).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut release = h.hold_next_send(deadline);
+    let deadline = tokio::time::Instant::from_std(deadline);
+    let routing = tokio::time::timeout_at(
+        deadline,
+        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()),
+    )
+    .await
+    .expect("scheduled router starts within the delivery deadline");
+    let sent = tokio::time::timeout_at(deadline, next(&mut h))
+        .await
+        .expect("request arrives within the same delivery deadline");
     assert_eq!(header(&sent, "Title"), Some("2 notifications were held"));
     let state = h.state.clone();
     let flush = move || hotsheet_server::notification_router::flush_held(&state);
     assert!(tokio::task::spawn_blocking(flush).await.unwrap().is_empty());
-    let (status, deliveries) = call(&router, "GET", "/notification-deliveries", None).await;
+    let (status, unpublished) = call(&router, "GET", "/notification-deliveries", None).await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(unpublished.as_array().unwrap().len(), 2, "{unpublished}");
+    assert!(
+        unpublished
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|record| record["event"] == "ticket.blocked" && record["held"] == true),
+        "{unpublished}"
+    );
+    release.release();
+    // HS2-NPBQX5: request arrival and a busy flush's empty result do not mean
+    // delivery-log publication. Await that actual boundary at the SAME deadline.
+    let deliveries = tokio::time::timeout_at(deadline, async {
+        loop {
+            let (status, deliveries) = call(&router, "GET", "/notification-deliveries", None).await;
+            assert_eq!(status, StatusCode::OK);
+            let records = deliveries.as_array().expect("delivery log is an array");
+            if records
+                .iter()
+                .any(|record| record["event"] == "notifications.held")
+            {
+                break deliveries;
+            }
+            assert_eq!(records.len(), 2, "{deliveries}");
+            assert!(
+                records
+                    .iter()
+                    .all(|record| record["event"] == "ticket.blocked" && record["held"] == true),
+                "{deliveries}"
+            );
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("scheduled summary is published within the original delivery deadline");
     assert_eq!(deliveries[0]["event"], "notifications.held", "{deliveries}");
     assert_eq!(deliveries[1]["held"], true, "{deliveries}");
+    let records = deliveries.as_array().unwrap();
+    assert_eq!(records.len(), 3, "{deliveries}");
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record["event"] == "notifications.held")
+            .count(),
+        1
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record["held"] == true)
+            .count(),
+        2
+    );
+    let state = h.state.clone();
+    assert!(
+        tokio::task::spawn_blocking(move || hotsheet_server::notification_router::flush_held(
+            &state
+        ))
+        .await
+        .unwrap()
+        .is_empty()
+    );
+    assert!(
+        matches!(
+            h.received.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ),
+        "no duplicate transport request after publication"
+    );
     // Aborting the returned task must stop its timer too. The transport's weak
     // reference detects a detached timer retaining AppState after shutdown.
     routing.abort();
