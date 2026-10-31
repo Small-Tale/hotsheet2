@@ -16,7 +16,7 @@ type ControlledWindow = Window & { __hs2Frfpa5ReaderFocus?: ReaderFocusControl }
 /** HS2-FRFPA5: delay only the real reader's close-event return-focus delivery. */
 export async function holdReaderReturnFocus(page: Page) {
   await page.addInitScript(() => {
-    const nativeTimeout = window.setTimeout;
+    const nativeTimeout = window.setTimeout.bind(window);
     let pending: (() => void) | undefined;
     const control: ReaderFocusControl = {
       captures: 0,

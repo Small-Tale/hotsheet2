@@ -212,7 +212,9 @@ it('HS2-FRFPA5 retains row, inspector and workspace fallbacks through removal an
   f.workspaceTarget(undefined);
   f.active(f.body);
   restoreTicketReaderFocus(undefined, 'HS2-DEMO01', f.root);
-  expect(() => f.flush()).not.toThrow();
+  expect(() => {
+    f.flush();
+  }).not.toThrow();
   expect(f.root.activeElement).toBe(f.body);
   f.workspaceTarget(f.workspace);
   restoreTicketReaderFocus(undefined, 'HS2-DEMO01', f.root);
