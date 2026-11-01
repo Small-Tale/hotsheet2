@@ -1568,6 +1568,37 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
       },
     }),
   );
+  await page.route('**/checkouts/demo-checkout/analytics', (route) =>
+    route.fulfill({
+      json: {
+        stores: [
+          {
+            store_id: 'demo-store',
+            ticket_flow: {
+              total: 12,
+              open: 7,
+              completed: 5,
+              current_by_status: { 'Not Started': 3, Started: 4, Completed: 5 },
+              current_by_category: { feature: 6, bug: 4, task: 2 },
+              throughput_by_day: { '2026-10-30': 2 },
+              cycle_time_seconds: { samples: 5, average: 172800, p50: 86400, p95: 345600 },
+              historical_cumulative_flow_available: false,
+            },
+            usage: {
+              events: 8,
+              tokens_in: 120000,
+              tokens_out: 35000,
+              cost_usd: 2.48,
+              by_model: { 'model-a': 2.48 },
+              by_ticket: {},
+              by_day: {},
+            },
+          },
+        ],
+        unavailable_sources: [],
+      },
+    }),
+  );
   const git = (totalBytes: number) => ({
     loose_objects: 0,
     loose_bytes: 0,
@@ -1647,7 +1678,9 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   // The project Select returns to the project, where the scrim follows the remembered rail again.
   const strip = page.locator('.project-tab-bar');
   await strip.getByRole('button', { name: 'Cross-Project Stats' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Cross-Project Stats' })).toBeVisible();
+  const crossProjectStats = page.getByRole('region', { name: 'Cross-Project Stats' });
+  await expect(crossProjectStats).toBeVisible();
+  await expect(crossProjectStats.locator('[data-component="stats-dashboard"]')).toContainText('12');
   await expect(scrim).toHaveCount(0);
   // Back to project stats at a wide viewport, with the same loaded report and no scrim.
   await page.setViewportSize({ width: 1280, height: 800 });
