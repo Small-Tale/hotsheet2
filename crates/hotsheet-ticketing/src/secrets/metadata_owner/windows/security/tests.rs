@@ -255,6 +255,9 @@ fn hs2_hwc0fs_windows_noops_keep_handle_identity_and_set_delete_replace() {
         .unwrap();
     assert_eq!(bytes(home.path()), before);
     assert!(identity(&metadata_file(home.path()), false).unwrap() == first);
+    // The no-op must preserve the held object. Release this observer before the
+    // replacement: Windows may refuse a rename over an open destination.
+    drop(held);
     keys.set("synthetic", "second").unwrap();
     assert!(identity(&metadata_file(home.path()), false).unwrap() != first);
     assert_eq!(keys.get("synthetic").unwrap(), "second");
