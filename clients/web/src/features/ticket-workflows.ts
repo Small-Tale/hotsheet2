@@ -8,6 +8,7 @@ import {
   type CheckoutTicketCounts,
   type CodeReview,
   type DuplicateBacklink,
+  type FeedbackDelivery,
   type FullTicket,
   type TicketCloseReason,
   type TicketRow as WireTicketRow,
@@ -287,6 +288,29 @@ export interface TicketWorkflowDependencies {
 
 /** Ticket mutation, selection, transfer, attachment, close, and composer workflows. */
 export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) {
+  const feedbackDelivery = signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>();
+  async function chooseFeedbackSession(ticketId: string, connectionId: string) {
+    const current = project();
+    const ticket = tickets.value.find((item) => item.qualified_id === ticketId);
+    const pending = feedbackDelivery.value;
+    if (!current || !ticket || pending?.ticketId !== ticketId || pending.delivery.status !== 'choose') return;
+    try {
+      const delivery = await api().notifyTicketNote(
+        current.id,
+        ticket.qualified_id,
+        pending.delivery.note_id,
+        connectionId,
+      );
+      feedbackDelivery.value = { ticketId, delivery };
+      showToast(
+        delivery.status === 'queued'
+          ? 'The AI session will be notified after its current turn.'
+          : 'The AI session was notified.',
+      );
+    } catch (reason) {
+      showToast(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
   const {
     state,
     CLOSED_NOT_WORKING_TARGET,
@@ -634,13 +658,18 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               }
             }
             if (!updated) {
-              updated = (
-                await client.updateCheckoutTicket(
-                  current.id,
-                  ticket.qualified_id,
-                  base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
-                )
-              ).ticket;
+              const result = await client.updateCheckoutTicket(
+                current.id,
+                ticket.qualified_id,
+                base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
+              );
+              updated = result.ticket;
+              if (result.feedbackDelivery) {
+                feedbackDelivery.value = { ticketId: ticket.qualified_id, delivery: result.feedbackDelivery };
+                if (result.feedbackDelivery.status === 'sent') showToast('The AI session was notified.');
+                if (result.feedbackDelivery.status === 'queued')
+                  showToast('The AI session will be notified after its current turn.');
+              }
             }
             localTicketChangeAcknowledgements.acknowledge(current.id, {
               store: updated.connection_id,
@@ -2809,6 +2838,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
 
   return {
+    feedbackDelivery,
+    chooseFeedbackSession,
     attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,

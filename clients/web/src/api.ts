@@ -23,6 +23,7 @@ import {
   parseCorruptTicket,
   parseCustomView,
   parseDuplicateBacklinks,
+  parseFeedbackDelivery,
   parseFilePath,
   parseFullTicket,
   parseGitHubAuthStart,
@@ -732,6 +733,12 @@ export interface CorruptTicket {
   error: string;
   error_code?: 'invalid_ticket' | 'upgrade_required';
 }
+/** Result of notifying a session after a human note on a Started ticket (HS2-25TP3N). */
+export type FeedbackDelivery =
+  | { status: 'sent' | 'queued'; note_id: string; connection_id: string }
+  | { status: 'choose'; note_id: string; sessions: Array<{ id: string; tool: string }> }
+  | { status: 'start'; note_id: string };
+
 export interface FullTicket extends TicketRow {
   details: string;
   /** Target was created, but its source link needs an idempotent repair. */
@@ -1782,8 +1789,20 @@ export class Api {
   updateCheckoutTicket = (checkout: string, id: string, value: Record<string, unknown>) =>
     this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: JSON.stringify(prioritiesToWire(value)),
-    }).then((ticket) => ({ store: ticket.store, ticket }));
+      body: JSON.stringify(
+        prioritiesToWire(
+          typeof value.note === 'string' && !Object.hasOwn(value, 'actor')
+            ? { ...value, actor: { role: 'human' } }
+            : value,
+        ),
+      ),
+    }).then((ticket) => ({ store: ticket.store, ticket, feedbackDelivery: ticket.feedback_delivery }));
+  notifyTicketNote = (checkout: string, id: string, noteId: string, connectionId: string) =>
+    this.parsed(
+      parseFeedbackDelivery,
+      `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}/notify`,
+      { method: 'POST', body: JSON.stringify({ connection_id: connectionId }) },
+    );
   closeCheckoutTicket = (
     checkout: string,
     id: string,

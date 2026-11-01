@@ -11873,6 +11873,67 @@ async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_o
 }
 
 #[tokio::test]
+async fn hs2_25tp3n_human_feedback_is_distinct_from_not_working_and_offers_session_start() {
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root": checkout.path(), "alias": "feedback", "stores": [store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/feedback/tickets",
+                Some(r#"{"title":"Synthetic feedback test"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["qualified_id"].as_str().unwrap();
+    let path = format!("/checkouts/feedback/tickets/{id}");
+    app.clone()
+        .oneshot(authed("PATCH", &path, Some(r#"{"status":"started"}"#)))
+        .await
+        .unwrap();
+    let answer = body_json(app.clone().oneshot(authed(
+        "PATCH", &path,
+        Some(r#"{"note":"Synthetic feedback answer","actor":{"role":"human"},"note_kind":"regular"}"#),
+    )).await.unwrap()).await;
+    assert_eq!(answer["feedback_delivery"]["status"], "start", "{answer}");
+    assert_eq!(answer["status"], "started");
+    let note_id = answer["feedback_delivery"]["note_id"].as_str().unwrap();
+    let notify = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("{path}/notes/{note_id}/notify"),
+            Some(r#"{"connection_id":"foreign-session"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(notify.status(), StatusCode::NOT_FOUND);
+    let ai_note = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &path,
+                Some(r#"{"note":"Synthetic AI progress","actor":{"role":"ai","id":"codex-test"}}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(ai_note.get("feedback_delivery").is_none());
+}
+
+#[tokio::test]
 async fn expected_token_conflicts_carry_the_ticket_changed_code_on_every_write_route() {
     // HS2-9S8CV1: the real Markdown checkout 409 names the ticket in its message, so clients
     // branch on the stable `code`, never the text. Any other 409 stays code-free.

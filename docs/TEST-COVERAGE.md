@@ -1,5 +1,17 @@
 # Feature Coverage Matrix
 
+HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
+project/source filtering, and empty-to-one-session routing in
+`crates/hotsheet-server/src/routes/feedback_session.rs`. The real HTTP test in
+`crates/hotsheet-server/tests/http.rs` checks a committed human Started-ticket
+note returns a start offer, a foreign session cannot be chosen, and an AI note
+does not trigger delivery. `clients/web/src/components/ticket-inspector.test.ts`
+checks the nonmodal chooser/start controls; the real-server browser flow in
+`clients/web/tests/feedback-session-choice.spec.ts` saves a human note, chooses a
+session, and checks wide/medium/narrow/wide rendering. Live external-tool
+delivery remains a manual integration check; external-provider ticket routing is
+HS2-H9Z9KZ.
+
 HS2-E9SR7R covers the Workers read projection, source-qualified and operation-aware merge and state
 grouping in `clients/web/src/worker-view-model.test.ts`; cursor replay, cancellation,
 and bounded failure backoff in `worker-view-stream.test.ts`; and shared summary,

@@ -15,6 +15,7 @@ use crate::api_error::{ActorReq, ApiError};
 use crate::dto::{CloseReq, CreateReq, DuplicateOfReq, UpdateReq};
 use crate::multistore::StoreEntry;
 use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
+use crate::routes::feedback_session::{self, Delivery};
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::providers::{
     connection_disabled, do_provider_create, do_provider_update, provider_for,
@@ -22,7 +23,7 @@ use crate::routes::providers::{
 };
 use crate::routes::store_scoped::ResolvedTicket;
 use crate::routes::ticket_writes::{
-    AssignReq, do_assign, do_close, do_create, do_update, do_update_with_ticket,
+    AssignReq, do_assign, do_close, do_create, do_update_with_ticket,
 };
 use crate::routes::tickets::{api_ticket, api_ticket_with_settings, contextualize_api_ticket};
 use crate::{AppState, multistore, now, opt_parse, provider_overlay};
@@ -755,17 +756,20 @@ pub(crate) async fn update_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
-) -> Result<(HeaderMap, Json<ResolvedTicket>), ApiError> {
+) -> Result<(HeaderMap, Json<CheckoutUpdateResult>), ApiError> {
     let started = Instant::now();
-    let (_, settings) = checkout_settings(&state, &reference)?;
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
         let (ticket, timing) = do_provider_update(&state, &source.connection_id, &native_id, req)?;
         return Ok((
             provider_timing_headers(timing, started.elapsed()),
-            Json(ResolvedTicket {
-                store: source.connection_id.clone(),
-                ticket: contextualize_api_ticket(ticket, &settings)?,
+            Json(CheckoutUpdateResult {
+                resolved: ResolvedTicket {
+                    store: source.connection_id.clone(),
+                    ticket: contextualize_api_ticket(ticket, &settings)?,
+                },
+                feedback_delivery: None,
             }),
         ));
     }
@@ -775,16 +779,51 @@ pub(crate) async fn update_checkout_ticket(
             "checkout links an unhosted git source",
         )
     })?;
+    let notify = req.note.as_deref().is_some_and(|note| !note.is_empty())
+        && req.note_id.is_none()
+        && req.ai_feedback.is_none();
+    let (mut api, ticket) = do_update_with_ticket(&state, &entry, &native_id, req, true)?;
+    let feedback_delivery = if notify {
+        feedback_session::after_human_note(
+            &state,
+            &checkout,
+            &source.connection_id,
+            &entry,
+            &ticket,
+        )
+        .await
+    } else {
+        None
+    };
+    if matches!(feedback_delivery, Some(Delivery::Sent { .. })) {
+        let mut refreshed = api_ticket(
+            &entry,
+            &entry
+                .resolve(&native_id)?
+                .ok_or_else(|| ApiError::not_found(&native_id))?,
+        )?;
+        refreshed.warnings = api.warnings;
+        refreshed.follow_up_link_error = api.follow_up_link_error;
+        api = refreshed;
+    }
     Ok((
         HeaderMap::new(),
-        Json(ResolvedTicket {
-            store: multistore::store_url_id(&entry.store),
-            ticket: contextualize_api_ticket(
-                do_update(&state, &entry, &native_id, req)?,
-                &settings,
-            )?,
+        Json(CheckoutUpdateResult {
+            resolved: ResolvedTicket {
+                store: multistore::store_url_id(&entry.store),
+                ticket: contextualize_api_ticket(api, &settings)?,
+            },
+            feedback_delivery,
         }),
     ))
+}
+
+#[derive(Serialize)]
+pub(crate) struct CheckoutUpdateResult {
+    #[serde(flatten)]
+    resolved: ResolvedTicket,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    feedback_delivery: Option<Delivery>,
 }
 
 #[derive(Deserialize)]

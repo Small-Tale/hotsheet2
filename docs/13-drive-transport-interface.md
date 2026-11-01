@@ -464,7 +464,9 @@ one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2)
 
 **Status: Partial**. Shipped: the operation, the OpenCode adapter, the `codex queue` adapter
 (HS2-FKM97G), the Claude inbox-socket adapter (HS2-M15CHN), and the headless CLI
-message caller (HS2-NN6EXP). The drawer message button was removed after UX review (HS2-JVSFES). Automatic ticket-note delivery is tracked separately (HS2-25TP3N).
+message caller (HS2-NN6EXP). The drawer message button was removed after UX review (HS2-JVSFES). Human-note delivery for Started Git tickets is shipped (HS2-25TP3N); external-provider delivery remains HS2-H9Z9KZ.
+
+For a committed human regular note or a linked FEEDBACK NEEDED answer on a Started Git ticket, the checkout-scoped PATCH returns `feedback_delivery`. A live claim holder's reachable session receives a short ticket reference first. With no matching claim, a sole reachable session in the same project and source receives it; multiple sessions produce an inline chooser, and no session offers a start action. The chooser calls `POST /checkouts/{reference}/tickets/{id}/notes/{note_id}/notify`. Delivery records an activity note. A busy driven chat receives the reference after its current turn. This feedback write is separate from a completed ticket's Not Working report.
 
 Hot Sheet can push a message into an _interactive_ AI session that one of its terminals
 launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or

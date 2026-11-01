@@ -3822,6 +3822,8 @@ export async function startHotSheetWebClient() {
     loadRepositorySize,
   });
   const {
+    feedbackDelivery,
+    chooseFeedbackSession,
     attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
@@ -4071,6 +4073,18 @@ export async function startHotSheetWebClient() {
     draftScope,
     ago,
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
+  });
+  document.body.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const choose = target.closest<HTMLElement>('[data-action="choose-feedback-session"]');
+    if (choose) {
+      const ticketId = choose.dataset.ticketId,
+        connectionId = choose.dataset.connectionId;
+      if (ticketId && connectionId) void chooseFeedbackSession(ticketId, connectionId);
+      return;
+    }
+    if (target.closest('[data-action="start-feedback-session"]')) void toggleSidebarDrive();
   });
   const projectTeardown = createProjectTeardown({
     projects,
@@ -4506,6 +4520,7 @@ export async function startHotSheetWebClient() {
   });
   const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps } =
     createInspectorSurface({
+      feedbackDelivery,
       ago,
       api,
       attachmentContext,

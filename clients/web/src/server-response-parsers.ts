@@ -15,6 +15,7 @@ import type {
   CorruptTicket,
   CustomView,
   DuplicateBacklinkResponse,
+  FeedbackDelivery,
   FollowUpEvidence,
   FullTicket,
   GitHubAuthStart,
@@ -590,12 +591,40 @@ export const parseFullTicket = shape<FullTicket>('ticket', fullTicketRequired, {
  * A checkout-scoped full ticket, which names its source `store` when the route knows it; the
  * field is type-checked when present but not required, as before this parser existed.
  */
-export const parseStoredTicket = shape<FullTicket & { store: string }>('ticket', fullTicketRequired, {
-  ...rowOptional,
-  follow_up_link_error: isString,
-  store: isString,
-  warnings: isStringArray,
-});
+export const parseFeedbackDelivery: ResponseParser<FeedbackDelivery> = (value) => {
+  if (!isRecord(value) || typeof value.note_id !== 'string') return invalid('feedback delivery');
+  if ((value.status === 'sent' || value.status === 'queued') && typeof value.connection_id === 'string')
+    return value as FeedbackDelivery;
+  if (value.status === 'start') return value as FeedbackDelivery;
+  if (
+    value.status === 'choose' &&
+    Array.isArray(value.sessions) &&
+    value.sessions.every(
+      (session) => isRecord(session) && typeof session.id === 'string' && typeof session.tool === 'string',
+    )
+  )
+    return value as FeedbackDelivery;
+  return invalid('feedback delivery');
+};
+
+export const parseStoredTicket = shape<FullTicket & { store: string; feedback_delivery?: FeedbackDelivery }>(
+  'ticket',
+  fullTicketRequired,
+  {
+    ...rowOptional,
+    follow_up_link_error: isString,
+    store: isString,
+    warnings: isStringArray,
+    feedback_delivery: (value) => {
+      try {
+        parseFeedbackDelivery(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  },
+);
 
 export const parseProviderOutboxOperation = shape<ProviderOutboxOperation>(
   'provider outbox operation',

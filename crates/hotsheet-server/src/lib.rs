@@ -310,6 +310,8 @@ pub struct AppState {
     /// only while its terminal lives and only for tools whose manifest declares a supported
     /// `[session_push]` mechanism.
     session_pushes: routes::session_messages::SessionPushes,
+    /// HS2-25TP3N: one in-flight delivery per human note, shared by cloned route state.
+    feedback_notification_reservations: routes::feedback_session::Reservations,
     /// Per-tool binary overrides for hook-reported session-push adapters (`codex queue`);
     /// empty resolves each plugin's `[launch] program` on `PATH` (HS2-FKM97G).
     session_push_programs: Arc<std::collections::HashMap<String, std::path::PathBuf>>,
@@ -572,6 +574,7 @@ impl AppState {
                 60_000,
             ))),
             session_pushes: Arc::default(),
+            feedback_notification_reservations: Arc::default(),
             session_push_programs: Arc::default(),
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
@@ -1539,6 +1542,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/notes/{note_id}/notify",
+            post(routes::feedback_session::choose_feedback_session),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/claim",

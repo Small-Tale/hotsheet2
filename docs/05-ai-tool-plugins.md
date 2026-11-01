@@ -713,6 +713,8 @@ and per-ticket commit hygiene — while explicitly **leaving the push/PR decisio
 repository** rather than mandating it. The four first-party blocks share one body; the
 `every_builtin_carries_the_full_default_guidance` test pins that content.
 
+**Human ticket feedback delivery (HS2-25TP3N).** On a Started Git ticket, the web client's human note write uses checkout-scoped ticket PATCH with `actor: {role: "human"}`. After the note commits, the server sends a short ticket reference to the reachable session holding the live claim. If that session is unreachable, it uses one reachable same-project/source session, or returns an inline chooser or start action. The chooser has its own note notification POST. The server records delivery as an activity note; a driven chat already busy receives the reference after its turn. This path does not invoke the completed-ticket Not Working report. External-provider delivery remains HS2-H9Z9KZ.
+
 The blocks and the worklist skill also make **releasing a claim the rule on every exit path**
 (HS2-M3F0MS): an AI releases its claim the moment it stops working a ticket for any reason
 (completion, a blocker or `FEEDBACK NEEDED`, handoff, switching tickets, deferring, running

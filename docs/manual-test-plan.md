@@ -782,3 +782,13 @@ Inspect wide/medium/phone/returned-wide states and match the original tab compon
 capture. For a real incident, record the exact tooltip, terminal snapshot and read-only
 hook diagnosis at the same time; synthetic state reproduction alone does not identify
 that incident's cause. Never use the running user host or real customer actions.
+
+### Human ticket feedback to AI sessions (HS2-25TP3N)
+
+Use a synthetic Started Git ticket claimed by a live AI session.
+Add a human note and answer a FEEDBACK NEEDED prompt. Confirm that each committed
+note sends only a short ticket reference to the claimed session and records a
+delivery activity note. Repeat while the driven chat is busy, with the claimed
+session unreachable, with two reachable same-project sessions, and with no
+session. Confirm the chooser stays within the project/source, the start action
+opens a session, and a completed-ticket Not Working report remains separate.

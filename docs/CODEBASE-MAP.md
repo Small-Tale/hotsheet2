@@ -646,6 +646,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot); attachment annotation PUT uses the shared store validator on default and checkout routes
       tests/terminal_connection_attribution.rs # Pending trusted permission hook projection/events versus absent/wrong/correct MCP terminal leases, plus absent/stale hook ids without terminal guessing (HS2-HBA9Z8)
       src/routes/session_messages.rs # POST /connections/{id}/message (HS2-PEJ962): per-terminal SessionPush adapters, push-capable launch wiring (loopback port + random password), stable error codes, `message` connection action
+      src/routes/feedback_session.rs # HS2-25TP3N: route committed human notes to a same-project/source AI session, queue busy drives, and return chooser/start fallbacks
       tests/session_messages.rs # E2E: fake push/no-push plugins launched in real PTYs, a loopback fake OpenCode API, prompt/command delivery, exit/reopen adapter replacement, unsupported/unreachable/ended errors
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend

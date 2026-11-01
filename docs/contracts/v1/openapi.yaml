@@ -11533,6 +11533,58 @@ paths:
           description: Offered assignment; claiming the ticket is a separate worker action.
         '409':
           description: Stale plan or failed assignment eligibility.
+  /checkouts/{reference}/tickets/{id}/notes/{note_id}/notify:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: choose_feedback_session
+      summary: Notify a chosen project session of an existing human ticket note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connection_id]
+              properties:
+                connection_id:
+                  type: string
+      responses:
+        '200':
+          description: Delivery outcome for the chosen reachable session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, note_id, connection_id]
+                properties:
+                  status:
+                    type: string
+                    enum: [sent, queued]
+                  note_id:
+                    type: string
+                  connection_id:
+                    type: string
+        default:
+          description: The note or reachable project session could not be resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:

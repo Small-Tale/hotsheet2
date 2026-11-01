@@ -1338,6 +1338,28 @@ pub(crate) async fn send_drive_turn(
     Ok((StatusCode::ACCEPTED, Json(info)))
 }
 
+/// HS2-25TP3N: enter a committed human-feedback reference as the drive's next turn.
+pub(crate) async fn send_feedback_turn(
+    state: AppState,
+    id: String,
+    content: String,
+) -> Result<(), ApiError> {
+    send_drive_turn(
+        State(state),
+        Path(id),
+        Json(SendDriveTurnReq {
+            content,
+            session_id: None,
+            model: None,
+            effort: None,
+            permission_mode: None,
+            turn_id: None,
+        }),
+    )
+    .await
+    .map(|_| ())
+}
+
 pub(crate) async fn interrupt_drive_turn(
     State(state): State<AppState>,
     Path(id): Path<String>,
