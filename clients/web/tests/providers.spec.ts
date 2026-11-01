@@ -18021,7 +18021,7 @@ test('applies the one selected-answer menu to multiple preview and dialog rows (
   });
   await page.getByRole('menuitem', { name: 'Remember Until Hot Sheet Restarts' }).click();
   await expect(previewMenu.getByRole('button', { name: 'Selected Answer Actions' })).toBeDisabled();
-  expect(changed).toHaveLength(2);
+  await expect.poll(() => changed.length).toBe(2);
   await page.setViewportSize({ width: 1416, height: 1816 });
   await settings.getByRole('button', { name: 'Show all 4 answers' }).click();
   const dialog = settings.locator('[data-dialog-component="permission-rules-dialog"]'),
