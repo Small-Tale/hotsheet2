@@ -823,6 +823,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Credential Manager adapters.
   `key set` uses a hidden terminal prompt or piped stdin. Settings carry only `{ "secret": "provider" }`.
   See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
+- **GitHub origin inference (HS2-0HE7E4):**
+  `crates/hotsheet-ticketing/src/github_origin.rs` owns the existing protocol/configuration
+  origin normalization contract and strict saved-origin-to-API derivation; extsync's
+  `github_app_config.rs` delegates to it. `accounts.rs` separates tolerant historical
+  summaries from strict reused-source inference. CLI `dispatch/providers.rs` validates
+  bundle origins before connection/link writes; server `routes/providers/mod.rs` propagates
+  strict metadata inference through both create routes, retaining explicit endpoint priority.
+  Origin/account unit, CLI provider-read, and server source-create regressions cover this path.
 - **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` is version-guarded (legacy
   unversioned files remain readable) and maps readable path-derived
   checkout ids to optional repository identities and any number of ticket stores.

@@ -277,23 +277,28 @@ pub(crate) async fn create_provider_connection(
             &connection.locator,
         );
     }
-    fill_reused_sign_in_endpoint(&state, &mut connection);
+    fill_reused_sign_in_endpoint(&state, &mut connection)?;
     let connection = save_provider_connections(&state, connection, None)?;
     Ok((StatusCode::CREATED, Json(connection)))
 }
 
 /// A new GitHub source reusing a GitHub Enterprise sign-in gets that site's `api_base` even
 /// when the client did not send one (HS2-16MYXN). Best effort: an unreadable key registry
-/// leaves the connection as sent.
-fn fill_reused_sign_in_endpoint(state: &AppState, connection: &mut ProviderConnection) {
+/// leaves the connection as sent. Known malformed historical origins fail before writes.
+fn fill_reused_sign_in_endpoint(
+    state: &AppState,
+    connection: &mut ProviderConnection,
+) -> Result<(), ApiError> {
     if connection.provider != "github" {
-        return;
+        return Ok(());
     }
     // keys.json metadata only: creating a source never reads the keychain (the listing that
     // offered the account already backfilled any older sign-in's site).
     if let Ok(credentials) = state.key_registry().list() {
-        hotsheet_ticketing::accounts::fill_reused_github_api_base(connection, &credentials);
+        hotsheet_ticketing::accounts::fill_reused_github_api_base(connection, &credentials)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
     }
+    Ok(())
 }
 
 pub(crate) async fn update_provider_connection(
@@ -386,7 +391,7 @@ pub(crate) async fn create_checkout_provider_connection(
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     let mut connection = body.connection;
     let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-    fill_reused_sign_in_endpoint(&state, &mut connection);
+    fill_reused_sign_in_endpoint(&state, &mut connection)?;
     // The same validated create-and-link workflow `hotsheet provider-connect` runs
     // (HS2-65KYVP). A project's default lives on its checkout, never on the shared record,
     // and a failed link removes the new record again.

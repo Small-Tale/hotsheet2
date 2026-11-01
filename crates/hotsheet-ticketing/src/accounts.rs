@@ -82,10 +82,15 @@ pub fn connection_projects(checkouts: &[Checkout], connection_id: &str) -> Vec<A
 }
 
 fn host_of(url: &str) -> String {
-    let rest = url
-        .trim()
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
+    let url = url.trim();
+    let rest = match url.split_once("://") {
+        Some((scheme, rest))
+            if scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http") =>
+        {
+            rest
+        }
+        _ => url,
+    };
     rest.split('/')
         .next()
         .unwrap_or_default()
@@ -129,10 +134,13 @@ fn connection_base_url(connection: &ProviderConnection) -> Option<String> {
 }
 
 /// The GitHub `api_base` for a sign-in's web origin: none for github.com, `{site}/api/v3`
-/// for GitHub Enterprise Server.
+/// for GitHub Enterprise Server. Invalid historical sites are ignored for listing;
+/// source creation uses the strict `github_origin` derivation instead.
 pub fn github_api_base_for_site(site: &str) -> Option<String> {
-    let site = site.trim().trim_end_matches('/');
-    (!site.is_empty() && host_of(site) != "github.com").then(|| format!("{site}/api/v3"))
+    // Historical account listing is tolerant; source creation uses the strict owner.
+    crate::github_origin::api_base_for_web_origin(site)
+        .ok()
+        .flatten()
 }
 
 /// The `api_base` a new GitHub source reusing `credential` needs, from the sign-in site
@@ -148,22 +156,28 @@ pub fn reused_github_api_base(credential: &str, credentials: &[KeyMetadata]) -> 
 /// Fill a new GitHub connection's missing `api_base` from the reused sign-in's recorded site,
 /// so a GitHub Enterprise account reused by another project never falls back to github.com
 /// (HS2-16MYXN). Connections that already carry an `api_base`, other providers, and
-/// github.com sign-ins are left unchanged.
+/// github.com sign-ins are left unchanged. A known invalid site is rejected before
+/// settings change; an explicitly supplied endpoint retains precedence.
 pub fn fill_reused_github_api_base(
     connection: &mut ProviderConnection,
     credentials: &[KeyMetadata],
-) {
+) -> Result<(), String> {
     if connection.provider != "github" || connection_base_url(connection).is_some() {
-        return;
+        return Ok(());
     }
-    let Some(api_base) = credential_of(connection)
-        .and_then(|credential| reused_github_api_base(credential, credentials))
+    let Some(site) = credential_of(connection)
+        .and_then(|credential| credentials.iter().find(|key| key.provider == credential))
+        .and_then(|key| key.site.as_deref())
     else {
-        return;
+        return Ok(());
+    };
+    let Some(api_base) = crate::github_origin::api_base_for_web_origin(site)? else {
+        return Ok(());
     };
     if let serde_json::Value::Object(settings) = &mut connection.settings {
         settings.insert("api_base".into(), api_base.into());
     }
+    Ok(())
 }
 
 /// Derive every account from the connection records, the checkout links, and the credentials
@@ -771,7 +785,7 @@ mod tests {
             "github-app-01ghe",
             serde_json::json!({}),
         );
-        fill_reused_github_api_base(&mut reused, &credentials);
+        fill_reused_github_api_base(&mut reused, &credentials).unwrap();
         assert_eq!(reused.settings["api_base"], "https://ghe.corp.test/api/v3");
         // An explicit api_base, a github.com sign-in, an unknown credential, and another
         // provider are left alone.
@@ -782,7 +796,7 @@ mod tests {
             "github-app-01ghe",
             serde_json::json!({"api_base": "https://proxy.corp.test/api/v3"}),
         );
-        fill_reused_github_api_base(&mut explicit, &credentials);
+        fill_reused_github_api_base(&mut explicit, &credentials).unwrap();
         assert_eq!(
             explicit.settings["api_base"],
             "https://proxy.corp.test/api/v3"
@@ -793,11 +807,94 @@ mod tests {
             ("gitlab", "github-app-01ghe"),
         ] {
             let mut untouched = external("", provider, "a/b", credential, serde_json::json!({}));
-            fill_reused_github_api_base(&mut untouched, &credentials);
+            fill_reused_github_api_base(&mut untouched, &credentials).unwrap();
             assert!(
                 untouched.settings.get("api_base").is_none(),
                 "{provider} {credential}"
             );
+        }
+    }
+
+    #[test]
+    fn hs2_0he7e4_historical_listing_is_tolerant_but_creation_is_strict() {
+        for (site, expected) in [
+            (" HTTPS://GITHUB.COM/// ", None),
+            (
+                " HTTPS://GHE.CORP.TEST/// ",
+                Some("https://ghe.corp.test/api/v3"),
+            ),
+            (
+                "https://github.com:443",
+                Some("https://github.com:443/api/v3"),
+            ),
+        ] {
+            let credentials = [key("github-app-synthetic", Some(site))];
+            let accounts = list_accounts(&[], &[], &credentials);
+            assert_eq!(accounts[0].base_url.as_deref(), expected);
+            assert_eq!(accounts[0].host, host_of(site));
+            assert!(!accounts[0].host.contains("://"));
+            let mut connection = external(
+                "",
+                "github",
+                "synthetic/repo",
+                "github-app-synthetic",
+                serde_json::json!({}),
+            );
+            fill_reused_github_api_base(&mut connection, &credentials).unwrap();
+            assert_eq!(
+                connection
+                    .settings
+                    .get("api_base")
+                    .and_then(serde_json::Value::as_str),
+                expected
+            );
+            // Reading or inferring never rewrites the historical metadata.
+            assert_eq!(credentials[0].site.as_deref(), Some(site));
+        }
+        for site in [
+            "",
+            "github.com",
+            "https://ghe.test/path",
+            "https://user@ghe.test",
+            "https://ghe.test?query",
+        ] {
+            let credentials = [key("github-app-synthetic", Some(site))];
+            let accounts = list_accounts(&[], &[], &credentials);
+            assert_eq!(accounts.len(), 1);
+            assert!(accounts[0].base_url.is_none());
+            assert!(reused_github_api_base("github-app-synthetic", &credentials).is_none());
+            let mut connection = external(
+                "",
+                "github",
+                "synthetic/repo",
+                "github-app-synthetic",
+                serde_json::json!({}),
+            );
+            let original = connection.settings.clone();
+            assert!(fill_reused_github_api_base(&mut connection, &credentials).is_err());
+            assert_eq!(connection.settings, original);
+            // Server explicitly supplied endpoints remain independent of site inference.
+            connection.settings["api_base"] = "https://explicit.test/api/v3".into();
+            fill_reused_github_api_base(&mut connection, &credentials).unwrap();
+            assert_eq!(
+                connection.settings["api_base"],
+                "https://explicit.test/api/v3"
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_0he7e4_host_extraction_recognizes_scheme_before_lowercasing_host() {
+        for provider in ["github", "gitlab", "jira"] {
+            let mut settings = serde_json::json!({});
+            let key = if provider == "jira" {
+                "base_url"
+            } else {
+                "api_base"
+            };
+            settings[key] = " HTTPS://CORP.TEST:8443/api/v3 ".into();
+            let connection = external("", provider, "synthetic/repo", "synthetic", settings);
+            assert_eq!(connection_host(&connection), "corp.test:8443");
         }
     }
 

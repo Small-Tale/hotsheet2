@@ -386,27 +386,16 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
             hotsheet_ticketing::generate_connection_id(&connections, "github", locator)
         })
     });
-    let web_base = serde_json::from_str::<serde_json::Value>(&raw)
-        .ok()
-        .filter(|value| value.get("kind").and_then(serde_json::Value::as_str) == Some("github_app"))
-        .and_then(|value| {
-            value
-                .get("web_base")
+    // HS2-0HE7E4: reject malformed saved origins before either registry write,
+    // retaining inferred-Enterprise-first, then existing-endpoint precedence.
+    let api_base = github_api_base_from_saved_credential(&raw)?.or_else(|| {
+        existing.and_then(|item| {
+            item.settings
+                .get("api_base")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned)
-        });
-    let api_base = web_base
-        .as_deref()
-        .filter(|base| *base != "https://github.com")
-        .map(|base| format!("{base}/api/v3"))
-        .or_else(|| {
-            existing.and_then(|item| {
-                item.settings
-                    .get("api_base")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)
-            })
-        });
+        })
+    });
     let mut settings = serde_json::json!({"credential":{"secret":credential}});
     if let Some(api_base) = api_base {
         settings["api_base"] = api_base.into();
@@ -485,6 +474,25 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
         None => println!("Attachments: off (configure with --attachment-repo OWNER/REPO)"),
     }
     Ok(())
+}
+
+fn github_api_base_from_saved_credential(raw: &str) -> Result<Option<String>> {
+    let Some(stored) = serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .filter(|value| {
+            value.get("kind").and_then(serde_json::Value::as_str) == Some("github_app")
+        })
+    else {
+        return Ok(None);
+    };
+    let Some(web_base) = stored.get("web_base") else {
+        // Older bundles without site metadata retain the existing default/fallback.
+        return Ok(None);
+    };
+    let web_base = web_base
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("GitHub web base must be an origin string"))?;
+    hotsheet_ticketing::github_origin::api_base_for_web_origin(web_base).map_err(anyhow::Error::msg)
 }
 
 pub(crate) fn cmd_provider_attach(
@@ -1531,6 +1539,45 @@ pub(crate) fn read_key_secret(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_0he7e4_saved_bundle_origin_inference_preserves_pat_and_legacy_defaults() {
+        assert!(
+            github_api_base_from_saved_credential("synthetic-pat")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            github_api_base_from_saved_credential(r#"{"kind":"github_app"}"#)
+                .unwrap()
+                .is_none()
+        );
+        for (web_base, expected) in [
+            (" HTTPS://GITHUB.COM/// ", None),
+            (" HTTPS://GHE.TEST/// ", Some("https://ghe.test/api/v3")),
+            (
+                "https://github.com:443",
+                Some("https://github.com:443/api/v3"),
+            ),
+        ] {
+            let raw = serde_json::json!({"kind":"github_app","web_base":web_base}).to_string();
+            assert_eq!(
+                github_api_base_from_saved_credential(&raw)
+                    .unwrap()
+                    .as_deref(),
+                expected
+            );
+        }
+        for web_base in [
+            serde_json::json!(""),
+            serde_json::json!("https://ghe.test/path"),
+            serde_json::json!(null),
+            serde_json::json!(7),
+        ] {
+            let raw = serde_json::json!({"kind":"github_app","web_base":web_base}).to_string();
+            assert!(github_api_base_from_saved_credential(&raw).is_err());
+        }
+    }
 
     #[test]
     fn key_input_prompts_on_a_terminal_and_reads_pipes_without_prompting() {

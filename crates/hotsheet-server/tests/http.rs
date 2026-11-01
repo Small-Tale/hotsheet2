@@ -26550,8 +26550,8 @@ async fn an_unused_enterprise_sign_in_reports_its_host_and_seeds_reusing_sources
     std::fs::write(
         home.path().join("keys.json"),
         serde_json::json!({
-            "github-app-01ghe": {"provider": "github-app-01ghe", "env": "HOTSHEET_API_KEY_GITHUB_APP_01GHE", "site": "https://ghe.corp.test"},
-            "github-app-01dot": {"provider": "github-app-01dot", "env": "HOTSHEET_API_KEY_GITHUB_APP_01DOT", "site": "https://github.com"}
+            "github-app-01ghe": {"provider": "github-app-01ghe", "env": "HOTSHEET_API_KEY_GITHUB_APP_01GHE", "site": " HTTPS://GHE.CORP.TEST/// "},
+            "github-app-01dot": {"provider": "github-app-01dot", "env": "HOTSHEET_API_KEY_GITHUB_APP_01DOT", "site": " HTTPS://GITHUB.COM/// "}
         })
         .to_string(),
     )
@@ -26655,6 +26655,100 @@ async fn an_unused_enterprise_sign_in_reports_its_host_and_seeds_reusing_sources
     let (_, accounts) = call("GET", "/accounts", None).await;
     assert_eq!(accounts[0]["host"], "ghe.corp.test", "{accounts}");
     assert_eq!(accounts[0]["sources"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn hs2_0he7e4_invalid_saved_site_rejects_both_creates_without_writes_and_can_refill() {
+    let home = tempfile::tempdir().unwrap();
+    let (primary, st) = state();
+    let registry = tempfile::tempdir().unwrap();
+    let checkouts = registry.path().join("checkouts.json");
+    let keys = home.path().join("keys.json");
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(&checkouts));
+    let project = tempfile::tempdir().unwrap();
+    let registration =
+        serde_json::json!({"root":project.path(),"alias":"synthetic","stores":[primary.path()]})
+            .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let providers = primary.path().join("providers.json");
+    let call = |path: &'static str, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(authed("POST", path, Some(&body.to_string())))
+                .await
+                .unwrap();
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            )
+        }
+    };
+    for site in [
+        "https://ghe.synthetic.test/path",
+        "github.com",
+        "https://user@ghe.synthetic.test",
+        "https://ghe.synthetic.test?query",
+    ] {
+        let metadata = serde_json::json!({"github-app-origin":{"provider":"github-app-origin","env":"HOTSHEET_API_KEY_GITHUB_APP_ORIGIN","site":site}});
+        std::fs::write(&keys, metadata.to_string()).unwrap();
+        let accounts = app
+            .clone()
+            .oneshot(authed("GET", "/accounts", None))
+            .await
+            .unwrap();
+        assert_eq!(accounts.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(accounts.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let accounts: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(accounts.as_array().unwrap().len(), 1);
+        assert!(accounts[0].get("base_url").is_none());
+        let before_providers = std::fs::read(&providers).ok();
+        let before_checkouts = std::fs::read(&checkouts).unwrap();
+        let before_keys = std::fs::read(&keys).unwrap();
+        for path in [
+            "/provider-connections",
+            "/checkouts/synthetic/provider-connections",
+        ] {
+            let (status, _) = call(path, serde_json::json!({"id":"","provider":"github","locator":"synthetic/repo","settings":{"credential":{"secret":"github-app-origin"}}})).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{path} {site}");
+            assert_eq!(std::fs::read(&providers).ok(), before_providers);
+            assert_eq!(std::fs::read(&checkouts).unwrap(), before_checkouts);
+            assert_eq!(std::fs::read(&keys).unwrap(), before_keys);
+        }
+    }
+    // Explicit server endpoints retain precedence even with malformed historical metadata.
+    let (status, explicit) = call("/provider-connections", serde_json::json!({"id":"explicit","provider":"github","locator":"synthetic/explicit","settings":{"api_base":"https://explicit.synthetic.test/api/v3","credential":{"secret":"github-app-origin"}}})).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        explicit["settings"]["api_base"],
+        "https://explicit.synthetic.test/api/v3"
+    );
+    // Recovery updates only the fixture metadata; later source creation is not poisoned.
+    std::fs::write(&keys, serde_json::json!({"github-app-origin":{"provider":"github-app-origin","env":"HOTSHEET_API_KEY_GITHUB_APP_ORIGIN","site":" HTTPS://GITHUB.COM:443/// "}}).to_string()).unwrap();
+    let (status, created) = call("/checkouts/synthetic/provider-connections", serde_json::json!({"provider":"github","locator":"synthetic/refill","settings":{"credential":{"secret":"github-app-origin"}}})).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(
+        created["settings"]["api_base"],
+        "https://github.com:443/api/v3"
+    );
+    let checkout: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&checkouts).unwrap()).unwrap();
+    assert!(checkout.to_string().contains("synthetic/refill"));
 }
 
 #[tokio::test]

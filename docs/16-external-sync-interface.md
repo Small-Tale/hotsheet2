@@ -894,6 +894,19 @@ never stored, so there is nothing to migrate:
   `api_base` fills it from the reused sign-in's recorded Enterprise site, so a reused
   Enterprise account never falls back to github.com; `github-connect` already derives it from
   the bundle.
+- **Historical GitHub origin inference (HS2-0HE7E4).** Saved bundle `web_base` and reused
+  account `site` inference share the protocol/configuration origin normalizer in ticketing.
+  Scheme/host case, surrounding whitespace and trailing slashes normalize before selecting
+  the public default. Only exact normalized `https://github.com` is public; explicit ports,
+  including `:443`, remain distinct and infer that origin's `/api/v3`. A known malformed
+  saved origin fails source creation before connection or checkout writes. Account listing
+  stays tolerant and omits an inferred endpoint for invalid historical metadata; inference
+  does not rewrite saved credentials. CLI reconnect preserves its inferred-Enterprise-first,
+  then existing-endpoint fallback; a public origin or raw PAT uses the existing fallback.
+  Server creation preserves an explicitly supplied `api_base` before metadata inference.
+  Older missing site metadata keeps the existing default/fallback behavior. Server inference
+  reads metadata only, without a new keychain lookup. This does not change fresh sign-in form
+  parsing (HS2-VKNA12).
 - `DELETE /accounts/{id}` / `hotsheet account sign-out <id>` delete the credential. Both
   refuse (409 / non-zero exit) while any source still uses the account, naming the projects.
 - `DELETE /accounts/{id}/sources/{connection_id}` removes an orphaned connection shown under

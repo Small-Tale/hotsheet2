@@ -10237,6 +10237,191 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
 }
 
 #[test]
+fn hs2_0he7e4_github_connect_normalizes_saved_origins_and_preserves_precedence() {
+    for (saved, inferred) in [
+        (Some(" HTTPS://GITHUB.COM/// "), None),
+        (
+            Some(" HTTPS://GHE.SYNTHETIC.TEST/// "),
+            Some("https://ghe.synthetic.test/api/v3"),
+        ),
+        (
+            Some("https://github.com:443/"),
+            Some("https://github.com:443/api/v3"),
+        ),
+        (None, None),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let raw = saved
+            .map(|site| serde_json::json!({"kind":"github_app","web_base":site}).to_string())
+            .unwrap_or_else(|| "synthetic-pat".into());
+        let run = |args: &[&str], credential: &str| {
+            let mut command = hs(dir.path());
+            command
+                .env("HOTSHEET_HOME", home.path())
+                .env("HOTSHEET_API_KEY_CLI_ORIGIN", credential)
+                .args(args);
+            command
+        };
+        run(&["init"], &raw).assert().success();
+        run(
+            &[
+                "checkout",
+                "register",
+                project.path().to_str().unwrap(),
+                "--alias",
+                "linked",
+            ],
+            &raw,
+        )
+        .assert()
+        .success();
+        let connect = [
+            "github-connect",
+            "synthetic/repo",
+            "--credential",
+            "cli-origin",
+            "--checkout",
+            "linked",
+            "--default",
+        ];
+        run(&connect, &raw).assert().success();
+        run(&connect, &raw).assert().success();
+        let providers = dir.path().join("providers.json");
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&providers).unwrap()).unwrap();
+        assert_eq!(document["connections"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            document["connections"][0]["settings"]
+                .get("api_base")
+                .and_then(serde_json::Value::as_str),
+            inferred
+        );
+        // Existing endpoint provenance is unknown. Preserve this command's historical
+        // inferred-Enterprise-first order, while public/PAT falls back to this endpoint.
+        document["connections"][0]["settings"]["api_base"] =
+            "https://previous.synthetic.test/api/v3".into();
+        document["connections"][0]["disabled"] = true.into();
+        std::fs::write(&providers, serde_json::to_vec(&document).unwrap()).unwrap();
+        run(&connect, &raw).assert().success();
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&providers).unwrap()).unwrap();
+        assert_eq!(
+            document["connections"][0]["settings"]["api_base"],
+            inferred.unwrap_or("https://previous.synthetic.test/api/v3")
+        );
+        assert_eq!(document["connections"][0]["disabled"], true);
+        let checkouts = home.path().join("checkouts.json");
+        let before_providers = std::fs::read(&providers).unwrap();
+        let before_checkouts = std::fs::read(&checkouts).unwrap();
+        for invalid in [
+            serde_json::json!("https://ghe.synthetic.test/path"),
+            serde_json::json!(""),
+            serde_json::json!(null),
+        ] {
+            let invalid = serde_json::json!({"kind":"github_app","web_base":invalid}).to_string();
+            run(&connect, &invalid)
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("GitHub web base"));
+            assert_eq!(std::fs::read(&providers).unwrap(), before_providers);
+            assert_eq!(std::fs::read(&checkouts).unwrap(), before_checkouts);
+            run(
+                &[
+                    "github-connect",
+                    "synthetic/new",
+                    "--credential",
+                    "cli-origin",
+                    "--checkout",
+                    "linked",
+                ],
+                &invalid,
+            )
+            .assert()
+            .failure();
+            assert_eq!(std::fs::read(&providers).unwrap(), before_providers);
+            assert_eq!(std::fs::read(&checkouts).unwrap(), before_checkouts);
+        }
+        let checkout: serde_json::Value = serde_json::from_slice(
+            &run(&["checkout", "resolve", "linked"], &raw)
+                .assert()
+                .success()
+                .get_output()
+                .stdout,
+        )
+        .unwrap();
+        assert_eq!(checkout["sources"].as_array().unwrap().len(), 1);
+        assert_eq!(checkout["default_source"], "github-synthetic-repo");
+    }
+}
+
+#[test]
+fn hs2_0he7e4_saved_enterprise_origin_drives_the_real_cli_provider_read() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let saved = format!(" HTTP://{}/// ", listener.local_addr().unwrap());
+    let bundle = serde_json::json!({"kind":"github_app","web_base":saved,"token":{"access_token":"synthetic-access"}}).to_string();
+    let run = |args: &[&str]| {
+        let mut command = hs(dir.path());
+        command
+            .env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_API_KEY_CLI_ORIGIN", &bundle)
+            .args(args);
+        command
+    };
+    run(&["init"]).assert().success();
+    run(&[
+        "github-connect",
+        "synthetic/repo",
+        "--credential",
+        "cli-origin",
+    ])
+    .assert()
+    .success();
+    let server = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let (mut stream, _) = loop {
+            match listener.accept() {
+                Ok(connection) => break connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "synthetic provider request missing"
+                    );
+                    std::thread::park_timeout(std::time::Duration::from_millis(5));
+                }
+                Err(error) => panic!("synthetic accept failed: {error}"),
+            }
+        };
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let request = read_http_request(&mut stream);
+        assert!(request.starts_with("GET /api/v3/repos/synthetic/repo/issues?"));
+        assert!(request.contains("Authorization: Bearer synthetic-access"));
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]").unwrap();
+    });
+    let output = run(&["provider-ls", "github-synthetic-repo"])
+        .output()
+        .unwrap();
+    // Own the server cleanup even when the actual CLI fails before connecting.
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("[]"));
+}
+
+#[test]
 fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write() {
     use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
