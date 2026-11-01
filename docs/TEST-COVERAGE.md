@@ -298,8 +298,8 @@ common owner extraction, cfg Windows live-handle/SID/ACL-before-write and write-
 publication helpers, plus bounded Unix new-directory/parent syncing. The Windows
 fixture and CI expansion exercise the owner independently of the native adapter test.
 
-The metadata and cache tests also run on
-Windows while retaining Unix mode checks. Windows homes are missing private children
+The metadata owner and decoder tests also run on Windows; cache tests currently
+run on macOS pending HS2-2TD7M7. Windows homes are missing private children
 created by the actual owner, rather than assuming a temporary directory's default
 owner is the effective SID. Synthetic metadata overwrites retain an actual
 owner-published empty keys.json inode; the missing-file observation controls explicitly
@@ -325,9 +325,12 @@ has 47 named HWC test functions (including three ignored owned children); cfg me
 they are not all runnable on one OS. The Unix and shared groups compile and pass on macOS;
 Windows-specific cases run in CI.
 
-Windows CI explicitly selects HWC ticketing owner/generation, server cache/account,
-external credential-error conversion and CLI parent tests, alongside the unchanged
-disposable native adapter selection. The CI result is recorded in the ticket.
+Windows CI selects HWC ticketing owner/generation, external credential-error
+conversion and CLI parent tests, alongside the unchanged disposable native adapter
+selection. Server cache/account tests pass on macOS but cannot compile on Windows
+while `hotsheet-server` depends on the Unix-only terminal broker; HS2-2TD7M7 owns
+Windows server portability and restoration of that CI selection. The CI result is
+recorded in the ticket.
 Real reparse/symlink capability, foreign-SID/effective-token changes, unfamiliar ACL
 forms, unsupported filesystems/remote shares and full platform/parent failure matrices
 remain open verification cells. No unavailable capability is counted as passed.

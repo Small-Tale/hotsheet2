@@ -124,10 +124,8 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-ticketing hs2_hwc0fs -- --test-threads=2
 
-      - name: Exercise managed credential generation cache on Windows
-        env:
-          CC: cl
-        run: cargo test -p hotsheet-server hs2_hwc0fs -- --test-threads=2
+      # HS2-2TD7M7: hotsheet-server currently depends on the Unix-only terminal broker.
+      # Restore its HWC cache/account selection after the server compiles on Windows.
 
       - name: Exercise typed credential metadata errors on Windows
         env:
