@@ -674,6 +674,17 @@ The machine server shares each managed GitHub sign-in bundle in process memory a
 provider and account requests, so concurrent reads need one OS credential-store approval.
 The cache is cleared when `keys.json` changes and updated when the server replaces or
 deletes a credential; CLI reads continue to use the OS store directly (HS2-EG3ANE).
+HS2-HWC0FS narrows that optimization to selected account
+rows with a private valid credential generation. Its single ticketing-owned observation
+decodes and hashes one byte image; the server checks eligibility for every hit and
+before installing a result, and does not retag an overlapping result with a new
+generation. Native set/delete evict rather than seed precommit cache values. Public
+account metadata stays unchanged. Missing/invalid generations bypass values and denials,
+including repeated identical legacy-map writes; unrelated eligible accounts are not
+vetoed by an ineligible selected account. Duplicate reserved generation properties are
+malformed metadata, while singly invalid optional values remain compatible but uncacheable.
+This is a successful-publication/as-of contract, not native/metadata atomicity or old-map
+rollback protection; HS2-67SP63 owns investigation of the stronger recovery boundary.
 New connections need no user-chosen id: a create request with an empty `id` gets a readable
 unique one (`github-small-tale-hotsheet2`, then `-2`, …), and a blank display name defaults to
 the provider name ("GitHub Issues"). After sign-in the repository field is a searchable list of

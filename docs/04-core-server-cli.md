@@ -1670,6 +1670,60 @@ set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt whe
 > and, when available, its authenticated login as `identity`; both survive token refreshes
 > (HS2-16MYXN, HS2-1D350D).
 
+**Serialized metadata updates (HS2-HWC0FS):** the metadata mutators use one
+stable per-account operation lock followed by short metadata transactions. Native
+set/delete run outside the metadata lock; each successful native result is followed
+by a fresh merged, owner-only staged write, file sync, atomic rename and directory
+sync. Set/delete publish even an unchanged or empty map. Unchanged site/identity
+backfills do not publish. The legacy JSON map and public metadata fields are retained.
+No native value is blindly deleted or restored if metadata completion fails:
+`MetadataCommitIncomplete` reports the partial outcome, and the caller retries the
+same existing `key set` or `key delete` operation. A failure after rename may already
+have published a complete map; this is not a native/metadata atomic transaction.
+
+Windows uses the same owner contract. Unsupported platforms explicitly refuse mutation,
+with get/list unchanged. Older writers do not participate in these locks.
+
+**Windows owner:** one shared transaction owner uses
+concrete Unix/Windows filesystem helpers. Windows uses effective TokenUser ownership,
+live volume/file IDs, real LockFileEx, reparse/special/hardlink refusal, and current-path
+handle checks. Existing directories accept mutating allow ACEs only for the current SID,
+SYSTEM or Administrators; unknown ACL forms and unproved ownership refuse, without ACL
+repair. New objects get an explicit current-user owner and protected user-only DACL
+before any metadata byte is written. Native SecretStore calls remain outside metadata,
+provider and checkout locks. Unix preparation syncs newly created components and their
+parent entries before native work; existing Unix ownership policy is retained.
+
+Windows publication flushes a private staged file, requests same-volume write-through
+replacement, then flushes/verifies the published object. This is not a portable Windows
+directory-fsync or universal power-loss guarantee. Failure after native success remains
+`MetadataCommitIncomplete`; no ACL takeover, destructive compensation, copy fallback or
+old-map restore is automatic. Ordinary valid-map recovery repeats the existing key
+set/delete operation after fixing the filesystem condition. Malformed/foreign-owned
+metadata requires explicit review, not silent initialization to an empty map. Platform
+fixtures and actual Windows parent flows are selected by platform CI.
+
+**Managed cache eligibility (HS2-HWC0FS):** the same top-level account map
+privately stores an optional canonical 26-character ULID `credential_generation` beside
+the unchanged public metadata fields. Successful native set followed by metadata commit
+rotates it; site/identity updates preserve it, true no-ops leave bytes unchanged, delete
+removes the row, and legacy backfill never creates one. Public list/account DTOs do not
+contain this field. Managed values and denials are cached only while the selected row
+has a valid generation and the observed document remains unchanged at installation.
+Missing rows/fields, null, wrong-type, malformed or oversized single generations bypass
+the cache. Old well-formed serde-map readers ignore the field; successful old whole-map
+writers drop it, so repeated identical generation-less maps still bypass caching.
+
+A duplicate known `credential_generation` property is now a malformed document, like
+duplicate known public fields: list and mutations refuse, with no native mutation;
+cache observation treats it as uncacheable. This is deliberately narrower than accepting
+every unknown-field JSON shape the old projection ignored. A new writer does not silently
+repair duplicates during refusal; an explicit well-formed replacement can remove them.
+Native success with incomplete metadata publication, in-flight writes and deliberate
+restoration of an old valid map are not made atomic or rollback-proof. Stronger fencing
+and recovery are the synthetic investigation HS2-67SP63. Stable eligible reads keep their
+managed fast path; generation-less legacy reads may access the underlying store repeatedly.
+
 Settings refer to a secret as `{ "secret": "provider-id" }`; consumers call the
 shared resolver. Since HS2-5A6JNS, the OS credential store holds one machine master.
 Provider values and permission-vault master values live in authenticated, owner-only

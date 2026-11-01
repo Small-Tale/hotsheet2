@@ -117,6 +117,28 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored
 
+      # HS2-HWC0FS: the native adapter filter above cannot cover the cooperative
+      # metadata owner, generation protocol or actual headless parent composition.
+      - name: Exercise synthetic key metadata ownership and generation on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-ticketing hs2_hwc0fs -- --test-threads=2
+
+      - name: Exercise managed credential generation cache on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-server hs2_hwc0fs -- --test-threads=2
+
+      - name: Exercise typed credential metadata errors on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-extsync hs2_hwc0fs -- --test-threads=2
+
+      - name: Exercise private synthetic headless key parents on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-cli --test key_metadata -- --test-threads=2
+
       - name: Exercise encrypted permission-vault locking on Windows
         env:
           CC: cl

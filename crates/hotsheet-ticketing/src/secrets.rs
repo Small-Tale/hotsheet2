@@ -7,7 +7,7 @@
 //! plaintext-on-disk fallback.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::{
     io::Write,
@@ -46,6 +46,10 @@ const SERVICE: &str = "com.smalltale.hotsheet2";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {
+    #[error(
+        "Credential operation may have completed, but metadata could not be confirmed; repeat the same operation"
+    )]
+    MetadataCommitIncomplete,
     #[error("invalid provider id '{0}' (use letters, digits, '.', '_' or '-')")]
     InvalidProvider(String),
     #[error("OS credential store unavailable: {0}")]
@@ -409,6 +413,10 @@ pub struct KeyRegistry<S> {
     store: S,
 }
 
+mod metadata;
+mod metadata_owner;
+pub use metadata::{KeyMetadataCacheObservation, key_metadata_cache_observation};
+
 impl<S: SecretStore> KeyRegistry<S> {
     pub fn new(root: impl Into<PathBuf>, store: S) -> Self {
         Self {
@@ -419,26 +427,36 @@ impl<S: SecretStore> KeyRegistry<S> {
 
     pub fn set(&self, provider: &str, secret: &str) -> Result<(), SecretError> {
         validate(provider)?;
+        let owner = metadata_owner::Owner::prepare(&self.root)?;
+        let account = owner.account(provider)?;
+        owner.preflight()?;
+        account.check()?;
         self.store.set(provider, secret)?;
-        let mut map = self.metadata()?;
-        // Replacing a value (a refreshed token) keeps the sign-in's recorded site.
-        let site = map.get(provider).and_then(|existing| existing.site.clone());
-        let identity = map
-            .get(provider)
-            .and_then(|existing| existing.identity.clone());
-        map.insert(
-            provider.into(),
-            KeyMetadata {
-                provider: provider.into(),
-                env: env_name(provider),
-                site,
-                identity,
-            },
-        );
-        if let Err(error) = self.write_metadata(&map) {
-            let _ = self.store.delete(provider);
-            return Err(error);
-        }
+        // HS2-HWC0FS: no metadata lock spans native work. Merge the latest labels,
+        // not a preflight snapshot; never destroy a value on partial failure.
+        account
+            .check()
+            .and_then(|()| {
+                owner.update(&account, |map| {
+                    let old = map.get(provider);
+                    let site = old.and_then(|entry| entry.metadata.site.clone());
+                    let identity = old.and_then(|entry| entry.metadata.identity.clone());
+                    map.insert(
+                        provider.into(),
+                        metadata::StoredKeyMetadata {
+                            metadata: KeyMetadata {
+                                provider: provider.into(),
+                                env: env_name(provider),
+                                site,
+                                identity,
+                            },
+                            credential_generation: metadata::Generation::fresh(),
+                        },
+                    );
+                    Ok(((), true))
+                })
+            })
+            .map_err(|_| SecretError::MetadataCommitIncomplete)?;
         Ok(())
     }
 
@@ -446,16 +464,20 @@ impl<S: SecretStore> KeyRegistry<S> {
     /// Idempotent; refused for a name the registry does not know.
     pub fn record_site(&self, provider: &str, site: &str) -> Result<(), SecretError> {
         validate(provider)?;
-        let mut map = self.metadata()?;
-        let Some(entry) = map.get_mut(provider) else {
-            return Err(SecretError::NotFound(provider.into()));
-        };
         let site = site.trim().trim_end_matches('/');
-        if entry.site.as_deref() == Some(site) {
-            return Ok(());
-        }
-        entry.site = Some(site.to_owned());
-        self.write_metadata(&map)
+        let owner = metadata_owner::Owner::prepare(&self.root)?;
+        let account = owner.account(provider)?;
+        account.check()?;
+        owner.update(&account, |map| {
+            let entry = map
+                .get_mut(provider)
+                .ok_or_else(|| SecretError::NotFound(provider.into()))?;
+            let changed = entry.metadata.site.as_deref() != Some(site);
+            if changed {
+                entry.metadata.site = Some(site.to_owned());
+            }
+            Ok(((), changed))
+        })
     }
 
     /// Record the public login associated with a managed provider sign-in.
@@ -465,15 +487,19 @@ impl<S: SecretStore> KeyRegistry<S> {
         if identity.is_empty() {
             return Ok(());
         }
-        let mut map = self.metadata()?;
-        let Some(entry) = map.get_mut(provider) else {
-            return Err(SecretError::NotFound(provider.into()));
-        };
-        if entry.identity.as_deref() == Some(identity) {
-            return Ok(());
-        }
-        entry.identity = Some(identity.to_owned());
-        self.write_metadata(&map)
+        let owner = metadata_owner::Owner::prepare(&self.root)?;
+        let account = owner.account(provider)?;
+        account.check()?;
+        owner.update(&account, |map| {
+            let entry = map
+                .get_mut(provider)
+                .ok_or_else(|| SecretError::NotFound(provider.into()))?;
+            let changed = entry.metadata.identity.as_deref() != Some(identity);
+            if changed {
+                entry.metadata.identity = Some(identity.to_owned());
+            }
+            Ok(((), changed))
+        })
     }
 
     pub fn get(&self, provider: &str) -> Result<String, SecretError> {
@@ -496,12 +522,15 @@ impl<S: SecretStore> KeyRegistry<S> {
 
     pub fn delete(&self, provider: &str) -> Result<bool, SecretError> {
         validate(provider)?;
+        let owner = metadata_owner::Owner::prepare(&self.root)?;
+        let account = owner.account(provider)?;
+        owner.preflight()?;
+        account.check()?;
         let deleted = self.store.delete(provider)?;
-        let mut map = self.metadata()?;
-        let recorded = map.remove(provider).is_some();
-        if recorded {
-            self.write_metadata(&map)?;
-        }
+        let recorded = account
+            .check()
+            .and_then(|()| owner.update(&account, |map| Ok((map.remove(provider).is_some(), true))))
+            .map_err(|_| SecretError::MetadataCommitIncomplete)?;
         Ok(deleted || recorded)
     }
 
@@ -516,24 +545,19 @@ impl<S: SecretStore> KeyRegistry<S> {
     fn metadata(&self) -> Result<BTreeMap<String, KeyMetadata>, SecretError> {
         let path = self.path();
         match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).map_err(|source| SecretError::Parse {
-                path: path.display().to_string(),
-                source,
-            }),
+            Ok(text) => metadata::decode(text.as_bytes())
+                .map(|map| {
+                    map.into_iter()
+                        .map(|(key, entry)| (key, entry.metadata))
+                        .collect()
+                })
+                .map_err(|source| SecretError::Parse {
+                    path: path.display().to_string(),
+                    source,
+                }),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
             Err(e) => Err(e.into()),
         }
-    }
-
-    fn write_metadata(&self, map: &BTreeMap<String, KeyMetadata>) -> Result<(), SecretError> {
-        std::fs::create_dir_all(&self.root)?;
-        let path = self.path();
-        std::fs::write(
-            &path,
-            serde_json::to_string_pretty(map).expect("serializable") + "\n",
-        )?;
-        restrict_file(&path)?;
-        Ok(())
     }
 }
 
@@ -577,17 +601,6 @@ fn validate(provider: &str) -> Result<(), SecretError> {
     } else {
         Ok(())
     }
-}
-
-#[cfg(unix)]
-fn restrict_file(path: &Path) -> Result<(), std::io::Error> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn restrict_file(_path: &Path) -> Result<(), std::io::Error> {
-    Ok(())
 }
 
 #[cfg(test)]

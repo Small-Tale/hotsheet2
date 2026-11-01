@@ -162,6 +162,19 @@ mod tests {
     use hotsheet_sync::LockExt;
     use std::sync::{Arc, Mutex};
 
+    #[test]
+    fn hs2_hwc0fs_partial_metadata_error_keeps_typed_credential_conversion() {
+        let error = GitHubCredentialError::from(SecretError::MetadataCommitIncomplete);
+        assert!(matches!(
+            error,
+            GitHubCredentialError::Secret(SecretError::MetadataCommitIncomplete)
+        ));
+        assert_eq!(
+            error.to_string(),
+            SecretError::MetadataCommitIncomplete.to_string()
+        );
+    }
+
     #[derive(Clone, Default)]
     struct MemorySecrets(Arc<Mutex<std::collections::HashMap<String, String>>>);
 

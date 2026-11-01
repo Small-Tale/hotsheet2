@@ -75,8 +75,8 @@ pub use provider::{
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
 pub use secrets::{
-    KeyMetadata, KeyRegistry, OsKeychain, ScopedOsKeychain, SecretError, SecretStore,
-    resolve_setting_secret,
+    KeyMetadata, KeyMetadataCacheObservation, KeyRegistry, OsKeychain, ScopedOsKeychain,
+    SecretError, SecretStore, key_metadata_cache_observation, resolve_setting_secret,
 };
 pub use settings::{
     DEFAULT_TRASH_CLEANUP_DAYS, Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING,

@@ -20,6 +20,14 @@ machine-local provider and permission-vault envelopes after verified legacy migr
 (HS2-5A6JNS). Backup, restore, rotation, and explicit legacy cleanup are headless
 `key master-*` commands; see [secure provider keys](04-core-server-cli.md#471-secure-provider-keys).
 
+**Serialized key metadata (HS2-HWC0FS):** the shared owner serializes per-account
+operations and publishes merged metadata with a staged atomic replacement. Private
+credential generations control managed cache eligibility; public account metadata is
+unchanged. A native operation followed by metadata failure reports a partial outcome
+without deleting the native value. Stronger partial/rollback recovery is tracked by
+HS2-67SP63. See
+[secure provider keys](04-core-server-cli.md#471-secure-provider-keys).
+
 **Shipped permission automation:** Auto-Allow and Auto-Deny offer a persisted 5-second
 visible-time delay alongside the existing choices (HS2-0XF17D); see [client permissions](06-clients.md).
 

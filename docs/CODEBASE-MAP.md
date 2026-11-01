@@ -561,6 +561,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/settings_locks.rs  #   Bounded ${HOTSHEET_HOME}/settings-locks: path-recording locks, identity-checked acquire, hourly prune of vanished targets (HS2-MZ1TMH)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS credential adapters + metadata-only provider registry (HS2-M1XMSX)
+      src/secrets/metadata_owner.rs # shared account→metadata transaction and publisher with Unix and Windows owners (HS2-HWC0FS)
+      src/secrets/metadata_owner/unix.rs # Unix identity, mode, lock, and directory-sync primitives
+      src/secrets/metadata_owner/windows.rs # Windows handle identity, protected creation, and write-through publication
+      src/secrets/metadata_owner/windows/security.rs # effective SID and private owner/DACL checks
+      src/secrets/metadata_owner/unix/tests.rs # synthetic mutation, process, and publication-fault coverage
+      src/secrets/metadata_owner/windows/security/tests.rs # Windows ACL, handle, lock, secret, and process coverage
+      src/secrets/metadata.rs # private stored generation decoder and opaque cache observation
+      src/secrets/metadata/tests.rs # legacy writer, generation, duplicate, and no-op coverage
       src/secrets/machine_secrets.rs # one machine master, encrypted per-account envelopes, verified legacy migration, rotation and restore (HS2-5A6JNS)
       src/connection_removal.rs # shared idempotent source removal: detach_source (one project; deletes the connection when no other checkout links it) + remove_provider_connection (every project); credentials stay (HS2-724S9N, HS2-SM9PM8)
       src/accounts.rs        #   derived machine-wide provider accounts (credential refs) with their sources + owning projects; sign_out refuses while in use (HS2-SM9PM8)
@@ -829,6 +837,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Credential Manager adapters.
   `key set` uses a hidden terminal prompt or piped stdin. Settings carry only `{ "secret": "provider" }`.
   See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
+  HS2-HWC0FS routes all four metadata mutators through the shared owner. Native operations
+  run outside its short metadata lock. A private per-account generation inside the same
+  top-level map drives an opaque cache-eligibility observation; public account DTOs omit it.
+  Stronger native-partial and old-map-restore recovery is tracked by HS2-67SP63.
 - **GitHub origin inference (HS2-0HE7E4):**
   `crates/hotsheet-ticketing/src/github_origin.rs` owns the existing protocol/configuration
   origin normalization contract and strict saved-origin-to-API derivation; extsync's

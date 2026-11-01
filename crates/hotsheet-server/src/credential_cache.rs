@@ -1,22 +1,21 @@
 //! Share managed GitHub sign-in bundles across requests in one machine server.
 //! A Keychain approval belongs to the process, not to every provider read. The
-//! registry file is non-secret and changes whenever Hot Sheet replaces/deletes a key.
+//! non-secret stored generation enables caching only after metadata publication.
+//! Old generation-less rows bypass values and denials (HS2-HWC0FS).
 
 use hotsheet_sync::LockExt;
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use hotsheet_ticketing::connection_removal::MANAGED_CREDENTIAL_PREFIX;
-use hotsheet_ticketing::{SecretError, SecretStore};
-use sha2::{Digest, Sha256};
-
-type Revision = [u8; 32];
+use hotsheet_ticketing::{
+    KeyMetadataCacheObservation, SecretError, SecretStore, key_metadata_cache_observation,
+};
 
 #[derive(Default)]
 struct CacheState {
-    revision: Option<Revision>,
+    observation: Option<KeyMetadataCacheObservation>,
     values: HashMap<String, Result<String, String>>,
 }
 
@@ -40,22 +39,27 @@ pub(crate) struct CachedSecretStore<S> {
 }
 
 impl<S: SecretStore> CachedSecretStore<S> {
-    fn revision(&self) -> Result<Option<Revision>, SecretError> {
-        match fs::read(self.home.join("keys.json")) {
-            Ok(bytes) => Ok(Some(Sha256::digest(bytes).into())),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(error.into()),
-        }
-    }
-
-    fn state(&self) -> Result<std::sync::MutexGuard<'_, CacheState>, SecretError> {
+    fn state(
+        &self,
+        account: &str,
+    ) -> Result<
+        (
+            std::sync::MutexGuard<'_, CacheState>,
+            KeyMetadataCacheObservation,
+        ),
+        SecretError,
+    > {
         let mut state = self.cache.0.lock_or_recover();
-        let revision = self.revision()?;
-        if state.revision != revision {
+        let observation = key_metadata_cache_observation(&self.home, account)?;
+        if state
+            .observation
+            .as_ref()
+            .is_none_or(|prior| !prior.same_document(&observation))
+        {
             state.values.clear();
-            state.revision = revision;
         }
-        Ok(state)
+        state.observation = Some(observation.clone());
+        Ok((state, observation))
     }
 }
 
@@ -64,10 +68,11 @@ impl<S: SecretStore> SecretStore for CachedSecretStore<S> {
         if !account.starts_with(MANAGED_CREDENTIAL_PREFIX) {
             return self.backend.set(account, secret);
         }
-        let mut state = self.state()?;
-        self.backend.set(account, secret)?;
-        state.values.insert(account.into(), Ok(secret.into()));
-        Ok(())
+        let mut state = self.cache.0.lock_or_recover();
+        // HS2-HWC0FS: this native phase precedes the owner's generation commit.
+        // Evict even on failure; never seed a new value under the old generation.
+        state.values.remove(account);
+        self.backend.set(account, secret)
     }
 
     fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
@@ -75,18 +80,32 @@ impl<S: SecretStore> SecretStore for CachedSecretStore<S> {
             return self.backend.get(account);
         }
         // Hold one mutex across the OS read: parallel startup requests share one prompt.
-        let mut state = self.state()?;
+        let (mut state, before) = self.state(account)?;
+        if !before.is_cacheable() {
+            state.values.remove(account);
+            drop(state);
+            return self.backend.get(account);
+        }
         if let Some(secret) = state.values.get(account) {
             return secret.clone().map(Some).map_err(SecretError::Backend);
         }
         let value = self.backend.get(account);
+        let after = key_metadata_cache_observation(&self.home, account)?;
+        let same = before.same_document(&after);
+        if !same {
+            state.values.clear();
+        }
+        state.observation = Some(after.clone());
+        if !before.is_cacheable() || !after.is_cacheable() || !same {
+            state.values.remove(account);
+            return value;
+        }
         match &value {
             Ok(Some(secret)) => {
                 state.values.insert(account.into(), Ok(secret.clone()));
             }
             Err(error) => {
-                // A refusal fails closed for this process instead of opening another
-                // Keychain dialog on the next startup request.
+                // A refusal is shared only for this eligible, unchanged document.
                 state.values.insert(account.into(), Err(error.to_string()));
             }
             Ok(None) => {}
@@ -98,10 +117,9 @@ impl<S: SecretStore> SecretStore for CachedSecretStore<S> {
         if !account.starts_with(MANAGED_CREDENTIAL_PREFIX) {
             return self.backend.delete(account);
         }
-        let mut state = self.state()?;
-        let deleted = self.backend.delete(account)?;
+        let mut state = self.cache.0.lock_or_recover();
         state.values.remove(account);
-        Ok(deleted)
+        self.backend.delete(account)
     }
 }
 
@@ -110,6 +128,9 @@ mod tests {
     use super::*;
     use hotsheet_ticketing::KeyRegistry;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[cfg(any(unix, windows))]
+    mod generation_tests;
 
     #[derive(Clone, Default)]
     struct CountingStore {
@@ -137,7 +158,9 @@ mod tests {
     fn managed_reads_are_shared_across_parallel_registries_and_revision_changes() {
         let home = tempfile::tempdir().unwrap();
         let backend = CountingStore::default();
-        backend.set("github-app-one", "first").unwrap();
+        KeyRegistry::new(home.path(), backend.clone())
+            .set("github-app-one", "first")
+            .unwrap();
         let cache = ManagedSecretCache::default();
         std::thread::scope(|threads| {
             for _ in 0..20 {
@@ -153,8 +176,9 @@ mod tests {
         });
         assert_eq!(backend.reads.load(Ordering::SeqCst), 1);
         // A CLI process may replace the credential and update keys.json outside this server.
-        backend.set("github-app-one", "second").unwrap();
-        fs::write(home.path().join("keys.json"), "{}\n").unwrap();
+        KeyRegistry::new(home.path(), backend.clone())
+            .set("github-app-one", "second")
+            .unwrap();
         let keys = KeyRegistry::new(
             home.path(),
             cache.store(home.path().into(), backend.clone()),
@@ -184,28 +208,35 @@ mod tests {
 
     #[test]
     fn refused_managed_read_is_attempted_only_once_per_revision() {
+        #[derive(Clone)]
         struct Denied(Arc<AtomicUsize>);
         impl SecretStore for Denied {
             fn set(&self, _: &str, _: &str) -> Result<(), SecretError> {
-                unreachable!()
+                Ok(())
             }
             fn get(&self, _: &str) -> Result<Option<String>, SecretError> {
                 self.0.fetch_add(1, Ordering::SeqCst);
                 Err(SecretError::Backend("user denied access".into()))
             }
             fn delete(&self, _: &str) -> Result<bool, SecretError> {
-                unreachable!()
+                Ok(false)
             }
         }
 
         let home = tempfile::tempdir().unwrap();
         let reads = Arc::new(AtomicUsize::new(0));
-        let store = ManagedSecretCache::default().store(home.path().into(), Denied(reads.clone()));
+        let backend = Denied(reads.clone());
+        KeyRegistry::new(home.path(), backend.clone())
+            .set("github-app-one", "synthetic")
+            .unwrap();
+        let store = ManagedSecretCache::default().store(home.path().into(), backend.clone());
         for _ in 0..20 {
             assert!(store.get("github-app-one").is_err());
         }
         assert_eq!(reads.load(Ordering::SeqCst), 1);
-        fs::write(home.path().join("keys.json"), "{}\n").unwrap();
+        KeyRegistry::new(home.path(), backend)
+            .set("github-app-one", "replacement")
+            .unwrap();
         assert!(store.get("github-app-one").is_err());
         assert_eq!(reads.load(Ordering::SeqCst), 2);
     }

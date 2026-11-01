@@ -823,6 +823,16 @@ mod tests {
     use hotsheet_ticketing::ProviderError;
     use hotsheet_ticketing::provider::{ISSUE_CHANGED_SINCE_READ, TICKET_CHANGED_SINCE_READ};
 
+    #[tokio::test]
+    async fn hs2_hwc0fs_partial_metadata_error_is_409_without_stale_ticket_code() {
+        let error = hotsheet_ticketing::SecretError::MetadataCommitIncomplete;
+        let expected = error.to_string();
+        let (status, body) = rendered(provider_transfer_error(error)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], expected);
+        assert!(body.get("code").is_none());
+    }
+
     async fn rendered(error: ApiError) -> (StatusCode, serde_json::Value) {
         let response = error.into_response();
         let status = response.status();

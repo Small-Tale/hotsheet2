@@ -264,6 +264,76 @@ exercises encrypted storage, backup, rotate, missing-root failure, and restore
 through the shipped commands. The OS-specific prompt count remains a manual check in
 `docs/manual-test-plan.md`.
 
+HS2-HWC0FS adds Unix tests in
+`secrets/metadata_owner/unix/tests.rs`: unchanged-map set/delete publication versus
+true backfill no-ops, malformed-input preflight, symlink/special/hardlink and replaced
+lock refusal, canonical-home alias ownership, publication-stage failures, retained
+native values and explicit partial recovery, independent-account merging, same-account
+set/delete ordering, site/identity merge and no post-delete resurrection, and native
+failure without publication. Owned test-binary children use only an injected synthetic
+disk SecretStore with cleared environment and private homes: real process lock release,
+independent-account progress, before/after-rename interruption/recovery and FIFO refusal.
+Shared credential-error conversion and HTTP 409 rendering cases are also covered.
+No real credentials or customer content are fixtures.
+
+The metadata and cache groups add 14 named tests: 8 in
+`secrets/metadata/tests.rs` cover actual old public serde projection/all-four writer
+algorithms, repeated identical legacy maps, private generation rotation/preservation,
+invalid optional values, duplicate reserved-field refusal with zero native effects,
+canonical rewrite and opaque observation semantics. These are synthetic old-algorithm
+fixtures, not executions of an older installed binary. Six tests in
+`hotsheet-server/src/credential_cache/tests/generation_tests.rs` cover two independent
+caches, success/denial invalidation, repeated legacy/invalid/empty bypass, unrelated
+eligible cache retention, native-phase eviction and generation rotation/drop/delete
+during an injected native get. Existing parallel cache and denial tests now establish
+generated metadata through actual KeyRegistry writes. Checkpoint A's replacement test
+pins unchanged PUBLIC metadata with a changed private generation, rather than equal
+stored bytes. A's remaining named cases stay present (18 total, including its one ignored
+owned child); A+B have 32 named test functions. Stronger partial-publication
+and old-map-restore recovery is HS2-67SP63, outside B's successful-publication/as-of
+contract.
+
+The production implementation includes
+common owner extraction, cfg Windows live-handle/SID/ACL-before-write and write-through
+publication helpers, plus bounded Unix new-directory/parent syncing. The Windows
+fixture and CI expansion exercise the owner independently of the native adapter test.
+
+The metadata and cache tests also run on
+Windows while retaining Unix mode checks. Windows homes are missing private children
+created by the actual owner, rather than assuming a temporary directory's default
+owner is the effective SID. Synthetic metadata overwrites retain an actual
+owner-published empty keys.json inode; the missing-file observation controls explicitly
+remove that seed before reading. The account child also fixes system/global Git
+configuration and owned empty hooks/templates rather than inheriting those inputs.
+Twelve new Windows owner test functions (11 ordinary and
+one owned ignored child) cover protected ACL/stage-before-byte checks, null/world-write
+ACL refusal with zero injected-native effects, real handle identity, hard links and
+directory targets, pinned lock sharing, no-op/replacement identity, all publication
+fault steps, non-destructive typed partial outcomes/retry, independent/same-account
+native ordering, real process lock release and before/after-rename interruption.
+These Windows cases require the Windows CI job for execution.
+
+`hotsheet-cli/tests/key_metadata.rs` adds one actual CLI parent covering explicit
+capability admission, stdin key set/get/list/delete, generation replacement, unrelated
+row preservation, malformed preflight with unchanged native value and deliberate
+synthetic retry. `hotsheet-server/tests/key_metadata.rs` adds one parent plus one
+ignored owned two-worker Tokio child: actual authenticated `/accounts` routing with
+private fixture credentials, a real owned Git store, site/identity backfill, unchanged
+generation and no public generation/secret export. This is router composition, not
+real socket transport or a counted native-read assertion. Together the source union
+has 47 named HWC test functions (including three ignored owned children); cfg means
+they are not all runnable on one OS. The Unix and shared groups compile and pass on macOS;
+Windows-specific cases run in CI.
+
+Windows CI explicitly selects HWC ticketing owner/generation, server cache/account,
+external credential-error conversion and CLI parent tests, alongside the unchanged
+disposable native adapter selection. The CI result is recorded in the ticket.
+Real reparse/symlink capability, foreign-SID/effective-token changes, unfamiliar ACL
+forms, unsupported filesystems/remote shares and full platform/parent failure matrices
+remain open verification cells. No unavailable capability is counted as passed.
+File/namespace power-loss guarantees, older-writer transactions and raw-map-restore
+read fencing remain outside the accepted as-of contract (HS2-67SP63).
+
 HS2-FYXRRM signs only ad hoc macOS host snapshot copies with the configured
 development identity. `clients/web/src/dev-signing.test.ts` covers absent/invalid
 configuration, distinct server and CLI identifiers, distribution signature preservation,
