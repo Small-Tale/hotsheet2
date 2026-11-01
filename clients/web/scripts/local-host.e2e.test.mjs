@@ -443,7 +443,7 @@ it.concurrent(
       await mkdir(resolve(project, '.hotsheet2'), { recursive: true });
       await writeFile(
         resolve(project, '.hotsheet2/settings.local.json'),
-        JSON.stringify({ commands: [{ id: 'hold', title: 'Hold the server busy', program: 'sleep', args: ['20'] }] }),
+        JSON.stringify({ commands: [{ id: 'hold', title: 'Hold the server busy', program: 'sleep', args: ['120'] }] }),
       );
       const hold = await fetch(`${api}/checkouts/${encodeURIComponent(id)}/commands/hold/run`, { method: 'POST' });
       expect(hold.status, await hold.clone().text()).toBe(202);
