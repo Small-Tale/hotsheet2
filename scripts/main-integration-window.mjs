@@ -1,7 +1,7 @@
 // HS2-BND42N: one local main writer from preflight through gate, push and confirmation.
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMainPushArgs } from './main-integration-options.mjs';
@@ -45,11 +45,39 @@ function snapshot(repo, requested = 'HEAD') {
   return { head, tree };
 }
 
+// HS2-BYDMV4: only acquisition may wait for an unresolved, physically present ref.
+class UnresolvedWindowError extends Error {}
+
 export function readWindow(repo, query = gitResult) {
   // HS2-W110HQ: release/replacement may follow this lookup; only read its immutable oid.
   const resolved = query(repo, ['rev-parse', '--verify', '--quiet', ref]);
-  if (resolved.status === 1) return null;
-  if (resolved.error || resolved.status !== 0) throw new Error('Cannot read main integration ref');
+  if (resolved.error || resolved.signal || resolved.stderr) throw new Error('Cannot read main integration ref');
+  if (resolved.status === 1) {
+    if (resolved.stdout) throw new Error('Cannot read main integration ref: unexpected lookup output');
+    // No OID was captured. Git's typed existence result distinguishes absence from quiet corruption.
+    const exists = query(repo, ['show-ref', '--exists', ref]);
+    if (exists.error || exists.signal || exists.stdout)
+      throw new Error('Cannot determine main integration ref existence');
+    // Status 2 has ordinary diagnostic stderr; use the typed status, never its message language.
+    if (exists.status === 2) {
+      // Git can call a directory at this loose-ref path missing. It still blocks
+      // zero-OID acquisition, so reject that physical collision explicitly.
+      const path = resolve(repo, git(repo, ['rev-parse', '--git-path', ref]));
+      try {
+        lstatSync(path);
+        throw new Error('Main integration ref path exists although Git reports it missing');
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+      return null;
+    }
+    if (exists.status === 0 && !exists.stderr)
+      throw new UnresolvedWindowError('Main integration ref exists but its reservation is unresolved');
+    throw new Error(
+      'Cannot determine main integration ref existence; Git show-ref --exists support and a readable ref database are required',
+    );
+  }
+  if (resolved.status !== 0) throw new Error('Cannot read main integration ref');
   const oid = resolved.stdout.trim();
   if (!fullSha.test(oid)) throw new Error('Cannot read main integration ref: invalid object id');
   const value = JSON.parse(git(repo, ['cat-file', 'blob', oid]));
@@ -119,31 +147,42 @@ function renew(repo, token) {
 async function acquire(repo, options) {
   const token = randomUUID();
   const started = Date.now();
+  let unresolved = false;
   while (Date.now() - started < 10 * 60_000) {
-    const current = readWindow(repo);
-    if (!current || current.value.expiresAt <= Date.now()) {
-      const selected = snapshot(repo, options.source);
-      const written = writeWindow(repo, current?.oid, {
-        version: 1,
-        token,
-        pid: process.pid,
-        expiresAt: Date.now() + leaseMs,
-        phase: 'gating',
-        remote: options.remote,
-        target: options.target,
-        head: selected.head,
-        tree: selected.tree,
-        gateArgs: options.gateArgs,
-        identity: options.identity,
-        assignment: options.assignment,
-        standalone: options.standalone,
-        sourceStore: options.sourceStore,
-      });
-      if (written) return written;
+    try {
+      const current = readWindow(repo);
+      unresolved = false;
+      if (!current || current.value.expiresAt <= Date.now()) {
+        const selected = snapshot(repo, options.source);
+        const written = writeWindow(repo, current?.oid, {
+          version: 1,
+          token,
+          pid: process.pid,
+          expiresAt: Date.now() + leaseMs,
+          phase: 'gating',
+          remote: options.remote,
+          target: options.target,
+          head: selected.head,
+          tree: selected.tree,
+          gateArgs: options.gateArgs,
+          identity: options.identity,
+          assignment: options.assignment,
+          standalone: options.standalone,
+          sourceStore: options.sourceStore,
+        });
+        if (written) return written;
+      }
+    } catch (error) {
+      if (!(error instanceof UnresolvedWindowError)) throw error;
+      unresolved = true;
     }
     await sleep(1000);
   }
-  throw new Error('Timed out waiting for the local main integration window');
+  throw new Error(
+    unresolved
+      ? 'Timed out resolving the main integration reservation ref; inspect the ref for corruption before recovery'
+      : 'Timed out waiting for the local main integration window',
+  );
 }
 
 function assertSnapshot(repo, value) {

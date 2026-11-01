@@ -112,6 +112,26 @@ turn a valid snapshot into an ambiguous-ref failure or substitute another owner'
 record. An absent ref permits admission; Git failures and malformed records remain
 errors. Compare-and-swap acquisition, renewal and release still decide ownership.
 
+HS2-BYDMV4 distinguishes quiet unresolved lookup from proven absence. Only a quiet
+failed OID lookup uses Git's typed `show-ref --exists` result: missing status 2 is
+absence at that later instant only if Git's own loose-ref path is absent. Git can
+return status 2 for a directory at that path, which blocks acquisition; this
+physical collision fails closed without reading ref contents. Present status 0 is
+unresolved, and other outcomes
+fail closed. Ordinary status-2 diagnostic text is not language-parsed; subprocess
+errors, signals and unexpected output are not absence. Git installations without
+that capability fail with an explicit support/readability error, not a guessed
+minimum version or a quiet-missing assumption. A captured valid OID never uses
+this fallback and is still read only as an immutable blob.
+
+Only acquisition may retry unresolved presence, within its existing one-second
+contention cadence and ten-minute budget; persistent unresolved presence reports
+an actionable ref-inspection error. Owner verification, renewal and release fail
+closed. Zero-OID acquisition and expected-old-OID updates/deletes retain their CAS
+fences. The retained fourteen-case matrix used different Git binaries reporting
+the same Apple Git version; it is not cross-version or ref-backend verification.
+Real-Git and interleaving regressions run against the local Apple Git 2.54 files backend.
+
 ## Timing history (HS2-TCCKRZ)
 
 `scripts/check.sh --timings` prints recent stage and test-file cost estimates as
