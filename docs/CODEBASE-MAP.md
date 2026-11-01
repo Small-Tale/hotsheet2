@@ -290,6 +290,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
+    src/client-notifications.ts # Checkout-scoped server inbox, live refresh, deduped presentation, and acknowledgement (HS2-ZP869N)
+    src/native-notifications.ts # Foreground/background choice and desktop OS delivery (HS2-ZP869N)
     src/interaction-attrs/    # Per-domain Kerf attr()/action() spec tables (`<DOMAIN>_ACTIONS`, `<DOMAIN>_TARGETS`): handlers use `.selector`, components spread `.attrs`
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor (note create on blur/10-second pause, empty-note delete), shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main
@@ -618,7 +620,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/commands.rs        #   configured program plus runtime-resolved shell/AI execution, cursor output, cancellation, bounded history
       src/custom_views.rs    #   /views routes' types: re-exports hotsheet_ticketing::saved_views (HS2-G8NXNC)
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
-      src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
+      src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing, timestamps, and live arrival events (HS2-ZP869N)
       src/notification_router.rs # notifier delivery (HS2-R5HTZN): change-bus subscriber seeded from the index; ticket status/feedback/blocked transitions, permission_asked, and hub notifications → hotsheet-notify dispatch on blocking workers; AppState::with_notifiers test override
       src/project_activity.rs #  pure claim-derived per-store activity tracker: active → released + grace → stopped, unrenewed lease → stalled; claims held without progress → idle, a halted worker session → halted (HS2-P57XHV); router arms one timer per store (HS2-2MM07G)
       src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-link-base, /notification-project-timing, /notification-channels/{id}[/secrets/{field}|/test|/trust], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
@@ -677,7 +679,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/pty_io.rs          #   PtyWriter/PtyReader (HS2-RA494E, unix): non-blocking PTY master I/O waiting in poll(2); the writer gives up once the child exits so a killed terminal never strands it
       src/manager.rs         #   TerminalManager: per-(project,terminal) lazy spawn + shared Arc<Terminal> + atomic new-PTY/reuse result + list/get/kill/reap
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
-      src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify}; surfaced on the terminal read/list state (HS2-RCKEJ9)
+      src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify} and per-feed OSC 9 messages; surfaced on terminal read/list and attached notification streams (HS2-RCKEJ9, HS2-ZP869N)
       src/sizing.rs          #   SizeArbiter: server-arbitrated multi-viewer PTY sizing (focus-follows default + smallest/largest/pinned; leased ViewportClaims + heartbeat/expire; SIZE_FOCUS_HOLD/MIN_DELTA/RESIZE_MIN_INTERVAL guards; self-heal on disconnect) — pure, injected-clock, transition+adversarial tested (HS2-BD7Q74)
       src/broker.rs          #   detached broker (HS2-8HHFHN/HS2-ERT00F): line-delimited JSON Request/Response over a Unix socket (the scrollback-free `info` op serves the server's 500 ms status pollers, HS2-7RRAA8), serve_broker (hosts a TerminalManager) + BrokerClient; plus a streaming Attach op (StreamOut/StreamIn frames) + BrokerStream client for the live attach (replay scrollback → stream output + size decisions; apply input + size claims, self-heal on disconnect) — PTYs and machine-local session-push launch state (including the password and resolved session id) live in a separate process so terminals and message adapters survive a server restart; byte payloads use `src/wire_bytes.rs` `WireBytes` (decodes array or base64, encoding negotiated per connection, HS2-9R751Y)
       #   resize_replay is a backward-compatible request that updates retention for running broker PTYs (HS2-56G204)

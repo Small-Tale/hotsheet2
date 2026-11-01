@@ -2,6 +2,7 @@ import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import type { createClientNotifications } from '../client-notifications';
 import { type NotificationView } from '../components/notification-navigation';
 import { wireNotificationSettings } from '../components/notification-settings-interactions';
 import {
@@ -35,6 +36,7 @@ import { type Control, type Project } from './types';
 /** Live application bindings used by this handler group. */
 export interface NotificationAndLinkInteractionsDependencies {
   readonly notificationView: Signal<NotificationView>;
+  readonly clientNotifications: ReturnType<typeof createClientNotifications>;
   readonly project: () => Project | undefined;
   readonly permissionTimer: VisiblePermissionTimer;
   permissionCountdown: { key: string; remainingMs: number } | undefined;
@@ -167,6 +169,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
     notificationSettings,
+    clientNotifications,
   } = dependencies;
   const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
   lifetime.add(permissionRuleEditorFocus.dispose);
@@ -185,6 +188,39 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       NOTIFICATIONS_AND_LINKS_ACTIONS.selectNotificationView.selector,
       (_event, target) => {
         notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.openClientNotification.selector,
+      (_event, target) => {
+        const current = project();
+        const id = data(target).itemId;
+        const item = current && clientNotifications.items(current.id).find((entry) => entry.id === id);
+        if (!current || !item) return;
+        if (item.ticket) void selectLinkedTicket(item.ticket, current.id);
+        if (!item.acknowledged)
+          void clientNotifications.acknowledge(current, item.id).catch((reason: unknown) => {
+            error.value = reason instanceof Error ? reason.message : String(reason);
+          });
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.acknowledgeClientNotification.selector,
+      (_event, target) => {
+        const current = project();
+        const id = data(target).itemId;
+        if (!current || !id) return;
+        void clientNotifications.acknowledge(current, id).catch((reason: unknown) => {
+          error.value = reason instanceof Error ? reason.message : String(reason);
+        });
       },
     ),
   );

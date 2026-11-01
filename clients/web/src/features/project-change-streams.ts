@@ -51,6 +51,8 @@ export interface ProjectChangeStreamsDependencies {
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
   loadAnalytics?: (target: Project) => Promise<unknown>;
+  refreshClientNotifications?: (target: Project, announcedIds?: readonly string[]) => Promise<unknown>;
+  removeClientNotifications?: (projectId: string) => void;
   onActivity?: (project: Project, storeId: string, activity: ActivityEvent) => void;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
@@ -175,6 +177,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshRepositoryStatus,
     loadConfidenceReport,
     loadAnalytics,
+    refreshClientNotifications,
+    removeClientNotifications,
     onActivity,
     loadRepositorySize,
   } = dependencies;
@@ -249,6 +253,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         stop();
         projectChangeStreams.delete(id);
         ticketRefresh.cancel(id);
+        removeClientNotifications?.(id);
       }
     for (const [id, timer] of repositoryRefreshTimers)
       if (!live.has(id)) {
@@ -271,6 +276,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           onResync: async (reason) => {
             await Promise.all([
               refreshPermissions(current.id),
+              ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
@@ -331,6 +337,15 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             if (response.events.some((event) => event.kind === 'command_updated') && project()?.id === current.id)
               await refreshCommands(current);
             if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
+            if (
+              response.events.some(
+                (event) => event.kind === 'notification' || event.kind === 'notification_acknowledged',
+              )
+            )
+              await refreshClientNotifications?.(
+                current,
+                response.events.filter((event) => event.kind === 'notification').map((event) => event.id),
+              );
             for (const event of response.events)
               if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
             // A terminal's AI session halted or resumed (HS2-HJ4D1H), or connected to or left Hot Sheet

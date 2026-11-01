@@ -8,6 +8,8 @@ import { action } from 'kerfjs/actions';
  */
 export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   selectNotificationView: action('select-notification-view'),
+  openClientNotification: action('open-client-notification'),
+  acknowledgeClientNotification: action('acknowledge-client-notification'),
   ignorePermission: action('ignore-permission'),
   cancelPermissionAutomation: action('cancel-permission-automation'),
   pauseNotifications: action('pause-notifications'),

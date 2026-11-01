@@ -16,6 +16,7 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
   return createSidebarSurface({
     viewMode: read(mode),
     notificationView: read('pending'),
+    clientNotifications: { items: () => [] } as unknown as SidebarSurfaceDependencies['clientNotifications'],
     notificationsPaused: read(false),
     partialSourcesByProject: read({}),
     sidebarSearchCounts: read(undefined),

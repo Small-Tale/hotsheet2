@@ -187,6 +187,7 @@ fn stop_bridge(child: &Mutex<Child>) {
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![desktop_flush_complete])
         .setup(|app| {
             let url = if cfg!(debug_assertions) {
@@ -211,7 +212,12 @@ pub fn run() {
                         "webviews": ["main"],
                         "local": false,
                         "remote": { "urls": [format!("{origin}/*")] },
-                        "permissions": ["allow-desktop-flush-complete"]
+                        "permissions": [
+                            "allow-desktop-flush-complete",
+                            "notification:allow-is-permission-granted",
+                            "notification:allow-request-permission",
+                            "notification:allow-notify"
+                        ]
                     })
                     .to_string(),
                 )?;

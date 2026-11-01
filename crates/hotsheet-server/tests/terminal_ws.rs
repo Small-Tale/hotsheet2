@@ -249,6 +249,71 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
 }
 
 #[tokio::test]
+async fn osc9_terminal_output_reaches_the_scoped_notification_inbox_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+
+    let base = format!("http://{addr}");
+    let open_base = base.clone();
+    let id = tokio::task::spawn_blocking(move || {
+        let response = ureq::post(&format!("{open_base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"command":"/bin/sh","args":["-c","stty -echo; exec cat"]}"#)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+        value["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut first, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    let (_second, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    first
+        .send(WsMessage::Binary(
+            b"\x1b]9;Synthetic job done\x07\n".to_vec().into(),
+        ))
+        .await
+        .unwrap();
+
+    let notices = tokio::task::spawn_blocking(move || {
+        for _ in 0..100 {
+            let response = ureq::get(&format!("{base}/notifications"))
+                .set("x-hotsheet-secret", SECRET)
+                .call()
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            if value.as_array().is_some_and(|items| !items.is_empty()) {
+                return value;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("OSC 9 notification was not published");
+    })
+    .await
+    .unwrap();
+    let items = notices.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["message"], "Synthetic job done");
+    assert!(
+        items[0]["store"]
+            .as_str()
+            .is_some_and(|store| !store.is_empty())
+    );
+    assert!(
+        items[0]["dedupe_key"]
+            .as_str()
+            .is_some_and(|key| !key.contains("Synthetic"))
+    );
+}
+
+#[tokio::test]
 async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

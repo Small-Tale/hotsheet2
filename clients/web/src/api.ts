@@ -17,6 +17,8 @@ import {
   parseCheckoutRelink,
   parseCheckoutTicketPage,
   parseCheckoutTicketRowsPage,
+  parseClientNotification,
+  parseClientNotifications,
   parseCodeReview,
   parseCommandDefinition,
   parseCommandRun,
@@ -1300,6 +1302,19 @@ export interface ChangeEvent {
   activity?: ActivityEvent;
   turn?: TurnStreamEnvelope;
 }
+/** A notification in the local server's attention inbox (HS2-ZP869N). */
+export interface ClientNotification {
+  id: string;
+  message: string;
+  severity: string;
+  checkout: string | null;
+  store: string | null;
+  ticket: string | null;
+  recipient: string | null;
+  dedupe_key: string | null;
+  created_at_ms: number;
+  acknowledged: boolean;
+}
 export interface PollResponse {
   cursor: number;
   events: ChangeEvent[];
@@ -1676,6 +1691,10 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/activity${params.size ? `?${params}` : ''}`,
     );
   };
+  notifications = (checkout: string) =>
+    this.parsed(parseClientNotifications, `/notifications?checkout=${encodeURIComponent(checkout)}`);
+  acknowledgeNotification = (id: string) =>
+    this.parsed(parseClientNotification, `/notifications/${encodeURIComponent(id)}/ack`, { method: 'POST' });
   /** Configured server speech adapters; browser speech is a separate local choice (HS2-5PSQJQ). */
   ttsProviders = () => this.parsed(parseStringList, '/tts/providers');
   synthesizeSpeech = async (text: string, provider: string, voice?: string): Promise<Blob> => {

@@ -3,6 +3,7 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import { type CheckoutTicketCounts, type CorruptTicket, type TicketRow as WireTicketRow } from '../api';
 import { boardColumnHasMore, type BoardColumnPage, boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
+import type { createClientNotifications } from '../client-notifications';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
 import { type TicketEmptyStateProps } from '../components/ticket-empty-state';
@@ -29,6 +30,7 @@ export interface WorkspaceSurfaceDependencies {
   hideVerifiedColumn: () => boolean;
   loading: Signal<boolean>;
   notificationView: Signal<NotificationView>;
+  clientNotifications: ReturnType<typeof createClientNotifications>;
   partialSourcesByProject: Signal<Record<string, boolean>>;
   project: () => Project | undefined;
   projectPendingPermissions: (projectId?: string) => PermissionItem[];
@@ -77,6 +79,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     hideVerifiedColumn,
     loading,
     notificationView,
+    clientNotifications,
     partialSourcesByProject,
     project,
     projectPendingPermissions,
@@ -141,7 +144,9 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
       case 'notifications': {
         const history = projectPermissionHistory(),
           cutoff = Date.now() - 24 * 60 * 60 * 1000,
-          view = notificationView.value;
+          weekCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000,
+          view = notificationView.value,
+          notices = current ? clientNotifications.items(current.id) : [];
         return {
           kind: 'notifications',
           notifications: {
@@ -149,6 +154,10 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
             pending: view === 'pending' ? projectPendingPermissions() : [],
             history:
               view === 'day' ? history.filter((item) => item.resolvedAt >= cutoff) : view === 'week' ? history : [],
+            notices:
+              view === 'pending'
+                ? notices.filter((item) => !item.acknowledged)
+                : notices.filter((item) => item.created_at_ms >= (view === 'day' ? cutoff : weekCutoff)),
           },
         };
       }

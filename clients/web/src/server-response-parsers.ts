@@ -8,6 +8,7 @@ import type {
   CheckoutSource,
   CheckoutTicketPage,
   CheckoutTicketRowsPage,
+  ClientNotification,
   CodeReview,
   CodeReviewCommit,
   CommandDefinition,
@@ -1093,6 +1094,18 @@ export const parseNotificationConfig = shape<NotificationConfig>(
   },
   { link_base: isString, project_activity: parseNotificationProjectTiming.check },
 );
+export const parseClientNotification: ResponseParser<ClientNotification> = (value) => {
+  const what = 'notification';
+  const body = record(value, what);
+  for (const key of ['id', 'message', 'severity']) requiredString(body, key, what);
+  for (const key of ['checkout', 'store', 'ticket', 'recipient', 'dedupe_key'])
+    if (body[key] !== null && typeof body[key] !== 'string') invalid(what);
+  if (typeof body.created_at_ms !== 'number' || !Number.isFinite(body.created_at_ms)) invalid(what);
+  if (typeof body.acknowledged !== 'boolean') invalid(what);
+  return body as unknown as ClientNotification;
+};
+export const parseClientNotifications: ResponseParser<ClientNotification[]> = (value) =>
+  list(value, 'notifications', parseClientNotification);
 export const parseNotificationDelivery = shape<NotificationDelivery>(
   'notification delivery',
   {

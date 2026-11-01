@@ -9,6 +9,7 @@ import type {
   TicketRow as WireTicketRow,
   ToolConnection,
 } from '../api';
+import type { createClientNotifications } from '../client-notifications';
 import type { AiToolDescriptor } from '../components/drive-options-menu';
 import type { NotificationView } from '../components/notification-navigation';
 import type { SettingsCategory } from '../components/settings-navigation';
@@ -35,6 +36,7 @@ interface Readable<T> {
 export interface SidebarSurfaceDependencies {
   viewMode: Readable<WorkspaceViewMode>;
   notificationView: Readable<NotificationView>;
+  clientNotifications: ReturnType<typeof createClientNotifications>;
   notificationsPaused: Readable<boolean>;
   partialSourcesByProject: Readable<Record<string, boolean>>;
   sidebarSearchCounts: Readable<SidebarSearchCounts | undefined>;
@@ -86,6 +88,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
   const {
     viewMode,
     notificationView,
+    clientNotifications,
     notificationsPaused,
     partialSourcesByProject,
     sidebarSearchCounts,
@@ -129,14 +132,17 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     if (!statsSelected && viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
     if (!statsSelected && viewMode.value === 'notifications') {
       const history = projectPermissionHistory(current.id),
+        notices = clientNotifications.items(current.id),
         now = Date.now();
       return {
         kind: 'notifications',
         selected: notificationView.value,
         counts: {
-          pending: projectPendingPermissions(current.id).length,
-          day: history.filter((item) => item.resolvedAt >= now - 24 * 60 * 60 * 1000).length,
-          week: history.length,
+          pending: projectPendingPermissions(current.id).length + notices.filter((item) => !item.acknowledged).length,
+          day:
+            history.filter((item) => item.resolvedAt >= now - 24 * 60 * 60 * 1000).length +
+            notices.filter((item) => item.created_at_ms >= now - 24 * 60 * 60 * 1000).length,
+          week: history.length + notices.filter((item) => item.created_at_ms >= now - 7 * 24 * 60 * 60 * 1000).length,
         },
         paused: notificationsPaused.value,
       };

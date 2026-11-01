@@ -13814,8 +13814,13 @@ async fn notifications_route_dedupe_ack_and_emit_live_events() {
     )
     .await;
     assert_eq!(first["id"], second["id"]);
+    assert!(first["created_at_ms"].as_u64().unwrap() > 0);
     let event = events.recv().await.unwrap();
     assert_eq!(event.kind, "notification");
+    assert!(
+        events.try_recv().is_err(),
+        "deduplication must not emit a second event"
+    );
     let listed = body_json(
         app.clone()
             .oneshot(authed("GET", "/notifications?checkout=web", None))
@@ -13832,6 +13837,10 @@ async fn notifications_route_dedupe_ack_and_emit_live_events() {
     )
     .await;
     assert_eq!(ack["acknowledged"], true);
+    assert_eq!(
+        events.recv().await.unwrap().kind,
+        "notification_acknowledged"
+    );
 }
 
 #[tokio::test]
@@ -13886,6 +13895,7 @@ async fn assign_endpoint_emits_recipient_payloads_and_targeted_notifications() {
     .await;
     assert_eq!(notices.as_array().unwrap().len(), 1);
     assert_eq!(notices[0]["ticket"], slug);
+    assert!(notices[0]["created_at_ms"].as_u64().unwrap() > 0);
 }
 
 struct FakeTts;

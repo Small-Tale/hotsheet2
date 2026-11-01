@@ -1,13 +1,20 @@
 import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { ListActionRow } from '@kerfjs/ui/list-action-row';
+import { ListItem } from '@kerfjs/ui/list-item';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Bell, Check } from 'lucide';
 
+import type { ClientNotification } from '../api';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { PermissionRequestCard } from './permission-request-card';
 
 export interface NotificationCenterProps {
   pending: PermissionItem[];
   history: PermissionHistoryItem[];
+  notices?: ClientNotification[];
   countdowns?: Readonly<Record<string, string>>;
   countdownAction?: 'allow' | 'deny';
   title?: string;
@@ -22,12 +29,13 @@ export interface NotificationCenterProps {
 export function NotificationCenter({
   pending,
   history,
+  notices = [],
   countdowns = {},
   countdownAction = 'allow',
   title = 'Notifications',
   inset = 'page',
 }: NotificationCenterProps) {
-  const empty = pending.length === 0 && history.length === 0;
+  const empty = pending.length === 0 && history.length === 0 && notices.length === 0;
   return (
     <section class="notification-center" data-component="notification-center" data-inset={inset} aria-label={title}>
       <List gap={px(12)} controlInsets={inset === 'page' ? 'trbl' : ''}>
@@ -43,6 +51,32 @@ export function NotificationCenter({
             {history.map((item) => (
               <PermissionRequestCard item={item} />
             ))}
+          </List>
+        )}
+        {notices.length > 0 && (
+          <List gap={px(8)}>
+            {notices.map((item) =>
+              item.acknowledged ? (
+                <ListItem
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.openClientNotification.value}
+                  itemId={item.id}
+                  label={`${item.message} · ${item.ticket ? `${item.ticket} · ` : ''}${new Date(item.created_at_ms).toLocaleString()}`}
+                  icon={<LucideIcon icon={Bell} name="bell" />}
+                  multiline
+                />
+              ) : (
+                <ListActionRow
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.openClientNotification.value}
+                  itemId={item.id}
+                  label={`${item.message} · ${item.ticket ? `${item.ticket} · ` : ''}${new Date(item.created_at_ms).toLocaleString()}`}
+                  icon={<LucideIcon icon={Bell} name="bell" />}
+                  multiline
+                  trailingAction={NOTIFICATIONS_AND_LINKS_ACTIONS.acknowledgeClientNotification.value}
+                  trailingActionLabel={`Mark ${item.message} as read`}
+                  trailingActionIcon={<LucideIcon icon={Check} name="check" />}
+                />
+              ),
+            )}
           </List>
         )}
         {empty && (

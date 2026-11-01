@@ -60,13 +60,15 @@ impl OscScanner {
     }
 
     /// Feed PTY output bytes.
-    pub fn feed(&mut self, bytes: &[u8]) {
+    pub fn feed(&mut self, bytes: &[u8]) -> Vec<String> {
+        let mut notifications = Vec::new();
         for &b in bytes {
-            self.byte(b);
+            self.byte(b, &mut notifications);
         }
+        notifications
     }
 
-    fn byte(&mut self, b: u8) {
+    fn byte(&mut self, b: u8, notifications: &mut Vec<String>) {
         match self.state {
             State::Normal => {
                 if b == 0x1b {
@@ -82,13 +84,13 @@ impl OscScanner {
                 }
             }
             State::Osc => match b {
-                0x07 => self.finish(),              // BEL terminates the OSC
+                0x07 => self.finish(notifications), // BEL terminates the OSC
                 0x1b => self.state = State::OscEsc, // maybe ESC \ terminator
                 _ => self.push(b),
             },
             State::OscEsc => {
                 if b == b'\\' {
-                    self.finish(); // ESC \ (ST) terminates the OSC
+                    self.finish(notifications); // ESC \ (ST) terminates the OSC
                 } else {
                     self.state = State::Osc;
                     if b != 0x1b {
@@ -105,7 +107,7 @@ impl OscScanner {
         }
     }
 
-    fn finish(&mut self) {
+    fn finish(&mut self, notifications: &mut Vec<String>) {
         // Take the payload out first so the dispatch can borrow `self` mutably (the `rest`
         // slice would otherwise alias `self.payload`). This also clears the buffer.
         let payload = std::mem::take(&mut self.payload);
@@ -114,7 +116,7 @@ impl OscScanner {
         } else if let Some(rest) = payload.strip_prefix(b"8;") {
             self.set_link(rest);
         } else if let Some(rest) = payload.strip_prefix(b"9;") {
-            self.set_notify_or_progress(rest);
+            self.set_notify_or_progress(rest, notifications);
         }
         self.state = State::Normal;
     }
@@ -152,7 +154,7 @@ impl OscScanner {
 
     /// OSC 9 is `4;<state>;<pct>` for ConEmu-style **progress**, else an iTerm2-style
     /// **notification** message.
-    fn set_notify_or_progress(&mut self, rest: &[u8]) {
+    fn set_notify_or_progress(&mut self, rest: &[u8], notifications: &mut Vec<String>) {
         let Ok(s) = std::str::from_utf8(rest) else {
             return;
         };
@@ -168,6 +170,7 @@ impl OscScanner {
             };
         } else if !s.is_empty() {
             self.term.notify = Some(s.to_string());
+            notifications.push(s.to_string());
         }
     }
 }
@@ -237,6 +240,18 @@ mod tests {
         );
         // Percent is clamped to 100.
         assert_eq!(scan(&[b"\x1b]9;4;1;250\x07"]).progress, Some(100));
+    }
+
+    #[test]
+    fn osc9_notifications_are_emitted_once_across_split_chunks() {
+        let mut scanner = OscScanner::new();
+        assert!(scanner.feed(b"\x1b]9;first").is_empty());
+        assert_eq!(
+            scanner.feed(b"\x07\x1b]9;second\x1b\\\x1b]9;4;1;50\x07"),
+            ["first", "second"]
+        );
+        assert!(scanner.feed(b"plain text").is_empty());
+        assert_eq!(scanner.state().notify.as_deref(), Some("second"));
     }
 
     #[test]

@@ -21,6 +21,59 @@ import { realTicketServer } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
+test('routes live server notices into the project inbox and bell (HS2-ZP869N)', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/notifications**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        const query = new URLSearchParams(incoming.search);
+        if (path === '/notifications') query.set('checkout', server.checkoutId);
+        const response = await route.fetch({
+          url: `${server.url}${path}${query.size ? `?${query}` : ''}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 60_000,
+        });
+        await route.fulfill({ response });
+      });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Notifications View' }).click();
+    const center = page.locator('[data-component="notification-center"]');
+    await expect(center).toBeVisible();
+
+    await server.request('/notifications', 'POST', {
+      message: 'Synthetic build complete',
+      checkout: server.checkoutId,
+      dedupe_key: 'synthetic-build',
+    });
+    await expect(center.getByText('Synthetic build complete')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mark Synthetic build complete as read' })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('hs2-zp869n-wide.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 900, height: 800 });
+    await expect(center.getByText('Synthetic build complete')).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('hs2-zp869n-medium.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(center.getByText('Synthetic build complete')).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('hs2-zp869n-narrow.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 1728, height: 971 });
+    await expect(center.getByText('Synthetic build complete')).toBeVisible();
+    await page.getByRole('button', { name: 'Mark Synthetic build complete as read' }).click();
+    await expect(center.getByText('Synthetic build complete')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Last 24 Hours' }).click();
+    await expect(center.getByText('Synthetic build complete')).toBeVisible();
+  } finally {
+    await server.stop();
+  }
+});
+
 test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', async ({ page }) => {
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 844 });

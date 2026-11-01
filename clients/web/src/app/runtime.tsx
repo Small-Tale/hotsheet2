@@ -54,6 +54,7 @@ import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
+import { createClientNotifications } from '../client-notifications';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -164,6 +165,7 @@ import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
+import { sendSystemNotification, shouldUseSystemNotification } from '../native-notifications';
 import { type ProjectTicketSources, resolveNewTicketSource } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { priorityFromWire } from '../priority-wire';
@@ -3825,6 +3827,17 @@ export async function startHotSheetWebClient() {
     };
   }
   const announcerController = createAnnouncerController(projects);
+  const clientNotifications = createClientNotifications({
+    api: (current) => new Api(current.apiPath),
+    present: (current, item) => {
+      if (notificationsPaused.value) return;
+      if (shouldUseSystemNotification(document.visibilityState === 'visible', document.hasFocus())) {
+        void sendSystemNotification(current, item).catch((reason: unknown) => {
+          console.error('System notification failed', reason);
+        });
+      } else showToast(`${current.name}: ${item.message}`);
+    },
+  });
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -3849,6 +3862,8 @@ export async function startHotSheetWebClient() {
     refreshRepositoryStatus,
     loadConfidenceReport,
     loadAnalytics,
+    refreshClientNotifications: clientNotifications.refresh,
+    removeClientNotifications: clientNotifications.removeProject,
     onActivity: announcerController.onActivity,
     loadRepositorySize,
   });
@@ -4347,6 +4362,7 @@ export async function startHotSheetWebClient() {
     searchScope,
     viewMode,
     notificationView,
+    clientNotifications,
     notificationsPaused,
     partialSourcesByProject,
     sidebarSearchCounts,
@@ -4665,6 +4681,7 @@ export async function startHotSheetWebClient() {
     hideVerifiedColumn,
     loading,
     notificationView,
+    clientNotifications,
     partialSourcesByProject,
     project,
     projectPendingPermissions,
@@ -4756,7 +4773,8 @@ export async function startHotSheetWebClient() {
     partialSourcesByProject,
     pendingPermissions,
     pendingRestoreEntries,
-    permissionCount,
+    permissionCount: (projectId?: string) =>
+      permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     permissionPopupSurface,
     project,
     projectRestoreFailures,
@@ -5476,6 +5494,7 @@ export async function startHotSheetWebClient() {
     copyGitHubCode,
     reopenGitHubSignIn,
     notificationView,
+    clientNotifications,
     permissionTimer,
     permissionAutomationByProject,
     updatePermissionTimer,

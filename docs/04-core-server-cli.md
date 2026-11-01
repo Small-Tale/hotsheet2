@@ -366,7 +366,11 @@ notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipien
 An absent server fails with a start-server instruction. The ticket-flow summary covers
 the server's selected store; activity uses its persisted rolling window, and
 notifications use its bounded server-process feed. Acknowledgement uses the same id and
-authorization as the web client.
+authorization as the web client. A checkout read includes notices for its linked stores and
+filters recipient-scoped records by that checkout's Git user identity (HS2-ZP869N). Each
+record includes creation time; new records and acknowledgements emit live change events.
+Assignment, review, and attached terminal OSC 9 messages enter this feed. Repeating an
+unacknowledged dedupe key reuses the record without emitting a second arrival.
 
 Checkout-scoped ticket usage is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/usage` (HS2-ZA7W6E, HS2-J14225): the ticket's

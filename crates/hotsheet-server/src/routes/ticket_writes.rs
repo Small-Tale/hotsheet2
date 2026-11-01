@@ -356,7 +356,7 @@ pub(crate) fn do_assign(
         .map(|v| (v, "assigned"))
         .chain(review_requested.iter().map(|v| (v, "review-requested")))
     {
-        state.notifications.publish(notifications::NewNotification {
+        state.publish_notification(notifications::NewNotification {
             message: format!("{action}: {} — {}", ticket.slug, ticket.title),
             severity: "info".into(),
             checkout: None,

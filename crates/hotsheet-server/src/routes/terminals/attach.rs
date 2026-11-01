@@ -40,12 +40,12 @@ pub(crate) async fn attach_terminal(
             }
         }
         let socket_path = tb.socket.clone();
-        return ws.on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id));
+        return ws.on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id, state));
     }
     let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
         return (StatusCode::NOT_FOUND, "no such terminal").into_response();
     };
-    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term))
+    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term, state, id))
 }
 
 fn default_true() -> bool {
@@ -236,10 +236,13 @@ fn queue_pong(control: &mpsc::Sender<Message>, seq: u64) -> bool {
 async fn terminal_attach_loop(
     mut socket: WebSocket,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
+    state: AppState,
+    terminal_id: String,
 ) {
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
     let (snapshot, rx) = term.subscribe_with_scrollback();
+    let (_, mut notification_rx) = term.subscribe_with_scrollback();
     let size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
@@ -280,6 +283,22 @@ async fn terminal_attach_loop(
         size_rx,
         frames_tx,
     ));
+    let notification_pump = tokio::spawn(async move {
+        let mut scanner = hotsheet_terminals::OscScanner::new();
+        loop {
+            match notification_rx.recv().await {
+                Ok(bytes) => {
+                    for message in scanner.feed(&bytes) {
+                        state.publish_terminal_notification(&terminal_id, message);
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    scanner = hotsheet_terminals::OscScanner::new();
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
     let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
 
     loop {
@@ -327,6 +346,7 @@ async fn terminal_attach_loop(
         }
     }
     pump.abort();
+    notification_pump.abort();
     writer.abort();
 
     // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
@@ -343,11 +363,14 @@ async fn terminal_attach_loop(
 async fn pump_broker_output(
     mut broker: hotsheet_terminals::BrokerStreamReader,
     frames: mpsc::Sender<Outbound>,
+    state: AppState,
+    terminal_id: String,
 ) {
     use hotsheet_terminals::StreamOut as S;
     let mut pending = PendingOutput::default();
     let mut received_initial_replay = false;
     let mut liveness_announced = false;
+    let mut scanner = hotsheet_terminals::OscScanner::new();
     loop {
         tokio::select! {
             biased;
@@ -359,6 +382,7 @@ async fn pump_broker_output(
             }
             frame = broker.next(), if !pending.over_cap() => match frame {
                 Ok(Some(S::Scrollback { data })) => {
+                    scanner = hotsheet_terminals::OscScanner::new();
                     if received_initial_replay {
                         pending.replace_with(data.into_vec());
                     } else {
@@ -369,6 +393,9 @@ async fn pump_broker_output(
                     }
                 }
                 Ok(Some(S::Output { data })) => {
+                    for message in scanner.feed(&data) {
+                        state.publish_terminal_notification(&terminal_id, message);
+                    }
                     if pending.push(data.into_vec(), &frames).is_err() {
                         return;
                     }
@@ -400,7 +427,12 @@ async fn pump_broker_output(
 /// input never waits behind output (HS2-J52ZJ7). The broker replays the scrollback as its
 /// first frame(s) and drops the size claim when this connection closes, so the size self-heal
 /// holds even across a server restart.
-async fn broker_attach_loop(socket: WebSocket, broker_socket: std::path::PathBuf, id: String) {
+async fn broker_attach_loop(
+    socket: WebSocket,
+    broker_socket: std::path::PathBuf,
+    id: String,
+    state: AppState,
+) {
     let stream = match hotsheet_terminals::BrokerStream::open(&broker_socket, &id).await {
         Ok(s) => s,
         Err(_) => return, // dropping the socket closes it
@@ -409,7 +441,7 @@ async fn broker_attach_loop(socket: WebSocket, broker_socket: std::path::PathBuf
     let (sink, mut inbound) = socket.split();
     let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
     let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
-    let pump = tokio::spawn(pump_broker_output(broker_out, frames_tx));
+    let pump = tokio::spawn(pump_broker_output(broker_out, frames_tx, state, id.clone()));
     let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
 
     loop {

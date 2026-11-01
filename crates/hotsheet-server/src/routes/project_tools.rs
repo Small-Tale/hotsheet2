@@ -792,41 +792,75 @@ pub(crate) struct NotificationQuery {
 pub(crate) async fn list_notifications(
     State(state): State<AppState>,
     Query(q): Query<NotificationQuery>,
-) -> Json<Vec<notifications::Notification>> {
-    Json(state.notifications.list(
-        q.checkout.as_deref(),
+) -> Result<Json<Vec<notifications::Notification>>, ApiError> {
+    let mut items = state.notifications.list(
+        None,
         q.store.as_deref(),
         q.ticket.as_deref(),
         q.recipient.as_deref(),
-    ))
+    );
+    if let Some(reference) = q.checkout.as_deref() {
+        if let Ok(checkout) = state.checkout_registry.resolve(reference) {
+            let linked_stores = state
+                .host
+                .locations()
+                .into_iter()
+                .filter(|(_, root)| {
+                    checkout
+                        .stores
+                        .iter()
+                        .any(|store| crate::watcher::same_path(std::path::Path::new(store), root))
+                })
+                .map(|(id, _)| id)
+                .collect::<std::collections::HashSet<_>>();
+            let recipient =
+                hotsheet_ticketing::current_user_email(std::path::Path::new(&checkout.root));
+            items.retain(|item| {
+                ((item.checkout.is_none() && item.store.is_none())
+                    || item.checkout.as_deref() == Some(checkout.id.as_str())
+                    || item
+                        .store
+                        .as_ref()
+                        .is_some_and(|store| linked_stores.contains(store)))
+                    && item
+                        .recipient
+                        .as_deref()
+                        .is_none_or(|who| recipient.as_deref() == Some(who))
+            });
+        } else {
+            // Legacy clients used arbitrary checkout labels before the registry linked stores.
+            items.retain(|item| item.checkout.as_deref() == Some(reference));
+        }
+    }
+    Ok(Json(items))
 }
 pub(crate) async fn publish_notification(
     State(state): State<AppState>,
     Json(body): Json<notifications::NewNotification>,
 ) -> (StatusCode, Json<notifications::Notification>) {
-    let n = state.notifications.publish(body);
-    state.emit(ChangeEvent {
-        cursor: None,
-        store: n.store.clone().unwrap_or_default(),
-        kind: "notification".into(),
-        id: n.id.clone(),
-        slug: n.ticket.clone().unwrap_or_default(),
-        message: Some(n.message.clone()),
-        activity: None,
-        assignment: None,
-        turn: None,
-    });
+    let n = state.publish_notification(body);
     (StatusCode::CREATED, Json(n))
 }
 pub(crate) async fn acknowledge_notification(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<notifications::Notification>, ApiError> {
-    state
+    let notification = state
         .notifications
         .acknowledge(&id)
-        .map(Json)
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown notification"))
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown notification"))?;
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: notification.store.clone().unwrap_or_default(),
+        kind: "notification_acknowledged".into(),
+        id: notification.id.clone(),
+        slug: notification.ticket.clone().unwrap_or_default(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+    Ok(Json(notification))
 }
 pub(crate) async fn synthesize_speech(
     State(state): State<AppState>,

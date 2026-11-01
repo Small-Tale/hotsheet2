@@ -460,6 +460,13 @@ background and extension behavior.
 Exercise platform accessibility, background/resume, notification presentation, and
 credential storage once the native clients exist.
 
+For the desktop notification path (HS2-ZP869N), grant the packaged app notification permission,
+open a project and leave it in the background, then publish a synthetic scoped notice through
+the local server. Confirm one OS notification appears, the correct project bell increases, and
+the notice stays in Pending without an interruptive popup after Pause Notifications is enabled.
+Bring the app forward, mark it read, and confirm the 24-hour history retains it. Repeat with a
+second project and a recipient that does not match the checkout user to confirm isolation.
+
 ### Mobile paged board touch swiping (HS2-ZYJMDP)
 
 On a **physical phone** (iOS Safari, the installed PWA, and Android Chrome), open a project in

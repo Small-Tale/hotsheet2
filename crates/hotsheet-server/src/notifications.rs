@@ -1,6 +1,11 @@
 use hotsheet_sync::LockExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::AppState;
+use crate::events::ChangeEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Notification {
@@ -17,6 +22,7 @@ pub struct Notification {
     pub recipient: Option<String>,
     #[serde(default)]
     pub dedupe_key: Option<String>,
+    pub created_at_ms: u64,
     pub acknowledged: bool,
 }
 
@@ -46,6 +52,10 @@ pub struct NotificationHub {
 }
 impl NotificationHub {
     pub fn publish(&self, n: NewNotification) -> Notification {
+        self.publish_with_status(n).0
+    }
+
+    fn publish_with_status(&self, n: NewNotification) -> (Notification, bool) {
         let mut items = self.items.lock_or_recover();
         if let Some(key) = &n.dedupe_key {
             if let Some(old) = items
@@ -53,7 +63,7 @@ impl NotificationHub {
                 .rev()
                 .find(|v| v.dedupe_key.as_ref() == Some(key) && !v.acknowledged)
             {
-                return old.clone();
+                return (old.clone(), false);
             }
         }
         let v = Notification {
@@ -65,10 +75,14 @@ impl NotificationHub {
             ticket: n.ticket,
             recipient: n.recipient,
             dedupe_key: n.dedupe_key,
+            created_at_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
             acknowledged: false,
         };
         items.push(v.clone());
-        v
+        (v, true)
     }
     pub fn list(
         &self,
@@ -97,6 +111,41 @@ impl NotificationHub {
     }
 }
 
+impl AppState {
+    pub(crate) fn publish_notification(&self, body: NewNotification) -> Notification {
+        let (notification, created) = self.notifications.publish_with_status(body);
+        if created {
+            self.emit(ChangeEvent {
+                cursor: None,
+                store: notification.store.clone().unwrap_or_default(),
+                kind: "notification".into(),
+                id: notification.id.clone(),
+                slug: notification.ticket.clone().unwrap_or_default(),
+                message: Some(notification.message.clone()),
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+        }
+        notification
+    }
+
+    /// Route a terminal's OSC 9 message through the same scoped inbox as other attention (HS2-ZP869N).
+    pub(crate) fn publish_terminal_notification(&self, terminal_id: &str, message: String) {
+        let store = crate::multistore::store_url_id(&self.store);
+        let digest = Sha256::digest(message.as_bytes());
+        self.publish_notification(NewNotification {
+            message,
+            severity: "info".into(),
+            checkout: None,
+            store: Some(store.clone()),
+            ticket: None,
+            recipient: None,
+            dedupe_key: Some(format!("osc9:{store}:{terminal_id}:{digest:x}")),
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +164,7 @@ mod tests {
         let a = h.publish(n.clone());
         let b = h.publish(n);
         assert_eq!(a.id, b.id);
+        assert!(a.created_at_ms > 0);
         assert_eq!(h.list(Some("a"), None, None, None).len(), 1);
         h.acknowledge(&a.id).unwrap();
         assert!(h.list(Some("a"), None, None, None)[0].acknowledged);
