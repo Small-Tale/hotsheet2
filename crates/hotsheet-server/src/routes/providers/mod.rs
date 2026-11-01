@@ -1,5 +1,7 @@
 //! Ticket-provider connection and provider-ticket routes.
 
+#[cfg(test)]
+mod disabled_transfer_tests;
 mod tickets;
 pub(crate) use tickets::{
     assign_provider_ticket, close_provider_ticket, create_provider_ticket,
@@ -533,19 +535,53 @@ pub(crate) struct ProviderTransferBody {
     confirm: bool,
 }
 
-pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiError> {
+// HS2-DJWTB0: persisted policy also covers injected external winners. Skipped Git
+// metadata cannot disable a hosted-only Git object, nor exempt a constructed external one.
+fn admit_selected_transfers(
+    connections: &[ProviderConnection],
+    winners: &[hotsheet_ticketing::ProviderDescriptor],
+    source: &str,
+    destination: &str,
+) -> Result<(), ApiError> {
+    for id in [source, destination] {
+        if let Some(connection) = connections.iter().find(|connection| connection.id == id) {
+            let external = connection.provider != "git"
+                || winners
+                    .iter()
+                    .any(|winner| winner.connection_id == id && winner.provider != "git");
+            if connection.disabled && external {
+                return Err(provider_transfer_error(
+                    hotsheet_ticketing::ProviderError::Disabled {
+                        connection_id: id.into(),
+                    },
+                ));
+            }
+        }
+        if source == destination {
+            break;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn hosted_provider_registry(
+    state: &AppState,
+    source: &str,
+    destination: &str,
+) -> Result<ProviderRegistry, ApiError> {
+    let selected = |id: &str| id == source || id == destination;
     let registry = ProviderRegistry::default();
     let default_id = multistore::store_url_id(&state.store);
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
-        .load()
-        .map_err(provider_transfer_error)?;
+    let config = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let connections = config.load().map_err(provider_transfer_error)?;
+    let injected = state.injected_providers.descriptors();
+    admit_selected_transfers(&connections, &injected, source, destination)?;
     let external_default = connections.iter().any(|connection| connection.default)
-        || state
-            .injected_providers
-            .descriptors()
-            .iter()
-            .any(|descriptor| descriptor.default);
+        || injected.iter().any(|descriptor| descriptor.default);
     for (id, _) in state.host.locations() {
+        if !selected(&id) {
+            continue;
+        }
         let entry = state
             .host
             .get(&id)
@@ -559,7 +595,7 @@ pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegis
             .map_err(provider_transfer_error)?;
     }
     for connection in connections {
-        if connection.provider == "git" {
+        if connection.provider == "git" || !selected(&connection.id) {
             continue;
         }
         let token = connection_token(state, &connection)?;
@@ -570,7 +606,10 @@ pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegis
             )
             .map_err(provider_transfer_error)?;
     }
-    for descriptor in state.injected_providers.descriptors() {
+    for descriptor in injected {
+        if !selected(&descriptor.connection_id) {
+            continue;
+        }
         registry
             .register(
                 state
@@ -580,6 +619,11 @@ pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegis
             )
             .map_err(provider_transfer_error)?;
     }
+    // Observe actual constructed winners before the fresh policy read: a concurrent
+    // external→Git metadata change must not exempt the still-external object.
+    let winners = registry.descriptors();
+    let current = config.load().map_err(provider_transfer_error)?;
+    admit_selected_transfers(&current, &winners, source, destination)?;
     Ok(registry)
 }
 

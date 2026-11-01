@@ -802,6 +802,18 @@ than reporting it inaccessible. Toggle it with `PUT /provider-connections/{id}/d
 dialog's **Disable / Enable** action; the settings list badges it **Disabled**. An ordinary
 connection edit preserves the flag.
 
+Transfer admission also checks both explicit selected IDs before constructing either
+side or resolving its credential (HS2-DJWTB0). Matching disabled external metadata
+applies to injected replacements; unrelated disabled sources do not veto a transfer.
+Hosted-only Git sources retain their local authority. A second fresh metadata check
+before transfer ticket I/O also considers the constructed winner, so changing a record
+from external to Git cannot exempt a stale external object. These are as-of admission
+checks: a disable observed during construction can refuse the transfer but cannot undo
+earlier permitted credential access, and a toggle after final admission can race an
+already admitted operation. Move confirmation and operation-id retry identity remain
+unchanged. The owned synthetic server fixture exercises disabled and enabled transfer
+admission through the authenticated routes.
+
 A checkout link (`TicketSource` in `checkouts.json`) copies its connection's locator.
 Editing a connection's repository or project with `PATCH /provider-connections/{id}` or
 its checkout-scoped twin (a project's Ticket sources edit) rewrites that copy on

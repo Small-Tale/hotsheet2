@@ -293,6 +293,12 @@ the Rust server separate. Developer ID signing instructions are in
 
 ## Requirements summary (synthesized status view)
 
+HS2-DJWTB0 adds transfer admission checks: both selected external
+sources are checked for disabled metadata before construction and again before ticket
+I/O, including persisted-policy/injected-object collisions. An isolated authenticated
+server fixture covers routing and transfer transitions. Ordinary hosted-only Git routing
+is unchanged.
+
 Keep this current as the design firms up. Statuses: **Design** (specified here) ·
 **Confirm** (needs maintainer sign-off) · **Deferred**.
 

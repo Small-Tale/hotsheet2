@@ -730,7 +730,11 @@ pub(crate) async fn provider_copy_route(
     Json(body): Json<ProviderTransferBody>,
 ) -> Result<(StatusCode, Json<hotsheet_ticketing::TransferOutcome>), ApiError> {
     let outcome = copy_between(
-        &hosted_provider_registry(&state)?,
+        &hosted_provider_registry(
+            &state,
+            &body.source.connection_id,
+            &body.destination_connection,
+        )?,
         body.source,
         &body.destination_connection,
         &body.operation_id,
@@ -751,7 +755,11 @@ pub(crate) async fn provider_move_route(
         ));
     }
     let outcome = move_between(
-        &hosted_provider_registry(&state)?,
+        &hosted_provider_registry(
+            &state,
+            &body.source.connection_id,
+            &body.destination_connection,
+        )?,
         body.source,
         &body.destination_connection,
         &body.operation_id,

@@ -1295,6 +1295,24 @@ on the visible right edge and captures the resulting scrolled terminal.
 
 ## Coverage report layers
 
+### Selected disabled transfer admission (HS2-DJWTB0)
+
+The server test
+`routes::providers::disabled_transfer_tests::hs2_djwtb0_owned_authenticated_transfer_admission`
+launches one explicitly isolated ignored child. Four named called scenario sources
+cover initial both-position policy and missing-peer-credential precedence across
+GitHub/Jira/GitLab/Git metadata; copy/retry/disable/re-enable/move provenance;
+effective routing, defaults, same ID and missing IDs; and bounded registration-descriptor
+rendezvous for final-check toggle plus external-to-Git reclassification. The last scenario
+is called with two transition variants. These are one discoverable parent and one ignored
+child entrypoint, not six independently executed tests.
+
+The fixture owns real Git ticket stores and synthetic credentials only after compiled
+capability checks. Exact disabled 409 responses, provider ticket-method counters and
+unchanged bytes/counts support the intended refusal. Native credential reads are not
+instrumented: missing-peer-credential precedence is an additional behavioral control,
+not a measured secret-get count. No UI or manual/live-provider validation is claimed.
+
 - Rust line coverage: `cargo llvm-cov`; CI uploads `rust-coverage-lcov` and enforces
   the current line floor.
 - Migrator line/branch/function coverage: `npm run test:coverage` in `migrator/`; CI
