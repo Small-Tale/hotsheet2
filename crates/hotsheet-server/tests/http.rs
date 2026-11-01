@@ -8663,6 +8663,7 @@ async fn all_collection_spans_every_lifecycle_collection_except_trash() {
     )
     .await;
     let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    let mut done_id = String::new();
     for (title, status) in [
         ("Search queue", "started"),
         ("Search backlog", "backlog"),
@@ -8682,6 +8683,9 @@ async fn all_collection_spans_every_lifecycle_collection_except_trash() {
                 .unwrap(),
         )
         .await;
+        if title == "Search done" {
+            done_id = created["qualified_id"].as_str().unwrap().to_owned();
+        }
         assert_eq!(
             router
                 .clone()
@@ -8729,6 +8733,56 @@ async fn all_collection_spans_every_lifecycle_collection_except_trash() {
             "Search queue"
         ]
     );
+    let uploaded = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/checkouts/{checkout_id}/tickets/{done_id}/attachments"
+                ))
+                .header("x-hotsheet-secret", SECRET)
+                .header("x-hotsheet-filename", "synthetic-proof.txt")
+                .body(Body::from("synthetic fixture"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::CREATED);
+    for filter in ["has_attachment=true", "attachment=*.txt"] {
+        let membership = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/{checkout_id}/tickets?collection=all&{filter}&page_size=500&counts=false&fields=slug,connection_id,native_id,qualified_id,id"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(membership["counts"], serde_json::Value::Null);
+        let rows = membership["items"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{filter}: {membership}");
+        assert_eq!(rows[0]["qualified_id"], done_id);
+        assert!(
+            rows[0]["connection_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(
+            rows[0]["native_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(
+            rows[0]["qualified_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(rows[0]["title"].is_null(), "projection must stay lean");
+    }
 }
 
 #[tokio::test]

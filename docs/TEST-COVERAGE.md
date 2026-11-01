@@ -401,6 +401,14 @@ explicit review requests, and resolved feedback. Index tests check marker and re
 request filtering before a bounded page; the real-server checkout HTTP test checks
 note, description, and explicit request sources and feedback-resolution transitions.
 
+HS2-DE9CMP covers Boolean structured search in the shared field and real workspace.
+Parser and field tests check quoted values, committed chips, and `NOT` membership;
+controller tests check complete cursor walks, source-qualified identity, `OR` scope,
+and unavailable source handling. The server checkout HTTP test exercises projected
+attachment membership through real indexed filters. The browser search test exercises
+attachment and date compositions in the shipped workspace at wide, medium, and narrow
+sizes with a return to wide.
+
 HS2-DX3EWW covers project statistics scrolling. The app-owned stats workspace
 bounds the Kerf Pane so its content slot is the sole vertical scroll owner;
 `clients/web/tests/mobile-layout.spec.ts` exercises wheel scrolling and reaches the

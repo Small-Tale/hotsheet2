@@ -357,7 +357,7 @@ export function effectiveSearch(input: string, tokens: readonly InlineSearchToke
       parsed.token && !tokens.some((token) => token.kind === parsed.token!.kind && token.value === parsed.token!.value)
         ? [...tokens, { ...parsed.token, offset: text.length }]
         : [...tokens];
-  const ordered = orderedSearchText(text, next),
+  const ordered = orderedSearchText(text, next, () => true),
     advanced = /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]/i.test(ordered);
   return { text: advanced ? ordered : orderedSearchText(text, next, (token) => token.kind === 'is'), tokens: next };
 }

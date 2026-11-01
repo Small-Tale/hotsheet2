@@ -1406,9 +1406,14 @@ preview/download, server directory browser) are separate design work.
   Notifications or Settings collapses the workspace search without clearing its query;
   returning to a ticket view restores that active query (HS2-6ZK9KF).
   Explicit lifecycle expressions and filter chips narrow the
-  selected collection. Boolean expressions that cannot be represented as one provider query
-  walk every compact cursor page for that collection, retain only client-side matches, and
-  cancel cleanly when the query changes, so matches after the first 200 rows remain discoverable.
+  selected collection. Boolean expressions walk every compact cursor page for that
+  collection and resolve each `has:`, `attachment:`, and date term through complete,
+  source-qualified indexed membership pages before applying `AND`, `OR`, and `NOT`.
+  Committed structured chips keep their place in the expression; quoted attachment
+  values stay one term. An unsupported or failed source makes the composed search
+  unavailable instead of producing a definitive empty or negated result. Searches
+  cancel cleanly when the query changes, so matches after the first 200 rows remain
+  discoverable (HS2-DE9CMP).
   Structured duplicate searches send
   `close_reason=duplicate` to the provider before bounded pagination, rather than hoping
   duplicate rows happen to occur in the first unfiltered page. The toolbar's inline search

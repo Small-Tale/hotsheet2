@@ -1,5 +1,6 @@
 import { isTicketActivelyWorkedOn } from './active-ticket-work';
 import type { TicketRow } from './api';
+import { type InlineSearchToken, tokenFromRaw } from './inline-search';
 
 const normalized = (value: string) => value.trim().toLowerCase();
 type SearchExpression =
@@ -57,7 +58,17 @@ function lexSearchExpression(query: string): Lexeme[] {
       continue;
     }
     const start = index;
-    while (index < query.length && !/[\s()]/.test(query[index])) index += 1;
+    let quoted = false;
+    while (index < query.length) {
+      const character = query[index];
+      if (character === '\\' && quoted && index + 1 < query.length) {
+        index += 2;
+        continue;
+      }
+      if (character === '"') quoted = !quoted;
+      if (!quoted && /[\s()]/.test(character)) break;
+      index += 1;
+    }
     const value = query.slice(start, index),
       keyword = value.toLowerCase();
     result.push({ kind: keyword === 'and' || keyword === 'or' || keyword === 'not' ? keyword : 'term', value });
@@ -151,21 +162,52 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
   const statuses = lifecycleAliases[state];
   return statuses ? statuses.includes(ticket.status ?? '') : false;
 }
-function evaluateSearchExpression(ticket: TicketRow, expression: SearchExpression, now: number): boolean {
+type StructuredTerm = Extract<InlineSearchToken, { kind: 'has' | 'attachment' | 'date' }>;
+function structuredTerm(value: string): StructuredTerm | undefined {
+  const token = tokenFromRaw(value);
+  return token?.kind === 'has' || token?.kind === 'attachment' || token?.kind === 'date' ? token : undefined;
+}
+export function structuredSearchTerms(query: string): StructuredTerm[] {
+  const expression = parseSearchExpression(query),
+    terms = new Map<string, StructuredTerm>();
+  const visit = (node: SearchExpression): void => {
+    if (node.kind === 'term') {
+      const term = structuredTerm(node.value);
+      if (term) terms.set(term.raw, term);
+    } else if (node.kind === 'not') visit(node.value);
+    else {
+      visit(node.left);
+      visit(node.right);
+    }
+  };
+  if (expression) visit(expression);
+  return [...terms.values()];
+}
+export type StructuredTermResolver = (ticket: TicketRow, term: StructuredTerm) => boolean;
+function evaluateSearchExpression(
+  ticket: TicketRow,
+  expression: SearchExpression,
+  now: number,
+  resolve?: StructuredTermResolver,
+): boolean {
   switch (expression.kind) {
     case 'term':
+      if (resolve) {
+        const term = structuredTerm(expression.value);
+        if (term) return resolve(ticket, term);
+      }
       return matchesTerm(ticket, expression.value, now);
     case 'not':
-      return !evaluateSearchExpression(ticket, expression.value, now);
+      return !evaluateSearchExpression(ticket, expression.value, now, resolve);
     case 'and':
       return (
-        evaluateSearchExpression(ticket, expression.left, now) &&
-        evaluateSearchExpression(ticket, expression.right, now)
+        evaluateSearchExpression(ticket, expression.left, now, resolve) &&
+        evaluateSearchExpression(ticket, expression.right, now, resolve)
       );
     case 'or':
       return (
-        evaluateSearchExpression(ticket, expression.left, now) ||
-        evaluateSearchExpression(ticket, expression.right, now)
+        evaluateSearchExpression(ticket, expression.left, now, resolve) ||
+        evaluateSearchExpression(ticket, expression.right, now, resolve)
       );
   }
 }
@@ -180,9 +222,14 @@ export function usesAdvancedSearchExpression(query: string) {
     )
   );
 }
-export function matchesSearchExpression(ticket: TicketRow, query: string, now = Date.now()) {
+export function matchesSearchExpression(
+  ticket: TicketRow,
+  query: string,
+  now = Date.now(),
+  resolve?: StructuredTermResolver,
+) {
   const expression = parseSearchExpression(query);
-  return expression ? evaluateSearchExpression(ticket, expression, now) : ticketContains(ticket, query);
+  return expression ? evaluateSearchExpression(ticket, expression, now, resolve) : ticketContains(ticket, query);
 }
 export async function collectMatchingSearchPages<T>(
   first: { items: T[]; next_cursor?: string },
@@ -204,7 +251,8 @@ export async function collectMatchingSearchPages<T>(
   return undefined;
 }
 /** Inline search filters only expressions the provider cannot represent directly. */
-export function filterAdvancedSearchResults(rows: TicketRow[], query: string) {
+export function filterAdvancedSearchResults(rows: TicketRow[], query: string, resolve?: StructuredTermResolver) {
   const advanced = usesAdvancedSearchExpression(query);
-  return rows.filter((ticket) => !advanced || matchesSearchExpression(ticket, query));
+  const now = Date.now();
+  return rows.filter((ticket) => !advanced || matchesSearchExpression(ticket, query, now, resolve));
 }

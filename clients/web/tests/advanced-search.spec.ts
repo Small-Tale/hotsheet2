@@ -111,23 +111,31 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     if (path.endsWith('/tickets') && request.method() === 'GET') {
       const url = new URL(request.url());
       ticketQueries.push(url);
+      const structuredRows = url.searchParams.has('has_attachment')
+        ? [rows[1]]
+        : url.searchParams.has('created_after')
+          ? [rows[0]]
+          : rows;
       return route.fulfill({
         json: url.searchParams.has('page_size')
           ? {
-              items: rows,
-              counts: {
-                total: rows.length,
-                queued: 3,
-                backlog: 1,
-                archive: 2,
-                open: 1,
-                up_next: 1,
-                active: 1,
-                started: 1,
-                completed_today: 0,
-              },
+              items: structuredRows,
+              counts:
+                url.searchParams.get('counts') === 'false'
+                  ? null
+                  : {
+                      total: rows.length,
+                      queued: 3,
+                      backlog: 1,
+                      archive: 2,
+                      open: 1,
+                      up_next: 1,
+                      active: 1,
+                      started: 1,
+                      completed_today: 0,
+                    },
             }
-          : rows,
+          : structuredRows,
       });
     }
     if (path.endsWith('/providers'))
@@ -387,6 +395,41 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   for (const slug of ['HS2-ACTIVE', 'HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await search.fill('NOT has:attachment');
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);
+  expect(ticketQueries.some((url) => url.searchParams.get('has_attachment') === 'true')).toBe(true);
+  await search.fill('has:attachment OR is:open');
+  await page.getByRole('button', { name: 'All Tickets' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-de9cmp-structured-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-de9cmp-structured-medium.png', fullPage: true });
+  await page.setViewportSize({ width: 680, height: 720 });
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-de9cmp-structured-narrow.png' });
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
+  await search.fill('created-after:2026-01-01 AND is:open');
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);
+  expect(ticketQueries.some((url) => url.searchParams.has('created_after'))).toBe(true);
+  await page.getByRole('button', { name: 'Clear search' }).click();
   await page.setViewportSize({ width: 680, height: 720 });
   await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Search Syntax Help' }).click();

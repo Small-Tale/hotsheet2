@@ -3075,17 +3075,8 @@ export async function startHotSheetWebClient() {
     let result: WireTicketRow[];
     if (workspaceSearchActive()) {
       const matches = searchMatchKeys.value,
-        matched = matches ? tickets.value.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [],
-        effective = selectedViewSearch(),
-        advanced = usesAdvancedSearchExpression(effective.text),
-        tags = advanced
-          ? []
-          : effective.tokens
-              .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
-              .map((token) => token.value.toLowerCase());
-      result = filterAdvancedSearchResults(matched, effective.text).filter((ticket) =>
-        tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)),
-      );
+        matched = matches ? tickets.value.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [];
+      result = matched;
     } else result = ticketsForView(tickets.value, selectedView.value);
     const active = activeWorkspaceSort();
     return result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
@@ -3096,7 +3087,6 @@ export async function startHotSheetWebClient() {
     searchScope,
     allTicketsSearchAvailable,
     setAllTicketsSearch,
-    selectedViewSearch,
     workspaceSearchModel,
     workspaceSearchTokenOffset,
     searchSignature,

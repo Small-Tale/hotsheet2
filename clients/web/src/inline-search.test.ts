@@ -87,6 +87,13 @@ describe('inline advanced-search tokens', () => {
     expect(effectiveSearch(parsed.text, parsed.tokens).text).toBe('NOT tag:client AND hello');
     const simple = consumeSearchTokens('tag:client ', true);
     expect(effectiveSearch(simple.text, simple.tokens).text).toBe('');
+    const structured = consumeSearchTokens('has:attachment OR attachment:"annual report*.png"', true);
+    expect(effectiveSearch(structured.text, structured.tokens).text).toBe(
+      'has:attachment OR attachment:"annual report*.png"',
+    );
+    expect(effectiveSearch('NOT ', [{ ...tokenFromRaw('created-after:2026-01-01')!, offset: 4 }]).text).toBe(
+      'NOT created-after:2026-01-01',
+    );
     expect(inlineSearchParts('', [{ ...tokenFromRaw('tag:client')!, offset: 0 }])).toEqual([
       { kind: 'text', value: '' },
       { kind: 'token', token: expect.objectContaining({ raw: 'tag:client', offset: 0 }) },

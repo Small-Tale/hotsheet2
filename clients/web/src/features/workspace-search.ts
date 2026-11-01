@@ -3,6 +3,8 @@ import { batch, effect, type Signal } from 'kerfjs';
 import {
   collectMatchingSearchPages,
   filterAdvancedSearchResults,
+  structuredSearchTerms,
+  type StructuredTermResolver,
   usesAdvancedSearchExpression,
   usesBooleanSearchExpression,
 } from '../advanced-search';
@@ -194,13 +196,60 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     const active = activeWorkspaceSort();
     return { ...query, sort: active.sort, direction: active.sortDirection };
   }
-  function matchedSearchRows(rows: WireTicketRow[], effective: EffectiveTicketSearch) {
+  function matchedSearchRows(
+    rows: WireTicketRow[],
+    effective: EffectiveTicketSearch,
+    resolve?: StructuredTermResolver,
+  ) {
     const advanced = usesAdvancedSearchExpression(effective.text),
-      matched = advanced ? filterAdvancedSearchResults(rows, effective.text) : rows,
+      boolean = usesBooleanSearchExpression(effective.text),
+      matched = advanced ? filterAdvancedSearchResults(rows, effective.text, resolve) : rows,
       tags = effective.tokens
         .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
         .map((token) => token.value.toLowerCase());
-    return matched.filter((ticket) => tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)));
+    return boolean
+      ? matched
+      : matched.filter((ticket) => tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)));
+  }
+  async function prepareStructuredMembership(
+    client: Api,
+    current: Project,
+    effective: EffectiveTicketSearch,
+    view: TicketScope,
+    active: () => boolean,
+  ): Promise<StructuredTermResolver | undefined> {
+    if (!usesBooleanSearchExpression(effective.text)) return undefined;
+    const terms = structuredSearchTerms(effective.text);
+    if (!terms.length) return undefined;
+    const memberships = new Map<string, Set<string>>();
+    for (const term of terms) {
+      const members = new Set<string>(),
+        seen = new Set<string>(),
+        query: CheckoutTicketQuery = {
+          ...searchScopeQuery(view),
+          ...tokenQuery([term]),
+          fields: 'slug,connection_id,native_id,qualified_id,id',
+        };
+      let cursor: string | undefined;
+      do {
+        if (!active()) return undefined;
+        const page = await client.checkoutTicketRowsPage(current.id, 500, cursor, query);
+        if (page.source_errors?.length)
+          throw new Error(`Structured search unavailable: ${page.source_errors.join(' · ')}`);
+        for (const row of page.items) {
+          if (!row.connection_id || !row.native_id || !row.qualified_id)
+            throw new Error('Structured search returned a row without a qualified ticket identity.');
+          members.add(ticketSearchKey(row));
+        }
+        cursor = page.next_cursor;
+        if (cursor) {
+          if (seen.has(cursor)) throw new Error('Structured search pagination returned a repeated cursor.');
+          seen.add(cursor);
+        }
+      } while (cursor);
+      memberships.set(term.raw, members);
+    }
+    return (row, term) => memberships.get(term.raw)?.has(ticketSearchKey(row)) ?? false;
   }
   function searchRequest(effective: EffectiveTicketSearch, view: TicketScope): CheckoutTicketQuery {
     const advanced = usesAdvancedSearchExpression(effective.text),
@@ -244,15 +293,22 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     state: SidebarSearchCounts,
     first?: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
   ) {
-    let count = first ? matchedSearchRows(first.rows, effective).length : 0,
+    const query = first?.query ?? searchRequest(effective, view),
+      active = () => activeSidebarSearchCount(state),
+      resolve = await prepareStructuredMembership(client, current, effective, view, active);
+    if (!active()) return;
+    let count = first ? matchedSearchRows(first.rows, effective, resolve).length : 0,
       cursor = first?.cursor;
     const sourceErrors = new Set(first?.sourceErrors ?? []);
-    const query = first?.query ?? searchRequest(effective, view);
+    if (resolve && sourceErrors.size)
+      throw new Error(`Structured search unavailable: ${[...sourceErrors].join(' · ')}`);
     do {
       if (!first || cursor) {
         const page = await client.checkoutTicketPage(current.id, 500, cursor, query);
-        count += matchedSearchRows(page.items, effective).length;
+        count += matchedSearchRows(page.items, effective, resolve).length;
         page.source_errors?.forEach((message) => sourceErrors.add(message));
+        if (resolve && sourceErrors.size)
+          throw new Error(`Structured search unavailable: ${[...sourceErrors].join(' · ')}`);
         cursor = page.next_cursor;
       } else cursor = undefined;
       first = undefined;
@@ -360,22 +416,28 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
           selectedView.value === view &&
           searchScope() === scope &&
           searchSignature() === signature,
-        sourceErrors = new Set(page.source_errors ?? []),
-        allMatches = collectAll
-          ? await collectMatchingSearchPages(
-              page,
-              async (cursor) => {
-                const next = await client.checkoutTicketPage(current.id, 500, cursor, query);
-                next.source_errors?.forEach((message) => sourceErrors.add(message));
-                return next;
-              },
-              (row) => matchedSearchRows([row], effective).length === 1,
-              active,
-            )
-          : undefined;
+        sourceErrors = new Set(page.source_errors ?? []);
+      const resolve = await prepareStructuredMembership(client, current, effective, scope, active);
+      if (!active()) return;
+      if (resolve && sourceErrors.size)
+        throw new Error(`Structured search unavailable: ${[...sourceErrors].join(' · ')}`);
+      const allMatches = collectAll
+        ? await collectMatchingSearchPages(
+            page,
+            async (cursor) => {
+              const next = await client.checkoutTicketPage(current.id, 500, cursor, query);
+              next.source_errors?.forEach((message) => sourceErrors.add(message));
+              if (resolve && sourceErrors.size)
+                throw new Error(`Structured search unavailable: ${[...sourceErrors].join(' · ')}`);
+              return next;
+            },
+            (row) => matchedSearchRows([row], effective, resolve).length === 1,
+            active,
+          )
+        : undefined;
       if (collectAll && !allMatches) return;
       const rows = collectAll ? allMatches! : page.items,
-        matched = collectAll ? rows : matchedSearchRows(rows, effective);
+        matched = collectAll ? rows : matchedSearchRows(rows, effective, resolve);
       if (!active()) return;
       ticketPageQuery.value = query;
       ticketNextCursor.value = collectAll ? undefined : page.next_cursor;

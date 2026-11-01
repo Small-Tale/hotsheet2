@@ -4,6 +4,7 @@ import {
   collectMatchingSearchPages,
   filterAdvancedSearchResults,
   matchesSearchExpression,
+  structuredSearchTerms,
   usesAdvancedSearchExpression,
   usesBooleanSearchExpression,
 } from './advanced-search';
@@ -97,6 +98,20 @@ describe('advanced search semantics', () => {
     const ticket = row('HS2-ONE', 'started', { title: 'Parser repair' });
     expect(matchesSearchExpression(ticket, '(parser')).toBe(false);
     expect(matchesSearchExpression(ticket, 'is:unknown')).toBe(false);
+  });
+  it('keeps quoted structured values intact and resolves Boolean membership before NOT', () => {
+    const first = row('HS2-ONE', 'started', { tags: ['client'] }),
+      second = row('HS2-TWO', 'started', { tags: ['docs'] }),
+      query = 'attachment:"annual report*.png" OR (tag:docs AND NOT has:attachment)',
+      terms = structuredSearchTerms(query);
+    expect(terms.map((term) => term.raw)).toEqual(['attachment:"annual report*.png"', 'has:attachment']);
+    const resolve = (ticket: TicketRow, term: { raw: string }) =>
+      ticket === first && term.raw === 'attachment:"annual report*.png"';
+    expect([first, second].filter((ticket) => matchesSearchExpression(ticket, query, 0, resolve))).toEqual([
+      first,
+      second,
+    ]);
+    expect(structuredSearchTerms('NOT (attachment:"unfinished')).toEqual([]);
   });
   it('collects matches beyond the first page and rejects repeated cursors', async () => {
     const pages: Record<string, { items: number[]; next_cursor?: string }> = {

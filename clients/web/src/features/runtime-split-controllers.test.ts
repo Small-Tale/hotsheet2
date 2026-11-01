@@ -515,6 +515,100 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(calls.every((url) => !url.includes('needs_review=true'))).toBe(true);
     expect(searchMatchKeys.value).toEqual(new Set(['git:HS2-FIRST', 'git:HS2-LATE']));
   });
+  it('workspace Boolean search uses complete qualified membership and refuses unavailable NOT (HS2-DE9CMP)', async () => {
+    const first: TicketRow = {
+        connection_id: 'git',
+        native_id: 'one',
+        qualified_id: 'git:one',
+        id: 'one',
+        slug: 'HS2-ONE',
+        title: 'First',
+        status: 'started',
+        up_next: false,
+        feedback_needed: false,
+        tags: ['docs'],
+        blocked_by: [],
+        claim_count: 0,
+      },
+      second: TicketRow = {
+        ...first,
+        connection_id: 'other',
+        native_id: 'one',
+        qualified_id: 'other:one',
+        id: 'two',
+        slug: 'HS2-TWO',
+        title: 'Second',
+        tags: [],
+      },
+      searchQuery = signal(''),
+      searchTokens = signal<InlineSearchToken[]>([]),
+      searchMatchKeys = signal<Set<string> | undefined>(undefined),
+      error = signal(''),
+      calls: URL[] = [];
+    let unavailable = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (url) => {
+        const parsed = new URL(typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, 'http://local'),
+          params = parsed.searchParams,
+          membership = params.get('has_attachment') === 'true';
+        calls.push(parsed);
+        return Response.json({
+          items: membership ? (params.has('cursor') ? [second] : []) : [first, second],
+          next_cursor: membership && !params.has('cursor') ? 'membership-next' : null,
+          counts:
+            params.get('counts') === 'false'
+              ? null
+              : { total: 2, queued: 2, backlog: 0, archive: 0, open: 2, up_next: 0, active: 0, started: 2 },
+          source_errors: membership && unavailable ? ['provider does not support attachment search'] : [],
+        });
+      }),
+    );
+    const owner = createWorkspaceSearchController({
+      searchQuery,
+      searchTokens,
+      searchHelpOpen: signal(false),
+      searchMatchKeys,
+      sidebarSearchCounts: signal<SidebarSearchCounts | undefined>(undefined),
+      selectedView: signal<TicketView>('all'),
+      searchAllTickets: signal(false),
+      error,
+      ticketPageQuery: signal<CheckoutTicketQuery>({}),
+      ticketNextCursor: signal<string | undefined>(undefined),
+      tickets: signal<TicketRow[]>([]),
+      ticketRowsByProject: signal({}),
+      project: () => project('a'),
+      customViewFor: () => undefined,
+      customViewsFor: () => [],
+      activeWorkspaceSort: () => ({ sort: 'priority', sortDirection: 'descending' }),
+      ticketSearchKey: (ticket) => `${ticket.connection_id}:${ticket.native_id}`,
+      mergeTicketLinkRows: (_existing, incoming) => [...incoming],
+      refreshProject: vi.fn(async () => undefined),
+      resetBoardColumnPages: vi.fn(),
+      resetProgressiveTicketRendering: vi.fn(),
+      scheduleProjectSessionPersistence: vi.fn(),
+    });
+    replaceTicketSearch(owner.workspaceSearchModel, 'tag:docs OR has:attachment');
+    await owner.refreshTicketSearch();
+    expect(searchMatchKeys.value).toEqual(new Set(['git:one', 'other:one']));
+    calls.length = 0;
+    replaceTicketSearch(owner.workspaceSearchModel, 'NOT has:attachment');
+    await owner.refreshTicketSearch();
+    expect(searchMatchKeys.value).toEqual(new Set(['git:one']));
+    expect(
+      calls.some(
+        (call) => call.searchParams.get('has_attachment') === 'true' && call.searchParams.get('counts') === 'false',
+      ),
+    ).toBe(true);
+    expect(calls.some((call) => call.searchParams.get('cursor') === 'membership-next')).toBe(true);
+    expect(
+      calls.some((call) => call.searchParams.get('fields') === 'slug,connection_id,native_id,qualified_id,id'),
+    ).toBe(true);
+    unavailable = true;
+    await owner.refreshTicketSearch();
+    expect(searchMatchKeys.value).toEqual(new Set());
+    expect(error.value).toContain('Structured search unavailable');
+  });
   it('workspace search: All Tickets scope toggles, re-scopes the request, and ends with the search (HS2-4J6764)', async () => {
     const searchQuery = signal(''),
       searchTokens = signal<InlineSearchToken[]>([]),
