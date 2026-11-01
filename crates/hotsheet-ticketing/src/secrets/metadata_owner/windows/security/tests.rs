@@ -264,6 +264,7 @@ fn hs2_hwc0fs_windows_noops_keep_handle_identity_and_set_delete_replace() {
     assert!(keys.delete("synthetic").unwrap());
     let empty = metadata_file(home.path());
     let previous = identity(&empty, false).unwrap();
+    drop(empty);
     assert!(!keys.delete("synthetic").unwrap());
     assert!(identity(&metadata_file(home.path()), false).unwrap() != previous);
     assert!(map(home.path()).is_empty());
