@@ -3,6 +3,7 @@ import type {
   AiToolDescriptor,
   CalibrationReport,
   Checkout,
+  CheckoutActivityEvent,
   CheckoutAnalytics,
   CheckoutSource,
   CheckoutTicketPage,
@@ -704,6 +705,17 @@ export const parseCheckoutAnalytics = shape<CheckoutAnalytics>('checkout analyti
   stores: listOf(analyticsStore.check),
   unavailable_sources: listOf(unavailableAnalyticsSource.check),
 });
+
+export const parseCheckoutActivity: ResponseParser<CheckoutActivityEvent[]> = (value) =>
+  list(value, 'checkout activity', (entry) => {
+    const item = record(entry, 'checkout activity entry');
+    requiredString(item, 'store_id', 'checkout activity entry');
+    const event = record(item.event, 'activity event');
+    for (const key of ['id', 'ts', 'tool', 'kind', 'summary']) requiredString(event, key, 'activity event');
+    if (!['low', 'normal', 'high'].includes(String(event.importance))) invalid('activity event');
+    for (const key of ['project', 'ticket', 'session']) optionalOf(event, key, 'activity event', isString);
+    return entry as CheckoutActivityEvent;
+  });
 
 const isSizeLevel: Check = (field) => field === 'ok' || field === 'warning' || field === 'critical';
 const repositorySizeEntry = shape<RepositorySizeEntry>(

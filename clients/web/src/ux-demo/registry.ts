@@ -2,6 +2,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { wireAppComboboxes } from '../components/app-combobox-wiring';
 import { demoModule as aiConversation } from './ai-conversation-demo';
+import { demoModule as announcerOverlay } from './announcer-overlay-demo';
 import { demoModule as appChrome } from './app-chrome-demo';
 import { demoModule as appDialogs } from './app-dialogs-demo';
 import { demoModule as appLoadingIndicator } from './app-loading-indicator-demo';
@@ -56,6 +57,7 @@ import { demoModule as workspaceComponents } from './workspace-components-demo';
 export const demoModules: readonly DemoModule[] = [
   projectDialog,
   appShell,
+  announcerOverlay,
   workspaceComponents,
   ticketSearchField,
   notificationCard,

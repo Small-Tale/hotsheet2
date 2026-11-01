@@ -1,5 +1,16 @@
 # Feature Coverage Matrix
 
+HS2-5PSQJQ covers checkout-scoped cross-store retained activity in the real
+server HTTP suite; cross-project merge, shared-store deduplication, replay and
+digest selection in `clients/web/src/announcer-reel.test.ts`; configured speech
+provider discovery and binary response with a synthetic adapter in the server
+HTTP suite; and the shipped shell's project-strip entry, phone drawer
+non-overlap, compact/expanded digest, browser speech, diff view and responsive
+transition in `clients/web/tests/announcer.spec.ts`.
+The macOS server voice and browser voice are the two local provider choices.
+`tts.rs` runs the installed macOS voice and checks RIFF/WAV output on macOS;
+the fake adapter keeps server HTTP behavior deterministic on other platforms.
+
 HS2-25TP3N covers live-claim precedence, stale-claim fallback, exact
 project/source filtering, and empty-to-one-session routing in
 `crates/hotsheet-server/src/routes/feedback_session.rs`. The real HTTP test in

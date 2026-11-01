@@ -13908,6 +13908,13 @@ impl hotsheet_server::tts::TtsProvider for FakeTts {
 async fn tts_runs_behind_server_provider_boundary_without_client_secrets() {
     let (_d, st) = state();
     let app = app(st.with_tts_providers(vec![std::sync::Arc::new(FakeTts)]));
+    let providers = app
+        .clone()
+        .oneshot(authed("GET", "/tts/providers", None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    assert_eq!(body_json(providers).await, serde_json::json!(["fake"]));
     let resp = app
         .oneshot(authed(
             "POST",
@@ -14589,6 +14596,65 @@ async fn activity_ingest_then_timeline_filters_by_ticket_and_importance() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+/// HS2-5PSQJQ: the Announcer reads activity from the checkout's linked store with source
+/// identity, not from an unrelated server default or a synthetic client-only timeline.
+#[tokio::test]
+async fn checkout_activity_reads_linked_store_and_rejects_unknown_checkout() {
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({ "root": checkout, "sources": [source] }).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let posted = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/activity",
+            Some(
+                r#"{"tool":"codex","kind":"edit","ticket":"T1","summary":"Edited synthetic file"}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(posted.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{id}/activity?ticket=T1&limit=1"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let rows = body_json(response).await;
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["event"]["summary"], "Edited synthetic file");
+    assert!(rows[0]["store_id"].is_string());
+    let missing = app
+        .oneshot(authed("GET", "/checkouts/no-such-checkout/activity", None))
+        .await
+        .unwrap();
+    assert!(missing.status().is_client_error());
 }
 
 #[tokio::test]

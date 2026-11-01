@@ -12,6 +12,7 @@ import {
   parseAiToolDescriptor,
   parseCalibrationReport,
   parseCheckout,
+  parseCheckoutActivity,
   parseCheckoutAnalytics,
   parseCheckoutRelink,
   parseCheckoutTicketPage,
@@ -1259,6 +1260,10 @@ export interface ActivityEvent {
   detail?: unknown;
   importance: 'low' | 'normal' | 'high';
 }
+export interface CheckoutActivityEvent {
+  store_id: string;
+  event: ActivityEvent;
+}
 export interface ClientFileReference {
   id: string;
   filename: string;
@@ -1659,6 +1664,33 @@ export class Api {
   /** Ticket flow and usage for each linked Git store, with unsupported sources identified. */
   checkoutAnalytics = (checkout: string) =>
     this.parsed(parseCheckoutAnalytics, `/checkouts/${encodeURIComponent(checkout)}/analytics`);
+  checkoutActivity = (
+    checkout: string,
+    options: { limit?: number; minImportance?: 'low' | 'normal' | 'high' } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.minImportance) params.set('min_importance', options.minImportance);
+    return this.parsed(
+      parseCheckoutActivity,
+      `/checkouts/${encodeURIComponent(checkout)}/activity${params.size ? `?${params}` : ''}`,
+    );
+  };
+  /** Configured server speech adapters; browser speech is a separate local choice (HS2-5PSQJQ). */
+  ttsProviders = () => this.parsed(parseStringList, '/tts/providers');
+  synthesizeSpeech = async (text: string, provider: string, voice?: string): Promise<Blob> => {
+    const headers = new Headers({ 'Content-Type': 'application/json', 'X-Hotsheet-Secret': this.secret });
+    const response = await fetch(`${this.origin}/tts/synthesize`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text, provider, voice }),
+    });
+    if (!response.ok) {
+      const failure = await responseJson(response);
+      throw new ApiHttpError(errorMessageOf(failure) ?? `${response.status}`, response.status, errorCodeOf(failure));
+    }
+    return response.blob();
+  };
   /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
   checkoutRepositorySize = (checkout: string) =>
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);

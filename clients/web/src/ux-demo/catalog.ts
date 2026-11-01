@@ -53,6 +53,7 @@ export const demoCatalog: DemoCategory[] = [
         'ticket-inspector',
       ]),
       cataloged('app-loading-indicator', ['state-banner', 'loading-spinner']),
+      cataloged('announcer-overlay'),
       cataloged('project-sidebar', [
         'button',
         'toolbar',

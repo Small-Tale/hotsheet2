@@ -76,7 +76,7 @@ use routes::accounts::{
     list_stores, remove_unused_account_source, sign_out_account, start_github_device_auth,
     wait_github_device_auth,
 };
-use routes::activity::{ingest_activity, list_activity, post_announce};
+use routes::activity::{checkout_activity, ingest_activity, list_activity, post_announce};
 use routes::auth::require_secret;
 use routes::checkout_tickets::{
     act_on_checkout_ticket_attachment, act_on_checkout_ticket_attachment_by_name,
@@ -1532,6 +1532,7 @@ pub fn app(state: AppState) -> Router {
             get(checkout_confidence_report),
         )
         .route("/checkouts/{reference}/analytics", get(checkout_analytics))
+        .route("/checkouts/{reference}/activity", get(checkout_activity))
         .route(
             "/checkouts/{reference}/phase-report",
             get(checkout_phase_report),
@@ -1843,6 +1844,10 @@ pub fn app(state: AppState) -> Router {
             get(list_notification_deliveries),
         )
         .route("/tts/synthesize", post(synthesize_speech))
+        .route(
+            "/tts/providers",
+            get(routes::project_tools::list_tts_providers),
+        )
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.
         .route("/terminals", get(list_terminals).post(open_terminal))

@@ -1,12 +1,12 @@
 # 15. Cross-Tool Activity / Narration Interface
 
-> **Status: Rich native stream built (HS2-KP31ZE/HS2-4C68Y8/HS2-SW655F).** A **tool-agnostic activity event stream** — the common
+> **Status: Rich native stream and Announcer built (HS2-KP31ZE/HS2-4C68Y8/HS2-SW655F/HS2-5PSQJQ).** A **tool-agnostic activity event stream** — the common
 > interface the **Announcer** (narration + TTS) and a **timeline** consume, so
 > narration isn't Claude-only like HS1's (which rode Claude's OTLP stream). Part of
 > the "generalize a concern across every tool via a capability" theme (with `drive`
 > [13](13-drive-transport-interface.md) and `metrics`
 > [14](14-metrics-interface.md)). This is the event spec + mapping + build plan. The
-> Announcer _build_ is a later feature (post-floor); this is the interface it needs.
+> Announcer uses the retained checkout feed and live change stream.
 
 ## 15.1 The idea
 
@@ -83,10 +83,15 @@ The `activity` capability turns native signals → events; the host owns the str
 - **Connection registry ([05](05-ai-tool-plugins.md) §5.6):** events are tagged by
   connection, so a multi-connection / worker setup narrates per source.
 
-## 15.6 Consumers (built later)
+## 15.6 Consumers
 
-- **Announcer** — PIP, live mode, multi-provider TTS, code-diff visuals (post-floor,
-  HS2-17) — subscribes live + requests digests.
+- **Announcer (HS2-5PSQJQ)** — a project-strip control opens the compact or expanded
+  picture-in-picture, retained cross-project digest, live narration over the change stream,
+  a bounded reel,
+  browser speech or a configured server provider, and before/after or diff views
+  when an activity event carries that detail. The macOS server offers a local
+  `macos-say` provider. Source adapters currently emit path-only edit details;
+  richer diff payloads need a separately reviewed privacy and size contract.
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
   window. (A natural, cheaper first consumer than full TTS.)
 
@@ -223,7 +228,9 @@ client adapter, never a server dependency; other clients can inject another
   summarizer boundary, deterministic fallback, and provenance-derived idempotent
   activity-note writes. The server supplies only the optional deterministic adapter;
   Apple Foundation Models remains an on-device client adapter.
-- **Deferred:** the full Announcer UI/TTS remains the post-floor HS2-17 consumer.
+- **Shipped (HS2-5PSQJQ):** the Announcer UI and local speech choices consume
+  retained and live activity. Diff views render when the event carries a diff or
+  before/after detail; the native mappings currently carry a path only.
 
 ## 15.9 Cross-references
 

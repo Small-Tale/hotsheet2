@@ -792,3 +792,13 @@ delivery activity note. Repeat while the driven chat is busy, with the claimed
 session unreachable, with two reachable same-project sessions, and with no
 session. Confirm the chooser stays within the project/source, the start action
 opens a session, and a completed-ticket Not Working report remains separate.
+
+### Announcer audio on a real device (HS2-5PSQJQ)
+
+On a rebuilt local macOS server with a synthetic project, open Announcer and play
+one retained item with Browser voice, then Mac voice on server. Check that both
+are audible on the client device, stop and restart playback, select another
+item, switch voices while audio is pending, and close the panel. Confirm that
+only the selected synthetic item plays and no temporary speech file remains.
+Repeat with an incoming synthetic live event while Live is enabled. The browser
+suite uses fake audio to verify request and state wiring; it cannot hear output.

@@ -164,6 +164,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "announcer-overlay",
+      "name": "AnnouncerOverlay",
+      "kind": "component",
+      "purpose": "Picture-in-picture activity digest and live cross-project narration reel.",
+      "useWhen": [
+        "Showing retained activity narration from open projects."
+      ],
+      "avoidWhen": [
+        "The surface does not need an activity reel."
+      ],
+      "publicClasses": [
+        "announcer"
+      ],
+      "publicTokens": [],
+      "source": "src/components/announcer-overlay.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "app-empty-state",
       "name": "AppEmptyState",
       "kind": "component",

@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
-import { Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
+import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
 import { createChangeWebSocketMultiplexers } from '../change-ws-mux';
@@ -51,6 +51,7 @@ export interface ProjectChangeStreamsDependencies {
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
   loadAnalytics?: (target: Project) => Promise<unknown>;
+  onActivity?: (project: Project, storeId: string, activity: ActivityEvent) => void;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
   /**
@@ -174,6 +175,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshRepositoryStatus,
     loadConfidenceReport,
     loadAnalytics,
+    onActivity,
     loadRepositorySize,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
@@ -313,6 +315,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               if (event.kind === 'activity' && event.activity) {
                 const activity = event.activity,
                   connection = conversationForActivity(current, activity.tool, activity.session);
+                onActivity?.(current, event.store, activity);
                 if (connection)
                   updateConversation(connection.id, (state) => applyConversationActivity(state, activity), true);
               }

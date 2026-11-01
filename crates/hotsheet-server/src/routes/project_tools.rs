@@ -832,13 +832,18 @@ pub(crate) async fn synthesize_speech(
     State(state): State<AppState>,
     Json(body): Json<tts::TtsRequest>,
 ) -> Result<Response, ApiError> {
-    let audio = state
-        .tts
-        .synthesize(&body)
+    let providers = state.tts.clone();
+    let audio = tokio::task::spawn_blocking(move || providers.synthesize(&body))
+        .await
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "speech worker failed"))?
         .map_err(|e| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, e))?;
     Response::builder()
         .status(StatusCode::OK)
         .header("content-type", audio.content_type)
         .body(axum::body::Body::from(audio.bytes))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+pub(crate) async fn list_tts_providers(State(state): State<AppState>) -> Json<Vec<String>> {
+    Json(state.tts.available())
 }

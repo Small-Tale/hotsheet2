@@ -43,6 +43,8 @@ export interface AppShellProps {
   sidebar?: SidebarPanelParts;
   header: SafeHtml;
   headerActions?: SafeHtml;
+  /** Announcer opens from the project strip, clear of the workbench's corner controls (HS2-5PSQJQ). */
+  announcerTrigger?: SafeHtml;
   /** Expanded workspace search uses the whole available toolbar row. */
   workspaceSearchOpen?: boolean;
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
@@ -109,6 +111,7 @@ export function AppShell({
   sidebar,
   header,
   headerActions,
+  announcerTrigger,
   workspaceSearchOpen = false,
   projectTabAction,
   pageHeader,
@@ -282,6 +285,7 @@ export function AppShell({
               mode={mode}
               projectStats={projectStats}
               workspaceAction={projectTabAction}
+              announcerTrigger={announcerTrigger}
               mobile={mobile}
               surface="default"
               divider={mode === 'terminals'}

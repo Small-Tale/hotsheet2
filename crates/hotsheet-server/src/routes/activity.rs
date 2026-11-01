@@ -1,12 +1,15 @@
 //! Activity timeline and announcement routes (HS2-KP31ZE).
 
 use crate::api_error::ApiError;
+use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
 use crate::{AppState, multistore, now};
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_model::Ulid;
 use serde::Deserialize;
+use serde::Serialize;
+use std::collections::BTreeSet;
 
 // ---- activity timeline (HS2-KP31ZE) ----------------------------------------------
 
@@ -93,6 +96,78 @@ pub(crate) async fn list_activity(
     let events = hotsheet_ticketing::activity::timeline(&state.store, &filter)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(events))
+}
+
+/// A retained event with its authoritative store identity. One store may be linked to several
+/// checkouts, so the identity also lets clients deduplicate a cross-project reel (HS2-5PSQJQ).
+#[derive(Serialize)]
+pub(crate) struct CheckoutActivityEvent {
+    store_id: String,
+    event: hotsheet_ticketing::ActivityEvent,
+}
+
+/// `GET /checkouts/{reference}/activity` reads all linked Git stores, deduplicating stores that
+/// are linked through several sources. The retained activity window is already bounded by the
+/// store, and the response is capped after merging stores.
+pub(crate) async fn checkout_activity(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(params): Query<ActivityParams>,
+) -> Result<Json<Vec<CheckoutActivityEvent>>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        state
+            .checkout_registry
+            .resolve(&reference)
+            .map_err(checkout_lookup_error)?;
+        let min_importance = match params.min_importance.as_deref() {
+            None => None,
+            Some("low") => Some(hotsheet_ticketing::Importance::Low),
+            Some("normal") => Some(hotsheet_ticketing::Importance::Normal),
+            Some("high") => Some(hotsheet_ticketing::Importance::High),
+            Some(other) => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid min_importance '{other}' (low|normal|high)"),
+                ));
+            }
+        };
+        let mut seen = BTreeSet::new();
+        let mut events = Vec::new();
+        for (store_id, entry) in checkout_entries(&state, &reference)? {
+            if !seen.insert(store_id.clone()) {
+                continue;
+            }
+            let filter = hotsheet_ticketing::TimelineFilter {
+                ticket: params.ticket.clone(),
+                session: params.session.clone(),
+                min_importance,
+                limit: params.limit,
+            };
+            let timeline =
+                hotsheet_ticketing::activity::timeline(&entry.store, &filter).map_err(|error| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                })?;
+            events.extend(timeline.into_iter().map(|event| CheckoutActivityEvent {
+                store_id: store_id.clone(),
+                event,
+            }));
+        }
+        events.sort_by(|left, right| {
+            left.event
+                .ts
+                .cmp(&right.event.ts)
+                .then_with(|| left.event.id.cmp(&right.event.id))
+                .then_with(|| left.store_id.cmp(&right.store_id))
+        });
+        if let Some(limit) = params.limit {
+            if events.len() > limit {
+                events.drain(..events.len() - limit);
+            }
+        }
+        Ok(Json(events))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 /// `POST /announce` body: a store-level broadcast message (HS2-HHDNTH).

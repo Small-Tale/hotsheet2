@@ -8554,6 +8554,18 @@ paths:
         required: true
         schema:
           type: string
+  /tts/providers:
+    get:
+      operationId: list_tts_providers
+      responses:
+        '200':
+          description: Configured server-owned speech provider identifiers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /tts/synthesize:
     post:
       operationId: synthesize_speech
@@ -11607,6 +11619,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CheckoutAnalytics'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/activity:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: checkout_activity
+      description: Retained activity from distinct Git stores linked to one checkout, sorted chronologically.
+      parameters:
+        - name: ticket
+          in: query
+          schema:
+            type: string
+        - name: session
+          in: query
+          schema:
+            type: string
+        - name: min_importance
+          in: query
+          schema:
+            enum:
+              - low
+              - normal
+              - high
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Activity entries with authoritative store identities.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckoutActivityEvent'
         default:
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -15853,6 +15910,17 @@ components:
             - low
             - normal
             - high
+      additionalProperties: false
+    CheckoutActivityEvent:
+      type: object
+      required:
+        - store_id
+        - event
+      properties:
+        store_id:
+          type: string
+        event:
+          $ref: '#/components/schemas/ActivityEvent'
       additionalProperties: false
     ActivityIngest:
       type: object

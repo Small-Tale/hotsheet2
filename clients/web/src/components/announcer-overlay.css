@@ -1,0 +1,194 @@
+.announcer {
+  position: fixed;
+  z-index: 65;
+  right: max(var(--wa-space-m), env(safe-area-inset-right));
+  bottom: max(var(--wa-space-m), env(safe-area-inset-bottom));
+  font: inherit;
+}
+
+.announcer button {
+  border: 0;
+  border-radius: var(--wa-border-radius-m);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.announcer button:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 2px;
+}
+
+.announcer button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.announcer__panel {
+  width: min(240px, calc(100vw - 24px));
+  max-height: min(300px, calc(100dvh - 24px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-text-normal);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-l);
+  box-shadow: var(--wa-shadow-l);
+}
+
+.announcer[data-expanded='true'] .announcer__panel {
+  width: min(960px, calc(100vw - 24px));
+  max-height: min(720px, calc(100dvh - 24px));
+}
+
+.announcer__header,
+.announcer__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--wa-space-2xs);
+  padding: var(--wa-space-xs);
+}
+
+.announcer__header {
+  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
+}
+
+.announcer__header strong {
+  margin-left: var(--wa-space-2xs);
+  font-size: var(--wa-font-size-s);
+}
+
+.announcer__count {
+  margin-left: auto;
+  font-size: var(--wa-font-size-xs);
+  opacity: 0.7;
+}
+
+.announcer__header button,
+.announcer__controls button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wa-space-2xs);
+  padding: var(--wa-space-2xs) var(--wa-space-xs);
+  font-size: var(--wa-font-size-xs);
+}
+
+.announcer__header button:hover,
+.announcer__controls button:hover,
+.announcer__reel button:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+
+.announcer__controls {
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+  justify-content: space-between;
+}
+
+.announcer__controls [aria-pressed='true'] {
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
+}
+
+.announcer__screen {
+  padding: var(--wa-space-s);
+  min-height: 92px;
+  overflow: auto;
+}
+
+.announcer__source {
+  font-size: var(--wa-font-size-xs);
+  opacity: 0.7;
+}
+
+.announcer__summary,
+.announcer__empty {
+  margin: var(--wa-space-xs) 0 0;
+  font-size: var(--wa-font-size-s);
+  line-height: 1.4;
+}
+
+.announcer__change {
+  margin-top: var(--wa-space-s);
+  font-size: var(--wa-font-size-xs);
+}
+
+.announcer__change pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--wa-color-neutral-fill-quiet);
+  padding: var(--wa-space-xs);
+  border-radius: var(--wa-border-radius-s);
+}
+
+.announcer__before-after {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--wa-space-xs);
+}
+
+.announcer__before-after span {
+  display: block;
+  margin-bottom: var(--wa-space-2xs);
+  opacity: 0.7;
+}
+
+.announcer__before-after pre {
+  margin: 0;
+}
+
+.announcer__error {
+  margin: 0 var(--wa-space-xs) var(--wa-space-xs);
+  color: var(--wa-color-danger-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+
+.announcer__reel {
+  list-style: none;
+  margin: 0;
+  padding: var(--wa-space-xs);
+  overflow: auto;
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+}
+
+.announcer__reel li[data-current='true'] {
+  background: var(--wa-color-neutral-fill-quiet);
+  border-radius: var(--wa-border-radius-s);
+}
+
+.announcer__reel button {
+  width: 100%;
+  text-align: left;
+  padding: var(--wa-space-xs);
+  font-size: var(--wa-font-size-xs);
+}
+
+.announcer__reel span {
+  font-weight: 700;
+  margin-right: var(--wa-space-xs);
+}
+
+.announcer__voice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wa-space-xs);
+  padding: var(--wa-space-xs) var(--wa-space-s);
+  font-size: var(--wa-font-size-xs);
+}
+
+.announcer__voice select,
+.announcer__voice input {
+  max-width: 75%;
+  min-width: 0;
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-s);
+  font: inherit;
+}

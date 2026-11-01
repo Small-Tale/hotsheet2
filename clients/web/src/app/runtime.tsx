@@ -99,6 +99,7 @@ import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
+import { createAnnouncerController } from '../features/announcer-controller';
 import { createBoardColumnPaging } from '../features/board-column-paging';
 import { createClaimClockController } from '../features/claim-clock';
 import { createCommandsController } from '../features/commands';
@@ -3823,6 +3824,7 @@ export async function startHotSheetWebClient() {
       release();
     };
   }
+  const announcerController = createAnnouncerController(projects);
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
@@ -3847,6 +3849,7 @@ export async function startHotSheetWebClient() {
     refreshRepositoryStatus,
     loadConfidenceReport,
     loadAnalytics,
+    onActivity: announcerController.onActivity,
     loadRepositorySize,
   });
   const {
@@ -4727,6 +4730,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    announcerTrigger: announcerController.trigger,
     searchScope,
     allTicketsSearchAvailable,
     appRegionSize,
@@ -4861,6 +4865,7 @@ export async function startHotSheetWebClient() {
     (window as typeof window & { __hotsheetRenderMetrics?: typeof renderMetrics }).__hotsheetRenderMetrics =
       renderMetrics;
   const { HotSheetApp } = createHotSheetApp({
+    announcerSurface: announcerController.surface,
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,
@@ -5925,6 +5930,7 @@ export async function startHotSheetWebClient() {
       workerStreamStop?.();
       workerDetailRefresh?.dispose();
       disposeProjectChangeStreams();
+      announcerController.dispose();
       terminalDashboardController.dispose();
     },
   };

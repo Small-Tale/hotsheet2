@@ -101,6 +101,7 @@ export const PENDING_PROJECT_TAB_PREFIX = 'pending:';
 
 /** Live application bindings createHotSheetShell reads (HS2-K0VC2C). */
 export interface HotSheetShellDependencies {
+  announcerTrigger: () => SafeHtml;
   appRegionSize: (id: AppRegionId) => number;
   capabilitiesFor: (connectionId: string) => Capabilities;
   conversationOpen: Signal<boolean>;
@@ -192,6 +193,7 @@ export interface HotSheetShellDependencies {
  */
 export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
   const {
+    announcerTrigger,
     appRegionSize,
     capabilitiesFor,
     conversationOpen,
@@ -358,6 +360,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          announcerTrigger={announcerTrigger()}
           mode={shellMode.value}
           projectStats={shellMode.value === 'stats' && Boolean(statsProjectId.value)}
           gridFullscreen={shellMode.value === 'terminals' && terminalGridFullscreen.value}
@@ -407,6 +410,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          announcerTrigger={announcerTrigger()}
           mode="project"
           header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
           mobile={viewportMobile.value}
@@ -421,6 +425,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          announcerTrigger={announcerTrigger()}
           mode="project"
           header={<WorkspaceIdentity projectName={openingName} id="workspace-page-title" headingLevel={1} />}
           mobile={viewportMobile.value}
@@ -536,6 +541,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     return (
       <MainShell
         tabs={tabs}
+        announcerTrigger={announcerTrigger()}
         mode="project"
         workspaceSearchOpen={
           (searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')) ||

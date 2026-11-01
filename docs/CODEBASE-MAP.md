@@ -245,6 +245,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/gallery-annotation-workflow.ts # Pure gallery annotation session and save transitions (HS2-8SD6XQ)
     src/permission-decision-workflow.ts # Injectable permission inbox, optimistic decision, and reconciliation workflow (HS2-GGJ57M)
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
+    src/announcer-reel.ts     #   Retained and live cross-project activity merge, digest and diff view model (HS2-5PSQJQ)
+    src/features/announcer-controller.tsx # Announcer playback, provider choice and live-stream composition (HS2-5PSQJQ)
+    src/components/announcer-overlay.tsx # Responsive picture-in-picture digest and reel (HS2-5PSQJQ)
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
@@ -620,7 +623,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/project_activity.rs #  pure claim-derived per-store activity tracker: active → released + grace → stopped, unrenewed lease → stalled; claims held without progress → idle, a halted worker session → halted (HS2-P57XHV); router arms one timer per store (HS2-2MM07G)
       src/routes/notifiers.rs #  /notifiers, /notification-config, /notification-link-base, /notification-project-timing, /notification-channels/{id}[/secrets/{field}|/test|/trust], /notification-rules/{id}, /notification-deliveries over hotsheet_notify::admin
       tests/notification_delivery.rs # E2E: admin routes + real bus events through the running router to a fake ntfy transport
-      src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
+      src/tts.rs             #   server-owned TTS provider boundary and macOS say-to-WAV adapter; no provider secrets on client wire (HS2-5PSQJQ)
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ) and optional failed-done provider message (HS2-AZVE3P); envelope `at_ms` + `in_flight_tool` (HS2-XV1VCR)
       src/blocking_offload.rs  # Router layer: run every non-streaming handler on the blocking pool so sync store work never starves async workers (HS2-9Z0Q8N; long-wait routes like `/permissions/ask` stay off it, slot waits are reported and `/health` shows `api_offload` (HS2-V3S89Q); a pending ask awaits the bridge asynchronously and parks no pool thread (HS2-43YT58))
       src/request_timing.rs  # Per-request latency budget middleware: warn over 100 ms (API) / 2 s (attachments, media, TTS); streams and long waits exempt (HS2-0DH8ZS, HS2-V3S89Q); adds `Server-Timing: handler` (HS2-ZGBQ5Q)
