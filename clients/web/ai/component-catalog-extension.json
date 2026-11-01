@@ -1767,6 +1767,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "stats-dashboard",
+      "name": "StatsDashboard",
+      "kind": "component",
+      "purpose": "Checkout ticket-flow and settled-usage dashboard with cross-project store deduplication.",
+      "useWhen": [
+        "Showing current ticket flow and recorded usage for one or several checkouts."
+      ],
+      "avoidWhen": [
+        "The interaction does not need checkout analytics."
+      ],
+      "publicClasses": [
+        "stats-dashboard"
+      ],
+      "publicTokens": [],
+      "source": "src/components/stats-dashboard.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "status-badge",
       "name": "StatusBadge",
       "kind": "component",

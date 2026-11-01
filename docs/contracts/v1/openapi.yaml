@@ -11559,7 +11559,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [connection_id]
+              required:
+                - connection_id
               properties:
                 connection_id:
                   type: string
@@ -11570,17 +11571,44 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, note_id, connection_id]
+                required:
+                  - status
+                  - note_id
+                  - connection_id
                 properties:
                   status:
                     type: string
-                    enum: [sent, queued]
+                    enum:
+                      - sent
+                      - queued
                   note_id:
                     type: string
                   connection_id:
                     type: string
         default:
           description: The note or reachable project session could not be resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/analytics:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: checkout_analytics
+      responses:
+        '200':
+          description: Analytics for distinct linked Git stores and unavailable provider sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutAnalytics'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
             application/json:
               schema:
@@ -15081,6 +15109,42 @@ components:
           type: object
           additionalProperties:
             type: number
+      additionalProperties: false
+    CheckoutAnalytics:
+      type: object
+      required:
+        - stores
+        - unavailable_sources
+      properties:
+        stores:
+          type: array
+          items:
+            type: object
+            required:
+              - store_id
+              - ticket_flow
+              - usage
+            properties:
+              store_id:
+                type: string
+              ticket_flow:
+                $ref: '#/components/schemas/TicketFlowSummary'
+              usage:
+                $ref: '#/components/schemas/UsageRollup'
+            additionalProperties: false
+        unavailable_sources:
+          type: array
+          items:
+            type: object
+            required:
+              - connection_id
+              - provider
+            properties:
+              connection_id:
+                type: string
+              provider:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     CalibrationCompletion:
       type: object

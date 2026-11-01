@@ -130,7 +130,7 @@ use routes::permissions::{
     probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
 };
 use routes::project_tools::{
-    acknowledge_notification, cancel_checkout_command_run, cancel_command_run,
+    acknowledge_notification, cancel_checkout_command_run, cancel_command_run, checkout_analytics,
     checkout_confidence_report, checkout_phase_report, confidence_report, get_checkout_command_run,
     get_command_run, list_checkout_command_groups, list_checkout_command_runs,
     list_checkout_commands, list_checkout_custom_views, list_command_groups, list_command_runs,
@@ -1531,6 +1531,7 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/confidence-report",
             get(checkout_confidence_report),
         )
+        .route("/checkouts/{reference}/analytics", get(checkout_analytics))
         .route(
             "/checkouts/{reference}/phase-report",
             get(checkout_phase_report),

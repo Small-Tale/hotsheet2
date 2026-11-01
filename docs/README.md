@@ -155,6 +155,10 @@ attachment compaction (HS2-T2Q7KM, HS2-RFJ1GN). Its bounded plan also finds dele
 attachment history with no current ticket or working-tree path, and the reviewed
 rewrite retains a provenance manifest and mirror backup (HS2-JRT1ZP).
 
+The browser's project and cross-project Stats views now show checkout-scoped ticket-flow
+and usage/cost dashboards (HS2-38RJMK). Historical cumulative flow awaits durable
+status-transition history (HS2-XKXE7V); the broader client area remains partial.
+
 The versioned [client transport contracts](contracts/README.md) inventory the
 HTTP routes and define the core ticket, compatibility, and live-change wire
 shapes. Operations marked `route-only` still need concrete DTO schemas under

@@ -5337,6 +5337,74 @@
       }
     },
     {
+      "key": "hotsheet-web:stats-dashboard",
+      "package": "hotsheet-web",
+      "id": "stats-dashboard",
+      "name": "StatsDashboard",
+      "kind": "component",
+      "purpose": "Checkout ticket-flow and settled-usage dashboard with cross-project store deduplication.",
+      "publicExports": [
+        {
+          "name": "StatsDashboard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/stats-dashboard.tsx"
+      ],
+      "source": "src/components/stats-dashboard.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "stats-dashboard"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "stats-dashboard"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/stats-dashboard.tsx",
+        "composition": "src/components/stats-dashboard.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:status-badge",
       "package": "hotsheet-web",
       "id": "status-badge",

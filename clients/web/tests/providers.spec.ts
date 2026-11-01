@@ -23676,7 +23676,9 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(page.getByRole('region', { name: 'demo Project Statistics' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Cross-Project Stats' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Cross-Project Stats' }).locator('[data-component="stats-dashboard"]'),
+  ).toBeVisible();
 });
 
 test('keeps project Stats attached to the selected project until its tab returns to Columns View (HS2-JK3DXP)', async ({
@@ -33830,6 +33832,10 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-component="project-summary"]').first().click();
+    const analytics = page.locator('[data-component="stats-dashboard"]');
+    await expect(analytics).toContainText(/2\s*Tickets/u);
+    await expect(analytics).toContainText('Historical cumulative flow is unavailable');
+    await expect(analytics.getByRole('img', { name: /Completed tickets by day/ })).toBeVisible();
     const panel = page.locator('[data-component="confidence-calibration"]');
     await expect(panel).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
     await expect(panel).toContainText('3 completions, 2 scored');
@@ -33844,6 +33850,10 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     await expect(recent.first()).toContainText(unscored.slug);
     await expect(recent.first()).toContainText('Awaiting outcome');
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-q1wccy-calibration-wide.png' });
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-project-wide.png', fullPage: true });
+    await page.setViewportSize({ width: 900, height: 760 });
+    await expect(analytics).toBeVisible();
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-project-medium.png', fullPage: true });
     // Narrow: the table scrolls inside its own container rather than widening the page.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
@@ -33853,6 +33863,27 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     );
     expect(pageOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-q1wccy-calibration-narrow.png' });
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-project-narrow.png', fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(analytics).toBeVisible();
+    expect(
+      await page.evaluate(() => ({
+        scrollX: window.scrollX,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      })),
+    ).toEqual({ scrollX: 0, overflow: 0 });
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-project-restored.png', fullPage: true });
+    await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+    await expect(
+      page.getByRole('region', { name: 'Cross-Project Stats' }).locator('[data-component="stats-dashboard"]'),
+    ).toContainText(/2\s*Tickets/u);
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-global-wide.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('region', { name: 'Cross-Project Stats' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(
+      0,
+    );
+    await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-global-narrow.png' });
   } finally {
     await server.stop();
   }

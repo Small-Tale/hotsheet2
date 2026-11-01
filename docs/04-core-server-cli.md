@@ -236,6 +236,13 @@ and commits at the sibling `/repository/files` and `/repository/commits` endpoin
 current ticket-flow aggregates at
 `/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
 
+**Checkout analytics (HS2-38RJMK).** `GET /checkouts/{reference}/analytics` returns the
+current ticket-flow and settled-plus-live usage rollup for each distinct linked Git
+store, identified by store id. It lists non-Git ticket sources separately as
+unavailable, so clients never present partial totals as complete. Historical
+cumulative flow remains unavailable until status transitions are persisted
+(HS2-XKXE7V).
+
 **Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
 checkout's code repository and every linked ticket source. The CLI twin,
 `hotsheet checkout repo-size [reference] [--json]`, calls the same function in

@@ -13089,6 +13089,82 @@ async fn analytics_endpoints_return_ticket_flow_and_usage_contracts() {
     assert_eq!(body_json(usage).await["events"], 0);
 }
 
+/// HS2-38RJMK: checkout analytics identify each linked Git store and never fall back
+/// silently to the server's default store for an unknown checkout.
+#[tokio::test]
+async fn checkout_analytics_reports_linked_store_and_missing_checkout() {
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let external = hotsheet_ticketing::checkouts::TicketSource {
+        connection_id: "github-demo".into(),
+        provider: "github".into(),
+        locator: "demo/repo".into(),
+    };
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let app = app(st.with_checkout_registry(registry_path.clone()));
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"Synthetic analytics ticket","category":"task"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({ "root": checkout, "sources": [source.clone()] }).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register_sources(
+            &checkout,
+            None,
+            None,
+            vec![source.clone(), external],
+            Some(source.connection_id),
+        )
+        .unwrap();
+    let project = body_json(opened).await;
+    let id = project["checkout"]["id"].as_str().unwrap();
+    let response = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/analytics"), None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let report = body_json(response).await;
+    assert_eq!(report["stores"].as_array().unwrap().len(), 1, "{report}");
+    assert!(report["stores"][0]["store_id"].is_string());
+    assert_eq!(report["stores"][0]["ticket_flow"]["total"], 1);
+    assert_eq!(
+        report["stores"][0]["ticket_flow"]["current_by_category"]["task"],
+        1
+    );
+    assert_eq!(report["stores"][0]["usage"]["events"], 0);
+    assert_eq!(report["unavailable_sources"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        report["unavailable_sources"][0]["connection_id"],
+        "github-demo"
+    );
+    let missing = app
+        .oneshot(authed("GET", "/checkouts/no-such-checkout/analytics", None))
+        .await
+        .unwrap();
+    assert!(missing.status().is_client_error());
+}
+
 #[tokio::test]
 async fn configured_commands_stream_output_keep_history_and_cancel() {
     use hotsheet_ticketing::commands::CommandDefinition;

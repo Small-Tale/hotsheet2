@@ -4407,6 +4407,16 @@ completion summary) shows its completion-confidence calibration:
   changes while the view is open. It never polls.
 - **Narrow widths:** the table scrolls inside its own container.
 
+**Ticket flow and usage (HS2-38RJMK).** Project Stats and Cross-Project Stats show
+current ticket totals, 14 days of completed-ticket throughput, current status and
+category distributions, average completed-ticket cycle time, recorded cost and
+token totals, and cost by model. The cross-project total counts a Git ticket store
+linked to several projects once; project rows retain their individual view. The
+dashboard loads checkout-scoped analytics on open and refreshes from the existing
+project change stream. Loading, failed, empty, and unsupported provider sources
+remain explicit. Historical cumulative flow is labeled unavailable pending durable
+transition history (HS2-XKXE7V).
+
 **Repository size (HS2-QF44T7).** Below the calibration, the statistics view shows a
 "Repository size" section built from `GET /checkouts/{id}/repository/size` (see
 [04](04-core-server-cli.md) "Headless platform APIs"):

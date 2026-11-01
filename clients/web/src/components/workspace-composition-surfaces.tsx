@@ -6,7 +6,6 @@ import { Pane } from '@kerfjs/ui/pane';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
-import { AppMessageState } from './app-empty-state';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
@@ -14,6 +13,7 @@ import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from '.
 import { type CompactionPreviewState, RepositorySize, type RepositorySizeState } from './repository-size';
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
 import { inspectorToggle, type NavigationPanelParts, type SidebarPanelParts } from './sidebar-panel';
+import { StatsDashboard, type StatsDashboardProps } from './stats-dashboard';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
@@ -96,6 +96,7 @@ export type GlobalWorkspaceSurfaceProps =
   | {
       kind: 'stats';
       projectName?: string;
+      analytics: StatsDashboardProps['projects'];
       calibration?: ConfidenceCalibrationState;
       /** Git object and attachment sizes against GitHub's limits (HS2-QF44T7). */
       repositorySize?: RepositorySizeState;
@@ -113,12 +114,22 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
           <Text variant="h1" size="xlarge" flush>
             {props.projectName} project statistics
           </Text>
+          <StatsDashboard projects={props.analytics} />
           <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
           <RepositorySize state={props.repositorySize ?? { status: 'loading' }} compaction={props.compaction} />
         </div>
       </Pane>
     );
-  return <AppMessageState title="Cross-Project Stats" message="This dashboard is still being designed." />;
+  return (
+    <Pane element="section" label="Cross-Project Stats" deepInset>
+      <div class="kui-content">
+        <Text variant="h1" size="xlarge" flush>
+          Cross-project statistics
+        </Text>
+        <StatsDashboard projects={props.analytics} crossProject />
+      </div>
+    </Pane>
+  );
 }
 
 function statsPlaceholderPanel(label: string, toggle: SidebarPanelParts['toggle'], message: string): SidebarPanelParts {

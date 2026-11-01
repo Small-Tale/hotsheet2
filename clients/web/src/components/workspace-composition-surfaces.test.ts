@@ -38,7 +38,9 @@ describe('workspace composition surfaces', () => {
   });
 
   it('owns global stats, optional drawers, and terminal summaries', () => {
-    expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo Project Statistics');
+    expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo', analytics: [] }))).toContain(
+      'Demo Project Statistics',
+    );
     // Stats rails show empty states rather than being hidden (HS2-MGQDY2).
     expect(statsSidebarPanel().toggle.action).toBe('toggle-project-sidebar');
     expect(String(statsSidebarPanel().content)).toContain('Stats filters will appear here');

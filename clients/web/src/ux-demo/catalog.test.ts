@@ -101,6 +101,7 @@ describe('UX demo catalog', () => {
       'status-badge',
       'confidence-badge',
       'confidence-calibration',
+      'stats-dashboard',
       'repository-size',
       'tag-chip',
       'choice-card',

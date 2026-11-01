@@ -12,6 +12,7 @@ import {
   parseAiToolDescriptor,
   parseCalibrationReport,
   parseCheckout,
+  parseCheckoutAnalytics,
   parseCheckoutRelink,
   parseCheckoutTicketPage,
   parseCheckoutTicketRowsPage,
@@ -420,6 +421,30 @@ export interface CalibrationReport {
   scored: number;
   bands: CalibrationBand[];
   events: CalibrationEvent[];
+}
+/** Checkout-scoped analytics keep each Git store distinct so shared stores are counted once. */
+export interface TicketFlowSummary {
+  total: number;
+  open: number;
+  completed: number;
+  current_by_status: Record<string, number>;
+  current_by_category: Record<string, number>;
+  throughput_by_day: Record<string, number>;
+  cycle_time_seconds: { samples: number; average: number; p50: number; p95: number };
+  historical_cumulative_flow_available: boolean;
+}
+export interface UsageRollup {
+  events: number;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  by_model: Record<string, number>;
+  by_ticket: Record<string, number>;
+  by_day: Record<string, number>;
+}
+export interface CheckoutAnalytics {
+  stores: Array<{ store_id: string; ticket_flow: TicketFlowSummary; usage: UsageRollup }>;
+  unavailable_sources: Array<{ connection_id: string; provider: string }>;
 }
 /** How close a repository is to GitHub's size limits; computed by the server (HS2-QF44T7). */
 export type RepositorySizeLevel = 'ok' | 'warning' | 'critical';
@@ -1631,6 +1656,9 @@ export class Api {
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
+  /** Ticket flow and usage for each linked Git store, with unsupported sources identified. */
+  checkoutAnalytics = (checkout: string) =>
+    this.parsed(parseCheckoutAnalytics, `/checkouts/${encodeURIComponent(checkout)}/analytics`);
   /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
   checkoutRepositorySize = (checkout: string) =>
     this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);

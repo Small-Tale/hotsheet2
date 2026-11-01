@@ -3,6 +3,7 @@ import type {
   AiToolDescriptor,
   CalibrationReport,
   Checkout,
+  CheckoutAnalytics,
   CheckoutSource,
   CheckoutTicketPage,
   CheckoutTicketRowsPage,
@@ -662,6 +663,46 @@ export const parseCalibrationReport = shape<CalibrationReport>('confidence repor
   scored: isNumber,
   bands: listOf(isObject),
   events: listOf(isObject),
+});
+
+const numericMap: Check = (field) =>
+  isObject(field) &&
+  Object.values(field as Record<string, unknown>).every((value) => typeof value === 'number' && Number.isFinite(value));
+const durationSummary = shape<CheckoutAnalytics['stores'][number]['ticket_flow']['cycle_time_seconds']>(
+  'cycle-time summary',
+  { samples: isNumber, average: isNumber, p50: isNumber, p95: isNumber },
+);
+const ticketFlowSummary = shape<CheckoutAnalytics['stores'][number]['ticket_flow']>('ticket-flow summary', {
+  total: isNumber,
+  open: isNumber,
+  completed: isNumber,
+  current_by_status: numericMap,
+  current_by_category: numericMap,
+  throughput_by_day: numericMap,
+  cycle_time_seconds: accepts(durationSummary),
+  historical_cumulative_flow_available: isBoolean,
+});
+const usageRollup = shape<CheckoutAnalytics['stores'][number]['usage']>('usage rollup', {
+  events: isNumber,
+  tokens_in: isNumber,
+  tokens_out: isNumber,
+  cost_usd: isNumber,
+  by_model: numericMap,
+  by_ticket: numericMap,
+  by_day: numericMap,
+});
+const analyticsStore = shape<CheckoutAnalytics['stores'][number]>('analytics store', {
+  store_id: isString,
+  ticket_flow: accepts(ticketFlowSummary),
+  usage: accepts(usageRollup),
+});
+const unavailableAnalyticsSource = shape<CheckoutAnalytics['unavailable_sources'][number]>(
+  'unavailable analytics source',
+  { connection_id: isString, provider: isString },
+);
+export const parseCheckoutAnalytics = shape<CheckoutAnalytics>('checkout analytics', {
+  stores: listOf(analyticsStore.check),
+  unavailable_sources: listOf(unavailableAnalyticsSource.check),
 });
 
 const isSizeLevel: Check = (field) => field === 'ok' || field === 'warning' || field === 'critical';

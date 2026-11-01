@@ -68,6 +68,7 @@ import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../compo
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory } from '../components/settings-navigation';
+import type { StatsDashboardState } from '../components/stats-dashboard';
 import type { TicketStatus } from '../components/status-badge';
 import {
   type TerminalCopyState,
@@ -367,6 +368,7 @@ export async function startHotSheetWebClient() {
     statsProjectId = signal<string | undefined>(undefined),
     // Per-project completion-confidence calibration shown in the stats view (HS2-Q1WCCY).
     confidenceReportByProject = signal<Record<string, ConfidenceCalibrationState>>({}),
+    analyticsByProject = signal<Record<string, StatsDashboardState>>({}),
     // Per-project repository size shown in the stats view, measured when it opens (HS2-QF44T7).
     repositorySizeByProject = signal<Record<string, RepositorySizeState>>({}),
     compactionByProject = signal<Record<string, CompactionPreviewState>>({});
@@ -452,6 +454,20 @@ export async function startHotSheetWebClient() {
     }
     confidenceReportByProject.value = { ...confidenceReportByProject.peek(), [target.id]: next };
   }
+  async function loadAnalytics(target: Project) {
+    const previous = analyticsByProject.peek()[target.id] as StatsDashboardState | undefined;
+    if (previous?.status !== 'ready')
+      analyticsByProject.value = { ...analyticsByProject.peek(), [target.id]: { status: 'loading' } };
+    try {
+      const report = await new Api(target.apiPath).checkoutAnalytics(target.id);
+      analyticsByProject.value = { ...analyticsByProject.peek(), [target.id]: { status: 'ready', report } };
+    } catch (error) {
+      analyticsByProject.value = {
+        ...analyticsByProject.peek(),
+        [target.id]: { status: 'error', message: error instanceof Error ? error.message : String(error) },
+      };
+    }
+  }
   /** Measure a project's repositories, keeping the last report visible while it refreshes. */
   async function loadRepositorySize(target: Project) {
     const previous = repositorySizeByProject.peek()[target.id] as RepositorySizeState | undefined;
@@ -476,6 +492,17 @@ export async function startHotSheetWebClient() {
       void loadConfidenceReport(target);
       // Size changes with commits rather than ticket events, so it refreshes on open only.
       void loadRepositorySize(target);
+    });
+  });
+  effect(() => {
+    if (shellMode.value !== 'stats') return;
+    const targets = statsProjectId.value
+      ? projects.peek().filter((item) => item.id === statsProjectId.value)
+      : projects.value;
+    queueMicrotask(() => {
+      targets.forEach((target) => {
+        void loadAnalytics(target);
+      });
     });
   });
   const terminalRailScreen = signal<'root' | 'ticket'>('root');
@@ -3819,6 +3846,7 @@ export async function startHotSheetWebClient() {
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
+    loadAnalytics,
     loadRepositorySize,
   });
   const {
@@ -4454,6 +4482,7 @@ export async function startHotSheetWebClient() {
       shellMode,
       statsProjectId,
       confidenceReportByProject,
+      analyticsByProject,
       repositorySizeByProject,
       compactionByProject,
       canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),

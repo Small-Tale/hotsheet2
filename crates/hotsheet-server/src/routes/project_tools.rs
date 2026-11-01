@@ -11,6 +11,7 @@ use axum::response::Response;
 use hotsheet_ticketing::{Settings, TicketQuery, ops};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 
 pub(crate) async fn ticket_flow_summary(
     State(state): State<AppState>,
@@ -18,6 +19,76 @@ pub(crate) async fn ticket_flow_summary(
     let tickets = ops::query(&state.store, &TicketQuery::default())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(hotsheet_ticketing::analytics::ticket_flow(&tickets)))
+}
+
+/// One linked Git store's analytics. Keeping the store identity lets a client show project
+/// details while counting a store linked to two checkouts only once in cross-project totals.
+#[derive(Serialize)]
+pub(crate) struct AnalyticsStore {
+    store_id: String,
+    ticket_flow: hotsheet_ticketing::analytics::TicketFlowSummary,
+    usage: hotsheet_ticketing::metrics::Rollup,
+}
+
+#[derive(Serialize)]
+pub(crate) struct UnavailableAnalyticsSource {
+    connection_id: String,
+    provider: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CheckoutAnalytics {
+    stores: Vec<AnalyticsStore>,
+    unavailable_sources: Vec<UnavailableAnalyticsSource>,
+}
+
+/// `GET /checkouts/{reference}/analytics`: summarize every distinct linked Git store and
+/// explicitly identify provider sources whose native history/usage cannot be read here.
+pub(crate) async fn checkout_analytics(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<CheckoutAnalytics>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let checkout = state
+            .checkout_registry
+            .resolve(&reference)
+            .map_err(checkout_lookup_error)?;
+        let unavailable_sources = checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider != "git")
+            .map(|source| UnavailableAnalyticsSource {
+                connection_id: source.connection_id.clone(),
+                provider: source.provider.clone(),
+            })
+            .collect();
+        let mut seen = BTreeSet::new();
+        let mut stores = Vec::new();
+        for (store_id, entry) in checkout_entries(&state, &reference)? {
+            if !seen.insert(store_id.clone()) {
+                continue;
+            }
+            let tickets = ops::query(&entry.store, &TicketQuery::default()).map_err(|error| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            })?;
+            let usage =
+                hotsheet_ticketing::metrics::summary_settled(&entry.store).map_err(|error| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                })?;
+            stores.push(AnalyticsStore {
+                store_id,
+                ticket_flow: hotsheet_ticketing::analytics::ticket_flow(&tickets),
+                usage,
+            });
+        }
+        stores.sort_by(|left, right| left.store_id.cmp(&right.store_id));
+        Ok(Json(CheckoutAnalytics {
+            stores,
+            unavailable_sources,
+        }))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 /// `GET /confidence-report`: completion-confidence calibration for the default store

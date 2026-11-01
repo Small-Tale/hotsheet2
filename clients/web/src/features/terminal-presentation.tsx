@@ -15,6 +15,7 @@ import type { ConfidenceCalibrationState } from '../components/confidence-calibr
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { AIConversationSurface } from '../components/reader-overlay-surfaces';
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
+import type { StatsDashboardState } from '../components/stats-dashboard';
 import { type MobileMagnifiedTerminal, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalDrawerChatTab, type TerminalDrawerProps } from '../components/terminal-drawer';
 import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-composition-surfaces';
@@ -33,6 +34,7 @@ export interface TerminalPresentationDependencies {
   statsProjectId: Signal<string | undefined>;
   /** Calibration report state per project for the stats view (HS2-Q1WCCY). */
   confidenceReportByProject: Signal<Record<string, ConfidenceCalibrationState>>;
+  analyticsByProject: Signal<Record<string, StatsDashboardState>>;
   /** Repository size state per project for the stats view (HS2-QF44T7). */
   repositorySizeByProject: Signal<Record<string, RepositorySizeState>>;
   compactionByProject: Signal<Record<string, CompactionPreviewState>>;
@@ -92,6 +94,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     shellMode,
     statsProjectId,
     confidenceReportByProject,
+    analyticsByProject,
     repositorySizeByProject,
     compactionByProject,
     canGiveFeedback,
@@ -209,6 +212,19 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     return {
       kind: 'stats',
       projectName: statsProject?.name,
+      analytics: statsProject
+        ? [
+            {
+              id: statsProject.id,
+              name: statsProject.name,
+              state: analyticsByProject.value[statsProject.id] ?? { status: 'loading' },
+            },
+          ]
+        : projects.value.map((item) => ({
+            id: item.id,
+            name: item.name,
+            state: analyticsByProject.value[item.id] ?? { status: 'loading' },
+          })),
       calibration: statsProject ? confidenceReportByProject.value[statsProject.id] : undefined,
       repositorySize: statsProject ? repositorySizeByProject.value[statsProject.id] : undefined,
       compaction: statsProject ? compactionByProject.value[statsProject.id] : undefined,

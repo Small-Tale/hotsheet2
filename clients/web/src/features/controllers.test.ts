@@ -2388,6 +2388,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     shellMode,
     statsProjectId: signal<string | undefined>('b'),
     confidenceReportByProject: signal({}),
+    analyticsByProject: signal({}),
     repositorySizeByProject: signal({}),
     compactionByProject: signal({}),
     canGiveFeedback: () => false,
@@ -2443,7 +2444,11 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   groups.value = [];
   expect(presentation.workspaceTerminalGroups()).toEqual([]);
   shellMode.value = 'stats';
-  expect(presentation.globalWorkspaceSurfaceProps()).toEqual({ kind: 'stats', projectName: 'b' });
+  expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({
+    kind: 'stats',
+    projectName: 'b',
+    analytics: [{ id: 'b', state: { status: 'loading' } }],
+  });
   state.active.value = undefined;
   expect(presentation.projectTerminalDrawerProps()).toBeUndefined();
   state.active.value = project('a');

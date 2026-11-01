@@ -50,6 +50,7 @@ export interface ProjectChangeStreamsDependencies {
   refreshCustomViews: (current?: Project) => Promise<unknown>;
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
+  loadAnalytics?: (target: Project) => Promise<unknown>;
   /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
   loadRepositorySize: (target: Project) => Promise<unknown>;
   /**
@@ -172,6 +173,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
+    loadAnalytics,
     loadRepositorySize,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
@@ -280,6 +282,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             // Ticket changes can complete, reopen, or verify: keep an open calibration current.
             if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
               await loadConfidenceReport(current);
+            if (shellMode.peek() === 'stats' && (!statsProjectId.peek() || statsProjectId.peek() === current.id))
+              await loadAnalytics?.(current);
           },
           onEvents: async (response) => {
             const acceptedTurns = new Set(turnStreamEvents(response));

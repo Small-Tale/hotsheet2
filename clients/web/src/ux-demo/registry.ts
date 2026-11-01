@@ -34,6 +34,7 @@ import { demoModule as repositoryStatus } from './repository-status-demo';
 import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
 import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
+import { demoModule as statsDashboard } from './stats-dashboard-demo';
 import { demoModule as statusBadge } from './status-badge-demo';
 import { demoModule as tagChip } from './tag-chip-demo';
 import { demoModule as terminalComponents } from './terminal-components-demo';
@@ -78,6 +79,7 @@ export const demoModules: readonly DemoModule[] = [
   tagChip,
   statusBadge,
   confidenceCalibration,
+  statsDashboard,
   repositorySize,
   confidenceBadge,
   toolbarControlGroup,
