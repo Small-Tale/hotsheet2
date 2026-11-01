@@ -139,6 +139,8 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       expect(new URL(page.url()).searchParams.get('component'), id).toBe(id);
       small.push(...(await smallEditableFields(page)).map((field) => `${id}: ${field}`));
+      if (id === 'announcer-overlay')
+        await page.screenshot({ path: test.info().outputPath('hs2-5psqjq-announcer-touch-font.png') });
     }
     expect(small).toEqual([]);
     expect(pageErrors).toEqual([]);

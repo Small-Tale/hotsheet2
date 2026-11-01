@@ -192,3 +192,11 @@
   border-radius: var(--wa-border-radius-s);
   font: inherit;
 }
+
+@media (max-width: 600px) {
+  /* HS2-5PSQJQ: editable controls stay at the touch input floor on phones. */
+  .announcer__voice select,
+  .announcer__voice input {
+    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-s));
+  }
+}

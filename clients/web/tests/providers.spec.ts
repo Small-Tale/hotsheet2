@@ -34666,6 +34666,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
         stripRight: stripElement.getBoundingClientRect().right,
         overflowing: stripElement.scrollWidth > stripElement.clientWidth + 1,
         add: rect('.project-tab-bar [data-action="choose-project"]'),
+        announcer: rect('.project-tab-bar [data-announcer-action="open"]'),
         launcher: rect('.project-tab-bar [data-component="quick-ticket-composer-launcher"]'),
         bar: rect('.app-shell__main > .project-tab-bar'),
       };
@@ -34676,6 +34677,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(box.add.left - box.lastTabRight).toBeGreaterThanOrEqual(0);
   expect(box.add.left - box.lastTabRight).toBeLessThan(24);
   expect(box.launcher.left - box.add.right).toBeGreaterThan(48);
+  expect(box.launcher.left - box.announcer.right).toBeLessThan(24);
   expect(box.bar.right - box.launcher.right).toBeLessThan(24);
   expect(Math.abs(box.add.top + box.add.height / 2 - (box.launcher.top + box.launcher.height / 2))).toBeLessThan(2);
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-few-tabs-wide.png' });
@@ -34686,7 +34688,8 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   box = await geometry();
   expect(box.overflowing).toBe(true);
   expect(box.add.left).toBeGreaterThanOrEqual(box.stripRight);
-  expect(box.launcher.left - box.add.right).toBeLessThan(24);
+  expect(box.announcer.left - box.add.right).toBeLessThan(24);
+  expect(box.launcher.left - box.announcer.right).toBeLessThan(24);
   expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
@@ -34694,8 +34697,12 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   await expect(page.locator('.project-tab-bar')).toHaveAttribute('data-mode', 'terminals');
   await expect(add).toBeVisible();
   const dashboardBar = (await page.locator('.project-tab-bar').boundingBox())!,
-    dashboardAdd = (await add.boundingBox())!;
-  expect(dashboardBar.x + dashboardBar.width - (dashboardAdd.x + dashboardAdd.width)).toBeLessThanOrEqual(32);
+    dashboardAdd = (await add.boundingBox())!,
+    dashboardAnnouncer = (await page.locator('.project-tab-bar [data-announcer-action="open"]').boundingBox())!;
+  expect(dashboardAnnouncer.x - (dashboardAdd.x + dashboardAdd.width)).toBeLessThan(24);
+  expect(dashboardBar.x + dashboardBar.width - (dashboardAnnouncer.x + dashboardAnnouncer.width)).toBeLessThanOrEqual(
+    32,
+  );
 });
 
 test('keeps Add project beside the last project tab on dashboard project strips (HS2-0KSBW7, HS2-YFKQT1)', async ({
