@@ -4328,11 +4328,13 @@ for (const width of [1280, 390])
       route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
     );
     const signIns: unknown[] = [],
-      creates: Array<Record<string, unknown>> = [];
+      creates: Array<Record<string, unknown>> = [],
+      repositoryReads: string[] = [];
     page.on('request', (request) => {
       const path = new URL(request.url()).pathname;
       if (request.method() === 'POST' && path.endsWith('/github-auth/device')) signIns.push(request.postDataJSON());
       if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+      if (path.endsWith('/github-repositories')) repositoryReads.push(path);
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
@@ -4351,7 +4353,35 @@ for (const width of [1280, 390])
     });
     await page.screenshot({ path: test.info().outputPath(`reuse-account-${width}.png`) });
     await reuse.click();
+    // HS2-WV6QCR: an unknown legacy site cannot be guessed as public. Once refreshed metadata
+    // establishes github.com, the same sign-in follows the original project/account lifecycle.
+    await expect(setup.getByRole('alert')).toContainText('Choose another account or sign in again');
+    await expect(form.locator('input[name="connection-locator"]')).toHaveCount(0);
+    expect(signIns).toEqual([]);
+    expect(creates).toEqual([]);
+    expect(repositoryReads).toEqual([]);
+    await page.route('**/accounts', (route) =>
+      creates.length > 0
+        ? route.fallback()
+        : route.fulfill({
+            json: [
+              {
+                id: 'github-app-abandoned',
+                provider: 'github',
+                host: 'github.com',
+                identity: 'legacy-user',
+                managed: true,
+                sources: [],
+                projects: [],
+              },
+            ],
+          }),
+    );
+    await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    await form.getByRole('button', { name: 'Use legacy-user on github.com, not used by any project yet' }).click();
     await expect(form.getByText('Using your GitHub account on GitHub.')).toBeVisible();
+    await expect.poll(() => repositoryReads.length).toBe(1);
     await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
     await setup.getByRole('button', { name: 'Connect provider' }).click();
     await expect(setup).not.toHaveAttribute('open');
@@ -36330,5 +36360,368 @@ test('dismisses a legacy implicit feedback request through failure, retry, selec
     expect(writes).toHaveLength(2);
   } finally {
     await server.stop();
+  }
+});
+
+// HS2-WV6QCR: appended so existing focused declaration locators remain stable.
+function wvSavedAccount(id: string, base_url?: string | null, host: string | null = 'ghe.test') {
+  return { id, provider: 'github', host, base_url, identity: id, managed: false, sources: [], projects: [] };
+}
+
+async function wvPrepareAccountPicker(page: Page, accounts: ReturnType<typeof wvSavedAccount>[]) {
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+  );
+  await page.route('**/accounts', (route) =>
+    route.request().method() === 'GET' ? route.fulfill({ json: accounts }) : route.fallback(),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  return { setup, form: setup.locator('[data-action="save-provider-connection"]') };
+}
+
+for (const [endpoint, host] of [
+  ['https://github.com:443/api/v3', 'github.com:443'],
+  ['http://github.com:80/api/v3', 'github.com:80'],
+  ['https://ghe.test:8443/custom/API', 'ghe.test:8443'],
+  ['HTTPS://GHE.TEST:443/Gateway/API/v3', 'ghe.test:443'],
+  ['https://api.github.com', 'api.github.com'],
+  [undefined, 'github.com'],
+] as const) {
+  test(`HS2-WV6QCR saved account preserves full endpoint ${endpoint ?? 'public default'}`, async ({ page }) => {
+    const creates: Array<{ settings: Record<string, unknown> }> = [],
+      signIns: string[] = [],
+      popups: Page[] = [];
+    page.on('popup', (popup) => popups.push(popup));
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+      if (path.endsWith('/github-auth/device')) signIns.push(path);
+    });
+    const { setup, form } = await wvPrepareAccountPicker(page, [wvSavedAccount('wv-saved', endpoint, host)]);
+    await form.locator('[data-action="use-github-account"][data-item-id="wv-saved"]').click();
+    await expect(form.getByRole('status')).toContainText('Using your GitHub account');
+    if (endpoint === 'https://api.github.com' || endpoint === undefined)
+      await expect(form.getByRole('status')).toContainText('on GitHub.');
+    await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+    if (endpoint === 'https://github.com:443/api/v3') {
+      for (const [width, state] of [
+        [1440, 'wide'],
+        [900, 'medium'],
+        [390, 'narrow'],
+        [1440, 'wide-return'],
+      ] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(form.getByRole('status')).toContainText('github.com:443');
+        await page.screenshot({
+          path: `target/visual-captures/HS2-WV6QCR-selected-${state}.png`,
+          animations: 'disabled',
+        });
+      }
+    }
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect(setup).not.toHaveAttribute('open');
+    expect(creates).toHaveLength(1);
+    expect(creates[0].settings.credential).toEqual({ secret: 'wv-saved' });
+    expect(creates[0].settings.api_base).toBe(endpoint);
+    expect(signIns).toEqual([]);
+    expect(popups).toEqual([]);
+  });
+}
+
+for (const bad of [
+  { base_url: null, host: 'github.com' },
+  { base_url: '', host: 'github.com' },
+  { base_url: 'https://synthetic-secret@ghe.test/api/v3', host: 'ghe.test' },
+  { base_url: 'https://ghe.test/api/v3?synthetic-secret', host: 'ghe.test' },
+  { base_url: 'https://ghe.test/api/v3\n', host: 'ghe.test' },
+  { base_url: undefined, host: '' },
+  { base_url: undefined, host: null },
+  { base_url: undefined, host: 'ghe.test' },
+]) {
+  test(`HS2-WV6QCR refuses bad metadata ${JSON.stringify(bad)} then accepts a valid selection`, async ({ page }) => {
+    const requests: string[] = [],
+      errors: string[] = [],
+      popups: Page[] = [];
+    page.on('popup', (popup) => popups.push(popup));
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        path.endsWith('/github-repositories') ||
+        path.endsWith('/github-auth/device') ||
+        (path.endsWith('/provider-connections') && request.method() !== 'GET')
+      )
+        requests.push(path);
+    });
+    const { setup, form } = await wvPrepareAccountPicker(page, [
+      wvSavedAccount('wv-invalid', bad.base_url, bad.host),
+      wvSavedAccount('wv-valid', 'https://ghe.test:8443/Gateway/API'),
+    ]);
+    await form.locator('[data-action="use-github-account"][data-item-id="wv-invalid"]').click();
+    await expect(setup.getByRole('alert')).toContainText('Choose another account or sign in again');
+    await expect(form.locator('input[name="connection-locator"]')).toHaveCount(0);
+    expect(await setup.getByRole('alert').innerText()).not.toContain('synthetic-secret');
+    expect(requests).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(popups).toEqual([]);
+    if (bad.base_url === null) {
+      for (const [width, state] of [
+        [1440, 'wide'],
+        [900, 'medium'],
+        [390, 'narrow'],
+        [1440, 'wide-return'],
+      ] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(setup.getByRole('alert')).toContainText('Choose another account or sign in again');
+        expect(requests).toEqual([]);
+        await page.screenshot({
+          path: `target/visual-captures/HS2-WV6QCR-invalid-${state}.png`,
+          animations: 'disabled',
+        });
+      }
+    }
+    await form.locator('[data-action="use-github-account"][data-item-id="wv-valid"]').click();
+    await expect(form.getByRole('status')).toContainText('ghe.test:8443');
+    await expect(setup.getByRole('alert')).toHaveCount(0);
+    await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+    const created = page.waitForRequest(
+      (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'),
+    );
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    expect((await created).postDataJSON().settings).toMatchObject({
+      credential: { secret: 'wv-valid' },
+      api_base: 'https://ghe.test:8443/Gateway/API',
+    });
+    await expect(setup).not.toHaveAttribute('open');
+  });
+}
+
+test('HS2-WV6QCR account changes, back, provider switch, fresh sign-in and edit keep endpoint ownership', async ({
+  page,
+}) => {
+  const { setup, form } = await wvPrepareAccountPicker(page, [
+    wvSavedAccount('wv-a', 'https://ghe.test:443/A/API'),
+    wvSavedAccount('wv-b', 'https://ghe.test:8443/B/API'),
+    wvSavedAccount('wv-public', undefined, 'github.com'),
+  ]);
+  const select = (id: string) => form.locator(`[data-action="use-github-account"][data-item-id="${id}"]`).click();
+  const back = async () => {
+    await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  };
+  for (const [id, authority] of [
+    ['wv-a', 'ghe.test:443'],
+    ['wv-b', 'ghe.test:8443'],
+  ] as const) {
+    await select(id);
+    await expect(form.getByRole('status')).toContainText(authority);
+    await back();
+  }
+  await select('wv-public');
+  await expect(form.getByRole('status')).toContainText('on GitHub.');
+  await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+  for (const [provider, endpointLabel] of [
+    ['Connect GitLab Issues', 'API Base URL (Optional)'],
+    ['Connect Jira Cloud', 'Jira Site URL'],
+  ] as const) {
+    await setup.getByRole('button', { name: provider, exact: true }).click();
+    await expect(form.getByLabel('Credential Reference', { exact: true })).toHaveValue('');
+    await expect(form.getByLabel(endpointLabel, { exact: true })).toHaveValue('');
+    await form.getByRole('button', { name: 'Ticket source types', exact: true }).click();
+  }
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await select('wv-b');
+  await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+  await form.getByLabel('Display Name').fill('WV Saved Endpoint');
+  const created = page.waitForRequest(
+    (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'),
+  );
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  expect((await created).postDataJSON().settings.api_base).toBe('https://ghe.test:8443/B/API');
+  await expect(setup).not.toHaveAttribute('open');
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Edit WV Saved Endpoint', exact: true }).click();
+  await form.getByLabel('Display Name').fill('WV Saved Endpoint Edited');
+  const updated = page.waitForRequest(
+    (request) => request.method() === 'PATCH' && new URL(request.url()).pathname.includes('/provider-connections/'),
+  );
+  await setup.getByRole('button', { name: 'Save changes' }).click();
+  expect((await updated).postDataJSON().settings.api_base).toBe('https://ghe.test:8443/B/API');
+  await expect(setup).not.toHaveAttribute('open');
+  await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await select('wv-a');
+  await back();
+  await page
+    .context()
+    .route('https://github.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Synthetic sign-in</title>' }),
+    );
+  const popup = page.waitForEvent('popup');
+  await form.getByRole('button', { name: 'Sign in with GitHub', exact: true }).click();
+  await popup;
+  await expect(form.getByText('Signed in to GitHub.')).toBeVisible();
+  await form.locator('input[name="connection-locator"]').fill('small-tale/secondary');
+  const fresh = page.waitForRequest(
+    (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'),
+  );
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  expect((await fresh).postDataJSON().settings.api_base).toBeUndefined();
+  await expect(setup).not.toHaveAttribute('open');
+});
+
+test('HS2-WV6QCR saved-account form persists its API prefix and reads through the real server and Ureq', async ({
+  page,
+}) => {
+  const { createServer } = await import('node:http');
+  const paths: string[] = [];
+  const upstream = createServer((request, response) => {
+    paths.push(request.url ?? '');
+    response.setHeader('content-type', 'application/json');
+    response.setHeader('connection', 'close');
+    if (request.headers.authorization !== 'Bearer synthetic-wv-token') {
+      response.statusCode = 401;
+      response.end('{"message":"synthetic authorization required"}');
+      return;
+    }
+    if (request.url === '/Gateway/API/v3/repos/synthetic/reused/issues/7') {
+      response.end(
+        JSON.stringify({
+          number: 7,
+          title: 'Synthetic saved endpoint ticket',
+          body: 'Synthetic body',
+          state: 'open',
+          state_reason: null,
+          html_url: 'https://github.test/synthetic/reused/issues/7',
+          created_at: '2026-10-01T00:00:00Z',
+          updated_at: '2026-10-01T00:00:00Z',
+          closed_at: null,
+          labels: [],
+          assignees: [],
+          pull_request: null,
+        }),
+      );
+    } else if (request.url === '/Gateway/API/v3/repos/synthetic/reused/issues/7/comments?per_page=100&page=1')
+      response.end('[]');
+    else {
+      response.statusCode = 404;
+      response.end('{"message":"unexpected synthetic route"}');
+    }
+  });
+  upstream.requestTimeout = 5000;
+  upstream.headersTimeout = 5000;
+  let server: Awaited<ReturnType<typeof realTicketServer>> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject);
+      upstream.listen(0, '127.0.0.1', resolve);
+    });
+    const address = upstream.address();
+    if (!address || typeof address === 'string') throw new Error('Synthetic provider did not bind');
+    const endpoint = `http://127.0.0.1:${address.port}/Gateway/API/v3`;
+    server = await realTicketServer({
+      seed: async ({ store, env }) => {
+        // Metadata and env-backed synthetic PAT only; fixture binaries never use the native keychain.
+        env.HOTSHEET_API_KEY_WV_SYNTHETIC = 'synthetic-wv-token';
+        mkdirSync(env.HOTSHEET_HOME!, { recursive: true });
+        writeFileSync(
+          join(env.HOTSHEET_HOME!, 'keys.json'),
+          JSON.stringify({
+            'wv-synthetic': { provider: 'wv-synthetic', env: 'HOTSHEET_API_KEY_WV_SYNTHETIC' },
+          }),
+        );
+        writeFileSync(
+          join(store, 'providers.json'),
+          JSON.stringify({
+            connections: [
+              {
+                id: 'wv-seed',
+                provider: 'github',
+                locator: 'synthetic/seed',
+                name: 'Synthetic endpoint seed',
+                default: false,
+                disabled: false,
+                settings: { credential: { secret: 'wv-synthetic' }, api_base: endpoint },
+              },
+            ],
+          }),
+        );
+      },
+    });
+    const actual = server;
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.route('**/__hotsheet/projects/open', (route) =>
+      route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+    );
+    // Only unrelated shell/repository-choice surfaces remain mocked. Accounts, create, persistence
+    // and the resulting provider read use the real isolated server and actual HTTP transport.
+    await page.route('**/accounts', async (route) => {
+      const response = await route.fetch({
+        url: `${actual.url}/accounts`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
+      });
+      await route.fulfill({ response });
+    });
+    let created: import('../src/api').ProviderConnection | undefined, createdStatus: number | undefined;
+    await page.route('**/provider-connections', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      // Forward the actual submitted body unchanged; only the synthetic checkout URL is adapted.
+      const response = await route.fetch({
+        url: `${actual.url}/checkouts/${actual.checkoutId}/provider-connections`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
+      });
+      createdStatus = response.status();
+      if (createdStatus === 201) created = (await response.json()) as import('../src/api').ProviderConnection;
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const setup = page.locator('[data-ticket-source-setup-dialog]');
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    const form = setup.locator('[data-action="save-provider-connection"]');
+    await form.locator('[data-action="use-github-account"][data-item-id="wv-synthetic"]').click();
+    await expect(form.getByRole('status')).toContainText(`127.0.0.1:${address.port}`);
+    await form.locator('input[name="connection-locator"]').fill('synthetic/reused');
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect.poll(() => createdStatus).toBe(201);
+    await expect(setup).not.toHaveAttribute('open');
+    expect(created?.settings.api_base).toBe(endpoint);
+    const connections = await actual.request<import('../src/api').ProviderConnection[]>('/provider-connections');
+    expect(connections.find((item) => item.id === created?.id)?.settings.api_base).toBe(endpoint);
+    const persisted = JSON.parse(readFileSync(join(actual.store, 'providers.json'), 'utf8')) as {
+      connections: import('../src/api').ProviderConnection[];
+    };
+    expect(persisted.connections.find((item) => item.id === created?.id)?.settings.api_base).toBe(endpoint);
+    const accounts = await actual.request<import('../src/api').ProviderAccount[]>('/accounts');
+    const reusedAccount = accounts.find((account) => account.id === 'wv-synthetic');
+    expect(reusedAccount?.base_url).toBe(endpoint);
+    expect(reusedAccount?.sources.find((source) => source.connection_id === created?.id)?.locator).toBe(
+      'synthetic/reused',
+    );
+    const read = await actual.request<FullTicket>(`/providers/${created!.id}/tickets/7`);
+    expect(read.title).toBe('Synthetic saved endpoint ticket');
+    expect(paths).toEqual([
+      '/Gateway/API/v3/repos/synthetic/reused/issues/7',
+      '/Gateway/API/v3/repos/synthetic/reused/issues/7/comments?per_page=100&page=1',
+    ]);
+  } finally {
+    try {
+      await server?.stop();
+    } finally {
+      upstream.closeAllConnections();
+      if (upstream.listening)
+        await new Promise<void>((resolve, reject) =>
+          upstream.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          }),
+        );
+    }
   }
 });

@@ -38,6 +38,8 @@ export interface GithubAuthState {
   credential?: string;
   /** Reusing this machine-wide account instead of a new sign-in (HS2-SM9PM8). */
   account?: string;
+  /** HS2-WV6QCR: complete saved API endpoint, separate from the presentation/sign-in origin. */
+  reusedApiBase?: string;
   repositories?: string[];
   /** What each GitHub App installation grants, to explain a missing repository (HS2-27T5WT). */
   installations?: Array<{ account: string; selection: string; settingsUrl?: string }>;

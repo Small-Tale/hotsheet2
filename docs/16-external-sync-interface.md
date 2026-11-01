@@ -844,9 +844,27 @@ never stored, so there is nothing to migrate:
   reference, `provider`, `host`, `base_url`, account `identity`, `managed` for a Hot Sheet GitHub
   sign-in) with its sources and the projects using each. `base_url` is the endpoint a new
   source reusing the account needs — a GitHub Enterprise or self-managed GitLab `api_base`, or
-  the Jira site — and is omitted for github.com and gitlab.com. A Hot Sheet GitHub sign-in
+  the Jira site — and is omitted for the public github.com/gitlab.com default when no
+  explicit endpoint is recorded. A Hot Sheet GitHub sign-in
   (`github-app-*`) that no source uses yet is listed too; other unused keys (AI-provider keys)
   are not accounts.
+  Reusing a saved GitHub account carries its complete supplied API endpoint into the new
+  source unchanged, including explicit default/custom ports and custom API paths
+  (HS2-WV6QCR). It does not reconstruct an API endpoint from a serialized URL origin.
+  A present malformed endpoint is rejected before repository lookup or source creation;
+  ordinary outer spaces may trim, but controls and internal whitespace, credentials,
+  queries, fragments and backslashes are rejected before URL normalization. Missing
+  endpoint metadata permits the public default only for a reported canonical github.com
+  host. Unknown or nonpublic missing endpoints require another account or a new sign-in,
+  rather than guessing an API path. Invalid selection clears any previous selected account.
+  This clarifies the older unused-account flow (HS2-SM9PM8): an unreadable legacy sign-in
+  with no site remains listed but cannot be assumed public; after a normal metadata
+  refresh establishes its public endpoint identity, the same account can be reused.
+  Explicit public API endpoints retain ordinary GitHub presentation; presentation does
+  not discard or replace their separately transported endpoint setting.
+  Account changes, back/reset and a fresh sign-in do not retain the old endpoint; editing
+  still keeps the existing source endpoint. This neither rewrites account metadata nor
+  reconciles valid legacy endpoints of ambiguous provenance (HS2-6H8ZY6).
 - **GitHub account identity (HS2-1D350D).** Device sign-in looks up the authenticated
   `/user` login and records it as non-secret `identity` metadata in `keys.json`. A failed
   lookup does not block sign-in. Both the server and CLI device flows record this label,

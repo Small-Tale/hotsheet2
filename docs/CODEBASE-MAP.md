@@ -445,6 +445,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/toast-presentation.ts # Generation-aware asynchronous public Toast.create handoff and disposal (HS2-QHH1ZP)
     src/github-attachment-settings.ts # HS1-compatible GitHub assets-repository setting keys carried through a connection-dialog edit (HS2-HSA64D)
     src/github-sign-in-origin.ts # Typed sign-in origin validation without collapsing an explicit default port or aliasing configured hosts (HS2-VKNA12)
+    src/github-account-endpoint.ts # Saved-account complete API endpoint validation/transport, separate from the display origin; explicit invalid/unknown metadata refusal (HS2-WV6QCR)
     src/new-ticket-source.ts # Project ticket sources from provider descriptors; the composer's writable-source choices and last-used/default target resolution (HS2-NZMJBJ)
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry

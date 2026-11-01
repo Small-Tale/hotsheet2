@@ -14,6 +14,7 @@ import { copyWhenReady } from '../clipboard-when-ready';
 import { resolveTicketSourceColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
+import { githubAccountEndpoint } from '../github-account-endpoint';
 import { githubAttachmentSettings } from '../github-attachment-settings';
 import { githubSignInOrigin } from '../github-sign-in-origin';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
@@ -568,17 +569,19 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
     const existingApiBase = existing?.settings.api_base,
       settings: Record<string, unknown> = { credential: { secret: credential } },
-      // GitHub has no API-base field: Enterprise derives it from the server signed in to, and an edit
-      // keeps the connection's existing one (HS2-1JT25R).
+      // GitHub has no API-base field: keep an edit's endpoint, transport a reused account's
+      // full endpoint, or derive it only for a fresh sign-in (HS2-1JT25R, HS2-WV6QCR).
       apiBase =
         kind === 'github'
           ? editingId
             ? typeof existingApiBase === 'string'
               ? existingApiBase
               : ''
-            : githubAuth.value?.enterpriseUrl
-              ? `${githubAuth.value.enterpriseUrl}/api/v3`
-              : ''
+            : githubAuth.value?.account
+              ? (githubAuth.value.reusedApiBase ?? '')
+              : githubAuth.value?.enterpriseUrl
+                ? `${githubAuth.value.enterpriseUrl}/api/v3`
+                : ''
           : read('api-base'),
       email = read('jira-email');
     if (apiBase) settings[kind === 'jira' ? 'base_url' : 'api_base'] = apiBase;
@@ -1021,14 +1024,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     const target = ticketSourceSetupProject.value,
       account = providerAccounts.value.find((item) => item.id === id && item.provider === 'github');
     if (!target || !account || githubAuth.value?.state === 'waiting') return;
-    // An Enterprise account's site comes from its reported endpoint (also for an unused sign-in,
-    // HS2-16MYXN), so the new source gets that server's api_base rather than github.com's.
+    // HS2-WV6QCR: base_url is already the full endpoint. Keep it distinct from display origin.
+    const endpoint = githubAccountEndpoint(account);
+    if ('error' in endpoint) {
+      githubAuth.value = undefined;
+      providerSettingsError.value = endpoint.error;
+      return;
+    }
     const session = `account:${id}`,
-      enterpriseUrl = account.base_url
-        ? new URL(account.base_url).origin
-        : account.host && account.host !== 'github.com'
-          ? `https://${account.host}`
-          : undefined;
+      enterpriseUrl = endpoint.webOrigin;
     providerSettingsError.value = '';
     githubAuth.value = {
       session,
@@ -1037,6 +1041,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       state: 'authorized',
       credential: id,
       account: id,
+      reusedApiBase: endpoint.apiBase,
       enterprise: Boolean(enterpriseUrl),
       enterpriseUrl,
     };

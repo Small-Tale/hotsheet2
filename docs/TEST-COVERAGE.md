@@ -1735,6 +1735,29 @@ discard flow remains covered by its existing real-router test.
 - Visual review: inspect the matching real-application signed-in and responsive validation
   captures attached to the tickets. Saved-account endpoint reuse is separate (HS2-WV6QCR).
 
+### Saved GitHub account endpoint reuse (HS2-WV6QCR)
+
+- Planned unit: `clients/web/src/github-account-endpoint.test.ts` authors 43 cases for
+  complete API path/port preservation, uppercase authority, encoded path, explicit public
+  endpoint, loopback/IPv6/internal hosts, public-default omission, malformed-present and
+  unknown/nonpublic missing metadata, static error hygiene and legacy provenance isolation.
+- Planned end to end: appended `clients/web/tests/providers.spec.ts # HS2-WV6QCR` authors
+  six exact endpoint/public-default forms, eight invalid-to-valid no-call sequences, account
+  A/back/B/public/provider/fresh-sign-in/edit transitions, and one actual isolated server
+  persistence/account-summary/Ureq custom-prefix read. The malformed-input cases begin
+  without authorized reuse state; they do not prove an already-authorized-to-invalid UI
+  transition. Source clears auth on refusal, without a product-state injection test.
+  The real composition adapts only the synthetic checkout URL;
+  unrelated shell/repository choices remain explicitly mocked. Credentials/listeners are
+  synthetic; native keychain and live accounts are not used.
+- Planned visual: actual selected default-port confirmation and invalid-metadata refusal at wide, medium, narrow and
+  returned-wide sizes. Root must inspect the captures on the rebuilt app.
+- Authored only: no compilation, unit/browser execution or visual pass is claimed here.
+  Fresh typed sign-in (VKNA12), Rust metadata inference (0HE7E4) and legacy reconciliation
+  (6H8ZY6) remain separate; this source does not claim their completion. Authoritative
+  account DTO/parser nullability consistency is separate (HS2-FE0HBN); these helper cases
+  validate the optional/null fields the current parser already admits.
+
 ### Deferred reader return focus (HS2-FRFPA5)
 
 - Unit: `clients/web/src/ticket-reader-focus.test.ts` covers deferred opener return,
