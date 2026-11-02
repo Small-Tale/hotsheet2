@@ -53,6 +53,28 @@ test('HS2-RS0FFT client selection omits unrelated Rust and keeps policy and real
   assert.ok(p.stages.filter((stage) => !stage.selected).every((stage) => stage.reasons.length));
 });
 
+test('HS2-3ZJBRM scoped lint receipts track web inputs while global format tracks docs', (t) => {
+  const f = fixture(t);
+  const keys = () => {
+    const checks = prepare(f.repo, undefined, false, f.options.versions).checks;
+    return {
+      format: checks.find((item) => item.command === 'npm run format:sources:check')?.key,
+      lint: checks.find((item) => item.command === 'npm run lint:web')?.key,
+    };
+  };
+  const first = keys();
+  assert.ok(first.format && first.lint);
+  f.put('docs/example.md', 'Synthetic documentation\n');
+  f.git('add', 'docs/example.md');
+  f.git('commit', '--quiet', '-m', 'docs change');
+  const docs = keys();
+  assert.notEqual(docs.format, first.format);
+  assert.equal(docs.lint, first.lint);
+  f.put('clients/web/src/example.ts', 'export const value = 3;\n');
+  f.git('commit', '--quiet', '-am', 'web change');
+  assert.notEqual(keys().lint, docs.lint);
+});
+
 test('HS2-RS0FFT receipts reuse unchanged inputs and invalidate toolchain and baseline', (t) => {
   const f = fixture(t);
   let count = 0;

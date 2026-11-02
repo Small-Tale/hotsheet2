@@ -154,12 +154,13 @@ describe('Kerf application UI profile', () => {
         scripts: Record<string, string>;
       }
     ).scripts;
-    expect(scripts.lint.split('&&').map((step) => step.trim())).toEqual([
-      'npm run format:check',
+    expect(scripts.lint.split('&&').map((step) => step.trim())).toEqual(['npm run format:check', 'npm run lint:web']);
+    expect(scripts['lint:web'].split('&&').map((step) => step.trim())).toEqual([
       'eslint . --max-warnings 0',
       'npm run catalog:check',
       'npm run ui:doctor',
     ]);
+    expect(scripts['format:sources:check']).toBe('node scripts/format-sources.mjs --check');
     expect(scripts['ui:doctor']).toBe('kerf-ui-doctor --full');
     expect(scripts).not.toHaveProperty('css:ownership');
   });

@@ -45,6 +45,19 @@ test('HS2-GN06JT mandatory floor runs even over budget and reports it', () => {
   );
 });
 
+test('HS2-3ZJBRM web lint remains mandatory when its declared inputs change', () => {
+  const scoped = stage('clients/web', 'npm run lint:web', 'web_lint');
+  const result = selectBudget({
+    stages: [scoped],
+    changes: ['clients/web/src/app.ts'],
+    history: { stages: {} },
+    budgetMs: null,
+    tier: 'T2',
+  });
+  assert.equal(result.selected[0]?.command, scoped.command);
+  assert.equal(result.selected[0]?.budgetReason, 'mandatory floor');
+});
+
 test('HS2-GN06JT public assets and contracts keep their direct suites in the floor', () => {
   for (const path of ['clients/web/public/favicon-32.png', 'docs/contracts/api.json']) {
     const result = choose({ changes: [path], budgetMs: 1 });

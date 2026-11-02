@@ -14,6 +14,10 @@ maintained in `plugins/shared/role-skills/` and mirrored by
 package stage catalog is `scripts/check-full.sh`; push and its hook use the same
 receipt-backed default. Policy and measured limits: [affected local verification](29-affected-local-verification.md)
 (HS2-RS0FFT).
+HS2-3ZJBRM splits the local floor into repository formatting, cross-package
+policy tests, script-local tooling tests, and web-source lint in
+`scripts/check-full.sh`; `scripts/gate-plan.mjs` declares their inputs and keeps
+unknown changes on the full fallback.
 The measured cross-package dependency baseline and proposed machine-readable
 edge map are in [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md)
 and [local-verification-dependencies.proposed.yaml](local-verification-dependencies.proposed.yaml)

@@ -156,6 +156,10 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   checkout; when present, it receives the same formatting and syntax checks. Missing
   tracked paths and unreadable or malformed local config remain errors. Rust formatting
   continues through `cargo fmt` after Prettier succeeds (HS2-G9K0NY).
+  The HS2-3ZJBRM local gate runs Prettier and `cargo fmt` as separate mandatory
+  stages and selects the web-only ESLint, catalog, and doctor stage from its
+  declared web and catalog-documentation inputs. `npm run lint` still runs both
+  formatting and web lint for direct package use and CI.
 - The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`), which enforces
   component CSS ownership between the app's own components. A stylesheet may style only the class
   blocks its component renders, plus the native and raw Web Awesome elements it authors, and a

@@ -23,7 +23,8 @@ export const STAGE_GROUPS = {
   '.::node scripts/check-test-coverage.mjs': 'always',
   '.::node scripts/check-test-quarantine.mjs': 'always',
   '.::node scripts/sync-role-skills.mjs --check': 'always',
-  'clients/web::npm run lint': 'always',
+  'clients/web::npm run format:sources:check': 'always',
+  'clients/web::npm run lint:web': 'web_lint',
   'clients/web::npm run typecheck': 'web',
   'clients/web::npm run test:unit': 'web',
   'clients/web::npm run build': 'web',
@@ -33,12 +34,42 @@ export const STAGE_GROUPS = {
   'spikes/kerf-webawesome::npm run typecheck': 'spike',
   'spikes/kerf-webawesome::npm run build': 'spike',
 };
-// The root `node --test` list grows with every new script test, so it is matched by its prefix.
-const ROOT_NODE_TESTS = /^node --test scripts\/[\w./-]+(?: scripts\/[\w./-]+)*$/;
+// HS2-3ZJBRM: exact lists keep a new or moved root test unclassified until its
+// read inputs are reviewed. Policy tests read other packages or generated guidance;
+// tooling tests read scripts/ and full-fallback configuration inputs only.
+export const ROOT_POLICY_TESTS = [
+  'instruction-policy',
+  'sync-ai-playbook',
+  'check-test-coverage',
+  'check-test-quarantine',
+  'gitgist-tooling',
+  'check-rulesync-generation',
+];
+export const ROOT_TOOLING_TESTS = [
+  'test-quiet',
+  'test-profile',
+  'gate-timings',
+  'playwright-retries',
+  'ci-gate',
+  'ci-completion-proposal',
+  'integration-record',
+  'gate-plan',
+  'gate-budget',
+  'gate-ticket-profile',
+  'local-gate',
+  'git-hooks',
+  'windows-crt-directives',
+  'windows-crt-link-correlation',
+  'throughput-baseline',
+  'main-integration-options',
+  'main-integration-authority',
+  'main-integration-window',
+];
+const rootTestCommand = (names) => `node --test ${names.map((name) => `scripts/${name}.test.mjs`).join(' ')}`;
 
 /** Why each group can never be omitted: these checks read the whole repository. */
 const ALWAYS_REASON =
-  'always runs: repository-wide formatting (Prettier and cargo fmt), policy, coverage-matrix and quarantine checks read every area';
+  'always runs: repository-wide formatting, cross-package policy, coverage-matrix and quarantine checks read every area';
 
 /**
  * Path rules, first match wins. `full` forces the whole gate. Edges come from source (HS2-FCCRCK):
@@ -58,12 +89,14 @@ export const PATH_RULES = [
   ],
   [/^(AGENTS\.md|CLAUDE\.md|\.rulesync\/|guidance\/)/, 'full', 'shared guidance and its generators'],
   [/^clients\/web\/src-tauri\//, 'full', 'desktop shell outside the Cargo workspace; not classified'],
+  [/^clients\/web\/scripts\/format-sources\.mjs$/, 'full', 'shared formatter and gate input'],
   [/^crates\//, ['rust', 'web', 'migrator'], 'Rust source; web and migrator tests spawn the built binaries'],
   [/^(plugins|\.claude|\.agents)\//, ['rust'], 'embedded in or read by the Rust build and tests'],
-  [/^clients\/web\/public\//, ['rust', 'web'], 'web assets; Rust tests read clients/web/public'],
-  [/^clients\/web\//, ['web'], 'web client source, tests or configuration'],
+  [/^clients\/web\/public\//, ['rust', 'web', 'web_lint'], 'web assets; Rust tests read clients/web/public'],
+  [/^clients\/web\//, ['web', 'web_lint'], 'web client source, tests or configuration'],
   [/^migrator\//, ['migrator', 'rust', 'web'], 'migrator; the Rust CLI runs migrator/src and web tests read it'],
   [/^spikes\/kerf-webawesome\//, ['spike', 'web'], 'Kerf/Web Awesome spike; web tests read it'],
+  [/^docs\/ux-components\.md$/, ['web', 'web_lint'], 'web component catalog links this documentation'],
   [/^docs\//, ['web'], 'documentation; web tests read docs/contracts and other docs'],
 ];
 
@@ -97,7 +130,8 @@ export function parseCheckScript(text) {
 }
 
 export function stageGroup(stage) {
-  if (stage.cwd === '.' && ROOT_NODE_TESTS.test(stage.command)) return 'always';
+  if (stage.cwd === '.' && stage.command === rootTestCommand(ROOT_POLICY_TESTS)) return 'always';
+  if (stage.cwd === '.' && stage.command === rootTestCommand(ROOT_TOOLING_TESTS)) return 'tooling';
   return STAGE_GROUPS[`${stage.cwd}::${stage.command}`];
 }
 

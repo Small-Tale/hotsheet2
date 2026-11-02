@@ -60,6 +60,7 @@ export function selectBudget({
       full ||
       stage.force === true ||
       stage.group === 'always' ||
+      stage.group === 'web_lint' ||
       /(?:^| )lint$|typecheck/.test(stage.command) ||
       directlyAffected(stage, changes);
     if (floor) selectedIds.add(stageId(stage));

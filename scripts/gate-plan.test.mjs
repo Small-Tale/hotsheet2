@@ -20,13 +20,21 @@ const selectedGroups = (changes) => {
 };
 
 test('HS2-FCCRCK reads every stage of the real scripts/check.sh and classifies each one', () => {
-  assert.equal(stages.length, 16);
+  assert.equal(stages.length, 18);
   assert.deepEqual(
     stages.filter((stage) => stageGroup(stage) === undefined),
     [],
     'a new or renamed gate stage must be classified before the planner can omit anything',
   );
-  assert.deepEqual([...new Set(stages.map(stageGroup))].sort(), ['always', 'migrator', 'rust', 'spike', 'web']);
+  assert.deepEqual([...new Set(stages.map(stageGroup))].sort(), [
+    'always',
+    'migrator',
+    'rust',
+    'spike',
+    'tooling',
+    'web',
+    'web_lint',
+  ]);
 });
 
 test('HS2-FCCRCK an unclassified gate stage forces the full gate', () => {
@@ -40,7 +48,10 @@ test('HS2-FCCRCK an unclassified gate stage forces the full gate', () => {
 
 test('HS2-FCCRCK selects each package and its dependents from source-derived edges', () => {
   const always = ['always'];
-  assert.deepEqual(selectedGroups(['clients/web/src/app.ts']), { mode: 'selected', groups: [...always, 'web'].sort() });
+  assert.deepEqual(selectedGroups(['clients/web/src/app.ts']), {
+    mode: 'selected',
+    groups: [...always, 'web', 'web_lint'].sort(),
+  });
   assert.deepEqual(selectedGroups(['docs/06-clients.md']), { mode: 'selected', groups: ['always', 'web'] });
   assert.deepEqual(selectedGroups(['crates/hotsheet-cli/src/lib.rs']), {
     mode: 'selected',
@@ -55,10 +66,11 @@ test('HS2-FCCRCK selects each package and its dependents from source-derived edg
     groups: ['always', 'migrator', 'rust', 'web'],
   });
   // Cross-package edges the path prefix alone would miss.
-  assert.deepEqual(selectedGroups(['clients/web/public/favicon-32.png']).groups, ['always', 'rust', 'web']);
+  assert.deepEqual(selectedGroups(['clients/web/public/favicon-32.png']).groups, ['always', 'rust', 'web', 'web_lint']);
   assert.deepEqual(selectedGroups(['plugins/shared/visual-qa.md']).groups, ['always', 'rust']);
   assert.deepEqual(selectedGroups(['.claude/skills/hotsheet/SKILL.md']).groups, ['always', 'rust']);
   assert.deepEqual(selectedGroups(['docs/contracts/api.json']).groups, ['always', 'web']);
+  assert.deepEqual(selectedGroups(['docs/ux-components.md']).groups, ['always', 'web', 'web_lint']);
 });
 
 test('HS2-FCCRCK falls back to the full gate for gate, config, lock, toolchain, guidance and unknown paths', () => {
@@ -80,6 +92,7 @@ test('HS2-FCCRCK falls back to the full gate for gate, config, lock, toolchain, 
     '.rulesync/rules/project-local.md',
     'guidance/ai-playbook.lock.json',
     'clients/web/src-tauri/src/main.rs',
+    'clients/web/scripts/format-sources.mjs',
     '.gitignore',
     'Makefile',
   ]) {
@@ -108,6 +121,7 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
     [
       'cargo lint',
       'cargo nextest run --all-features --status-level leak',
+      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs',
       'npm run lint',
       'npm run test:coverage',
       'npm run lint',
@@ -116,8 +130,51 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
     ],
   );
   assert.ok(omitted.every((stage) => /^no changed path reaches the \w+ group$/.test(stage.reasons[0])));
-  for (const command of ['cargo fmt --all --check', 'node scripts/check-test-coverage.mjs', 'npm run lint'])
+  for (const command of [
+    'cargo fmt --all --check',
+    'node scripts/check-test-coverage.mjs',
+    'npm run format:sources:check',
+    'npm run lint:web',
+  ])
     assert.ok(result.stages.some((stage) => stage.command === command && stage.selected));
+});
+
+test('HS2-3ZJBRM scopes web lint and script-local tests by declared inputs', () => {
+  const selected = (paths, command) => {
+    const result = plan({ stages, changes: paths });
+    return { mode: result.mode, stage: result.stages.find((stage) => stage.command === command) };
+  };
+  const webLint = 'npm run lint:web';
+  const tooling = stages.find((stage) => stageGroup(stage) === 'tooling')?.command;
+  assert.ok(tooling);
+  for (const path of [
+    'clients/web/src/app.ts',
+    'clients/web/ai/component-catalog-extension.json',
+    'clients/web/public/favicon-32.png',
+    'docs/ux-components.md',
+  ]) {
+    assert.equal(selected([path], webLint).stage.selected, true, path);
+    assert.equal(selected([path], tooling).stage.selected, false, path);
+  }
+  for (const path of ['crates/hotsheet-cli/src/lib.rs', 'docs/06-clients.md', 'migrator/src/export.mjs']) {
+    assert.equal(selected([path], webLint).stage.selected, false, path);
+    assert.equal(selected([path], tooling).stage.selected, false, path);
+    assert.equal(selected([path], 'npm run format:sources:check').stage.selected, true, path);
+  }
+  for (const path of [
+    'scripts/gate-plan.mjs',
+    'clients/web/package.json',
+    'clients/web/scripts/format-sources.mjs',
+    '.prettierrc.json',
+    'unknown/input.txt',
+  ]) {
+    assert.equal(selected([path], webLint).mode, 'full', path);
+    assert.equal(selected([path], webLint).stage.selected, true, path);
+    assert.equal(selected([path], tooling).stage.selected, true, path);
+  }
+  const changedTest = realCheck.replace('scripts/test-quiet.test.mjs', 'scripts/new-root-test.test.mjs');
+  const drift = plan({ stages: parseCheckScript(changedTest), changes: ['docs/06-clients.md'] });
+  assert.equal(drift.mode, 'full', 'an unreviewed root-test input must fail closed');
 });
 
 function repository(t) {

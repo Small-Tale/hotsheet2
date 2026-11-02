@@ -15,6 +15,39 @@ select their dependent packages. Unknown paths, missing baseline, configuration,
 lockfiles, toolchain, gate scripts, or ambiguous stages select the full package gate.
 High-risk changes retain full affected suites.
 
+## Scoped repository-wide checks (HS2-3ZJBRM)
+
+The local stage catalog now runs repository-wide Prettier and `cargo fmt`
+separately, then selects web source lint only when `clients/web/` inputs or the
+catalog-linked `docs/ux-components.md` change. Web source lint still includes
+warning-free ESLint, generated component catalog byte checks, and UI doctor.
+The ordinary `clients/web` `npm run lint` command retains all four checks for
+developers and CI. Thus a Rust, migrator, spike, or unrelated docs edit does not
+pay for web source lint, while web source and generated-artifact edits do.
+
+Root Node tests are two declared stage lists. The cross-package policy list
+(instruction, pinned guidance, feature coverage, quarantine, gitgist and Rulesync)
+stays mandatory. The script-local tooling list is selected when the full fallback
+applies. Its tests read `scripts/` and configuration inputs already classified as
+full-fallback paths; a new or changed test list is unclassified until reviewed.
+`scripts/`, hooks, CI, package manifests and locks, toolchains, formatter code,
+shared guidance generators, and unknown paths still select every stage. The
+planner tests mutate positive and negative paths, and exact-input receipt tests
+check that a docs edit invalidates global formatting but not web-only lint.
+Full CI keeps its existing package and browser coverage.
+
+On the shared Mac, HS2-D461XW's 20-sample p75 for the former mandatory
+repository-wide stages was 256.501 s: `cargo fmt` 2.958 s, combined root tests
+74.667 s, coverage/quarantine/role checks 3.691 s, and web lint 175.185 s.
+Direct runs of the new cross-package policy command and Prettier command took
+5.084 s (32 tests) and 24.640 s respectively. Combining those observations with
+the unchanged p75 stages gives a **36.373 s modeled sequential floor**, a
+**220.128 s (85.8%) reduction** for a narrow non-web change. This is a stage-cost
+comparison from different runs on one shared host, not a matched end-to-end
+edit-to-green result; affected Rust, typecheck, unit, browser, and other package
+stages still add their own time. HS2-DAA8AB owns the quiet-host selected/full
+outcome comparison before broader gate selection changes.
+
 ## Per-ticket time budget (HS2-GN06JT)
 
 The checked-in `scripts/gate-budget.json` sets a five-minute planning target. With
