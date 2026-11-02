@@ -14,6 +14,10 @@ maintained in `plugins/shared/role-skills/` and mirrored by
 package stage catalog is `scripts/check-full.sh`; push and its hook use the same
 receipt-backed default. Policy and measured limits: [affected local verification](29-affected-local-verification.md)
 (HS2-RS0FFT).
+The measured cross-package dependency baseline and proposed machine-readable
+edge map are in [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md)
+and [local-verification-dependencies.proposed.yaml](local-verification-dependencies.proposed.yaml)
+(HS2-D461XW); gate scripts do not consume that proposal yet.
 
 `clients/web/tests/inspector-resize-delivery.ts` controls one actual resize-listener
 delivery in the real concurrency parent regression, with explicit callback release

@@ -1,0 +1,117 @@
+# HS2-D461XW: review artifact only. scripts/check.sh does not read this file.
+schema_version: 1
+status: proposal_only
+source_commit: 7d4f6bc7e162bb2eaca0284c29221390001211ed
+source_of_edges:
+  cargo: Cargo.toml and crates/*/Cargo.toml via cargo metadata --no-deps
+  path_rules: scripts/gate-plan.mjs
+  stage_catalog: scripts/check-full.sh
+rust_regular_dependencies:
+  hotsheet-model: []
+  hotsheet-sync: []
+  hotsheet-process-journal: []
+  hotsheet-ticketing: [hotsheet-model, hotsheet-sync]
+  hotsheet-plugins: [hotsheet-model, hotsheet-process-journal, hotsheet-ticketing]
+  hotsheet-tls: [hotsheet-plugins]
+  hotsheet-extsync: [hotsheet-model, hotsheet-sync, hotsheet-ticketing]
+  hotsheet-index: [hotsheet-model, hotsheet-ticketing]
+  hotsheet-notify: [hotsheet-sync, hotsheet-ticketing]
+  hotsheet-terminals: [hotsheet-process-journal, hotsheet-sync]
+  hotsheet-aitools: [hotsheet-plugins, hotsheet-process-journal, hotsheet-sync, hotsheet-ticketing, hotsheet-tls]
+  hotsheet-cli:
+    [
+      hotsheet-aitools,
+      hotsheet-extsync,
+      hotsheet-index,
+      hotsheet-model,
+      hotsheet-notify,
+      hotsheet-plugins,
+      hotsheet-process-journal,
+      hotsheet-ticketing,
+      hotsheet-tls,
+    ]
+  hotsheet-mcp: [hotsheet-cli, hotsheet-extsync, hotsheet-model, hotsheet-plugins, hotsheet-ticketing]
+  hotsheet-server:
+    [
+      hotsheet-aitools,
+      hotsheet-cli,
+      hotsheet-extsync,
+      hotsheet-index,
+      hotsheet-model,
+      hotsheet-notify,
+      hotsheet-plugins,
+      hotsheet-process-journal,
+      hotsheet-sync,
+      hotsheet-terminals,
+      hotsheet-ticketing,
+      hotsheet-tls,
+    ]
+non_cargo_edges:
+  - input: crates/hotsheet-server/src/lib.rs
+    consumers: [clients/web/scripts/sync-openapi-routes.mjs, clients/web/tests/contracts.spec.ts]
+    output: docs/contracts/v1/openapi.yaml
+    reason: Axum route declarations generate and are checked against the OpenAPI route inventory.
+  - input: docs/contracts/v1/openapi.yaml
+    consumers: [clients/web/tests/contracts.spec.ts]
+    reason: The browser contract test compiles the schema and checks the real server response.
+  - input: migrator/src/export.mjs
+    consumers:
+      [
+        crates/hotsheet-cli/src/lib.rs,
+        clients/web/src/project-bridge.ts,
+        clients/web/scripts/prepare-desktop.mjs,
+        migrator/test/export.test.mjs,
+      ]
+    reason: CLI and desktop flows invoke the exporter; the migrator suite exercises its payload.
+  - input: crates/hotsheet-cli/src/main.rs
+    consumers: [clients/web/tests/real-ticket-server.ts, migrator/test/export.test.mjs]
+    reason: Browser fixtures and migrator tests spawn the built CLI.
+  - input: crates/hotsheet-server/src/lib.rs
+    consumers: [clients/web/tests/real-ticket-server.ts]
+    reason: Real-server browser fixtures spawn the built server.
+  - input: clients/web/public/favicon-32.png
+    consumers: [crates/hotsheet-server/tests/http.rs]
+    reason: The Rust HTTP suite embeds the public asset as test input.
+  - input: plugins/shared/ticket-driven-work.md
+    consumers: [crates/hotsheet-cli/tests/cli.rs]
+    reason: The CLI suite embeds shared guidance with include_str!.
+  - input: .github/workflows/ci.yml
+    consumers: [crates/hotsheet-cli/tests/claim_run.rs]
+    reason: The CLI test embeds the workflow with include_str!.
+  - input: clients/web/src/trailing-task.ts
+    consumers: [clients/web/src/app/runtime.tsx, clients/web/src/trailing-task.test.ts]
+    reason: The runtime uses its debounce for ticket collection refresh; the unit file tests schedule and cancel.
+  - input: clients/web/src/app/runtime.tsx
+    consumers: [clients/web/tests/providers.spec.ts]
+    reason: The shipped browser flow tests deferred ticket refresh with an open metadata popup.
+repository_wide_floor:
+  - cargo fmt --all --check
+  - root node --test policy and gate script list from scripts/check-full.sh
+  - node scripts/check-test-coverage.mjs
+  - node scripts/check-test-quarantine.mjs
+  - node scripts/sync-role-skills.mjs --check
+  - clients/web npm run lint
+pilot_candidates:
+  rust:
+    input: crates/hotsheet-cli/src/broken_pipe.rs
+    constraint: Private function body only; no exported signature, panic-hook installation, CLI output shape, or dependency change.
+    direct_tests:
+      - cargo nextest run -p hotsheet-cli -E 'test(broken_pipe)' --status-level leak
+      - cargo nextest run -p hotsheet-cli --test broken_pipe --status-level leak
+    dependents_to_compile: [hotsheet-cli, hotsheet-mcp, hotsheet-server]
+    status: candidate_pending_HS2-DAA8AB_validation
+  web:
+    input: clients/web/src/trailing-task.ts
+    constraint: Private timer implementation only; no exported type, delay contract, or runtime call-site change.
+    direct_tests:
+      - npx vitest run src/trailing-task.test.ts
+      - npx playwright test tests/providers.spec.ts --grep 'defers ticket refresh without hiding an open metadata popup'
+    dependents_to_compile: [clients/web/src/app/runtime.tsx]
+    status: candidate_pending_HS2-DAA8AB_validation
+conservative_fallbacks:
+  - Unknown, generated, renamed, deleted, or dynamically read inputs without a proven edge require the existing full affected selection.
+  - Cargo or npm manifests, lockfiles, toolchains, gate code, hooks, CI, instruction sources, and this manifest require the existing full fallback.
+  - Public API, wire schema, router, shared fixture, migration, auth, sync, index, and other T2 changes keep full affected suites and their real composition tests.
+  - A missing or ambiguous baseline, dependency edge, test mapping, tool version, or receipt selects the existing full fallback; no empty selection is green.
+  - The checked-in repository-wide floor remains mandatory, and every selected result stays bound to the exact committed tree.
+  - CI retains full browser, coverage, and platform checks; HS2-DAA8AB must validate selected-versus-full outcomes before any gate-policy change.
