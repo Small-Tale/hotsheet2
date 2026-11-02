@@ -47,10 +47,36 @@ test('HS2-RS0FFT client selection omits unrelated Rust and keeps policy and real
   const f = fixture(t);
   const p = prepare(f.repo, undefined, false, f.options.versions);
   assert.equal(p.mode, 'selected');
+  assert.equal(p.edgePreview.mode, 'broad');
+  assert.equal(p.edgePreview.requiredGate, 'unchanged pending HS2-DAA8AB');
   assert.ok(!p.checks.some((stage) => stage.command === 'cargo lint'));
   assert.ok(p.checks.some((stage) => stage.command.includes('contracts.spec.ts')));
   assert.ok(p.checks.some((stage) => stage.command.includes('check-test-coverage')));
   assert.ok(p.stages.filter((stage) => !stage.selected).every((stage) => stage.reasons.length));
+});
+
+test('HS2-55MWQ9 a private web candidate cannot replace the required unit stage or receipt inputs', (t) => {
+  const f = fixture(t);
+  f.put('clients/web/src/trailing-task-internal.ts', 'export const delay = 250;\n');
+  f.put('clients/web/src/trailing-task.ts', "import { createTrailingTaskInternal } from './trailing-task-internal';\n");
+  f.put('clients/web/eslint.config.mjs', "'**/trailing-task-internal'\n");
+  f.put('clients/web/src/trailing-task.test.ts', 'HS2-K5E2KF preserves the public delay\n');
+  f.put('clients/web/tests/providers.spec.ts', 'defers ticket refresh without hiding an open metadata popup\n');
+  f.put(
+    'clients/web/src/app/runtime.tsx',
+    "import { createTrailingTask } from '../trailing-task';\ncreateTrailingTask<TicketView>();\n",
+  );
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'synthetic boundary');
+  f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  f.put('clients/web/src/trailing-task-internal.ts', 'export const delay = 251;\n');
+  f.git('commit', '--quiet', '-am', 'private timer edit');
+  const p = prepare(f.repo, undefined, false, f.options.versions);
+  assert.equal(p.edgePreview.mode, 'candidate');
+  assert.ok(p.checks.some((item) => item.command === 'npm run test:unit'));
+  assert.ok(!p.checks.some((item) => item.command.startsWith('npx vitest run src/trailing-task.test.ts')));
+  assert.equal(runGate({ ...f.options, runner: () => ({ status: 0 }) }), 0);
+  assert.equal(runGate({ ...f.options, verify: true }), 0);
 });
 
 test('HS2-3ZJBRM scoped lint receipts track web inputs while global format tracks docs', (t) => {

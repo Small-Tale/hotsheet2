@@ -15,6 +15,35 @@ select their dependent packages. Unknown paths, missing baseline, configuration,
 lockfiles, toolchain, gate scripts, or ambiguous stages select the full package gate.
 High-risk changes retain full affected suites.
 
+## Read-only dependency edge preview (HS2-55MWQ9)
+
+`scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
+selection for two exact private paths from HS2-D461XW: the Rust CLI broken-pipe
+parser body and the web trailing-task timer module created by HS2-K5E2KF. The
+Rust preview reads `cargo metadata --no-deps`, walks reverse regular dependencies,
+and names direct parser/CLI tests plus compilation of every reached crate. It
+checks that every byte outside the private parser body is unchanged against the
+Git base. The web preview requires the public-import lint boundary, public
+contract tests, and shipped provider composition case, then names the focused
+Vitest and browser commands. These commands are candidates alongside the
+existing global floor, lint, typecheck, build, and cross-package checks; the
+preview does not execute or issue receipts for them.
+
+A public signature, generated contract, router, shared input, mixed path set,
+missing baseline, missing consumer, or ambiguous read reports `mode: broad` and
+keeps the existing gate. The `requiredGate` field explicitly says `unchanged
+pending HS2-DAA8AB`; `scripts/check.sh`, the push hook, and exact-input receipts
+still use the same required stage selection. Synthetic mutation tests pin both
+candidate paths and compare private, public-contract, and cross-package plans
+against the complete checked-in stage catalog. The measured required
+edit-to-green reduction is **0 seconds** at this stage because the preview does
+not execute; no missed failure has been observed in those plan tests.
+HS2-DAA8AB's quiet-host matched selected/full outcomes, cross-edge mutations,
+and independent flake check remain required before a policy change can shorten
+mandatory runs. CI continues
+its full regression. No measured edit-to-green saving is attributed to this
+preview until those runs exist.
+
 ## Scoped repository-wide checks (HS2-3ZJBRM)
 
 The local stage catalog now runs repository-wide Prettier and `cargo fmt`

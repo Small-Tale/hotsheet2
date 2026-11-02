@@ -8,6 +8,11 @@ HS2-55MWQ9, and HS2-K5E2KF may use this map to design an enforceable selection;
 HS2-DAA8AB owns quiet-host selected-versus-full validation before any gate-policy
 change.
 
+HS2-55MWQ9 now exposes the two pilot edges as a read-only `edgePreview` from
+`scripts/check.sh --plan`. It reads the live Cargo graph rather than treating
+this YAML as an executable manifest. Required selection and receipts remain
+unchanged while HS2-DAA8AB validates the candidates.
+
 ## What actually depends on what
 
 The direct regular dependencies of all fourteen Rust packages in the YAML come from `cargo

@@ -9,6 +9,15 @@ scheduling through the public API. The shipped `tests/providers.spec.ts` case
 “defers ticket refresh without hiding an open metadata popup” covers the
 runtime parent and its visible collection behavior. No server DTO is involved.
 
+HS2-55MWQ9 previews proven private Rust and web test edges without changing the
+required gate. `scripts/gate-edge-plan.test.mjs` checks live Cargo reverse
+consumers, private-body edits, public API mutations, mixed/generated/cross-package
+fallbacks, and a real synthetic Git baseline with a missing-boundary case.
+`scripts/local-gate.test.mjs` verifies the preview appears beside the existing
+affected plan and leaves receipt selection unchanged. The required gate still
+runs its existing stages; HS2-DAA8AB owns selected-versus-full validation before
+activation.
+
 HS2-5PSQJQ covers checkout-scoped cross-store retained activity in the real
 server HTTP suite; cross-project merge, shared-store deduplication, replay and
 digest selection in `clients/web/src/announcer-reel.test.ts`; configured speech

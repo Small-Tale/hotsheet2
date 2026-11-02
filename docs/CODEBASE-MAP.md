@@ -18,6 +18,10 @@ HS2-3ZJBRM splits the local floor into repository formatting, cross-package
 policy tests, script-local tooling tests, and web-source lint in
 `scripts/check-full.sh`; `scripts/gate-plan.mjs` declares their inputs and keeps
 unknown changes on the full fallback.
+HS2-55MWQ9 adds `scripts/gate-edge-plan.mjs` as a read-only candidate preview
+in `scripts/check.sh --plan`: it reads live Cargo metadata for reverse crate
+consumers and checks the exact private Rust/web pilot paths. It does not change
+required stages or receipt keys pending HS2-DAA8AB validation.
 The measured cross-package dependency baseline and proposed machine-readable
 edge map are in [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md)
 and [local-verification-dependencies.proposed.yaml](local-verification-dependencies.proposed.yaml)

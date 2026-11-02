@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
+import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import { sandboxFailureNotice } from './sandbox-notice.mjs';
@@ -246,6 +247,7 @@ function budgetConfig(repo) {
 
 export function prepare(repo, baseRef, full = false, versions, options = {}) {
   const state = collect(repo, baseRef);
+  const edgePreview = edgePreviewForRepo(repo, state.base, state.changes);
   const profile = options.profile ?? readTicketProfile(repo, { ticket: options.ticket, dirty: state.dirty });
   if (options.tier && profile.ticket && options.tier !== profile.tier)
     throw new Error(`--tier ${options.tier} conflicts with ${profile.ticket} tag tier:${profile.tier}.`);
@@ -382,6 +384,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   const common = resolve(repo, git(repo, ['rev-parse', '--git-common-dir']));
   return {
     ...state,
+    edgePreview,
     ...selected,
     ...budgeted,
     profile,

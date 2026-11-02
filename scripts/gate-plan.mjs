@@ -54,6 +54,7 @@ export const ROOT_TOOLING_TESTS = [
   'ci-completion-proposal',
   'integration-record',
   'gate-plan',
+  'gate-edge-plan',
   'gate-budget',
   'gate-ticket-profile',
   'local-gate',
