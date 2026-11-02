@@ -526,6 +526,9 @@ HS2-QCBEQF covers the read-only CI batch-gate helper: `scripts/ci-gate.test.mjs`
 checks recorded GitHub runs, branch/workflow filtering, ancestry, unknown local
 commits, and explicit `final_testing` markers. A live `status --covers` call verifies
 the installed `gh`, Git, and Hot Sheet CLI path; CI runs the unit test.
+HS2-HBGGRQ adds a synthetic child with more than 2 MiB of ticket output and a
+final CI marker, verifying that status scans long histories without the child
+output buffer failure or losing the last relevant marker.
 
 HS2-5WXA6W covers the terminal rail's shared All Tickets search scope. The rail
 component unit test checks view and All Tickets states; `clients/web/tests/search-scope.spec.ts`

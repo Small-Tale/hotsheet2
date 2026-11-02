@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 
 const SHA = /^[0-9a-f]{40}$/i;
 const TICKET_ROW = /^\s*[*●]*\s*(HS2-[A-Z0-9]+)\s/;
-const COMMIT_MARKER = /^CI gate commit:[ \t]*([0-9a-f]{40})[ \t]*$/gim;
+const COMMIT_MARKER = /^CI gate commit:[ \t]*([0-9a-f]{40})[ \t]*$/i;
+const MAX_SCAN_LINE = 256;
 
 export function latestGreenRun(value) {
   if (!Array.isArray(value)) throw new Error('gh returned a non-array CI run list');
@@ -37,13 +39,92 @@ export function startedSlugs(listOutput) {
   ];
 }
 
-export function waitingCommit(ticketOutput) {
-  if (!/^status: started$/m.test(ticketOutput) || !/^started_phase: final_testing$/m.test(ticketOutput)) {
-    return null;
+function ticketScanner() {
+  let line = '';
+  let discardLine = false;
+  let inHeader = true;
+  let inNotes = false;
+  let frontmatterDelimiters = 0;
+  let started = false;
+  let finalTesting = false;
+  let commit = null;
+
+  function readLine() {
+    if (discardLine) return;
+    const value = line.endsWith('\r') ? line.slice(0, -1) : line;
+    if (inHeader && value === '---' && ++frontmatterDelimiters === 2) inHeader = false;
+    if (value === '<!-- hotsheet:body:begin -->') inHeader = false;
+    if (value === '<!-- hotsheet:notes:begin -->') inNotes = true;
+    if (value === '<!-- hotsheet:notes:end -->') inNotes = false;
+    if (inHeader) {
+      if (value === 'status: started') started = true;
+      if (value === 'started_phase: final_testing') finalTesting = true;
+    }
+    if (inNotes) {
+      const marker = value.match(COMMIT_MARKER);
+      if (marker) commit = marker[1].toLowerCase();
+    }
   }
-  const notes = ticketOutput.split('<!-- hotsheet:notes:begin -->')[1] ?? '';
-  const matches = [...notes.matchAll(COMMIT_MARKER)];
-  return matches.at(-1)?.[1].toLowerCase() ?? null;
+
+  function append(part) {
+    if (discardLine) return;
+    if (line.length + part.length > MAX_SCAN_LINE) {
+      line = '';
+      discardLine = true;
+    } else {
+      line += part;
+    }
+  }
+
+  return {
+    push(chunk) {
+      let start = 0;
+      let end = chunk.indexOf('\n', start);
+      while (end !== -1) {
+        append(chunk.slice(start, end));
+        readLine();
+        line = '';
+        discardLine = false;
+        start = end + 1;
+        end = chunk.indexOf('\n', start);
+      }
+      append(chunk.slice(start));
+    },
+    finish() {
+      if (line || discardLine) readLine();
+      return started && finalTesting ? commit : null;
+    },
+  };
+}
+
+export function waitingCommit(ticketOutput) {
+  const scanner = ticketScanner();
+  scanner.push(ticketOutput);
+  return scanner.finish();
+}
+
+// `show` can contain years of notes. Scan its stdout instead of retaining it in
+// spawnSync's fixed buffer; only short metadata/marker lines matter (HS2-HBGGRQ).
+export function streamWaitingCommit(binary, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const scanner = ticketScanner();
+    const decoder = new StringDecoder('utf8');
+    let stderr = '';
+    child.stdout.on('data', (chunk) => scanner.push(decoder.write(chunk)));
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8').slice(0, Math.max(0, 4096 - stderr.length));
+    });
+    child.on('error', reject);
+    child.on('close', (status, signal) => {
+      scanner.push(decoder.end());
+      if (status !== 0) {
+        reject(new Error(stderr.trim() || `${binary} exited with ${signal ?? status}`));
+      } else {
+        resolve(scanner.finish());
+      }
+    });
+  });
 }
 
 export function command(binary, args, options = {}) {
@@ -64,7 +145,11 @@ export function isCovered(commit, greenSha, run = command) {
   throw new Error(ancestry.stderr?.trim() || 'git ancestry check failed');
 }
 
-export function gateStatus({ covers, run = command } = {}) {
+export async function gateStatus({
+  covers,
+  run = command,
+  readTicket = (slug) => streamWaitingCommit('hotsheet-cli', ['show', slug]),
+} = {}) {
   const list = run('gh', [
     'run',
     'list',
@@ -90,15 +175,13 @@ export function gateStatus({ covers, run = command } = {}) {
   if (tickets.status !== 0) throw new Error(tickets.stderr?.trim() || 'hotsheet-cli ls failed');
   const waiting = [];
   for (const slug of startedSlugs(tickets.stdout)) {
-    const ticket = run('hotsheet-cli', ['show', slug]);
-    if (ticket.status !== 0) throw new Error(ticket.stderr?.trim() || `hotsheet-cli show ${slug} failed`);
-    const commit = waitingCommit(ticket.stdout);
+    const commit = await readTicket(slug);
     if (commit) waiting.push({ slug, commit, coverage: isCovered(commit, green.headSha, run) });
   }
   return { green, covers: coverage, waiting };
 }
 
-function main(args) {
+async function main(args) {
   if (
     args[0] !== 'status' ||
     (args.length !== 1 && args.length !== 3) ||
@@ -106,7 +189,7 @@ function main(args) {
   ) {
     throw new Error('usage: node scripts/ci-gate.mjs status [--covers <full-sha>]');
   }
-  const result = gateStatus({ covers: args[2] });
+  const result = await gateStatus({ covers: args[2] });
   if (!result.green) {
     console.log('No successful main push CI run found in the latest 20 successful run records.');
     return;
@@ -120,10 +203,8 @@ function main(args) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  try {
-    main(process.argv.slice(2));
-  } catch (error) {
+  main(process.argv.slice(2)).catch((error) => {
     console.error(error.message);
     process.exitCode = 1;
-  }
+  });
 }

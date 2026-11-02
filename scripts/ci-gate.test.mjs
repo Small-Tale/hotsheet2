@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { gateStatus, isCovered, latestGreenRun, startedSlugs, waitingCommit } from './ci-gate.mjs';
+import {
+  gateStatus,
+  isCovered,
+  latestGreenRun,
+  startedSlugs,
+  streamWaitingCommit,
+  waitingCommit,
+} from './ci-gate.mjs';
 
 const oldSha = 'a'.repeat(40);
 const greenSha = 'b'.repeat(40);
@@ -78,6 +85,12 @@ test('reads only listed ticket slugs and final-testing note markers', () => {
     null,
   );
   assert.equal(waitingCommit(ticket('final_testing', 'No marker')), null);
+  assert.equal(
+    waitingCommit(
+      `---\nstatus: started\nstarted_phase: working\n---\n<!-- hotsheet:body:begin -->\nstarted_phase: final_testing\n<!-- hotsheet:notes:begin -->\nCI gate commit: ${greenSha}\n`,
+    ),
+    null,
+  );
 });
 
 test('coverage distinguishes ancestor, non-ancestor, and missing local objects', () => {
@@ -96,7 +109,21 @@ test('coverage distinguishes ancestor, non-ancestor, and missing local objects',
   assert.throws(() => isCovered('short', greenSha, run), /full commit SHAs/);
 });
 
-test('reports only explicit final-testing tickets covered by the green run', () => {
+test('HS2-HBGGRQ streams a large ticket without losing its final CI marker', async () => {
+  const script = `
+    process.stdout.write('status: started\\nstarted_phase: final_testing\\n');
+    process.stdout.write('<!-- hotsheet:notes:begin -->\\n');
+    process.stdout.write('x'.repeat(2 * 1024 * 1024) + '\\n');
+    process.stdout.write('CI gate commit: ${greenSha}\\n');
+  `;
+  assert.equal(await streamWaitingCommit(process.execPath, ['-e', script]), greenSha);
+  await assert.rejects(
+    streamWaitingCommit(process.execPath, ['-e', "process.stderr.write('synthetic failure'); process.exit(2)"]),
+    /synthetic failure/,
+  );
+});
+
+test('reports only explicit final-testing tickets covered by the green run', async () => {
   const calls = [];
   const run = (binary, args) => {
     calls.push([binary, ...args]);
@@ -104,18 +131,17 @@ test('reports only explicit final-testing tickets covered by the green run', () 
     if (binary === 'hotsheet-cli' && args[0] === 'ls') {
       return { status: 0, stdout: '*● HS2-ONE started first\n● HS2-TWO started second\n' };
     }
-    if (binary === 'hotsheet-cli') {
-      const marker = args[1] === 'HS2-ONE' ? oldSha : futureSha;
-      return {
-        status: 0,
-        stdout: `status: started\nstarted_phase: final_testing\n<!-- hotsheet:notes:begin -->\nCI gate commit: ${marker}\n`,
-      };
-    }
     if (args[0] === 'cat-file') return { status: 0 };
     if (args[0] === 'merge-base') return { status: args[2] === futureSha ? 1 : 0 };
     throw new Error(`unexpected command: ${binary} ${args.join(' ')}`);
   };
-  const result = gateStatus({ covers: oldSha, run });
+  const readTicket = async (slug) => {
+    const marker = slug === 'HS2-ONE' ? oldSha : futureSha;
+    return waitingCommit(
+      `status: started\nstarted_phase: final_testing\n<!-- hotsheet:notes:begin -->\nCI gate commit: ${marker}\n`,
+    );
+  };
+  const result = await gateStatus({ covers: oldSha, run, readTicket });
   assert.equal(result.green.headSha, greenSha);
   assert.equal(result.covers, 'covered');
   assert.deepEqual(result.waiting, [
