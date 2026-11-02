@@ -128,7 +128,7 @@ test('pastes the clipboard into the phone terminal and keeps sticky modifiers of
   await expect(page.locator('[data-dialog-component="terminal-paste-dialog"]')).toHaveJSProperty('open', false);
   await expect(textarea).toBeFocused();
 
-  // With the keyboard up, the key bar's Fn row carries the same actions without scrolling.
+  // With the keyboard up, the key bar's More row carries the same actions without scrolling.
   await page.evaluate(() => {
     (window as unknown as FeedbackWindow).__setVisualViewport(420);
   });
@@ -136,7 +136,7 @@ test('pastes the clipboard into the phone terminal and keeps sticky modifiers of
   const keyBar = page.locator('[data-component="terminal-key-bar"]');
   await expect(keyBar).toBeVisible();
   await expect(keyBar.getByRole('button', { name: 'Paste' })).toHaveCount(0);
-  await keyBar.getByRole('button', { name: 'Function and navigation keys' }).tap();
+  await keyBar.getByRole('button', { name: 'More Terminal Keys' }).tap();
   const clipboardGroup = keyBar.getByRole('group', { name: 'Clipboard' });
   await expect(clipboardGroup).toBeVisible();
   const [groupBox, barBox] = await Promise.all([clipboardGroup.boundingBox(), keyBar.boundingBox()]);

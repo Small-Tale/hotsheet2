@@ -3991,14 +3991,14 @@ receives up/down arrow keys (honoring application cursor mode), the same as xter
 touch that moves less than 8px is a tap, which still focuses the terminal and opens the keyboard.
 Scaled grid previews never scroll.
 
-**Phone terminal key bar (HS2-CKS78M).** While a phone terminal (drawer focus mode or the magnified
+**Phone terminal key bar (HS2-CKS78M, HS2-RS96EJ).** While a phone terminal (drawer focus mode or the magnified
 terminal) has the soft keyboard up, a key bar sits directly above the keyboard. Its main row fits a
-390px phone without scrolling: **Fn**, Esc, Tab, sticky **Ctrl** and **Alt**, and the four arrows
-(Lucide `arrow-*`). **Fn** swaps in a scrolling row with Shift, Home, End, PgUp, PgDn, and F1–F12, and
+390px phone without scrolling: an ellipsis button labelled **More terminal keys**, Esc, Tab, sticky **Ctrl** and **Alt**, and the four arrows
+(Lucide `arrow-*`). **More terminal keys** swaps in a scrolling row with Shift, Home, End, PgUp, PgDn, and F1–F12, and
 the row resets to its leading edge when toggled. A modifier tap cycles _once_ (applies to the next key,
 including a character typed on the soft keyboard, then clears) → _locked_ (marked with an underline;
-stays on) → off; leaving focus mode or closing the magnified terminal clears modifiers and the Fn row.
-Its compact dark groups are owned by the app so Fn can stay sticky inside the horizontally scrolling
+stays on) → off; leaving focus mode or closing the magnified terminal clears modifiers and the extra row.
+Its compact dark groups are owned by the app so More can stay sticky inside the horizontally scrolling
 bar; the ordinary row still fits at 390px (HS2-2TN51D).
 Keys use xterm sequences: application-cursor-aware arrows and Home/End, `CSI 1;m` modifier forms, SS3
 F1–F4, `CSI n~` for F5–F12/PgUp/PgDn, Shift+Tab as `CSI Z`, Ctrl+letter control codes, and an ESC
@@ -4009,7 +4009,7 @@ focus in the terminal, so tapping a key never dismisses the keyboard.
 and its hidden input offers no Paste callout, so phone terminals expose explicit **Copy** (Lucide
 `copy`) and **Paste** (Lucide `clipboard-paste`) actions. With the keyboard hidden they sit beside the
 text-size control: a Copy/Paste pill in drawer focus mode and two buttons in the magnified terminal's
-top toolbar. With the keyboard up they live in the key bar's Fn row as a Clipboard group after the
+top toolbar. With the keyboard up they live in the key bar's More row as a Clipboard group after the
 modifiers (the main row stays unchanged and fits 390px).
 
 - **Copy** snapshots the active buffer (scrollback plus screen; soft-wrapped rows rejoined, row padding

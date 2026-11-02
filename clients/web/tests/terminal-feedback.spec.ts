@@ -1128,6 +1128,7 @@ test('adapts the phone magnified terminal to the keyboard with a fixed grid (HS2
     const fake = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 844, scale: 1 });
     Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => fake });
     (window as unknown as { __setVisualViewport: (height: number) => void }).__setVisualViewport = (height) => {
+      fake.width = window.innerWidth;
       fake.height = height;
       fake.dispatchEvent(new Event('resize'));
     };
@@ -1356,8 +1357,17 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await expect(keyBar).toBeVisible();
   await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(3);
   await expect(keyBar.locator('[data-component="toolbar-control-group"]')).toHaveCount(3);
-  await expect(keyBar.locator('.terminal-key-bar__group').first()).toHaveAttribute('aria-label', 'Function Row');
+  await expect(keyBar.locator('.terminal-key-bar__group').first()).toHaveAttribute('aria-label', 'More Terminal Keys');
   expect(await keyBar.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+  const rightArrow = await keyBar.getByRole('button', { name: 'Right arrow' }).boundingBox();
+  expect(rightArrow).not.toBeNull();
+  expect(rightArrow!.x + rightArrow!.width).toBeLessThanOrEqual(390);
+  const rightArrowGlyph = await keyBar
+    .getByRole('button', { name: 'Right arrow' })
+    .locator('[data-lucide]')
+    .boundingBox();
+  expect(rightArrowGlyph).not.toBeNull();
+  expect(rightArrowGlyph!.x + rightArrowGlyph!.width).toBeLessThanOrEqual(382);
   const sent = () =>
     page.evaluate(() =>
       (
@@ -1393,23 +1403,38 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await expect.poll(() => sentSince(before)).toEqual(['\u001b[1;3A', '\u001b[1;3D']);
   await expect(alt).toHaveAttribute('aria-pressed', 'true');
   await page.screenshot({ path: test.info().outputPath('hs2-cks78m-drawer-key-bar.png') });
-  // The Fn row carries function and navigation keys.
-  await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
+  // HS2-RS96EJ: More includes Shift as well as function, clipboard, and navigation keys.
+  await keyBar.getByRole('button', { name: 'More Terminal Keys' }).click();
   await expect(keyBar.getByRole('button', { name: 'Up arrow' })).toHaveCount(0);
   await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(5);
+  const shift = keyBar.getByRole('button', { name: /^Shift/ });
+  await expect(shift).toBeVisible();
   before = (await sent()).length;
   await keyBar.getByRole('button', { name: 'F5', exact: true }).click();
   await keyBar.getByRole('button', { name: 'Page down' }).click();
   await expect.poll(() => sentSince(before)).toEqual(['\u001b[15;3~', '\u001b[6;3~']);
-  // Scrolled to the far keys, Fn stays pinned at the leading edge.
-  const fn = keyBar.getByRole('button', { name: 'Function and navigation keys' });
+  // Scrolled to the far keys, More stays pinned at the leading edge.
+  const more = keyBar.getByRole('button', { name: 'More Terminal Keys' });
   expect(await keyBar.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
-  const [fnBox, barBox] = await Promise.all([fn.boundingBox(), keyBar.boundingBox()]);
-  expect(fnBox!.x - barBox!.x).toBeLessThanOrEqual(12);
+  const [moreBox, barBox] = await Promise.all([more.boundingBox(), keyBar.boundingBox()]);
+  expect(moreBox!.x - barBox!.x).toBeLessThanOrEqual(12);
+  expect(
+    await keyBar.evaluate((node) => {
+      const group = node.querySelector('.terminal-key-bar__group')!;
+      const box = group.getBoundingClientRect();
+      return group.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }),
+  ).toBe(true);
   await page.screenshot({ path: test.info().outputPath('hs2-cks78m-drawer-function-row.png') });
   await alt.click();
   await expect(alt).toHaveAttribute('aria-pressed', 'false');
-  await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
+  await shift.click();
+  await expect(shift).toHaveAttribute('aria-pressed', 'true');
+  before = (await sent()).length;
+  await keyBar.getByRole('button', { name: 'Tab' }).click();
+  await expect.poll(() => sentSince(before)).toEqual(['\u001b[Z']);
+  await expect(shift).toHaveAttribute('aria-pressed', 'false');
+  await more.click();
   await expect(textarea).toBeFocused();
   // Hiding the keyboard hides the bar again.
   await setKeyboard(844);
@@ -1421,6 +1446,13 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await expect(alt).toHaveAccessibleName('Alt (locked)');
   await setKeyboard(844);
   await assertMagnifiedKeyBar(page, setKeyboard, sent);
+  // HS2-RS96EJ: the bar is a phone keyboard affordance; resize through wider layouts and back.
+  for (const [step, width] of [1280, 768, 390, 1280].entries()) {
+    await page.setViewportSize({ width, height: 844 });
+    await setKeyboard(width === 390 ? 420 : 844);
+    await expect(page.locator('[data-component="terminal-key-bar"]')).toHaveCount(width === 390 ? 1 : 0);
+    await page.screenshot({ path: test.info().outputPath(`hs2-rs96ej-terminal-${step}-${width}.png`) });
+  }
 });
 
 async function assertMagnifiedKeyBar(

@@ -621,7 +621,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       },
     }),
   );
-  // The key bar's Fn-row clipboard group and the long-press edit menu report what production does
+  // The key bar's More-row clipboard group and the long-press edit menu report what production does
   // (HS2-FRB545, HS2-KKP8YJ).
   const reportClipboardAction = (target: Element, action: 'selection' | 'copy' | 'paste') => {
     if (target.closest('[data-context-menu="terminal-edit"]')) {

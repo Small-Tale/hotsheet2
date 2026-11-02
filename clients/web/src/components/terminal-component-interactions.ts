@@ -18,7 +18,7 @@ export interface TerminalKeyBarBindings {
   readonly sendKey: (key: TerminalSpecialKey, target: Element) => void;
 }
 
-/** Wire TerminalKeyBar modifier, Fn-row, and key presses under `root`. */
+/** Wire TerminalKeyBar modifier, expanded-key row, and key presses under `root`. */
 export function wireTerminalKeyBar(root: HTMLElement, bindings: TerminalKeyBarBindings): () => void {
   const lifetime = createScope();
   lifetime.add(

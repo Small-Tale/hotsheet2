@@ -4825,7 +4825,7 @@
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",
-      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
       "source": "src/components/terminal-key-bar.tsx",
       "publicExports": [
         {
@@ -4880,7 +4880,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
+          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and a More row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."],
         "documentation": "../../docs/ux-components.md"

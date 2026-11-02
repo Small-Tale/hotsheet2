@@ -1,6 +1,6 @@
 /* Phone terminal accessory bar (HS2-CKS78M): one horizontally scrolling row of Kerf
    ToolbarControlGroups on the terminal surface (light or dark, HS2-QNSS9C), directly above the soft keyboard. The
-   sticky Fn group must share this scroll container with the keys, which a Toolbar's clipped zone
+   sticky More group must share this scroll container with the keys, which a Toolbar's clipped zone
    cannot provide, so the bar owns its scroller, safe-area inset and terminal backing. */
 .terminal-key-bar {
   display: flex;
@@ -22,7 +22,7 @@
 .terminal-key-bar::-webkit-scrollbar {
   display: none;
 }
-/* App-owned group slots never shrink in the scroller; Fn's slot stays pinned at the leading edge
+/* App-owned group slots never shrink in the scroller; More's slot stays pinned at the leading edge
    on the terminal-colored backing while a row scrolls beneath it. */
 .terminal-key-bar__group {
   display: flex;
@@ -30,7 +30,9 @@
 }
 .terminal-key-bar__group:first-child {
   position: sticky;
-  z-index: 1;
+  /* HS2-RS96EJ: the pinned group must cover scrolled FloatingToolbars (layer 4). */
+  z-index: 5;
   left: 0;
+  background: var(--hs-terminal-background);
   box-shadow: calc(-1 * var(--kui-space-xs)) 0 0 var(--kui-space-xs) var(--hs-terminal-background);
 }

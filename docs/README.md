@@ -6,6 +6,10 @@ in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
 AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
 These documents remain the source of truth for what we are building and why.
 
+**Phone terminal keys (HS2-RS96EJ):** the expanded key group uses an ellipsis control labelled More terminal keys
+because it includes Shift and clipboard actions as well as function and navigation
+keys. See [client behavior](06-clients.md) §6.
+
 **Announcer edit review (HS2-A93BHS):** edit activity retains path and operation
 metadata; the explicit viewer reads a bounded current checkout diff through an
 authenticated, non-retained route. The diff is labelled as current state, not the

@@ -9748,7 +9748,7 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await expect(keys).toHaveAttribute('data-function-row', 'false');
   await expect(bars.nth(1)).toHaveAttribute('data-function-row', 'true');
   await expect(bars.nth(1).getByRole('button', { name: 'Alt (locked)' })).toHaveAttribute('aria-pressed', 'true');
-  for (const name of ['Escape', 'Tab', 'Ctrl', 'Alt', 'Up arrow', 'Function and navigation keys'])
+  for (const name of ['Escape', 'Tab', 'Ctrl', 'Alt', 'Up arrow', 'More Terminal Keys'])
     await expect(keys.getByRole('button', { name, exact: true })).toBeVisible();
   await expect(keys.getByRole('button', { name: 'Shift' })).toHaveCount(0);
   const ctrl = keys.getByRole('button', { name: /^Ctrl/ });
@@ -9757,13 +9757,13 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await keys.getByRole('button', { name: 'Right arrow' }).click();
   await expect(output).toHaveText('ArrowRight → \\u001b[1;5C');
   await expect(ctrl).toHaveAttribute('data-state', 'off');
-  await keys.getByRole('button', { name: 'Function and navigation keys' }).click();
+  await keys.getByRole('button', { name: 'More Terminal Keys' }).click();
   await expect(keys).toHaveAttribute('data-function-row', 'true');
   await keys.getByRole('button', { name: 'F12', exact: true }).click();
   await expect(output).toHaveText('F12 → \\u001b[24~');
   await expect(keys.getByRole('button', { name: 'Escape' })).toHaveCSS('cursor', 'pointer');
   await demo.screenshot({ path: test.info().outputPath('hs2-cks78m-demo.png') });
-  // HS2-FRB545: the Fn row's clipboard group reports what production does.
+  // HS2-FRB545: the extra row's clipboard group reports what production does.
   await keys.getByRole('button', { name: 'Paste' }).click();
   await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
   await keys.getByRole('button', { name: 'Copy Terminal Text' }).click();

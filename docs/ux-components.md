@@ -3325,11 +3325,11 @@ terminal visibility button/select in a compact Toolbar. The gallery retains its 
 markup and right-aligned zoom actions; visibility controls retain their group selection
 and fit the dashboard header at desktop and phone widths.
 
-HS2-2TN51D gives the phone terminal key bar app-owned compact groups. Its Fn control can
+HS2-2TN51D and HS2-RS96EJ give the phone terminal key bar app-owned compact groups. Its More control can
 stay sticky in the same horizontal scroll container as the function keys, while the
 ordinary row fits the phone viewport and all keys retain their dark treatment.
 
-HS2-FRB545 adds phone terminal copy and paste. `TerminalKeyBar`'s Fn row gains a Clipboard group
+HS2-FRB545 adds phone terminal copy and paste. `TerminalKeyBar`'s More row gains a Clipboard group
 (Copy, Paste) after the modifiers; the drawer focus mode shows a matching Copy/Paste pill beside the
 text-size control, and the magnified terminal toolbar adds the same two buttons. `TerminalCopyDialog`
 (a raw `wa-dialog` with an app-owned, read-only, terminal-colored native text view) and

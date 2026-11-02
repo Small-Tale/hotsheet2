@@ -3,14 +3,14 @@ import './terminal-key-bar.css';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ToolbarControlGroup, type ToolbarControlGroupProps } from '@kerfjs/ui/toolbar-control-group';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, Copy, Lock } from 'lucide';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, Copy, Ellipsis, Lock } from 'lucide';
 
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { TerminalModifier, TerminalModifiers, TerminalSpecialKey } from '../terminal-keys';
 
 export interface TerminalKeyBarProps {
   modifiers: TerminalModifiers;
-  /** Show the F1–F12 / navigation row instead of the arrows (the Fn key toggles it). */
+  /** Show the extra keys row instead of the arrows (the More key toggles it). */
   functionRow?: boolean;
 }
 
@@ -63,7 +63,7 @@ function ModifierButton({ modifier, modifiers }: { modifier: TerminalModifier; m
 
 /**
  * One key group: a Kerf ToolbarControlGroup in an inline (forced-dark) Kerf FloatingToolbar, inside an
- * app-owned, non-shrinking slot of the bar's shared scroller, so the Fn slot can stay sticky while the
+ * app-owned, non-shrinking slot of the bar's shared scroller, so the More slot can stay sticky while the
  * other groups scroll beneath it.
  */
 function KeyGroup({
@@ -87,8 +87,8 @@ function KeyGroup({
 }
 
 /**
- * Phone terminal accessory bar (HS2-CKS78M). The main row (Fn, Esc, Tab, sticky Ctrl/Alt, arrows)
- * fits a 390px phone without scrolling; Fn swaps in a scrolling row with Shift, the Copy/Paste clipboard
+ * Phone terminal accessory bar (HS2-CKS78M, HS2-RS96EJ). The main row (More, Esc, Tab, sticky Ctrl/Alt, arrows)
+ * fits a 390px phone without scrolling; More swaps in a scrolling row with Shift, the Copy/Paste clipboard
  * actions (HS2-FRB545), Home/End/PgUp/PgDn, and F1–F12, and stays at the leading edge so it is always reachable. Buttons are not focusable and
  * a capture-phase `pointerdown` guard keeps focus in the terminal, so the soft keyboard stays up.
  */
@@ -101,15 +101,16 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
       role="toolbar"
       aria-label="Terminal keys"
     >
-      <KeyGroup label="Function Row">
+      <KeyGroup label="More Terminal Keys" content="icon">
         <button
           type="button"
           tabindex="-1"
           {...TERMINALS_ACTIONS.toggleTerminalFunctionRow.attrs}
           aria-pressed={String(functionRow)}
-          aria-label="Function and navigation keys"
+          aria-label="More Terminal Keys"
+          title="More Terminal Keys"
         >
-          Fn
+          <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
         </button>
       </KeyGroup>
       <KeyGroup
