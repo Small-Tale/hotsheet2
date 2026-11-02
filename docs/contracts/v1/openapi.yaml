@@ -11670,6 +11670,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/activity/current-diff:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: checkout_current_diff
+      description: Explicit non-retained read of a bounded current tracked working-tree diff against HEAD.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              additionalProperties: false
+              properties:
+                path:
+                  type: string
+      responses:
+        '200':
+          description: Current diff, capped at 64 KiB, with a no-store cache header.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [diff, truncated]
+                additionalProperties: false
+                properties:
+                  diff:
+                    type: string
+                  truncated:
+                    type: boolean
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /provider-connections/{connection_id}/endpoint-review:
     parameters:
       - name: connection_id

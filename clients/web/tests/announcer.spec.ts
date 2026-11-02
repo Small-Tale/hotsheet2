@@ -84,18 +84,34 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
             tool: 'codex',
             kind: 'edit',
             summary: 'Updated the synthetic sample file',
-            detail: { path: 'src/sample.ts', before: 'const n = 1;', after: 'const n = 2;' },
+            detail: { path: 'src/sample.ts', operation: 'fileChange', before: 'const n = 1;', after: 'const n = 2;' },
             importance: 'normal',
           },
         },
       ],
     }),
   );
+  let diffReads = 0;
+  await page.route('**/checkouts/demo-checkout/activity/current-diff', (route) => {
+    diffReads += 1;
+    return route.fulfill({
+      json: { diff: 'diff --git a/src/sample.ts b/src/sample.ts\n+const n = 2;', truncated: false },
+    });
+  });
 
   await page.getByRole('button', { name: 'Announcer' }).click();
   const overlay = page.locator('[data-component="announcer-overlay"]');
   await expect(overlay).toContainText('Updated the synthetic sample file');
   await expect(overlay).toContainText('src/sample.ts');
+  await expect(overlay).not.toContainText('const n = 1;');
+  await expect(overlay).not.toContainText('const n = 2;');
+  expect(diffReads).toBe(0);
+  const currentDiffRequest = page.waitForRequest('**/checkouts/demo-checkout/activity/current-diff');
+  await overlay.getByRole('button', { name: 'View current diff' }).click();
+  expect((await currentDiffRequest).postDataJSON()).toEqual({ path: 'src/sample.ts' });
+  expect(diffReads).toBe(1);
+  await expect(overlay.getByLabel('Current working-tree diff')).toContainText('const n = 2;');
+  await expect(overlay).toContainText('may differ from this edit');
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
@@ -142,6 +158,10 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   await expect(overlay.getByRole('button', { name: 'Close Announcer' })).toBeVisible();
   await overlay.getByRole('button', { name: 'Close Announcer' }).click();
   await expect(page.getByRole('button', { name: 'Announcer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Announcer' }).click();
+  await expect(overlay).toContainText('src/sample.ts');
+  await expect(overlay).not.toContainText('const n = 2;');
+  expect(diffReads).toBe(1);
 });
 
 test('HS2-5PSQJQ narrates a new live activity once after a replayable stream event', async ({ page }) => {
@@ -170,6 +190,9 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
   });
   await openDemoProject(page);
   await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
+  await page.route('**/checkouts/demo-checkout/activity/current-diff', (route) =>
+    route.fulfill({ json: { diff: '+const live = false;', truncated: false } }),
+  );
   let send = false;
   await page.route('**/ws/poll**', (route) => {
     if (!send) return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
@@ -204,6 +227,9 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
   await overlay.getByRole('button', { name: 'Live' }).click();
   send = true;
   await expect(overlay).toContainText('Changed the synthetic live file');
+  await expect(overlay).not.toContainText('+const live = true;');
+  await overlay.getByRole('button', { name: 'View current diff' }).click();
+  await expect(overlay.getByLabel('Current working-tree diff')).toContainText('+const live = false;');
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toEqual(['Changed the synthetic live file']);

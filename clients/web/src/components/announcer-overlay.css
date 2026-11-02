@@ -116,6 +116,20 @@
   font-size: var(--wa-font-size-xs);
 }
 
+.announcer__change code,
+.announcer__change span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.announcer__change span {
+  opacity: 0.7;
+}
+
+.announcer__change button {
+  margin-top: var(--wa-space-xs);
+}
+
 .announcer__change pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -124,22 +138,6 @@
   background: var(--wa-color-neutral-fill-quiet);
   padding: var(--wa-space-xs);
   border-radius: var(--wa-border-radius-s);
-}
-
-.announcer__before-after {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--wa-space-xs);
-}
-
-.announcer__before-after span {
-  display: block;
-  margin-bottom: var(--wa-space-2xs);
-  opacity: 0.7;
-}
-
-.announcer__before-after pre {
-  margin: 0;
 }
 
 .announcer__error {

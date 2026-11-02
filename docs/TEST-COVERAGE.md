@@ -1,5 +1,14 @@
 # Feature Coverage Matrix
 
+HS2-A93BHS keeps native edit content out of retained and live activity:
+`crates/hotsheet-ticketing/src/activity.rs` tests Codex/Claude metadata projection;
+`crates/hotsheet-server/tests/http.rs # checkout_current_diff_is_on_demand_confined_and_non_retained`
+checks authentication, checkout path confinement, retention, no-store response,
+current Git content, and the 64 KiB bound. `clients/web/src/announcer-reel.test.ts`
+checks legacy content fields are ignored, and `clients/web/tests/announcer.spec.ts`
+exercises the real shell's explicit current diff action, privacy boundary, and
+wide/medium/narrow/wide rendering with synthetic code.
+
 HS2-K5E2KF pins the web trailing-task boundary: `src/trailing-task.ts`
 exports only `TrailingTask<T>` and `createTrailingTask`, while ESLint rejects
 consumer imports of `src/trailing-task-internal.ts` through the

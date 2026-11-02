@@ -718,6 +718,13 @@ export const parseCheckoutActivity: ResponseParser<CheckoutActivityEvent[]> = (v
     return entry as CheckoutActivityEvent;
   });
 
+export const parseCurrentDiff: ResponseParser<{ diff: string; truncated: boolean }> = (value) => {
+  const item = record(value, 'current diff');
+  requiredString(item, 'diff', 'current diff');
+  if (typeof item.truncated !== 'boolean') invalid('current diff');
+  return item as { diff: string; truncated: boolean };
+};
+
 const isSizeLevel: Check = (field) => field === 'ok' || field === 'warning' || field === 'critical';
 const repositorySizeEntry = shape<RepositorySizeEntry>(
   'repository size entry',

@@ -85,13 +85,22 @@ The `activity` capability turns native signals → events; the host owns the str
 
 ## 15.6 Consumers
 
-- **Announcer (HS2-5PSQJQ)** — a project-strip control opens the compact or expanded
+- **Announcer (HS2-5PSQJQ, HS2-A93BHS)** — a project-strip control opens the compact or expanded
   picture-in-picture, retained cross-project digest, live narration over the change stream,
   a bounded reel,
-  browser speech or a configured server provider, and before/after or diff views
-  when an activity event carries that detail. The macOS server offers a local
-  `macos-say` provider. Source adapters currently emit path-only edit details;
-  richer diff payloads need a separately reviewed privacy and size contract.
+  browser speech or a configured server provider. The macOS server offers a local
+  `macos-say` provider. Edit events carry path, operation, and optional file count;
+  native patch and old/new text are excluded from retained and live activity. An
+  explicit **View current diff** action calls the authenticated
+  `POST /checkouts/{reference}/activity/current-diff` endpoint with a file path.
+  The response is the checkout's current tracked working-tree diff against `HEAD`,
+  not a historical reconstruction of the event. It is capped at 64 KiB with a
+  `truncated` flag, has `Cache-Control: no-store`, and is never written to activity,
+  logs, or browser persistence. Invalid paths, traversal, and symlink escapes are
+  rejected. An empty diff means the file has no current tracked change; untracked
+  files have no diff against `HEAD`. The browser clears the response on selection
+  changes, close, and disposal. Historical native patch review would require a
+  separately approved short-lived content channel.
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
   window. (A natural, cheaper first consumer than full TTS.)
 
@@ -228,9 +237,9 @@ client adapter, never a server dependency; other clients can inject another
   summarizer boundary, deterministic fallback, and provenance-derived idempotent
   activity-note writes. The server supplies only the optional deterministic adapter;
   Apple Foundation Models remains an on-device client adapter.
-- **Shipped (HS2-5PSQJQ):** the Announcer UI and local speech choices consume
-  retained and live activity. Diff views render when the event carries a diff or
-  before/after detail; the native mappings currently carry a path only.
+- **Shipped (HS2-5PSQJQ, HS2-A93BHS):** the Announcer UI and local speech choices
+  consume retained and live activity. Edit content is fetched only on demand as a
+  bounded current checkout diff; retained activity contains metadata only.
 
 ## 15.9 Cross-references
 

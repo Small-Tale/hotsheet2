@@ -7,7 +7,7 @@ export interface AnnouncerReelItem {
   storeId: string;
   event: ActivityEvent;
   narration: string;
-  change?: { path: string; before?: string; after?: string; diff?: string };
+  change?: { path: string; operation?: string; fileCount?: number };
 }
 
 const MAX_REEL_ITEMS = 120;
@@ -16,10 +16,12 @@ function changeDetail(value: unknown): AnnouncerReelItem['change'] {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const detail = value as Record<string, unknown>;
   if (typeof detail.path !== 'string' || !detail.path.trim()) return undefined;
-  const before = typeof detail.before === 'string' ? detail.before : undefined;
-  const after = typeof detail.after === 'string' ? detail.after : undefined;
-  const diff = typeof detail.diff === 'string' ? detail.diff : undefined;
-  return { path: detail.path, before, after, diff };
+  const operation = typeof detail.operation === 'string' ? detail.operation : undefined;
+  const fileCount =
+    Number.isSafeInteger(detail.file_count) && (detail.file_count as number) > 0
+      ? (detail.file_count as number)
+      : undefined;
+  return { path: detail.path, operation, fileCount };
 }
 
 export function announcerItem(
@@ -35,7 +37,7 @@ export function announcerItem(
     storeId,
     event,
     narration: event.summary.trim() || `${event.tool} reported ${event.kind.replaceAll('_', ' ')}.`,
-    change: changeDetail(event.detail),
+    change: event.kind === 'edit' ? changeDetail(event.detail) : undefined,
   };
 }
 

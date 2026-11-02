@@ -33,10 +33,14 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   const items = signal<AnnouncerReelItem[]>([]);
   const index = signal(0);
   const error = signal<string | undefined>();
+  const currentDiff = signal<{ key: string; diff: string; truncated: boolean } | undefined>();
+  const diffLoading = signal(false);
+  const diffError = signal<string | undefined>();
   const providers = signal<string[]>([]);
   const provider = signal('browser');
   const voice = signal('');
   let requestGeneration = 0;
+  let diffGeneration = 0;
   let speechGeneration = 0;
   let currentUtterance: SpeechSynthesisUtterance | undefined;
   let currentAudio: HTMLAudioElement | undefined;
@@ -51,6 +55,35 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     if (currentUrl) URL.revokeObjectURL(currentUrl);
     currentUrl = undefined;
     speaking.value = false;
+  }
+
+  function clearDiff() {
+    diffGeneration += 1;
+    currentDiff.value = undefined;
+    diffLoading.value = false;
+    diffError.value = undefined;
+  }
+
+  async function loadCurrentDiff() {
+    const item = items.peek().at(index.peek());
+    if (!item?.change || diffLoading.peek()) return;
+    const project = projects.peek().find((entry) => entry.id === item.projectId);
+    if (!project) {
+      diffError.value = 'Project is no longer open.';
+      return;
+    }
+    const generation = ++diffGeneration;
+    currentDiff.value = undefined;
+    diffError.value = undefined;
+    diffLoading.value = true;
+    try {
+      const diff = await new Api(project.apiPath).checkoutCurrentDiff(item.projectId, item.change.path);
+      if (generation === diffGeneration && open.peek()) currentDiff.value = { key: item.key, ...diff };
+    } catch {
+      if (generation === diffGeneration && open.peek()) diffError.value = 'Current diff could not be loaded.';
+    } finally {
+      if (generation === diffGeneration) diffLoading.value = false;
+    }
   }
 
   async function narrateCurrent() {
@@ -157,10 +190,12 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       }
     }
     if (live.peek()) {
+      clearDiff();
       index.value = Math.max(0, items.peek().length - 1);
       return;
     }
     const digest = announcerDigest(items.peek());
+    clearDiff();
     index.value = digest.length ? items.peek().findIndex((item) => item.key === digest[0].key) : 0;
   }
 
@@ -169,6 +204,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     const isNew = !items.peek().some((entry) => entry.key === item.key);
     items.value = mergeAnnouncerReel(items.peek(), [item]);
     if (live.peek() && open.peek() && isNew && !speaking.peek()) {
+      clearDiff();
       index.value = items.peek().findIndex((entry) => entry.key === item.key);
       void narrateCurrent();
     }
@@ -180,10 +216,12 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     if (!requestedAction) return;
     switch (requestedAction) {
       case 'open':
+        clearDiff();
         open.value = true;
         void loadDigest();
         break;
       case 'close':
+        clearDiff();
         open.value = false;
         live.value = false;
         cancelSpeech();
@@ -196,14 +234,17 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         else void narrateCurrent();
         break;
       case 'previous':
+        clearDiff();
         cancelSpeech();
         index.value = Math.max(0, index.peek() - 1);
         break;
       case 'next':
+        clearDiff();
         cancelSpeech();
         index.value = Math.min(items.peek().length - 1, index.peek() + 1);
         break;
       case 'live':
+        clearDiff();
         live.value = !live.peek();
         if (live.peek() && items.peek().length) index.value = items.peek().length - 1;
         break;
@@ -214,11 +255,15 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       case 'select': {
         const selected = Number(element.dataset.index);
         if (Number.isInteger(selected) && selected >= 0 && selected < items.peek().length) {
+          clearDiff();
           cancelSpeech();
           index.value = selected;
         }
         break;
       }
+      case 'current-diff':
+        void loadCurrentDiff();
+        break;
       default:
         break;
     }
@@ -258,6 +303,9 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         items={items.value}
         index={index.value}
         error={error.value}
+        currentDiff={currentDiff.value}
+        diffLoading={diffLoading.value}
+        diffError={diffError.value}
         providers={providers.value}
         provider={provider.value}
         voice={voice.value}
@@ -269,6 +317,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       unbindProvider();
       unbindVoice();
       cancelSpeech();
+      clearDiff();
     },
   };
 }

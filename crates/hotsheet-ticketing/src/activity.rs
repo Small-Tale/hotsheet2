@@ -511,7 +511,7 @@ pub fn claude_activity(hook: &Value, id: &str, ts: &str) -> Option<ActivityEvent
                 ),
                 "Edit" | "Write" | "MultiEdit" | "NotebookEdit" => (
                     ActivityKind::Edit,
-                    serde_json::json!({ "path": path.unwrap_or("") }),
+                    serde_json::json!({ "path": path.unwrap_or(""), "operation": tool_name }),
                 ),
                 other => (ActivityKind::ToolCall, serde_json::json!({ "name": other })),
             }
@@ -585,7 +585,8 @@ pub fn codex_activity(item: &Value, id: &str, ts: &str) -> Option<ActivityEvent>
             ActivityKind::Edit,
             serde_json::json!({ "path": item.get("path").and_then(Value::as_str).or_else(|| {
                 item.get("changes").and_then(Value::as_array)?.first()?.get("path")?.as_str()
-            }).unwrap_or("") }),
+            }).unwrap_or(""), "operation": ty,
+            "file_count": item.get("changes").and_then(Value::as_array).map_or(1, Vec::len) }),
         ),
         "reasoning" | "decision" | "plan" => {
             let text = item
@@ -991,6 +992,15 @@ mod tests {
         .unwrap();
         assert_eq!(e.kind, ActivityKind::Edit);
         assert_eq!(e.summary, "claude edited src/main.rs");
+        assert_eq!(e.detail["operation"], "Edit");
+
+        let private = claude_activity(
+            &json!({"hook_event_name":"PreToolUse", "tool_name":"Edit", "tool_input":{
+                "file_path":"src/main.rs", "old_string":"synthetic before", "new_string":"synthetic after"
+            }}), "01B2", "t",
+        ).unwrap();
+        assert_eq!(private.detail.as_object().unwrap().len(), 2);
+        assert!(!private.detail.to_string().contains("synthetic"));
 
         // Prompt submit / stop map to turn boundaries.
         assert_eq!(
@@ -1024,6 +1034,18 @@ mod tests {
 
         let e = codex_activity(&json!({ "type": "patch", "path": "a.rs" }), "01B", "t").unwrap();
         assert_eq!(e.kind, ActivityKind::Edit);
+        assert_eq!(e.detail["operation"], "patch");
+        let private = codex_activity(
+            &json!({"type":"fileChange", "changes":[
+                {"path":"a.rs", "diff":"synthetic patch"},
+                {"path":"b.rs", "diff":"synthetic second patch"}
+            ]}),
+            "01B2",
+            "t",
+        )
+        .unwrap();
+        assert_eq!(private.detail["file_count"], 2);
+        assert!(!private.detail.to_string().contains("synthetic"));
 
         let e = codex_activity(
             &json!({ "type": "plan", "text": "do X then Y" }),

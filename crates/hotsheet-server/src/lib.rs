@@ -76,7 +76,9 @@ use routes::accounts::{
     list_stores, remove_unused_account_source, sign_out_account, start_github_device_auth,
     wait_github_device_auth,
 };
-use routes::activity::{checkout_activity, ingest_activity, list_activity, post_announce};
+use routes::activity::{
+    checkout_activity, checkout_current_diff, ingest_activity, list_activity, post_announce,
+};
 use routes::auth::require_secret;
 use routes::checkout_tickets::{
     act_on_checkout_ticket_attachment, act_on_checkout_ticket_attachment_by_name,
@@ -1534,6 +1536,10 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/checkouts/{reference}/analytics", get(checkout_analytics))
         .route("/checkouts/{reference}/activity", get(checkout_activity))
+        .route(
+            "/checkouts/{reference}/activity/current-diff",
+            post(checkout_current_diff),
+        )
         .route(
             "/checkouts/{reference}/phase-report",
             get(checkout_phase_report),

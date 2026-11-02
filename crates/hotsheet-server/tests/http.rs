@@ -14771,6 +14771,133 @@ async fn checkout_activity_reads_linked_store_and_rejects_unknown_checkout() {
     assert!(missing.status().is_client_error());
 }
 
+/// HS2-A93BHS: the current diff is an authenticated, bounded checkout read. Native-style
+/// content in an edit event never crosses the retained or live activity boundary.
+#[tokio::test]
+async fn checkout_current_diff_is_on_demand_confined_and_non_retained() {
+    let (primary, st) = state();
+    let mut live = st.subscribe();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(primary.path());
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            hotsheet_ticketing::git::command_in(&checkout)
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.name", "Synthetic Test"]);
+    git(&["config", "user.email", "synthetic@example.invalid"]);
+    std::fs::write(checkout.join("sample.rs"), "fn synthetic() { 1 }\n").unwrap();
+    git(&["add", "sample.rs"]);
+    git(&["commit", "-qm", "synthetic baseline"]);
+    std::fs::write(checkout.join("sample.rs"), "fn synthetic() { 2 }\n").unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout,"sources":[source]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let uri = format!("/checkouts/{id}/activity/current-diff");
+    let body = r#"{"path":"sample.rs"}"#;
+    let denied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+    let outside = app
+        .clone()
+        .oneshot(authed("POST", &uri, Some(r#"{"path":"../outside.rs"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(outside.status(), StatusCode::BAD_REQUEST);
+    let symlink = checkout.join("escape.rs");
+    std::os::unix::fs::symlink(workspace.path(), &symlink).unwrap();
+    let escape = app
+        .clone()
+        .oneshot(authed("POST", &uri, Some(r#"{"path":"escape.rs"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(escape.status(), StatusCode::BAD_REQUEST);
+
+    let edit = app.clone().oneshot(authed("POST", "/activity", Some(
+        r#"{"tool":"codex","kind":"edit","detail":{"path":"sample.rs","operation":"fileChange","diff":"synthetic private patch"}}"#
+    ))).await.unwrap();
+    assert_eq!(edit.status(), StatusCode::OK);
+    let retained = body_json(edit).await;
+    assert_eq!(
+        retained["detail"],
+        serde_json::json!({"path":"sample.rs","operation":"fileChange"})
+    );
+    let pushed = (0..16)
+        .filter_map(|_| live.try_recv().ok())
+        .find(|event| event.kind == "activity")
+        .expect("edit activity reached the live bus");
+    assert!(
+        !serde_json::to_string(&pushed.activity)
+            .unwrap()
+            .contains("synthetic private patch")
+    );
+    let timeline = app
+        .clone()
+        .oneshot(authed("GET", "/activity", None))
+        .await
+        .unwrap();
+    assert!(
+        !body_json(timeline)
+            .await
+            .to_string()
+            .contains("synthetic private patch")
+    );
+
+    let response = app
+        .clone()
+        .oneshot(authed("POST", &uri, Some(body)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let current = body_json(response).await;
+    assert!(
+        current["diff"]
+            .as_str()
+            .unwrap()
+            .contains("fn synthetic() { 2 }")
+    );
+    assert_eq!(current["truncated"], false);
+    std::fs::write(
+        checkout.join("sample.rs"),
+        format!("{}\n", "x".repeat(90_000)),
+    )
+    .unwrap();
+    let response = app.oneshot(authed("POST", &uri, Some(body))).await.unwrap();
+    assert_eq!(body_json(response).await["truncated"], true);
+}
+
 #[tokio::test]
 async fn fields_projection_returns_a_leaner_row() {
     let (_d, st) = state();

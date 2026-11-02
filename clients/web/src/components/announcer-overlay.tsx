@@ -14,6 +14,9 @@ export interface AnnouncerOverlayProps {
   items: readonly AnnouncerReelItem[];
   index: number;
   error?: string;
+  currentDiff?: { key: string; diff: string; truncated: boolean };
+  diffLoading?: boolean;
+  diffError?: string;
   providers?: readonly string[];
   provider?: string;
   voice?: string;
@@ -32,6 +35,9 @@ export function AnnouncerOverlay({
   items,
   index,
   error,
+  currentDiff,
+  diffLoading = false,
+  diffError,
   providers = [],
   provider = 'browser',
   voice = '',
@@ -61,20 +67,25 @@ export function AnnouncerOverlay({
               {selected.change && (
                 <div class="announcer__change">
                   <code>{selected.change.path}</code>
-                  {selected.change.diff ? (
-                    <pre>{selected.change.diff}</pre>
-                  ) : selected.change.before !== undefined || selected.change.after !== undefined ? (
-                    <div class="announcer__before-after">
-                      <div>
-                        <span>Before</span>
-                        <pre aria-label="Before">{selected.change.before ?? ''}</pre>
-                      </div>
-                      <div>
-                        <span>After</span>
-                        <pre aria-label="After">{selected.change.after ?? ''}</pre>
-                      </div>
+                  {selected.change.operation && <span>{selected.change.operation}</span>}
+                  {selected.change.fileCount && selected.change.fileCount > 1 && (
+                    <span>{selected.change.fileCount} files in edit</span>
+                  )}
+                  <button type="button" disabled={diffLoading} {...action('current-diff')}>
+                    {diffLoading ? 'Loading current diff…' : 'View current diff'}
+                  </button>
+                  {currentDiff?.key === selected.key && (
+                    <div>
+                      <span>Current working-tree diff · may differ from this edit</span>
+                      {currentDiff.diff ? (
+                        <pre aria-label="Current working-tree diff">{currentDiff.diff}</pre>
+                      ) : (
+                        <p>No current tracked changes for this file.</p>
+                      )}
+                      {currentDiff.truncated && <p>Diff truncated at 64 KiB.</p>}
                     </div>
-                  ) : undefined}
+                  )}
+                  {diffError && <p role="alert">{diffError}</p>}
                 </div>
               )}
             </>

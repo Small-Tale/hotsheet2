@@ -6,6 +6,11 @@ in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
 AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
 These documents remain the source of truth for what we are building and why.
 
+**Announcer edit review (HS2-A93BHS):** edit activity retains path and operation
+metadata; the explicit viewer reads a bounded current checkout diff through an
+authenticated, non-retained route. The diff is labelled as current state, not the
+historical edit. See [activity narration](15-activity-narration-interface.md) §15.6.
+
 **Shipped guidance provenance:** reusable rules are maintained in `Small-Tale/ai-playbook`;
 Hot Sheet embeds pinned offline snapshots with upstream drift checks. See
 [snapshot maintenance](../guidance/README.md) and [plugin setup](05-ai-tool-plugins.md).

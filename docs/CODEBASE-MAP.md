@@ -257,8 +257,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/gallery-annotation-workflow.ts # Pure gallery annotation session and save transitions (HS2-8SD6XQ)
     src/permission-decision-workflow.ts # Injectable permission inbox, optimistic decision, and reconciliation workflow (HS2-GGJ57M)
     src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
-    src/announcer-reel.ts     #   Retained and live cross-project activity merge, digest and diff view model (HS2-5PSQJQ)
-    src/features/announcer-controller.tsx # Announcer playback, provider choice and live-stream composition (HS2-5PSQJQ)
+    src/announcer-reel.ts     #   Retained and live cross-project activity merge and metadata-only edit model (HS2-5PSQJQ, HS2-A93BHS)
+    src/features/announcer-controller.tsx # Announcer playback, provider choice, live-stream composition and on-demand current diff (HS2-5PSQJQ, HS2-A93BHS)
     src/components/announcer-overlay.tsx # Responsive picture-in-picture digest and reel (HS2-5PSQJQ)
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects

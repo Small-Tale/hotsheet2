@@ -25,6 +25,7 @@ import {
   parseCompactionPlan,
   parseCompactionResult,
   parseCorruptTicket,
+  parseCurrentDiff,
   parseCustomView,
   parseDuplicateBacklinks,
   parseFeedbackDelivery,
@@ -1691,6 +1692,12 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/activity${params.size ? `?${params}` : ''}`,
     );
   };
+  /** Bounded current working-tree diff; explicitly requested and never retained as activity. */
+  checkoutCurrentDiff = (checkout: string, path: string) =>
+    this.parsed(parseCurrentDiff, `/checkouts/${encodeURIComponent(checkout)}/activity/current-diff`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    });
   notifications = (checkout: string) =>
     this.parsed(parseClientNotifications, `/notifications?checkout=${encodeURIComponent(checkout)}`);
   acknowledgeNotification = (id: string) =>

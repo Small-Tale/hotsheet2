@@ -31,14 +31,21 @@ describe('HS2-5PSQJQ Announcer reel', () => {
     expect(announcerDigest(reel).map((item) => item.key)).toEqual(['shared:A', 'second:B']);
   });
 
-  it('deduplicates a replay, caps the reel, and only shows diff detail when the event contains it', () => {
+  it('deduplicates a replay, caps the reel, and discards retained content fields', () => {
     const before = announcerItem('one', 'One', 'store', event('A', '2026-10-01T10:00:00Z', 'low'));
     const changed = announcerItem('one', 'One', 'store', {
       ...event('B', '2026-10-01T10:01:00Z'),
-      detail: { path: 'src/example.ts', before: 'one', after: 'two' },
+      detail: {
+        path: 'src/example.ts',
+        operation: 'edit',
+        file_count: 2,
+        before: 'one',
+        after: 'two',
+        diff: 'private',
+      },
     });
     expect(before.change).toBeUndefined();
-    expect(changed.change).toEqual({ path: 'src/example.ts', before: 'one', after: 'two', diff: undefined });
+    expect(changed.change).toEqual({ path: 'src/example.ts', operation: 'edit', fileCount: 2 });
     const replayed = mergeAnnouncerReel([before, changed], [changed], 1);
     expect(replayed.map((item) => item.key)).toEqual(['store:B']);
     expect(announcerDigest([before, changed])).toEqual([changed]);
