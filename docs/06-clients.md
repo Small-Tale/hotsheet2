@@ -1283,6 +1283,13 @@ preview/download, server directory browser) are separate design work.
   fields accept only an existing keychain reference; secret values are never returned to
   browser JavaScript.
 
+  **HS2-K5E2KF:** Rapid view changes share a trailing 250 ms collection-refresh
+  intent. Only the latest pending view starts work; cancelling prevents that
+  pending refresh, and a later view can schedule again. The public client
+  scheduler contract is `TrailingTask<T>` and `createTrailingTask`; timer
+  mechanics are private to that module. The shipped parent keeps an open
+  metadata popup stable while a queued refresh waits.
+
   Workspace collection refreshes retain one bounded compact page and expose a visible
   **Load more tickets** cursor continuation below lists and after the final loaded row in its column instead of
   downloading every ticket. Continuation pages append without duplicating overlapping

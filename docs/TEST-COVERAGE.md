@@ -1,5 +1,14 @@
 # Feature Coverage Matrix
 
+HS2-K5E2KF pins the web trailing-task boundary: `src/trailing-task.ts`
+exports only `TrailingTask<T>` and `createTrailingTask`, while ESLint rejects
+consumer imports of `src/trailing-task-internal.ts` through the
+`src/eslint-policy.test.ts` policy proof. `src/trailing-task.test.ts` checks
+latest-only scheduling, cancellation, exact delay, reset, and further
+scheduling through the public API. The shipped `tests/providers.spec.ts` case
+“defers ticket refresh without hiding an open metadata popup” covers the
+runtime parent and its visible collection behavior. No server DTO is involved.
+
 HS2-5PSQJQ covers checkout-scoped cross-store retained activity in the real
 server HTTP suite; cross-project merge, shared-store deduplication, replay and
 digest selection in `clients/web/src/announcer-reel.test.ts`; configured speech

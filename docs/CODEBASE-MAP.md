@@ -415,7 +415,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/notification-settings-model.ts # Pure schema-to-form mapping, form-to-request parsing, rule summaries, notifier icons (HS2-DPBJJA)
     src/components/ticket-sources-settings.tsx # Project Settings → Ticket sources (only this project's own sources: default choice, edit, remove-from-this-project) and App Settings → Accounts (machine-wide sign-ins with their sources/projects, Sign out when unused), HS2-3SCH1K/HS2-SM9PM8
     src/tracked-size-observer.ts # ResizeObserver that re-binds to whichever element currently renders a slot and ignores 0x0 hidden/detached reports (drawer + workspace grid bounds, HS2-0PF13V)
-    src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
+    src/trailing-task.ts     # Public TrailingTask/createTrailingTask contract for collapsed view intent; app/runtime.tsx is its production consumer (HS2-K5E2KF)
+    src/trailing-task-internal.ts # Private timer mechanics; ESLint bars direct consumer imports (HS2-K5E2KF)
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers; identical-request grouping and remembered-rule helpers (HS2-JNHAYB); 5-second Settings and real-server coverage in tests/permission-automation-delay.spec.ts (HS2-0XF17D)

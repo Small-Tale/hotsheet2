@@ -63,6 +63,21 @@ describe('web ESLint policy', () => {
       });
       expect(invalid.messages.map((message) => message.ruleId)).toContain('no-undef');
     });
+
+    it('HS2-K5E2KF rejects imports of the trailing-task implementation', async () => {
+      const [invalid] = await eslint.lintText(
+        "import { createTrailingTaskInternal } from './trailing-task-internal';\n",
+        {
+          filePath: join(webRoot, 'src/trailing-task.test.ts'),
+        },
+      );
+      expect(invalid.messages.map((message) => message.ruleId)).toContain('no-restricted-imports');
+      const publicSource = readFileSync(join(webRoot, 'src/trailing-task.ts'), 'utf8');
+      expect(publicSource.match(/^export (?:interface|function).*$/gm)).toEqual([
+        'export interface TrailingTask<T> {',
+        'export function createTrailingTask<T>(delayMs: number, run: (value: T) => void): TrailingTask<T> {',
+      ]);
+    });
   });
 
   it('HS2-6ABCVC keeps the four Kerf packages on one exact version', () => {

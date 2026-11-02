@@ -120,6 +120,24 @@ export default tseslint.config(
     },
   },
   {
+    // HS2-K5E2KF: consumers use the public trailing-task contract, never timer internals.
+    files: ['**/*.{ts,tsx,mts,mjs}'],
+    ignores: ['src/trailing-task.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/trailing-task-internal', '**/trailing-task-internal.ts'],
+              message: 'Import the public trailing-task module instead (HS2-K5E2KF).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/dev-server.ts'],
     rules: { '@typescript-eslint/no-unsafe-return': 'off' },
   },
