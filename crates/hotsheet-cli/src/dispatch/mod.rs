@@ -107,6 +107,7 @@ impl Cmd {
             | ProviderEdit { .. }
             | ProviderClose { .. }
             | ProviderAssign { .. }
+            | ProviderAdvisoryClaim { .. }
             | ProviderRestore { .. }
             | ProviderReportNotWorking { .. }
             | ProviderDeleteNote { .. }

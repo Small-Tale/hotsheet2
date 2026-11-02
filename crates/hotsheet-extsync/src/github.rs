@@ -1580,6 +1580,31 @@ impl TicketProvider for GitHubProvider {
         Ok(self.api_ticket(issue, vec![]))
     }
 
+    fn assign_current_user(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
+        validate_number(native_id)?;
+        let response = self.request(
+            "GET",
+            &format!("{}/user", self.config.api_base.trim_end_matches('/')),
+            None,
+        )?;
+        let user: Value = self.json(response)?;
+        let login = user
+            .get("login")
+            .and_then(Value::as_str)
+            .filter(|login| !login.is_empty())
+            .ok_or_else(|| ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: "GitHub credential user response has no login".into(),
+            })?;
+        let response = self.request(
+            "POST",
+            &self.endpoint(&format!("issues/{native_id}/assignees")),
+            Some(&json!({"assignees":[login]})),
+        )?;
+        let issue: GitHubIssue = self.json(response)?;
+        Ok(self.api_ticket(issue, vec![]))
+    }
+
     fn claim_next(
         &self,
         _: Timestamp,
@@ -2146,6 +2171,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         up_next: true,
         close_reasons: true,
         claims: false,
+        advisory_claims: false,
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
@@ -2593,6 +2619,27 @@ mod tests {
             requests[0].3.as_ref().unwrap()["assignees"],
             json!(["octocat"])
         );
+    }
+
+    #[test]
+    fn hs2_bpkm76_assign_current_github_credential_user() {
+        let transport = FakeTransport::with(vec![
+            response(200, json!({"login":"octocat"})),
+            response(200, issue(42, "example", "details")),
+        ]);
+        let ticket = provider(transport.clone())
+            .assign_current_user("42")
+            .unwrap();
+        assert_eq!(ticket.assignees, vec!["octocat"]);
+        let requests = transport.requests.lock_or_recover();
+        assert_eq!(requests[0].0, "GET");
+        assert_eq!(requests[0].1, "https://api.test/user");
+        assert_eq!(requests[1].0, "POST");
+        assert_eq!(
+            requests[1].1,
+            "https://api.test/repos/acme/widgets/issues/42/assignees"
+        );
+        assert_eq!(requests[1].3, Some(json!({"assignees":["octocat"]})));
     }
 
     #[test]

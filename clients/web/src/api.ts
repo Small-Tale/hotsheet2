@@ -275,6 +275,8 @@ export type Capabilities = Record<
   attachment_crop?: boolean;
   /** Host may expose an opt-in durable provisional field-edit endpoint. */
   write_behind?: boolean;
+  /** Provider-native advisory process markers; separate from exclusive claims. */
+  advisory_claims?: boolean;
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };

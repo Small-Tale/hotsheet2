@@ -867,6 +867,39 @@ impl TicketProvider for GitLabProvider {
         self.unsupported("assignment requires provider-native numeric user ids")
     }
 
+    fn assign_current_user(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
+        let response = self.request(
+            "GET",
+            &format!("{}/user", self.config.api_base.trim_end_matches('/')),
+            None,
+        )?;
+        let credential: GitLabCredentialUser = self.json(response)?;
+        if credential.id == 0 {
+            return self.unsupported("current credential user id");
+        }
+        let current = self.issue(native_id)?;
+        let mut ids = current
+            .assignees
+            .iter()
+            .map(|user| user.id)
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| ProviderError::Unsupported {
+                connection_id: self.config.connection_id.clone(),
+                capability: "complete numeric assignee ids",
+            })?;
+        if ids.contains(&credential.id) {
+            return self.get(native_id);
+        }
+        ids.push(credential.id);
+        let response = self.request(
+            "PUT",
+            &self.endpoint(&format!("issues/{native_id}")),
+            Some(&json!({"assignee_ids":ids})),
+        )?;
+        let issue: GitLabIssue = self.json(response)?;
+        Ok(self.ticket(issue, vec![]))
+    }
+
     fn claim_next(
         &self,
         _: Timestamp,
@@ -908,7 +941,14 @@ struct GitLabIssue {
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitLabUser {
+    #[serde(default)]
+    id: Option<u64>,
     username: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitLabCredentialUser {
+    id: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -952,6 +992,7 @@ fn capabilities() -> ProviderCapabilities {
         up_next: false,
         close_reasons: false,
         claims: false,
+        advisory_claims: false,
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
@@ -1086,6 +1127,55 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
+    #[test]
+    fn hs2_bpkm76_gitlab_current_credential_assignment_preserves_existing_user() {
+        let mut before = issue(9, "example");
+        before["assignees"] = json!([{"id":4,"username":"existing"}]);
+        let mut after = before.clone();
+        after["assignees"] = json!([{"id":4,"username":"existing"},{"id":7,"username":"current"}]);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"id":7})),
+                    response(200, before),
+                    response(200, after),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let provider = provider(fake.clone());
+        assert!(!provider.descriptor().capabilities.advisory_claims);
+        let ticket = provider.assign_current_user("9").unwrap();
+        assert_eq!(ticket.assignees, vec!["existing", "current"]);
+        let requests = fake.requests.lock_or_recover();
+        assert!(requests[0].1.ends_with("/user"));
+        assert_eq!(requests[2].3, Some(json!({"assignee_ids":[4,7]})));
+    }
+
+    #[test]
+    fn hs2_bpkm76_gitlab_missing_existing_numeric_id_refuses_without_write() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"id":7})),
+                    response(200, issue(9, "example")),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake.clone()).assign_current_user("9"),
+            Err(ProviderError::Unsupported { .. })
+        ));
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|request| request.0 == "GET")
+        );
+    }
     type RecordedRequest = (String, String, Vec<(String, String)>, Option<Value>);
 
     #[derive(Default)]

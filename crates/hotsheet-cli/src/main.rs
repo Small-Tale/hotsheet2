@@ -270,8 +270,28 @@ enum Cmd {
         to: Vec<String>,
         #[arg(long)]
         clear: bool,
+        /// Assign to the provider account authenticated by this connection.
+        #[arg(long, conflicts_with_all = ["to", "clear", "reviews"])]
+        me: bool,
         #[arg(long = "review")]
         reviews: Vec<String>,
+    },
+    /// Inspect or write a Jira advisory process claim for a linked checkout source.
+    ProviderAdvisoryClaim {
+        checkout: String,
+        connection: String,
+        id: String,
+        #[arg(value_parser = ["status", "claim", "renew", "release"])]
+        action: String,
+        #[arg(long)]
+        worker: Option<String>,
+        #[arg(long)]
+        operation: Option<String>,
+        #[arg(long)]
+        expires_ms: Option<i64>,
+        /// Record a local provisional claim for replay after connectivity returns.
+        #[arg(long)]
+        provisional: bool,
     },
     /// Restore a ticket in a git-backed provider's Trash.
     ProviderRestore { connection: String, id: String },

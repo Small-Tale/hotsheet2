@@ -301,6 +301,10 @@ async fn main() -> Result<()> {
             .join(format!("{store_id}.sqlite"));
         state = state.with_jira_outbox(outbox_path, 1_000)?;
     }
+    let claim_ledger_path = hotsheet_plugins::hotsheet_home()
+        .join("advisory_claims")
+        .join("provisional.sqlite");
+    state = state.with_advisory_claim_ledger(claim_ledger_path)?;
 
     // Detached terminal hosting is the default: normal server stops/restarts disconnect from
     // the broker without killing its PTYs. `--no-terminal-broker` is an explicit diagnostic

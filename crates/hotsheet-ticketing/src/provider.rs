@@ -16,6 +16,7 @@ use hotsheet_model::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::advisory_claim::{AdvisoryClaimEvent, AdvisoryClaimProjection};
 use crate::checkout_order::{self, MergeKey};
 use crate::ops::{self, NewTicket, NoteMetadataInput, TicketPatch, TicketQuery};
 use crate::wire::{ApiAttachment, ApiTicket};
@@ -456,6 +457,9 @@ pub struct ProviderCapabilities {
     pub up_next: bool,
     pub close_reasons: bool,
     pub claims: bool,
+    /// Provider-native best-effort process markers; never an exclusive lease.
+    #[serde(default)]
+    pub advisory_claims: bool,
     pub atomic_batch: bool,
     /// One all-or-nothing note/evidence/reopen operation.
     #[serde(default)]
@@ -514,6 +518,7 @@ impl ProviderCapabilities {
             up_next: true,
             close_reasons: true,
             claims: true,
+            advisory_claims: false,
             atomic_batch: true,
             not_working_report: true,
             note_confidence: true,
@@ -1388,6 +1393,43 @@ pub trait TicketProvider: Send + Sync {
         lease_expires: Timestamp,
         worker: &str,
     ) -> Result<ApiTicket, ProviderError>;
+
+    /// Assign the ticket to the provider account behind this connection's credential.
+    fn assign_current_user(&self, _native_id: &str) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "assign_current_user",
+        })
+    }
+
+    /// Read every provider-native process marker for one qualified ticket. A
+    /// conflict must prevent automatic dispatch, even if this read succeeds.
+    fn advisory_claims(
+        &self,
+        _native_id: &str,
+        _now_unix_ms: i64,
+        _skew_allowance_ms: i64,
+    ) -> Result<AdvisoryClaimProjection, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "advisory_claims",
+        })
+    }
+
+    /// Append an independent provider-native marker and re-read the projection.
+    /// This is deliberately distinct from the exclusive Git claim methods.
+    fn append_advisory_claim_event(
+        &self,
+        _native_id: &str,
+        _event: &AdvisoryClaimEvent,
+        _now_unix_ms: i64,
+        _skew_allowance_ms: i64,
+    ) -> Result<AdvisoryClaimProjection, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "advisory_claims",
+        })
+    }
 }
 
 #[derive(Debug, Clone)]

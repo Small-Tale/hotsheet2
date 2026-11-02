@@ -6,11 +6,12 @@ pub(crate) mod admission_tests;
 mod disabled_transfer_tests;
 mod tickets;
 pub(crate) use tickets::{
-    assign_provider_ticket, close_provider_ticket, create_provider_ticket,
-    delete_provider_ticket_note, do_provider_create, do_provider_update, do_rate_ai_feedback,
-    get_provider_ticket, list_provider_ai_feedback, list_provider_tickets, provider_copy_route,
-    provider_move_route, provider_timing_headers, report_provider_ticket_not_working,
-    report_provider_ticket_not_working_json, restore_provider_ticket, update_provider_ticket,
+    assign_provider_current_user, assign_provider_ticket, close_provider_ticket,
+    create_provider_ticket, delete_provider_ticket_note, do_provider_create, do_provider_update,
+    do_rate_ai_feedback, get_provider_ticket, list_provider_ai_feedback, list_provider_tickets,
+    provider_copy_route, provider_move_route, provider_timing_headers,
+    report_provider_ticket_not_working, report_provider_ticket_not_working_json,
+    restore_provider_ticket, update_provider_ticket,
 };
 
 use crate::api_error::ApiError;

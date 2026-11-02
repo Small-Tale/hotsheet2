@@ -2,16 +2,21 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
+use hotsheet_ticketing::advisory_claim::{
+    AdvisoryClaimEvent, AdvisoryClaimEventKind, AdvisoryClaimProjection, reconcile_claims,
+    valid_write_event,
+};
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderMutationTiming,
     ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
-    checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
+    TicketRef, checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
     keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::note_trailer;
 
@@ -19,6 +24,8 @@ mod attachments;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
+const CLAIM_PROPERTY_PREFIX: &str = "hotsheet.advisory.v1.";
+const MAX_CLAIM_PROPERTIES: usize = 1000;
 
 use crate::github::{GitHubTransport as HttpTransport, HttpResponse, UreqGitHubTransport};
 
@@ -164,6 +171,58 @@ impl JiraProvider {
         validate_key(key)?;
         let response = self.request("GET", &self.endpoint(&format!("issue/{key}")), None)?;
         self.json(response)
+    }
+
+    fn claim_ticket_ref(&self, native_id: &str) -> TicketRef {
+        TicketRef {
+            connection_id: self.config.connection_id.clone(),
+            native_id: native_id.to_owned(),
+        }
+    }
+
+    fn claim_properties(&self, native_id: &str) -> Result<Vec<AdvisoryClaimEvent>, ProviderError> {
+        validate_key(native_id)?;
+        let response = self.request(
+            "GET",
+            &self.endpoint(&format!("issue/{native_id}/properties")),
+            None,
+        )?;
+        let listing: JiraPropertyKeys = self.json(response)?;
+        if listing.keys.len() > MAX_CLAIM_PROPERTIES {
+            return self.unsupported("bounded advisory claim property scan");
+        }
+        let mut keys = listing
+            .keys
+            .into_iter()
+            .map(|entry| entry.key)
+            .filter(|key| key.starts_with(CLAIM_PROPERTY_PREFIX))
+            .collect::<Vec<_>>();
+        keys.sort();
+        let mut events = Vec::with_capacity(keys.len());
+        for (index, key) in keys.iter().enumerate() {
+            let response = self.request(
+                "GET",
+                &self.endpoint(&format!("issue/{native_id}/properties/{key}")),
+                None,
+            )?;
+            let property: JiraPropertyValue = self.json(response)?;
+            let mut event: AdvisoryClaimEvent =
+                serde_json::from_value(property.value).map_err(|error| {
+                    ProviderError::Conflict {
+                        ticket: self.claim_ticket_ref(native_id).qualified(),
+                        message: format!("invalid advisory claim property {key}: {error}"),
+                    }
+                })?;
+            if claim_property_key(&event) != *key {
+                return Err(ProviderError::Conflict {
+                    ticket: self.claim_ticket_ref(native_id).qualified(),
+                    message: format!("advisory claim property key mismatch: {key}"),
+                });
+            }
+            event.provider_order = (index + 1) as u64;
+            events.push(event);
+        }
+        Ok(events)
     }
 
     /// When the issue left the `done` status category, from its changelog (HS2-N3RMTV).
@@ -883,6 +942,18 @@ impl TicketProvider for JiraProvider {
         self.get(native_id)
     }
 
+    fn assign_current_user(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
+        validate_key(native_id)?;
+        let response = self.request("GET", &self.endpoint("myself"), None)?;
+        let user: JiraUser = self.json(response)?;
+        self.request(
+            "PUT",
+            &self.endpoint(&format!("issue/{native_id}/assignee")),
+            Some(&json!({"accountId": user.account_id})),
+        )?;
+        self.get(native_id)
+    }
+
     fn claim_next(
         &self,
         _: Timestamp,
@@ -904,6 +975,104 @@ impl TicketProvider for JiraProvider {
     ) -> Result<ApiTicket, ProviderError> {
         self.unsupported("claims")
     }
+
+    fn advisory_claims(
+        &self,
+        native_id: &str,
+        now_unix_ms: i64,
+        skew_allowance_ms: i64,
+    ) -> Result<AdvisoryClaimProjection, ProviderError> {
+        let ticket = self.claim_ticket_ref(native_id);
+        Ok(reconcile_claims(
+            &ticket,
+            &self.claim_properties(native_id)?,
+            now_unix_ms,
+            skew_allowance_ms,
+        ))
+    }
+
+    fn append_advisory_claim_event(
+        &self,
+        native_id: &str,
+        event: &AdvisoryClaimEvent,
+        now_unix_ms: i64,
+        skew_allowance_ms: i64,
+    ) -> Result<AdvisoryClaimProjection, ProviderError> {
+        validate_key(native_id)?;
+        let ticket = self.claim_ticket_ref(native_id);
+        if !valid_write_event(event, &ticket, now_unix_ms) {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "invalid advisory claim event".into(),
+            });
+        }
+        let prior_events = self.claim_properties(native_id)?;
+        let before = reconcile_claims(&ticket, &prior_events, now_unix_ms, skew_allowance_ms);
+        if prior_events.iter().any(|prior| {
+            prior.ticket == event.ticket
+                && prior.worker == event.worker
+                && prior.operation_id == event.operation_id
+                && prior.kind == event.kind
+        }) {
+            return Ok(before);
+        }
+        let allowed = match &event.kind {
+            AdvisoryClaimEventKind::Claim { .. } => !before.conflicted && before.claims.is_empty(),
+            AdvisoryClaimEventKind::Renew { expires_unix_ms } => {
+                !before.conflicted
+                    && before.claims.iter().any(|claim| {
+                        claim.worker == event.worker
+                            && claim.operation_id == event.operation_id
+                            && *expires_unix_ms >= claim.expires_unix_ms
+                    })
+            }
+            AdvisoryClaimEventKind::Release => prior_events.iter().any(|prior| {
+                prior.worker == event.worker
+                    && prior.operation_id == event.operation_id
+                    && matches!(prior.kind, AdvisoryClaimEventKind::Claim { .. })
+            }),
+        };
+        if !allowed {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "advisory claim conflict; automatic handoff stopped".into(),
+            });
+        }
+        let key = claim_property_key(event);
+        self.request(
+            "PUT",
+            &self.endpoint(&format!("issue/{native_id}/properties/{key}")),
+            Some(&serde_json::to_value(event).expect("claim event is serializable")),
+        )?;
+        self.advisory_claims(native_id, now_unix_ms, skew_allowance_ms)
+    }
+}
+
+fn claim_property_key(event: &AdvisoryClaimEvent) -> String {
+    let (kind, expiry) = match &event.kind {
+        AdvisoryClaimEventKind::Claim { .. } => ('0', 0),
+        AdvisoryClaimEventKind::Renew { expires_unix_ms } => ('1', (*expires_unix_ms).max(0)),
+        AdvisoryClaimEventKind::Release => ('2', 0),
+    };
+    let mut event = event.clone();
+    event.provider_order = 0;
+    let digest = Sha256::digest(serde_json::to_vec(&event).expect("claim event is serializable"));
+    format!("{CLAIM_PROPERTY_PREFIX}{kind}.{expiry:020}.{digest:x}")
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraPropertyKeys {
+    keys: Vec<JiraPropertyKey>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraPropertyKey {
+    key: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraPropertyValue {
+    value: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1073,6 +1242,7 @@ fn capabilities() -> ProviderCapabilities {
         up_next: false,
         close_reasons: false,
         claims: false,
+        advisory_claims: true,
         atomic_batch: false,
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
@@ -1277,6 +1447,320 @@ mod tests {
             },
             fake,
         )
+    }
+
+    fn claim_event(worker: &str, op: &str, kind: AdvisoryClaimEventKind) -> AdvisoryClaimEvent {
+        AdvisoryClaimEvent {
+            ticket: TicketRef {
+                connection_id: "jira-eng".into(),
+                native_id: "ENG-9".into(),
+            },
+            worker: worker.into(),
+            operation_id: op.into(),
+            provider_order: 0,
+            kind,
+        }
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_issue_properties_claim_and_reconcile_without_comments() {
+        let a = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let b = claim_event(
+            "worker-b",
+            "op-b",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let key_a = claim_property_key(&a);
+        let key_b = claim_property_key(&b);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[]})),
+                    response(201, json!({})),
+                    response(200, json!({"keys":[{"key":key_b},{"key":key_a}]})),
+                    response(200, json!({"key":key_a,"value":a})),
+                    response(200, json!({"key":key_b,"value":b})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &a, 1000, 0)
+            .unwrap();
+        assert!(projection.conflicted);
+        assert_eq!(projection.claims.len(), 2);
+        let requests = fake.requests.lock_or_recover();
+        assert_eq!(requests[1].0, "PUT");
+        assert_eq!(requests[1].3, Some(serde_json::to_value(&a).unwrap()));
+        assert!(
+            requests
+                .iter()
+                .all(|request| !request.1.contains("/comment"))
+        );
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_property_scan_fails_closed_on_damage_and_bound() {
+        let bad_key = format!("{CLAIM_PROPERTY_PREFIX}0.00000000000000000000.bad");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":bad_key}]})),
+                    response(200, json!({"key":bad_key,"value":{"broken":true}})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake).advisory_claims("ENG-9", 1000, 0),
+            Err(ProviderError::Conflict { .. })
+        ));
+        let keys = (0..=MAX_CLAIM_PROPERTIES)
+            .map(|i| json!({"key":format!("other.{i}")}))
+            .collect::<Vec<_>>();
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![response(200, json!({"keys":keys}))].into()),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake).advisory_claims("ENG-9", 1000, 0),
+            Err(ProviderError::Unsupported { .. })
+        ));
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_conflict_can_be_resolved_by_owning_release() {
+        let a = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let b = claim_event(
+            "worker-b",
+            "op-b",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let release = claim_event("worker-a", "op-a", AdvisoryClaimEventKind::Release);
+        let ka = claim_property_key(&a);
+        let kb = claim_property_key(&b);
+        let kr = claim_property_key(&release);
+        let listing = json!({"keys":[{"key":ka},{"key":kb}]});
+        let after = json!({"keys":[{"key":ka},{"key":kb},{"key":kr}]});
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, listing),
+                    response(200, json!({"value":a})),
+                    response(200, json!({"value":b})),
+                    response(204, json!({})),
+                    response(200, after),
+                    response(200, json!({"value":a})),
+                    response(200, json!({"value":b})),
+                    response(200, json!({"value":release})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake)
+            .append_advisory_claim_event("ENG-9", &release, 1000, 0)
+            .unwrap();
+        assert!(!projection.conflicted);
+        assert_eq!(projection.claims.len(), 1);
+        assert_eq!(projection.claims[0].worker, "worker-b");
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_renew_requires_existing_live_owned_claim() {
+        let renew = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Renew {
+                expires_unix_ms: 5000,
+            },
+        );
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![response(200, json!({"keys":[]}))].into()),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake.clone()).append_advisory_claim_event("ENG-9", &renew, 1000, 0),
+            Err(ProviderError::Conflict { .. })
+        ));
+        assert_eq!(fake.requests.lock_or_recover().len(), 1);
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_exact_claim_retry_reads_without_rewriting() {
+        let claim = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let key = claim_property_key(&claim);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"value":claim})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &claim, 1000, 0)
+            .unwrap();
+        assert_eq!(projection.claims.len(), 1);
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|request| request.0 == "GET")
+        );
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_renew_cannot_shorten_or_change_owner() {
+        let claim = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 7000,
+            },
+        );
+        let key = claim_property_key(&claim);
+        for renew in [
+            claim_event(
+                "worker-a",
+                "op-a",
+                AdvisoryClaimEventKind::Renew {
+                    expires_unix_ms: 6000,
+                },
+            ),
+            claim_event(
+                "worker-b",
+                "op-a",
+                AdvisoryClaimEventKind::Renew {
+                    expires_unix_ms: 8000,
+                },
+            ),
+        ] {
+            let fake = Arc::new(Fake {
+                responses: Mutex::new(
+                    vec![
+                        response(200, json!({"keys":[{"key":key}]})),
+                        response(200, json!({"value":claim})),
+                    ]
+                    .into(),
+                ),
+                ..Default::default()
+            });
+            assert!(matches!(
+                provider(fake.clone()).append_advisory_claim_event("ENG-9", &renew, 1000, 0),
+                Err(ProviderError::Conflict { .. })
+            ));
+            assert!(
+                fake.requests
+                    .lock_or_recover()
+                    .iter()
+                    .all(|request| request.0 == "GET")
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_release_retry_is_idempotent_and_foreign_release_refused() {
+        let claim = claim_event(
+            "worker-a",
+            "op-a",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 7000,
+            },
+        );
+        let release = claim_event("worker-a", "op-a", AdvisoryClaimEventKind::Release);
+        let foreign = claim_event("worker-b", "op-a", AdvisoryClaimEventKind::Release);
+        let kc = claim_property_key(&claim);
+        let kr = claim_property_key(&release);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":kc},{"key":kr}]})),
+                    response(200, json!({"value":claim})),
+                    response(200, json!({"value":release})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &release, 1000, 0)
+            .unwrap();
+        assert!(projection.claims.is_empty());
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|request| request.0 == "GET")
+        );
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":kc}]})),
+                    response(200, json!({"value":claim})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake.clone()).append_advisory_claim_event("ENG-9", &foreign, 1000, 0),
+            Err(ProviderError::Conflict { .. })
+        ));
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|request| request.0 == "GET")
+        );
+    }
+
+    #[test]
+    fn hs2_bpkm76_jira_assigns_current_credential_account() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"accountId":"account-current"})),
+                    response(204, json!({})),
+                    response(200, issue("ENG-9", "example")),
+                    response(200, json!({"comments":[]})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let result = provider(fake.clone()).assign_current_user("ENG-9").unwrap();
+        assert_eq!(result.native_id, "ENG-9");
+        let requests = fake.requests.lock_or_recover();
+        assert!(requests[0].1.ends_with("/myself"));
+        assert!(requests[1].1.ends_with("/issue/ENG-9/assignee"));
+        assert_eq!(requests[1].3, Some(json!({"accountId":"account-current"})));
     }
 
     /// HS2-5YNASC: the trailer survives Jira's ADF paragraph round trip, and an ordinary

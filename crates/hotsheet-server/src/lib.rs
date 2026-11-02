@@ -30,6 +30,7 @@ pub mod notification_router;
 pub mod notifications;
 mod presence;
 pub mod project_activity;
+pub mod provider_advisory_claims;
 mod provider_overlay;
 pub mod provider_write_behind;
 pub mod repository_browser;
@@ -60,6 +61,7 @@ use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use hotsheet_index::Index;
 use hotsheet_model::{Status, Timestamp};
+use hotsheet_ticketing::advisory_claim_ledger::AdvisoryClaimLedger;
 use hotsheet_ticketing::provider_outbox::{OutboxAdmission, OutboxError, ProviderOutbox};
 use hotsheet_ticketing::{
     FsStore, KeyRegistry, OsKeychain, ProviderPatch, ProviderRegistry, Settings,
@@ -143,13 +145,13 @@ use routes::project_tools::{
     usage_metrics_summary,
 };
 use routes::providers::{
-    assign_provider_ticket, close_provider_ticket, copy_provider_attachment,
-    create_checkout_provider_connection, create_provider_connection, create_provider_ticket,
-    delete_provider_connection, delete_provider_ticket_note, get_provider_endpoint_review,
-    get_provider_ticket, list_checkout_provider_connections, list_checkout_providers,
-    list_provider_ai_feedback, list_provider_connections, list_provider_tickets, list_providers,
-    provider_copy_route, provider_for, provider_move_route, provider_transfer_error,
-    recover_github_connection, report_provider_ticket_not_working,
+    assign_provider_current_user, assign_provider_ticket, close_provider_ticket,
+    copy_provider_attachment, create_checkout_provider_connection, create_provider_connection,
+    create_provider_ticket, delete_provider_connection, delete_provider_ticket_note,
+    get_provider_endpoint_review, get_provider_ticket, list_checkout_provider_connections,
+    list_checkout_providers, list_provider_ai_feedback, list_provider_connections,
+    list_provider_tickets, list_providers, provider_copy_route, provider_for, provider_move_route,
+    provider_transfer_error, recover_github_connection, report_provider_ticket_not_working,
     report_provider_ticket_not_working_json, restore_provider_ticket,
     set_checkout_provider_connection_disabled, set_provider_connection_disabled,
     update_checkout_provider_connection, update_provider_connection, update_provider_ticket,
@@ -233,6 +235,7 @@ pub struct AppState {
     github_deliveries: github_webhooks::DeliveryState,
     /// Experimental durable Jira field-edit admission. None keeps every existing write synchronous.
     jira_outbox: Option<Arc<Mutex<ProviderOutbox>>>,
+    advisory_claim_ledger: Option<Arc<Mutex<AdvisoryClaimLedger>>>,
     /// One Keychain read per managed sign-in per metadata revision, shared by requests.
     managed_secrets: ManagedSecretCache,
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive, by store id (the
@@ -551,6 +554,7 @@ impl AppState {
             live_providers: Arc::default(),
             github_deliveries: github_webhooks::DeliveryState::default(),
             jira_outbox: None,
+            advisory_claim_ledger: None,
             managed_secrets: ManagedSecretCache::default(),
             watchers: Arc::default(),
             presence: presence::Presence::default(),
@@ -784,6 +788,14 @@ impl AppState {
             path,
             max_pending,
         )?)));
+        Ok(self)
+    }
+
+    pub fn with_advisory_claim_ledger(
+        mut self,
+        path: impl AsRef<FsPath>,
+    ) -> Result<Self, hotsheet_ticketing::advisory_claim_ledger::ClaimLedgerError> {
+        self.advisory_claim_ledger = Some(Arc::new(Mutex::new(AdvisoryClaimLedger::open(path)?)));
         Ok(self)
     }
 
@@ -1689,6 +1701,15 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/providers/{connection_id}/tickets/{id}/assign",
             post(assign_provider_ticket),
+        )
+        .route(
+            "/providers/{connection_id}/tickets/{id}/assign-current",
+            post(assign_provider_current_user),
+        )
+        .route(
+            "/checkouts/{checkout}/providers/{connection_id}/tickets/{id}/advisory-claim",
+            get(provider_advisory_claims::get_advisory_claim)
+                .post(provider_advisory_claims::post_advisory_claim),
         )
         .route(
             "/providers/{connection_id}/tickets/{id}/not-working",

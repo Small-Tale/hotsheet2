@@ -725,6 +725,16 @@ pub(crate) async fn assign_provider_ticket(
         .map_err(provider_transfer_error)
 }
 
+pub(crate) async fn assign_provider_current_user(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    provider_for(&state, &connection_id)?
+        .assign_current_user(&id)
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
 pub(crate) async fn provider_copy_route(
     State(state): State<AppState>,
     Json(body): Json<ProviderTransferBody>,

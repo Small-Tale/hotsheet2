@@ -109,6 +109,54 @@ offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent
 capabilities.
 
+### Advisory process claims (HS2-BPKM76)
+
+`claims` continues to mean an exclusive provider lease; GitHub, GitLab, and Jira
+report `claims: false`. The separate `advisory_claims` capability means a provider
+can store and fully reconcile best-effort worker/operation/expiry markers. Jira
+Cloud uses one issue entity property per immutable claim, renewal, or release
+event under `hotsheet.advisory.v1.*`. Property keys order claim before renewal
+by expiry and release last; the full qualified ticket, worker, operation id,
+and expiry are in the JSON property value. Readers list all issue property keys
+and fetch each matching value, refusing a malformed value, key mismatch, or a
+listing above 1,000 keys. Release is terminal for its operation. Overlapping live
+operations or damaged metadata stop automatic handoff. A 60-second expiry skew
+allowance avoids early takeover. These properties are invisible to Jira comments;
+Jira Browse and Edit issue permissions are required. A Jira connection without
+those permissions returns an explicit provider error.
+The first implementation keeps settled properties append-only; it does not yet
+delete expired or released properties. The 1,000-key bound therefore eventually
+requires cleanup on a long-lived issue (HS2-HTYZAG), and the adapter fails
+closed rather than dropping an unscanned marker.
+
+GitHub and GitLab report `advisory_claims: false` until a non-notifying metadata
+transport is implemented. Hidden Markdown comments would still notify subscribers,
+and dynamic issue labels would require repository-wide label creation. Both
+providers reject advisory writes explicitly. Their native user assignment remains
+separate from process claims. `POST /providers/{connection_id}/tickets/{id}/assign-current`
+resolves Jira's credential account through `/myself`, or GitHub's and GitLab's
+through `/user`, then uses the provider's native assignee endpoint. GitLab reads
+all existing numeric assignee IDs before adding the credential ID, and refuses
+to write if any existing ID is missing from the response; its non-conditional
+whole-array update remains best effort. Headless
+`provider-assign <connection> <id> --me` uses the same provider operation.
+
+The checkout-qualified `GET` and `POST`
+`/checkouts/{checkout}/providers/{connection_id}/tickets/{id}/advisory-claim`
+validate that the exact Jira source is linked. POST accepts `worker`,
+`operation_id`, and a tagged `kind` (`claim` or `renew` with `expires_unix_ms`,
+or `release`). `provisional: true` admits only a Claim into a machine-local
+SQLite ledger while offline. The response marks it provisional and
+`automatic_handoff_safe: false`; local intent never establishes remote ownership.
+Each GET rechecks that ticket's remote properties and replays at most 16 queued
+intents after reconnect. A restart reuses the same operation id and reads remote
+state before retrying, so a timeout after a successful write does not mint a
+second claim. Conflicts become `needs_attention`; expired intents never publish.
+The ledger bounds pending and total rows, rejects changed retries, and prunes
+settled rows after the seven-day retry window. `provider-advisory-claim` is the
+headless equivalent and uses the same ledger path. Automatic dispatch may proceed
+only when the response is remote-verified, not provisional, and conflict-free.
+
 The host owns multi-provider routing, aggregation, normalized validation,
 server/API/MCP presentation, caching, credential resolution, and capability-aware
 errors. Providers own remote calls, opaque native page cursors, bounded page retrieval,

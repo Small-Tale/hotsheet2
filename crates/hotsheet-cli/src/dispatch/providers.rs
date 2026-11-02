@@ -7,6 +7,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use hotsheet_model::{Confidence, NoteKind, ReviewRequest, Status, Ulid};
+use hotsheet_ticketing::advisory_claim::{
+    AdvisoryClaimEvent, AdvisoryClaimEventKind, valid_write_event,
+};
+use hotsheet_ticketing::advisory_claim_ledger::{AdvisoryClaimLedger, ClaimReplayState, now_epoch};
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, OsKeychain, ProviderConfigRegistry,
     ProviderDraft, ProviderPatch, ProviderRegistry, TicketProvider, TicketQuery, TicketRef,
@@ -126,8 +130,29 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             id,
             to,
             clear,
+            me,
             reviews,
-        } => cmd_provider_assign(path, &connection, &id, to, clear, reviews),
+        } => cmd_provider_assign(path, &connection, &id, to, clear, me, reviews),
+        Cmd::ProviderAdvisoryClaim {
+            checkout,
+            connection,
+            id,
+            action,
+            worker,
+            operation,
+            expires_ms,
+            provisional,
+        } => cmd_provider_advisory_claim(
+            path,
+            &checkout,
+            &connection,
+            &id,
+            &action,
+            worker,
+            operation,
+            expires_ms,
+            provisional,
+        ),
         Cmd::ProviderRestore { connection, id } => cmd_provider_restore(path, &connection, &id),
         Cmd::ProviderReportNotWorking {
             connection,
@@ -933,6 +958,7 @@ pub(crate) fn cmd_provider_assign(
     id: &str,
     to: Vec<String>,
     clear: bool,
+    me: bool,
     review: Vec<String>,
 ) -> Result<()> {
     let provider = configured_provider(path, connection)?;
@@ -940,11 +966,16 @@ pub(crate) fn cmd_provider_assign(
     if !capabilities.assignment {
         bail!("provider connection '{connection}' does not support assignment");
     }
+    if me {
+        let ticket = provider.assign_current_user(id)?;
+        println!("{}", serde_json::to_string_pretty(&ticket)?);
+        return Ok(());
+    }
     if !review.is_empty() && !capabilities.review_requests {
         bail!("provider connection '{connection}' does not support review requests");
     }
     if !clear && to.is_empty() && review.is_empty() {
-        bail!("provide --to, --clear, or --review");
+        bail!("provide --to, --clear, --me, or --review");
     }
     let assignees = if clear {
         Some(Vec::new())
@@ -971,6 +1002,149 @@ pub(crate) fn cmd_provider_assign(
         .collect::<Result<Vec<_>>>()?;
     let ticket = provider.assign(id, at, assignees, reviews)?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)] // HS2-BPKM76: CLI arguments remain explicit for headless replay.
+pub(crate) fn cmd_provider_advisory_claim(
+    path: &Path,
+    checkout_ref: &str,
+    connection: &str,
+    id: &str,
+    action: &str,
+    worker: Option<String>,
+    operation: Option<String>,
+    expires_ms: Option<i64>,
+    provisional: bool,
+) -> Result<()> {
+    let home = hotsheet_plugins::hotsheet_home();
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+            .resolve(checkout_ref)?;
+    if !checkout
+        .sources
+        .iter()
+        .any(|source| source.connection_id == connection && source.provider == "jira")
+    {
+        bail!(
+            "Jira source '{connection}' is not linked to checkout '{}'",
+            checkout.id
+        );
+    }
+    let provider = configured_provider(path, connection)?;
+    if !provider.descriptor().capabilities.advisory_claims {
+        bail!("provider connection '{connection}' does not support advisory claims");
+    }
+    let ticket = TicketRef {
+        connection_id: connection.into(),
+        native_id: id.into(),
+    };
+    let now_ms = now_epoch().saturating_mul(1000);
+    let mut ledger =
+        AdvisoryClaimLedger::open(home.join("advisory_claims").join("provisional.sqlite"))?;
+    if action == "status" {
+        if provisional || worker.is_some() || operation.is_some() || expires_ms.is_some() {
+            bail!("status takes no claim mutation options");
+        }
+        let queued = ledger.for_ticket(&checkout.id, connection, id)?;
+        for entry in queued.into_iter().take(16) {
+            if entry.created_at.saturating_add(7 * 24 * 60 * 60) < now_epoch()
+                || matches!(&entry.event.kind, AdvisoryClaimEventKind::Claim { expires_unix_ms } if *expires_unix_ms <= now_ms)
+            {
+                ledger.settle(&entry, ClaimReplayState::Expired)?;
+                continue;
+            }
+            let before = match provider.advisory_claims(id, now_ms, 60_000) {
+                Ok(value) => value,
+                Err(_) => break,
+            };
+            let own = before.claims.iter().any(|claim| {
+                claim.worker == entry.event.worker && claim.operation_id == entry.event.operation_id
+            });
+            if entry.state == ClaimReplayState::NeedsAttention {
+                if own && !before.conflicted {
+                    ledger.settle(&entry, ClaimReplayState::Confirmed)?;
+                }
+                continue;
+            }
+            let state = if own {
+                Some(ClaimReplayState::Confirmed)
+            } else if before.conflicted || !before.claims.is_empty() {
+                Some(ClaimReplayState::NeedsAttention)
+            } else {
+                match provider.append_advisory_claim_event(id, &entry.event, now_ms, 60_000) {
+                    Ok(after)
+                        if !after.conflicted
+                            && after.claims.iter().any(|claim| {
+                                claim.worker == entry.event.worker
+                                    && claim.operation_id == entry.event.operation_id
+                            }) =>
+                    {
+                        Some(ClaimReplayState::Confirmed)
+                    }
+                    Ok(_) | Err(hotsheet_ticketing::ProviderError::Conflict { .. }) => {
+                        Some(ClaimReplayState::NeedsAttention)
+                    }
+                    Err(_) => None,
+                }
+            };
+            if let Some(state) = state {
+                ledger.settle(&entry, state)?;
+            }
+        }
+    } else {
+        let worker = worker.context("--worker is required")?;
+        let operation_id = operation.context("--operation is required")?;
+        let kind = match action {
+            "claim" => AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: expires_ms.context("--expires-ms is required")?,
+            },
+            "renew" => AdvisoryClaimEventKind::Renew {
+                expires_unix_ms: expires_ms.context("--expires-ms is required")?,
+            },
+            "release" => {
+                if expires_ms.is_some() {
+                    bail!("release takes no --expires-ms");
+                }
+                AdvisoryClaimEventKind::Release
+            }
+            _ => bail!("unknown advisory claim action"),
+        };
+        let event = AdvisoryClaimEvent {
+            ticket,
+            worker,
+            operation_id,
+            provider_order: 0,
+            kind,
+        };
+        if !valid_write_event(&event, &event.ticket, now_ms) {
+            bail!("invalid advisory claim event");
+        }
+        if provisional {
+            if !matches!(event.kind, AdvisoryClaimEventKind::Claim { .. }) {
+                bail!("only a claim can be provisional");
+            }
+            ledger.admit(&checkout.id, &event, now_epoch())?;
+        } else {
+            if !ledger.for_ticket(&checkout.id, connection, id)?.is_empty() {
+                bail!("unresolved provisional claim; reconcile before writing");
+            }
+            provider.append_advisory_claim_event(id, &event, now_ms, 60_000)?;
+        }
+    }
+    let pending = ledger.for_ticket(&checkout.id, connection, id)?;
+    let remote = provider.advisory_claims(id, now_ms, 60_000);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "project_scope": checkout.id,
+            "ticket": format!("{connection}:{id}"),
+            "provisional": !pending.is_empty(),
+            "automatic_handoff_safe": pending.is_empty() && remote.as_ref().is_ok_and(|value| !value.conflicted),
+            "pending_operation_ids": pending.iter().map(|entry| &entry.event.operation_id).collect::<Vec<_>>(),
+            "remote_projection": remote.ok(),
+        }))?
+    );
     Ok(())
 }
 

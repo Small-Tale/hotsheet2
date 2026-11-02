@@ -6167,6 +6167,83 @@ paths:
         required: true
         schema:
           type: string
+  /providers/{connection_id}/tickets/{id}/assign-current:
+    post:
+      operationId: assignProviderCurrentUser
+      description: Assign the provider account authenticated by this connection's credential.
+      responses:
+        '200':
+          description: Updated provider ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        default:
+          description: Provider or permission failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+  /checkouts/{checkout}/providers/{connection_id}/tickets/{id}/advisory-claim:
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema: { type: string }
+      - name: connection_id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getProviderAdvisoryClaim
+      description: Reconcile and replay at most 16 provisional intents for this qualified ticket.
+      responses:
+        '200':
+          description: Remote and local advisory claim status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisoryClaimStatus'
+        default:
+          description: Unsupported, permission, or provider failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      operationId: appendProviderAdvisoryClaim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvisoryClaimRequest'
+      responses:
+        '200':
+          description: Reconciled claim status; provisional local intent never authorizes handoff.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdvisoryClaimStatus'
+        default:
+          description: Unsupported, conflict, permission, or provider failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /providers/{connection_id}/tickets/{id}/not-working:
     post:
       operationId: report_provider_ticket_not_working
@@ -14780,6 +14857,44 @@ components:
         disabled:
           type: boolean
       additionalProperties: false
+    AdvisoryClaimRequest:
+      type: object
+      required: [worker, operation_id, kind]
+      properties:
+        worker: { type: string }
+        operation_id: { type: string }
+        provisional: { type: boolean, default: false }
+        kind:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [claim, renew, release] }
+            expires_unix_ms: { type: integer, format: int64 }
+    AdvisoryClaimStatus:
+      type: object
+      required: [projection, provisional, remote_verified, automatic_handoff_safe, pending_operation_ids]
+      properties:
+        projection:
+          type: object
+          required: [claims, conflicted, invalid_markers]
+          properties:
+            claims:
+              type: array
+              items:
+                type: object
+                required: [worker, operation_id, expires_unix_ms]
+                properties:
+                  worker: { type: string }
+                  operation_id: { type: string }
+                  expires_unix_ms: { type: integer, format: int64 }
+            conflicted: { type: boolean }
+            invalid_markers: { type: integer, minimum: 0 }
+        provisional: { type: boolean }
+        remote_verified: { type: boolean }
+        automatic_handoff_safe: { type: boolean }
+        pending_operation_ids:
+          type: array
+          items: { type: string }
     ProviderCapabilities:
       type: object
       properties:
@@ -14814,6 +14929,8 @@ components:
         close_reasons:
           type: boolean
         claims:
+          type: boolean
+        advisory_claims:
           type: boolean
         atomic_batch:
           type: boolean

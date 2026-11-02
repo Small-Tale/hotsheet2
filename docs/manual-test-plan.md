@@ -809,3 +809,16 @@ item, switch voices while audio is pending, and close the panel. Confirm that
 only the selected synthetic item plays and no temporary speech file remains.
 Repeat with an incoming synthetic live event while Live is enabled. The browser
 suite uses fake audio to verify request and state wiring; it cannot hear output.
+
+### Jira advisory process claims (HS2-BPKM76)
+
+On a synthetic Jira issue with Browse and Edit issue permissions, assign the
+current credential user, then create an advisory claim through the checkout
+qualified route or `provider-advisory-claim`. Confirm the property appears under
+the issue's entity properties and no issue comment or notification is created.
+With two independent workers, confirm concurrent live markers show conflict and
+block automatic handoff. Release one exact owning operation and confirm the
+remaining claim reconciles. Disconnect, admit a provisional claim, restart the
+server, reconnect, and confirm replay uses the original operation id and clears
+the provisional flag. Test missing Edit permission and an expired pending claim;
+both must fail closed. No customer content belongs in claim markers or captures.

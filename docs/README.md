@@ -56,6 +56,14 @@ controlled-close flush for large pending draft strings (HS2-E0H7S0). See the
 
 **GitHub pagination boundary (HS2-TAG2ZP):** selected API origins and explicit ports constrain authenticated next-page requests; Enterprise cursor path scope remains enforced, with explicit cycle and request-budget errors. See [external provider requirements](16-external-sync-interface.md).
 
+**Advisory external claims (HS2-BPKM76):** Jira issue properties support backend
+process-claim reconciliation and a durable provisional headless/server path. GitHub,
+GitLab, and Jira can assign the current credential user. Exclusive external leases remain
+unsupported. MCP and web conflict presentation remain partial (HS2-2MZWZT);
+non-notifying GitHub/GitLab process metadata remains deferred (HS2-D9V8YT).
+Jira settled-property cleanup remains HS2-HTYZAG; the bounded reader fails closed
+until that cleanup exists.
+
 ## Why a rewrite
 
 Hot Sheet 1 is a mature, feature-rich Node/TypeScript app (188 requirement
