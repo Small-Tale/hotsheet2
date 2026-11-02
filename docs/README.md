@@ -61,12 +61,14 @@ process-claim reconciliation and a durable provisional headless/server path. Git
 GitLab, and Jira can assign the current credential user. Exclusive external leases remain
 unsupported. MCP and web conflict presentation remain partial (HS2-2MZWZT);
 non-notifying GitHub/GitLab process metadata remains deferred (HS2-D9V8YT).
-Jira settled-property cleanup remains HS2-HTYZAG; the bounded reader fails closed
-until that cleanup exists.
+Jira prunes time-fenced v2 issue properties before a new advisory write
+(HS2-HTYZAG), while the bounded reader fails closed above 1,000 total issue
+properties and at high write rates.
 New Jira process claims use a 24-hour v2 operation horizon and a checked 60-second
 provider clock window (HS2-0QEPRW); old v1 markers retain strict reads and a
-legacy tombstone floor pending migration decision HS2-63669G.
-V2 property deletion remains in HS2-HTYZAG and requires a second skew window.
+legacy tombstone floor. HS2-63669G selected permanent retention of all v1
+markers. V2 property deletion requires a second skew window and preserves every
+v1 marker.
 
 ## Why a rewrite
 

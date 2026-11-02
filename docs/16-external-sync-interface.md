@@ -133,20 +133,29 @@ offline replay may arrive later while its expiry remains future and within the
 validates the key, JSON body, qualified identity, worker, ID and expiry bound
 before treating an event past that 24-hour horizon plus 60 seconds as inert.
 Missing or invalid Jira `Date`, or a local clock more than 60 seconds from it,
-fails closed for v2. A delayed
-same-ID PUT after that horizon cannot revive a v2 claim. Jira's provider clock
+fails closed for v2. A delayed same-ID PUT after that horizon cannot revive a
+v2 claim. Jira's provider clock
 must remain within that bound; an untrusted or rolled-back clock stops v2 reads.
 Within the bound, reconciliation uses the earlier observed clock so a Jira Date
 ahead of the machine clock cannot expire a legacy v1 claim early.
 Deletion eligibility starts only after 24 hours plus two 60-second skew windows,
 so a bounded clock rollback still leaves every late v2 event inert.
-Existing v1 properties remain strictly reconciled and new v1 Claims are refused;
-exact legacy retries and owned release remain available. Legacy Release tombstones
-cannot yet be safely reclaimed and may leave an issue-specific property floor;
-HS2-63669G owns the migration decision.
-The first implementation keeps all settled properties append-only; bounded
-deletion is still HS2-HTYZAG. The 1,000-key reader fails closed rather than
-dropping an unscanned marker.
+HS2-HTYZAG prunes exact v2 property keys only on a write, after a complete
+validated read and reconciliation, when their issued time is at least 24 hours
+plus two 60-second skew windows behind the checked clock. It deletes one key at
+a time and re-reads before the new write. A partial DELETE, concurrent 404, or
+readback failure aborts the write; the next attempt can retry because remaining
+or delayed v2 events are inert. Ordinary GET remains read-only. At 1,000 total
+issue properties, a new write is refused unless safe pruning frees a slot.
+Concurrent Jira writers have no compare-and-set for property creation; if they
+cross the bound, subsequent reads fail closed for operator recovery. This is a
+throughput bound, not unlimited storage: Claim+Release once per hour retains
+about 50 event keys in the 24-hour-plus-two-minute window; once per minute
+needs about 2,884 keys and exceeds the 1,000-key limit even with pruning.
+HS2-63669G chose to retain **all** v1 Claim, Renew and Release markers. They
+remain strictly reconciled, new v1 Claims are refused, and exact legacy retries
+and owned Release remain available. If their floor alone exhausts the reader,
+automatic dispatch stops for manual handling; pruning never erases v1 proof.
 
 GitHub and GitLab report `advisory_claims: false` until a non-notifying metadata
 transport is implemented. Hidden Markdown comments would still notify subscribers,

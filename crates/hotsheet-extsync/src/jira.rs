@@ -29,6 +29,13 @@ const CLAIM_PROPERTY_PREFIX: &str = "hotsheet.advisory.v1.";
 const CLAIM_V2_PROPERTY_PREFIX: &str = "hotsheet.advisory.v2.";
 const MAX_CLAIM_PROPERTIES: usize = 1000;
 
+struct ClaimPropertySnapshot {
+    events: Vec<AdvisoryClaimEvent>,
+    keys: Vec<String>,
+    total_keys: usize,
+    date_ms: Option<i64>,
+}
+
 use crate::github::{GitHubTransport as HttpTransport, HttpResponse, UreqGitHubTransport};
 
 #[derive(Debug, Clone)]
@@ -182,10 +189,7 @@ impl JiraProvider {
         }
     }
 
-    fn claim_properties(
-        &self,
-        native_id: &str,
-    ) -> Result<(Vec<AdvisoryClaimEvent>, Option<i64>), ProviderError> {
+    fn claim_properties(&self, native_id: &str) -> Result<ClaimPropertySnapshot, ProviderError> {
         validate_key(native_id)?;
         let response = self.request(
             "GET",
@@ -198,7 +202,8 @@ impl JiraProvider {
                 .map(|value| value.unix_timestamp().saturating_mul(1000))
         });
         let listing: JiraPropertyKeys = self.json(response)?;
-        if listing.keys.len() > MAX_CLAIM_PROPERTIES {
+        let total_keys = listing.keys.len();
+        if total_keys > MAX_CLAIM_PROPERTIES {
             return self.unsupported("bounded advisory claim property scan");
         }
         let mut keys = listing
@@ -234,7 +239,93 @@ impl JiraProvider {
             event.provider_order = (index + 1) as u64;
             events.push(event);
         }
-        Ok((events, provider_date))
+        Ok(ClaimPropertySnapshot {
+            events,
+            keys,
+            total_keys,
+            date_ms: provider_date,
+        })
+    }
+
+    /// HS2-HTYZAG: only a completely validated, time-fenced v2 snapshot can
+    /// authorize exact-key deletion. A partial failure leaves inert v2 events
+    /// that the next attempt can safely rediscover; v1 is never a candidate.
+    fn prune_settled_claim_properties(
+        &self,
+        native_id: &str,
+        snapshot: ClaimPropertySnapshot,
+        now_unix_ms: i64,
+        skew_allowance_ms: i64,
+    ) -> Result<ClaimPropertySnapshot, ProviderError> {
+        let ticket = self.claim_ticket_ref(native_id);
+        let clock = self.claim_provider_now(
+            native_id,
+            now_unix_ms,
+            snapshot.date_ms,
+            snapshot
+                .events
+                .iter()
+                .any(|event| event.operation_id.starts_with("v2:")),
+        )?;
+        let projection = reconcile_claims(
+            &ticket,
+            &snapshot.events,
+            clock,
+            skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
+        );
+        if projection.conflicted {
+            return Ok(snapshot);
+        }
+        let keys = snapshot
+            .keys
+            .iter()
+            .zip(&snapshot.events)
+            .filter(|(_, event)| advisory_claim_v2::reclaimable(event, &ticket, clock))
+            .map(|(key, _)| key.clone())
+            .collect::<Vec<_>>();
+        if keys.is_empty() {
+            return Ok(snapshot);
+        }
+        for key in keys {
+            let response = self.request(
+                "DELETE",
+                &self.endpoint(&format!("issue/{native_id}/properties/{key}")),
+                None,
+            )?;
+            if response.status != 204 {
+                return Err(ProviderError::Conflict {
+                    ticket: ticket.qualified(),
+                    message: format!(
+                        "unexpected Jira advisory property DELETE status: {}",
+                        response.status
+                    ),
+                });
+            }
+        }
+        let after = self.claim_properties(native_id)?;
+        let after_clock = self.claim_provider_now(
+            native_id,
+            now_unix_ms,
+            after.date_ms,
+            after
+                .events
+                .iter()
+                .any(|event| event.operation_id.starts_with("v2:")),
+        )?;
+        if reconcile_claims(
+            &ticket,
+            &after.events,
+            after_clock,
+            skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
+        )
+        .conflicted
+        {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "advisory claim conflict after Jira property cleanup".into(),
+            });
+        }
+        Ok(after)
     }
 
     fn claim_provider_now(
@@ -1022,18 +1113,19 @@ impl TicketProvider for JiraProvider {
         skew_allowance_ms: i64,
     ) -> Result<AdvisoryClaimProjection, ProviderError> {
         let ticket = self.claim_ticket_ref(native_id);
-        let (events, date_ms) = self.claim_properties(native_id)?;
+        let snapshot = self.claim_properties(native_id)?;
         let provider_now_ms = self.claim_provider_now(
             native_id,
             now_unix_ms,
-            date_ms,
-            events
+            snapshot.date_ms,
+            snapshot
+                .events
                 .iter()
                 .any(|event| event.operation_id.starts_with("v2:")),
         )?;
         Ok(reconcile_claims(
             &ticket,
-            &events,
+            &snapshot.events,
             provider_now_ms,
             skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
         ))
@@ -1054,24 +1146,25 @@ impl TicketProvider for JiraProvider {
                 message: "invalid advisory claim event".into(),
             });
         }
-        let (prior_events, date_ms) = self.claim_properties(native_id)?;
+        let snapshot = self.claim_properties(native_id)?;
         let v2_write = event.operation_id.starts_with("v2:");
         let provider_now_ms = self.claim_provider_now(
             native_id,
             now_unix_ms,
-            date_ms,
+            snapshot.date_ms,
             v2_write
-                || prior_events
+                || snapshot
+                    .events
                     .iter()
                     .any(|prior| prior.operation_id.starts_with("v2:")),
         )?;
-        let before = reconcile_claims(
+        let mut before = reconcile_claims(
             &ticket,
-            &prior_events,
+            &snapshot.events,
             provider_now_ms,
             skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
         );
-        if prior_events.iter().any(|prior| {
+        if snapshot.events.iter().any(|prior| {
             prior.ticket == event.ticket
                 && prior.worker == event.worker
                 && prior.operation_id == event.operation_id
@@ -1091,6 +1184,47 @@ impl TicketProvider for JiraProvider {
                 message: "new Jira advisory claims require a v2 operation id".into(),
             });
         }
+        let snapshot = self.prune_settled_claim_properties(
+            native_id,
+            snapshot,
+            now_unix_ms,
+            skew_allowance_ms,
+        )?;
+        let provider_now_ms = self.claim_provider_now(
+            native_id,
+            now_unix_ms,
+            snapshot.date_ms,
+            v2_write
+                || snapshot
+                    .events
+                    .iter()
+                    .any(|prior| prior.operation_id.starts_with("v2:")),
+        )?;
+        if !valid_write_event(event, &ticket, provider_now_ms)
+            || (v2_write && !advisory_claim_v2::valid_write(event, provider_now_ms))
+        {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "advisory claim expired during Jira property cleanup".into(),
+            });
+        }
+        before = reconcile_claims(
+            &ticket,
+            &snapshot.events,
+            provider_now_ms,
+            skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
+        );
+        if snapshot.events.iter().any(|prior| {
+            prior.ticket == event.ticket
+                && prior.worker == event.worker
+                && prior.operation_id == event.operation_id
+                && prior.kind == event.kind
+        }) {
+            return Ok(before);
+        }
+        if snapshot.total_keys == MAX_CLAIM_PROPERTIES {
+            return self.unsupported("bounded advisory claim property capacity");
+        }
         let allowed = match &event.kind {
             AdvisoryClaimEventKind::Claim { .. } => !before.conflicted && before.claims.is_empty(),
             AdvisoryClaimEventKind::Renew { expires_unix_ms } => {
@@ -1101,7 +1235,7 @@ impl TicketProvider for JiraProvider {
                             && *expires_unix_ms >= claim.expires_unix_ms
                     })
             }
-            AdvisoryClaimEventKind::Release => prior_events.iter().any(|prior| {
+            AdvisoryClaimEventKind::Release => snapshot.events.iter().any(|prior| {
                 prior.worker == event.worker
                     && prior.operation_id == event.operation_id
                     && matches!(prior.kind, AdvisoryClaimEventKind::Claim { .. })
@@ -1472,7 +1606,7 @@ fn base64(value: &str) -> String {
 mod tests {
     use super::*;
     use hotsheet_sync::LockExt;
-    use std::collections::{HashMap, VecDeque};
+    use std::collections::{BTreeMap, HashMap, VecDeque};
     use std::sync::Mutex;
 
     type RecordedRequest = (String, String, Vec<(String, String)>, Option<Value>);
@@ -1522,7 +1656,7 @@ mod tests {
     fn issue(key: &str, title: &str) -> Value {
         json!({"key":key,"fields":{"summary":title,"description":text_to_adf("line one\nline two"),"status":{"statusCategory":{"key":"indeterminate"}},"priority":{"name":"High"},"issuetype":{"name":"Bug"},"labels":["customer"],"assignee":{"accountId":"acct-1"},"created":"2026-08-26T00:00:00Z","updated":"2026-08-26T00:01:00Z","resolutiondate":null}})
     }
-    fn provider(fake: Arc<Fake>) -> JiraProvider {
+    fn provider<T: HttpTransport + 'static>(fake: Arc<T>) -> JiraProvider {
         JiraProvider::new(
             JiraConfig {
                 connection_id: "jira-eng".into(),
@@ -1547,6 +1681,461 @@ mod tests {
             provider_order: 0,
             kind,
         }
+    }
+
+    /// Stateful synthetic Jira issue-property transport for deletion/replay
+    /// sequences. The clock is injected so the 24-hour boundary is exact.
+    struct ClaimStateFake {
+        properties: Mutex<BTreeMap<String, Value>>,
+        clock_ms: Mutex<i64>,
+        delete_attempts: Mutex<usize>,
+        fail_delete_at: Mutex<Option<usize>>,
+        race_delete_at: Mutex<Option<usize>>,
+        fail_readback_once: Mutex<bool>,
+        requests: Mutex<Vec<(String, String)>>,
+    }
+
+    impl ClaimStateFake {
+        fn new(clock_ms: i64, events: &[AdvisoryClaimEvent], unrelated: usize) -> Self {
+            let mut properties = BTreeMap::new();
+            for event in events {
+                properties.insert(
+                    claim_property_key(event),
+                    serde_json::to_value(event).unwrap(),
+                );
+            }
+            for index in 0..unrelated {
+                properties.insert(format!("other.{index}"), json!({"synthetic":true}));
+            }
+            Self {
+                properties: Mutex::new(properties),
+                clock_ms: Mutex::new(clock_ms),
+                delete_attempts: Mutex::new(0),
+                fail_delete_at: Mutex::new(None),
+                race_delete_at: Mutex::new(None),
+                fail_readback_once: Mutex::new(false),
+                requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn response(&self, status: u16, body: Value) -> HttpResponse {
+            let date = time::OffsetDateTime::from_unix_timestamp_nanos(
+                *self.clock_ms.lock_or_recover() as i128 * 1_000_000,
+            )
+            .unwrap()
+            .format(&time::format_description::well_known::Rfc2822)
+            .unwrap();
+            HttpResponse {
+                status,
+                headers: HashMap::from([("date".into(), date)]),
+                body: body.to_string(),
+            }
+        }
+    }
+
+    impl HttpTransport for ClaimStateFake {
+        fn request(
+            &self,
+            method: &str,
+            url: &str,
+            _: &[(&str, String)],
+            body: Option<&Value>,
+        ) -> Result<HttpResponse, String> {
+            let path = url
+                .split("/issue/ENG-9/properties")
+                .nth(1)
+                .ok_or("unexpected synthetic Jira URL")?;
+            self.requests
+                .lock_or_recover()
+                .push((method.into(), path.into()));
+            match (method, path) {
+                ("GET", "") => {
+                    if *self.delete_attempts.lock_or_recover() > 0 {
+                        let mut fail = self.fail_readback_once.lock_or_recover();
+                        if *fail {
+                            *fail = false;
+                            return Err("synthetic post-DELETE readback interruption".into());
+                        }
+                    }
+                    let keys = self
+                        .properties
+                        .lock_or_recover()
+                        .keys()
+                        .map(|key| json!({"key":key}))
+                        .collect::<Vec<_>>();
+                    Ok(self.response(200, json!({"keys":keys})))
+                }
+                ("GET", key) => {
+                    let key = key.strip_prefix('/').ok_or("missing property key")?;
+                    let value = self
+                        .properties
+                        .lock_or_recover()
+                        .get(key)
+                        .cloned()
+                        .ok_or("missing synthetic property")?;
+                    Ok(self.response(200, json!({"key":key,"value":value})))
+                }
+                ("PUT", key) => {
+                    let key = key.strip_prefix('/').ok_or("missing property key")?;
+                    self.properties
+                        .lock_or_recover()
+                        .insert(key.into(), body.ok_or("missing property body")?.clone());
+                    Ok(self.response(201, json!({})))
+                }
+                ("DELETE", key) => {
+                    let key = key.strip_prefix('/').ok_or("missing property key")?;
+                    let attempt = {
+                        let mut count = self.delete_attempts.lock_or_recover();
+                        *count += 1;
+                        *count
+                    };
+                    {
+                        let mut failure = self.fail_delete_at.lock_or_recover();
+                        if *failure == Some(attempt) {
+                            *failure = None;
+                            return Err("synthetic DELETE transport interruption".into());
+                        }
+                    }
+                    self.properties.lock_or_recover().remove(key);
+                    {
+                        let mut race = self.race_delete_at.lock_or_recover();
+                        if *race == Some(attempt) {
+                            *race = None;
+                            return Ok(self.response(404, json!({"error":"already removed"})));
+                        }
+                    }
+                    Ok(self.response(204, json!({})))
+                }
+                _ => Err("unexpected synthetic Jira property request".into()),
+            }
+        }
+    }
+
+    fn v2_event(issued: i64, nonce: &str, kind: AdvisoryClaimEventKind) -> AdvisoryClaimEvent {
+        claim_event("worker-a", &format!("v2:{issued:013}:{nonce}"), kind)
+    }
+
+    #[test]
+    fn hs2_htyzag_prunes_only_fenced_v2_keys_and_preserves_v1_and_live_worker() {
+        let now = 1_800_000_000_000;
+        let old = now - advisory_claim_v2::RECLAIM_AFTER_ISSUE_MS - 1000;
+        let old_claim = v2_event(
+            old,
+            "0000000000000001",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: old + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let old_renew = v2_event(
+            old,
+            "0000000000000001",
+            AdvisoryClaimEventKind::Renew {
+                expires_unix_ms: old + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let old_release = v2_event(old, "0000000000000001", AdvisoryClaimEventKind::Release);
+        let legacy_claim = claim_event(
+            "legacy-worker",
+            "legacy-op",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let legacy_release = claim_event(
+            "legacy-worker",
+            "legacy-op",
+            AdvisoryClaimEventKind::Release,
+        );
+        let current_operation = format!("v2:{now:013}:0000000000000002");
+        let current = claim_event(
+            "worker-b",
+            &current_operation,
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let current_renew = claim_event(
+            "worker-b",
+            &current_operation,
+            AdvisoryClaimEventKind::Renew {
+                expires_unix_ms: now + 90_000,
+            },
+        );
+        let release = claim_event(
+            "worker-b",
+            &current_operation,
+            AdvisoryClaimEventKind::Release,
+        );
+        let fake = Arc::new(ClaimStateFake::new(
+            now,
+            &[
+                old_claim.clone(),
+                old_renew.clone(),
+                old_release.clone(),
+                legacy_claim.clone(),
+                legacy_release.clone(),
+                current.clone(),
+                current_renew.clone(),
+            ],
+            993,
+        ));
+        assert_eq!(fake.properties.lock_or_recover().len(), 1000);
+        let projection = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &release, now, MAX_CLOCK_SKEW_MS)
+            .unwrap();
+        assert!(!projection.conflicted);
+        assert!(projection.claims.is_empty());
+        let properties = fake.properties.lock_or_recover();
+        for old_event in [&old_claim, &old_renew, &old_release] {
+            assert!(!properties.contains_key(&claim_property_key(old_event)));
+        }
+        for retained in [
+            &legacy_claim,
+            &legacy_release,
+            &current,
+            &current_renew,
+            &release,
+        ] {
+            assert!(properties.contains_key(&claim_property_key(retained)));
+        }
+        assert_eq!(properties.len(), 998);
+    }
+
+    #[test]
+    fn hs2_htyzag_partial_delete_and_concurrent_404_retry_safely() {
+        let now = 1_800_000_000_000;
+        let old = now - advisory_claim_v2::RECLAIM_AFTER_ISSUE_MS - 1000;
+        let old_claim = v2_event(
+            old,
+            "0000000000000003",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: old + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let old_release = v2_event(old, "0000000000000003", AdvisoryClaimEventKind::Release);
+        let new_claim = v2_event(
+            now,
+            "0000000000000004",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let fake = Arc::new(ClaimStateFake::new(
+            now,
+            &[old_claim.clone(), old_release.clone()],
+            0,
+        ));
+        *fake.fail_delete_at.lock_or_recover() = Some(2);
+        assert!(
+            provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+                .is_err()
+        );
+        assert_eq!(fake.properties.lock_or_recover().len(), 1);
+        assert!(
+            !fake
+                .properties
+                .lock_or_recover()
+                .contains_key(&claim_property_key(&new_claim))
+        );
+        *fake.race_delete_at.lock_or_recover() = Some(3);
+        assert!(
+            provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+                .is_err()
+        );
+        assert!(fake.properties.lock_or_recover().is_empty());
+        let result = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+            .unwrap();
+        assert_eq!(result.claims.len(), 1);
+        fake.properties.lock_or_recover().insert(
+            claim_property_key(&old_claim),
+            serde_json::to_value(&old_claim).unwrap(),
+        );
+        assert!(
+            provider(fake.clone())
+                .advisory_claims("ENG-9", now, MAX_CLOCK_SKEW_MS)
+                .unwrap()
+                .claims
+                .iter()
+                .all(|claim| claim.operation_id == new_claim.operation_id)
+        );
+    }
+
+    #[test]
+    fn hs2_htyzag_capacity_and_malformed_metadata_fail_before_delete_or_put() {
+        let now = 1_800_000_000_000;
+        let current = v2_event(
+            now,
+            "0000000000000005",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let release = v2_event(now, "0000000000000005", AdvisoryClaimEventKind::Release);
+        let full = Arc::new(ClaimStateFake::new(
+            now,
+            std::slice::from_ref(&current),
+            999,
+        ));
+        assert!(matches!(
+            provider(full.clone()).append_advisory_claim_event("ENG-9", &release, now, 0),
+            Err(ProviderError::Unsupported { .. })
+        ));
+        assert_eq!(full.properties.lock_or_recover().len(), 1000);
+        assert!(
+            full.requests
+                .lock_or_recover()
+                .iter()
+                .all(|(method, _)| method == "GET")
+        );
+
+        let malformed = Arc::new(ClaimStateFake::new(now, &[], 0));
+        malformed.properties.lock_or_recover().insert(
+            format!("{CLAIM_PROPERTY_PREFIX}0.00000000000000000000.bad"),
+            json!({"broken":true}),
+        );
+        assert!(
+            provider(malformed.clone())
+                .append_advisory_claim_event("ENG-9", &current, now, 0)
+                .is_err()
+        );
+        assert!(
+            malformed
+                .requests
+                .lock_or_recover()
+                .iter()
+                .all(|(method, _)| method == "GET")
+        );
+    }
+
+    #[test]
+    fn hs2_htyzag_reclaim_boundary_and_clock_rollback_do_not_delete() {
+        let now = 1_800_000_000_000;
+        let just_too_new = now - advisory_claim_v2::RECLAIM_AFTER_ISSUE_MS + 1;
+        let old_claim = v2_event(
+            just_too_new,
+            "0000000000000006",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: just_too_new + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let new_claim = v2_event(
+            now,
+            "0000000000000007",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let fake = Arc::new(ClaimStateFake::new(
+            now,
+            std::slice::from_ref(&old_claim),
+            0,
+        ));
+        provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+            .unwrap();
+        assert!(
+            fake.properties
+                .lock_or_recover()
+                .contains_key(&claim_property_key(&old_claim))
+        );
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|(method, _)| method != "DELETE")
+        );
+
+        let later = now + 61_000;
+        let another = v2_event(
+            later,
+            "0000000000000008",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: later + 60_000,
+            },
+        );
+        let before = fake.requests.lock_or_recover().len();
+        assert!(matches!(
+            provider(fake.clone()).append_advisory_claim_event("ENG-9", &another, later, 0),
+            Err(ProviderError::Conflict { .. })
+        ));
+        assert!(
+            fake.requests.lock_or_recover()[before..]
+                .iter()
+                .all(|(method, _)| method == "GET")
+        );
+    }
+
+    #[test]
+    fn hs2_htyzag_readback_failure_stops_write_and_retry_recovers() {
+        let now = 1_800_000_000_000;
+        let old = now - advisory_claim_v2::RECLAIM_AFTER_ISSUE_MS;
+        let old_claim = v2_event(
+            old,
+            "0000000000000009",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: old + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let new_claim = v2_event(
+            now,
+            "0000000000000010",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 60_000,
+            },
+        );
+        let fake = Arc::new(ClaimStateFake::new(now, &[old_claim], 0));
+        *fake.fail_readback_once.lock_or_recover() = true;
+        assert!(
+            provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+                .is_err()
+        );
+        assert!(fake.properties.lock_or_recover().is_empty());
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|(method, _)| method != "PUT")
+        );
+        assert_eq!(
+            provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &new_claim, now, 0)
+                .unwrap()
+                .claims
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn hs2_htyzag_hourly_settled_operations_keep_a_bounded_rolling_count() {
+        let start = 1_800_000_000_000;
+        let fake = Arc::new(ClaimStateFake::new(start, &[], 100));
+        let jira = provider(fake.clone());
+        let mut peak = 0;
+        for hour in 0..50 {
+            let now = start + hour * 3_600_000;
+            *fake.clock_ms.lock_or_recover() = now;
+            let nonce = format!("{hour:016}");
+            let claim = v2_event(
+                now,
+                &nonce,
+                AdvisoryClaimEventKind::Claim {
+                    expires_unix_ms: now + 60_000,
+                },
+            );
+            let release = v2_event(now, &nonce, AdvisoryClaimEventKind::Release);
+            jira.append_advisory_claim_event("ENG-9", &claim, now, 0)
+                .unwrap();
+            jira.append_advisory_claim_event("ENG-9", &release, now, 0)
+                .unwrap();
+            peak = peak.max(fake.properties.lock_or_recover().len());
+        }
+        assert!(peak <= 152, "rolling 24h+2m count was {peak}");
+        assert!(fake.properties.lock_or_recover().len() <= 152);
     }
 
     #[test]

@@ -826,3 +826,11 @@ For v2 cleanup readiness (HS2-0QEPRW), use a timestamped operation ID, verify
 Jira's `Date` header is present and within 60 seconds of the local clock, and
 confirm a stale same-ID event beyond 24 hours cannot become live. A legacy v1
 Release property remains present and is never treated as reclaimable.
+For HS2-HTYZAG, seed a synthetic Jira issue with v2 Claim/Renew/Release
+properties older than 24 hours plus two skew windows, a current other-worker
+Renew, and v1 markers. Submit a new advisory write: only the old v2 keys should
+be deleted, then the write should reconcile. Interrupt a DELETE and its
+readback in separate runs; neither may publish the new write, and a retry must
+recover. At 1,000 total issue keys with no eligible v2 key, verify the write
+is refused before PUT. At more than 1,000 keys, reads stop for operator
+recovery. Retain every v1 marker even when expired or released.

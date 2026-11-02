@@ -4,7 +4,12 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use hotsheet_extsync::{GitHubTransport, HttpResponse, JiraConfig, JiraProvider};
 use hotsheet_server::{AppState, app};
-use hotsheet_ticketing::{FsStore, StoreMetadata, advisory_claim_ledger::now_epoch};
+use hotsheet_ticketing::{
+    FsStore, StoreMetadata, TicketProvider, TicketRef,
+    advisory_claim::{AdvisoryClaimEvent, AdvisoryClaimEventKind},
+    advisory_claim_ledger::now_epoch,
+    advisory_claim_v2::RECLAIM_AFTER_ISSUE_MS,
+};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -17,6 +22,7 @@ use tower::ServiceExt;
 struct FakeJira {
     offline: AtomicBool,
     timeout_after_property_write: AtomicBool,
+    clock_override_ms: Mutex<Option<i64>>,
     properties: Mutex<HashMap<String, Value>>,
 }
 
@@ -25,6 +31,7 @@ impl Default for FakeJira {
         Self {
             offline: AtomicBool::new(false),
             timeout_after_property_write: AtomicBool::new(false),
+            clock_override_ms: Mutex::new(None),
             properties: Mutex::new(HashMap::new()),
         }
     }
@@ -46,6 +53,14 @@ impl GitHubTransport for FakeJira {
             if suffix.is_empty() && method == "GET" {
                 json!({"keys":self.properties.lock().unwrap().keys().map(|key|json!({"key":key})).collect::<Vec<_>>()})
             } else if let Some(key) = suffix.strip_prefix('/') {
+                if method == "DELETE" {
+                    let removed = self.properties.lock().unwrap().remove(key);
+                    return Ok(HttpResponse {
+                        status: if removed.is_some() { 204 } else { 404 },
+                        headers: HashMap::new(),
+                        body: String::new(),
+                    });
+                }
                 if method == "PUT" {
                     self.properties
                         .lock()
@@ -70,11 +85,17 @@ impl GitHubTransport for FakeJira {
         } else {
             return Err(format!("unexpected request {method} {url}"));
         };
+        let clock = self
+            .clock_override_ms
+            .lock()
+            .unwrap()
+            .unwrap_or_else(|| time::OffsetDateTime::now_utc().unix_timestamp() * 1000);
         Ok(HttpResponse {
             status: 200,
             headers: HashMap::from([(
                 "date".into(),
-                time::OffsetDateTime::now_utc()
+                time::OffsetDateTime::from_unix_timestamp_nanos(clock as i128 * 1_000_000)
+                    .unwrap()
                     .format(&time::format_description::well_known::Rfc2822)
                     .unwrap(),
             )]),
@@ -192,5 +213,101 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     assert_eq!(reconciled["provisional"], false);
     assert_eq!(reconciled["remote_verified"], true);
     assert_eq!(reconciled["projection"]["claims"][0]["worker"], "worker-a");
+    assert_eq!(fake.properties.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn hs2_htyzag_http_claim_prunes_fenced_v2_properties_before_remote_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let checkout_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let old_now = now_epoch() * 1000 - RECLAIM_AFTER_ISSUE_MS - 5_000;
+    *fake.clock_override_ms.lock().unwrap() = Some(old_now);
+    let old_id = format!("v2:{old_now:013}:0123456789abcdef");
+    let old_claim = AdvisoryClaimEvent {
+        ticket: TicketRef {
+            connection_id: "jira-eng".into(),
+            native_id: "ENG-9".into(),
+        },
+        worker: "old-worker".into(),
+        operation_id: old_id.clone(),
+        provider_order: 0,
+        kind: AdvisoryClaimEventKind::Claim {
+            expires_unix_ms: old_now + 60_000,
+        },
+    };
+    let old_release = AdvisoryClaimEvent {
+        kind: AdvisoryClaimEventKind::Release,
+        ..old_claim.clone()
+    };
+    let jira = provider(fake.clone());
+    jira.append_advisory_claim_event("ENG-9", &old_claim, old_now, 0)
+        .unwrap();
+    jira.append_advisory_claim_event("ENG-9", &old_release, old_now, 0)
+        .unwrap();
+    assert_eq!(fake.properties.lock().unwrap().len(), 2);
+    *fake.clock_override_ms.lock().unwrap() = None;
+
+    let server = app(AppState::new(store, "synthetic-secret".into())
+        .unwrap()
+        .with_checkout_registry(dir.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(jira))
+        .with_advisory_claim_ledger(dir.path().join("advisory.sqlite"))
+        .unwrap());
+    let (status, _) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/provider-connections",
+                Some(json!({
+                    "id":"jira-eng","provider":"jira","locator":"ENG","default":false,
+                    "settings":{"base_url":"https://jira.test","email":"synthetic@example.test","credential":{"secret":"fixture"}}
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, registration) = response_json(
+        server
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/checkouts",
+                Some(json!({
+                    "root":checkout_dir.path(),"alias":"cleanup-jira",
+                    "sources":[{"connection_id":"jira-eng","provider":"jira","locator":"ENG"}],
+                    "default_source":"jira-eng"
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{registration}");
+    let checkout_id = registration["id"].as_str().unwrap();
+    let uri = format!("/checkouts/{checkout_id}/providers/jira-eng/tickets/ENG-9/advisory-claim");
+    let new_now = now_epoch() * 1000;
+    let new_id = format!("v2:{new_now:013}:fedcba9876543210");
+    let (status, result) = response_json(
+        server
+            .oneshot(request(
+                "POST",
+                &uri,
+                Some(json!({
+                    "worker":"new-worker","operation_id":new_id,
+                    "kind":{"type":"claim","expires_unix_ms":new_now+60_000},
+                    "provisional":false
+                })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["projection"]["claims"][0]["worker"], "new-worker");
     assert_eq!(fake.properties.lock().unwrap().len(), 1);
 }
