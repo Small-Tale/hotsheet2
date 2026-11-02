@@ -1,4 +1,5 @@
 import type {
+  AdvisoryClaimStatus,
   AiToolDefaults,
   AiToolDescriptor,
   CalibrationReport,
@@ -507,6 +508,32 @@ export const parseProviderDescriptor = shape<ProviderDescriptor>(
   { connection_id: isString, provider: isString, display_name: isString, locator: isString, capabilities: isObject },
   { default: isBoolean, color: isString },
 );
+
+const advisoryClaim = shape<AdvisoryClaimStatus['projection']['claims'][number]>('advisory claim', {
+  worker: isString,
+  operation_id: isString,
+  expires_unix_ms: isNumber,
+});
+const advisoryProjection = shape<AdvisoryClaimStatus['projection']>('advisory claim projection', {
+  claims: listOf(advisoryClaim.check),
+  conflicted: isBoolean,
+  invalid_markers: isNumber,
+});
+const pendingAdvisoryOperation = shape<AdvisoryClaimStatus['pending_operations'][number]>(
+  'pending advisory operation',
+  {
+    operation_id: isString,
+    state: (value) => isString(value) && ['queued', 'confirmed', 'needs_attention', 'expired'].includes(value),
+  },
+);
+export const parseAdvisoryClaimStatus = shape<AdvisoryClaimStatus>('advisory claim status', {
+  projection: advisoryProjection.check,
+  provisional: isBoolean,
+  remote_verified: isBoolean,
+  automatic_handoff_safe: isBoolean,
+  pending_operation_ids: isStringArray,
+  pending_operations: listOf(pendingAdvisoryOperation.check),
+});
 
 export const parseProviderConnection = shape<ProviderConnection>(
   'provider connection',

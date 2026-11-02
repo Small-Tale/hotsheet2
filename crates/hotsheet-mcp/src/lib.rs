@@ -428,6 +428,31 @@ fn base_tools_list() -> Value {
             }, "required": ["id"] }
         },
         {
+            "name": "hotsheet_advisory_claim_status",
+            "description": "Read best-effort external process claims for one checkout-qualified provider ticket. Conflicts and provisional claims never prove exclusive ownership; requires a running server for external providers.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("linked provider connection id"),
+                "native_id": str_prop("provider-native ticket id")
+            }, "required": ["checkout", "connection_id", "native_id"] }
+        },
+        {
+            "name": "hotsheet_advisory_claim_event",
+            "description": "Append one advisory claim, renewal, or release event for a checkout-qualified external ticket. The marker is best effort, not an exclusive lease. A provisional claim remains unsafe for automatic handoff.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "connection_id": str_prop("linked provider connection id"),
+                "native_id": str_prop("provider-native ticket id"),
+                "worker": str_prop("process or AI-session identity"),
+                "operation_id": str_prop("stable v2:<13-digit-issued-ms>:<random> id reused for retries, renewals and release"),
+                "kind": { "type": "object", "description": "{type: claim|renew, expires_unix_ms: epoch milliseconds}, or {type: release}", "properties": {
+                    "type": { "type": "string", "enum": ["claim", "renew", "release"] },
+                    "expires_unix_ms": { "type": "integer" }
+                }, "required": ["type"] },
+                "provisional": { "type": "boolean", "description": "admit a local offline claim intent; never authorizes automatic handoff" }
+            }, "required": ["checkout", "connection_id", "native_id", "worker", "operation_id", "kind"] }
+        },
+        {
             "name": "hotsheet_claim_next",
             "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
@@ -566,6 +591,7 @@ const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_batch",
     "hotsheet_announce",
     "hotsheet_claim",
+    "hotsheet_advisory_claim_event",
     "hotsheet_claim_next",
     "hotsheet_release",
     "hotsheet_renew",
@@ -1006,6 +1032,20 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
+        "hotsheet_advisory_claim_status" => {
+            let path = advisory_claim_route(args)?;
+            backend.get(&path, &[]).map_err(be_msg)
+        }
+        "hotsheet_advisory_claim_event" => {
+            let path = advisory_claim_route(args)?;
+            backend
+                .send(
+                    "POST",
+                    &path,
+                    &without_many(args, &["checkout", "connection_id", "native_id"]),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
@@ -1200,6 +1240,18 @@ fn checkout_route(args: &Value, suffix: &str) -> String {
             || suffix.to_owned(),
             |checkout| format!("/checkouts/{}{suffix}", encode_checkout_reference(checkout)),
         )
+}
+
+fn advisory_claim_route(args: &Value) -> Result<String, String> {
+    let checkout = arg_str(args, "checkout")?;
+    let connection = arg_str(args, "connection_id")?;
+    let native_id = arg_str(args, "native_id")?;
+    Ok(format!(
+        "/checkouts/{}/providers/{}/tickets/{}/advisory-claim",
+        encode_checkout_reference(&checkout),
+        encode_checkout_reference(&connection),
+        encode_checkout_reference(&native_id)
+    ))
 }
 
 /// A checkout path is one HTTP route parameter even when it contains separators.
@@ -1669,6 +1721,12 @@ mod core_backend {
                     .request("GET", path, &serde_json::Value::Null)
                     .map_err(remote_tools::backend_error);
             }
+            if path.starts_with("/checkouts/") && path.ends_with("/advisory-claim") {
+                return Err(BackendError {
+                    status: Some(409),
+                    message: "external advisory claims require a running Hot Sheet server in serverless MCP mode".into(),
+                });
+            }
             if path == "/providers" {
                 let descriptor = hotsheet_ticketing::GitProvider::new(
                     hotsheet_ticketing::git_connection_id(&self.store),
@@ -2036,6 +2094,12 @@ mod core_backend {
                     .remote_runtime()?
                     .request(method, path, body)
                     .map_err(remote_tools::backend_error);
+            }
+            if path.starts_with("/checkouts/") && path.ends_with("/advisory-claim") {
+                return Err(BackendError {
+                    status: Some(409),
+                    message: "external advisory claims require a running Hot Sheet server in serverless MCP mode".into(),
+                });
             }
             if let Some((connection, suffix)) = provider_ticket_suffix(path) {
                 let expected = hotsheet_ticketing::git_connection_id(&self.store);
@@ -5019,6 +5083,108 @@ mod tests {
             calls[..3]
                 .iter()
                 .all(|call| call.contains("\"actor\":{\"id\":\"agent\",\"role\":\"ai\"}"))
+        );
+    }
+
+    #[test]
+    fn hs2_2mzwzt_advisory_tools_keep_checkout_and_provider_identity() {
+        let backend = FakeBackend::default();
+        let arguments = json!({
+            "checkout": "/tmp/synthetic project",
+            "connection_id": "jira-eng",
+            "native_id": "ENG-9"
+        });
+        call(
+            &backend,
+            "hotsheet_advisory_claim_status",
+            arguments.clone(),
+        );
+        call(
+            &backend,
+            "hotsheet_advisory_claim_event",
+            json!({
+                "checkout": "/tmp/synthetic project",
+                "connection_id": "jira-eng",
+                "native_id": "ENG-9",
+                "worker": "synthetic-worker",
+                "operation_id": "v2:2000000000000:synthetic-worker-0001",
+                "kind": {"type":"claim","expires_unix_ms":2_000_000_300_000_i64},
+                "provisional": true,
+                "actor_role": "ai",
+                "actor_id": "synthetic-worker"
+            }),
+        );
+        let calls = backend.calls.borrow();
+        let path = "/checkouts/%2Ftmp%2Fsynthetic%20project/providers/jira-eng/tickets/ENG-9/advisory-claim";
+        assert_eq!(calls[0], format!("GET {path} []"));
+        assert!(calls[1].starts_with(&format!("POST {path} ")));
+        assert!(calls[1].contains("\"provisional\":true"));
+        assert!(calls[1].contains("\"actor\":{\"id\":\"synthetic-worker\",\"role\":\"ai\"}"));
+        assert!(!calls[1].contains("connection_id"));
+    }
+
+    #[test]
+    fn hs2_2mzwzt_serverless_advisory_requests_fail_explicitly() {
+        let (_dir, backend) = core();
+        let path = "/checkouts/synthetic/providers/jira-eng/tickets/ENG-9/advisory-claim";
+        for result in [
+            backend.get(path, &[]),
+            backend.send("POST", path, &json!({"worker":"synthetic"})),
+        ] {
+            let error = result.unwrap_err();
+            assert_eq!(error.status, Some(409));
+            assert!(error.message.contains("require a running Hot Sheet server"));
+        }
+    }
+
+    #[test]
+    fn hs2_2mzwzt_advisory_status_preserves_conflict_and_remote_error() {
+        struct AdvisoryBackend {
+            fail: bool,
+        }
+        impl Backend for AdvisoryBackend {
+            fn get(&self, _: &str, _: &[(String, String)]) -> Result<Value, BackendError> {
+                if self.fail {
+                    return Err(BackendError {
+                        status: Some(409),
+                        message: "malformed remote advisory marker".into(),
+                    });
+                }
+                Ok(json!({
+                    "projection": {"claims": [
+                        {"worker":"one","operation_id":"one","expires_unix_ms":2_000_000_300_000_i64},
+                        {"worker":"two","operation_id":"two","expires_unix_ms":2_000_000_300_000_i64}
+                    ],"conflicted":true,"invalid_markers":0},
+                    "provisional":true,"remote_verified":true,"automatic_handoff_safe":false,
+                    "pending_operation_ids":["one"],
+                    "pending_operations":[{"operation_id":"one","state":"needs_attention"}]
+                }))
+            }
+            fn send(&self, _: &str, _: &str, _: &Value) -> Result<Value, BackendError> {
+                unreachable!()
+            }
+        }
+        let args = json!({"checkout":"code","connection_id":"jira","native_id":"ENG-9"});
+        let conflict = call(
+            &AdvisoryBackend { fail: false },
+            "hotsheet_advisory_claim_status",
+            args.clone(),
+        );
+        assert_eq!(conflict["projection"]["conflicted"], true);
+        assert_eq!(
+            conflict["pending_operations"][0]["state"],
+            "needs_attention"
+        );
+        let error = call(
+            &AdvisoryBackend { fail: true },
+            "hotsheet_advisory_claim_status",
+            args,
+        );
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("malformed remote advisory marker")
         );
     }
 

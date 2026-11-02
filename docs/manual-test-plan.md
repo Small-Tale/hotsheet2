@@ -812,6 +812,15 @@ suite uses fake audio to verify request and state wiring; it cannot hear output.
 
 ### Jira advisory process claims (HS2-BPKM76)
 
+For HS2-2MZWZT, open the same Jira ticket in the web inspector and reader at
+wide, medium, and narrow widths, then resize wide to narrow to wide. Inspect
+two live worker claims, a provisional offline claim, a queued operation, a
+needs-attention operation, and a malformed remote property. Confirm conflict
+and uncertainty copy remains legible, automatic handoff stays paused, and
+Claim/Renew/Release appear only for valid current-session state. Reconnect and
+refresh to confirm the projection updates without periodic requests. Exercise
+the checkout-qualified MCP status/event tools against the same linked source.
+
 On a synthetic Jira issue with Browse and Edit issue permissions, assign the
 current credential user, then create an advisory claim through the checkout
 qualified route or `provider-advisory-claim`. Confirm the property appears under

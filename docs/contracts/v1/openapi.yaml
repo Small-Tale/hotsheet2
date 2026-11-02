@@ -14872,7 +14872,8 @@ components:
             expires_unix_ms: { type: integer, format: int64 }
     AdvisoryClaimStatus:
       type: object
-      required: [projection, provisional, remote_verified, automatic_handoff_safe, pending_operation_ids]
+      required:
+        [projection, provisional, remote_verified, automatic_handoff_safe, pending_operation_ids, pending_operations]
       properties:
         projection:
           type: object
@@ -14895,6 +14896,14 @@ components:
         pending_operation_ids:
           type: array
           items: { type: string }
+        pending_operations:
+          type: array
+          items:
+            type: object
+            required: [operation_id, state]
+            properties:
+              operation_id: { type: string }
+              state: { type: string, enum: [queued, confirmed, needs_attention, expired] }
     ProviderCapabilities:
       type: object
       properties:

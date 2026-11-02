@@ -14,6 +14,11 @@ import {
 } from '../active-ticket-work';
 import { filterAdvancedSearchResults, usesAdvancedSearchExpression } from '../advanced-search';
 import {
+  activeAdvisoryOperationId,
+  advisoryRenewExpiry,
+  createAdvisoryClaimResource,
+} from '../advisory-claim-resource';
+import {
   Api,
   ApiHttpError,
   type Capabilities,
@@ -52,7 +57,7 @@ import {
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
-import { browserRandomId } from '../browser-id';
+import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { createClientNotifications } from '../client-notifications';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
@@ -1657,6 +1662,160 @@ export async function startHotSheetWebClient() {
   };
   const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
   const api = () => new Api(project()?.apiPath ?? '');
+  const advisoryClaimResource = createAdvisoryClaimResource(api);
+  const advisoryWorker = (() => {
+    try {
+      const saved = sessionStorage.getItem('hotsheet:advisory-worker');
+      if (saved) return saved;
+      const created = `web-${browserRandomId()}`;
+      sessionStorage.setItem('hotsheet:advisory-worker', created);
+      return created;
+    } catch {
+      return `web-${browserRandomId()}`;
+    }
+  })();
+  const advisoryOperationKey = (checkout: string, connection: string, nativeId: string) =>
+    `hotsheet:advisory-operation:${JSON.stringify([checkout, connection, nativeId])}`;
+  const advisoryOperation = (checkout: string, connection: string, nativeId: string) => {
+    try {
+      return sessionStorage.getItem(advisoryOperationKey(checkout, connection, nativeId)) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const setAdvisoryOperation = (checkout: string, connection: string, nativeId: string, operation?: string) => {
+    try {
+      const key = advisoryOperationKey(checkout, connection, nativeId);
+      if (operation) sessionStorage.setItem(key, operation);
+      else sessionStorage.removeItem(key);
+    } catch {
+      /* Session storage is optional; live state still works. */
+    }
+  };
+  const advisoryClaimAttempt = (checkout: string, connection: string, nativeId: string) => {
+    try {
+      const parsed = JSON.parse(
+        sessionStorage.getItem(`${advisoryOperationKey(checkout, connection, nativeId)}:claim`) ?? 'null',
+      ) as { operation_id?: string; expires_unix_ms?: number } | null;
+      return parsed?.operation_id && parsed.expires_unix_ms && parsed.expires_unix_ms > Date.now()
+        ? { operation_id: parsed.operation_id, expires_unix_ms: parsed.expires_unix_ms }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const setAdvisoryClaimAttempt = (
+    checkout: string,
+    connection: string,
+    nativeId: string,
+    attempt?: { operation_id: string; expires_unix_ms: number },
+  ) => {
+    try {
+      const key = `${advisoryOperationKey(checkout, connection, nativeId)}:claim`;
+      if (attempt) sessionStorage.setItem(key, JSON.stringify(attempt));
+      else sessionStorage.removeItem(key);
+    } catch {
+      /* A session without storage can still claim; retries then need a fresh read. */
+    }
+  };
+  effect(() => {
+    const current = project(),
+      ticket = selectedTicket.value;
+    const supported =
+      ticket && (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.advisory_claims;
+    advisoryClaimResource.select(
+      current && ticket && supported
+        ? {
+            checkout: current.id,
+            connection: ticket.connection_id,
+            nativeId: ticket.native_id,
+            apiPath: current.apiPath,
+          }
+        : undefined,
+    );
+  });
+  const advisoryClaimNotice = (ticket: WireTicketRow) => {
+    const current = project(),
+      state = advisoryClaimResource.state.value;
+    if (
+      !current ||
+      !(providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.advisory_claims ||
+      state.target?.checkout !== current.id ||
+      state.target.apiPath !== current.apiPath ||
+      state.target.connection !== ticket.connection_id ||
+      state.target.nativeId !== ticket.native_id
+    )
+      return undefined;
+    return {
+      status: state.status,
+      loading: state.loading,
+      busy: state.busy,
+      error: state.error,
+      worker: advisoryWorker,
+      operationId: activeAdvisoryOperationId(
+        state.status,
+        advisoryWorker,
+        advisoryOperation(current.id, ticket.connection_id, ticket.native_id),
+      ),
+    };
+  };
+  async function handleAdvisoryAction(action: string) {
+    const current = project(),
+      ticket = selectedTicket.value,
+      state = advisoryClaimResource.state.peek();
+    if (
+      !current ||
+      !ticket ||
+      state.target?.checkout !== current.id ||
+      state.target.apiPath !== current.apiPath ||
+      state.target.connection !== ticket.connection_id ||
+      state.target.nativeId !== ticket.native_id
+    )
+      return;
+    if (action === 'advisory-refresh') {
+      await advisoryClaimResource.refresh();
+      return;
+    }
+    const own = state.status?.projection.claims.find((claim) => claim.worker === advisoryWorker);
+    if (
+      action === 'advisory-claim' &&
+      (!state.status?.remote_verified ||
+        state.status.provisional ||
+        state.status.projection.conflicted ||
+        state.status.projection.claims.length)
+    )
+      return;
+    if (action !== 'advisory-claim' && !own) return;
+    const previousAttempt =
+      action === 'advisory-claim'
+        ? advisoryClaimAttempt(current.id, ticket.connection_id, ticket.native_id)
+        : undefined;
+    const operationId =
+      action === 'advisory-claim' ? (previousAttempt?.operation_id ?? browserOutboxId()) : own?.operation_id;
+    if (!operationId) return;
+    if (action === 'advisory-claim')
+      setAdvisoryOperation(current.id, ticket.connection_id, ticket.native_id, operationId);
+    const expires = previousAttempt?.expires_unix_ms ?? Date.now() + 30 * 60 * 1000;
+    if (action === 'advisory-claim')
+      setAdvisoryClaimAttempt(current.id, ticket.connection_id, ticket.native_id, {
+        operation_id: operationId,
+        expires_unix_ms: expires,
+      });
+    const renewExpiry = advisoryRenewExpiry(operationId);
+    if (action === 'advisory-renew' && renewExpiry === undefined) return;
+    const kind =
+      action === 'advisory-release'
+        ? { type: 'release' as const }
+        : {
+            type: action === 'advisory-renew' ? ('renew' as const) : ('claim' as const),
+            expires_unix_ms: action === 'advisory-claim' ? expires : (renewExpiry ?? expires),
+          };
+    const result = await advisoryClaimResource.submit({ worker: advisoryWorker, operation_id: operationId, kind });
+    if (result && action === 'advisory-claim')
+      setAdvisoryClaimAttempt(current.id, ticket.connection_id, ticket.native_id);
+    if (result && action === 'advisory-release')
+      setAdvisoryOperation(current.id, ticket.connection_id, ticket.native_id);
+  }
   async function checkGuidanceUpdates(force = false) {
     const current = project();
     if (!current) return;
@@ -3541,6 +3700,7 @@ export async function startHotSheetWebClient() {
       // HS2-J118P3: an older worker read cannot undo an accepted ordinary source refresh.
       workerDetailRefresh?.invalidate();
       reconcileRefreshedSelected(previous, refreshed);
+      void advisoryClaimResource.refresh();
     },
   });
   // A hoisted entry point: earlier-built owners and handlers call it before this line runs.
@@ -4113,6 +4273,11 @@ export async function startHotSheetWebClient() {
   document.body.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    const advisoryAction = target.closest<HTMLElement>('[data-action^="advisory-"]')?.dataset.action;
+    if (advisoryAction) {
+      void handleAdvisoryAction(advisoryAction);
+      return;
+    }
     const choose = target.closest<HTMLElement>('[data-action="choose-feedback-session"]');
     if (choose) {
       const ticketId = choose.dataset.ticketId,
@@ -4592,6 +4757,7 @@ export async function startHotSheetWebClient() {
       fieldConflictResolution,
       inspectorTab,
       liveClaimNotice,
+      advisoryClaimNotice,
       newNoteDraft,
       noteDraft,
       notes,
@@ -4635,6 +4801,7 @@ export async function startHotSheetWebClient() {
     fieldConflictResolution,
     linkedReaderStack,
     liveClaimNotice,
+    advisoryClaimNotice,
     newNoteDraft,
     notes,
     priority,

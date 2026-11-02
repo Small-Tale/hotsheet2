@@ -48,6 +48,7 @@ import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-
 import { isTicketTitleExpanded } from '../ticket-title-disclosure';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
+import { AdvisoryClaimNotice, type AdvisoryClaimNoticeProps } from './advisory-claim-notice';
 import { ConfidenceBadge } from './confidence-badge';
 import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
@@ -106,6 +107,7 @@ export interface TicketInspectorProps {
   latestConfidence?: number;
   /** A live claim lease: who is actively working on the ticket and its ETA progress (HS2-QKNQXC). */
   liveClaim?: LiveClaimNoticeProps;
+  advisoryClaim?: AdvisoryClaimNoticeProps;
   /** Recent Jira write-behind states for this ticket, including confirmed history. */
   pendingOperations?: readonly ProviderOutboxOperation[];
   duplicateTarget?: DuplicateTargetSummary;
@@ -200,6 +202,7 @@ export function ticketInspectorPanel({
   closeReason,
   latestConfidence,
   liveClaim,
+  advisoryClaim,
   pendingOperations = [],
   duplicateTarget,
   duplicateBacklinks = [],
@@ -386,6 +389,11 @@ export function ticketInspectorPanel({
         </div>
       )}
       {liveClaim && <LiveClaimNotice {...liveClaim} />}
+      {advisoryClaim && (
+        <div class="ticket-inspector__notice">
+          <AdvisoryClaimNotice {...advisoryClaim} />
+        </div>
+      )}
       {feedbackNeeded && (
         <div class="ticket-inspector__notice ticket-inspector__feedback">
           <StateBanner

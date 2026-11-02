@@ -17,6 +17,54 @@ const base = {
 };
 
 describe('TicketInspector', () => {
+  it('shows advisory conflicts and provisional work through the shipped inspector (HS2-2MZWZT)', () => {
+    const status = {
+      projection: {
+        claims: [
+          { worker: 'worker-one', operation_id: 'one', expires_unix_ms: 1 },
+          { worker: 'worker-two', operation_id: 'two', expires_unix_ms: 1 },
+        ],
+        conflicted: true,
+        invalid_markers: 0,
+      },
+      provisional: true,
+      remote_verified: true,
+      automatic_handoff_safe: false,
+      pending_operation_ids: ['one'],
+      pending_operations: [{ operation_id: 'one', state: 'needs_attention' as const }],
+    };
+    const conflict = String(
+      TicketInspector({
+        ...base,
+        advisoryClaim: {
+          status,
+          loading: false,
+          busy: false,
+          worker: 'worker-one',
+          operationId: 'one',
+        },
+      }),
+    );
+    expect(conflict).toContain('Overlapping advisory claims');
+    expect(conflict).toContain('The local claim needs review');
+    expect(conflict).toContain('Local intent is pending provider confirmation');
+    expect(conflict).toContain('Automatic handoff is paused');
+    expect(conflict).not.toContain('data-action="advisory-claim"');
+    expect(conflict).toContain('data-action="advisory-refresh"');
+    const unavailable = String(
+      TicketInspector({
+        ...base,
+        advisoryClaim: {
+          loading: false,
+          busy: false,
+          error: 'Provider unavailable',
+          worker: 'worker-one',
+        },
+      }),
+    );
+    expect(unavailable).toContain('Advisory claim state unavailable');
+    expect(unavailable).not.toContain('data-action="advisory-release"');
+  });
   it('offers scoped nonmodal session choices or a start action after human feedback (HS2-25TP3N)', () => {
     const choose = String(
       TicketInspector({

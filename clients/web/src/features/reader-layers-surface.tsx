@@ -10,6 +10,7 @@ import {
 } from '../attachment-label-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
+import type { AdvisoryClaimNoticeProps } from '../components/advisory-claim-notice';
 import { type MarkdownEditorMode } from '../components/markdown-editor';
 import type { NoteCardProps } from '../components/note-card';
 import type {
@@ -70,6 +71,7 @@ export interface ReaderLayersSurfaceDependencies {
   fieldConflictResolution: Signal<string>;
   linkedReaderStack: Signal<TicketReaderFrame[]>;
   liveClaimNotice: (ticket: WireTicketRow) => LiveClaimNoticeProps | undefined;
+  advisoryClaimNotice: (ticket: WireTicketRow) => AdvisoryClaimNoticeProps | undefined;
   newNoteDraft: Signal<string>;
   notes: (ticket: FullTicket) => {
     readonly id: string;
@@ -152,6 +154,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     fieldConflictResolution,
     linkedReaderStack,
     liveClaimNotice,
+    advisoryClaimNotice,
     newNoteDraft,
     notes,
     priority,
@@ -261,6 +264,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
               : ticket.details
         }
         liveClaim={liveClaimNotice(ticket)}
+        advisoryClaim={editable ? advisoryClaimNotice(ticket) : undefined}
         detailsMode={linked?.detailsMode ?? (editable ? readerDetailsMode.value : 'preview')}
         detailsDirty={
           Boolean(linked && linked.detailsDraft !== ticket.details) ||

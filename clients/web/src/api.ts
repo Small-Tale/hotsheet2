@@ -8,6 +8,7 @@ import { beginServerRequest, describeServerRequest, endServerRequest } from './s
 import {
   ignoreBody,
   parseAccountIdentity,
+  parseAdvisoryClaimStatus,
   parseAiToolDefaults,
   parseAiToolDescriptor,
   parseCalibrationReport,
@@ -297,6 +298,29 @@ export interface ProviderDescriptor {
   /** The linked Git store path is missing or its metadata cannot be read. */
   store_unavailable?: boolean;
   capabilities: Capabilities;
+}
+
+/** Best-effort provider marker; this never proves an exclusive lease (HS2-2MZWZT). */
+export interface AdvisoryClaimStatus {
+  projection: {
+    claims: Array<{ worker: string; operation_id: string; expires_unix_ms: number }>;
+    conflicted: boolean;
+    invalid_markers: number;
+  };
+  provisional: boolean;
+  remote_verified: boolean;
+  automatic_handoff_safe: boolean;
+  pending_operation_ids: string[];
+  pending_operations: Array<{ operation_id: string; state: 'queued' | 'confirmed' | 'needs_attention' | 'expired' }>;
+}
+
+export type AdvisoryClaimEventKind = { type: 'claim' | 'renew'; expires_unix_ms: number } | { type: 'release' };
+
+export interface AdvisoryClaimEventInput {
+  worker: string;
+  operation_id: string;
+  kind: AdvisoryClaimEventKind;
+  provisional?: boolean;
 }
 export interface ProviderConnection {
   id: string;
@@ -1826,6 +1850,15 @@ export class Api {
     this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(
       (ticket) => ({ store: ticket.store, ticket }),
     );
+  advisoryClaimStatus = (checkout: string, connection: string, nativeId: string) =>
+    this.parsed(parseAdvisoryClaimStatus, this.advisoryClaimPath(checkout, connection, nativeId));
+  appendAdvisoryClaimEvent = (checkout: string, connection: string, nativeId: string, event: AdvisoryClaimEventInput) =>
+    this.parsed(parseAdvisoryClaimStatus, this.advisoryClaimPath(checkout, connection, nativeId), {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  private advisoryClaimPath = (checkout: string, connection: string, nativeId: string) =>
+    `/checkouts/${encodeURIComponent(checkout)}/providers/${encodeURIComponent(connection)}/tickets/${encodeURIComponent(nativeId)}/advisory-claim`;
   checkoutTicketDuplicateBacklinks = (checkout: string, id: string) =>
     this.parsed(
       parseDuplicateBacklinks,

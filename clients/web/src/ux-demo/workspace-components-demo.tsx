@@ -13,6 +13,7 @@ import { createScope } from 'kerfjs/scope';
 
 import type { CodeReview, DuplicateBacklink } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
+import { AdvisoryClaimNotice } from '../components/advisory-claim-notice';
 import { NotificationCenter } from '../components/notification-center';
 import {
   QuickTicketComposer,
@@ -754,6 +755,33 @@ export function TicketInspectorDemo({ collapseControl = true }: { collapseContro
   );
 }
 
+export function AdvisoryClaimNoticeDemo() {
+  return (
+    <CatalogExample label="External Advisory State">
+      <AdvisoryClaimNotice
+        worker="demo-worker"
+        loading={false}
+        busy={false}
+        status={{
+          projection: {
+            claims: [
+              { worker: 'demo-worker', operation_id: 'demo-one', expires_unix_ms: 2_000_000_000_000 },
+              { worker: 'other-worker', operation_id: 'demo-two', expires_unix_ms: 2_000_000_000_000 },
+            ],
+            conflicted: true,
+            invalid_markers: 0,
+          },
+          provisional: true,
+          remote_verified: false,
+          automatic_handoff_safe: false,
+          pending_operation_ids: ['demo-one'],
+          pending_operations: [{ operation_id: 'demo-one', state: 'needs_attention' }],
+        }}
+      />
+    </CatalogExample>
+  );
+}
+
 export function TicketInspectorSkeletonDemo() {
   return (
     <CatalogExample label="Loading">
@@ -1133,6 +1161,7 @@ export const demoModule: DemoModule = {
       Settings: TicketInspectorSettings,
       reset: resetTicketInspectorDemo,
     },
+    'advisory-claim-notice': { catalogExamples: true, Demo: AdvisoryClaimNoticeDemo },
     'ticket-inspector-skeleton': { catalogExamples: true, Demo: TicketInspectorSkeletonDemo },
     'terminal-ticket-rail': { catalogExamples: true, Demo: TerminalTicketRailDemo },
   },

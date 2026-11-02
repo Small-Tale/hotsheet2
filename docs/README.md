@@ -59,11 +59,12 @@ controlled-close flush for large pending draft strings (HS2-E0H7S0). See the
 **Advisory external claims (HS2-BPKM76):** Jira issue properties support backend
 process-claim reconciliation and a durable provisional headless/server path. GitHub,
 GitLab, and Jira can assign the current credential user. Exclusive external leases remain
-unsupported. MCP and web conflict presentation remain partial (HS2-2MZWZT);
+unsupported. MCP and web selected-ticket conflict/provisional presentation are shipped (HS2-2MZWZT);
 non-notifying GitHub/GitLab process metadata remains deferred (HS2-D9V8YT).
 Jira prunes time-fenced v2 issue properties before a new advisory write
 (HS2-HTYZAG), while the bounded reader fails closed above 1,000 total issue
 properties and at high write rates.
+Safe web offline admission awaits typed provider transport errors (HS2-315TEM).
 New Jira process claims use a 24-hour v2 operation horizon and a checked 60-second
 provider clock window (HS2-0QEPRW); old v1 markers retain strict reads and a
 legacy tombstone floor. HS2-63669G selected permanent retention of all v1

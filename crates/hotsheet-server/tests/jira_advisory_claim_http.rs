@@ -183,6 +183,11 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     assert_eq!(admitted["provisional"], true);
     assert_eq!(admitted["remote_verified"], false);
     assert_eq!(admitted["automatic_handoff_safe"], false);
+    assert_eq!(
+        admitted["pending_operations"][0]["operation_id"],
+        operation_id
+    );
+    assert_eq!(admitted["pending_operations"][0]["state"], "queued");
     drop(server);
     fake.offline.store(false, Ordering::SeqCst);
     fake.timeout_after_property_write
@@ -207,12 +212,17 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     assert_eq!(status, StatusCode::OK, "{uncertain}");
     assert_eq!(uncertain["provisional"], true);
     assert_eq!(uncertain["automatic_handoff_safe"], false);
+    assert_eq!(
+        uncertain["pending_operations"][0]["state"],
+        "needs_attention"
+    );
     let (status, reconciled) =
         response_json(restarted.oneshot(request("GET", &uri, None)).await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{reconciled}");
     assert_eq!(reconciled["provisional"], false);
     assert_eq!(reconciled["remote_verified"], true);
     assert_eq!(reconciled["projection"]["claims"][0]["worker"], "worker-a");
+    assert_eq!(reconciled["pending_operations"], json!([]));
     assert_eq!(fake.properties.lock().unwrap().len(), 1);
 }
 

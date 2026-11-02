@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Api } from './api';
 import {
   parseAccountIdentity,
+  parseAdvisoryClaimStatus,
   parseAiToolDefaults,
   parseCheckout,
   parseCheckoutRelink,
@@ -44,6 +45,27 @@ import {
   type ResponseParser,
   ServerResponseShapeError,
 } from './server-response-parsers';
+
+describe('HS2-2MZWZT advisory status parser', () => {
+  const status = {
+    projection: {
+      claims: [{ worker: 'w', operation_id: 'op', expires_unix_ms: 2_000_000_000_000 }],
+      conflicted: false,
+      invalid_markers: 0,
+    },
+    provisional: true,
+    remote_verified: false,
+    automatic_handoff_safe: false,
+    pending_operation_ids: ['op'],
+    pending_operations: [{ operation_id: 'op', state: 'needs_attention' }],
+  };
+  it('preserves pending state and refuses an unknown replay state', () => {
+    expect(parseAdvisoryClaimStatus(status).pending_operations[0].state).toBe('needs_attention');
+    expect(() =>
+      parseAdvisoryClaimStatus({ ...status, pending_operations: [{ operation_id: 'op', state: 'lost' }] }),
+    ).toThrow();
+  });
+});
 
 const checkout = { id: 'c', root: '/w/c', alias: 'c', stores: ['/w/c.hs2'] };
 

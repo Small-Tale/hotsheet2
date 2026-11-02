@@ -146,11 +146,13 @@ export const demoCatalog: DemoCategory[] = [
             'ticket-timeline',
             'ticket-code-review',
             'ticket-attachments',
+            'advisory-claim-notice',
             'note-card',
             'note-composer',
             'loading-spinner',
           ]),
           cataloged('ticket-inspector-skeleton'),
+          cataloged('advisory-claim-notice', ['state-banner', 'button']),
           cataloged('corrupt-ticket-inspector', ['list-header', 'state-banner']),
           cataloged('ticket-info-panel', [
             'ticket-category-select',

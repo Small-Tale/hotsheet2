@@ -1045,6 +1045,42 @@
       }
     },
     {
+      "id": "advisory-claim-notice",
+      "name": "AdvisoryClaimNotice",
+      "kind": "component",
+      "purpose": "Selected external ticket's advisory claim, conflict, and pending provider state.",
+      "source": "src/components/advisory-claim-notice.tsx",
+      "publicExports": [{ "name": "AdvisoryClaimNotice" }],
+      "sourceLinks": ["src/components/advisory-claim-notice.tsx"],
+      "composition": {
+        "parents": { "mode": "any", "entries": [] },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "state": [],
+        "wiring": { "required": false, "helpers": [], "obligations": [] },
+        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "layout": { "roles": ["controls"], "geometry": { "margin": "none", "border": "self", "padding": "self" } }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": { "obligations": [] },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/advisory-claim-notice.tsx",
+        "composition": "src/components/advisory-claim-notice.tsx"
+      },
+      "selection": {
+        "useWhen": ["A selected external ticket needs advisory process status and actions."],
+        "avoidWhen": ["The ticket uses Git's exclusive worker lease."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "connection-state-banner",
       "name": "ConnectionStateBanner",
       "kind": "component",

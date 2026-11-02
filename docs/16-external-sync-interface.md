@@ -182,8 +182,25 @@ state before retrying, so a timeout after a successful write does not mint a
 second claim. Conflicts become `needs_attention`; expired intents never publish.
 The ledger bounds pending and total rows, rejects changed retries, and prunes
 settled rows after the seven-day retry window. `provider-advisory-claim` is the
-headless equivalent and uses the same ledger path. Automatic dispatch may proceed
-only when the response is remote-verified, not provisional, and conflict-free.
+headless equivalent and uses the same ledger path. A future external automatic
+handoff consumer must require a remote-verified, non-provisional, conflict-free
+response; no external automatic handoff consumer is shipped yet.
+The status also exposes `pending_operations` with each local operation's
+`queued`, `confirmed`, `needs_attention`, or `expired` state; the original
+`pending_operation_ids` remains for older clients. The shipped MCP status/event
+tools require checkout, connection, and native ticket id, and serverless MCP
+returns an explicit unsupported error for external advisory claims (HS2-2MZWZT).
+The web inspector and reader show remote conflicts, provisional intent, and
+needs-attention state separately from Git's exclusive live claim. Actions use
+a stable browser-session worker and retry a claim under the same operation id
+and expiry after an uncertain response. Selected-ticket reads refresh on
+selection, explicit Refresh, and project detail refreshes without board-row
+polling. Advisory mutations do not emit a project event, so another session's
+change is not pushed into an already open notice (HS2-WHW46N). Failed remote
+reads clear the displayed projection and present automatic handoff as unsafe.
+The current provider route returns a generic conflict for both transport and
+malformed-marker failures, so the web cannot safely offer offline provisional
+admission after a failed read; HS2-315TEM will add a typed distinction.
 
 The host owns multi-provider routing, aggregation, normalized validation,
 server/API/MCP presentation, caching, credential resolution, and capability-aware

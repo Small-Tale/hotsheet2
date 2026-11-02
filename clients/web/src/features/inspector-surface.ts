@@ -21,6 +21,7 @@ import {
 } from '../attachment-label-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
+import type { AdvisoryClaimNoticeProps } from '../components/advisory-claim-notice';
 import { type MarkdownEditorMode } from '../components/markdown-editor';
 import type { NotWorkingSurface } from '../components/reader-overlay-surfaces';
 import { type TicketStatus } from '../components/status-badge';
@@ -73,6 +74,7 @@ export interface InspectorSurfaceDependencies {
   fieldConflictResolution: Signal<string>;
   inspectorTab: Signal<InspectorTab>;
   liveClaimNotice: (ticket: WireTicketRow) => LiveClaimNoticeProps | undefined;
+  advisoryClaimNotice: (ticket: WireTicketRow) => AdvisoryClaimNoticeProps | undefined;
   newNoteDraft: Signal<string>;
   noteDraft: Signal<string>;
   notes: (ticket: FullTicket) => {
@@ -151,6 +153,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     fieldConflictResolution,
     inspectorTab,
     liveClaimNotice,
+    advisoryClaimNotice,
     newNoteDraft,
     noteDraft,
     notes,
@@ -227,6 +230,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       ),
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),
+      advisoryClaim: advisoryClaimNotice(ticket),
       pendingOperations: Object.values(providerOutboxOperations.value)
         .filter((operation): operation is ProviderOutboxOperation =>
           Boolean(

@@ -246,6 +246,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/test-quarantine.ts   #   Vitest `quarantined(slug)` and Playwright `@quarantine` grepInvert helpers (HS2-3PX1E4; docs/test-quarantine.md)
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
+    src/advisory-claim-resource.ts # Selected external ticket advisory status, stale-response guard, and action resource (HS2-2MZWZT)
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
     src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open` (Kerf beta.51) and opens/closes marked Kerf DialogSurface `<dialog>`s with openDialog/closeDialog (beta.106)

@@ -49,6 +49,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "advisory-claim-notice",
+      "name": "AdvisoryClaimNotice",
+      "kind": "component",
+      "purpose": "Selected external ticket's advisory claim, conflict, and pending provider state.",
+      "useWhen": [
+        "A selected external ticket needs advisory process status and actions."
+      ],
+      "avoidWhen": [
+        "The ticket uses Git's exclusive worker lease."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/advisory-claim-notice.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ai-content-label",
       "name": "AIContentLabel",
       "kind": "component",

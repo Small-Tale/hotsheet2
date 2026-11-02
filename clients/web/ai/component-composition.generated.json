@@ -146,6 +146,70 @@
       }
     },
     {
+      "key": "hotsheet-web:advisory-claim-notice",
+      "package": "hotsheet-web",
+      "id": "advisory-claim-notice",
+      "name": "AdvisoryClaimNotice",
+      "kind": "component",
+      "purpose": "Selected external ticket's advisory claim, conflict, and pending provider state.",
+      "publicExports": [
+        {
+          "name": "AdvisoryClaimNotice"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/advisory-claim-notice.tsx"
+      ],
+      "source": "src/components/advisory-claim-notice.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/advisory-claim-notice.tsx",
+        "composition": "src/components/advisory-claim-notice.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ai-content-label",
       "package": "hotsheet-web",
       "id": "ai-content-label",

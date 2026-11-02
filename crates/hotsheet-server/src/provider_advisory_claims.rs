@@ -35,6 +35,13 @@ pub struct ClaimStatus {
     pub remote_verified: bool,
     pub automatic_handoff_safe: bool,
     pub pending_operation_ids: Vec<String>,
+    pub pending_operations: Vec<PendingOperation>,
+}
+
+#[derive(Serialize)]
+pub struct PendingOperation {
+    pub operation_id: String,
+    pub state: ClaimReplayState,
 }
 
 fn ledger_error(error: ClaimLedgerError) -> ApiError {
@@ -102,6 +109,7 @@ fn local_status(
             provisional: false,
             remote_verified: true,
             pending_operation_ids: Vec::new(),
+            pending_operations: Vec::new(),
         });
     }
     let mut events = pending
@@ -134,6 +142,13 @@ fn local_status(
         pending_operation_ids: pending
             .iter()
             .map(|entry| entry.event.operation_id.clone())
+            .collect(),
+        pending_operations: pending
+            .iter()
+            .map(|entry| PendingOperation {
+                operation_id: entry.event.operation_id.clone(),
+                state: entry.state,
+            })
             .collect(),
         projection,
         provisional: true,

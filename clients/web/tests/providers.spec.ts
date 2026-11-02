@@ -10,7 +10,7 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
-import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
+import type { AdvisoryClaimStatus, FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
@@ -12869,6 +12869,165 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   expect(
     requests.some((request) => request.path.endsWith('/tickets/PROJ-7') || request.path.endsWith('/tickets/01')),
   ).toBe(false);
+});
+
+test('shows selected Jira advisory conflict, provisional state, and safe actions across resize (HS2-2MZWZT)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  const external = {
+    ...row,
+    id: 'PROJ-7',
+    native_id: 'PROJ-7',
+    qualified_id: 'jira-1:PROJ-7',
+    connection_id: 'jira-1',
+    slug: 'JIRA-7',
+    title: 'Advisory process ticket',
+  };
+  const empty: AdvisoryClaimStatus = {
+    projection: { claims: [], conflicted: false, invalid_markers: 0 },
+    provisional: false,
+    remote_verified: true,
+    automatic_handoff_safe: true,
+    pending_operation_ids: [],
+    pending_operations: [],
+  };
+  let advisory: AdvisoryClaimStatus = empty;
+  let malformed = false;
+  let advisoryReads = 0;
+  const writes: Array<{ worker: string; operation_id: string; kind: { type: string } }> = [];
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'Hot Sheet Git',
+          locator: '/tickets',
+          default: true,
+          capabilities: { update: true, notes: true },
+        },
+        {
+          connection_id: 'jira-1',
+          provider: 'jira',
+          display_name: 'Jira',
+          locator: 'https://jira.test',
+          default: false,
+          capabilities: { update: true, notes: true, advisory_claims: true, claims: false },
+        },
+      ],
+    }),
+  );
+  await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (path.endsWith('/tickets'))
+      return route.fulfill({
+        json: {
+          items: [external],
+          counts: {
+            total: 1,
+            queued: 1,
+            backlog: 0,
+            archive: 0,
+            trash: 0,
+            open: 1,
+            up_next: 0,
+            active: 0,
+            started: 1,
+            completed_today: 0,
+          },
+        },
+      });
+    if (path.endsWith('/tickets/jira-1:PROJ-7'))
+      return route.fulfill({ json: { store: 'jira-1', ...full, ...external } });
+    return route.fallback();
+  });
+  await page.route('**/checkouts/demo-checkout/providers/jira-1/tickets/PROJ-7/advisory-claim', (route) => {
+    if (malformed) return route.fulfill({ status: 409, json: { error: 'malformed Jira advisory marker' } });
+    if (route.request().method() === 'GET') advisoryReads += 1;
+    if (route.request().method() === 'POST') {
+      const event = route.request().postDataJSON() as (typeof writes)[number];
+      writes.push(event);
+      advisory = {
+        ...empty,
+        projection: {
+          ...empty.projection,
+          claims:
+            event.kind.type === 'release'
+              ? []
+              : [{ worker: event.worker, operation_id: event.operation_id, expires_unix_ms: Date.now() + 30 * 60_000 }],
+        },
+      };
+    }
+    return route.fulfill({ json: advisory });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector).toContainText('No advisory process claim');
+  await inspector.getByRole('button', { name: 'Claim Advisory' }).click();
+  await expect(inspector).toContainText('Your advisory claim is active');
+  expect(writes[0].operation_id).toMatch(/^v2:\d{13}:[a-z0-9-]+$/);
+  const renewed = page.waitForResponse(
+    (response) => response.url().endsWith('/advisory-claim') && response.request().method() === 'POST',
+  );
+  await inspector.getByRole('button', { name: 'Renew Advisory' }).click();
+  await renewed;
+  expect(writes[1].operation_id).toBe(writes[0].operation_id);
+  advisory = {
+    ...advisory,
+    projection: {
+      ...advisory.projection,
+      claims: [
+        ...advisory.projection.claims,
+        {
+          worker: 'another-worker',
+          operation_id: `v2:${String(Date.now()).padStart(13, '0')}:another-worker-0001`,
+          expires_unix_ms: Date.now() + 30 * 60_000,
+        },
+      ],
+      conflicted: true,
+    },
+    automatic_handoff_safe: false,
+  };
+  const beforeConflictRead = advisoryReads;
+  await inspector.getByRole('button', { name: 'Refresh' }).click();
+  await expect.poll(() => advisoryReads).toBeGreaterThan(beforeConflictRead);
+  await expect(inspector).toContainText('Overlapping advisory claims');
+  await expect(inspector.getByRole('button', { name: 'Renew Advisory' })).toHaveCount(0);
+  advisory = {
+    ...advisory,
+    provisional: true,
+    automatic_handoff_safe: false,
+    pending_operation_ids: [writes[0].operation_id],
+    pending_operations: [{ operation_id: writes[0].operation_id, state: 'needs_attention' }],
+  };
+  await inspector.getByRole('button', { name: 'Refresh' }).click();
+  await expect(inspector).toContainText('The local claim needs review');
+  await expect(inspector).toContainText('Automatic handoff is paused');
+  await expect(inspector.getByRole('button', { name: 'Renew Advisory' })).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-2mzwzt-wide.png', fullPage: true });
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const readerNotice = page.locator(
+    '.ticket-reader[data-reader-active="true"] [data-component="advisory-claim-notice"]',
+  );
+  await page.setViewportSize({ width: 940, height: 844 });
+  await expect(readerNotice).toContainText('The local claim needs review');
+  await page.screenshot({ path: 'target/visual-captures/hs2-2mzwzt-medium.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(readerNotice).toContainText('Automatic handoff is paused');
+  await page.screenshot({ path: 'target/visual-captures/hs2-2mzwzt-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(inspector).toContainText('The local claim needs review');
+  malformed = true;
+  await readerNotice.getByRole('button', { name: 'Refresh' }).click();
+  await expect(readerNotice).toContainText('Advisory claim state unavailable');
+  await expect(readerNotice.getByRole('button', { name: 'Claim Advisory' })).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-2mzwzt-unavailable-wide.png', fullPage: true });
 });
 
 test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (HS2-YSF8TV, HS2-QA1VEF) @ci-smoke', async ({

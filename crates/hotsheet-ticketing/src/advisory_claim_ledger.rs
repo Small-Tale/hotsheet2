@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::advisory_claim::{AdvisoryClaimEvent, AdvisoryClaimEventKind};
@@ -15,7 +16,8 @@ const MAX_PENDING: i64 = 1000;
 const MAX_TOTAL: i64 = 10_000;
 const MAX_AGE_SECONDS: i64 = 7 * 24 * 60 * 60;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ClaimReplayState {
     Queued,
     Confirmed,
