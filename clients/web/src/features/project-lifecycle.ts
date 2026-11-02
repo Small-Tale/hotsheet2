@@ -624,7 +624,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         // A new source is created owned by this project: record and link in one request (HS2-SM9PM8).
         saved = editingId
           ? await client.updateConnection(editingId, connection)
-          : await client.createConnection(connection, makeDefault);
+          : await client.createConnection(connection, makeDefault, kind === 'github' && !githubAuth.value?.account);
       if (editingId && makeDefault !== wasProjectDefault)
         await client.setCheckoutDefaultSource(current.id, makeDefault ? editingId : null);
       if (editingId && sourceColor && resolveTicketSourceColor(sourceColor) !== resolveTicketSourceColor(previousColor))

@@ -2,7 +2,7 @@
 //!
 //! The signed body supplies only an identity. Ticket data always comes from GitHub.
 
-use crate::routes::providers::provider_for;
+use crate::routes::providers::{connection_credential_error, provider_from_read};
 use crate::{ApiError, AppState, ChangeEvent};
 use axum::Json;
 use axum::body::Bytes;
@@ -173,23 +173,78 @@ pub(crate) struct WebhookSetup {
     active: bool,
 }
 
+fn setup_provider_error(error: ProviderError) -> ApiError {
+    match error {
+        ProviderError::Endpoint(error) => ApiError::new(StatusCode::CONFLICT, error.to_string()),
+        ProviderError::UnknownConnection(_) => {
+            ApiError::new(StatusCode::NOT_FOUND, "GitHub source unavailable")
+        }
+        other => ApiError::new(StatusCode::SERVICE_UNAVAILABLE, other.to_string()),
+    }
+}
+
+/// HS2-6H8ZY6: call only after linkage lookup, retaining the SAME selected read
+/// across the actual key lookup. None preserves unavailable-key readiness behavior.
+fn hook_secret<S: hotsheet_ticketing::SecretStore>(
+    read: &hotsheet_extsync::ConnectionRead<'_, S>,
+    keys: &hotsheet_ticketing::KeyRegistry<S>,
+    reference: &str,
+) -> Result<Option<String>, ApiError> {
+    read.check().map_err(connection_credential_error)?;
+    let secret = keys.get(reference);
+    read.check().map_err(connection_credential_error)?;
+    Ok(secret.ok())
+}
+
 fn setup(state: &AppState, connection_id: &str) -> Result<WebhookSetup, ApiError> {
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
-        .load()
-        .map_err(|error| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?
-        .into_iter()
-        .find(|item| item.id == connection_id && item.provider == "github")
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "GitHub source unavailable"))?;
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let snapshot = hotsheet_ticketing::github_endpoint::EndpointRegistry::new(&registry)
+        .capture_ordinary(connection_id)
+        .map_err(setup_provider_error)?;
+    setup_from_connection(
+        state,
+        &registry,
+        &state.key_registry(),
+        snapshot.connection(),
+    )
+}
+
+fn setup_from_connection(
+    state: &AppState,
+    registry: &ProviderConfigRegistry,
+    keys: &hotsheet_ticketing::KeyRegistry<impl hotsheet_ticketing::SecretStore>,
+    connection: &ProviderConnection,
+) -> Result<WebhookSetup, ApiError> {
+    // Metadata maintenance may target a disabled source, but pending/malformed
+    // records never become ready through the disabled compatibility branch.
+    let owner = hotsheet_ticketing::github_endpoint::EndpointRegistry::new(registry);
+    let snapshot = owner
+        .capture_ordinary(&connection.id)
+        .map_err(setup_provider_error)?;
+    if snapshot.connection() != connection {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            hotsheet_ticketing::github_endpoint::EndpointError::Conflict.to_string(),
+        ));
+    }
+    let connection_id = &connection.id;
     let secret_ref = connection
         .settings
         .pointer("/webhook/secret")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned);
-    let resolved_secret = secret_ref
-        .as_deref()
-        .and_then(|name| state.key_registry().get(name).ok());
-    let configured =
-        !connection.disabled && linked_checkout(state, &connection)? && resolved_secret.is_some();
+    let mut resolved_secret = None;
+    if !connection.disabled {
+        let read = hotsheet_extsync::ConnectionRead::capture(registry, connection, keys)
+            .map_err(connection_credential_error)?;
+        read.check().map_err(connection_credential_error)?;
+        if let Some(name) = secret_ref.as_deref().filter(|name| !name.is_empty()) {
+            if linked_checkout(state, connection)? {
+                resolved_secret = hook_secret(&read, keys, name)?;
+            }
+        }
+    }
+    let configured = resolved_secret.is_some();
     let active = configured
         && resolved_secret.as_deref().is_some_and(|secret| {
             state.github_deliveries.verified(
@@ -228,6 +283,17 @@ fn linked_checkout(state: &AppState, connection: &ProviderConnection) -> Result<
 /// A capability becomes truthful only after a signed delivery from this exact
 /// configured source succeeded during the current server process.
 pub(crate) fn watch_ready(state: &AppState, connection: &ProviderConnection) -> bool {
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let keys = state.key_registry();
+    watch_ready_with(state, connection, &registry, &keys)
+}
+
+fn watch_ready_with(
+    state: &AppState,
+    connection: &ProviderConnection,
+    registry: &ProviderConfigRegistry,
+    keys: &hotsheet_ticketing::KeyRegistry<impl hotsheet_ticketing::SecretStore>,
+) -> bool {
     if connection.provider != "github" || connection.disabled {
         return false;
     }
@@ -235,18 +301,27 @@ pub(crate) fn watch_ready(state: &AppState, connection: &ProviderConnection) -> 
         .settings
         .pointer("/webhook/secret")
         .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
     else {
         return false;
     };
+    let Ok(read) = hotsheet_extsync::ConnectionRead::capture(registry, connection, keys) else {
+        return false;
+    };
+    if read.check().is_err() || !linked_checkout(state, connection).unwrap_or(false) {
+        return false;
+    }
     let source_key = format!("{}:{}:{secret_ref}", connection.id, connection.locator);
-    let Ok(secret) = state.key_registry().get(secret_ref) else {
+    let Ok(Some(secret)) = hook_secret(&read, keys, secret_ref) else {
         return false;
     };
     state
         .github_deliveries
         .verified(&source_key, secret.as_bytes())
-        && linked_checkout(state, connection).unwrap_or(false)
 }
+
+#[cfg(test)]
+pub(crate) mod admission_tests;
 
 /// Protected, idempotent setup endpoint. It never accepts or returns the secret value.
 pub(crate) async fn configure(
@@ -260,34 +335,53 @@ pub(crate) async fn configure(
             "invalid webhook key reference",
         ));
     }
-    state
-        .key_registry()
-        .get(&body.secret_ref)
-        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "webhook key reference unavailable"))?;
-    let previous_ref = setup(&state, &connection_id)?.secret_ref;
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-    hotsheet_extsync::configure_webhook(&registry, &connection_id, &body.secret_ref).map_err(
-        |error| match error {
-            ProviderError::UnknownConnection(_) => {
-                ApiError::new(StatusCode::NOT_FOUND, "GitHub source unavailable")
-            }
-            ProviderError::Conflict { message, .. } => {
-                ApiError::new(StatusCode::BAD_REQUEST, message)
-            }
-            other => ApiError::new(StatusCode::SERVICE_UNAVAILABLE, other.to_string()),
-        },
-    )?;
-    if previous_ref.as_deref() != Some(body.secret_ref.as_str()) {
-        forget_connection(&state, &connection_id);
-    }
-    setup(&state, &connection_id).map(Json)
+    tokio::task::spawn_blocking(move || {
+        let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+        let keys = state.key_registry();
+        let configured =
+            hotsheet_extsync::configure_webhook(&registry, &keys, &connection_id, &body.secret_ref)
+                .map_err(|error| match error {
+                    hotsheet_extsync::WebhookSetupError::Provider(ProviderError::Endpoint(
+                        error,
+                    )) => ApiError::new(StatusCode::CONFLICT, error.to_string()),
+                    hotsheet_extsync::WebhookSetupError::Provider(
+                        ProviderError::UnknownConnection(_),
+                    ) => ApiError::new(StatusCode::NOT_FOUND, "GitHub source unavailable"),
+                    hotsheet_extsync::WebhookSetupError::Provider(ProviderError::Conflict {
+                        message,
+                        ..
+                    }) => ApiError::new(StatusCode::BAD_REQUEST, message),
+                    hotsheet_extsync::WebhookSetupError::KeyUnavailable => {
+                        ApiError::new(StatusCode::BAD_REQUEST, "webhook key reference unavailable")
+                    }
+                    other => ApiError::new(StatusCode::SERVICE_UNAVAILABLE, other.to_string()),
+                })?;
+        if configured.previous_ref.as_deref() != Some(body.secret_ref.as_str()) {
+            forget_connection(&state, &connection_id);
+        }
+        setup_from_connection(&state, &registry, &keys, &configured.connection).map(Json)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "GitHub setup task unavailable",
+        )
+    })?
 }
 
 pub(crate) async fn setup_instructions(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
 ) -> Result<Json<WebhookSetup>, ApiError> {
-    setup(&state, &connection_id).map(Json)
+    tokio::task::spawn_blocking(move || setup(&state, &connection_id).map(Json))
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "GitHub setup task unavailable",
+            )
+        })?
 }
 
 fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, ApiError> {
@@ -306,12 +400,35 @@ pub(crate) async fn receive(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<WebhookReceipt>, ApiError> {
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    // All borrowed registry/key/proof contexts live inside this one owned
+    // blocking task, including authentication and the synchronous provider read.
+    tokio::task::spawn_blocking(move || receive_sync(&state, connection_id, headers, body))
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "GitHub re-read task unavailable",
+            )
+        })?
+}
+
+fn receive_sync(
+    state: &AppState,
+    connection_id: String,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<WebhookReceipt>, ApiError> {
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let keys = state.key_registry();
+    let connection = registry
         .load()
         .map_err(|error| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?
         .into_iter()
         .find(|item| item.id == connection_id && item.provider == "github" && !item.disabled)
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "GitHub source unavailable"))?;
+    let read = hotsheet_extsync::ConnectionRead::capture(&registry, &connection, &keys)
+        .map_err(connection_credential_error)?;
+    read.check().map_err(connection_credential_error)?;
     let secret_ref = connection
         .settings
         .pointer("/webhook/secret")
@@ -319,10 +436,14 @@ pub(crate) async fn receive(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "GitHub webhook not configured"))?;
     let verification_key = format!("{connection_id}:{}:{secret_ref}", connection.locator);
-    let secret = state
-        .key_registry()
-        .get(secret_ref)
-        .map_err(|_| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "webhook key unavailable"))?;
+    if !linked_checkout(state, &connection)? {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "GitHub source is not linked to a checkout",
+        ));
+    }
+    let secret = hook_secret(&read, &keys, secret_ref)?
+        .ok_or_else(|| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "webhook key unavailable"))?;
     let signature = header(&headers, "x-hub-signature-256")?;
     if !hotsheet_extsync::github::verify_webhook_signature(secret.as_bytes(), &body, signature) {
         return Err(ApiError::new(
@@ -334,6 +455,7 @@ pub(crate) async fn receive(
     let Some(invalidation) = hotsheet_extsync::github::parse_webhook(event, &body)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid GitHub webhook body"))?
     else {
+        read.check().map_err(connection_credential_error)?;
         return Ok(Json(WebhookReceipt {
             accepted: false,
             duplicate: false,
@@ -344,12 +466,6 @@ pub(crate) async fn receive(
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "webhook repository does not match source",
-        ));
-    }
-    if !linked_checkout(&state, &connection)? {
-        return Err(ApiError::new(
-            StatusCode::FORBIDDEN,
-            "GitHub source is not linked to a checkout",
         ));
     }
     let delivery = header(&headers, "x-github-delivery")?;
@@ -364,6 +480,7 @@ pub(crate) async fn receive(
         ));
     }
     let delivery_key = format!("{connection_id}:{delivery}");
+    read.check().map_err(connection_credential_error)?;
     if !state.github_deliveries.reserve(&delivery_key) {
         return Ok(Json(WebhookReceipt {
             accepted: false,
@@ -391,30 +508,12 @@ pub(crate) async fn receive(
             "future issue update time",
         ));
     }
-    let read_state = state.clone();
-    let read_connection_id = connection_id.clone();
-    let read_native_id = invalidation.native_id.clone();
-    // The provider uses a synchronous HTTP transport. Keep a slow GitHub read
-    // off Tokio's request workers so other event and setup routes stay live.
-    let read = tokio::task::spawn_blocking(move || {
-        let provider = provider_for(&read_state, &read_connection_id)?;
-        Ok::<_, ApiError>(provider.get(&read_native_id))
-    })
-    .await;
-    let authoritative = match read {
-        Ok(Ok(result)) => result,
-        Ok(Err(error)) => {
-            state.github_deliveries.retry(&delivery_key);
-            return Err(error);
-        }
-        Err(error) => {
-            state.github_deliveries.retry(&delivery_key);
-            return Err(ApiError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!("GitHub re-read task failed: {error}"),
-            ));
-        }
-    };
+    let provider = provider_from_read(state, &read)?;
+    read.check().map_err(connection_credential_error)?;
+    let authoritative = provider.get(&invalidation.native_id);
+    // Check before selecting any success/deletion/revision branch. A failed
+    // check leaves the reservation retryable through its existing Drop owner.
+    read.check().map_err(connection_credential_error)?;
     let ticket = match authoritative {
         Ok(ticket) => ticket,
         Err(ProviderError::NotFound { .. })
@@ -422,6 +521,7 @@ pub(crate) async fn receive(
         {
             // The authoritative 404 confirms removal. There is no issue revision to
             // compare after deletion; the signed delivery id prevents a duplicate.
+            read.check().map_err(connection_credential_error)?;
             state
                 .github_deliveries
                 .mark_verified(&verification_key, secret.as_bytes());
@@ -466,6 +566,7 @@ pub(crate) async fn receive(
         ));
     }
     if signed_at < authoritative_at {
+        read.check().map_err(connection_credential_error)?;
         state
             .github_deliveries
             .mark_verified(&verification_key, secret.as_bytes());
@@ -476,6 +577,9 @@ pub(crate) async fn receive(
             cursor: state.event_cursor(),
         }));
     }
+    // One final as-of check precedes the contiguous no-I/O effect bundle;
+    // these independent caches/events are not a cross-file transaction.
+    read.check().map_err(connection_credential_error)?;
     let fresh = state
         .github_deliveries
         .newer_revision(&issue_key, &ticket.updated_at);

@@ -143,10 +143,11 @@ use routes::project_tools::{
 use routes::providers::{
     assign_provider_ticket, close_provider_ticket, copy_provider_attachment,
     create_checkout_provider_connection, create_provider_connection, create_provider_ticket,
-    delete_provider_connection, delete_provider_ticket_note, get_provider_ticket,
-    list_checkout_provider_connections, list_checkout_providers, list_provider_ai_feedback,
-    list_provider_connections, list_provider_tickets, list_providers, provider_copy_route,
-    provider_for, provider_move_route, provider_transfer_error, report_provider_ticket_not_working,
+    delete_provider_connection, delete_provider_ticket_note, get_provider_endpoint_review,
+    get_provider_ticket, list_checkout_provider_connections, list_checkout_providers,
+    list_provider_ai_feedback, list_provider_connections, list_provider_tickets, list_providers,
+    provider_copy_route, provider_for, provider_move_route, provider_transfer_error,
+    recover_github_connection, report_provider_ticket_not_working,
     report_provider_ticket_not_working_json, restore_provider_ticket,
     set_checkout_provider_connection_disabled, set_provider_connection_disabled,
     update_checkout_provider_connection, update_provider_connection, update_provider_ticket,
@@ -1704,6 +1705,14 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/provider-connections/{connection_id}/disabled",
             put(set_provider_connection_disabled),
+        )
+        .route(
+            "/provider-connections/{connection_id}/endpoint-review",
+            get(get_provider_endpoint_review),
+        )
+        .route(
+            "/provider-connections/{connection_id}/recover",
+            post(recover_github_connection),
         )
         // Machine-wide provider sign-ins and the projects using each (HS2-SM9PM8).
         .route("/accounts", get(list_accounts_route))

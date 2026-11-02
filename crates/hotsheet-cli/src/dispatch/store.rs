@@ -937,7 +937,14 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             } else {
                 connection_id.as_deref()
             };
-            let checkout = registry.set_default_source(&reference, selected)?;
+            let store_root = FsStore::open(store)
+                .map(|opened| opened.root().to_path_buf())
+                .unwrap_or_else(|_| store.to_path_buf());
+            let checkout = registry.set_registered_default_source(
+                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &reference,
+                selected,
+            )?;
             super::setup::retry_pending_consolidation(store, Path::new(&checkout.root));
             println!("{}", serde_json::to_string_pretty(&checkout)?);
         }

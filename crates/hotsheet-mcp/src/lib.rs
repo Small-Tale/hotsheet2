@@ -4083,16 +4083,21 @@ mod tests {
                 .contains("requested limit")
         );
 
+        let providers = hotsheet_ticketing::ProviderConfigRegistry::new(
+            root.path().join("home/providers.json"),
+        );
+        let connection = hotsheet_ticketing::ProviderConnection {
+            id: "github-synthetic".into(),
+            provider: "github".into(),
+            locator: "synthetic/project".into(),
+            name: None,
+            default: false,
+            settings: json!({"credential":{"secret":"synthetic-key"}}),
+            disabled: false,
+        };
+        providers.save(std::slice::from_ref(&connection)).unwrap();
         registry
-            .add_source(
-                &checkout.id,
-                hotsheet_ticketing::checkouts::TicketSource {
-                    connection_id: "github-synthetic".into(),
-                    provider: "github".into(),
-                    locator: "synthetic/project".into(),
-                },
-                false,
-            )
+            .add_registered_connection(&providers, &checkout.id, &connection, false)
             .unwrap();
         let partial = query(&backend, 2);
         assert_eq!(partial["items"].as_array().unwrap().len(), 2);

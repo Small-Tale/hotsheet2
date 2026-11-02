@@ -5,12 +5,24 @@ use hotsheet_ticketing::connection_removal::MANAGED_CREDENTIAL_PREFIX;
 use hotsheet_ticketing::{
     KeyMetadata, KeyRegistry, ProviderConnection, ProviderError, SecretError, SecretStore,
 };
+use hotsheet_ticketing::{
+    ProviderConfigRegistry,
+    github_endpoint::{
+        BundleOrigin, Decision, EndpointError, EndpointRegistry, Observation, ReadProof, State,
+        validate_bundle_origin,
+    },
+};
 use serde_json::{Value, json};
 
 use crate::{GitHubDeviceClient, GitHubDeviceError, GitHubTokenBundle, credential_reference};
 
+#[cfg(test)]
+mod read_tests;
+
 #[derive(Debug, thiserror::Error)]
 pub enum GitHubCredentialError {
+    #[error("GitHub source requires endpoint review or a fresh read")]
+    Endpoint(#[from] EndpointError),
     #[error(transparent)]
     Provider(#[from] ProviderError),
     #[error(transparent)]
@@ -72,17 +84,116 @@ pub fn credentials_with_sites<S: SecretStore>(
     Ok(listed)
 }
 
+/// HS2-6H8ZY6: one immutable selected-source proof survives every effect and return.
+pub struct ConnectionRead<'a, S: SecretStore> {
+    registry: &'a ProviderConfigRegistry,
+    keys: &'a KeyRegistry<S>,
+    connection: ProviderConnection,
+    proof: Option<ReadProof>,
+}
+
+impl<'a, S: SecretStore> ConnectionRead<'a, S> {
+    pub fn capture(
+        registry: &'a ProviderConfigRegistry,
+        connection: &ProviderConnection,
+        keys: &'a KeyRegistry<S>,
+    ) -> Result<Self, GitHubCredentialError> {
+        let proof = if connection.provider == "github" {
+            Some(EndpointRegistry::new(registry).capture_read(connection)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            registry,
+            keys,
+            connection: connection.clone(),
+            proof,
+        })
+    }
+
+    pub fn connection(&self) -> &ProviderConnection {
+        &self.connection
+    }
+
+    pub fn check(&self) -> Result<(), GitHubCredentialError> {
+        let Some(proof) = &self.proof else {
+            return Ok(());
+        };
+        let owner = EndpointRegistry::new(self.registry);
+        owner.check_current(proof)?;
+        let observation = match State::load(&self.connection)?.map(|state| state.decision) {
+            Some(Decision::Inferred { credential_ref, .. }) => self
+                .keys
+                .list()
+                .ok()
+                .and_then(|entries| {
+                    entries
+                        .into_iter()
+                        .find(|entry| entry.provider == credential_ref)
+                        .and_then(|entry| entry.site)
+                })
+                .map_or(Observation::Unavailable, |site| Observation::Available {
+                    credential_ref,
+                    site,
+                }),
+            _ => Observation::Unavailable,
+        };
+        owner.check_read(proof, &observation)?;
+        Ok(())
+    }
+}
+
 pub fn connection_access_token<S: SecretStore>(
-    connection: &ProviderConnection,
-    keys: &KeyRegistry<S>,
+    read: &ConnectionRead<'_, S>,
     now: i64,
 ) -> Result<String, GitHubCredentialError> {
+    connection_token_with(read, now, |client_id, web_base, refresh| {
+        Ok(GitHubDeviceClient::live(client_id, web_base).refresh(refresh)?)
+    })
+}
+
+fn connection_token_with<S: SecretStore>(
+    read: &ConnectionRead<'_, S>,
+    now: i64,
+    refresh: impl FnOnce(&str, &str, &str) -> Result<GitHubTokenBundle, GitHubCredentialError>,
+) -> Result<String, GitHubCredentialError> {
+    read.check()?;
+    let connection = read.connection();
     let reference = credential_reference(connection)?;
-    let raw = keys.get(reference)?;
+    let raw = read.keys.get(reference)?;
     if connection.provider != "github" {
         return Ok(raw);
     }
-    access_token_from_raw(&raw, keys, reference, now)
+    let origin = match serde_json::from_str::<Value>(&raw)
+        .ok()
+        .filter(|stored| stored.get("kind").and_then(Value::as_str) == Some("github_app"))
+    {
+        None => BundleOrigin::Missing,
+        Some(stored) => stored
+            .get("web_base")
+            .and_then(Value::as_str)
+            .map_or(BundleOrigin::Invalid, |site| {
+                BundleOrigin::Known(site.into())
+            }),
+    };
+    validate_bundle_origin(connection, &origin)?;
+    read.check()?;
+    let token = resolve_token(
+        &raw,
+        now,
+        |client_id, web_base, refresh_token| {
+            read.check()?;
+            refresh(client_id, web_base, refresh_token)
+        },
+        |updated| {
+            read.check()?;
+            read.keys
+                .set(reference, updated)
+                .map_err(GitHubCredentialError::from)
+        },
+    )?;
+    read.check()?;
+    Ok(token)
 }
 
 /// Resolve a bundle already read from the keychain, for an explicit account lookup that
@@ -97,7 +208,7 @@ pub fn access_token_from_raw<S: SecretStore>(
         raw,
         now,
         |client_id, web_base, refresh| {
-            GitHubDeviceClient::live(client_id, web_base).refresh(refresh)
+            Ok(GitHubDeviceClient::live(client_id, web_base).refresh(refresh)?)
         },
         |updated| {
             keys.set(reference, updated)
@@ -109,7 +220,7 @@ pub fn access_token_from_raw<S: SecretStore>(
 fn resolve_token(
     raw: &str,
     now: i64,
-    refresh: impl FnOnce(&str, &str, &str) -> Result<GitHubTokenBundle, GitHubDeviceError>,
+    refresh: impl FnOnce(&str, &str, &str) -> Result<GitHubTokenBundle, GitHubCredentialError>,
     save: impl FnOnce(&str) -> Result<(), GitHubCredentialError>,
 ) -> Result<String, GitHubCredentialError> {
     let Ok(mut stored) = serde_json::from_str::<Value>(raw) else {
@@ -290,10 +401,10 @@ mod tests {
             settings: json!({"credential":{"secret":"github-app-test"}}),
             disabled: false,
         };
-        assert_eq!(
-            connection_access_token(&connection, &keys, 159).unwrap(),
-            "access"
-        );
+        let registry = ProviderConfigRegistry::new(home.path().join("providers.json"));
+        registry.save(std::slice::from_ref(&connection)).unwrap();
+        let read = ConnectionRead::capture(&registry, &connection, &keys).unwrap();
+        assert_eq!(connection_access_token(&read, 159).unwrap(), "access");
         let stored: Value = serde_json::from_str(&keys.get("github-app-test").unwrap()).unwrap();
         assert_eq!(stored["client_id"], "IvTest12345678");
         assert_eq!(stored["obtained_at"], 100);

@@ -223,6 +223,14 @@ Provider-config publications are atomic and preserve file modes; malformed commi
 config remains an explicit failure, and process-wait tests retain exit diagnostics
 (HS2-GBSPP8).
 
+GitHub endpoint provenance/reconciliation (HS2-6H8ZY6, requirements 16) is
+implemented across the shared registry, selected-source reads, CLI, authenticated
+server routes, and web fresh sign-in. Known Explicit and Inferred decisions keep a
+fixed endpoint; ambiguous historical LegacyUnknown state is never rewritten from
+URL spelling. Explicit review and exact-snapshot recovery are headless and
+idempotent. Endpoint admission guards checkout links, removal, webhooks, and
+provider reads. See requirement 16 for the command and HTTP contract.
+
 **F · Collaboration & distribution**
 
 | Doc                                                                          | Topic                                                                                                                                                                        | Status                                                                                     |

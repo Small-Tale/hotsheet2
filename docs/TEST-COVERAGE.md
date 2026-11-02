@@ -1832,6 +1832,26 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-server/tests/broker_startup.rs # long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_restart` retains its actual self-hosted broker, private short namespace, same-inode restart, PTY output persistence and owned cleanup assertions.
 - Manual: inspect the status/probe metadata if the historical failure recurs; no live user-host probe is required.
 
+### GitHub endpoint provenance and recovery (HS2-6H8ZY6)
+
+- Unit: `hotsheet-ticketing/src/github_endpoint` covers Explicit, Inferred and
+  LegacyUnknown decisions, exact operation replay, stale revision refusal,
+  pending freeze, conditional compensation, read proofs and ordinary writer guards.
+  Checkout link and removal suites cover provider-owned publication, defaults,
+  collisions, no-write refusal and strict malformed-state handling.
+- Composition: extsync tests cover typed create/link/finalize, pending recovery,
+  conditional compensation and global defaults. CLI tests cover uppercase public
+  legacy refusal, explicit/PAT/Enterprise routing and recovery. Authenticated HTTP
+  tests cover create, exact-snapshot review, repeated recovery, provider errors,
+  and endpoint-only review with unrelated malformed checkout metadata.
+  The project-open regression checks that a refused provider link does not host
+  its Git store or create a checkout.
+  The isolated server/CLI child exercises selected read and webhook admission with
+  synthetic credentials and loopback provider responses. Web type and browser
+  checks cover fresh sign-in and reused-account create intent.
+- Verification: local affected and full T2 gate results plus the covering main CI
+  run are recorded in the ticket completion note. No customer content was used.
+
 ### MCP startup and presence redirect confinement (HS2-081PXN)
 
 - Unit source: `crates/hotsheet-mcp/src/presence/redirect_tests.rs` distinguishes ordinary success from ureq's Ok 3xx and error responses. Existing presence unit transitions pin precedence, heartbeat, release and trusted relocation.

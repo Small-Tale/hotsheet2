@@ -6410,7 +6410,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProviderConnection'
+              $ref: '#/components/schemas/ProviderConnectionUpdate'
     delete:
       operationId: delete_provider_connection
       responses:
@@ -11670,6 +11670,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /provider-connections/{connection_id}/endpoint-review:
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_provider_endpoint_review
+      responses:
+        '200':
+          description: Current GitHub endpoint decision and compare token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubEndpointReview'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /provider-connections/{connection_id}/recover:
+    parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: recover_github_connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubConnectionRecoveryRequest'
+      responses:
+        '200':
+          description: The pending link was finalized or compensated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubConnectionRecoveryResult'
+        default:
+          description: The request failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -13959,6 +14009,138 @@ components:
         disabled:
           type: boolean
       additionalProperties: false
+    ProviderConnectionUpdate:
+      type: object
+      required:
+        - id
+        - provider
+        - locator
+        - name
+        - default
+        - settings
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+        locator:
+          type: string
+        name:
+          type:
+            - string
+            - 'null'
+        default:
+          type: boolean
+        settings: {}
+        disabled:
+          type: boolean
+        review_endpoint:
+          type: boolean
+        endpoint_expected:
+          $ref: '#/components/schemas/GithubEndpointExpected'
+      additionalProperties: false
+    GithubEndpointExpected:
+      type: object
+      required:
+        - incarnation
+        - revision
+        - record_sha256
+      properties:
+        incarnation:
+          type:
+            - string
+            - 'null'
+        revision:
+          type:
+            - string
+            - 'null'
+        record_sha256:
+          type: string
+      additionalProperties: false
+    GithubEndpointDecision:
+      oneOf:
+        - type: object
+          required:
+            - kind
+            - credential_ref
+            - endpoint
+          properties:
+            kind:
+              enum:
+                - legacy_unknown
+                - explicit
+            credential_ref:
+              type: string
+            endpoint:
+              type:
+                - string
+                - 'null'
+          additionalProperties: false
+        - type: object
+          required:
+            - kind
+            - credential_ref
+            - endpoint
+            - origin
+          properties:
+            kind:
+              const: inferred
+            credential_ref:
+              type: string
+            endpoint:
+              type:
+                - string
+                - 'null'
+            origin:
+              type: string
+          additionalProperties: false
+    GithubEndpointReview:
+      type: object
+      required:
+        - connection
+        - expected
+        - decision
+      properties:
+        connection:
+          $ref: '#/components/schemas/ProviderConnection'
+        expected:
+          $ref: '#/components/schemas/GithubEndpointExpected'
+        decision:
+          anyOf:
+            - $ref: '#/components/schemas/GithubEndpointDecision'
+            - type: 'null'
+      additionalProperties: false
+    GithubConnectionRecoveryRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          enum:
+            - resume
+            - compensate
+      additionalProperties: false
+    GithubConnectionRecoveryResult:
+      oneOf:
+        - type: object
+          required:
+            - status
+            - connection
+          properties:
+            status:
+              enum:
+                - finalized
+                - restored
+            connection:
+              $ref: '#/components/schemas/ProviderConnection'
+          additionalProperties: false
+        - type: object
+          required:
+            - status
+          properties:
+            status:
+              const: removed
+          additionalProperties: false
     GithubWebhookSetupRequest:
       type: object
       required:

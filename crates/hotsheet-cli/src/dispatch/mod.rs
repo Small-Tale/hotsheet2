@@ -93,6 +93,7 @@ impl Cmd {
             Providers { .. }
             | GithubSignIn { .. }
             | GithubConnect(_)
+            | GithubRecover(_)
             | GithubWebhookSetup { .. }
             | ProviderConnect(_)
             | ProviderAttach { .. }

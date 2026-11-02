@@ -23,6 +23,17 @@ use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
 use std::sync::atomic::Ordering;
 
+pub(crate) fn checkout_source_error(
+    error: hotsheet_ticketing::checkouts::CheckoutError,
+) -> ApiError {
+    match error {
+        hotsheet_ticketing::checkouts::CheckoutError::Endpoint(error) => {
+            ApiError::new(StatusCode::CONFLICT, error.to_string())
+        }
+        other => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct RegisterCheckoutBody {
     root: String,
@@ -187,7 +198,6 @@ pub(crate) async fn open_project(
     } else {
         hotsheet_ticketing::checkouts::OpenSourceMode::Discovered
     };
-    let hosting_state = state.clone();
     let discovery_root = body.root.clone();
     let explicit_stores = body.stores;
     let explicit_sources = body.sources;
@@ -219,24 +229,22 @@ pub(crate) async fn open_project(
                 .cloned()
                 .map(hotsheet_ticketing::checkouts::TicketSource::git),
         );
+        // Validate without maintenance before provider admission. A rejected external
+        // link must not reconcile a Git index or start hosting a store (HS2-6H8ZY6).
         for source in sources.iter().filter(|source| source.provider == "git") {
-            if existing.as_ref().is_some_and(|checkout| {
-                checkout.source(&source.connection_id).is_some()
-                    && !checkout
-                        .store_instance_ids
-                        .contains_key(&source.connection_id)
-            }) {
-                continue;
-            }
-            let store = FsStore::open(&source.locator)
+            FsStore::open_without_maintenance(&source.locator)
                 .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-            hosting_state.host_project_store(store)?;
         }
         Ok::<_, ApiError>(sources)
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let root = FsPath::new(&body.root);
+    let requested_git_sources = sources
+        .iter()
+        .filter(|source| source.provider == "git")
+        .cloned()
+        .collect::<Vec<_>>();
     let checkout = state
         .checkout_registry
         .open_registered_sources(
@@ -251,6 +259,23 @@ pub(crate) async fn open_project(
             },
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let hosting_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        for source in &requested_git_sources {
+            if existing.as_ref().is_some_and(|prior| {
+                prior.source(&source.connection_id).is_some()
+                    && !prior.store_instance_ids.contains_key(&source.connection_id)
+            }) {
+                continue;
+            }
+            let store = FsStore::open(&source.locator)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+            hosting_state.host_project_store(store)?;
+        }
+        Ok::<_, ApiError>(())
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     // Setup's plan writer adds a missing push policy. Seed it through Settings' locked
     // mutation before responding, so a background refresh cannot overwrite settings
     // saved immediately after a source-free project opens (HS2-TSXSH6).
@@ -379,7 +404,7 @@ pub(crate) async fn add_checkout_source(
             source,
             body.make_default,
         )
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        .map_err(checkout_source_error)?;
     retry_pending_guidance(&state, &checkout).await;
     Ok(Json(checkout))
 }
@@ -516,8 +541,12 @@ pub(crate) async fn set_checkout_default_source(
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
     let checkout = state
         .checkout_registry
-        .set_default_source(&reference, body.connection_id.as_deref())
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        .set_registered_default_source(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &reference,
+            body.connection_id.as_deref(),
+        )
+        .map_err(checkout_source_error)?;
     retry_pending_guidance(&state, &checkout).await;
     Ok(Json(checkout))
 }

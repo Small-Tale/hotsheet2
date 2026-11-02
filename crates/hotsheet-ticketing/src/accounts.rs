@@ -18,9 +18,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::checkouts::{Checkout, CheckoutError};
+use crate::checkouts::{Checkout, CheckoutError, CheckoutRegistry};
 use crate::connection_removal::{MANAGED_CREDENTIAL_PREFIX, credential_of};
-use crate::provider::{ProviderConnection, ProviderError};
+use crate::provider::{ProviderConfigRegistry, ProviderConnection, ProviderError};
 use crate::secrets::{KeyMetadata, KeyRegistry, SecretError, SecretStore};
 
 /// A project (checkout) that uses a connection.
@@ -307,6 +307,22 @@ pub enum AccountError {
     Secret(#[from] SecretError),
 }
 
+/// Remove an unused source under checkout then provider ownership, preserving
+/// account eligibility errors before endpoint refusal (HS2-6H8ZY6).
+pub fn remove_unused_source(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    account: &str,
+    source: &str,
+) -> Result<ProviderConnection, AccountError> {
+    // HS2-6H8ZY6: retain the checkout owner across actual provider eligibility
+    // and publication. Wrong account / in-use errors precede pending refusal.
+    let checkouts = checkouts.prepare_source_links()?;
+    providers.update_ordinary_domain(|connections| {
+        take_unused_source(connections, checkouts.list(), account, source)
+    })
+}
+
 /// Remove an account's unused external source from an in-memory connection catalog. The caller
 /// persists the returned catalog; this never unlinks projects or deletes the account credential.
 pub fn take_unused_source(
@@ -527,7 +543,7 @@ mod tests {
             let root = dir.path().join(name);
             std::fs::create_dir(&root).unwrap();
             checkouts
-                .register_sources(&root, Some(name), None, sources, None)
+                .register_registered_sources(&providers, &root, Some(name), None, sources, None)
                 .unwrap();
         }
         Legacy {

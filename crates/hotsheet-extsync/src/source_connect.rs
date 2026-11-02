@@ -4,7 +4,11 @@
 //! terminal is validated and linked exactly like one created in a client.
 
 use hotsheet_ticketing::accounts::connection_host;
-use hotsheet_ticketing::checkouts::{CheckoutError, CheckoutRegistry, TicketSource};
+use hotsheet_ticketing::checkouts::{CheckoutError, CheckoutRegistry};
+use hotsheet_ticketing::github_endpoint::{
+    Compensation, EndpointError, EndpointRegistry, Expected, Intent, Link, LinkObserver,
+    Observation, OperationState, Request, State,
+};
 use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection, ProviderError};
 
 use crate::updated_connections;
@@ -23,10 +27,212 @@ pub enum ConnectMode {
 pub enum ConnectSourceError {
     #[error(transparent)]
     Provider(#[from] ProviderError),
-    /// The record was valid but the checkout link could not be written; the registry was
-    /// restored to what it held before.
+    #[error(transparent)]
+    Endpoint(#[from] EndpointError),
+    /// The checkout link failed after the typed candidate was conditionally
+    /// compensated. A retained pending candidate has a separate recovery command.
     #[error("{0}")]
     Link(#[from] CheckoutError),
+}
+
+struct CheckoutLinks<'a>(Option<&'a CheckoutRegistry>);
+
+impl LinkObserver for CheckoutLinks<'_> {
+    fn is_linked(&self, connection_id: &str, link: &Link) -> Result<bool, EndpointError> {
+        let checkout = self
+            .0
+            .ok_or(EndpointError::Storage)?
+            .resolve(&link.checkout_id)
+            .map_err(|_| EndpointError::Storage)?;
+        Ok(checkout.source(connection_id).is_some()
+            && (!link.make_default || checkout.default_source.as_deref() == Some(connection_id)))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoverGithubLink {
+    Resume,
+    Compensate,
+}
+
+#[derive(Debug)]
+pub enum GithubLinkRecovery {
+    Finalized(ProviderConnection),
+    Compensated(Compensation),
+}
+
+/// Reacquire the exact saved pending operation after a restart. No caller-supplied
+/// digest or endpoint assertion becomes authority. Repeated resume of a completed
+/// link returns the current completed row; compensation is conditional on the
+/// pending candidate and never overwrites an intervening writer.
+pub fn recover_github_link(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    connection_id: &str,
+    action: RecoverGithubLink,
+) -> Result<GithubLinkRecovery, ConnectSourceError> {
+    let current = providers
+        .load()?
+        .into_iter()
+        .find(|row| row.id == connection_id)
+        .ok_or_else(|| ProviderError::UnknownConnection(connection_id.into()))?;
+    let state = State::load(&current)?.ok_or(EndpointError::Conflict)?;
+    let operation = state.operation.as_ref().ok_or(EndpointError::Conflict)?;
+    let link = operation
+        .link
+        .as_ref()
+        .ok_or(EndpointError::Conflict)?
+        .clone();
+    let observer = CheckoutLinks(Some(checkouts));
+    if operation.state == OperationState::Completed {
+        if action == RecoverGithubLink::Resume && observer.is_linked(connection_id, &link)? {
+            return Ok(GithubLinkRecovery::Finalized(current));
+        }
+        return Err(EndpointError::Conflict.into());
+    }
+    let core = EndpointRegistry::new(providers);
+    let proof = core.pending(connection_id, operation.id, &operation.request_sha256)?;
+    match action {
+        RecoverGithubLink::Resume => {
+            checkouts.add_pending_github_connection(providers, &current, &link, &proof)?;
+            Ok(GithubLinkRecovery::Finalized(
+                core.finalize(&proof, &observer)?,
+            ))
+        }
+        RecoverGithubLink::Compensate => {
+            Ok(GithubLinkRecovery::Compensated(core.compensate(&proof)?))
+        }
+    }
+}
+
+/// Issue a reviewed GitHub endpoint decision and, when requested, complete its
+/// exact pending checkout link. The caller has already selected the typed intent
+/// and bounded site observation outside provider and checkout locks.
+pub fn connect_github_source(
+    providers: &ProviderConfigRegistry,
+    mut connection: ProviderConnection,
+    checkout: Option<CheckoutLink<'_>>,
+    mode: ConnectMode,
+    intent: Intent,
+    observation: &Observation,
+) -> Result<ProviderConnection, ConnectSourceError> {
+    if connection.provider != "github" {
+        return Err(EndpointError::Invalid.into());
+    }
+    let connections = providers.load()?;
+    let existing = match mode {
+        ConnectMode::Create => None,
+        ConnectMode::Reconnect => {
+            let match_row = if connection.id.trim().is_empty() {
+                connections.iter().find(|row| {
+                    row.provider == "github"
+                        && row.locator.eq_ignore_ascii_case(&connection.locator)
+                })
+            } else {
+                connections.iter().find(|row| row.id == connection.id)
+            };
+            if let Some(row) = match_row {
+                if row.provider != "github"
+                    || !row.locator.eq_ignore_ascii_case(&connection.locator)
+                {
+                    return Err(EndpointError::Conflict.into());
+                }
+            }
+            match_row.cloned()
+        }
+    };
+    if let Some(existing) = &existing {
+        connection.id = existing.id.clone();
+        connection.disabled = existing.disabled;
+        if connection.name.is_none() {
+            connection.name = existing.name.clone();
+        }
+        if let Some(webhook) = existing.settings.get("webhook").cloned() {
+            connection.settings["webhook"] = webhook;
+        }
+    } else if connection.id.trim().is_empty() {
+        connection.id = hotsheet_ticketing::generate_connection_id(
+            &connections,
+            &connection.provider,
+            &connection.locator,
+        );
+    }
+    let wants_global_default =
+        connection.default || existing.as_ref().is_some_and(|item| item.default);
+    // A link-pending candidate cannot displace another global default without
+    // extending its compensation before-image to that other record. Apply the
+    // legacy global default only after the exact link has finalized.
+    connection.default = existing.as_ref().is_some_and(|item| item.default);
+    crate::descriptor(&connection)?;
+    let link = checkout
+        .as_ref()
+        .map(|checkout| {
+            checkout
+                .registry
+                .resolve(checkout.reference)
+                .map(|resolved| Link {
+                    checkout_id: resolved.id,
+                    make_default: checkout.make_default,
+                })
+        })
+        .transpose()?;
+    let core = EndpointRegistry::new(providers);
+    let request = Request {
+        operation_id: hotsheet_model::Ulid::new(),
+        expected: existing.as_ref().map(Expected::capture).transpose()?,
+        connection,
+        intent,
+        link: link.clone(),
+    };
+    let observer = CheckoutLinks(checkout.as_ref().map(|value| value.registry));
+    let mutation = core.apply(&request, observation, &observer)?;
+    let Some(recovery) = mutation.recovery else {
+        return if wants_global_default {
+            set_global_default(providers, &mutation.connection.id)
+        } else {
+            Ok(mutation.connection)
+        };
+    };
+    let checkout = checkout.expect("pending operation has a checkout");
+    let link = link.expect("pending operation has a link");
+    match checkout.registry.add_pending_github_connection(
+        providers,
+        &mutation.connection,
+        &link,
+        &recovery,
+    ) {
+        Ok(_) => {
+            let completed = core.finalize(&recovery, &observer)?;
+            if wants_global_default {
+                set_global_default(providers, &completed.id)
+            } else {
+                Ok(completed)
+            }
+        }
+        Err(error) => match core.compensate(&recovery)? {
+            hotsheet_ticketing::github_endpoint::Compensation::Retained(_) => {
+                Err(EndpointError::Pending.into())
+            }
+            _ => Err(error.into()),
+        },
+    }
+}
+
+fn set_global_default(
+    providers: &ProviderConfigRegistry,
+    connection_id: &str,
+) -> Result<ProviderConnection, ConnectSourceError> {
+    providers
+        .update_connection(connection_id, |rows| {
+            if !rows.iter().any(|row| row.id == connection_id) {
+                return Err(ProviderError::UnknownConnection(connection_id.into()));
+            }
+            for row in rows {
+                row.default = row.id == connection_id;
+            }
+            Ok(())
+        })?
+        .ok_or_else(|| ProviderError::UnknownConnection(connection_id.into()).into())
 }
 
 /// The checkout a new source is linked to.
@@ -42,7 +248,8 @@ pub struct CheckoutLink<'a> {
 /// it to `checkout`. An empty id is generated. The provider descriptor validates the
 /// connection's locator and settings before anything is written. With a checkout the
 /// record's own `default` is left as it was: a project's default lives on its checkout.
-/// If the link cannot be written the registry is restored, so no ownerless record is left.
+/// If linking fails the legacy path attempts restoration; this is not a guarantee against
+/// partial publication. Typed conditional compensation/link recovery is pending (HS2-6H8ZY6).
 pub fn connect_source(
     providers: &ProviderConfigRegistry,
     mut connection: ProviderConnection,
@@ -79,20 +286,20 @@ pub fn connect_source(
     };
     let previous = connections.clone();
     let replacing = existing.as_ref().map(|item| item.id.as_str());
-    providers.update(|current| {
-        let updated = updated_connections(std::mem::take(current), connection.clone(), replacing)?;
-        *current = updated;
-        Ok(())
-    })?;
+    let connection_id = connection.id.clone();
+    let connection = providers
+        .update_connection(&connection_id, |current| {
+            let updated =
+                updated_connections(std::mem::take(current), connection.clone(), replacing)?;
+            *current = updated;
+            Ok(())
+        })?
+        .ok_or_else(|| ProviderError::UnknownConnection(connection_id))?;
     if let Some(link) = checkout {
-        let linked = link.registry.add_registered_source(
+        let linked = link.registry.add_registered_connection(
             providers,
             link.reference,
-            TicketSource {
-                connection_id: connection.id.clone(),
-                provider: connection.provider.clone(),
-                locator: connection.locator.clone(),
-            },
+            &connection,
             link.make_default,
         );
         if let Err(error) = linked {
@@ -176,6 +383,29 @@ fn restore(providers: &ProviderConfigRegistry, previous: &[ProviderConnection], 
 mod tests {
     use super::*;
 
+    #[derive(Clone)]
+    struct WebhookSecrets;
+    impl hotsheet_ticketing::SecretStore for WebhookSecrets {
+        fn get(&self, _: &str) -> Result<Option<String>, hotsheet_ticketing::SecretError> {
+            Ok(Some("synthetic-hook-bytes".into()))
+        }
+        fn set(&self, _: &str, _: &str) -> Result<(), hotsheet_ticketing::SecretError> {
+            Ok(())
+        }
+        fn delete(&self, _: &str) -> Result<bool, hotsheet_ticketing::SecretError> {
+            panic!("setup does not delete keys")
+        }
+    }
+    fn webhook_keys(
+        fixture: &Fixture,
+        reference: &str,
+    ) -> hotsheet_ticketing::KeyRegistry<WebhookSecrets> {
+        assert!(std::env::var_os(hotsheet_ticketing::secrets::env_name(reference)).is_none());
+        let keys = hotsheet_ticketing::KeyRegistry::new(fixture._dir.path(), WebhookSecrets);
+        keys.set(reference, "synthetic-hook-bytes").unwrap();
+        keys
+    }
+
     fn gitlab(locator: &str, api_base: Option<&str>) -> ProviderConnection {
         let mut settings = serde_json::json!({"credential":{"secret":"gitlab-key"}});
         if let Some(api_base) = api_base {
@@ -232,6 +462,240 @@ mod tests {
     }
 
     #[test]
+    fn hs2_6h8zy6_typed_github_connect_links_and_returns_finalized_decision() {
+        use hotsheet_ticketing::github_endpoint::{Decision, Endpoint, State};
+        let fixture = fixture();
+        let connection = ProviderConnection {
+            id: "github-synthetic".into(),
+            provider: "github".into(),
+            locator: "synthetic/issues".into(),
+            name: Some("Synthetic Issues".into()),
+            default: false,
+            settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+            disabled: false,
+        };
+        let completed = connect_github_source(
+            &fixture.providers,
+            connection,
+            Some(CheckoutLink {
+                registry: &fixture.checkouts,
+                reference: "app",
+                make_default: true,
+            }),
+            ConnectMode::Create,
+            Intent::Explicit {
+                credential_ref: "synthetic-key".into(),
+                endpoint: Endpoint::Public,
+            },
+            &Observation::Unavailable,
+        )
+        .unwrap();
+        assert!(matches!(
+            State::load(&completed).unwrap().unwrap().decision,
+            Decision::Explicit {
+                endpoint: Endpoint::Public,
+                ..
+            }
+        ));
+        assert!(!State::load(&completed).unwrap().unwrap().is_pending());
+        assert_eq!(fixture.providers.load().unwrap(), vec![completed.clone()]);
+        let checkout = fixture.checkouts.resolve("app").unwrap();
+        assert!(checkout.source(&completed.id).is_some());
+        assert_eq!(
+            checkout.default_source.as_deref(),
+            Some(completed.id.as_str())
+        );
+    }
+
+    #[test]
+    fn hs2_6h8zy6_typed_github_connect_compensates_a_refused_default_link() {
+        use hotsheet_ticketing::github_endpoint::{Endpoint, Expected, Link, Request};
+        let fixture = fixture();
+        let old = ProviderConnection {
+            id: "github-old".into(),
+            provider: "github".into(),
+            locator: "synthetic/old".into(),
+            name: None,
+            default: false,
+            settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+            disabled: false,
+        };
+        fixture.providers.save(std::slice::from_ref(&old)).unwrap();
+        let checkout = fixture
+            .checkouts
+            .add_registered_connection(&fixture.providers, "app", &old, true)
+            .unwrap();
+        let core = EndpointRegistry::new(&fixture.providers);
+        core.apply(
+            &Request {
+                operation_id: hotsheet_model::Ulid::new(),
+                expected: Some(Expected::capture(&old).unwrap()),
+                connection: old.clone(),
+                intent: Intent::Explicit {
+                    credential_ref: "synthetic-key".into(),
+                    endpoint: Endpoint::Public,
+                },
+                link: Some(Link {
+                    checkout_id: checkout.id.clone(),
+                    make_default: false,
+                }),
+            },
+            &Observation::Unavailable,
+            &CheckoutLinks(Some(&fixture.checkouts)),
+        )
+        .unwrap();
+        let pending = fixture.providers.load().unwrap();
+        let checkout_before = fixture.checkouts.resolve("app").unwrap();
+        let new = ProviderConnection {
+            id: "github-new".into(),
+            locator: "synthetic/new".into(),
+            ..old
+        };
+        let error = connect_github_source(
+            &fixture.providers,
+            new,
+            Some(CheckoutLink {
+                registry: &fixture.checkouts,
+                reference: "app",
+                make_default: true,
+            }),
+            ConnectMode::Create,
+            Intent::Explicit {
+                credential_ref: "synthetic-key".into(),
+                endpoint: Endpoint::Public,
+            },
+            &Observation::Unavailable,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            ConnectSourceError::Link(CheckoutError::Endpoint(EndpointError::Pending))
+        ));
+        assert_eq!(fixture.providers.load().unwrap(), pending);
+        assert_eq!(fixture.checkouts.resolve("app").unwrap(), checkout_before);
+    }
+
+    #[test]
+    fn hs2_6h8zy6_typed_global_default_changes_after_both_links_complete() {
+        use hotsheet_ticketing::github_endpoint::Endpoint;
+        let fixture = fixture();
+        let row = |id: &str| ProviderConnection {
+            id: id.into(),
+            provider: "github".into(),
+            locator: format!("synthetic/{id}"),
+            name: None,
+            default: true,
+            settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+            disabled: false,
+        };
+        for id in ["github-first", "github-second"] {
+            let saved = connect_github_source(
+                &fixture.providers,
+                row(id),
+                Some(CheckoutLink {
+                    registry: &fixture.checkouts,
+                    reference: "app",
+                    make_default: true,
+                }),
+                ConnectMode::Create,
+                Intent::Explicit {
+                    credential_ref: "synthetic-key".into(),
+                    endpoint: Endpoint::Public,
+                },
+                &Observation::Unavailable,
+            )
+            .unwrap();
+            assert!(saved.default);
+            let rows = fixture.providers.load().unwrap();
+            assert_eq!(rows.iter().filter(|row| row.default).count(), 1);
+            assert_eq!(rows.iter().find(|row| row.default).unwrap().id, id);
+            assert_eq!(
+                fixture
+                    .checkouts
+                    .resolve("app")
+                    .unwrap()
+                    .default_source
+                    .as_deref(),
+                Some(id)
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_6h8zy6_saved_pending_link_resumes_after_restart_and_repeats_without_write() {
+        use hotsheet_ticketing::github_endpoint::Endpoint;
+        let fixture = fixture();
+        let checkout_id = fixture.checkouts.resolve("app").unwrap().id;
+        let row = ProviderConnection {
+            id: "github-recover".into(),
+            provider: "github".into(),
+            locator: "synthetic/recover".into(),
+            name: None,
+            default: false,
+            settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+            disabled: false,
+        };
+        EndpointRegistry::new(&fixture.providers)
+            .apply(
+                &Request {
+                    operation_id: hotsheet_model::Ulid::new(),
+                    expected: None,
+                    connection: row,
+                    intent: Intent::Explicit {
+                        credential_ref: "synthetic-key".into(),
+                        endpoint: Endpoint::Public,
+                    },
+                    link: Some(Link {
+                        checkout_id: checkout_id.clone(),
+                        make_default: true,
+                    }),
+                },
+                &Observation::Unavailable,
+                &CheckoutLinks(Some(&fixture.checkouts)),
+            )
+            .unwrap();
+        assert!(
+            fixture
+                .checkouts
+                .resolve("app")
+                .unwrap()
+                .source("github-recover")
+                .is_none()
+        );
+        let GithubLinkRecovery::Finalized(completed) = recover_github_link(
+            &fixture.providers,
+            &fixture.checkouts,
+            "github-recover",
+            RecoverGithubLink::Resume,
+        )
+        .unwrap() else {
+            panic!("resume must finalize")
+        };
+        assert!(!State::load(&completed).unwrap().unwrap().is_pending());
+        assert_eq!(
+            fixture
+                .checkouts
+                .resolve("app")
+                .unwrap()
+                .default_source
+                .as_deref(),
+            Some("github-recover")
+        );
+        let before = std::fs::read(fixture.providers.path()).unwrap();
+        let GithubLinkRecovery::Finalized(repeated) = recover_github_link(
+            &fixture.providers,
+            &fixture.checkouts,
+            "github-recover",
+            RecoverGithubLink::Resume,
+        )
+        .unwrap() else {
+            panic!("repeated resume must return completed")
+        };
+        assert_eq!(repeated, completed);
+        assert_eq!(std::fs::read(fixture.providers.path()).unwrap(), before);
+    }
+
+    #[test]
     fn hs2_sgq183_failed_relink_keeps_concurrent_webhook_setup() {
         let fixture = fixture();
         let mut before = ProviderConnection {
@@ -246,12 +710,86 @@ mod tests {
         fixture.providers.save(&[before.clone()]).unwrap();
         before.name = Some("Temporary edit".into());
         fixture.providers.save(&[before.clone()]).unwrap();
-        crate::configure_webhook(&fixture.providers, "github-synthetic", "hook-key").unwrap();
+        let keys = webhook_keys(&fixture, "hook-key");
+        crate::configure_webhook(&fixture.providers, &keys, "github-synthetic", "hook-key")
+            .unwrap();
         before.name = Some("Before".into());
         restore(&fixture.providers, &[before], "github-synthetic");
         let [restored] = fixture.providers.load().unwrap().try_into().unwrap();
         assert_eq!(restored.name.as_deref(), Some("Before"));
         assert_eq!(restored.settings["webhook"]["secret"], "hook-key");
+    }
+
+    #[test]
+    fn hs2_6h8zy6_webhook_and_reconnect_return_actual_normalized_records() {
+        use hotsheet_ticketing::github_endpoint::{
+            Endpoint, EndpointError, EndpointRegistry, Intent, Link, LinkObserver, Observation,
+            Request, State,
+        };
+        struct NoLinks;
+        impl LinkObserver for NoLinks {
+            fn is_linked(&self, _: &str, _: &Link) -> Result<bool, EndpointError> {
+                Ok(false)
+            }
+        }
+        let fixture = fixture();
+        let raw = ProviderConnection {
+            id: "normalized-github".into(),
+            provider: "github".into(),
+            locator: "synthetic/project".into(),
+            name: Some("Before".into()),
+            default: false,
+            disabled: false,
+            settings: serde_json::json!({"credential":{"secret":"synthetic-account"}}),
+        };
+        let saved = EndpointRegistry::new(&fixture.providers)
+            .apply(
+                &Request {
+                    operation_id: hotsheet_model::Ulid::new(),
+                    expected: None,
+                    connection: raw.clone(),
+                    intent: Intent::Explicit {
+                        credential_ref: "synthetic-account".into(),
+                        endpoint: Endpoint::Public,
+                    },
+                    link: None,
+                },
+                &Observation::Unavailable,
+                &NoLinks,
+            )
+            .unwrap()
+            .connection;
+        let keys = webhook_keys(&fixture, "synthetic-hook");
+        let webhook =
+            crate::configure_webhook(&fixture.providers, &keys, &saved.id, "synthetic-hook")
+                .unwrap()
+                .connection;
+        assert_eq!(webhook, fixture.providers.load().unwrap()[0]);
+        assert!(State::load(&webhook).unwrap().unwrap().operation.is_none());
+        let mut edited = raw;
+        edited.name = Some("After".into());
+        let returned = connect_source(
+            &fixture.providers,
+            edited,
+            link(&fixture, true),
+            ConnectMode::Reconnect,
+        )
+        .unwrap();
+        assert_eq!(returned, fixture.providers.load().unwrap()[0]);
+        assert_eq!(returned.settings["webhook"]["secret"], "synthetic-hook");
+        assert!(matches!(
+            State::load(&returned).unwrap().unwrap().decision,
+            hotsheet_ticketing::github_endpoint::Decision::Explicit { .. }
+        ));
+        assert_eq!(
+            fixture
+                .checkouts
+                .resolve("app")
+                .unwrap()
+                .default_source
+                .as_deref(),
+            Some(returned.id.as_str())
+        );
     }
 
     fn link(fixture: &Fixture, make_default: bool) -> Option<CheckoutLink<'_>> {

@@ -101,6 +101,11 @@ pub struct ProviderConfigRegistry {
     path: PathBuf,
 }
 
+enum Publication {
+    Always,
+    IfChanged,
+}
+
 impl ProviderConfigRegistry {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
@@ -122,6 +127,15 @@ impl ProviderConfigRegistry {
     }
 
     pub fn save(&self, connections: &[ProviderConnection]) -> Result<(), ProviderError> {
+        self.update_domain_with_publication(Publication::Always, |current| {
+            let before = current.clone();
+            *current = connections.to_vec();
+            guard_ordinary_connections(&before, current)
+        })
+    }
+
+    // HS2-6H8ZY6: only the domain owner publishes, after its lock and validation.
+    fn publish_unlocked(&self, connections: &[ProviderConnection]) -> Result<(), ProviderError> {
         validate_connections(connections)?;
         use std::io::Write;
 
@@ -173,14 +187,83 @@ impl ProviderConfigRegistry {
     /// Atomically change provider configuration across processes. Every production
     /// read-modify-write path uses the stable sibling lock, so a webhook setup
     /// cannot overwrite a concurrent connection edit (HS2-SGQ183).
+    /// The closure's generic result is provisional: use `update_connection` when
+    /// returning an authoritative normalized connection (HS2-6H8ZY6).
     pub fn update<T>(
         &self,
         change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, ProviderError>,
     ) -> Result<T, ProviderError> {
+        self.update_ordinary_domain(change)
+    }
+
+    /// HS2-6H8ZY6: preserve domain eligibility errors before checking the actual
+    /// ordinary candidate. T remains provisional, not normalized record authority.
+    pub(crate) fn update_ordinary_domain<T, E: From<ProviderError>>(
+        &self,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, E>,
+    ) -> Result<T, E> {
+        self.update_domain(|connections| {
+            let before = connections.clone();
+            let result = change(connections)?;
+            guard_ordinary_connections(&before, connections).map_err(E::from)?;
+            Ok(result)
+        })
+    }
+
+    /// HS2-6H8ZY6: normalize all touched records before returning this target
+    /// under the same owner. An absent target may still be created by the closure.
+    pub fn update_connection(
+        &self,
+        connection_id: &str,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<(), ProviderError>,
+    ) -> Result<Option<ProviderConnection>, ProviderError> {
+        self.update_connection_domain(connection_id, change)
+            .map(|((), connection)| connection)
+    }
+
+    /// Precheck the actual target before a domain callback can unlink checkout
+    /// metadata. The same batch guard normalizes the final target under this owner.
+    pub(crate) fn update_connection_domain<T, E: From<ProviderError>>(
+        &self,
+        connection_id: &str,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, E>,
+    ) -> Result<(T, Option<ProviderConnection>), E> {
+        self.update_domain(|connections| {
+            if let Some(connection) = connections.iter().find(|item| item.id == connection_id) {
+                require_ordinary_target(connection).map_err(E::from)?;
+            }
+            let before = connections.clone();
+            let result = change(connections)?;
+            guard_ordinary_connections(&before, connections).map_err(E::from)?;
+            Ok((
+                result,
+                connections
+                    .iter()
+                    .find(|item| item.id == connection_id)
+                    .cloned(),
+            ))
+        })
+    }
+
+    /// HS2-6H8ZY6: typed domain refusals reuse this exact transaction owner.
+    /// Typed endpoint operations own their validation; ordinary callers use the guards above.
+    pub(crate) fn update_domain<T, E: From<ProviderError>>(
+        &self,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, E>,
+    ) -> Result<T, E> {
+        self.update_domain_with_publication(Publication::IfChanged, change)
+    }
+
+    fn update_domain_with_publication<T, E: From<ProviderError>>(
+        &self,
+        publication: Publication,
+        change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, E>,
+    ) -> Result<T, E> {
         use std::fs::OpenOptions;
+        let io = |error| E::from(ProviderError::from(StoreError::Io(error)));
         let lock_path = self.path.with_extension("json.lock");
         if let Some(parent) = lock_path.parent() {
-            std::fs::create_dir_all(parent).map_err(StoreError::Io)?;
+            std::fs::create_dir_all(parent).map_err(io)?;
         }
         let file = OpenOptions::new()
             .create(true)
@@ -188,13 +271,14 @@ impl ProviderConfigRegistry {
             .read(true)
             .write(true)
             .open(lock_path)
-            .map_err(StoreError::Io)?;
-        let _guard = crate::file_lock::FileLock::acquire(file).map_err(StoreError::Io)?;
-        let mut connections = self.load()?;
+            .map_err(io)?;
+        let _guard = crate::file_lock::FileLock::acquire(file).map_err(io)?;
+        let mut connections = self.load().map_err(E::from)?;
         let before = connections.clone();
         let result = change(&mut connections)?;
-        if connections != before {
-            self.save(&connections)?;
+        validate_connections(&connections).map_err(E::from)?;
+        if matches!(publication, Publication::Always) || connections != before {
+            self.publish_unlocked(&connections).map_err(E::from)?;
         }
         Ok(result)
     }
@@ -206,15 +290,15 @@ impl ProviderConfigRegistry {
         connection_id: &str,
         disabled: bool,
     ) -> Result<Option<ProviderConnection>, ProviderError> {
-        self.update(|connections| {
+        self.update_connection(connection_id, |connections| {
             let Some(connection) = connections
                 .iter_mut()
                 .find(|connection| connection.id == connection_id)
             else {
-                return Ok(None);
+                return Ok(());
             };
             connection.disabled = disabled;
-            Ok(Some(connection.clone()))
+            Ok(())
         })
     }
 
@@ -225,6 +309,54 @@ impl ProviderConfigRegistry {
             .iter()
             .any(|connection| connection.id == connection_id && connection.disabled))
     }
+}
+
+pub(crate) fn require_ordinary_target(
+    connection: &ProviderConnection,
+) -> Result<(), ProviderError> {
+    if connection.provider == "github"
+        && crate::github_endpoint::State::load(connection)?.is_some_and(|state| state.is_pending())
+    {
+        return Err(crate::github_endpoint::EndpointError::Pending.into());
+    }
+    Ok(())
+}
+
+// HS2-6H8ZY6: exact IDs only. No URL/credential heuristic transfers authority to a new ID.
+fn guard_ordinary_connections(
+    before: &[ProviderConnection],
+    incoming: &mut [ProviderConnection],
+) -> Result<(), ProviderError> {
+    use crate::github_endpoint::{EndpointError, guard_ordinary};
+    validate_connections(incoming)?;
+    for old in before {
+        let next = incoming.iter_mut().find(|item| item.id == old.id);
+        match next {
+            Some(next) if *next == *old => {}
+            Some(next) if old.provider == "github" || next.provider == "github" => {
+                if old.provider == "github" {
+                    require_ordinary_target(old)?;
+                }
+                if old.provider != next.provider {
+                    return Err(EndpointError::Conflict.into());
+                }
+                guard_ordinary(old, next)?;
+            }
+            None if old.provider == "github" => require_ordinary_target(old)?,
+            _ => {}
+        }
+    }
+    for next in incoming {
+        // Raw legacy creation remains unmarked, even for incomplete old metadata shapes.
+        // Reserved authority can only be created through the typed endpoint owner.
+        if next.provider == "github"
+            && !before.iter().any(|old| old.id == next.id)
+            && next.settings.get("github_endpoint").is_some()
+        {
+            return Err(EndpointError::Invalid.into());
+        }
+    }
+    Ok(())
 }
 
 /// A readable, unique connection id for a new `provider` connection to `locator`
@@ -889,6 +1021,8 @@ pub struct NotWorkingReport {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
+    #[error(transparent)]
+    Endpoint(#[from] crate::github_endpoint::EndpointError),
     #[error("ticket provider connection '{0}' was not found")]
     UnknownConnection(String),
     #[error("ticket '{native_id}' was not found in provider connection '{connection_id}'")]
@@ -3189,7 +3323,14 @@ mod tests {
                 .is_err()
         );
         assert_eq!(registry.load().unwrap(), [connection]);
-        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        // The stable sibling lock is retained for later provider transactions.
+        let files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(files.len(), 2);
+        assert!(files.contains(&std::ffi::OsString::from("providers.json")));
+        assert!(files.contains(&std::ffi::OsString::from("providers.json.lock")));
     }
 
     #[cfg(unix)]

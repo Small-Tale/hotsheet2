@@ -24,17 +24,20 @@ pub use github::{
 };
 pub use github_attachments::GitHubAttachmentRepository;
 pub use github_credential::{
-    GitHubCredentialError, access_token_from_raw, connection_access_token, credentials_with_sites,
-    store_device_authorization,
+    ConnectionRead, GitHubCredentialError, access_token_from_raw, connection_access_token,
+    credentials_with_sites, store_device_authorization,
 };
 pub use github_device::{
     AppInstallation, DeviceAuthorization, DevicePoll, GitHubDeviceClient, GitHubDeviceError,
     GitHubTokenBundle, RepositoryAccess,
 };
-pub use github_webhook_setup::configure_webhook;
+pub use github_webhook_setup::{WebhookConfiguration, WebhookSetupError, configure_webhook};
 pub use gitlab::{GitLabConfig, GitLabProvider};
 pub use jira::{JiraConfig, JiraProvider};
-pub use source_connect::{CheckoutLink, ConnectMode, ConnectSourceError, connect_source};
+pub use source_connect::{
+    CheckoutLink, ConnectMode, ConnectSourceError, GithubLinkRecovery, RecoverGithubLink,
+    connect_github_source, connect_source, recover_github_link,
+};
 
 use std::sync::Arc;
 

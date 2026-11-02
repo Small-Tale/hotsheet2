@@ -70,6 +70,7 @@ test('routes live server notices into the project inbox and bell (HS2-ZP869N)', 
     await page.getByRole('button', { name: 'Last 24 Hours' }).click();
     await expect(center.getByText('Synthetic build complete')).toBeVisible();
   } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -4775,7 +4776,7 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
       route.fulfill({ contentType: 'text/html', body: '<title>Device</title>' }),
     );
   const starts: unknown[] = [],
-    creates: Array<{ settings: Record<string, unknown> }> = [];
+    creates: Array<{ settings: Record<string, unknown>; infer_site?: boolean }> = [];
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path.endsWith('/github-auth/device')) starts.push(request.postDataJSON());
@@ -4814,6 +4815,7 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect(setup).not.toHaveAttribute('open');
   expect(creates[0].settings).toMatchObject({ api_base: 'https://ghe.test/api/v3' });
+  expect(creates[0].infer_site).toBe(true);
 });
 
 for (const [typed, origin] of [
@@ -36484,7 +36486,7 @@ for (const [endpoint, host] of [
   [undefined, 'github.com'],
 ] as const) {
   test(`HS2-WV6QCR saved account preserves full endpoint ${endpoint ?? 'public default'}`, async ({ page }) => {
-    const creates: Array<{ settings: Record<string, unknown> }> = [],
+    const creates: Array<{ settings: Record<string, unknown>; infer_site?: boolean }> = [],
       signIns: string[] = [],
       popups: Page[] = [];
     page.on('popup', (popup) => popups.push(popup));
@@ -36519,6 +36521,7 @@ for (const [endpoint, host] of [
     expect(creates).toHaveLength(1);
     expect(creates[0].settings.credential).toEqual({ secret: 'wv-saved' });
     expect(creates[0].settings.api_base).toBe(endpoint);
+    expect(creates[0].infer_site).toBe(false);
     expect(signIns).toEqual([]);
     expect(popups).toEqual([]);
   });

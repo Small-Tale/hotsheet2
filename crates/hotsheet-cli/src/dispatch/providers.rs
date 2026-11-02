@@ -28,6 +28,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Providers { json } => cmd_providers(path, json),
         Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
         Cmd::GithubConnect(args) => cmd_github_connect(path, args),
+        Cmd::GithubRecover(args) => cmd_github_recover(path, args),
         Cmd::GithubWebhookSetup {
             connection,
             secret_ref,
@@ -235,14 +236,12 @@ pub(crate) fn cmd_github_webhook_setup(
     connection_id: &str,
     secret_ref: &str,
 ) -> Result<()> {
-    KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
-        .get(secret_ref)
-        .context(
-            "webhook key reference unavailable; run `hotsheet-cli key set <reference>` first",
-        )?;
     let store = FsStore::open(path)?;
     let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
-    let connection = hotsheet_extsync::configure_webhook(&registry, connection_id, secret_ref)?;
+    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    let connection =
+        hotsheet_extsync::configure_webhook(&registry, &keys, connection_id, secret_ref)?
+            .connection;
     println!(
         "Configured GitHub webhook key reference for {}.",
         connection.id
@@ -346,6 +345,8 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
         attachment_folder,
         attachment_branch,
         no_attachments,
+        api_base: reviewed_api_base,
+        public_api,
     } = args;
     let (locator, credential) = (locator.as_str(), credential.as_str());
     let attachments = GitHubAttachmentChange::from_flags(
@@ -386,18 +387,105 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
             hotsheet_ticketing::generate_connection_id(&connections, "github", locator)
         })
     });
-    // HS2-0HE7E4: reject malformed saved origins before either registry write,
-    // retaining inferred-Enterprise-first, then existing-endpoint precedence.
-    let api_base = github_api_base_from_saved_credential(&raw)?.or_else(|| {
-        existing.and_then(|item| {
-            item.settings
-                .get("api_base")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-        })
+    use hotsheet_ticketing::github_endpoint::{Decision, Endpoint, Intent, Observation, State};
+    // Provenance is selected before either registry write. Legacy endpoints whose
+    // fixed value disagrees with a known site require an explicit review flag.
+    let site = github_site_from_saved_credential(&raw)?;
+    let durable_site = keys.list().ok().and_then(|entries| {
+        entries
+            .into_iter()
+            .find(|entry| entry.provider == credential)
+            .and_then(|entry| entry.site)
     });
+    if let (Some(bundle_site), Some(metadata_site)) = (&site, &durable_site) {
+        let normalized = hotsheet_ticketing::github_origin::normalize_web_base(metadata_site)
+            .map_err(anyhow::Error::msg)?;
+        if normalized != *bundle_site {
+            bail!("GitHub sign-in site changed; review the endpoint before reconnecting");
+        }
+    }
+    let inferred_endpoint = site
+        .as_ref()
+        .map(|site| hotsheet_ticketing::github_origin::api_base_for_web_origin(site))
+        .transpose()
+        .map_err(anyhow::Error::msg)?
+        .flatten()
+        .map_or(Endpoint::Public, Endpoint::Url);
+    let state = existing.map(State::load).transpose()?.flatten();
+    let (endpoint, intent) = if let Some(api_base) = reviewed_api_base {
+        let endpoint = Endpoint::Url(api_base);
+        (
+            endpoint.clone(),
+            Intent::Explicit {
+                credential_ref: credential.into(),
+                endpoint,
+            },
+        )
+    } else if public_api {
+        (
+            Endpoint::Public,
+            Intent::Explicit {
+                credential_ref: credential.into(),
+                endpoint: Endpoint::Public,
+            },
+        )
+    } else if let Some(state) = &state {
+        match &state.decision {
+            Decision::Explicit { endpoint, .. } => (
+                endpoint.clone(),
+                Intent::Explicit {
+                    credential_ref: credential.into(),
+                    endpoint: endpoint.clone(),
+                },
+            ),
+            Decision::Inferred {
+                endpoint, origin, ..
+            } => (
+                endpoint.clone(),
+                Intent::InferSite {
+                    credential_ref: credential.into(),
+                    endpoint: endpoint.clone(),
+                    origin: origin.clone(),
+                },
+            ),
+            Decision::LegacyUnknown { endpoint, .. } => {
+                if site.is_some() && *endpoint != inferred_endpoint {
+                    bail!(
+                        "legacy GitHub endpoint needs review; rerun with --public-api or --api-base URL"
+                    );
+                }
+                (endpoint.clone(), Intent::Legacy)
+            }
+        }
+    } else if let Some(existing) = existing {
+        let endpoint = Endpoint::from_record(existing)?;
+        if site.is_some() && endpoint != inferred_endpoint {
+            bail!("legacy GitHub endpoint needs review; rerun with --public-api or --api-base URL");
+        }
+        (endpoint, Intent::Legacy)
+    } else if let Some(origin) = &site {
+        if durable_site.is_some() {
+            (
+                inferred_endpoint.clone(),
+                Intent::InferSite {
+                    credential_ref: credential.into(),
+                    endpoint: inferred_endpoint,
+                    origin: origin.clone(),
+                },
+            )
+        } else {
+            (inferred_endpoint, Intent::Legacy)
+        }
+    } else {
+        (Endpoint::Public, Intent::Legacy)
+    };
+    let observation =
+        durable_site.map_or(Observation::Unavailable, |site| Observation::Available {
+            credential_ref: credential.into(),
+            site,
+        });
     let mut settings = serde_json::json!({"credential":{"secret":credential}});
-    if let Some(api_base) = api_base {
+    if let Endpoint::Url(api_base) = endpoint {
         settings["api_base"] = api_base.into();
     }
     // A reconnect keeps the existing assets repository unless the flags change it.
@@ -437,29 +525,21 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
         settings,
         disabled: existing.is_some_and(|item| item.disabled),
     };
-    let replacing = existing.map(|item| item.id.clone());
-    registry.update(|connections| {
-        let updated = hotsheet_extsync::updated_connections(
-            std::mem::take(connections),
-            connection.clone(),
-            replacing.as_deref(),
-        )?;
-        *connections = updated;
-        Ok(())
-    })?;
-    if let Some(reference) = &checkout {
-        checkout_registry.add_registered_source(
-            &registry,
-            reference,
-            hotsheet_ticketing::checkouts::TicketSource {
-                connection_id: connection_id.clone(),
-                provider: "github".into(),
-                locator: locator.into(),
-            },
-            make_default,
-        )?;
-    }
-    println!("Connected GitHub Issues as '{connection_id}'.");
+    let connection = hotsheet_extsync::connect_github_source(
+        &registry,
+        connection,
+        checkout
+            .as_deref()
+            .map(|reference| hotsheet_extsync::CheckoutLink {
+                registry: &checkout_registry,
+                reference,
+                make_default,
+            }),
+        hotsheet_extsync::ConnectMode::Reconnect,
+        intent,
+        &observation,
+    )?;
+    println!("Connected GitHub Issues as '{}'.", connection.id);
     match attachment_repository {
         Some(repository) => println!(
             "Attachments: {} ({}/ on {})",
@@ -476,6 +556,44 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
     Ok(())
 }
 
+pub(crate) fn cmd_github_recover(path: &Path, args: GithubRecoverArgs) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let home = hotsheet_plugins::hotsheet_home();
+    let providers = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let checkouts =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let action = if args.compensate {
+        hotsheet_extsync::RecoverGithubLink::Compensate
+    } else {
+        hotsheet_extsync::RecoverGithubLink::Resume
+    };
+    match hotsheet_extsync::recover_github_link(&providers, &checkouts, &args.connection, action)? {
+        hotsheet_extsync::GithubLinkRecovery::Finalized(connection) => {
+            println!("Completed GitHub source '{}' checkout link.", connection.id);
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(
+            hotsheet_ticketing::github_endpoint::Compensation::Restored(connection),
+        ) => {
+            println!(
+                "Restored GitHub source '{}' before its pending link.",
+                connection.id
+            );
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(
+            hotsheet_ticketing::github_endpoint::Compensation::Removed,
+        ) => {
+            println!("Removed the unlinked GitHub source '{}'.", args.connection);
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(
+            hotsheet_ticketing::github_endpoint::Compensation::Retained(_),
+        ) => {
+            bail!("GitHub source changed during recovery; inspect it again");
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn github_api_base_from_saved_credential(raw: &str) -> Result<Option<String>> {
     let Some(stored) = serde_json::from_str::<serde_json::Value>(raw)
         .ok()
@@ -493,6 +611,27 @@ fn github_api_base_from_saved_credential(raw: &str) -> Result<Option<String>> {
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("GitHub web base must be an origin string"))?;
     hotsheet_ticketing::github_origin::api_base_for_web_origin(web_base).map_err(anyhow::Error::msg)
+}
+
+fn github_site_from_saved_credential(raw: &str) -> Result<Option<String>> {
+    let Some(stored) = serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .filter(|value| {
+            value.get("kind").and_then(serde_json::Value::as_str) == Some("github_app")
+        })
+    else {
+        return Ok(None);
+    };
+    let Some(web_base) = stored.get("web_base") else {
+        return Ok(None);
+    };
+    let web_base = web_base
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("GitHub web base must be an origin string"))?;
+    Ok(Some(
+        hotsheet_ticketing::github_origin::normalize_web_base(web_base)
+            .map_err(anyhow::Error::msg)?,
+    ))
 }
 
 pub(crate) fn cmd_provider_attach(
@@ -1195,6 +1334,21 @@ pub(crate) struct GithubConnectArgs {
     /// Remove the assets repository; the connection then reports no attachment support.
     #[arg(long)]
     no_attachments: bool,
+    /// Explicitly review and use this complete GitHub API endpoint.
+    #[arg(long, value_name = "URL", conflicts_with = "public_api")]
+    api_base: Option<String>,
+    /// Explicitly review and use the public GitHub API endpoint.
+    #[arg(long, conflicts_with = "api_base")]
+    public_api: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct GithubRecoverArgs {
+    /// Connection id with a saved pending checkout link.
+    connection: String,
+    /// Restore the prior source or remove a new unlinked source instead of resuming.
+    #[arg(long)]
+    compensate: bool,
 }
 
 /// A provider `provider-connect` creates (GitHub has `github-connect`, which also owns its
@@ -1484,7 +1638,8 @@ pub(crate) fn configured_provider(
     if connection_id == git_id {
         return Ok(Arc::new(GitProvider::new(git_id, store)));
     }
-    let connection = ProviderConfigRegistry::new(store.root().join("providers.json"))
+    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let connection = registry
         .load()?
         .into_iter()
         .find(|connection| connection.id == connection_id)
@@ -1495,12 +1650,15 @@ pub(crate) fn configured_provider(
         }
         .into());
     }
+    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    let read = hotsheet_extsync::ConnectionRead::capture(&registry, &connection, &keys)?;
     let token = hotsheet_extsync::connection_access_token(
-        &connection,
-        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+        &read,
         time::OffsetDateTime::now_utc().unix_timestamp(),
     )?;
-    Ok(hotsheet_extsync::live_provider(&connection, token)?)
+    let provider = hotsheet_extsync::live_provider(read.connection(), token)?;
+    read.check()?;
+    Ok(provider)
 }
 
 pub(crate) struct ProviderEditInput {

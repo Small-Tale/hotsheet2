@@ -5722,8 +5722,28 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
             locator: "synthetic/project".into(),
         });
     }
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::new(home.path().join("providers.json"));
+    providers
+        .save(
+            &sources
+                .iter()
+                .filter(|source| source.provider != "git")
+                .map(|source| hotsheet_ticketing::ProviderConnection {
+                    id: source.connection_id.clone(),
+                    provider: source.provider.clone(),
+                    locator: source.locator.clone(),
+                    name: None,
+                    default: false,
+                    disabled: false,
+                    settings: serde_json::json!({}),
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     registry
-        .register_sources(
+        .register_registered_sources(
+            &providers,
             &mixed,
             Some("mixed-alias"),
             None,
@@ -5754,7 +5774,7 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
     let identity = mixed_checkout.permission_identity();
     let git_default = sources[0].connection_id.clone();
     registry
-        .set_default_source("mixed-alias", Some(&git_default))
+        .set_registered_default_source(&providers, "mixed-alias", Some(&git_default))
         .unwrap();
     host.command()
         .current_dir(&empty)
@@ -10237,6 +10257,104 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
 }
 
 #[test]
+fn hs2_6h8zy6_github_recover_resumes_and_compensates_saved_pending_links() {
+    use hotsheet_ticketing::github_endpoint::{
+        Endpoint, EndpointError, EndpointRegistry, Intent, Link, LinkObserver, Observation,
+        Request, State,
+    };
+    struct NoLinks;
+    impl LinkObserver for NoLinks {
+        fn is_linked(&self, _: &str, _: &Link) -> Result<bool, EndpointError> {
+            Ok(false)
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut command = hs(dir.path());
+        command.env("HOTSHEET_HOME", home.path()).args(args);
+        command
+    };
+    run(&["init"]).assert().success();
+    run(&[
+        "checkout",
+        "register",
+        project.path().to_str().unwrap(),
+        "--alias",
+        "linked",
+    ])
+    .assert()
+    .success();
+    let checkouts =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.path().join("checkouts.json"));
+    let checkout = checkouts.resolve("linked").unwrap();
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::new(dir.path().join("providers.json"));
+    for id in ["github-resume", "github-compensate"] {
+        EndpointRegistry::new(&providers)
+            .apply(
+                &Request {
+                    operation_id: hotsheet_model::Ulid::new(),
+                    expected: None,
+                    connection: hotsheet_ticketing::ProviderConnection {
+                        id: id.into(),
+                        provider: "github".into(),
+                        locator: format!("synthetic/{id}"),
+                        name: None,
+                        default: false,
+                        settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+                        disabled: false,
+                    },
+                    intent: Intent::Explicit {
+                        credential_ref: "synthetic-key".into(),
+                        endpoint: Endpoint::Public,
+                    },
+                    link: Some(Link {
+                        checkout_id: checkout.id.clone(),
+                        make_default: false,
+                    }),
+                },
+                &Observation::Unavailable,
+                &NoLinks,
+            )
+            .unwrap();
+    }
+    run(&["github-recover", "github-resume"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Completed GitHub source"));
+    let before = std::fs::read(providers.path()).unwrap();
+    run(&["github-recover", "github-resume"]).assert().success();
+    assert_eq!(std::fs::read(providers.path()).unwrap(), before);
+    assert!(
+        checkouts
+            .resolve("linked")
+            .unwrap()
+            .source("github-resume")
+            .is_some()
+    );
+    let resumed = providers
+        .load()
+        .unwrap()
+        .into_iter()
+        .find(|row| row.id == "github-resume")
+        .unwrap();
+    assert!(!State::load(&resumed).unwrap().unwrap().is_pending());
+    run(&["github-recover", "github-compensate", "--compensate"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Removed the unlinked"));
+    assert!(
+        providers
+            .load()
+            .unwrap()
+            .iter()
+            .all(|row| row.id != "github-compensate")
+    );
+}
+
+#[test]
 fn hs2_0he7e4_github_connect_normalizes_saved_origins_and_preserves_precedence() {
     for (saved, inferred) in [
         (Some(" HTTPS://GITHUB.COM/// "), None),
@@ -10298,18 +10416,53 @@ fn hs2_0he7e4_github_connect_normalizes_saved_origins_and_preserves_precedence()
                 .and_then(serde_json::Value::as_str),
             inferred
         );
-        // Existing endpoint provenance is unknown. Preserve this command's historical
-        // inferred-Enterprise-first order, while public/PAT falls back to this endpoint.
+        // An old unmarked endpoint with a known site requires explicit review;
+        // an environment-only PAT retains legacy-unknown fallback.
         document["connections"][0]["settings"]["api_base"] =
             "https://previous.synthetic.test/api/v3".into();
+        document["connections"][0]["settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("github_endpoint");
         document["connections"][0]["disabled"] = true.into();
         std::fs::write(&providers, serde_json::to_vec(&document).unwrap()).unwrap();
-        run(&connect, &raw).assert().success();
+        if saved.is_some() {
+            let before = std::fs::read(&providers).unwrap();
+            run(&connect, &raw)
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("needs review"));
+            assert_eq!(std::fs::read(&providers).unwrap(), before);
+            let mut reviewed = connect.to_vec();
+            if let Some(api_base) = inferred {
+                reviewed.extend(["--api-base", api_base]);
+            } else {
+                reviewed.push("--public-api");
+            }
+            run(&reviewed, &raw).assert().success();
+        } else {
+            run(&connect, &raw).assert().success();
+        }
         let document: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&providers).unwrap()).unwrap();
+        let endpoint = &document["connections"][0]["settings"];
+        if let Some(api_base) = inferred {
+            assert_eq!(endpoint["api_base"], api_base);
+        } else if saved.is_some() {
+            assert!(endpoint.get("api_base").is_none());
+        } else {
+            assert_eq!(
+                endpoint["api_base"],
+                "https://previous.synthetic.test/api/v3"
+            );
+        }
         assert_eq!(
-            document["connections"][0]["settings"]["api_base"],
-            inferred.unwrap_or("https://previous.synthetic.test/api/v3")
+            endpoint["github_endpoint"]["decision"]["kind"],
+            if saved.is_some() {
+                "explicit"
+            } else {
+                "legacy_unknown"
+            }
         );
         assert_eq!(document["connections"][0]["disabled"], true);
         let checkouts = home.path().join("checkouts.json");

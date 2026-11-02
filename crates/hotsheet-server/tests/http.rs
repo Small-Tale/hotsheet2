@@ -8012,6 +8012,41 @@ async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output(
     assert!(seen, "the working-tree change was not announced within 10s");
 }
 
+/// HS2-6H8ZY6: a provider refusal must happen before Git store hosting or maintenance.
+#[tokio::test]
+async fn hs2_6h8zy6_refused_project_open_does_not_host_its_git_store() {
+    let (_primary, state) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("synthetic-project");
+    let store_path = workspace.path().join("synthetic.hs2");
+    std::fs::create_dir(&project).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("SYN")).unwrap();
+    FsStore::open(&store_path).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let checkouts = registry.path().join("checkouts.json");
+    let app = app(state.with_checkout_registry(&checkouts));
+    let request = serde_json::json!({
+        "root": project,
+        "stores": [store_path],
+        "sources": [{"connection_id":"missing-github", "provider":"github", "locator":"synthetic/repo"}]
+    });
+    let response = app
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&request.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(!checkouts.exists());
+    let hosted = body_json(app.oneshot(authed("GET", "/stores", None)).await.unwrap()).await;
+    assert!(
+        !hosted
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["prefix"] == "SYN")
+    );
+}
+
 /// A project's store is hosted while some client has it open and unhosted once the last one
 /// closes it, unless live work still needs it; a later request hosts it again (HS2-ARJ9J1).
 #[tokio::test]
@@ -10955,11 +10990,22 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
         format!("@{external_project}/github-target:42")
     );
 
-    // Historical references keep resolving after an explicit source rename and are
-    // normalized to the source's current id when a new duplicate relationship is saved.
-    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
-        .rename_source(external_project, "github-target", "github-renamed")
+    // Historical GitHub aliases still resolve, although an ordinary checkout
+    // edit can no longer rename a live GitHub connection. Seed the retained
+    // post-migration shape without invoking that forbidden public writer.
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+    let entry = saved["checkouts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == external_project)
         .unwrap();
+    entry["sources"][0]["connection_id"] = serde_json::json!("github-renamed");
+    entry["default_source"] = serde_json::json!("github-renamed");
+    saved["sourceAliases"][external_project] =
+        serde_json::json!({"github-target":"github-renamed"});
+    std::fs::write(&registry_path, serde_json::to_vec(&saved).unwrap()).unwrap();
     let historical_reference = app
         .clone()
         .oneshot(authed(
@@ -13181,17 +13227,21 @@ async fn checkout_analytics_reports_linked_store_and_missing_checkout() {
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::CREATED);
-    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
-        .register_sources(
-            &checkout,
-            None,
-            None,
-            vec![source.clone(), external],
-            Some(source.connection_id),
-        )
-        .unwrap();
     let project = body_json(opened).await;
     let id = project["checkout"]["id"].as_str().unwrap();
+    // Analytics reads a retained historical link; it does not create new provider
+    // membership. Seed that persisted shape without the public raw writer.
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+    let entry = saved["checkouts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == id)
+        .unwrap();
+    entry["sources"] = serde_json::json!([source.clone(), external]);
+    entry["default_source"] = serde_json::json!(source.connection_id);
+    std::fs::write(&registry_path, serde_json::to_vec(&saved).unwrap()).unwrap();
     let response = app
         .clone()
         .oneshot(authed("GET", &format!("/checkouts/{id}/analytics"), None))
@@ -21964,21 +22014,24 @@ async fn checkout_detail_fetches_each_provider_ticket_once_including_source_alia
     let path = registry_dir.path().join("checkouts.json");
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&path);
     let registered = registry
-        .register_sources(
-            checkout.path(),
-            Some("remote"),
-            None,
-            vec![hotsheet_ticketing::checkouts::TicketSource {
-                connection_id: "github-old".into(),
-                provider: "github".into(),
-                locator: "acme/repo".into(),
-            }],
-            Some("github-old".into()),
-        )
+        .register_sources(checkout.path(), Some("remote"), None, vec![], None)
         .unwrap();
-    registry
-        .rename_source(&registered.id, "github-old", "github-main")
+    // A historical GitHub alias may remain after a prior migration even though
+    // ordinary checkout edits cannot rename a live GitHub connection now.
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let entry = saved["checkouts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == registered.id)
         .unwrap();
+    entry["sources"] = serde_json::json!([{
+        "connection_id": "github-main", "provider": "github", "locator": "acme/repo"
+    }]);
+    entry["default_source"] = serde_json::json!("github-main");
+    saved["sourceAliases"][&registered.id] = serde_json::json!({"github-old":"github-main"});
+    std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
     let transport = Arc::new(FakeGitHub {
         responses: Mutex::new(
             (0..3)
@@ -22291,11 +22344,13 @@ async fn a_rate_limited_github_source_does_not_hide_local_tickets_and_recovers()
         .await
         .unwrap();
     assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+    let mismatch_body = body_json(mismatched).await;
     assert!(
-        body_json(mismatched).await["error"]
+        mismatch_body["error"]
             .as_str()
             .unwrap()
-            .contains("does not match its connection's 'acme/repo'")
+            .contains("locator does not match its registered connection"),
+        "{mismatch_body}"
     );
     assert_eq!(
         router
@@ -22949,7 +23004,8 @@ async fn creating_a_connection_without_an_id_generates_a_unique_readable_one() {
     let app = app(st);
     let body = serde_json::json!({
         "provider":"github","locator":"Small-Tale/hotsheet2","name":"GitHub Issues",
-        "default":false,"settings":{"credential":{"secret":"github-app-x"}}
+        "default":false,"explicit_public_api":true,
+        "settings":{"credential":{"secret":"github-app-x"}}
     })
     .to_string();
     let mut ids = Vec::new();
@@ -25332,6 +25388,7 @@ async fn reopening_a_project_after_server_restart_keeps_its_github_source() {
             Some(
                 &serde_json::json!({
                     "provider": "github", "locator": "acme/app", "name": "GitHub Issues",
+                    "explicit_public_api": true,
                     "settings": {"credential": {"secret": "github-app-test"}},
                     "make_default": true
                 })
@@ -26944,6 +27001,25 @@ async fn hs2_0he7e4_invalid_saved_site_rejects_both_creates_without_writes_and_c
         explicit["settings"]["api_base"],
         "https://explicit.synthetic.test/api/v3"
     );
+    assert_eq!(
+        explicit["settings"]["github_endpoint"]["decision"]["kind"],
+        "explicit"
+    );
+    let (status, public) = call(
+        "/provider-connections",
+        serde_json::json!({
+            "id":"explicit-public", "provider":"github", "locator":"synthetic/public",
+            "explicit_public_api":true,
+            "settings":{"credential":{"secret":"github-app-origin"}}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{public}");
+    assert!(public["settings"].get("api_base").is_none());
+    assert_eq!(
+        public["settings"]["github_endpoint"]["decision"]["kind"],
+        "explicit"
+    );
     // Recovery updates only the fixture metadata; later source creation is not poisoned.
     std::fs::write(&keys, serde_json::json!({"github-app-origin":{"provider":"github-app-origin","env":"HOTSHEET_API_KEY_GITHUB_APP_ORIGIN","site":" HTTPS://GITHUB.COM:443/// "}}).to_string()).unwrap();
     let (status, created) = call("/checkouts/synthetic/provider-connections", serde_json::json!({"provider":"github","locator":"synthetic/refill","settings":{"credential":{"secret":"github-app-origin"}}})).await;
@@ -26952,9 +27028,198 @@ async fn hs2_0he7e4_invalid_saved_site_rejects_both_creates_without_writes_and_c
         created["settings"]["api_base"],
         "https://github.com:443/api/v3"
     );
+    assert_eq!(
+        created["settings"]["github_endpoint"]["decision"]["kind"],
+        "inferred"
+    );
+    assert_eq!(
+        created["settings"]["github_endpoint"]["operation"]["state"],
+        "completed"
+    );
+    let (status, supplied_inference) = call(
+        "/provider-connections",
+        serde_json::json!({
+            "id":"inferred-supplied", "provider":"github", "locator":"synthetic/supplied",
+            "infer_site":true,
+            "settings":{"api_base":"https://github.com:443/api/v3",
+                        "credential":{"secret":"github-app-origin"}}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{supplied_inference}");
+    assert_eq!(
+        supplied_inference["settings"]["github_endpoint"]["decision"]["kind"],
+        "inferred"
+    );
     let checkout: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&checkouts).unwrap()).unwrap();
     assert!(checkout.to_string().contains("synthetic/refill"));
+}
+
+#[tokio::test]
+async fn hs2_6h8zy6_http_recovers_the_saved_pending_link_and_repeats() {
+    use hotsheet_ticketing::github_endpoint::{
+        Endpoint, EndpointError, EndpointRegistry, Intent, Link, LinkObserver, Observation,
+        Request, State,
+    };
+    struct NoLinks;
+    impl LinkObserver for NoLinks {
+        fn is_linked(&self, _: &str, _: &Link) -> Result<bool, EndpointError> {
+            Ok(false)
+        }
+    }
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let (store_dir, state) = state();
+    let checkout_path = home.path().join("checkouts.json");
+    let checkouts = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&checkout_path);
+    let checkout = checkouts
+        .register(
+            project.path(),
+            Some("synthetic"),
+            None,
+            vec![store_dir.path().into()],
+        )
+        .unwrap();
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::new(store_dir.path().join("providers.json"));
+    let connection = hotsheet_ticketing::ProviderConnection {
+        id: "github-pending".into(),
+        provider: "github".into(),
+        locator: "synthetic/project".into(),
+        name: None,
+        default: false,
+        settings: serde_json::json!({"credential":{"secret":"synthetic-key"}}),
+        disabled: false,
+    };
+    EndpointRegistry::new(&providers)
+        .apply(
+            &Request {
+                operation_id: hotsheet_model::Ulid::new(),
+                expected: None,
+                connection,
+                intent: Intent::Explicit {
+                    credential_ref: "synthetic-key".into(),
+                    endpoint: Endpoint::Public,
+                },
+                link: Some(Link {
+                    checkout_id: checkout.id.clone(),
+                    make_default: false,
+                }),
+            },
+            &Observation::Unavailable,
+            &NoLinks,
+        )
+        .unwrap();
+    let app = app(state.with_checkout_registry(&checkout_path));
+    let recover = || {
+        app.clone().oneshot(authed(
+            "POST",
+            "/provider-connections/github-pending/recover",
+            Some(r#"{"action":"resume"}"#),
+        ))
+    };
+    let first = recover().await.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let completed = body_json(first).await;
+    assert_eq!(completed["status"], "finalized");
+    assert_eq!(completed["connection"]["id"], "github-pending");
+    let saved = providers.load().unwrap().remove(0);
+    assert!(!State::load(&saved).unwrap().unwrap().is_pending());
+    assert!(
+        checkouts
+            .resolve(&checkout.id)
+            .unwrap()
+            .source("github-pending")
+            .is_some()
+    );
+    let before = std::fs::read(providers.path()).unwrap();
+    let repeated = recover().await.unwrap();
+    assert_eq!(repeated.status(), StatusCode::OK);
+    assert_eq!(body_json(repeated).await, completed);
+    assert_eq!(std::fs::read(providers.path()).unwrap(), before);
+}
+
+#[tokio::test]
+async fn hs2_6h8zy6_http_endpoint_review_requires_exact_snapshot_and_explicit_choice() {
+    let home = tempfile::tempdir().unwrap();
+    let (store_dir, state) = state();
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::new(store_dir.path().join("providers.json"));
+    providers
+        .save(&[hotsheet_ticketing::ProviderConnection {
+            id: "github-legacy".into(),
+            provider: "github".into(),
+            locator: "synthetic/project".into(),
+            name: None,
+            default: false,
+            settings: serde_json::json!({
+                "api_base":"HTTPS://GITHUB.COM/api/v3",
+                "credential":{"secret":"synthetic-key"}
+            }),
+            disabled: false,
+        }])
+        .unwrap();
+    let checkout_path = home.path().join("checkouts.json");
+    let app = app(state
+        .with_machine_home(home.path())
+        .with_checkout_registry(&checkout_path));
+    let uri = "/provider-connections/github-legacy";
+    let review = body_json(
+        app.clone()
+            .oneshot(authed("GET", &format!("{uri}/endpoint-review"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(review["decision"].is_null());
+    assert_eq!(review["expected"]["incarnation"], serde_json::Value::Null);
+    let mut candidate = review["connection"].clone();
+    candidate["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("api_base");
+    let before = std::fs::read(providers.path()).unwrap();
+    let raw = app
+        .clone()
+        .oneshot(authed("PATCH", uri, Some(&candidate.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(raw.status(), StatusCode::CONFLICT);
+    assert_eq!(std::fs::read(providers.path()).unwrap(), before);
+    candidate["review_endpoint"] = true.into();
+    let missing = app
+        .clone()
+        .oneshot(authed("PATCH", uri, Some(&candidate.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(std::fs::read(providers.path()).unwrap(), before);
+    candidate["endpoint_expected"] = review["expected"].clone();
+    // Endpoint-only review has no checkout locator update. A malformed unrelated
+    // checkout registry must not turn a committed endpoint into a failed response.
+    std::fs::write(&checkout_path, b"{invalid").unwrap();
+    let reviewed = app
+        .clone()
+        .oneshot(authed("PATCH", uri, Some(&candidate.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(reviewed.status(), StatusCode::OK);
+    assert_eq!(std::fs::read(&checkout_path).unwrap(), b"{invalid");
+    let saved = body_json(reviewed).await;
+    assert!(saved["settings"].get("api_base").is_none());
+    assert_eq!(
+        saved["settings"]["github_endpoint"]["decision"]["kind"],
+        "explicit"
+    );
+    let current = std::fs::read(providers.path()).unwrap();
+    candidate["settings"]["api_base"] = "https://other.synthetic.test/API".into();
+    let stale = app
+        .oneshot(authed("PATCH", uri, Some(&candidate.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    assert_eq!(std::fs::read(providers.path()).unwrap(), current);
 }
 
 #[tokio::test]

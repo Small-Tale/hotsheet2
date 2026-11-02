@@ -11,7 +11,8 @@ mod dispatch;
 use dispatch::coordination::CoordinationArgs;
 use dispatch::notify::NotifyCmd;
 use dispatch::providers::{
-    AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
+    AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, GithubRecoverArgs, KeyCmd,
+    ProviderConnectArgs,
 };
 use dispatch::remotes::RemoteArgs;
 use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
@@ -158,6 +159,8 @@ enum Cmd {
     },
     /// Create or update a GitHub Issues connection in this ticket store, safely repeatable.
     GithubConnect(GithubConnectArgs),
+    /// Resume or conditionally compensate a saved GitHub source awaiting its checkout link.
+    GithubRecover(GithubRecoverArgs),
     /// Configure a GitHub webhook key and print exact external callback steps.
     GithubWebhookSetup {
         connection: String,

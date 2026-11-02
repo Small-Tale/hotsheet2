@@ -12,7 +12,9 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::file_lock::FileLock;
-use crate::provider::ProviderConfigRegistry;
+use crate::provider::{
+    ProviderConfigRegistry, ProviderConnection, ProviderError, require_ordinary_target,
+};
 use crate::store::{FsStore, STORE_METADATA_FILE, StoreError};
 
 pub const DEFAULT_SOURCE_COLOR: &str = "#6b7280";
@@ -183,6 +185,8 @@ impl Default for RegistryFile {
 
 #[derive(Debug, Error)]
 pub enum CheckoutError {
+    #[error(transparent)]
+    Endpoint(#[from] crate::github_endpoint::EndpointError),
     #[error("checkout path does not exist: {0}")]
     Missing(String),
     #[error("no checkout matches {0}")]
@@ -199,6 +203,15 @@ pub enum CheckoutError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Store(#[from] StoreError),
+}
+
+impl From<ProviderError> for CheckoutError {
+    fn from(error: ProviderError) -> Self {
+        match error {
+            ProviderError::Endpoint(error) => Self::Endpoint(error),
+            other => Self::Invalid(other.to_string()),
+        }
+    }
 }
 
 fn git_store_instance_id(source: &TicketSource) -> Result<Option<String>, CheckoutError> {
@@ -327,24 +340,629 @@ pub(crate) struct LockedCheckoutRegistry<'a> {
     _lock: FileLock,
 }
 
-impl LockedCheckoutRegistry<'_> {
+/// HS2-6H8ZY6: strict metadata prepared before entering the provider owner.
+/// Publishing an external unlink never reopens Git stores or repairs the registry.
+pub(crate) struct PreparedCheckoutLinks<'a> {
+    locked: LockedCheckoutRegistry<'a>,
+    file: RegistryFile,
+    changed: bool,
+}
+
+impl PreparedCheckoutLinks<'_> {
+    pub(crate) fn list(&self) -> &[Checkout] {
+        &self.file.checkouts
+    }
+
     pub(crate) fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
-        self.registry.resolve_locked(reference)
+        resolve_checkout(self.file.checkouts.clone(), reference)
     }
 
-    pub(crate) fn list(&self) -> Result<Vec<Checkout>, CheckoutError> {
-        let mut entries = self.registry.read_locked()?.checkouts;
-        entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
-        Ok(entries)
+    fn exact(&self, checkout_id: &str) -> Result<&Checkout, CheckoutError> {
+        self.file
+            .checkouts
+            .iter()
+            .find(|entry| entry.id == checkout_id)
+            .ok_or_else(|| CheckoutError::NotFound(checkout_id.into()))
     }
 
-    pub(crate) fn remove_source(
+    /// HS2-6H8ZY6: resolve the complete normalized candidate before taking any
+    /// provider owner. This does not initialize stores or publish either file.
+    fn registration(
         &self,
-        reference: &str,
-        connection_id: &str,
-    ) -> Result<Checkout, CheckoutError> {
-        self.registry.remove_source_locked(reference, connection_id)
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        mut sources: Vec<TicketSource>,
+        mut default_source: Option<String>,
+        explicit_clear: bool,
+    ) -> Result<(Option<Checkout>, Checkout), CheckoutError> {
+        let root = root
+            .canonicalize()
+            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+        let before = self
+            .file
+            .checkouts
+            .iter()
+            .find(|row| Path::new(&row.root) == root)
+            .cloned();
+        unique_source_ids(&sources)?;
+        for source in &mut sources {
+            if source.provider == "git" {
+                let normalized = TicketSource::git(&source.locator);
+                if default_source.as_deref() == Some(&source.connection_id) {
+                    default_source = Some(normalized.connection_id.clone());
+                }
+                *source = normalized;
+            }
+        }
+        unique_source_ids(&sources)?;
+        sources.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+        sources.dedup();
+        if let Some(before) = &before {
+            unique_source_ids(&before.sources)?;
+            for source in &sources {
+                if before
+                    .source(&source.connection_id)
+                    .is_some_and(|old| old.provider != source.provider)
+                {
+                    return Err(CheckoutError::Invalid(
+                        "ticket source id is linked to another provider kind".into(),
+                    ));
+                }
+            }
+        }
+        if let Some(default) = &default_source
+            && !sources
+                .iter()
+                .any(|source| &source.connection_id == default)
+        {
+            return Err(CheckoutError::Invalid(format!(
+                "default source '{default}' is not associated with this checkout"
+            )));
+        }
+        let retained = |id: &String| sources.iter().any(|source| &source.connection_id == id);
+        let mut after = Checkout {
+            id: before
+                .as_ref()
+                .map(|row| row.id.clone())
+                .unwrap_or(checkout_id(&root)?),
+            root: root.to_string_lossy().into_owned(),
+            alias: alias.map(str::to_owned).unwrap_or_else(|| {
+                root.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("checkout")
+                    .to_owned()
+            }),
+            repository,
+            stores: sources
+                .iter()
+                .filter(|source| source.provider == "git")
+                .map(|source| source.locator.clone())
+                .collect(),
+            store_instance_ids: before
+                .as_ref()
+                .map(|row| {
+                    row.store_instance_ids
+                        .iter()
+                        .filter(|(id, _)| retained(id))
+                        .map(|(id, value)| (id.clone(), value.clone()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            unverified_store_sources: before
+                .as_ref()
+                .map(|row| {
+                    row.unverified_store_sources
+                        .iter()
+                        .filter(|(id, _)| retained(id))
+                        .map(|(id, value)| (id.clone(), value.clone()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            source_colors: before
+                .as_ref()
+                .map(|row| {
+                    row.source_colors
+                        .iter()
+                        .filter(|(id, _)| retained(id))
+                        .map(|(id, value)| (id.clone(), value.clone()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            default_source_cleared: default_source.is_none()
+                && (explicit_clear
+                    || before
+                        .as_ref()
+                        .is_some_and(|row| row.default_source_cleared)),
+            default_source,
+            permission_vault_registered: before
+                .as_ref()
+                .is_some_and(|row| row.permission_vault_registered),
+            sources,
+        };
+        after.stores.sort();
+        // Legacy link/default observations happen here, never inside the provider callback.
+        migrate_checkout(&mut after);
+        unique_source_ids(&after.sources)?;
+        Ok((before, after))
     }
+
+    fn finish_registration(
+        &mut self,
+        before: Option<&Checkout>,
+        mut after: Checkout,
+        providers: Option<&ProviderConfigRegistry>,
+        explicit_default: Option<&str>,
+    ) -> Result<Checkout, CheckoutError> {
+        let targets = external_registration_targets(before, &after, explicit_default)?;
+        if providers.is_none() && !targets.is_empty() {
+            return Err(source_context_required());
+        }
+        let mixed = after
+            .sources
+            .iter()
+            .chain(before.into_iter().flat_map(|row| &row.sources))
+            .any(|source| source.provider != "git");
+        for source in after
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+        {
+            let previous = before.and_then(|row| row.source(&source.connection_id));
+            let affected = previous != Some(source)
+                || explicit_default == Some(source.connection_id.as_str())
+                || (before.and_then(|row| row.default_source.as_deref())
+                    != after.default_source.as_deref()
+                    && after.default_source.as_deref() == Some(source.connection_id.as_str()));
+            if mixed && !affected {
+                continue;
+            }
+            if mixed {
+                if let Some(before) = before.filter(|_| previous.is_some()) {
+                    validate_linked_store_identity(before, source)?;
+                } else {
+                    let instance = FsStore::open_without_maintenance(&source.locator)?.metadata()?.instance_id
+                        .ok_or_else(|| CheckoutError::Invalid("new Git sources in a mixed checkout require an established store identity; run headless init/bootstrap setup first".into()))?;
+                    after
+                        .store_instance_ids
+                        .insert(source.connection_id.clone(), instance);
+                }
+            } else {
+                // Pure Git/bootstrap remains outside provider ownership. Retain the
+                // existing unverified-link rule; never silently adopt that store.
+                let prior =
+                    before.and_then(|row| row.store_instance_ids.get(&source.connection_id));
+                let unverified = previous.is_some()
+                    && prior.is_none()
+                    && !self
+                        .file
+                        .link_derived_sources
+                        .contains(&(after.id.clone(), source.connection_id.clone()));
+                let found = if unverified {
+                    None
+                } else {
+                    git_store_instance_id(source).ok().flatten()
+                };
+                if let (Some(prior), Some(found)) = (prior, found.as_ref())
+                    && prior != found
+                {
+                    return Err(CheckoutError::Invalid(
+                        "ticket store has a different identity than the linked source".into(),
+                    ));
+                }
+                if let Some(instance) = found.or_else(|| prior.cloned()) {
+                    after
+                        .store_instance_ids
+                        .insert(source.connection_id.clone(), instance);
+                }
+            }
+        }
+        if targets.is_empty() {
+            self.install_registration(&after);
+            self.publish()?;
+            return Ok(after);
+        }
+        let providers = providers.ok_or_else(source_context_required)?;
+        providers.update_domain(|records| {
+            // Resolve every kind/membership/locator before any endpoint predicate.
+            let mut actual = Vec::new();
+            for target in &targets {
+                if after.source(&target.connection_id).is_some() {
+                    actual.push(registered_source(records, target)?);
+                } else if let Some(row) = records.iter().find(|row| row.id == target.connection_id)
+                {
+                    if row.provider != target.provider {
+                        return Err(CheckoutError::Invalid(
+                            "removed source belongs to another provider kind".into(),
+                        ));
+                    }
+                    actual.push(row);
+                }
+            }
+            for row in actual {
+                require_ordinary_target(row)?;
+            }
+            self.install_registration(&after);
+            self.publish()?;
+            Ok(after)
+        })
+    }
+
+    fn install_registration(&mut self, after: &Checkout) {
+        if let Some(current) = self
+            .file
+            .checkouts
+            .iter_mut()
+            .find(|row| row.id == after.id)
+        {
+            self.changed |= current != after;
+            *current = after.clone();
+        } else {
+            self.file.checkouts.push(after.clone());
+            self.changed = true;
+        }
+    }
+
+    fn external_eligibility(
+        &self,
+        checkout_id: &str,
+        source: &TicketSource,
+    ) -> Result<(), CheckoutError> {
+        if source.provider == "git" {
+            return Err(CheckoutError::Invalid(
+                "Git sources use the linked-store workflow".into(),
+            ));
+        }
+        for existing in self
+            .exact(checkout_id)?
+            .sources
+            .iter()
+            .filter(|item| item.connection_id == source.connection_id)
+        {
+            if existing.provider == "git" || existing.provider != source.provider {
+                return Err(CheckoutError::Invalid(
+                    "ticket source id is already linked to another provider kind".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Pure metadata only. The hint is computed before provider entry using the
+    /// existing legacy-default rule; no path discovery or Git work occurs here.
+    fn upsert_external(
+        &mut self,
+        checkout_id: &str,
+        source: TicketSource,
+        make_default: bool,
+        default_hint: Option<String>,
+    ) -> Result<Checkout, CheckoutError> {
+        self.external_eligibility(checkout_id, &source)?;
+        let entry = self
+            .file
+            .checkouts
+            .iter_mut()
+            .find(|entry| entry.id == checkout_id)
+            .ok_or_else(|| CheckoutError::NotFound(checkout_id.into()))?;
+        let before = entry.clone();
+        let id = source.connection_id.clone();
+        entry.sources.retain(|item| item.connection_id != id);
+        entry.sources.push(source);
+        entry
+            .sources
+            .sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+        if make_default {
+            entry.default_source = Some(id);
+            entry.default_source_cleared = false;
+        } else if entry.default_source.is_none() && !entry.default_source_cleared {
+            entry.default_source = default_hint;
+        }
+        self.changed |= *entry != before;
+        Ok(entry.clone())
+    }
+
+    fn set_default(
+        &mut self,
+        checkout_id: &str,
+        source: Option<&str>,
+    ) -> Result<Checkout, CheckoutError> {
+        let entry = self
+            .file
+            .checkouts
+            .iter_mut()
+            .find(|entry| entry.id == checkout_id)
+            .ok_or_else(|| CheckoutError::NotFound(checkout_id.into()))?;
+        if let Some(id) = source
+            && entry.source(id).is_none()
+        {
+            return Err(CheckoutError::Invalid(format!(
+                "default source '{id}' is not associated with checkout {checkout_id}"
+            )));
+        }
+        let before = entry.clone();
+        entry.default_source = source.map(str::to_owned);
+        entry.default_source_cleared = source.is_none();
+        self.changed |= *entry != before;
+        Ok(entry.clone())
+    }
+
+    fn update_external_locator(
+        &mut self,
+        connection: &ProviderConnection,
+    ) -> Result<Vec<String>, CheckoutError> {
+        let mut changed = Vec::new();
+        for entry in &mut self.file.checkouts {
+            let mut updated = false;
+            for source in &mut entry.sources {
+                if source.connection_id != connection.id {
+                    continue;
+                }
+                if source.provider == "git" || source.provider != connection.provider {
+                    return Err(CheckoutError::Invalid(
+                        "ticket source id is linked to another provider kind".into(),
+                    ));
+                }
+                if source.locator != connection.locator {
+                    source.locator = connection.locator.clone();
+                    updated = true;
+                }
+            }
+            if updated {
+                changed.push(entry.id.clone());
+            }
+        }
+        self.changed |= !changed.is_empty();
+        Ok(changed)
+    }
+
+    pub(crate) fn unlink_external(&mut self, checkout_id: &str, connection_id: &str) -> bool {
+        let Some(checkout) = self
+            .file
+            .checkouts
+            .iter_mut()
+            .find(|entry| entry.id == checkout_id)
+        else {
+            return false;
+        };
+        let before = checkout.sources.len();
+        checkout
+            .sources
+            .retain(|source| source.connection_id != connection_id || source.provider == "git");
+        if checkout.sources.len() == before {
+            return false;
+        }
+        // A colliding retained Git member must keep its maps and default too.
+        if checkout.source(connection_id).is_none() {
+            checkout.source_colors.remove(connection_id);
+            checkout.unverified_store_sources.remove(connection_id);
+            if checkout.default_source.as_deref() == Some(connection_id) {
+                checkout.default_source = None;
+            }
+        }
+        self.changed = true;
+        true
+    }
+
+    pub(crate) fn publish(&mut self) -> Result<(), CheckoutError> {
+        if self.changed {
+            self.locked.registry.write_locked(&self.file)?;
+            self.changed = false;
+        }
+        Ok(())
+    }
+
+    /// Git detach can infer an external default. Prepare that result before
+    /// entering its actual provider owner instead of treating it as Git-only.
+    pub(crate) fn unlink_git(
+        &mut self,
+        providers: &ProviderConfigRegistry,
+        checkout_id: &str,
+        connection_id: &str,
+    ) -> Result<(), CheckoutError> {
+        let before = self.exact(checkout_id)?.clone();
+        let mut sources = before.sources.clone();
+        sources.retain(|source| source.connection_id != connection_id);
+        let default = before
+            .default_source
+            .clone()
+            .filter(|id| id != connection_id);
+        let (_, after) = self.registration(
+            Path::new(&before.root),
+            Some(&before.alias),
+            before.repository.clone(),
+            sources,
+            default,
+            false,
+        )?;
+        self.finish_registration(Some(&before), after, Some(providers), None)?;
+        Ok(())
+    }
+}
+
+fn registered_source<'a>(
+    records: &'a [ProviderConnection],
+    source: &TicketSource,
+) -> Result<&'a ProviderConnection, CheckoutError> {
+    let actual = records
+        .iter()
+        .find(|row| row.id == source.connection_id)
+        .ok_or_else(|| {
+            CheckoutError::Invalid(format!(
+                "ticket source '{}' is not registered in providers.json",
+                source.connection_id
+            ))
+        })?;
+    if actual.provider != source.provider {
+        return Err(CheckoutError::Invalid(
+            "ticket source id belongs to another provider kind".into(),
+        ));
+    }
+    if !actual.locator.eq_ignore_ascii_case(&source.locator) {
+        return Err(CheckoutError::Invalid(
+            "ticket source locator does not match its registered connection".into(),
+        ));
+    }
+    Ok(actual)
+}
+
+fn exact_connection(
+    actual: &ProviderConnection,
+    expected: &ProviderConnection,
+) -> Result<(), CheckoutError> {
+    if actual != expected {
+        return Err(if actual.provider == "github" {
+            crate::github_endpoint::EndpointError::Conflict.into()
+        } else {
+            CheckoutError::Invalid(
+                "provider connection changed before its project links could be updated".into(),
+            )
+        });
+    }
+    Ok(())
+}
+
+fn displaced_external(
+    before: &Checkout,
+    after: &Checkout,
+) -> Result<Option<TicketSource>, CheckoutError> {
+    if before.default_source == after.default_source {
+        return Ok(None);
+    }
+    let source = before
+        .default_source
+        .as_deref()
+        .map(|id| linked_source(before, id))
+        .transpose()?
+        .flatten();
+    Ok(source.filter(|source| source.provider != "git").cloned())
+}
+
+fn linked_source<'a>(
+    checkout: &'a Checkout,
+    id: &str,
+) -> Result<Option<&'a TicketSource>, CheckoutError> {
+    let source = checkout.source(id);
+    if let Some(source) = source {
+        if checkout
+            .sources
+            .iter()
+            .any(|other| other.connection_id == id && other.provider != source.provider)
+        {
+            return Err(CheckoutError::Invalid(
+                "ticket source id is linked to conflicting provider kinds".into(),
+            ));
+        }
+    }
+    Ok(source)
+}
+
+/// Resolve all eligibility before checking any endpoint authority. An absent old
+/// default can be cleared; it grants no authority and must not strand cleanup.
+fn ordinary_link_targets(
+    records: &[ProviderConnection],
+    selected: Option<&ProviderConnection>,
+    displaced: Option<&TicketSource>,
+    expected: Option<&ProviderConnection>,
+) -> Result<(), CheckoutError> {
+    let mut targets = BTreeMap::new();
+    if let Some(selected) = selected {
+        targets.insert(selected.id.as_str(), selected);
+    }
+    if let Some(old) = displaced {
+        if let Some(actual) = records.iter().find(|row| row.id == old.connection_id) {
+            if actual.provider != old.provider {
+                return Err(CheckoutError::Invalid(
+                    "previous default source belongs to another provider kind".into(),
+                ));
+            }
+            targets.insert(actual.id.as_str(), actual);
+        }
+    }
+    if let Some(expected) = expected {
+        let actual = selected
+            .ok_or_else(|| CheckoutError::Invalid("exact provider candidate is missing".into()))?;
+        exact_connection(actual, expected)?;
+    }
+    for actual in targets.values() {
+        require_ordinary_target(actual)?;
+    }
+    Ok(())
+}
+
+fn source_context_required() -> CheckoutError {
+    CheckoutError::Invalid(
+        "external source changes require the provider-aware checkout workflow".into(),
+    )
+}
+
+fn unique_source_ids(sources: &[TicketSource]) -> Result<(), CheckoutError> {
+    let mut seen = BTreeMap::new();
+    for source in sources {
+        if let Some(previous) = seen.insert(source.connection_id.as_str(), source)
+            && previous != source
+        {
+            return Err(CheckoutError::Invalid(
+                "ticket source id has conflicting routing metadata".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Routing deltas, not retained membership, determine ordinary authority. Default
+/// inference is resolved before this comparison, outside the provider owner.
+fn external_registration_targets(
+    before: Option<&Checkout>,
+    after: &Checkout,
+    explicit_default: Option<&str>,
+) -> Result<Vec<TicketSource>, CheckoutError> {
+    let mut targets = BTreeMap::new();
+    if let Some(before) = before {
+        unique_source_ids(&before.sources)?;
+        for old in before
+            .sources
+            .iter()
+            .filter(|source| source.provider != "git")
+        {
+            if after.source(&old.connection_id) != Some(old) {
+                targets.insert(old.connection_id.clone(), old.clone());
+            }
+        }
+    }
+    unique_source_ids(&after.sources)?;
+    for source in after
+        .sources
+        .iter()
+        .filter(|source| source.provider != "git")
+    {
+        if before.and_then(|row| row.source(&source.connection_id)) != Some(source) {
+            targets.insert(source.connection_id.clone(), source.clone());
+        }
+    }
+    let before_default = before.and_then(|row| row.default_source.as_deref());
+    if before_default != after.default_source.as_deref() {
+        if let Some(old) = before
+            .and_then(|row| before_default.and_then(|id| row.source(id)))
+            .filter(|source| source.provider != "git")
+        {
+            targets.insert(old.connection_id.clone(), old.clone());
+        }
+        if let Some(selected) = after
+            .default_source
+            .as_deref()
+            .and_then(|id| after.source(id))
+            .filter(|source| source.provider != "git")
+        {
+            targets.insert(selected.connection_id.clone(), selected.clone());
+        }
+    }
+    if let Some(selected) = explicit_default
+        .and_then(|id| after.source(id))
+        .filter(|source| source.provider != "git")
+    {
+        targets.insert(selected.connection_id.clone(), selected.clone());
+    }
+    Ok(targets.into_values().collect())
 }
 
 impl CheckoutRegistry {
@@ -381,6 +999,18 @@ impl CheckoutRegistry {
         Ok(LockedCheckoutRegistry {
             registry: self,
             _lock: self.acquire_lock()?,
+        })
+    }
+
+    pub(crate) fn prepare_source_links(&self) -> Result<PreparedCheckoutLinks<'_>, CheckoutError> {
+        let locked = self.lock_source_links()?;
+        // Compatibility normalization may inspect legacy link paths here, before
+        // the provider owner exists. Malformed JSON is never recovered or written.
+        let file = self.read_strict_locked()?;
+        Ok(PreparedCheckoutLinks {
+            locked,
+            file,
+            changed: false,
         })
     }
 
@@ -442,8 +1072,10 @@ impl CheckoutRegistry {
         sources: Vec<TicketSource>,
         default_source: Option<String>,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        self.register_sources_locked(root, alias, repository, sources, default_source, false)
+        let mut prepared = self.prepare_source_links()?;
+        let (before, after) =
+            prepared.registration(root, alias, repository, sources, default_source, false)?;
+        prepared.finish_registration(before.as_ref(), after, None, None)
     }
 
     /// Register external links only while their provider records still exist.
@@ -456,9 +1088,10 @@ impl CheckoutRegistry {
         sources: Vec<TicketSource>,
         default_source: Option<String>,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        Self::validate_provider_sources(providers, &sources)?;
-        self.register_sources_locked(root, alias, repository, sources, default_source, false)
+        let mut prepared = self.prepare_source_links()?;
+        let (before, after) =
+            prepared.registration(root, alias, repository, sources, default_source, false)?;
+        prepared.finish_registration(before.as_ref(), after, Some(providers), None)
     }
 
     /// Reopening a project must retain linked providers and its selected default. Only an
@@ -473,8 +1106,17 @@ impl CheckoutRegistry {
         default_source: Option<String>,
         mode: OpenSourceMode,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        self.open_sources_locked(root, alias, repository, sources, default_source, mode)
+        self.open_sources_owned(
+            None,
+            root,
+            alias,
+            repository,
+            OpenSourceSelection {
+                sources,
+                default_source,
+                mode,
+            },
+        )
     }
 
     /// Project reopen validates requested external links under the removal lock. Existing
@@ -487,35 +1129,35 @@ impl CheckoutRegistry {
         repository: Option<String>,
         selection: OpenSourceSelection,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        Self::validate_provider_sources(providers, &selection.sources)?;
-        self.open_sources_locked(
-            root,
-            alias,
-            repository,
-            selection.sources,
-            selection.default_source,
-            selection.mode,
-        )
+        self.open_sources_owned(Some(providers), root, alias, repository, selection)
     }
 
-    fn open_sources_locked(
+    fn open_sources_owned(
         &self,
+        providers: Option<&ProviderConfigRegistry>,
         root: &Path,
         alias: Option<&str>,
         repository: Option<String>,
-        mut sources: Vec<TicketSource>,
-        mut default_source: Option<String>,
-        mode: OpenSourceMode,
+        selection: OpenSourceSelection,
     ) -> Result<Checkout, CheckoutError> {
+        let OpenSourceSelection {
+            mut sources,
+            mut default_source,
+            mode,
+        } = selection;
+        // HS2-6H8ZY6: the non-Explicit merge is last-wins by id. Reject
+        // conflicting requested routes before it can erase their evidence.
+        unique_source_ids(&sources)?;
         let root = root
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
-        let existing = self
-            .read_locked()?
+        let mut prepared = self.prepare_source_links()?;
+        let existing = prepared
+            .file
             .checkouts
-            .into_iter()
-            .find(|checkout| checkout.root == root.to_string_lossy());
+            .iter()
+            .find(|checkout| checkout.root == root.to_string_lossy())
+            .cloned();
         let is_new = existing.is_none();
         let mut alias = alias.map(str::to_owned);
         let mut repository = repository;
@@ -528,6 +1170,7 @@ impl CheckoutRegistry {
                         *source = TicketSource::git(&source.locator);
                     }
                 }
+                unique_source_ids(&sources)?;
                 let old_git = existing
                     .sources
                     .iter()
@@ -574,167 +1217,15 @@ impl CheckoutRegistry {
         if is_new && default_source.is_none() && sources.len() == 1 {
             default_source = Some(sources[0].connection_id.clone());
         }
-        self.register_sources_locked(
+        let (before, after) = prepared.registration(
             &root,
             alias.as_deref(),
             repository,
             sources,
             default_source,
             false,
-        )
-    }
-
-    fn register_sources_locked(
-        &self,
-        root: &Path,
-        alias: Option<&str>,
-        repository: Option<String>,
-        mut sources: Vec<TicketSource>,
-        mut default_source: Option<String>,
-        explicit_clear: bool,
-    ) -> Result<Checkout, CheckoutError> {
-        let root = root
-            .canonicalize()
-            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
-        let generated_id = checkout_id(&root)?;
-        let alias = alias.map(str::to_owned).unwrap_or_else(|| {
-            root.file_name()
-                .and_then(|v| v.to_str())
-                .unwrap_or("checkout")
-                .to_owned()
-        });
-        for source in &mut sources {
-            if source.provider == "git" {
-                let normalized = TicketSource::git(&source.locator);
-                if default_source.as_deref() == Some(&source.connection_id) {
-                    default_source = Some(normalized.connection_id.clone());
-                }
-                *source = normalized;
-            }
-        }
-        sources.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
-        sources.dedup_by(|a, b| a.connection_id == b.connection_id);
-        if let Some(default) = &default_source
-            && !sources
-                .iter()
-                .any(|source| &source.connection_id == default)
-        {
-            return Err(CheckoutError::Invalid(format!(
-                "default source '{default}' is not associated with checkout {generated_id}"
-            )));
-        }
-        let mut file = self.read_locked()?;
-        // An explicitly relocated checkout keeps its original id. Re-registering the new
-        // root (for example on the next app open) must update that durable entry rather
-        // than reintroducing the new path-derived id beside it.
-        let id = file
-            .checkouts
-            .iter()
-            .find(|checkout| checkout.root == root.to_string_lossy())
-            .map(|checkout| checkout.id.clone())
-            .unwrap_or(generated_id);
-        let previous = file.checkouts.iter().find(|checkout| checkout.id == id);
-        let mut store_instance_ids = BTreeMap::new();
-        for source in sources.iter().filter(|source| source.provider == "git") {
-            let prior = previous
-                .and_then(|checkout| checkout.store_instance_ids.get(&source.connection_id));
-            // A pre-identity link cannot prove that the store at the same path is still
-            // the original. Only a newly selected source or a recorded identity may be
-            // adopted without reviewed recovery.
-            let existing_link_without_id = previous
-                .and_then(|checkout| checkout.source(&source.connection_id))
-                .is_some()
-                && prior.is_none()
-                && !file
-                    .link_derived_sources
-                    .contains(&(id.clone(), source.connection_id.clone()));
-            let found = if existing_link_without_id {
-                None
-            } else {
-                git_store_instance_id(source).ok().flatten()
-            };
-            if let (Some(prior), Some(found)) = (prior, found.as_ref())
-                && prior != found
-            {
-                return Err(CheckoutError::Invalid(format!(
-                    "ticket store at {} has a different identity than the linked source",
-                    source.locator
-                )));
-            }
-            if let Some(instance_id) = found.or_else(|| prior.cloned()) {
-                store_instance_ids.insert(source.connection_id.clone(), instance_id);
-            }
-        }
-        let default_source_cleared = default_source.is_none()
-            && (explicit_clear
-                || file
-                    .checkouts
-                    .iter()
-                    .any(|checkout| checkout.id == id && checkout.default_source_cleared));
-        let mut store_strings = sources
-            .iter()
-            .filter(|source| source.provider == "git")
-            .map(|source| source.locator.clone())
-            .collect::<Vec<_>>();
-        store_strings.sort();
-        let source_colors = file
-            .checkouts
-            .iter()
-            .find(|checkout| checkout.id == id)
-            .map(|checkout| {
-                checkout
-                    .source_colors
-                    .iter()
-                    .filter(|(source_id, _)| {
-                        sources
-                            .iter()
-                            .any(|source| &source.connection_id == *source_id)
-                    })
-                    .map(|(source_id, color)| (source_id.clone(), color.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let unverified_store_sources = file
-            .checkouts
-            .iter()
-            .find(|checkout| checkout.id == id)
-            .map(|checkout| {
-                checkout
-                    .unverified_store_sources
-                    .iter()
-                    .filter(|(source_id, _)| {
-                        sources
-                            .iter()
-                            .any(|source| &source.connection_id == *source_id)
-                    })
-                    .map(|(source_id, former)| (source_id.clone(), former.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let entry = Checkout {
-            id: id.clone(),
-            root: root.to_string_lossy().into_owned(),
-            alias,
-            repository,
-            stores: store_strings,
-            sources,
-            store_instance_ids,
-            unverified_store_sources,
-            source_colors,
-            default_source,
-            default_source_cleared,
-            permission_vault_registered: file
-                .checkouts
-                .iter()
-                .any(|checkout| checkout.id == id && checkout.permission_vault_registered),
-        };
-        if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
-            *existing = entry.clone();
-        } else {
-            file.checkouts.push(entry.clone());
-        }
-        self.write_locked(&file)?;
-        Ok(entry)
+        )?;
+        prepared.finish_registration(before.as_ref(), after, providers, None)
     }
 
     pub fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
@@ -837,12 +1328,6 @@ impl CheckoutRegistry {
         Ok((checkout, source))
     }
 
-    fn resolve_locked(&self, reference: &str) -> Result<Checkout, CheckoutError> {
-        let mut entries = self.read_locked()?.checkouts;
-        entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
-        resolve_checkout(entries, reference)
-    }
-
     fn read(&self) -> Result<RegistryFile, CheckoutError> {
         let text = match std::fs::read_to_string(&self.path) {
             Ok(value) => value,
@@ -860,6 +1345,29 @@ impl CheckoutRegistry {
                 self.read_locked()
             }
         }
+    }
+
+    fn read_strict_locked(&self) -> Result<RegistryFile, CheckoutError> {
+        let text = match std::fs::read_to_string(&self.path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(RegistryFile::default());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let file: RegistryFile = serde_json::from_str(&text)
+            .map_err(|error| CheckoutError::Invalid(error.to_string()))?;
+        let mut ids = BTreeSet::new();
+        let mut roots = BTreeSet::new();
+        for checkout in &file.checkouts {
+            if !ids.insert(&checkout.id) || !roots.insert(&checkout.root) {
+                return Err(CheckoutError::Invalid(
+                    "checkout routing identity is ambiguous".into(),
+                ));
+            }
+            unique_source_ids(&checkout.sources)?;
+        }
+        normalize_registry(file)
     }
 
     fn read_locked(&self) -> Result<RegistryFile, CheckoutError> {
@@ -922,8 +1430,10 @@ impl CheckoutRegistry {
         source: TicketSource,
         make_default: bool,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        self.add_source_locked(reference, source, make_default)
+        if source.provider != "git" {
+            return Err(source_context_required());
+        }
+        self.add_git_source(None, reference, source, make_default)
     }
 
     /// Link an external source only while its provider record exists. This shares the
@@ -936,65 +1446,260 @@ impl CheckoutRegistry {
         source: TicketSource,
         make_default: bool,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        Self::validate_provider_sources(providers, std::slice::from_ref(&source))?;
-        self.add_source_locked(reference, source, make_default)
+        if source.provider == "git" {
+            return self.add_git_source(Some(providers), reference, source, make_default);
+        }
+        self.add_external_connection(providers, reference, source, make_default, None, None)
     }
 
-    fn validate_provider_sources(
-        providers: &ProviderConfigRegistry,
-        sources: &[TicketSource],
-    ) -> Result<(), CheckoutError> {
-        if sources.iter().all(|source| source.provider == "git") {
-            return Ok(());
-        }
-        let registered = providers
-            .load()
-            .map_err(|error| CheckoutError::Invalid(error.to_string()))?;
-        for source in sources.iter().filter(|source| source.provider != "git") {
-            let Some(connection) = registered.iter().find(|connection| {
-                connection.id == source.connection_id && connection.provider == source.provider
-            }) else {
-                return Err(CheckoutError::Invalid(format!(
-                    "ticket source '{}' is not registered in providers.json",
-                    source.connection_id
-                )));
-            };
-            // The link's locator is what routes unqualified ids offline (a Jira project key,
-            // a repository path), so it must name the connection's own project (HS2-KXEVTG).
-            // Locators compare ASCII case-insensitively, like the native-id shape check.
-            if !connection.locator.eq_ignore_ascii_case(&source.locator) {
-                return Err(CheckoutError::Invalid(format!(
-                    "ticket source '{}' locator '{}' does not match its connection's '{}'",
-                    source.connection_id, source.locator, connection.locator
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    fn add_source_locked(
+    /// HS2-6H8ZY6: bind a post-write link to the COMPLETE normalized returned
+    /// record. Candidate equality narrows current data; it is not new authority.
+    pub fn add_registered_connection(
         &self,
+        providers: &ProviderConfigRegistry,
+        reference: &str,
+        connection: &ProviderConnection,
+        make_default: bool,
+    ) -> Result<Checkout, CheckoutError> {
+        self.add_external_connection(
+            providers,
+            reference,
+            TicketSource {
+                connection_id: connection.id.clone(),
+                provider: connection.provider.clone(),
+                locator: connection.locator.clone(),
+            },
+            make_default,
+            Some(connection),
+            None,
+        )
+    }
+
+    /// Publish only the checkout link named by an opaque pending GitHub operation.
+    /// The strict checkout snapshot is prepared before the provider owner is entered;
+    /// the exact pending candidate and any displaced default are checked under it.
+    pub fn add_pending_github_connection(
+        &self,
+        providers: &ProviderConfigRegistry,
+        connection: &ProviderConnection,
+        link: &crate::github_endpoint::Link,
+        recovery: &crate::github_endpoint::Recovery,
+    ) -> Result<Checkout, CheckoutError> {
+        if connection.provider != "github" {
+            return Err(crate::github_endpoint::EndpointError::Invalid.into());
+        }
+        self.add_external_connection(
+            providers,
+            &link.checkout_id,
+            TicketSource {
+                connection_id: connection.id.clone(),
+                provider: connection.provider.clone(),
+                locator: connection.locator.clone(),
+            },
+            link.make_default,
+            Some(connection),
+            Some((recovery, link)),
+        )
+    }
+
+    fn add_external_connection(
+        &self,
+        providers: &ProviderConfigRegistry,
+        reference: &str,
+        source: TicketSource,
+        make_default: bool,
+        expected: Option<&ProviderConnection>,
+        pending: Option<(
+            &crate::github_endpoint::Recovery,
+            &crate::github_endpoint::Link,
+        )>,
+    ) -> Result<Checkout, CheckoutError> {
+        let mut prepared = self.prepare_source_links()?;
+        // Reference canonicalization and legacy link discovery happen BEFORE the provider owner.
+        let before = prepared.resolve(reference)?;
+        prepared.external_eligibility(&before.id, &source)?;
+        let default_hint =
+            if before.default_source.is_none() && !before.default_source_cleared && !make_default {
+                let mut sources = before.sources.clone();
+                sources.retain(|item| item.connection_id != source.connection_id);
+                sources.push(source.clone());
+                legacy_default_source(Path::new(&before.root), &sources)
+                    .or_else(|| (sources.len() == 1).then(|| source.connection_id.clone()))
+            } else {
+                None
+            };
+        providers.update_domain(|records| {
+            let actual = registered_source(records, &source)?;
+            let after = prepared.upsert_external(
+                &before.id,
+                TicketSource {
+                    connection_id: actual.id.clone(),
+                    provider: actual.provider.clone(),
+                    locator: actual.locator.clone(),
+                },
+                make_default,
+                default_hint,
+            )?;
+            let displaced = displaced_external(&before, &after)?;
+            if let Some((recovery, link)) = pending {
+                let expected = expected.ok_or(crate::github_endpoint::EndpointError::Conflict)?;
+                exact_connection(actual, expected)?;
+                if before.id != link.checkout_id {
+                    return Err(crate::github_endpoint::EndpointError::Conflict.into());
+                }
+                recovery.check_link_candidate(providers, actual, link)?;
+                ordinary_link_targets(records, None, displaced.as_ref(), None)?;
+            } else {
+                ordinary_link_targets(records, Some(actual), displaced.as_ref(), expected)?;
+            }
+            prepared.publish()?;
+            Ok(after)
+        })
+    }
+
+    /// Select a default with actual source authority, preserving effective
+    /// normalized-before semantics and unrelated retained source independence.
+    pub fn set_registered_default_source(
+        &self,
+        providers: &ProviderConfigRegistry,
+        reference: &str,
+        connection_id: Option<&str>,
+    ) -> Result<Checkout, CheckoutError> {
+        let mut prepared = self.prepare_source_links()?;
+        let before = prepared.resolve(reference)?;
+        let selected = connection_id
+            .map(|id| {
+                linked_source(&before, id)?.cloned().ok_or_else(|| {
+                    CheckoutError::Invalid(format!(
+                        "default source '{id}' is not associated with checkout {}",
+                        before.id
+                    ))
+                })
+            })
+            .transpose()?;
+        let old = before
+            .default_source
+            .as_deref()
+            .map(|id| linked_source(&before, id))
+            .transpose()?
+            .flatten();
+        let selecting_git = selected
+            .as_ref()
+            .is_some_and(|source| source.provider == "git");
+        let displacing_external = old.is_some_and(|source| source.provider != "git")
+            && before.default_source.as_deref() != connection_id;
+        if (selecting_git && !displacing_external)
+            || (connection_id.is_none() && old.is_some_and(|source| source.provider == "git"))
+        {
+            // Existing pure Git path, outside every provider owner; no lock reentry.
+            let (_, after) = prepared.registration(
+                Path::new(&before.root),
+                Some(&before.alias),
+                before.repository.clone(),
+                before.sources.clone(),
+                connection_id.map(str::to_owned),
+                connection_id.is_none(),
+            )?;
+            return prepared.finish_registration(
+                Some(&before),
+                after,
+                Some(providers),
+                connection_id,
+            );
+        }
+        if selecting_git {
+            // Read-only recorded identity verification, never initialization/autocommit.
+            validate_linked_store_identity(
+                &before,
+                selected.as_ref().expect("selected Git source exists"),
+            )?;
+        }
+        let after = prepared.set_default(&before.id, connection_id)?;
+        let displaced = displaced_external(&before, &after)?;
+        if selected.is_none() && displaced.is_none() {
+            prepared.publish()?;
+            return Ok(after);
+        }
+        providers.update_domain(|records| {
+            let actual = selected
+                .as_ref()
+                .filter(|source| source.provider != "git")
+                .map(|source| registered_source(records, source))
+                .transpose()?;
+            ordinary_link_targets(records, actual, displaced.as_ref(), None)?;
+            prepared.publish()?;
+            Ok(after)
+        })
+    }
+
+    /// Fan out only an exact normalized saved candidate; never reload an ID to
+    /// upgrade a caller's post-write snapshot or overwrite a colliding Git member.
+    pub fn update_registered_source_locator(
+        &self,
+        providers: &ProviderConfigRegistry,
+        connection: &ProviderConnection,
+    ) -> Result<Vec<String>, CheckoutError> {
+        if connection.provider == "git" {
+            return Err(CheckoutError::Invalid(
+                "Git sources use the linked-store workflow".into(),
+            ));
+        }
+        let mut prepared = self.prepare_source_links()?;
+        // Validate all checkout kinds before endpoint authority, using in-memory IDs only.
+        let updated = prepared.update_external_locator(connection)?;
+        providers.update_domain(|records| {
+            let actual = registered_source(
+                records,
+                &TicketSource {
+                    connection_id: connection.id.clone(),
+                    provider: connection.provider.clone(),
+                    locator: connection.locator.clone(),
+                },
+            )?;
+            ordinary_link_targets(records, Some(actual), None, Some(connection))?;
+            prepared.publish()?;
+            Ok(updated)
+        })
+    }
+
+    fn add_git_source(
+        &self,
+        providers: Option<&ProviderConfigRegistry>,
         reference: &str,
         source: TicketSource,
         make_default: bool,
     ) -> Result<Checkout, CheckoutError> {
-        let mut checkout = self.resolve_locked(reference)?;
+        let mut prepared = self.prepare_source_links()?;
+        let mut checkout = prepared.resolve(reference)?;
+        if checkout
+            .source(&source.connection_id)
+            .is_some_and(|old| old.provider != "git")
+        {
+            return Err(CheckoutError::Invalid(
+                "ticket source id is linked to another provider kind".into(),
+            ));
+        }
         checkout
             .sources
             .retain(|item| item.connection_id != source.connection_id);
         let source_id = source.connection_id.clone();
         checkout.sources.push(source);
         if make_default {
-            checkout.default_source = Some(source_id);
+            checkout.default_source = Some(source_id.clone());
         }
-        self.register_sources_locked(
+        let (before, after) = prepared.registration(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
             checkout.sources,
             checkout.default_source,
             false,
+        )?;
+        prepared.finish_registration(
+            before.as_ref(),
+            after,
+            providers,
+            make_default.then_some(source_id.as_str()),
         )
     }
 
@@ -1013,7 +1718,7 @@ impl CheckoutRegistry {
             ));
         }
         let _lock = self.acquire_lock()?;
-        let mut file = self.read_locked()?;
+        let mut file = self.read_strict_locked()?;
         let checkout = resolve_checkout(file.checkouts.clone(), reference)?;
         if file
             .source_aliases
@@ -1044,6 +1749,9 @@ impl CheckoutRegistry {
             return Err(CheckoutError::Invalid(
                 "git source ids cannot be renamed; relink the store path instead".into(),
             ));
+        }
+        if source.provider == "github" {
+            return Err(CheckoutError::Invalid("GitHub connection ids cannot be renamed by an ordinary checkout edit; use an explicit provider replacement workflow".into()));
         }
         source.connection_id = new_connection_id.to_string();
         if let Some(color) = entry.source_colors.remove(connection_id) {
@@ -1260,27 +1968,20 @@ impl CheckoutRegistry {
         locator: &str,
     ) -> Result<Vec<String>, CheckoutError> {
         let _lock = self.acquire_lock()?;
-        let mut file = self.read_locked()?;
-        let mut updated = Vec::new();
-        for checkout in &mut file.checkouts {
-            let mut changed = false;
-            for source in &mut checkout.sources {
-                if source.connection_id == connection_id
+        let file = self.read_strict_locked()?;
+        if file
+            .checkouts
+            .iter()
+            .flat_map(|row| &row.sources)
+            .any(|source| {
+                source.connection_id == connection_id
                     && source.provider != "git"
                     && source.locator != locator
-                {
-                    source.locator = locator.to_string();
-                    changed = true;
-                }
-            }
-            if changed {
-                updated.push(checkout.id.clone());
-            }
+            })
+        {
+            return Err(source_context_required());
         }
-        if !updated.is_empty() {
-            self.write_locked(&file)?;
-        }
-        Ok(updated)
+        Ok(Vec::new())
     }
 
     pub fn remove_source(
@@ -1288,16 +1989,14 @@ impl CheckoutRegistry {
         reference: &str,
         connection_id: &str,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        self.remove_source_locked(reference, connection_id)
-    }
-
-    fn remove_source_locked(
-        &self,
-        reference: &str,
-        connection_id: &str,
-    ) -> Result<Checkout, CheckoutError> {
-        let mut checkout = self.resolve_locked(reference)?;
+        let mut prepared = self.prepare_source_links()?;
+        let mut checkout = prepared.resolve(reference)?;
+        if checkout
+            .source(connection_id)
+            .is_some_and(|source| source.provider != "git")
+        {
+            return Err(source_context_required());
+        }
         let before = checkout.sources.len();
         checkout
             .sources
@@ -1308,14 +2007,15 @@ impl CheckoutRegistry {
         if checkout.default_source.as_deref() == Some(connection_id) {
             checkout.default_source = None;
         }
-        self.register_sources_locked(
+        let (before, after) = prepared.registration(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
             checkout.sources,
             checkout.default_source,
             false,
-        )
+        )?;
+        prepared.finish_registration(before.as_ref(), after, None, None)
     }
 
     /// Set this project's visual accent for a linked source. It has no effect on projects
@@ -1359,16 +2059,17 @@ impl CheckoutRegistry {
         reference: &str,
         connection_id: Option<&str>,
     ) -> Result<Checkout, CheckoutError> {
-        let _lock = self.acquire_lock()?;
-        let checkout = self.resolve_locked(reference)?;
-        self.register_sources_locked(
+        let mut prepared = self.prepare_source_links()?;
+        let checkout = prepared.resolve(reference)?;
+        let (before, after) = prepared.registration(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
             checkout.sources,
             connection_id.map(str::to_owned),
             connection_id.is_none(),
-        )
+        )?;
+        prepared.finish_registration(before.as_ref(), after, None, connection_id)
     }
 }
 
@@ -1570,7 +2271,9 @@ mod tests {
             .add_registered_source(&providers, "app", link("OPS"), false)
             .unwrap_err();
         assert!(
-            error.to_string().contains("locator 'OPS' does not match"),
+            error
+                .to_string()
+                .contains("locator does not match its registered connection"),
             "{error}"
         );
         assert!(matches!(
@@ -1939,9 +2642,32 @@ mod tests {
             provider: "github".into(),
             locator: "acme/issues".into(),
         };
+        let alternate = TicketSource {
+            connection_id: "jira-eng".into(),
+            provider: "jira".into(),
+            locator: "ENG".into(),
+        };
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(
+                &[&external, &alternate]
+                    .into_iter()
+                    .map(|source| ProviderConnection {
+                        id: source.connection_id.clone(),
+                        provider: source.provider.clone(),
+                        locator: source.locator.clone(),
+                        name: None,
+                        default: false,
+                        disabled: false,
+                        settings: serde_json::json!({}),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
         for root in [&first, &second] {
             registry
-                .register_sources(
+                .register_registered_sources(
+                    &providers,
                     root,
                     None,
                     None,
@@ -1951,33 +2677,45 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(registry.list().unwrap().len(), 2);
-        let alternate = TicketSource {
-            connection_id: "jira-eng".into(),
-            provider: "jira".into(),
-            locator: "ENG".into(),
-        };
         registry
-            .add_source(first.to_str().unwrap(), alternate, false)
+            .add_registered_source(&providers, first.to_str().unwrap(), alternate, false)
             .unwrap();
         let changed = registry
-            .set_default_source(first.to_str().unwrap(), Some("jira-eng"))
+            .set_registered_default_source(&providers, first.to_str().unwrap(), Some("jira-eng"))
             .unwrap();
         assert_eq!(changed.default_source.as_deref(), Some("jira-eng"));
-        let removed_default = registry
-            .remove_source(first.to_str().unwrap(), "jira-eng")
-            .unwrap();
-        assert!(removed_default.default_source.is_none());
+        crate::connection_removal::detach_source(
+            &providers,
+            &registry,
+            first.to_str().unwrap(),
+            "jira-eng",
+        )
+        .unwrap();
+        let removed_default = registry.resolve(first.to_str().unwrap()).unwrap();
+        assert_eq!(
+            removed_default.default_source.as_deref(),
+            Some("github-acme")
+        );
         let changed = registry
-            .set_default_source(first.to_str().unwrap(), None)
+            .set_registered_default_source(&providers, first.to_str().unwrap(), None)
             .unwrap();
         assert!(changed.default_source.is_none());
-        let removed = registry
-            .remove_source(first.to_str().unwrap(), "github-acme")
-            .unwrap();
+        crate::connection_removal::detach_source(
+            &providers,
+            &registry,
+            first.to_str().unwrap(),
+            "github-acme",
+        )
+        .unwrap();
+        let removed = registry.resolve(first.to_str().unwrap()).unwrap();
         assert!(removed.sources.is_empty());
         assert!(
             registry
-                .set_default_source(second.to_str().unwrap(), Some("missing"))
+                .set_registered_default_source(
+                    &providers,
+                    second.to_str().unwrap(),
+                    Some("missing")
+                )
                 .unwrap_err()
                 .to_string()
                 .contains("not associated")
@@ -2004,9 +2742,28 @@ mod tests {
             provider: "github".into(),
             locator: "acme/a".into(),
         };
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(&[ProviderConnection {
+                id: source.connection_id.clone(),
+                provider: source.provider.clone(),
+                locator: source.locator.clone(),
+                name: None,
+                default: false,
+                disabled: false,
+                settings: serde_json::json!({}),
+            }])
+            .unwrap();
         for root in [&first, &second] {
             registry
-                .register_sources(root, None, None, vec![source.clone()], None)
+                .register_registered_sources(
+                    &providers,
+                    root,
+                    None,
+                    None,
+                    vec![source.clone()],
+                    None,
+                )
                 .unwrap();
         }
         let first_ref = first.to_str().unwrap();
@@ -2029,7 +2786,7 @@ mod tests {
                 .is_empty()
         );
         registry
-            .register_sources(&first, None, None, vec![source.clone()], None)
+            .register_registered_sources(&providers, &first, None, None, vec![source.clone()], None)
             .unwrap();
         let reopened = CheckoutRegistry::new(&path);
         assert_eq!(
@@ -2046,15 +2803,17 @@ mod tests {
                 .set_source_color(first_ref, "github-a", "red")
                 .is_err()
         );
-        reopened
-            .rename_source(first_ref, "github-a", "github-b")
-            .unwrap();
+        assert!(
+            reopened
+                .rename_source(first_ref, "github-a", "github-b")
+                .is_err()
+        );
         assert_eq!(
-            reopened.resolve(first_ref).unwrap().source_colors["github-b"],
+            reopened.resolve(first_ref).unwrap().source_colors["github-a"],
             "#3b82f6"
         );
         reopened
-            .set_source_color(first_ref, "github-b", DEFAULT_SOURCE_COLOR)
+            .set_source_color(first_ref, "github-a", DEFAULT_SOURCE_COLOR)
             .unwrap();
         assert!(
             reopened
@@ -2064,9 +2823,10 @@ mod tests {
                 .is_empty()
         );
         reopened
-            .set_source_color(first_ref, "github-b", "#14b8a6")
+            .set_source_color(first_ref, "github-a", "#14b8a6")
             .unwrap();
-        reopened.remove_source(first_ref, "github-b").unwrap();
+        crate::connection_removal::detach_source(&providers, &reopened, first_ref, "github-a")
+            .unwrap();
         assert!(
             reopened
                 .resolve(first_ref)
@@ -2088,8 +2848,27 @@ mod tests {
             provider: "github".into(),
             locator: "example/issues".into(),
         };
+        let jira = TicketSource {
+            connection_id: "jira-eng".into(),
+            provider: "jira".into(),
+            locator: "ENG".into(),
+        };
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        let connection = |source: &TicketSource| ProviderConnection {
+            id: source.connection_id.clone(),
+            provider: source.provider.clone(),
+            locator: source.locator.clone(),
+            name: None,
+            default: false,
+            disabled: false,
+            settings: serde_json::json!({}),
+        };
+        providers
+            .save(&[connection(&github), connection(&jira)])
+            .unwrap();
         registry
-            .register_sources(
+            .register_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
@@ -2098,7 +2877,7 @@ mod tests {
             )
             .unwrap();
         let cleared = registry
-            .set_default_source(root.to_str().unwrap(), None)
+            .set_registered_default_source(&providers, root.to_str().unwrap(), None)
             .unwrap();
         assert!(cleared.default_source.is_none());
         assert!(cleared.default_source_cleared);
@@ -2112,60 +2891,75 @@ mod tests {
         );
         assert!(reopened.list().unwrap()[0].default_source_cleared);
 
-        let jira = TicketSource {
-            connection_id: "jira-eng".into(),
-            provider: "jira".into(),
-            locator: "ENG".into(),
-        };
         assert!(
             reopened
-                .add_source(root.to_str().unwrap(), jira, false)
+                .add_registered_source(&providers, root.to_str().unwrap(), jira, false)
                 .unwrap()
                 .default_source
                 .is_none()
         );
+        crate::connection_removal::detach_source(
+            &providers,
+            &reopened,
+            root.to_str().unwrap(),
+            "jira-eng",
+        )
+        .unwrap();
         assert!(
             reopened
-                .remove_source(root.to_str().unwrap(), "jira-eng")
+                .resolve(root.to_str().unwrap())
                 .unwrap()
                 .default_source
                 .is_none()
         );
-        let empty = reopened
-            .remove_source(root.to_str().unwrap(), &github.connection_id)
-            .unwrap();
+        crate::connection_removal::detach_source(
+            &providers,
+            &reopened,
+            root.to_str().unwrap(),
+            &github.connection_id,
+        )
+        .unwrap();
+        let empty = reopened.resolve(root.to_str().unwrap()).unwrap();
         assert!(empty.sources.is_empty());
         assert!(empty.default_source_cleared);
+        providers.save(&[connection(&github)]).unwrap();
         assert!(
             reopened
-                .add_source(root.to_str().unwrap(), github.clone(), false)
+                .add_registered_source(&providers, root.to_str().unwrap(), github.clone(), false)
                 .unwrap()
                 .default_source
                 .is_none()
         );
         assert!(
             reopened
-                .open_sources(
+                .open_registered_sources(
+                    &providers,
                     &root,
                     None,
                     None,
-                    vec![github.clone()],
-                    None,
-                    OpenSourceMode::Discovered
+                    OpenSourceSelection {
+                        sources: vec![github.clone()],
+                        default_source: None,
+                        mode: OpenSourceMode::Discovered,
+                    }
                 )
                 .unwrap()
                 .default_source
                 .is_none()
         );
         let selected = reopened
-            .set_default_source(root.to_str().unwrap(), Some(&github.connection_id))
+            .set_registered_default_source(
+                &providers,
+                root.to_str().unwrap(),
+                Some(&github.connection_id),
+            )
             .unwrap();
         assert_eq!(selected.default_source.as_deref(), Some("github-issues"));
         assert!(!selected.default_source_cleared);
 
         // An older file with no clear marker still infers its sole linked source.
         reopened
-            .set_default_source(root.to_str().unwrap(), None)
+            .set_registered_default_source(&providers, root.to_str().unwrap(), None)
             .unwrap();
         let mut legacy: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
@@ -2197,8 +2991,21 @@ mod tests {
             provider: "github".into(),
             locator: "acme/app".into(),
         };
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(&[ProviderConnection {
+                id: github.connection_id.clone(),
+                provider: github.provider.clone(),
+                locator: github.locator.clone(),
+                name: None,
+                default: false,
+                disabled: false,
+                settings: serde_json::json!({}),
+            }])
+            .unwrap();
         registry
-            .register_sources(
+            .register_registered_sources(
+                &providers,
                 &root,
                 Some("renamed app"),
                 Some("acme/app".into()),
@@ -2208,13 +3015,16 @@ mod tests {
             .unwrap();
 
         let reopened = registry
-            .open_sources(
+            .open_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
-                vec![git.clone()],
-                None,
-                OpenSourceMode::SelectedGitStore,
+                OpenSourceSelection {
+                    sources: vec![git.clone()],
+                    default_source: None,
+                    mode: OpenSourceMode::SelectedGitStore,
+                },
             )
             .unwrap();
         assert_eq!(reopened.alias, "renamed app");
@@ -2224,7 +3034,17 @@ mod tests {
         assert_eq!(reopened.default_source, Some(github.connection_id.clone()));
 
         let discovered = registry
-            .open_sources(&root, None, None, vec![], None, OpenSourceMode::Discovered)
+            .open_registered_sources(
+                &providers,
+                &root,
+                None,
+                None,
+                OpenSourceSelection {
+                    sources: vec![],
+                    default_source: None,
+                    mode: OpenSourceMode::Discovered,
+                },
+            )
             .unwrap();
         assert_eq!(discovered.sources.len(), 2);
         assert_eq!(
@@ -2232,17 +3052,24 @@ mod tests {
             Some(github.connection_id.clone())
         );
 
-        registry
-            .remove_source(&reopened.id, &github.connection_id)
-            .unwrap();
+        crate::connection_removal::detach_source(
+            &providers,
+            &registry,
+            &reopened.id,
+            &github.connection_id,
+        )
+        .unwrap();
         let removed = registry
-            .open_sources(
+            .open_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
-                vec![git.clone()],
-                None,
-                OpenSourceMode::SelectedGitStore,
+                OpenSourceSelection {
+                    sources: vec![git.clone()],
+                    default_source: None,
+                    mode: OpenSourceMode::SelectedGitStore,
+                },
             )
             .unwrap();
         assert!(removed.source(&github.connection_id).is_none());
@@ -2255,9 +3082,9 @@ mod tests {
         let root = temp.path().join("app");
         let old_store = temp.path().join("old.hs2");
         let new_store = temp.path().join("new.hs2");
-        for path in [&root, &old_store, &new_store] {
-            std::fs::create_dir(path).unwrap();
-        }
+        std::fs::create_dir(&root).unwrap();
+        FsStore::init(&old_store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init(&new_store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_store);
         let new = TicketSource::git(&new_store);
@@ -2266,8 +3093,21 @@ mod tests {
             provider: "github".into(),
             locator: "acme/app".into(),
         };
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(&[ProviderConnection {
+                id: github.connection_id.clone(),
+                provider: github.provider.clone(),
+                locator: github.locator.clone(),
+                name: None,
+                default: false,
+                disabled: false,
+                settings: serde_json::json!({}),
+            }])
+            .unwrap();
         registry
-            .register_sources(
+            .register_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
@@ -2276,13 +3116,16 @@ mod tests {
             )
             .unwrap();
         let relinked = registry
-            .open_sources(
+            .open_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
-                vec![new.clone()],
-                None,
-                OpenSourceMode::SelectedGitStore,
+                OpenSourceSelection {
+                    sources: vec![new.clone()],
+                    default_source: None,
+                    mode: OpenSourceMode::SelectedGitStore,
+                },
             )
             .unwrap();
         assert_eq!(relinked.default_source, Some(new.connection_id.clone()));
@@ -2302,17 +3145,20 @@ mod tests {
         assert_eq!(multiple_git.default_source, Some(new.connection_id.clone()));
 
         let explicit = registry
-            .open_sources(
+            .open_registered_sources(
+                &providers,
                 &root,
                 None,
                 None,
-                vec![github.clone()],
-                None,
-                OpenSourceMode::Explicit,
+                OpenSourceSelection {
+                    sources: vec![github.clone()],
+                    default_source: None,
+                    mode: OpenSourceMode::Explicit,
+                },
             )
             .unwrap();
         assert_eq!(explicit.sources, vec![github]);
-        assert!(explicit.default_source.is_none());
+        assert_eq!(explicit.default_source.as_deref(), Some("github-issues"));
     }
 
     #[test]
@@ -2879,66 +3725,98 @@ mod tests {
         let checkout = temp.path().join("app");
         std::fs::create_dir(&checkout).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(&[
+                ProviderConnection {
+                    id: "jira-old".into(),
+                    provider: "jira".into(),
+                    locator: "APP".into(),
+                    name: None,
+                    default: false,
+                    settings: serde_json::Value::Null,
+                    disabled: false,
+                },
+                ProviderConnection {
+                    id: "jira-other".into(),
+                    provider: "jira".into(),
+                    locator: "APP".into(),
+                    name: None,
+                    default: false,
+                    settings: serde_json::Value::Null,
+                    disabled: false,
+                },
+            ])
+            .unwrap();
         let old = TicketSource {
-            connection_id: "github-old".into(),
-            provider: "github".into(),
-            locator: "acme/app".into(),
+            connection_id: "jira-old".into(),
+            provider: "jira".into(),
+            locator: "APP".into(),
         };
         let saved = registry
-            .register_sources(&checkout, None, None, vec![old], Some("github-old".into()))
+            .register_registered_sources(
+                &providers,
+                &checkout,
+                None,
+                None,
+                vec![old],
+                Some("jira-old".into()),
+            )
             .unwrap();
 
         let renamed = registry
-            .rename_source(&saved.id, "github-old", "github-current")
+            .rename_source(&saved.id, "jira-old", "jira-current")
             .unwrap();
         assert_eq!(renamed.sources.len(), 1);
-        assert_eq!(renamed.sources[0].connection_id, "github-current");
-        assert_eq!(renamed.default_source.as_deref(), Some("github-current"));
+        assert_eq!(renamed.sources[0].connection_id, "jira-current");
+        assert_eq!(renamed.default_source.as_deref(), Some("jira-current"));
         assert_eq!(
-            registry.resolve_source(&saved.id, "github-old").unwrap().1,
+            registry.resolve_source(&saved.id, "jira-old").unwrap().1,
             renamed.sources[0]
         );
         assert_eq!(
             registry
-                .resolve_source(&saved.id, "github-current")
+                .resolve_source(&saved.id, "jira-current")
                 .unwrap()
                 .1,
             renamed.sources[0]
         );
 
         let other = TicketSource {
-            connection_id: "github-other".into(),
-            provider: "github".into(),
-            locator: "acme/app".into(),
+            connection_id: "jira-other".into(),
+            provider: "jira".into(),
+            locator: "APP".into(),
         };
-        let with_other = registry.add_source(&saved.id, other, false).unwrap();
+        let with_other = registry
+            .add_registered_source(&providers, &saved.id, other, false)
+            .unwrap();
         assert_eq!(with_other.sources.len(), 2);
         assert_eq!(
             registry
-                .resolve_source(&saved.id, "github-old")
+                .resolve_source(&saved.id, "jira-old")
                 .unwrap()
                 .1
                 .connection_id,
-            "github-current",
+            "jira-current",
             "a same-locator source is never silently treated as the rename target"
         );
         let renamed_again = registry
-            .rename_source(&saved.id, "github-current", "github-next")
+            .rename_source(&saved.id, "jira-current", "jira-next")
             .unwrap();
-        assert_eq!(renamed_again.default_source.as_deref(), Some("github-next"));
-        for historical in ["github-old", "github-current"] {
+        assert_eq!(renamed_again.default_source.as_deref(), Some("jira-next"));
+        for historical in ["jira-old", "jira-current"] {
             assert_eq!(
                 registry
                     .resolve_source(&saved.id, historical)
                     .unwrap()
                     .1
                     .connection_id,
-                "github-next"
+                "jira-next"
             );
         }
         assert!(
             registry
-                .rename_source(&saved.id, "github-next", "github-old")
+                .rename_source(&saved.id, "jira-next", "jira-old")
                 .unwrap_err()
                 .to_string()
                 .contains("historical alias")
@@ -2951,9 +3829,20 @@ mod tests {
         let store = temp.path().join("tickets");
         FsStore::init(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
-        let github = |locator: &str| TicketSource {
-            connection_id: "github-shared".into(),
-            provider: "github".into(),
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        let mut connection = ProviderConnection {
+            id: "jira-shared".into(),
+            provider: "jira".into(),
+            locator: "OLD".into(),
+            name: None,
+            default: false,
+            settings: serde_json::Value::Null,
+            disabled: false,
+        };
+        providers.save(&[connection.clone()]).unwrap();
+        let source = |locator: &str| TicketSource {
+            connection_id: "jira-shared".into(),
+            provider: "jira".into(),
             locator: locator.into(),
         };
         let mut ids = Vec::new();
@@ -2962,11 +3851,11 @@ mod tests {
             std::fs::create_dir(&root).unwrap();
             let mut sources = vec![TicketSource::git(&store)];
             if name != "unlinked" {
-                sources.push(github("acme/old"));
+                sources.push(source("OLD"));
             }
             ids.push(
                 registry
-                    .register_sources(&root, None, None, sources, None)
+                    .register_registered_sources(&providers, &root, None, None, sources, None)
                     .unwrap()
                     .id,
             );
@@ -2984,23 +3873,25 @@ mod tests {
                 .collect()
         };
 
+        connection.locator = "NEW".into();
+        providers.save(&[connection.clone()]).unwrap();
         let mut updated = registry
-            .update_source_locator("github-shared", "acme/new")
+            .update_registered_source_locator(&providers, &connection)
             .unwrap();
         updated.sort();
         let mut expected = ids[..2].to_vec();
         expected.sort();
         assert_eq!(updated, expected);
         assert_eq!(
-            locators("github-shared"),
-            vec![Some("acme/new".into()), Some("acme/new".into()), None]
+            locators("jira-shared"),
+            vec![Some("NEW".into()), Some("NEW".into()), None]
         );
 
         // Repeating the same locator changes nothing and does not rewrite the file.
         let before = std::fs::read(temp.path().join("checkouts.json")).unwrap();
         assert!(
             registry
-                .update_source_locator("github-shared", "acme/new")
+                .update_registered_source_locator(&providers, &connection)
                 .unwrap()
                 .is_empty()
         );
@@ -3009,25 +3900,23 @@ mod tests {
             before
         );
 
-        // A checkout linked afterwards (with the stale value) is caught by the next edit,
-        // and a rename keeps following the connection under its new id.
+        // A checkout linked afterwards follows the same registered record.
         registry
-            .add_source(&ids[2], github("acme/stale"), false)
+            .add_registered_source(&providers, &ids[2], source("NEW"), false)
             .unwrap();
-        registry
-            .rename_source(&ids[0], "github-shared", "github-renamed")
-            .unwrap();
+        connection.locator = "THIRD".into();
+        providers.save(&[connection.clone()]).unwrap();
         let updated = registry
-            .update_source_locator("github-shared", "acme/third")
+            .update_registered_source_locator(&providers, &connection)
             .unwrap();
-        assert_eq!(updated.len(), 2);
+        assert_eq!(updated.len(), 3);
         assert_eq!(
-            locators("github-shared"),
-            vec![None, Some("acme/third".into()), Some("acme/third".into())]
-        );
-        assert_eq!(
-            locators("github-renamed"),
-            vec![Some("acme/new".into()), None, None]
+            locators("jira-shared"),
+            vec![
+                Some("THIRD".into()),
+                Some("THIRD".into()),
+                Some("THIRD".into())
+            ]
         );
 
         // Git links are path-derived and never retargeted through a connection edit.

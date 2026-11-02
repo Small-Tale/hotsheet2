@@ -2,7 +2,7 @@
 
 use crate::api_error::ApiError;
 use crate::multistore::StoreInfo;
-use crate::routes::providers::{connection_token, provider_transfer_error};
+use crate::routes::providers::{connection_credential_error, provider_transfer_error};
 use crate::{AppState, github_app_config};
 use axum::Json;
 use axum::extract::{Path, State};
@@ -424,37 +424,27 @@ pub(crate) async fn remove_unused_account_source(
 ) -> Result<StatusCode, ApiError> {
     tokio::task::spawn_blocking(move || {
         let providers = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-        let checkouts = state
-            .checkout_registry
-            .list()
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-        providers
-            .update(|connections| {
-                let mut candidate = connections.clone();
-                let outcome = hotsheet_ticketing::accounts::take_unused_source(
-                    &mut candidate,
-                    &checkouts,
-                    &account,
-                    &connection_id,
-                );
-                if outcome.is_ok() {
-                    *connections = candidate;
+        hotsheet_ticketing::accounts::remove_unused_source(
+            &providers,
+            &state.checkout_registry,
+            &account,
+            &connection_id,
+        )
+        .map_err(|error| {
+            if let hotsheet_ticketing::accounts::AccountError::Provider(error) = error {
+                return provider_transfer_error(error);
+            }
+            let status = match error {
+                hotsheet_ticketing::accounts::AccountError::SourceNotFound { .. } => {
+                    StatusCode::NOT_FOUND
                 }
-                Ok(outcome)
-            })
-            .map_err(provider_transfer_error)?
-            .map_err(|error| {
-                let status = match error {
-                    hotsheet_ticketing::accounts::AccountError::SourceNotFound { .. } => {
-                        StatusCode::NOT_FOUND
-                    }
-                    hotsheet_ticketing::accounts::AccountError::SourceInUse { .. } => {
-                        StatusCode::CONFLICT
-                    }
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                };
-                ApiError::new(status, error.to_string())
-            })?;
+                hotsheet_ticketing::accounts::AccountError::SourceInUse { .. } => {
+                    StatusCode::CONFLICT
+                }
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            ApiError::new(status, error.to_string())
+        })?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await
@@ -468,7 +458,16 @@ pub(crate) async fn list_account_github_repositories(
     State(state): State<AppState>,
     Path(account): Path<String>,
 ) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
-    let keys = state.key_registry();
+    account_repositories_from_keys(state.key_registry(), account).await
+}
+
+/// HS2-6H8ZY6: the shipped account parent resolves its bundle exactly once.
+pub(super) async fn account_repositories_from_keys<
+    S: hotsheet_ticketing::SecretStore + Send + 'static,
+>(
+    keys: hotsheet_ticketing::KeyRegistry<S>,
+    account: String,
+) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
     let raw = keys.get(&account).map_err(|error| match error {
         hotsheet_ticketing::SecretError::NotFound(_) => ApiError::not_found(&account),
         other => provider_transfer_error(other),
@@ -491,18 +490,18 @@ pub(crate) async fn list_account_github_repositories(
         field("client_id", ""),
         field("web_base", "https://github.com"),
     );
-    let probe = ProviderConnection {
-        id: "account-probe".into(),
-        provider: "github".into(),
-        locator: String::new(),
-        name: None,
-        default: false,
-        settings: serde_json::json!({"credential": {"secret": account}}),
-        disabled: false,
-    };
-    let token = tokio::task::spawn_blocking(move || connection_token(&state, &probe))
-        .await
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    // HS2-6H8ZY6: this explicit account operation has no selected source authority.
+    let token = tokio::task::spawn_blocking(move || {
+        hotsheet_extsync::access_token_from_raw(
+            &raw,
+            &keys,
+            &account,
+            OffsetDateTime::now_utc().unix_timestamp(),
+        )
+        .map_err(connection_credential_error)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     github_repository_access(client_id, web_base, token).await
 }
 

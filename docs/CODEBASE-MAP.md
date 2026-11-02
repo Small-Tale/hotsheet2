@@ -510,6 +510,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
+      src/github_credential.rs #   shared account token resolution and HS2-6H8ZY6 owner-bound selected-source read context; read_tests.rs guards selected-source reads
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)
       src/github_pagination.rs #   HS2-TAG2ZP selected-origin Link boundary, explicit ports, traversal rejection and per-walk cycle/request guards; independent fake/Ureq regressions in github_pagination_tests.rs
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
@@ -570,8 +571,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/secrets/metadata.rs # private stored generation decoder and opaque cache observation
       src/secrets/metadata/tests.rs # legacy writer, generation, duplicate, and no-op coverage
       src/secrets/machine_secrets.rs # one machine master, encrypted per-account envelopes, verified legacy migration, rotation and restore (HS2-5A6JNS)
-      src/connection_removal.rs # shared idempotent source removal: detach_source (one project; deletes the connection when no other checkout links it) + remove_provider_connection (every project); credentials stay (HS2-724S9N, HS2-SM9PM8)
-      src/accounts.rs        #   derived machine-wide provider accounts (credential refs) with their sources + owning projects; sign_out refuses while in use (HS2-SM9PM8)
+      src/connection_removal.rs # shared source removal; HS2-6H8ZY6 target-before-unlink owner guards + connection_removal_endpoint_tests.rs regressions; credentials stay (HS2-724S9N, HS2-SM9PM8)
+      src/accounts.rs        #   derived provider accounts; sign_out refuses while in use; HS2-6H8ZY6 remove_unused_source holds checkout then provider ownership with eligibility precedence
+      src/github_origin.rs   #   shared saved-origin primitive for GitHub endpoint derivation (HS2-0HE7E4)
+      src/github_endpoint/   #   HS2-6H8ZY6 fixed provenance, opaque current-record read proofs, locked mutation/recovery and ordinary-registry boundaries
       src/checkouts.rs       #   readable path-derived checkout ids + OS-locked/atomic machine registry; many-to-many checkout/store discovery, scoped routing, and backup-first recovery of the legacy duplicated-suffix race (HS2-NGC8AE/VSPFD9/1S6DS9)
       src/repository_status.rs # git porcelain-v2 repository snapshot parser/runner (HS2-RPVFA4)
       src/repository_size.rs # repository size report (HS2-QF44T7): `git count-objects -v` + bounded attachment walk per checkout repo/store, WARNING_BYTES/CRITICAL_BYTES GitHub-limit levels; `git_object_size`/`limit_messages`/`crossing_message` behind `doctor` and `sync` warnings (HS2-P1GYWH); server `/checkouts/{id}/repository/size` and CLI `checkout repo-size`
@@ -607,6 +610,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/git_env_isolation.rs # real hotsheet-cli under hook-style GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE aimed at a sentinel repo: init/new/edit/sync touch only the store (HS2-RRD417)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
+      src/routes/providers/admission_tests.rs # HS2-6H8ZY6 owned-Git child HTTP/cache/CLI and selected-transfer admission composition
+      src/routes/providers/admission_tests/read_coverage.rs # called account HTTP/counting, managed-secret cache, stale-proof return and registry HTTP normalization/refusal scenarios
       github-app-client-id.txt, github-app-slug.txt # Build-validated public App identity; shared origin configuration in hotsheet-extsync/src/github_app_config.rs also normalizes device/API routing (HS2-K0D3TJ), and source freshness includes both files (HS2-FDTJ98)
       src/lib.rs             #   AppState + app() router (handlers live in routes/; split by concern, HS2-DPPCNN) for ticket/terminal/permission/activity/client-drive APIs; provider discovery/scoped routes (checkout-scoped /checkouts/{reference}/providers lists only linked sources with the checkout default, HS2-3SCH1K; project-owned /checkouts/{reference}/provider-connections list/create/edit/disable + detach-with-cleanup DELETE /checkouts/{reference}/sources/{id}, and machine-wide /accounts list, sign-out, and /accounts/{id}/github-repositories, HS2-SM9PM8) plus idempotent /provider-transfers/copy|move; /stores remains compatible; project /commands plus sibling /command-groups (kept empty command groups, HS2-EZ5KMC), each also checkout-scoped; also /command-runs (list/get/cancel, checkout-scoped too), /views (saved custom views GET/PUT), /lifecycle/quiescence + /lifecycle/restart, /permissions/bridge-probe, /permissions/rules (list/revoke remembered answers, HS2-JNHAYB), /provider-attachments/copy, /announce, and the GitHub App device-flow /github-auth/device* routes
       src/routes/            #   one module per API area: auth, tickets (primary store), activity, accounts (stores + GitHub device sign-in), providers, checkouts, checkout_tickets (+ attachments), project_tools (reports/commands/views/notifications/tts), ticket_writes (store-generic do_create/do_update/...), claims, permissions, terminals (+ live attach), transfer (copy/move), store_scoped (/stores/{id}/...). Large areas are directories (HS2-YMG48C): terminals/ (mod settings+info, launch, signals, attach), checkouts/ (mod + listing), checkout_tickets/ (mod + attachments), providers/ (mod connections + tickets; HS2-DJWTB0 selected transfer admission and independent disabled_transfer_tests owned HTTP fixture); lib.rs imports each module explicitly (no globs) and items are pub(crate) only when used across modules
@@ -1081,9 +1086,16 @@ External descriptors share configuration-owned canonical capabilities with live 
 deliveries, re-reads the issue, and emits through the existing bounded event
 cursor ring (HS2-SGQ183). CLI and HTTP setup share
 `hotsheet-extsync/src/github_webhook_setup.rs` to record the machine key
-reference idempotently. Callback reachability remains a manual setup step.
-Static GitHub/Jira/GitLab watch capabilities stay false; the server's GitHub
-descriptor becomes true after a verified delivery for the current source.
+reference idempotently. HS2-6H8ZY6 uses opaque ordinary snapshots for shared webhook setup and selected
+read proofs around credential and provider I/O. `github_endpoint/registry.rs` owns
+Explicit, Inferred and LegacyUnknown decisions, exact pending operations, review
+and compensation. `hotsheet-extsync/src/source_connect.rs` composes typed create,
+checkout link and durable recovery; CLI `github-connect` and `github-recover`, plus
+authenticated provider routes, use it. Provider-aware checkout add/default/locator
+and whole register/open operations guard affected records under one provider owner.
+HTTP project open validates without maintenance, admits links, then hosts Git stores.
+The web fresh sign-in marks derived endpoint intent as inferred. HS2-P5SZGV tracks
+non-GitHub rename compatibility separately.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home.

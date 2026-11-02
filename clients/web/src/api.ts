@@ -1505,10 +1505,10 @@ export class Api {
       },
     );
   /** Create a ticket source owned by this project: the record and its checkout link in one request. */
-  createConnection = (value: ProviderConnection, makeDefault = false) =>
+  createConnection = (value: ProviderConnection, makeDefault = false, inferSite = false) =>
     this.parsed(parseProviderConnection, '/provider-connections', {
       method: 'POST',
-      body: JSON.stringify({ ...value, make_default: makeDefault }),
+      body: JSON.stringify({ ...value, make_default: makeDefault, infer_site: inferSite }),
     });
   /** Machine-wide sign-ins with the sources and projects using each (HS2-SM9PM8). */
   accounts = () => this.parsed(parseProviderAccount.list, '/accounts');

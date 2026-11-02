@@ -490,7 +490,10 @@ describe('provider onboarding transport', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/provider-connections',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ...connection, make_default: true }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ ...connection, make_default: true, infer_site: false }),
+      }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

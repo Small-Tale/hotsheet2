@@ -961,6 +961,34 @@ jira <KEY> --site <URL> --email <addr>` take `--credential <ref>` or `--account 
   and record default unless flags change them. The referenced credential must exist
   (keychain or `HOTSHEET_API_KEY_*`); no provider API is called while connecting.
 
+**GitHub endpoint provenance and recovery (HS2-6H8ZY6).** A saved connection
+records one fixed endpoint decision: Explicit preserves the selected full API URL,
+Inferred binds an API URL to a normalized saved sign-in site, and LegacyUnknown
+retains an unmarked historical endpoint. URL spelling alone never establishes
+historical intent. Public GitHub inference omits `api_base`; Enterprise inference
+uses its saved site and preserves valid ports. PAT and legacy credentials retain
+fixed routing. A changed or unavailable saved site refuses an Inferred read;
+malformed or pending provenance refuses reads and ordinary edits. Selected-source
+proofs are rechecked around credential and provider I/O.
+
+CLI `github-connect` accepts `--api-base` or `--public-api` for an explicit choice.
+For a saved GitHub App site it otherwise derives an Inferred endpoint. An unmarked
+legacy endpoint conflicting with that site refuses with review instructions; the
+synthetic uppercase public site plus historical `/api/v3` case is covered. The web
+fresh sign-in sends the same inferred intent; a reused account passes its saved
+complete endpoint explicitly. Server create routes use the same typed workflow.
+No account probe, credential rewrite, or automatic legacy migration occurs.
+
+A typed create can leave an exact pending operation if its checkout link fails.
+`github-recover <connection>` resumes that saved link, and `--compensate` removes
+only its unchanged pending candidate. Repeating either action is safe. Authenticated
+HTTP exposes the same recovery route. HTTP endpoint review first reads
+`/provider-connections/{id}/endpoint-review`, then submits an explicit choice with
+that exact expected snapshot; stale review and unreviewed material edits refuse
+without writes. Provider and checkout publication remain separate file operations.
+Project open validates stores without maintenance, admits provider links, then
+hosts Git stores; a refused provider link cannot trigger Git maintenance.
+
 **Existing installs.** Nothing is rewritten. Every pre-existing connection is owned by the
 checkouts already linking it, and every credential a connection references becomes an
 account. A connection left in `providers.json` with no linking checkout (a catalog-only

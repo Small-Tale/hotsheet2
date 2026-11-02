@@ -184,12 +184,13 @@ fn connection(id: &str, kind: &str, disabled: bool, account: &str) -> ProviderCo
 }
 
 fn records(config: &ProviderConfigRegistry, values: Vec<ProviderConnection>) {
-    config
-        .update(|current| {
-            *current = values;
-            Ok(())
-        })
-        .unwrap();
+    // Each matrix row is an independent historical snapshot. Seed its synthetic
+    // bytes directly so an earlier pending row cannot veto the next fixture.
+    std::fs::write(
+        config.path(),
+        serde_json::to_vec(&serde_json::json!({ "connections": values })).unwrap(),
+    )
+    .unwrap();
 }
 
 fn body(source: &str, native: &str, destination: &str, operation: &str) -> serde_json::Value {

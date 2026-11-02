@@ -93,45 +93,63 @@ fn detach_source_with_hook(
     connection_id: &str,
     before_provider_save: impl FnOnce(),
 ) -> Result<SourceDetach, ConnectionRemovalError> {
-    let checkouts = checkouts.lock_source_links()?;
+    let mut checkouts = checkouts.prepare_source_links()?;
     let checkout = checkouts.resolve(reference)?;
     let linked_provider = checkout
         .source(connection_id)
         .map(|source| source.provider.clone());
-    let unlinked = match checkouts.remove_source(&checkout.id, connection_id) {
-        Ok(_) => true,
-        Err(CheckoutError::NotFound(_)) => false,
-        Err(error) => return Err(error.into()),
-    };
-    let still_used_by = checkouts
-        .list()?
-        .into_iter()
-        .filter(|other| other.source(connection_id).is_some())
-        .map(|other| other.id)
-        .collect::<Vec<_>>();
-    before_provider_save();
-    let removed_connection =
-        if linked_provider.as_deref() != Some("git") && still_used_by.is_empty() {
-            providers.update(|connections| {
-                let before = connections.len();
-                connections.retain(|connection| {
-                    connection.id != connection_id || connection.provider == "git"
-                });
-                Ok(connections.len() != before)
-            })?
-        } else {
-            false
-        };
-    if !unlinked && !removed_connection {
-        return Err(CheckoutError::NotFound(connection_id.into()).into());
+    // Git preparation stays outside provider ownership; a newly inferred
+    // external default still needs its actual final ordinary source guard.
+    if linked_provider.as_deref() == Some("git") {
+        checkouts.unlink_git(providers, &checkout.id, connection_id)?;
+        return Ok(SourceDetach {
+            checkout_id: checkout.id,
+            connection_id: connection_id.into(),
+            unlinked: true,
+            removed_connection: false,
+            still_used_by: remaining_users(checkouts.list(), connection_id),
+        });
     }
-    Ok(SourceDetach {
-        checkout_id: checkout.id,
-        connection_id: connection_id.into(),
-        unlinked,
-        removed_connection,
-        still_used_by,
-    })
+    before_provider_save();
+    let (report, _) = providers.update_connection_domain(connection_id, |connections| {
+        let unlinked = checkouts.unlink_external(&checkout.id, connection_id);
+        let still_used_by = remaining_users(checkouts.list(), connection_id);
+        let before = connections.len();
+        if still_used_by.is_empty() {
+            connections.retain(|connection| {
+                connection.id != connection_id || connection.provider == "git"
+            });
+        }
+        let removed_connection = connections.len() != before;
+        if !unlinked && !removed_connection {
+            return Err(ConnectionRemovalError::Checkout(CheckoutError::NotFound(
+                connection_id.into(),
+            )));
+        }
+        // Two files are not atomic. If provider publication fails after this write,
+        // retry collects the retained orphan; never restore an unchecked before-image.
+        checkouts.publish()?;
+        Ok(SourceDetach {
+            checkout_id: checkout.id.clone(),
+            connection_id: connection_id.into(),
+            unlinked,
+            removed_connection,
+            still_used_by,
+        })
+    })?;
+    Ok(report)
+}
+
+fn remaining_users(checkouts: &[crate::checkouts::Checkout], connection_id: &str) -> Vec<String> {
+    let mut users = checkouts
+        .iter()
+        .filter(|checkout| checkout.source(connection_id).is_some())
+        .collect::<Vec<_>>();
+    users.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
+    users
+        .into_iter()
+        .map(|checkout| checkout.id.clone())
+        .collect()
 }
 
 /// Remove `connection_id` from every project and from `providers.json`. See the module docs.
@@ -140,50 +158,41 @@ pub fn remove_provider_connection(
     checkouts: &CheckoutRegistry,
     connection_id: &str,
 ) -> Result<ConnectionRemoval, ConnectionRemovalError> {
-    let checkouts = checkouts.lock_source_links()?;
-    let removed = providers
-        .load()?
-        .into_iter()
-        .find(|connection| connection.id == connection_id);
-    if removed
-        .as_ref()
-        .is_some_and(|connection| connection.provider == "git")
-    {
-        return Err(ConnectionRemovalError::GitSource(connection_id.into()));
-    }
-    let mut report = ConnectionRemoval {
-        connection_id: connection_id.into(),
-        removed_connection: removed.is_some(),
-        ..ConnectionRemoval::default()
-    };
-    // Unlink first: a checkout never names a connection that providers.json has dropped.
-    for checkout in checkouts.list()? {
-        let linked = checkout
-            .sources
+    remove_provider_connection_with_hook(providers, checkouts, connection_id, || {})
+}
+
+fn remove_provider_connection_with_hook(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    connection_id: &str,
+    before_provider_owner: impl FnOnce(),
+) -> Result<ConnectionRemoval, ConnectionRemovalError> {
+    let mut checkouts = checkouts.prepare_source_links()?;
+    before_provider_owner();
+    let (report, _) = providers.update_connection_domain(connection_id, |connections| {
+        let index = connections
             .iter()
-            .any(|source| source.connection_id == connection_id && source.provider != "git");
-        if !linked {
-            continue;
+            .position(|connection| connection.id == connection_id);
+        // This must inspect the actual locked record, not an earlier classification.
+        if index.is_some_and(|index| connections[index].provider == "git") {
+            return Err(ConnectionRemovalError::GitSource(connection_id.into()));
         }
-        match checkouts.remove_source(&checkout.id, connection_id) {
-            Ok(_) | Err(CheckoutError::NotFound(_)) => {
-                report.unlinked_checkouts.push(checkout.id);
+        let mut report = ConnectionRemoval {
+            connection_id: connection_id.into(),
+            ..ConnectionRemoval::default()
+        };
+        let checkout_ids = remaining_users(checkouts.list(), connection_id);
+        for checkout_id in checkout_ids {
+            if checkouts.unlink_external(&checkout_id, connection_id) {
+                report.unlinked_checkouts.push(checkout_id);
             }
-            Err(error) => return Err(error.into()),
         }
-    }
-    let removed = providers.update(|connections| {
-        if let Some(index) = connections
-            .iter()
-            .position(|connection| connection.id == connection_id)
-        {
-            Ok(Some(connections.remove(index)))
-        } else {
-            Ok(None)
-        }
+        let removed = index.map(|index| connections.remove(index));
+        report.removed_connection = removed.is_some();
+        report.kept_credential = removed.as_ref().and_then(credential_of).map(str::to_owned);
+        checkouts.publish()?;
+        Ok(report)
     })?;
-    report.removed_connection = removed.is_some();
-    report.kept_credential = removed.as_ref().and_then(credential_of).map(str::to_owned);
     Ok(report)
 }
 
@@ -257,7 +266,8 @@ mod tests {
             std::fs::create_dir(&root).unwrap();
             ids.push(
                 checkouts
-                    .register_sources(
+                    .register_registered_sources(
+                        &providers,
                         &root,
                         Some(name),
                         None,
@@ -442,7 +452,8 @@ mod tests {
 
         // Re-attach headlessly (`checkout add-source`): links stay many-to-many.
         f.checkouts
-            .add_source(
+            .add_registered_source(
+                &f.providers,
                 "one",
                 TicketSource {
                     connection_id: "github-docs".into(),
@@ -494,7 +505,7 @@ mod tests {
     fn detaching_a_git_source_never_touches_provider_records() {
         let f = fixture();
         let store = f._dir.path().join("one.hs2");
-        std::fs::create_dir(&store).unwrap();
+        crate::FsStore::init(&store, &crate::StoreMetadata::new("HS")).unwrap();
         let git = TicketSource::git(&store);
         f.checkouts.add_source("one", git.clone(), false).unwrap();
         let report = detach_source(&f.providers, &f.checkouts, "one", &git.connection_id).unwrap();
@@ -502,4 +513,6 @@ mod tests {
         assert_eq!(connection_ids(&f).len(), 3);
         assert!(store.is_dir());
     }
+
+    include!("connection_removal_endpoint_tests.rs");
 }

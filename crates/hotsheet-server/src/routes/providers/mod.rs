@@ -1,6 +1,8 @@
 //! Ticket-provider connection and provider-ticket routes.
 
 #[cfg(test)]
+pub(crate) mod admission_tests;
+#[cfg(test)]
 mod disabled_transfer_tests;
 mod tickets;
 pub(crate) use tickets::{
@@ -207,8 +209,9 @@ fn save_provider_connections(
     mut connection: ProviderConnection,
     replacing: Option<&str>,
 ) -> Result<ProviderConnection, ApiError> {
+    let connection_id = connection.id.clone();
     ProviderConfigRegistry::new(state.store.root().join("providers.json"))
-        .update(|connections| {
+        .update_connection(&connection_id, |connections| {
             if let Some(id) = replacing {
                 connection.disabled = connections
                     .iter()
@@ -219,15 +222,11 @@ fn save_provider_connections(
                 connection.clone(),
                 replacing,
             )?;
-            let saved = updated
-                .iter()
-                .find(|item| item.id == connection.id)
-                .cloned()
-                .expect("updated connection retained");
             *connections = updated;
-            Ok(saved)
+            Ok(())
         })
-        .map_err(provider_connection_error)
+        .map_err(provider_connection_error)?
+        .ok_or_else(|| ApiError::not_found(&connection_id))
 }
 
 /// The HTTP status of a rejected connection record.
@@ -249,25 +248,40 @@ fn provider_connection_error(error: hotsheet_ticketing::ProviderError) -> ApiErr
 }
 
 pub(crate) fn connection_token(
-    state: &AppState,
-    connection: &ProviderConnection,
+    read: &hotsheet_extsync::ConnectionRead<'_, impl hotsheet_ticketing::SecretStore>,
 ) -> Result<String, ApiError> {
-    hotsheet_extsync::connection_access_token(
-        connection,
-        &state.key_registry(),
-        OffsetDateTime::now_utc().unix_timestamp(),
-    )
-    .map_err(|error| match error {
+    hotsheet_extsync::connection_access_token(read, OffsetDateTime::now_utc().unix_timestamp())
+        .map_err(connection_credential_error)
+}
+
+pub(crate) fn connection_credential_error(
+    error: hotsheet_extsync::GitHubCredentialError,
+) -> ApiError {
+    match error {
+        hotsheet_extsync::GitHubCredentialError::Endpoint(error) => {
+            ApiError::new(StatusCode::CONFLICT, error.to_string())
+        }
         hotsheet_extsync::GitHubCredentialError::Provider(error) => provider_transfer_error(error),
         hotsheet_extsync::GitHubCredentialError::Secret(error) => provider_transfer_error(error),
         other => ApiError::new(StatusCode::UNAUTHORIZED, other.to_string()),
-    })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateProviderConnectionBody {
+    #[serde(flatten)]
+    connection: ProviderConnection,
+    #[serde(default)]
+    explicit_public_api: bool,
+    #[serde(default)]
+    infer_site: bool,
 }
 
 pub(crate) async fn create_provider_connection(
     State(state): State<AppState>,
-    Json(mut connection): Json<ProviderConnection>,
+    Json(body): Json<CreateProviderConnectionBody>,
 ) -> Result<(StatusCode, Json<ProviderConnection>), ApiError> {
+    let mut connection = body.connection;
     let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .load()
         .map_err(provider_transfer_error)?;
@@ -279,9 +293,184 @@ pub(crate) async fn create_provider_connection(
             &connection.locator,
         );
     }
-    fill_reused_sign_in_endpoint(&state, &mut connection)?;
-    let connection = save_provider_connections(&state, connection, None)?;
+    let explicit_endpoint = connection.settings.get("api_base").is_some();
+    if !body.explicit_public_api {
+        fill_reused_sign_in_endpoint(&state, &mut connection)?;
+    }
+    let connection = if connection.provider == "github" {
+        let (intent, observation) = github_create_authority(
+            &state,
+            &connection,
+            explicit_endpoint,
+            body.explicit_public_api,
+            body.infer_site,
+        )?;
+        hotsheet_extsync::connect_github_source(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            connection,
+            None,
+            hotsheet_extsync::ConnectMode::Create,
+            intent,
+            &observation,
+        )
+        .map_err(connect_source_error)?
+    } else {
+        if body.explicit_public_api || body.infer_site {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "GitHub endpoint choice is only for GitHub",
+            ));
+        }
+        save_provider_connections(&state, connection, None)?
+    };
     Ok((StatusCode::CREATED, Json(connection)))
+}
+
+/// Resolve the caller's endpoint choice before any provider or checkout write.
+/// An explicit `api_base` wins over sign-in metadata; a known site creates a
+/// fixed inferred decision. A plain PAT without site remains legacy-unknown.
+fn github_create_authority(
+    state: &AppState,
+    connection: &ProviderConnection,
+    explicit_endpoint: bool,
+    explicit_public: bool,
+    infer_site: bool,
+) -> Result<
+    (
+        hotsheet_ticketing::github_endpoint::Intent,
+        hotsheet_ticketing::github_endpoint::Observation,
+    ),
+    ApiError,
+> {
+    use hotsheet_ticketing::github_endpoint::{Endpoint, EndpointError, Intent, Observation};
+    let credential_ref = connection
+        .settings
+        .get("credential")
+        .and_then(|value| value.get("secret"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, EndpointError::Invalid.to_string()))?
+        .to_owned();
+    let endpoint = Endpoint::from_record(connection)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    let site = state.key_registry().list().ok().and_then(|entries| {
+        entries
+            .into_iter()
+            .find(|entry| entry.provider == credential_ref)
+            .and_then(|entry| entry.site)
+    });
+    let observation =
+        site.as_ref()
+            .map_or(Observation::Unavailable, |site| Observation::Available {
+                credential_ref: credential_ref.clone(),
+                site: site.clone(),
+            });
+    if explicit_endpoint && explicit_public {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "choose either api_base or explicit_public_api",
+        ));
+    }
+    if explicit_public && infer_site {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "choose either explicit_public_api or infer_site",
+        ));
+    }
+    let intent = if infer_site {
+        let site = site.ok_or_else(|| {
+            ApiError::new(StatusCode::CONFLICT, EndpointError::Unavailable.to_string())
+        })?;
+        Intent::InferSite {
+            credential_ref,
+            endpoint,
+            origin: hotsheet_ticketing::github_origin::normalize_web_base(&site).map_err(|_| {
+                ApiError::new(StatusCode::CONFLICT, EndpointError::Invalid.to_string())
+            })?,
+        }
+    } else if explicit_endpoint || explicit_public {
+        Intent::Explicit {
+            credential_ref,
+            endpoint,
+        }
+    } else if let Some(site) = site {
+        Intent::InferSite {
+            credential_ref,
+            endpoint,
+            origin: hotsheet_ticketing::github_origin::normalize_web_base(&site).map_err(|_| {
+                ApiError::new(StatusCode::CONFLICT, EndpointError::Invalid.to_string())
+            })?,
+        }
+    } else if credential_ref.starts_with("github-app-") {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            EndpointError::Unavailable.to_string(),
+        ));
+    } else {
+        Intent::Legacy
+    };
+    Ok((intent, observation))
+}
+
+fn connect_source_error(error: hotsheet_extsync::ConnectSourceError) -> ApiError {
+    match error {
+        hotsheet_extsync::ConnectSourceError::Endpoint(error) => {
+            ApiError::new(StatusCode::CONFLICT, error.to_string())
+        }
+        hotsheet_extsync::ConnectSourceError::Provider(error) => provider_connection_error(error),
+        hotsheet_extsync::ConnectSourceError::Link(error) => {
+            super::checkouts::checkout_source_error(error)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum GithubRecoveryAction {
+    Resume,
+    Compensate,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GithubRecoveryBody {
+    action: GithubRecoveryAction,
+}
+
+pub(crate) async fn recover_github_connection(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+    Json(body): Json<GithubRecoveryBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let action = match body.action {
+        GithubRecoveryAction::Resume => hotsheet_extsync::RecoverGithubLink::Resume,
+        GithubRecoveryAction::Compensate => hotsheet_extsync::RecoverGithubLink::Compensate,
+    };
+    let result = hotsheet_extsync::recover_github_link(
+        &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+        &state.checkout_registry,
+        &connection_id,
+        action,
+    )
+    .map_err(connect_source_error)?;
+    use hotsheet_ticketing::github_endpoint::Compensation;
+    let value = match result {
+        hotsheet_extsync::GithubLinkRecovery::Finalized(connection) => {
+            serde_json::json!({"status":"finalized","connection":connection})
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(Compensation::Restored(connection)) => {
+            serde_json::json!({"status":"restored","connection":connection})
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(Compensation::Removed) => {
+            serde_json::json!({"status":"removed"})
+        }
+        hotsheet_extsync::GithubLinkRecovery::Compensated(Compensation::Retained(_)) => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                hotsheet_ticketing::github_endpoint::EndpointError::Conflict.to_string(),
+            ));
+        }
+    };
+    Ok(Json(value))
 }
 
 /// A new GitHub source reusing a GitHub Enterprise sign-in gets that site's `api_base` even
@@ -306,9 +495,54 @@ fn fill_reused_sign_in_endpoint(
 pub(crate) async fn update_provider_connection(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-    Json(connection): Json<ProviderConnection>,
+    Json(body): Json<UpdateProviderConnectionBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
-    update_connection_record(&state, connection_id, connection)
+    update_connection_record(
+        &state,
+        connection_id,
+        body.connection,
+        body.review_endpoint,
+        body.endpoint_expected,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateProviderConnectionBody {
+    #[serde(flatten)]
+    connection: ProviderConnection,
+    #[serde(default)]
+    review_endpoint: bool,
+    endpoint_expected: Option<hotsheet_ticketing::github_endpoint::Expected>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EndpointReview {
+    connection: ProviderConnection,
+    expected: hotsheet_ticketing::github_endpoint::Expected,
+    decision: Option<hotsheet_ticketing::github_endpoint::Decision>,
+}
+
+pub(crate) async fn get_provider_endpoint_review(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+) -> Result<Json<EndpointReview>, ApiError> {
+    use hotsheet_ticketing::github_endpoint::{Expected, State};
+    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?
+        .into_iter()
+        .find(|row| row.id == connection_id && row.provider == "github")
+        .ok_or_else(|| ApiError::not_found(&connection_id))?;
+    let expected = Expected::capture(&connection)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    let decision = State::load(&connection)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+        .map(|state| state.decision);
+    Ok(Json(EndpointReview {
+        connection,
+        expected,
+        decision,
+    }))
 }
 
 /// A connection as one project sees it (HS2-SM9PM8): its record plus every project that
@@ -376,6 +610,10 @@ pub(crate) struct CreateCheckoutConnectionBody {
     connection: ProviderConnection,
     #[serde(default)]
     make_default: bool,
+    #[serde(default)]
+    explicit_public_api: bool,
+    #[serde(default)]
+    infer_site: bool,
 }
 
 /// `POST /checkouts/{reference}/provider-connections`: create a ticket source owned by this
@@ -392,27 +630,50 @@ pub(crate) async fn create_checkout_provider_connection(
         .resolve(&reference)
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     let mut connection = body.connection;
+    let explicit_endpoint = connection.settings.get("api_base").is_some();
     let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-    fill_reused_sign_in_endpoint(&state, &mut connection)?;
+    if !body.explicit_public_api {
+        fill_reused_sign_in_endpoint(&state, &mut connection)?;
+    }
     // The same validated create-and-link workflow `hotsheet provider-connect` runs
     // (HS2-65KYVP). A project's default lives on its checkout, never on the shared record,
     // and a failed link removes the new record again.
-    let connection = hotsheet_extsync::connect_source(
-        &registry,
-        connection,
-        Some(hotsheet_extsync::CheckoutLink {
-            registry: &state.checkout_registry,
-            reference: &checkout.id,
-            make_default: body.make_default,
-        }),
-        hotsheet_extsync::ConnectMode::Create,
-    )
-    .map_err(|error| match error {
-        hotsheet_extsync::ConnectSourceError::Provider(error) => provider_connection_error(error),
-        hotsheet_extsync::ConnectSourceError::Link(error) => {
-            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+    let link = Some(hotsheet_extsync::CheckoutLink {
+        registry: &state.checkout_registry,
+        reference: &checkout.id,
+        make_default: body.make_default,
+    });
+    let connection = if connection.provider == "github" {
+        let (intent, observation) = github_create_authority(
+            &state,
+            &connection,
+            explicit_endpoint,
+            body.explicit_public_api,
+            body.infer_site,
+        )?;
+        hotsheet_extsync::connect_github_source(
+            &registry,
+            connection,
+            link,
+            hotsheet_extsync::ConnectMode::Create,
+            intent,
+            &observation,
+        )
+    } else {
+        if body.explicit_public_api || body.infer_site {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "GitHub endpoint choice is only for GitHub",
+            ));
         }
-    })?;
+        hotsheet_extsync::connect_source(
+            &registry,
+            connection,
+            link,
+            hotsheet_extsync::ConnectMode::Create,
+        )
+    }
+    .map_err(connect_source_error)?;
     let linked = state
         .checkout_registry
         .resolve(&checkout.id)
@@ -428,10 +689,16 @@ pub(crate) async fn create_checkout_provider_connection(
 pub(crate) async fn update_checkout_provider_connection(
     State(state): State<AppState>,
     Path((reference, connection_id)): Path<(String, String)>,
-    Json(connection): Json<ProviderConnection>,
+    Json(body): Json<UpdateProviderConnectionBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     checkout_linking(&state, &reference, &connection_id)?;
-    update_connection_record(&state, connection_id, connection)
+    update_connection_record(
+        &state,
+        connection_id,
+        body.connection,
+        body.review_endpoint,
+        body.endpoint_expected,
+    )
 }
 
 pub(crate) async fn set_checkout_provider_connection_disabled(
@@ -452,18 +719,115 @@ fn update_connection_record(
     state: &AppState,
     connection_id: String,
     mut connection: ProviderConnection,
+    review_endpoint: bool,
+    endpoint_expected: Option<hotsheet_ticketing::github_endpoint::Expected>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     connection.id = connection_id.clone();
-    // The transaction preserves the current disabled flag and webhook setup.
-    let connection = save_provider_connections(state, connection, Some(&connection_id))?;
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let previous = registry
+        .load()
+        .map_err(provider_transfer_error)?
+        .into_iter()
+        .find(|row| row.id == connection_id)
+        .ok_or_else(|| ApiError::not_found(&connection_id))?;
+    let endpoint_changed = previous.provider == "github"
+        && (previous.settings.get("api_base") != connection.settings.get("api_base")
+            || previous.settings.get("credential") != connection.settings.get("credential"));
+    // A user-edited material endpoint/account value is an explicit review. The
+    // ordinary metadata route keeps existing provenance when those values match.
+    let connection = if endpoint_changed && review_endpoint {
+        use hotsheet_ticketing::github_endpoint::{
+            Endpoint, EndpointError, EndpointRegistry, Intent, Link, LinkObserver, Observation,
+            Request,
+        };
+        struct NoLink;
+        impl LinkObserver for NoLink {
+            fn is_linked(&self, _: &str, _: &Link) -> Result<bool, EndpointError> {
+                Err(EndpointError::Conflict)
+            }
+        }
+        if previous.locator != connection.locator {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "review the GitHub endpoint and repository locator in separate edits",
+            ));
+        }
+        let endpoint = Endpoint::from_record(&connection)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+        let credential_ref = connection
+            .settings
+            .get("credential")
+            .and_then(|value| value.get("secret"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, EndpointError::Invalid.to_string()))?
+            .to_owned();
+        connection.disabled = previous.disabled;
+        connection.default = previous.default;
+        if let Some(webhook) = previous.settings.get("webhook").cloned() {
+            connection.settings["webhook"] = webhook;
+        }
+        hotsheet_extsync::descriptor(&connection).map_err(provider_connection_error)?;
+        EndpointRegistry::new(&registry)
+            .apply(
+                &Request {
+                    operation_id: hotsheet_model::Ulid::new(),
+                    expected: Some(endpoint_expected.ok_or_else(|| {
+                        ApiError::new(
+                            StatusCode::BAD_REQUEST,
+                            "endpoint_expected is required for review",
+                        )
+                    })?),
+                    connection,
+                    intent: Intent::Explicit {
+                        credential_ref,
+                        endpoint,
+                    },
+                    link: None,
+                },
+                &Observation::Unavailable,
+                &NoLink,
+            )
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?
+            .connection
+    } else {
+        if endpoint_changed {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                hotsheet_ticketing::github_endpoint::EndpointError::Conflict.to_string(),
+            ));
+        }
+        if review_endpoint {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "endpoint review requires a changed GitHub endpoint or account",
+            ));
+        }
+        if endpoint_expected.is_some() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "endpoint_expected requires review_endpoint",
+            ));
+        }
+        // The ordinary transaction preserves the current disabled flag and webhook setup.
+        save_provider_connections(state, connection, Some(&connection_id))?
+    };
     forget_live_provider(state, &connection_id);
     crate::github_webhooks::forget_connection(state, &connection_id);
-    // Checkout links copy the locator; an edit reaches every project that shares the
-    // connection (HS2-RCBKA3).
-    state
-        .checkout_registry
-        .update_source_locator(&connection_id, &connection.locator)
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    // Checkout links copy the locator; only an actual locator edit needs their
+    // second publication. An endpoint-only review must not fail after it commits
+    // because unrelated checkout metadata is unavailable (HS2-6H8ZY6).
+    if previous.locator != connection.locator {
+        state
+            .checkout_registry
+            .update_registered_source_locator(&registry, &connection)
+            .map_err(|error| match error {
+                hotsheet_ticketing::checkouts::CheckoutError::Endpoint(error) => {
+                    ApiError::new(StatusCode::CONFLICT, error.to_string())
+                }
+                other => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
+            })?;
+    }
     Ok(Json(connection))
 }
 
@@ -569,6 +933,7 @@ pub(crate) fn hosted_provider_registry(
     source: &str,
     destination: &str,
 ) -> Result<ProviderRegistry, ApiError> {
+    // HS2-6H8ZY6: unrelated source authority cannot veto an explicitly selected transfer.
     let selected = |id: &str| id == source || id == destination;
     let registry = ProviderRegistry::default();
     let default_id = multistore::store_url_id(&state.store);
@@ -576,6 +941,8 @@ pub(crate) fn hosted_provider_registry(
     let connections = config.load().map_err(provider_transfer_error)?;
     let injected = state.injected_providers.descriptors();
     admit_selected_transfers(&connections, &injected, source, destination)?;
+    let keys = state.key_registry();
+    let mut reads = Vec::new();
     let external_default = connections.iter().any(|connection| connection.default)
         || injected.iter().any(|descriptor| descriptor.default);
     for (id, _) in state.host.locations() {
@@ -598,17 +965,27 @@ pub(crate) fn hosted_provider_registry(
         if connection.provider == "git" || !selected(&connection.id) {
             continue;
         }
-        let token = connection_token(state, &connection)?;
+        let read = hotsheet_extsync::ConnectionRead::capture(&config, &connection, &keys)
+            .map_err(connection_credential_error)?;
+        let token = connection_token(&read)?;
+        read.check().map_err(connection_credential_error)?;
         registry
             .register(
                 hotsheet_extsync::live_provider(&connection, token)
                     .map_err(provider_transfer_error)?,
             )
             .map_err(provider_transfer_error)?;
+        reads.push(read);
     }
     for descriptor in injected {
         if !selected(&descriptor.connection_id) {
             continue;
+        }
+        if let Some(read) = reads
+            .iter()
+            .find(|read| read.connection().id == descriptor.connection_id)
+        {
+            read.check().map_err(connection_credential_error)?;
         }
         registry
             .register(
@@ -618,6 +995,9 @@ pub(crate) fn hosted_provider_registry(
                     .map_err(provider_transfer_error)?,
             )
             .map_err(provider_transfer_error)?;
+    }
+    for read in &reads {
+        read.check().map_err(connection_credential_error)?;
     }
     // Observe actual constructed winners before the fresh policy read: a concurrent
     // external→Git metadata change must not exempt the still-external object.
@@ -644,31 +1024,81 @@ pub(crate) fn provider_for(
             },
         ));
     }
-    if let Ok(provider) = state.injected_providers.get(connection_id) {
-        return Ok(provider);
-    }
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let config = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let keys = state.key_registry();
+    let connection = config
         .load()
         .map_err(provider_transfer_error)?
         .into_iter()
-        .find(|connection| connection.id == connection_id)
-        .ok_or_else(|| ApiError::not_found(connection_id))?;
-    let token = connection_token(state, &connection)?;
+        .find(|connection| connection.id == connection_id);
+    let read = connection
+        .as_ref()
+        .map(|connection| hotsheet_extsync::ConnectionRead::capture(&config, connection, &keys))
+        .transpose()
+        .map_err(connection_credential_error)?;
+    let Some(read) = read else {
+        return state
+            .injected_providers
+            .get(connection_id)
+            .map_err(|_| ApiError::not_found(connection_id));
+    };
+    provider_from_read(state, &read)
+}
+
+/// HS2-6H8ZY6: resolve using the caller's original source proof, including on
+/// injected and cached returns. Never recapture after a webhook effect.
+pub(crate) fn provider_from_read(
+    state: &AppState,
+    read: &hotsheet_extsync::ConnectionRead<'_, impl hotsheet_ticketing::SecretStore>,
+) -> Result<Arc<dyn hotsheet_ticketing::TicketProvider>, ApiError> {
+    let connection = read.connection();
+    let connection_id = connection.id.as_str();
+    if let Some(entry) = state.host.get(connection_id) {
+        read.check().map_err(connection_credential_error)?;
+        return Ok(Arc::new(
+            GitProvider::new(connection_id, entry.store.clone()).with_resolver(entry.resolver()),
+        ));
+    }
+    if let Ok(provider) = state.injected_providers.get(connection_id) {
+        read.check().map_err(connection_credential_error)?;
+        return Ok(provider);
+    }
+    let token = connection_token(read)?;
     use sha2::{Digest, Sha256};
     let mut fingerprint = Sha256::new();
     fingerprint.update(serde_json::to_vec(&connection).map_err(provider_transfer_error)?);
     fingerprint.update(token.as_bytes());
     let fingerprint = format!("{:x}", fingerprint.finalize());
-    let mut cached = state.live_providers.lock_or_recover();
-    if let Some((key, provider)) = cached.get(connection_id) {
-        if key == &fingerprint {
-            return Ok(provider.clone());
-        }
+    if let Some(provider) = cached_provider(state, connection_id, &fingerprint, read)? {
+        return Ok(provider);
     }
     let provider =
-        hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)?;
-    cached.insert(connection_id.into(), (fingerprint, provider.clone()));
+        hotsheet_extsync::live_provider(connection, token).map_err(provider_transfer_error)?;
+    read.check().map_err(connection_credential_error)?;
+    state
+        .live_providers
+        .lock_or_recover()
+        .insert(connection_id.into(), (fingerprint, provider.clone()));
     Ok(provider)
+}
+
+/// HS2-6H8ZY6: the actual cache-hit return boundary checks the SAME captured proof.
+fn cached_provider(
+    state: &AppState,
+    connection_id: &str,
+    fingerprint: &str,
+    read: &hotsheet_extsync::ConnectionRead<'_, impl hotsheet_ticketing::SecretStore>,
+) -> Result<Option<Arc<dyn hotsheet_ticketing::TicketProvider>>, ApiError> {
+    let cached = state
+        .live_providers
+        .lock_or_recover()
+        .get(connection_id)
+        .filter(|(key, _)| key == fingerprint)
+        .map(|(_, provider)| provider.clone());
+    if cached.is_some() {
+        read.check().map_err(connection_credential_error)?;
+    }
+    Ok(cached)
 }
 
 pub(crate) fn provider_read_get(
@@ -840,6 +1270,58 @@ mod tests {
             .await
             .unwrap();
         (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn hs2_6h8zy6_typed_registry_refusals_are_409_without_stale_ticket_code() {
+        use hotsheet_ticketing::github_endpoint::EndpointError;
+        for error in [
+            EndpointError::Invalid,
+            EndpointError::Pending,
+            EndpointError::Conflict,
+        ] {
+            let (status, body) =
+                rendered(provider_connection_error(ProviderError::Endpoint(error))).await;
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert_eq!(body["error"], error.to_string());
+            assert!(body.get("code").is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn hs2_6h8zy6_endpoint_credentials_are_409_without_changing_other_credential_statuses() {
+        use hotsheet_extsync::GitHubCredentialError;
+        use hotsheet_ticketing::github_endpoint::EndpointError;
+        for error in [
+            EndpointError::Pending,
+            EndpointError::Invalid,
+            EndpointError::Conflict,
+            EndpointError::Drift,
+        ] {
+            let (status, body) = rendered(connection_credential_error(
+                GitHubCredentialError::Endpoint(error),
+            ))
+            .await;
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert!(body.get("code").is_none());
+        }
+        for error in [
+            GitHubCredentialError::Expired,
+            GitHubCredentialError::Invalid("synthetic-invalid".into()),
+        ] {
+            assert_eq!(
+                rendered(connection_credential_error(error)).await.0,
+                StatusCode::UNAUTHORIZED
+            );
+        }
+        assert_eq!(
+            rendered(connection_credential_error(GitHubCredentialError::Secret(
+                hotsheet_ticketing::SecretError::NotFound("synthetic-missing".into())
+            )))
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
     }
 
     #[tokio::test]

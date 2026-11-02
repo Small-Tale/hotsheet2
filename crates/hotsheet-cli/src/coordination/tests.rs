@@ -881,7 +881,8 @@ fn hs2_76vmyg_additional_enabled_sources_prevent_false_drained() {
         checkouts::CheckoutRegistry::new(hotsheet_plugins::hotsheet_home().join("checkouts.json"));
     let project = c.directory.parent().unwrap().parent().unwrap();
     checkouts
-        .register_sources(
+        .register_registered_sources(
+            &registry,
             project,
             None,
             None,
