@@ -109,6 +109,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     const stored = await server.request<FullTicket>(`/tickets/${created.id}`);
     expect(stored.notes.some((note) => note.text === 'Synthetic human feedback')).toBe(true);
   } finally {
+    await page.unrouteAll({ behavior: 'wait' });
     await server.stop();
   }
 });
