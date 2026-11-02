@@ -1550,50 +1550,76 @@ mod tests {
     }
 
     #[test]
-    fn hs2_bpkm76_jira_issue_properties_claim_and_reconcile_without_comments() {
+    fn hs2_pqc1fj_jira_issue_properties_claim_and_reconcile_in_both_key_orders() {
         let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
-        let a = claim_event(
+        let first = claim_event(
             "worker-a",
             &format!("v2:{now:013}:0123456789abcdef"),
             AdvisoryClaimEventKind::Claim {
                 expires_unix_ms: now + 5000,
             },
         );
-        let b = claim_event(
+        let second = claim_event(
             "worker-b",
             &format!("v2:{now:013}:fedcba9876543210"),
             AdvisoryClaimEventKind::Claim {
                 expires_unix_ms: now + 5000,
             },
         );
-        let key_a = claim_property_key(&a);
-        let key_b = claim_property_key(&b);
-        let fake = Arc::new(Fake {
-            responses: Mutex::new(
-                vec![
-                    response(200, json!({"keys":[]})),
-                    response(201, json!({})),
-                    response(200, json!({"keys":[{"key":key_b},{"key":key_a}]})),
-                    response(200, json!({"key":key_a,"value":a})),
-                    response(200, json!({"key":key_b,"value":b})),
-                ]
-                .into(),
-            ),
-            ..Default::default()
-        });
-        let projection = provider(fake.clone())
-            .append_advisory_claim_event("ENG-9", &a, now, 0)
-            .unwrap();
-        assert!(projection.conflicted);
-        assert_eq!(projection.claims.len(), 2);
-        let requests = fake.requests.lock_or_recover();
-        assert_eq!(requests[1].0, "PUT");
-        assert_eq!(requests[1].3, Some(serde_json::to_value(&a).unwrap()));
-        assert!(
-            requests
-                .iter()
-                .all(|request| !request.1.contains("/comment"))
-        );
+        let mut observed_orders = Vec::new();
+        for (a, b) in [(first.clone(), second.clone()), (second, first)] {
+            let key_a = claim_property_key(&a);
+            let key_b = claim_property_key(&b);
+            observed_orders.push(key_a < key_b);
+            let mut properties = [(key_a, a.clone()), (key_b, b)];
+            properties.sort_by(|left, right| left.0.cmp(&right.0));
+            let fake = Arc::new(Fake {
+                responses: Mutex::new(
+                    vec![
+                        response(200, json!({"keys":[]})),
+                        response(201, json!({})),
+                        response(
+                            200,
+                            json!({"keys":[{"key": &properties[1].0},{"key": &properties[0].0}]}),
+                        ),
+                        response(
+                            200,
+                            json!({"key": &properties[0].0,"value": &properties[0].1}),
+                        ),
+                        response(
+                            200,
+                            json!({"key": &properties[1].0,"value": &properties[1].1}),
+                        ),
+                    ]
+                    .into(),
+                ),
+                ..Default::default()
+            });
+            let projection = provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &a, now, 0)
+                .unwrap();
+            assert!(projection.conflicted);
+            assert_eq!(projection.claims.len(), 2);
+            let requests = fake.requests.lock_or_recover();
+            assert_eq!(requests[1].0, "PUT");
+            assert_eq!(requests[1].3, Some(serde_json::to_value(&a).unwrap()));
+            assert!(
+                requests[3]
+                    .1
+                    .ends_with(&format!("/properties/{}", properties[0].0))
+            );
+            assert!(
+                requests[4]
+                    .1
+                    .ends_with(&format!("/properties/{}", properties[1].0))
+            );
+            assert!(
+                requests
+                    .iter()
+                    .all(|request| !request.1.contains("/comment"))
+            );
+        }
+        assert_ne!(observed_orders[0], observed_orders[1]);
     }
 
     #[test]
