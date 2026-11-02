@@ -63,6 +63,10 @@ unsupported. MCP and web conflict presentation remain partial (HS2-2MZWZT);
 non-notifying GitHub/GitLab process metadata remains deferred (HS2-D9V8YT).
 Jira settled-property cleanup remains HS2-HTYZAG; the bounded reader fails closed
 until that cleanup exists.
+New Jira process claims use a 24-hour v2 operation horizon and a checked 60-second
+provider clock window (HS2-0QEPRW); old v1 markers retain strict reads and a
+legacy tombstone floor pending migration decision HS2-63669G.
+V2 property deletion remains in HS2-HTYZAG and requires a second skew window.
 
 ## Why a rewrite
 

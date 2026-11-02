@@ -6,6 +6,7 @@ use hotsheet_ticketing::advisory_claim::{
     AdvisoryClaimEvent, AdvisoryClaimEventKind, AdvisoryClaimProjection, reconcile_claims,
     valid_write_event,
 };
+use hotsheet_ticketing::advisory_claim_v2::{self, MAX_CLOCK_SKEW_MS};
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
@@ -25,6 +26,7 @@ mod attachments;
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
 const CLAIM_PROPERTY_PREFIX: &str = "hotsheet.advisory.v1.";
+const CLAIM_V2_PROPERTY_PREFIX: &str = "hotsheet.advisory.v2.";
 const MAX_CLAIM_PROPERTIES: usize = 1000;
 
 use crate::github::{GitHubTransport as HttpTransport, HttpResponse, UreqGitHubTransport};
@@ -180,13 +182,21 @@ impl JiraProvider {
         }
     }
 
-    fn claim_properties(&self, native_id: &str) -> Result<Vec<AdvisoryClaimEvent>, ProviderError> {
+    fn claim_properties(
+        &self,
+        native_id: &str,
+    ) -> Result<(Vec<AdvisoryClaimEvent>, Option<i64>), ProviderError> {
         validate_key(native_id)?;
         let response = self.request(
             "GET",
             &self.endpoint(&format!("issue/{native_id}/properties")),
             None,
         )?;
+        let provider_date = response.headers.get("date").and_then(|date| {
+            time::OffsetDateTime::parse(date, &time::format_description::well_known::Rfc2822)
+                .ok()
+                .map(|value| value.unix_timestamp().saturating_mul(1000))
+        });
         let listing: JiraPropertyKeys = self.json(response)?;
         if listing.keys.len() > MAX_CLAIM_PROPERTIES {
             return self.unsupported("bounded advisory claim property scan");
@@ -195,7 +205,9 @@ impl JiraProvider {
             .keys
             .into_iter()
             .map(|entry| entry.key)
-            .filter(|key| key.starts_with(CLAIM_PROPERTY_PREFIX))
+            .filter(|key| {
+                key.starts_with(CLAIM_PROPERTY_PREFIX) || key.starts_with(CLAIM_V2_PROPERTY_PREFIX)
+            })
             .collect::<Vec<_>>();
         keys.sort();
         let mut events = Vec::with_capacity(keys.len());
@@ -222,7 +234,34 @@ impl JiraProvider {
             event.provider_order = (index + 1) as u64;
             events.push(event);
         }
-        Ok(events)
+        Ok((events, provider_date))
+    }
+
+    fn claim_provider_now(
+        &self,
+        native_id: &str,
+        local_now_ms: i64,
+        date_ms: Option<i64>,
+        v2_required: bool,
+    ) -> Result<i64, ProviderError> {
+        if !v2_required {
+            return Ok(local_now_ms);
+        }
+        let Some(provider_now_ms) = date_ms else {
+            return Err(ProviderError::Conflict {
+                ticket: self.claim_ticket_ref(native_id).qualified(),
+                message: "Jira advisory v2 requires a valid provider Date header".into(),
+            });
+        };
+        if local_now_ms.abs_diff(provider_now_ms) > MAX_CLOCK_SKEW_MS as u64 {
+            return Err(ProviderError::Conflict {
+                ticket: self.claim_ticket_ref(native_id).qualified(),
+                message: "Jira advisory clock is outside the 60-second skew bound".into(),
+            });
+        }
+        // The earlier clock delays expiry for mixed v1/v2 reads. A Date ahead
+        // of the machine clock must not shorten a legacy live claim.
+        Ok(local_now_ms.min(provider_now_ms))
     }
 
     /// When the issue left the `done` status category, from its changelog (HS2-N3RMTV).
@@ -983,11 +1022,20 @@ impl TicketProvider for JiraProvider {
         skew_allowance_ms: i64,
     ) -> Result<AdvisoryClaimProjection, ProviderError> {
         let ticket = self.claim_ticket_ref(native_id);
+        let (events, date_ms) = self.claim_properties(native_id)?;
+        let provider_now_ms = self.claim_provider_now(
+            native_id,
+            now_unix_ms,
+            date_ms,
+            events
+                .iter()
+                .any(|event| event.operation_id.starts_with("v2:")),
+        )?;
         Ok(reconcile_claims(
             &ticket,
-            &self.claim_properties(native_id)?,
-            now_unix_ms,
-            skew_allowance_ms,
+            &events,
+            provider_now_ms,
+            skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
         ))
     }
 
@@ -1006,8 +1054,23 @@ impl TicketProvider for JiraProvider {
                 message: "invalid advisory claim event".into(),
             });
         }
-        let prior_events = self.claim_properties(native_id)?;
-        let before = reconcile_claims(&ticket, &prior_events, now_unix_ms, skew_allowance_ms);
+        let (prior_events, date_ms) = self.claim_properties(native_id)?;
+        let v2_write = event.operation_id.starts_with("v2:");
+        let provider_now_ms = self.claim_provider_now(
+            native_id,
+            now_unix_ms,
+            date_ms,
+            v2_write
+                || prior_events
+                    .iter()
+                    .any(|prior| prior.operation_id.starts_with("v2:")),
+        )?;
+        let before = reconcile_claims(
+            &ticket,
+            &prior_events,
+            provider_now_ms,
+            skew_allowance_ms.min(MAX_CLOCK_SKEW_MS),
+        );
         if prior_events.iter().any(|prior| {
             prior.ticket == event.ticket
                 && prior.worker == event.worker
@@ -1015,6 +1078,18 @@ impl TicketProvider for JiraProvider {
                 && prior.kind == event.kind
         }) {
             return Ok(before);
+        }
+        if v2_write && !advisory_claim_v2::valid_write(event, provider_now_ms) {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "v2 advisory claim is outside its provider-time horizon".into(),
+            });
+        }
+        if !v2_write && matches!(event.kind, AdvisoryClaimEventKind::Claim { .. }) {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.qualified(),
+                message: "new Jira advisory claims require a v2 operation id".into(),
+            });
         }
         let allowed = match &event.kind {
             AdvisoryClaimEventKind::Claim { .. } => !before.conflicted && before.claims.is_empty(),
@@ -1049,6 +1124,11 @@ impl TicketProvider for JiraProvider {
 }
 
 fn claim_property_key(event: &AdvisoryClaimEvent) -> String {
+    let prefix = if event.operation_id.starts_with("v2:") {
+        CLAIM_V2_PROPERTY_PREFIX
+    } else {
+        CLAIM_PROPERTY_PREFIX
+    };
     let (kind, expiry) = match &event.kind {
         AdvisoryClaimEventKind::Claim { .. } => ('0', 0),
         AdvisoryClaimEventKind::Renew { expires_unix_ms } => ('1', (*expires_unix_ms).max(0)),
@@ -1057,7 +1137,7 @@ fn claim_property_key(event: &AdvisoryClaimEvent) -> String {
     let mut event = event.clone();
     event.provider_order = 0;
     let digest = Sha256::digest(serde_json::to_vec(&event).expect("claim event is serializable"));
-    format!("{CLAIM_PROPERTY_PREFIX}{kind}.{expiry:020}.{digest:x}")
+    format!("{prefix}{kind}.{expiry:020}.{digest:x}")
 }
 
 #[derive(Debug, Deserialize)]
@@ -1426,9 +1506,16 @@ mod tests {
         }
     }
     fn response(status: u16, body: Value) -> HttpResponse {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "date".into(),
+            time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc2822)
+                .unwrap(),
+        );
         HttpResponse {
             status,
-            headers: HashMap::new(),
+            headers,
             body: body.to_string(),
         }
     }
@@ -1464,18 +1551,19 @@ mod tests {
 
     #[test]
     fn hs2_bpkm76_jira_issue_properties_claim_and_reconcile_without_comments() {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
         let a = claim_event(
             "worker-a",
-            "op-a",
+            &format!("v2:{now:013}:0123456789abcdef"),
             AdvisoryClaimEventKind::Claim {
-                expires_unix_ms: 5000,
+                expires_unix_ms: now + 5000,
             },
         );
         let b = claim_event(
             "worker-b",
-            "op-b",
+            &format!("v2:{now:013}:fedcba9876543210"),
             AdvisoryClaimEventKind::Claim {
-                expires_unix_ms: 5000,
+                expires_unix_ms: now + 5000,
             },
         );
         let key_a = claim_property_key(&a);
@@ -1494,7 +1582,7 @@ mod tests {
             ..Default::default()
         });
         let projection = provider(fake.clone())
-            .append_advisory_claim_event("ENG-9", &a, 1000, 0)
+            .append_advisory_claim_event("ENG-9", &a, now, 0)
             .unwrap();
         assert!(projection.conflicted);
         assert_eq!(projection.claims.len(), 2);
@@ -1634,6 +1722,236 @@ mod tests {
                 .iter()
                 .all(|request| request.0 == "GET")
         );
+    }
+
+    #[test]
+    fn hs2_0qeprw_new_legacy_claim_is_refused_but_exact_retry_survives() {
+        let legacy = claim_event(
+            "worker-a",
+            "legacy-op",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: 5000,
+            },
+        );
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![response(200, json!({"keys":[]}))].into()),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake.clone()).append_advisory_claim_event("ENG-9", &legacy, 1000, 0),
+            Err(ProviderError::Conflict { .. })
+        ));
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|call| call.0 == "GET")
+        );
+
+        let key = claim_property_key(&legacy);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"value":legacy})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert_eq!(
+            provider(fake.clone())
+                .append_advisory_claim_event("ENG-9", &legacy, 1000, 0)
+                .unwrap()
+                .claims
+                .len(),
+            1
+        );
+        assert!(
+            fake.requests
+                .lock_or_recover()
+                .iter()
+                .all(|call| call.0 == "GET")
+        );
+    }
+
+    #[test]
+    fn hs2_0qeprw_delayed_v2_claim_replays_within_its_horizon() {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+        let issued = now - 5 * 60_000;
+        let claim = claim_event(
+            "worker-a",
+            &format!("v2:{issued:013}:0123456789abcdef"),
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 5 * 60_000,
+            },
+        );
+        let key = claim_property_key(&claim);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[]})),
+                    response(201, json!({})),
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"key":key,"value":claim})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake.clone())
+            .append_advisory_claim_event("ENG-9", &claim, now, MAX_CLOCK_SKEW_MS)
+            .unwrap();
+        assert_eq!(projection.claims.len(), 1);
+        assert_eq!(fake.requests.lock_or_recover()[1].0, "PUT");
+    }
+
+    #[test]
+    fn hs2_0qeprw_late_v2_write_is_inert_after_the_fixed_horizon() {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+        let issued = now - advisory_claim_v2::MAX_OPERATION_HORIZON_MS - MAX_CLOCK_SKEW_MS;
+        let delayed = claim_event(
+            "worker-a",
+            &format!("v2:{issued:013}:0123456789abcdef"),
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: issued + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let key = claim_property_key(&delayed);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"value":delayed})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let result = provider(fake)
+            .advisory_claims("ENG-9", now, MAX_CLOCK_SKEW_MS)
+            .unwrap();
+        assert!(!result.conflicted);
+        assert!(result.claims.is_empty());
+    }
+
+    #[test]
+    fn hs2_0qeprw_v2_needs_provider_time_and_rejects_rollback() {
+        assert!(
+            time::OffsetDateTime::parse(
+                "Fri, 15 Jan 2027 08:00:00 GMT",
+                &time::format_description::well_known::Rfc2822,
+            )
+            .is_ok()
+        );
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+        let claim = claim_event(
+            "worker-a",
+            &format!("v2:{now:013}:0123456789abcdef"),
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: now + 5000,
+            },
+        );
+        let key = claim_property_key(&claim);
+        let mut no_date = response(200, json!({"keys":[{"key":key}]}));
+        no_date.headers.clear();
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![no_date, response(200, json!({"value":claim}))].into()),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake).advisory_claims("ENG-9", now, MAX_CLOCK_SKEW_MS),
+            Err(ProviderError::Conflict { .. })
+        ));
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"value":claim})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake).advisory_claims(
+                "ENG-9",
+                now - MAX_CLOCK_SKEW_MS - 1000,
+                MAX_CLOCK_SKEW_MS
+            ),
+            Err(ProviderError::Conflict { .. })
+        ));
+    }
+
+    #[test]
+    fn hs2_0qeprw_stale_v2_key_cannot_hide_malformed_body() {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+        let issued = now - advisory_claim_v2::MAX_OPERATION_HORIZON_MS - MAX_CLOCK_SKEW_MS;
+        let old = claim_event(
+            "worker-a",
+            &format!("v2:{issued:013}:0123456789abcdef"),
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: issued + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let key = claim_property_key(&old);
+        let mut damaged = serde_json::to_value(&old).unwrap();
+        damaged["worker"] = json!("different-worker");
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":key}]})),
+                    response(200, json!({"value":damaged})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        assert!(matches!(
+            provider(fake).advisory_claims("ENG-9", now, MAX_CLOCK_SKEW_MS),
+            Err(ProviderError::Conflict { .. })
+        ));
+    }
+
+    #[test]
+    fn hs2_0qeprw_mixed_v1_v2_read_uses_earlier_checked_clock() {
+        let date_now = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
+        let local_now = date_now - 59_000;
+        let old_issued =
+            local_now - advisory_claim_v2::MAX_OPERATION_HORIZON_MS - MAX_CLOCK_SKEW_MS;
+        let old_v2 = claim_event(
+            "worker-old",
+            &format!("v2:{old_issued:013}:0123456789abcdef"),
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: old_issued + advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let legacy = claim_event(
+            "worker-live",
+            "legacy-op",
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: local_now - 1000,
+            },
+        );
+        let old_key = claim_property_key(&old_v2);
+        let legacy_key = claim_property_key(&legacy);
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"keys":[{"key":old_key},{"key":legacy_key}]})),
+                    response(200, json!({"value":legacy})),
+                    response(200, json!({"value":old_v2})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let projection = provider(fake)
+            .advisory_claims("ENG-9", local_now, MAX_CLOCK_SKEW_MS)
+            .unwrap();
+        assert!(!projection.conflicted);
+        assert_eq!(projection.claims.len(), 1);
+        assert_eq!(projection.claims[0].worker, "worker-live");
     }
 
     #[test]

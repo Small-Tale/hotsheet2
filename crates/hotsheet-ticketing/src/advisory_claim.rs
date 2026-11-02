@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::advisory_claim_v2::{self, V2EventState};
 use crate::provider::TicketRef;
 
 /// A provider-native marker event. `provider_order` is a stable order derived
@@ -39,6 +40,11 @@ pub fn valid_write_event(event: &AdvisoryClaimEvent, ticket: &TicketRef, now_uni
             AdvisoryClaimEventKind::Claim { expires_unix_ms }
             | AdvisoryClaimEventKind::Renew { expires_unix_ms } => *expires_unix_ms > now_unix_ms,
             AdvisoryClaimEventKind::Release => true,
+        }
+        && match advisory_claim_v2::issued_at_ms(&event.operation_id) {
+            Ok(None) => true,
+            Ok(Some(_)) => advisory_claim_v2::valid_write(event, now_unix_ms),
+            Err(_) => false,
         }
 }
 
@@ -86,6 +92,14 @@ pub fn reconcile_claims(
         {
             invalid_markers += 1;
             continue;
+        }
+        match advisory_claim_v2::classify(event, now_unix_ms) {
+            Ok(Some(V2EventState::Inert)) => continue,
+            Ok(Some(V2EventState::Current)) | Ok(None) => {}
+            Err(_) => {
+                invalid_markers += 1;
+                continue;
+            }
         }
         match ordered.insert(event.provider_order, event) {
             Some(previous) if previous != event => {
@@ -273,6 +287,102 @@ mod tests {
         assert!(projection.claims.is_empty());
         assert!(projection.conflicted);
         assert_eq!(projection.invalid_markers, 2);
+    }
+
+    #[test]
+    fn hs2_0qeprw_v1_release_deletion_can_resurrect_but_late_v2_cannot() {
+        let issued = 1_800_000_000_000;
+        let after = issued
+            + crate::advisory_claim_v2::MAX_OPERATION_HORIZON_MS
+            + crate::advisory_claim_v2::MAX_CLOCK_SKEW_MS;
+        let legacy = event(
+            "worker-a",
+            "legacy-op",
+            1,
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: after + 10_000,
+            },
+        );
+        assert_eq!(
+            reconcile_claims(&ticket(), &[legacy], after, 0)
+                .claims
+                .len(),
+            1
+        );
+        let v2 = event(
+            "worker-a",
+            &format!("v2:{issued:013}:0123456789abcdef"),
+            1,
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: issued + crate::advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        assert!(
+            reconcile_claims(&ticket(), &[v2], after, 0)
+                .claims
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn hs2_0qeprw_malformed_v2_fails_closed_beside_legacy_events() {
+        let issued = 1_800_000_000_000;
+        let malformed = event(
+            "worker-a",
+            &format!("v2:{issued:013}:0123456789abcdef"),
+            2,
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: issued + crate::advisory_claim_v2::MAX_OPERATION_HORIZON_MS + 1,
+            },
+        );
+        let legacy = event(
+            "worker-b",
+            "legacy-op",
+            1,
+            AdvisoryClaimEventKind::Claim {
+                expires_unix_ms: issued + 5000,
+            },
+        );
+        let result = reconcile_claims(&ticket(), &[legacy, malformed], issued, 0);
+        assert!(result.conflicted);
+        assert_eq!(result.invalid_markers, 1);
+    }
+
+    #[test]
+    fn hs2_0qeprw_partial_deletion_is_safe_only_after_v2_horizon() {
+        let issued = 1_800_000_000_000;
+        let operation_id = format!("v2:{issued:013}:0123456789abcdef");
+        let renew = event(
+            "worker-a",
+            &operation_id,
+            1,
+            AdvisoryClaimEventKind::Renew {
+                expires_unix_ms: issued + crate::advisory_claim_v2::MAX_OPERATION_HORIZON_MS,
+            },
+        );
+        let release = event(
+            "worker-a",
+            &operation_id,
+            2,
+            AdvisoryClaimEventKind::Release,
+        );
+        // Claim deletion before the horizon leaves an orphan Renew and stops dispatch.
+        let early = reconcile_claims(
+            &ticket(),
+            &[renew.clone(), release.clone()],
+            issued + 1000,
+            0,
+        );
+        assert!(early.conflicted);
+        // After the horizon, any partial subset or delayed retry is inert.
+        let after = issued
+            + crate::advisory_claim_v2::MAX_OPERATION_HORIZON_MS
+            + crate::advisory_claim_v2::MAX_CLOCK_SKEW_MS;
+        for remaining in [vec![renew.clone(), release], vec![renew], Vec::new()] {
+            let result = reconcile_claims(&ticket(), &remaining, after, 0);
+            assert!(!result.conflicted);
+            assert!(result.claims.is_empty());
+        }
     }
 
     #[test]

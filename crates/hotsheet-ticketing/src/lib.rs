@@ -13,6 +13,7 @@ pub mod activity_distillation;
 pub mod actor;
 pub mod advisory_claim;
 pub mod advisory_claim_ledger;
+pub mod advisory_claim_v2;
 pub mod analytics;
 pub mod annotation_activity;
 pub mod calibration;

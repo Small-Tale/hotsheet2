@@ -72,7 +72,12 @@ impl GitHubTransport for FakeJira {
         };
         Ok(HttpResponse {
             status: 200,
-            headers: HashMap::new(),
+            headers: HashMap::from([(
+                "date".into(),
+                time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc2822)
+                    .unwrap(),
+            )]),
             body: response.to_string(),
         })
     }
@@ -148,9 +153,10 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     let checkout_id = registration["id"].as_str().unwrap();
     let uri = format!("/checkouts/{checkout_id}/providers/jira-eng/tickets/ENG-9/advisory-claim");
     let expiry = (now_epoch() + 3600) * 1000;
+    let operation_id = format!("v2:{:013}:0123456789abcdef", now_epoch() * 1000);
     fake.offline.store(true, Ordering::SeqCst);
     let (status, admitted) = response_json(server.clone().oneshot(request("POST", &uri, Some(json!({
-        "worker":"worker-a","operation_id":"op-a","kind":{"type":"claim","expires_unix_ms":expiry},"provisional":true
+        "worker":"worker-a","operation_id":operation_id,"kind":{"type":"claim","expires_unix_ms":expiry},"provisional":true
     })))).await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{admitted}");
     assert_eq!(admitted["provisional"], true);

@@ -822,3 +822,7 @@ remaining claim reconciles. Disconnect, admit a provisional claim, restart the
 server, reconnect, and confirm replay uses the original operation id and clears
 the provisional flag. Test missing Edit permission and an expired pending claim;
 both must fail closed. No customer content belongs in claim markers or captures.
+For v2 cleanup readiness (HS2-0QEPRW), use a timestamped operation ID, verify
+Jira's `Date` header is present and within 60 seconds of the local clock, and
+confirm a stale same-ID event beyond 24 hours cannot become live. A legacy v1
+Release property remains present and is never treated as reclaimable.

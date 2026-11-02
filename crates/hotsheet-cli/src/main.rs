@@ -285,6 +285,7 @@ enum Cmd {
         action: String,
         #[arg(long)]
         worker: Option<String>,
+        /// Stable v2:<13-digit-issued-ms>:<16-80 lowercase/digit/hyphen nonce> ID.
         #[arg(long)]
         operation: Option<String>,
         #[arg(long)]
