@@ -416,6 +416,25 @@ test('HS2-RS0FFT bounded browser selection includes affected terminal and timeli
   assert.ok(shared.some((stage) => stage.command.includes('providers.spec.ts')));
 });
 
+test('HS2-WWZS75 app startup changes select the degraded WebKit boot spec', () => {
+  for (const path of ['clients/web/src/app/runtime.tsx', 'clients/web/src/main.tsx', 'clients/web/src/browser-id.ts']) {
+    const stages = browserStages([path], false);
+    assert.ok(
+      stages.some((stage) => stage.command.includes('tests/terminal-safari.spec.ts')),
+      path,
+    );
+    assert.ok(
+      stages.some((stage) => stage.reasons.some((reason) => reason.startsWith('HS2-WWZS75:'))),
+      path,
+    );
+  }
+  assert.ok(
+    !browserStages(['clients/web/src/ticket-timeline-data.ts'], false).some((stage) =>
+      stage.command.includes('tests/terminal-safari.spec.ts'),
+    ),
+  );
+});
+
 test('HS2-P9A21R selects phone navigation and resize after workspace chrome changes', () => {
   const stages = browserStages(['clients/web/src/components/workspace-controls.tsx'], false);
   assert.ok(

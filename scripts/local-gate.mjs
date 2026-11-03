@@ -132,6 +132,12 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     if (/terminal|dashboard/.test(path)) files.add('tests/terminal-feedback.spec.ts');
     if (/timeline/.test(path)) files.add('tests/ticket-timeline-usage.spec.ts');
   }
+  // HS2-WWZS75: startup code must still boot in WebKit on an insecure LAN origin whose random
+  // source fails. HS2-2MZWZT escaped to CI because only the provider suite was selected here.
+  if (changes.some((path) => /^clients\/web\/src\/(?:app\/|main\.tsx$|browser-id\.ts$)/.test(path))) {
+    files.add('tests/terminal-safari.spec.ts');
+    reasons.push('HS2-WWZS75: app startup must boot under degraded WebKit browser APIs');
+  }
   const workspaceChromeChanged = changes.some((path) =>
     /^clients\/web\/src\/(?:components\/(?:workspace-controls|app-shell)\.(?:tsx|css)|workspace-toolbar-visibility\.ts|features\/hot-sheet-shell\.tsx)$/.test(
       path,
