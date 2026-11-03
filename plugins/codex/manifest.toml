@@ -37,6 +37,10 @@ format = "codex-toml"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--project", "{project}"]
+# HS2-MRR6Z0: a TUI launched without a config override runs its session on the shared
+# `codex app-server --managed-daemon`. The daemon starts MCP servers (and hooks) with the
+# environment of whichever TUI started it, so a shim under it names no terminal.
+shared_hosts = [{ program = "codex", subcommand = "app-server" }]
 
 [drive]
 # How the host drives Codex (docs/13): the PERSISTENT app-server daemon — a play is a

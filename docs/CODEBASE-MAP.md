@@ -698,8 +698,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/http_redirects.rs # synthetic two-listener HttpBackend GET/mutation/health/workers-poll and real stdio proxy redirect confinement (HS2-0BTSX8)
       tests/startup_presence_redirects.rs # actual startup/initialize/EOF and real presence transport redirect/timeout/registry-relocation regressions; bounded HTTP/stdio support in startup_presence_redirects/ (HS2-081PXN)
       tests/support/git.rs           # owned, initially committed synthetic Git stores for actual --path and serverless notification fixtures (HS2-081PXN)
-      src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D)
-      tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server
+      src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D); a shim under a plugin-declared shared MCP host (`[mcp] shared_hosts`, Codex: `codex app-server`) ignores inherited terminal identity (`hosted_by_shared_host`, `identity_env`, HS2-MRR6Z0)
+      tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server; terminal identity under a fake Codex TUI vs app-server parent (HS2-MRR6Z0)
       tests/serverless_notifications.rs # real binary: serverless writes deliver ticket transitions through hotsheet_cli::notify_watch, reads send nothing, a live server suppresses (HS2-FYZ5S9)
       src/main.rs            #   stdio JSON-RPC loop; --project <code project> | --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF

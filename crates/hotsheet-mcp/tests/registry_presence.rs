@@ -208,3 +208,96 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     assert_eq!(route, format!("DELETE /mcp-presence/{lease}"));
     assert_eq!(secret, "live-secret");
 }
+
+/// HS2-MRR6Z0: start the real shim as a child of a fake `codex` whose arguments are
+/// `codex_args`, with a Hot Sheet terminal's identity in its environment, and return the
+/// presence body it registered with the registry server.
+#[cfg(unix)]
+fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let store_dir = tempfile::tempdir().unwrap();
+    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let (tx, rx) = mpsc::channel();
+    fake_server(listener, tx);
+    let instances = home.path().join("instances");
+    std::fs::create_dir(&instances).unwrap();
+    std::fs::write(
+        instances.join("live.json"),
+        serde_json::json!({
+            "pid": std::process::id(), "url": url, "secret": "live-secret",
+            "store_path": store_dir.path().display().to_string(),
+            "index_path": "", "started_at": "2026-11-03T00:00:00Z",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    // The fake host runs the shim as a child (not exec), as Codex does.
+    let bin = tempfile::tempdir().unwrap();
+    let codex = bin.path().join("codex");
+    std::fs::write(
+        &codex,
+        "#!/bin/sh\n\"$SHIM\" --path \"$STORE\"\nstatus=$?\nexit $status\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = Command::new(&codex)
+        .args(codex_args)
+        .env("SHIM", env!("CARGO_BIN_EXE_hotsheet-mcp"))
+        .env("STORE", store_dir.path())
+        .env("HOTSHEET_HOME", home.path())
+        // What a daemon started from the first Codex tab would carry.
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "first-tab-secret")
+        .env("HOTSHEET_TERMINAL_ID", "cdx-1")
+        .env("HOTSHEET_AGENT", "codex")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":0,"method":"initialize","params":{{"clientInfo":{{"name":"codex-mcp-client"}}}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+    let (route, secret, body) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(route, "POST /mcp-presence");
+    drop(stdin);
+    assert!(child.wait().unwrap().success());
+    let mut body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    body["secret_used"] = secret.into();
+    body
+}
+
+/// HS2-MRR6Z0: under the shared Codex daemon the inherited terminal identity belongs to the
+/// tab that started the daemon, so the lease names no terminal and uses the registry route.
+#[cfg(unix)]
+#[test]
+fn a_shim_under_a_shared_codex_app_server_names_no_terminal() {
+    let body = lease_under_codex(&["app-server", "--listen", "unix://", "--managed-daemon"]);
+    assert!(body["terminal_id"].is_null(), "{body}");
+    assert!(body["tool"].is_null(), "{body}");
+    assert_eq!(body["secret_used"], "live-secret");
+}
+
+/// HS2-MRR6Z0: under its own interactive TUI (Codex hosts the session in the TUI when it is
+/// launched with a `--config` override or `--no-daemon`) the forwarded identity is this
+/// terminal's, and the lease keeps it.
+#[cfg(unix)]
+#[test]
+fn a_shim_under_its_own_codex_tui_keeps_the_terminal() {
+    let body = lease_under_codex(&[
+        "--model",
+        "gpt-test",
+        "--config",
+        "model_reasoning_effort=\"medium\"",
+    ]);
+    assert_eq!(body["terminal_id"], "cdx-1", "{body}");
+    assert_eq!(body["tool"], "codex");
+    assert_eq!(body["secret_used"], "first-tab-secret");
+}

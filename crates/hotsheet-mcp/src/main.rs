@@ -79,7 +79,18 @@ fn main() -> Result<()> {
             .as_ref()
             .map(|(_, secret)| secret.as_str())
             .or(cli.secret.as_deref()),
-        |key| std::env::var(key).ok(),
+        // HS2-MRR6Z0: under a shared host (the Codex app-server daemon) the terminal environment
+        // belongs to whichever session started that host, so it names no terminal here.
+        presence::identity_env(
+            |key| std::env::var(key).ok(),
+            presence::INHERITED_IDENTITY
+                .iter()
+                .any(|key| std::env::var_os(key).is_some())
+                && presence::hosted_by_shared_host(
+                    &presence::ancestor_commands(4),
+                    &hotsheet_plugins::shared_mcp_hosts(),
+                ),
+        ),
         // HS2-E4J72D: a serverless shim outside a Hot Sheet terminal finds the store's
         // running server in the machine-local instance registry.
         || {

@@ -2004,6 +2004,32 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > Code additionally gets the absolute command in its `local` MCP scope (HS2-PN848F,
 > §5.1a).
 >
+> **Codex terminal identity (HS2-MRR6Z0).** Codex starts stdio MCP servers with a minimal
+> allowlisted environment plus the entry's `env` table, so setup's `[mcp_servers.hotsheet]`
+> entry (shared and local configs) also lists `env_vars`: `HOTSHEET_TERMINAL_ID`,
+> `HOTSHEET_SERVER`, `HOTSHEET_SECRET`, `HOTSHEET_AGENT`, and `HOTSHEET_HOME` (so a terminal
+> of a server with a non-default machine home does not send its shim to the default one).
+> These are names only, never values; setup rewrites the entry, so older configs refresh.
+> Where Codex hosts the session decides whose values those are. Observed on 0.166.0 with an isolated `CODEX_HOME`:
+>
+> - A TUI launched with any `--config` override (Hot Sheet's effort launch) or `--no-daemon`
+>   hosts its own session. Its MCP servers and hooks are its children and see its
+>   environment, so the forwarded identity is that terminal's.
+> - A TUI launched without one (including `--model` alone) runs its thread on the shared
+>   `codex app-server --managed-daemon`. MCP servers and hooks are daemon children that see
+>   the environment of whichever process started the daemon, and `initialize` carries only
+>   `clientInfo {name: "codex-mcp-client"}`, nothing per thread or per TUI.
+>
+> So the shim never trusts identity inherited through a shared host. A plugin declares such
+> hosts in its manifest as `[mcp] shared_hosts = [{ program, subcommand }]`; Codex declares
+> `codex app-server`. When the nearest ancestor (command lines read with `ps`, at most four
+> levels) running a declared program has that subcommand among its later arguments, the shim
+> ignores `HOTSHEET_TERMINAL_ID`, `HOTSHEET_AGENT`, `HOTSHEET_SERVER` and `HOTSHEET_SECRET`,
+> finds its server through the instance registry, and holds a project-only lease. A
+> daemon-hosted Codex terminal therefore shows MCP not connected rather than connecting the
+> tab that started the daemon. Per-thread attribution on the daemon, and
+> the same daemon problem for hooks, are open in HS2-4J7WCV.
+>
 > **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
 > restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a
 > restarted server listens on a new port. After any failed heartbeat a serverless shim

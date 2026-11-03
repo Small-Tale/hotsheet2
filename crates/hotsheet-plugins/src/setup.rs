@@ -3433,6 +3433,22 @@ fn resolve_hook_command_with(command: &str, stable: Option<&Path>) -> String {
 /// not launch the client (HS2-28DM8B). An explicit `actor_role` argument still wins.
 const MCP_ENV: &[(&str, &str)] = &[("HOTSHEET_ACTOR_ROLE", "ai")];
 
+/// Variables a Codex MCP entry forwards from the process that starts the server
+/// (HS2-MRR6Z0). Codex gives stdio MCP servers only a minimal allowlisted environment, so
+/// without these the shim cannot name the Hot Sheet terminal it runs in, and a terminal of a
+/// server with a non-default `HOTSHEET_HOME` would send its shim to the default machine home. Names only: the
+/// values stay in the launching terminal and never enter a config file. A TUI that hosts its
+/// own session (any `--config` override, or `--no-daemon`) forwards its own terminal's
+/// values; under the shared `codex app-server` daemon they would belong to whichever tab
+/// started it, so the shim ignores them there.
+const CODEX_MCP_ENV_VARS: &[&str] = &[
+    "HOTSHEET_TERMINAL_ID",
+    "HOTSHEET_SERVER",
+    "HOTSHEET_SECRET",
+    "HOTSHEET_AGENT",
+    "HOTSHEET_HOME",
+];
+
 fn mcp_env_json() -> serde_json::Value {
     MCP_ENV
         .iter()
@@ -3548,6 +3564,15 @@ fn write_mcp_toml(
             MCP_ENV
                 .iter()
                 .map(|(key, value)| ((*key).to_string(), toml::Value::from(*value)))
+                .collect(),
+        ),
+    );
+    entry.insert(
+        "env_vars".into(),
+        toml::Value::Array(
+            CODEX_MCP_ENV_VARS
+                .iter()
+                .map(|key| toml::Value::from(*key))
                 .collect(),
         ),
     );
@@ -5986,6 +6011,58 @@ args = ["--path", "{store}"]
         }
     }
 
+    /// HS2-MRR6Z0: an existing Codex entry written before `env_vars` existed is refreshed in
+    /// place, keeps the user's other servers, carries no identity values, and a second setup
+    /// is byte-identical.
+    #[test]
+    fn codex_mcp_entry_refreshes_env_vars_idempotently() {
+        let fixture = Sharing::new();
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        custom_tool(
+            fixture.plugins.path(),
+            "toby",
+            false,
+            r#"[mcp]
+target = ".toby/config.toml"
+format = "codex-toml"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+        );
+        fixture.write(
+            ".toby/config.toml",
+            "[mcp_servers.hotsheet]\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \".\"]\nenv_vars = [\"HOTSHEET_STALE\"]\n\n[mcp_servers.hotsheet.env]\nHOTSHEET_ACTOR_ROLE = \"ai\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\n",
+        );
+        fixture.setup("toby");
+        let first = fixture.read(".toby/config.toml").unwrap();
+        let codex: toml::Table = toml::from_str(&first).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env_vars"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect::<Vec<_>>(),
+            CODEX_MCP_ENV_VARS
+        );
+        assert_eq!(
+            codex["mcp_servers"]["other"]["command"].as_str(),
+            Some("other-mcp")
+        );
+        assert!(!first.contains("HOTSHEET_STALE"));
+        // Names only: no terminal id, server URL, or secret value is ever written.
+        assert!(!first.contains("http://"));
+        assert!(
+            !codex["mcp_servers"]["hotsheet"]["env"]
+                .as_table()
+                .unwrap()
+                .contains_key("HOTSHEET_SECRET")
+        );
+        fixture.setup("toby");
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+    }
+
     #[test]
     fn disabling_a_tool_keeps_unrelated_entries_in_shared_mcp_configs() {
         let fixture = Sharing::new();
@@ -6037,6 +6114,16 @@ args = ["--path", "{{store}}"]
         assert_eq!(
             codex["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
             Some("ai")
+        );
+        // HS2-MRR6Z0: the Codex entry forwards the terminal identity by name only.
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env_vars"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect::<Vec<_>>(),
+            CODEX_MCP_ENV_VARS
         );
         // Shared project files can be committed. Their Hot Sheet entry must remain
         // portable even when setup ran from a machine-specific binary and store.

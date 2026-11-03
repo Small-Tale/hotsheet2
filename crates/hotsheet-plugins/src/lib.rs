@@ -417,6 +417,26 @@ pub struct Mcp {
     /// such layer; setup then reports the limitation instead.
     #[serde(default)]
     pub local_layer: Option<McpLocalLayer>,
+    /// Processes of this tool that host MCP servers for many sessions at once (HS2-MRR6Z0),
+    /// such as a shared daemon. A server they start inherits the environment of whichever
+    /// session started the host, so `hotsheet-mcp` ignores Hot Sheet terminal identity there.
+    #[serde(default)]
+    pub shared_hosts: Vec<SharedMcpHost>,
+}
+
+/// One shared MCP host: the tool's `program` basename running `subcommand` (HS2-MRR6Z0).
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct SharedMcpHost {
+    pub program: String,
+    pub subcommand: String,
+}
+
+/// Every shared MCP host the built-in and machine plugins declare (HS2-MRR6Z0).
+pub fn shared_mcp_hosts() -> Vec<SharedMcpHost> {
+    all_plugins(&default_dirs())
+        .into_iter()
+        .flat_map(|plugin| plugin.manifest.mcp.shared_hosts)
+        .collect()
 }
 
 /// A client-owned MCP layer layered over a project's shared MCP config (HS2-PN848F).

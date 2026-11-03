@@ -17,6 +17,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use hotsheet_plugins::SharedMcpHost;
 use serde_json::{Value, json};
 
 /// How often the lease is renewed; the server's lease TTL is three heartbeats.
@@ -67,6 +68,90 @@ impl PresenceTarget {
             }),
             lease_id,
         })
+    }
+}
+
+/// Environment that names a Hot Sheet terminal and its server route. A shim hosted by a
+/// shared Codex app-server inherits these from whichever process started that host, not
+/// from the session it serves (HS2-MRR6Z0), so it must not use them.
+pub const INHERITED_IDENTITY: &[&str] = &[
+    "HOTSHEET_TERMINAL_ID",
+    "HOTSHEET_AGENT",
+    "HOTSHEET_SERVER",
+    "HOTSHEET_SECRET",
+];
+
+/// Whether this shim runs under a host that serves many sessions at once (HS2-MRR6Z0).
+/// `ancestors` holds the command lines of the shim's parent, grandparent, and so on, nearest
+/// first; `hosts` are the shared hosts plugins declare (for Codex, `codex app-server`, the
+/// managed daemon). The nearest ancestor running one of the hosts' programs decides: it is
+/// shared when a later argument is that host's subcommand, while the same program run
+/// interactively hosts only its own session. No such ancestor means no shared host.
+pub fn hosted_by_shared_host(ancestors: &[String], hosts: &[SharedMcpHost]) -> bool {
+    for command in ancestors {
+        let tokens: Vec<&str> = command.split_whitespace().collect();
+        for (index, token) in tokens.iter().enumerate() {
+            let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
+            let name = name.strip_suffix(".exe").unwrap_or(name);
+            let matching: Vec<&SharedMcpHost> =
+                hosts.iter().filter(|host| host.program == name).collect();
+            if !matching.is_empty() {
+                return matching
+                    .iter()
+                    .any(|host| tokens[index + 1..].contains(&host.subcommand.as_str()));
+            }
+        }
+    }
+    false
+}
+
+/// Up to `max` ancestor command lines of this process, nearest first (HS2-MRR6Z0). Read with
+/// `ps`; an unreadable process table yields what was read so far, and Windows yields none.
+pub fn ancestor_commands(max: usize) -> Vec<String> {
+    #[cfg(unix)]
+    {
+        let mut out = Vec::new();
+        let mut pid = std::os::unix::process::parent_id();
+        while out.len() < max && pid > 1 {
+            let Some((parent, command)) = std::process::Command::new("ps")
+                .args(["-o", "ppid=,args=", "-p", &pid.to_string()])
+                .stderr(std::process::Stdio::null())
+                .output()
+                .ok()
+                .filter(|output| output.status.success())
+                .and_then(|output| {
+                    let line = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+                    let (ppid, command) = line.split_once(char::is_whitespace)?;
+                    Some((ppid.trim().parse::<u32>().ok()?, command.trim().to_owned()))
+                })
+            else {
+                break;
+            };
+            out.push(command);
+            pid = parent;
+        }
+        out
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = max;
+        Vec::new()
+    }
+}
+
+/// `env`, minus [`INHERITED_IDENTITY`] when `untrusted` (the shim runs under a shared host,
+/// see [`hosted_by_shared_host`]). Such a shim still finds its server through the instance registry and holds a
+/// project-level lease; it simply names no terminal.
+pub fn identity_env(
+    env: impl Fn(&str) -> Option<String>,
+    untrusted: bool,
+) -> impl Fn(&str) -> Option<String> {
+    move |key| {
+        if untrusted && INHERITED_IDENTITY.contains(&key) {
+            None
+        } else {
+            env(key)
+        }
     }
 }
 
@@ -320,6 +405,99 @@ mod tests {
         );
         let blank = env(&[("HOTSHEET_SERVER", " "), ("HOTSHEET_SECRET", "s")]);
         assert!(PresenceTarget::resolve(None, None, blank, || None, 7, None, "L".into()).is_none());
+    }
+
+    /// HS2-MRR6Z0: the nearest ancestor running a declared host program decides.
+    #[test]
+    fn only_a_declared_shared_host_ancestor_marks_the_host_shared() {
+        let chain =
+            |commands: &[&str]| commands.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
+        let hosts = [SharedMcpHost {
+            program: "codex".into(),
+            subcommand: "app-server".into(),
+        }];
+        let shared = |commands: &[&str]| hosted_by_shared_host(&chain(commands), &hosts);
+        // Observed on 0.166.0: the managed daemon parents every daemon-hosted thread's server.
+        assert!(shared(&[
+            "/u/.codex/packages/app-server-daemon/releases/0.166.0/bin/codex app-server --listen unix:// --managed-daemon",
+        ]));
+        // An npm install runs the native binary under node; a wrapper shell may sit between.
+        assert!(shared(&[
+            "/bin/sh -c hotsheet-mcp --project .",
+            "node /usr/local/lib/node_modules/@openai/codex/bin/codex app-server",
+        ]));
+        // A TUI hosting its own session (a --config override or --no-daemon), even when a
+        // later ancestor is an app-server.
+        assert!(!shared(&[
+            "codex --model gpt-6 --config model_reasoning_effort=\"high\"",
+            "/x/codex app-server --managed-daemon",
+        ]));
+        assert!(!shared(&["C:\\tools\\codex.exe --no-daemon"]));
+        assert!(shared(&["C:\\tools\\codex.exe app-server"]));
+        // Not a declared host (Claude, a shell), an unreadable process table, a lookalike
+        // name, or the subcommand before the program.
+        assert!(!shared(&["claude --resume", "-zsh"]));
+        assert!(!shared(&[]));
+        assert!(!shared(&["mycodex app-server"]));
+        assert!(!shared(&["app-server-wrapper codex"]));
+        // No declared hosts: nothing is shared.
+        assert!(!hosted_by_shared_host(&chain(&["codex app-server"]), &[]));
+    }
+
+    /// HS2-MRR6Z0: a shim hosted by a shared app-server drops the inherited terminal identity
+    /// and server route, so its lease names no terminal and comes from the registry instead.
+    #[test]
+    fn inherited_identity_is_dropped_under_a_shared_host_only() {
+        let daemon_env = env(&[
+            ("HOTSHEET_SERVER", "http://127.0.0.1:1/"),
+            ("HOTSHEET_SECRET", "first-tab"),
+            ("HOTSHEET_TERMINAL_ID", "cdx-1"),
+            ("HOTSHEET_AGENT", "codex"),
+            ("HOTSHEET_ACTOR_ROLE", "ai"),
+        ]);
+        let shared = identity_env(&daemon_env, true);
+        for key in INHERITED_IDENTITY {
+            assert_eq!(shared(key), None, "{key}");
+        }
+        assert_eq!(shared("HOTSHEET_ACTOR_ROLE").as_deref(), Some("ai"));
+        let lease = PresenceTarget::resolve(
+            None,
+            None,
+            shared,
+            || Some(("http://registry".into(), "live".into())),
+            9,
+            None,
+            "L".into(),
+        )
+        .unwrap();
+        assert_eq!(
+            (lease.base.as_str(), lease.secret.as_str()),
+            ("http://registry", "live")
+        );
+        assert!(lease.body["terminal_id"].is_null());
+        assert!(lease.body["tool"].is_null());
+
+        // Its own TUI: the forwarded identity is kept.
+        let own = PresenceTarget::resolve(
+            None,
+            None,
+            identity_env(&daemon_env, false),
+            || None,
+            9,
+            None,
+            "L".into(),
+        )
+        .unwrap();
+        assert_eq!(own.body["terminal_id"], "cdx-1");
+        assert_eq!(own.body["tool"], "codex");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ancestor_commands_start_at_the_parent_and_respect_the_limit() {
+        let ancestors = ancestor_commands(2);
+        assert!(ancestors.len() <= 2);
+        assert!(ancestor_commands(0).is_empty());
     }
 
     #[test]

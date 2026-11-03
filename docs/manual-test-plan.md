@@ -184,6 +184,14 @@ a flash to the top. Review the before/after captures attached to HS2-KTXBK2 for
 clipping, row alignment, and any unexpected jump. The browser regression asserts
 the scroll offsets; this visual review checks the rendered transition.
 
+### Codex terminal MCP attribution (HS2-MRR6Z0)
+
+CI uses fake Codex parents; this checks an installed Codex against the user's own daemon, which automated runs must not start or stop.
+
+1. Run `hotsheet-cli setup --tool codex` (or open the project) and confirm `.codex/config.toml` lists `env_vars` with the five `HOTSHEET_*` names and no values.
+2. Open two Codex terminals in one project, each with an effort selected (in-process sessions). Confirm each tab's connection icon reads connected and that closing one tab disconnects only that tab.
+3. Open a third Codex terminal with no effort and no model (a daemon-hosted session). Confirm it shows MCP not connected and that neither earlier tab changes state; HS2-4J7WCV tracks connecting it.
+
 ### Native Codex terminal usage (HS2-J14225)
 
 1. Launch a Codex terminal in Hot Sheet with the shared Codex daemon enabled. Claim one ticket from that terminal's session, run a turn with nonzero token use, and open that ticket's Timeline. Confirm the Codex model (when reported), tokens, and per-model total appear at wide and phone widths.
