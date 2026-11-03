@@ -544,8 +544,13 @@ fn hs2_mfyyj9_source_policy_pins_owned_tree_and_under_lock_clock() {
             >= 3
     );
     assert!(ops.contains("let (now, lease_expires) = clock();"));
+    // HS2-WSE3FJ: the daily platform workflow's Windows targets run the whole workspace,
+    // including this Job Object test, instead of a per-commit Windows subset.
     assert!(
-        include_str!("../../../.github/workflows/ci.yml")
-            .contains("cargo test -p hotsheet-cli --test claim_run")
+        include_str!("../../../.github/workflows/platforms.yml")
+            .contains("cargo nextest run --all-features")
+    );
+    assert!(
+        include_str!("../../../scripts/platform-matrix.mjs").contains("runner: 'windows-latest'")
     );
 }

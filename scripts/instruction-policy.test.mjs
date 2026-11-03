@@ -57,14 +57,16 @@ test('HS2-39D5YS requires an explicit integration record before worker cleanup',
 });
 
 test('HS2-MFD44D runs notification process transitions on native Windows', () => {
-  const workflow = read('.github/workflows/ci.yml');
-  const start = workflow.indexOf('  windows-credential-store:');
-  const end = workflow.indexOf('\n  check:', start);
-  assert.ok(start >= 0 && end > start, 'the native Windows job must exist');
-  const native = workflow.slice(start, end);
-  assert.match(native, /runs-on: windows-latest/);
-  assert.ok(
-    /run: cargo test -p hotsheet-notify hs2_mfd44d(?:\r?\n|$)/.test(native),
-    'native Windows must run the notifier process regressions',
-  );
+  // HS2-WSE3FJ: the daily platform workflow's Windows targets run the whole nextest workspace,
+  // which includes the hotsheet-notify hs2_mfd44d process regressions.
+  const workflow = read('.github/workflows/platforms.yml');
+  const start = workflow.indexOf('\n  core:');
+  const end = workflow.indexOf('\n  tauri:', start);
+  assert.ok(start >= 0 && end > start, 'the core platform job must exist');
+  const core = workflow.slice(start, end);
+  assert.match(core, /runs-on: \$\{\{ matrix\.runner \}\}/);
+  assert.ok(/run: \$\{\{ matrix\.test_wrapper \}\} cargo nextest run --all-features\n/.test(core));
+  const targets = read('scripts/platform-matrix.mjs');
+  assert.match(targets, /runner: 'windows-latest'/);
+  assert.match(targets, /runner: 'windows-11-arm'/);
 });

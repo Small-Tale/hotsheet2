@@ -224,8 +224,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/ci-completion-proposal.mjs # Explicit-invocation local integrator proposals from coordination, ticket, exact root gate tree, Git, and covering main CI (HS2-1C1565; tests: ci-completion-proposal.test.mjs; docs: 28-ci-completion-proposals.md)
   scripts/integration-record.mjs # Provider-qualified source-to-shipping ledger in the Git common directory, fresh remote-main reachability, replay, and retained source refs (HS2-39D5YS; tests: integration-record.test.mjs; server reader: code_review.rs)
-  scripts/windows-crt-directives.mjs # Windows CI dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
-  scripts/windows-crt-link-correlation.mjs # Windows CI one-target verbose link; same-SHA/run/attempt, fresh package/test diagnostic attribution and private complete-member digests; weak matches advisory (HS2-9E879K; tests: windows-crt-link-correlation.test.mjs, registered local+CI)
+  scripts/windows-crt-directives.mjs # Windows platform-target (daily) dumpbin cached-candidate scan; fresh failure/completion reports, allowlisted run provenance, and current-link confirmation limit (HS2-1R2RGQ; tests: windows-crt-directives.test.mjs)
+  scripts/windows-crt-link-correlation.mjs # Windows platform-target (daily) one-target verbose link; same-SHA/run/attempt, fresh package/test diagnostic attribution and private complete-member digests; weak matches advisory (HS2-9E879K; tests: windows-crt-link-correlation.test.mjs, registered local+CI)
   scripts/throughput-baseline.mjs # Read-only integrator/worker throughput spans from coordination, claims, notes, Git and main CI (HS2-34PWSK; tests: throughput-baseline.test.mjs; report: docs/27-integrator-throughput-baseline.md)
   scripts/{check,push,install-git-hooks}.sh # Exact-input local gate, reserved main push wrapper, and hook setup (HS2-CD3D2T, HS2-BND42N)
   scripts/main-integration-{options,window}.mjs # Strict main target parser and Git-ref compare-and-swap reservation across preflight, gate, push and confirmation; atomic ref snapshot read (HS2-W110HQ), coordinator authority check (HS2-BND42N; tests: main-integration-{options,authority,window}.test.mjs)
@@ -780,7 +780,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
-  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (ephemeral Linux Secret Service for encrypted permission tests; Windows credential/vault checks) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
+  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (Linux x86_64 only per commit, HS2-WSE3FJ; ephemeral Linux Secret Service for encrypted permission tests) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
   .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
@@ -1100,8 +1100,8 @@ repair with real CLI processes and synthetic worktrees.
 per-assignment routes, evidence, replay and fences (HS2-HM9FRV). Portable recovery/handoff coverage is in
 `crates/hotsheet-cli/tests/coordination_portable.rs`; public lock contention and
 process-exit release tests are in `crates/hotsheet-ticketing/tests/file_lock_process.rs`.
-The native Windows CI job executes these coordination/lock targets explicitly
-(HS2-9TD8Q5); native execution is not inferred from credential coverage.
+The Windows targets of the daily `Platforms` workflow run these coordination/lock targets in
+their full nextest run (HS2-9TD8Q5, HS2-WSE3FJ); native execution is not inferred from credential coverage.
 Role instructions are canonical in `plugins/shared/role-skills/`, with generated
 `.agents/skills/` and `.claude/skills/` mirrors and bundled first-party plugin
 sources; `scripts/sync-role-skills.mjs --check` and `hotsheet-plugins` policy tests

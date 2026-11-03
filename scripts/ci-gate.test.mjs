@@ -66,6 +66,24 @@ test('selects the latest successful main push CI run, regardless of input order'
   assert.throws(() => latestGreenRun({}), /non-array/);
 });
 
+test('HS2-WSE3FJ never counts a daily, manual or called platform run as a per-commit gate', () => {
+  const platformRuns = ['schedule', 'workflow_dispatch', 'push'].map((event, index) => ({
+    conclusion: 'success',
+    status: 'completed',
+    headBranch: 'main',
+    event,
+    workflowName: 'Platforms',
+    headSha: futureSha,
+    databaseId: 10 + index,
+    createdAt: `2026-11-03T0${index}:00:00Z`,
+    url: `https://example.test/${10 + index}`,
+  }));
+  assert.equal(latestGreenRun(platformRuns), null);
+  assert.equal(latestGreenRun([...platformRuns, ...recordedRuns])?.headSha, greenSha);
+  const scheduledCi = { ...recordedRuns[1], event: 'schedule', headSha: futureSha, createdAt: '2026-11-03T09:00:00Z' };
+  assert.equal(latestGreenRun([scheduledCi, ...recordedRuns])?.headSha, greenSha);
+});
+
 test('reads only listed ticket slugs and final-testing note markers', () => {
   assert.deepEqual(startedSlugs('*● HS2-ABC started title mentions HS2-OTHER\n● HS2-DEF started title\n'), [
     'HS2-ABC',

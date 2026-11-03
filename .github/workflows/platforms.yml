@@ -172,6 +172,12 @@ jobs:
         if: ${{ !cancelled() && steps.rust.outcome != 'skipped' }}
         run: node scripts/test-profile.mjs --top 15 --nextest target/nextest/default/junit.xml || true
 
+      # HS2-SFVWN5: the real Credential Manager round trip is ignored in unattended suites; the
+      # disposable hosted Windows runner opts in explicitly (moved from per-commit CI, HS2-WSE3FJ).
+      - name: Exercise the native Credential Manager round trip (Windows)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' && matrix.os == 'windows' }}
+        run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored
+
       # HS2-1R2RGQ: name the archive members requesting MSVCRTD (LNK4098) for HS2-PN8D9F.
       # Diagnostic only; it runs after the native build, even a failed one, and changes no flags.
       - name: Report native CRT directives on Windows

@@ -107,6 +107,19 @@ test('HS2-31RGRK keeps the Windows CRT diagnostics after the native build', () =
   assert.doesNotMatch(core, /NODEFAULTLIB|crt-static|\/MDd?\b/i);
 });
 
+test('HS2-WSE3FJ opts the Windows targets into the ignored native Credential Manager round trip', () => {
+  const core = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
+  const step = core.slice(core.indexOf('Exercise the native Credential Manager round trip (Windows)'));
+  assert.match(step, /matrix\.os == 'windows'/);
+  assert.match(step, /run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored\n/);
+  assert.ok(
+    core.indexOf('windows_credential_manager_round_trip') < core.indexOf('node scripts/windows-crt-directives.mjs'),
+    'the CRT diagnostic follows every native build',
+  );
+  const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.doesNotMatch(ci, /runs-on: (windows|macos)|ubuntu-24\.04-arm/, 'per-commit CI runs Linux x86_64 only');
+});
+
 test('HS2-31RGRK builds and tests the Tauri desktop shell as its own targets', () => {
   const tauri = workflow.slice(workflow.indexOf('\n  tauri:'));
   assert.match(tauri, /npm run desktop:prepare/);

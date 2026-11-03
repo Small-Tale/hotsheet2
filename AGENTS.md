@@ -74,6 +74,13 @@ remote contains the commit and use `node scripts/ci-gate.mjs status --covers
 <full-sha>` to check the successful `main` CI run. A remote run never replaces a
 failing local gate.
 
+Per-commit `CI` runs Linux x86_64 only (HS2-WSE3FJ). Linux arm64, Windows x86_64
+and arm64, macOS Apple Silicon, and the Tauri desktop targets run in the
+`Platforms` workflow (`.github/workflows/platforms.yml`, HS2-31RGRK) daily, by
+`gh workflow run platforms.yml --ref main -f targets=<all|core|tauri|ids>`, and
+for releases. A `Platforms` run never counts as a ticket's CI gate. Native
+Windows or macOS evidence needs a passing target of that workflow.
+
 Local verification uses `scripts/check.sh` (HS2-RS0FFT), which prints an affected
 package and browser plan and records exact-input receipts. Inspect it with
 `scripts/check.sh --plan`; use `--full` when the risk analysis of shared

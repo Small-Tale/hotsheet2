@@ -525,10 +525,11 @@ test('HS2-9E879K registers its real regression suite in both root gates', () => 
 });
 
 test('HS2-9E879K correlates after the directive report in the native job, unmasked and flag-free', () => {
-  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const job = workflow.slice(workflow.indexOf('  windows-credential-store:'), workflow.indexOf('\n  check:'));
+  // HS2-WSE3FJ: the daily platform workflow's Windows targets own the native build and diagnostics.
+  const workflow = readFileSync(new URL('../.github/workflows/platforms.yml', import.meta.url), 'utf8');
+  const job = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
   const order = [
-    'cargo test -p hotsheet-ticketing --test file_lock_process',
+    'cargo nextest run --all-features',
     'path: target/crt-directives/report.json',
     'node scripts/windows-crt-link-correlation.mjs --target target --directives target/crt-directives/report.json --output target/crt-directives/link-correlation.json',
     'path: target/crt-directives/link-correlation.json',
@@ -542,10 +543,11 @@ test('HS2-9E879K correlates after the directive report in the native job, unmask
     order,
     'correlation follows the directive report',
   );
-  const steps = job.slice(job.indexOf('Correlate CRT candidates with one current affected link'));
-  assert.equal(steps.match(/if: \$\{\{ !cancelled\(\) \}\}/g)?.length, 2);
+  const correlation = job.indexOf('Correlate CRT candidates with one current affected link');
+  const steps = job.slice(correlation, job.indexOf('- name:', job.indexOf('path: target/crt-directives/link-correlation.json')));
+  assert.equal(steps.match(/if: \$\{\{ !cancelled\(\) && matrix\.os == 'windows' \}\}/g)?.length, 2);
   assert.match(steps, /CC: cl/);
-  assert.match(steps, /name: windows-crt-link-correlation/);
+  assert.match(steps, /name: windows-crt-link-correlation-\$\{\{ matrix\.target \}\}/);
   assert.match(steps, /if-no-files-found: error/);
   assert.doesNotMatch(job, /NODEFAULTLIB|crt-static|\/MDd?\b/i);
 });

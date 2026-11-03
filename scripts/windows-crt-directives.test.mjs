@@ -233,36 +233,38 @@ test('HS2-1R2RGQ reports requesting members and fails when every artifact is unr
   }
 });
 
-test('HS2-1R2RGQ wires the diagnostic after every native Windows step without masking', () => {
-  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const job = workflow.slice(workflow.indexOf('  windows-credential-store:'), workflow.indexOf('\n  check:'));
+test('HS2-1R2RGQ wires the diagnostic after the native Windows build without masking', () => {
+  // HS2-WSE3FJ: the daily platform workflow's Windows targets own this diagnostic; their full
+  // nextest run includes every native Windows test the per-commit job used to select.
+  const workflow = readFileSync(new URL('../.github/workflows/platforms.yml', import.meta.url), 'utf8');
+  const job = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
   const steps = [
-    'cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored',
-    'cargo test -p hotsheet-aitools permission_vault::tests',
-    'cargo test -p hotsheet-aitools --test antigravity_discovery',
-    'cargo test -p hotsheet-ticketing --test file_lock_process',
-    'cargo test -p hotsheet-cli --test coordination --test coordination_portable --test coordination_dispatcher',
-    'cargo test -p hotsheet-cli --test claim_run',
+    'cargo nextest run --all-features',
     'node scripts/windows-crt-directives.mjs --target target --output target/crt-directives/report.json',
     'path: target/crt-directives/report.json',
   ];
   const positions = steps.map((step) => job.indexOf(step));
   assert.ok(
     positions.every((position) => position > 0),
-    'every native step and the diagnostic remain in the job',
+    'the native build and the diagnostic remain in the Windows targets',
   );
   assert.deepEqual(
     [...positions].sort((left, right) => left - right),
     positions,
-    'the diagnostic runs last',
+    'the diagnostic follows the native build',
   );
   // Only this diagnostic's own two steps; the later HS2-9E879K correlation pins its own steps.
   const start = job.indexOf('Report native CRT directives on Windows'),
     next = job.indexOf('Correlate CRT candidates with one current affected link');
   const diagnostic = job.slice(start, next > start ? next : undefined);
-  assert.equal(diagnostic.match(/if: \$\{\{ !cancelled\(\) \}\}/g)?.length, 2);
+  assert.equal(diagnostic.match(/if: \$\{\{ !cancelled\(\) && matrix\.os == 'windows' \}\}/g)?.length, 2);
   assert.match(diagnostic, /if-no-files-found: error/);
   assert.doesNotMatch(workflow, /NODEFAULTLIB/i);
+  assert.doesNotMatch(
+    readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'),
+    /windows-crt-directives\.mjs --target/,
+    'per-commit CI runs on Linux only',
+  );
 });
 
 for (const failure of ['dumpbin_unavailable', 'no_candidates'])

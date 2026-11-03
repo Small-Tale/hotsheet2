@@ -30,7 +30,7 @@ The chosen parser budget provides headroom without changing help/error exit code
 panic propagation, dispatch, or test timeouts. Portable real-process coverage checks
 help, invalid arguments and coordination setup/status with a 1 MiB entry-stack cap
 on Unix and the native default entry stack on Windows. Native Windows verification
-requires its actual CI job.
+requires an actual Windows target run of the daily `Platforms` workflow (HS2-WSE3FJ).
 
 A single Cargo workspace at the repo root, everything in one repo so a wire-type
 change regenerates client types and updates every client in one PR (no cross-repo
@@ -692,12 +692,12 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `secret-tool` adapter remains default coverage. The real Windows Credential
   Manager roundtrip is ignored by default and runs only through explicit
   `cargo test -p hotsheet-ticketing windows_credential_manager_round_trip -- --ignored`
-  on the dedicated disposable Windows CI runner.
-- **Native CRT directive evidence (HS2-1R2RGQ):** after every native step, the
-  Windows Credential Manager job runs `node scripts/windows-crt-directives.mjs`, even when
+  on the disposable hosted Windows runners of the daily `Platforms` workflow (HS2-WSE3FJ).
+- **Native CRT directive evidence (HS2-1R2RGQ):** after every native step, each
+  Windows target of the daily `Platforms` workflow (HS2-WSE3FJ) runs `node scripts/windows-crt-directives.mjs`, even when
   an earlier step failed. It runs `dumpbin /ARCHIVEMEMBERS /DIRECTIVES` over bounded cached candidates:
   build-script `.lib` outputs under `target/debug/build/*/out`, the selected vcpkg
-  `x64-windows-static-md` dav1d archives (release and debug), and native `-sys` crate rlibs.
+  `x64-windows-static-md` or `arm64-windows-static-md` dav1d archives (release and debug), and native `-sys` crate rlibs.
   It reports candidate archive members requesting `MSVCRT`, `MSVCRTD`, `LIBCMT` or `LIBCMTD`,
   plus its `RuntimeLibrary` mismatch tag, using relative artifact identities, counts and
   timing. Cached outputs can include obsolete build hashes: this is not the current linked
@@ -706,7 +706,7 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   absent, and includes validated GitHub source SHA/run id/attempt when available; unavailable
   provenance is listed explicitly. Only the intended report file is cleared before probing,
   then a fresh started/completed/failed report replaces it, including missing-tool/no-input
-  failures, so a cached earlier report cannot be uploaded as this run. The JSON report is uploaded as the `windows-crt-directives` artifact. A
+  failures, so a cached earlier report cannot be uploaded as this run. The JSON report is uploaded as the `windows-crt-directives-<target>` artifact. A
   missing `dumpbin`, an empty artifact set, or every artifact being unreadable fails the
   step explicitly. This step diagnoses the LNK4098 `MSVCRTD` warnings for HS2-PN8D9F; it
   changes no CRT, linker or warning setting. Whether candidates request `MSVCRTD` or not, the
@@ -755,12 +755,13 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   with relative identities, bounded lists with totals and validated run provenance, and no raw
   linker log. It follows the same fresh lifecycle: an explicit failure for a missing, unreadable or
   incomplete directive report, an unstartable `cargo`, or no verbose linker output. It is uploaded
-  as the `windows-crt-link-correlation` artifact. It names candidates for HS2-PN8D9F; it is not a
+  as the `windows-crt-link-correlation-<target>` artifact. It names candidates for HS2-PN8D9F; it is not a
   CRT fix or a warning-free result.
 
-- **Native Windows coordination (HS2-9TD8Q5):** the Windows Credential Manager job
-  explicitly runs `cargo test -p hotsheet-ticketing --test file_lock_process` and
-  `cargo test -p hotsheet-cli --test coordination --test coordination_portable`.
+- **Native Windows coordination (HS2-9TD8Q5):** the Windows targets of the daily
+  `Platforms` workflow run the whole workspace under nextest (HS2-WSE3FJ), including
+  `hotsheet-ticketing --test file_lock_process` and `hotsheet-cli --test coordination
+--test coordination_portable`.
   These synthetic process tests exercise busy/nonblocking locks, release on abrupt
   process exit, duplicate wait refusal, filesystem wake/reconnect, retained handoff,
   and refill while earlier CI is pending. Pipe/channel readiness and native child
@@ -768,7 +769,7 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   synthetic repository sets `core.autocrlf=false` locally so worktree and cherry-pick
   byte assertions retain LF regardless of the developer or Windows runner defaults.
   Native
-  Windows evidence requires the actual Windows job to pass; a macOS run or the
+  Windows evidence requires an actual Windows platform target to pass; a macOS run or the
   credential-adapter tests alone do not establish it.
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
@@ -902,6 +903,11 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   may only edit designated throwaway issues: the Jira ones are `HS2T-1`..`HS2T-3`
   (summary prefix `[HS2 benchmark]`, label `hs2-benchmark`), named in the local `.env` as
   `HOTSHEET_BENCH_JIRA_ISSUES` / `HOTSHEET_BENCH_JIRA_ISSUE`.
+- **Per-commit CI is Linux x86_64 only (HS2-WSE3FJ):** each push and pull request runs only
+  the `CI` workflow's Linux x86_64 jobs, per the maintainer policy of 2026-11-03. The former
+  per-commit `windows-credential-store` job moved to the Windows targets below, so a
+  Windows-only regression surfaces in the next daily run, up to a day later; HS2-C6P32J files
+  its ticket.
 - **Full-platform workflow (HS2-31RGRK) — built:** `.github/workflows/platforms.yml`
   (workflow name `Platforms`) runs the full suite daily, on manual dispatch and through
   `workflow_call` for the release flow (HS2-5PEWKJ). It never runs per commit, and

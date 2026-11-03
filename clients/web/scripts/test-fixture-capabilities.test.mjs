@@ -14,7 +14,7 @@ describe('HS2-SFVWN5 unattended credential boundary', () => {
     expect(build).toContain('--bins --features hotsheet-aitools/test-permission-vault');
     expect(scripts['test:e2e']).toBe('npm run test:fixtures && playwright test');
     const workflow = read('../../../.github/workflows/ci.yml');
-    const job = workflow.match(/ {2}webkit-popup:[\s\S]*?(?=\n {2}windows-credential-store:)/)?.[0] ?? '';
+    const job = workflow.match(/ {2}webkit-popup:[\s\S]*?(?=\n {2}check:)/)?.[0] ?? '';
     expect(job).toContain('rustup show');
     expect(job).toContain('actions/cache@v4');
     expect(job).toContain("hashFiles('**/Cargo.lock')");
