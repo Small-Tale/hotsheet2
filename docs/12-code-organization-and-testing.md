@@ -1303,6 +1303,43 @@ Deletion errors remain failures; no removal retries or longer shutdown timeouts 
 
 `src/playwright-config.test.ts` pins the readiness URL and `reuseExistingServer: false`.
 
+#### Interrupted runs release the fixture server (HS2-F6F8MA)
+
+Playwright starts `webServer` in a detached process group and stops that group only from a live
+runner: its own teardown, or its `SIGINT` handler. A runner ended by `SIGTERM` (the integration
+window's abort or any stop of the gate's group) or `SIGKILL` (an escalated stop or a crash)
+never reaches that teardown, and signals to the gate's group do not reach the detached group.
+Before this fix the Vite group kept listening on the fixture port after an interrupted local gate.
+
+The config therefore runs Vite through `scripts/owned-server.mjs --exit-on-stdin-eof`. The runner
+holds that launcher's stdin pipe, and the kernel closes the pipe however the runner ends. On EOF,
+or on `SIGINT`, `SIGTERM`, or `SIGHUP`, the launcher sends `SIGTERM` to its own Vite child and
+`SIGKILL` after a 5 s grace. When it leads its group, which it does under Playwright's
+`sh -c`, it then sends one `SIGKILL` to that group, ending any same-group straggler and itself.
+Vite stays in the launcher's group, so Playwright's normal group `SIGKILL` still covers both.
+
+Ownership is only the launcher's `ChildProcess` handle and its own live group. Nothing searches
+for processes by name, command, or port. Node disables `kill` on a reaped handle, so a reused pid
+never receives the signal. A descendant that leaves the group (`setsid`/`setpgid`) is out of
+reach of every group signal; it must be bound to its parent instead. Vite's only descendant,
+esbuild's service, exits on its stdin EOF.
+
+`scripts/owned-server.e2e.test.mjs` proves this with real processes launched the way Playwright
+launches them (detached `sh -c` child, stdin pipe from a runner):
+
+- runner `SIGKILL` and `SIGTERM` release the owned port and end the launcher, the server, a
+  same-group straggler that ignores `SIGTERM`, and a detached descendant bound by stdin
+- a same-command foreign server and its listener survive
+- a server that ignores `SIGTERM` is killed after the grace
+- a group signal with the runner alive stops everything; a server's own exit code propagates
+- without `--exit-on-stdin-eof`, stdin closure does not stop the server
+- a real Vite server's whole recorded descendant tree, including esbuild, exits when its runner is
+  killed, and the port is released
+
+Fixtures are matched by pid and start time before any cleanup signal.
+`scripts/owned-server.test.mjs` covers the stop transitions with fake processes.
+`src/playwright-config.test.ts` pins the launcher command.
+
 ## 12.8 Cross-references
 
 - Core / server / CLI split: [04-core-server-cli.md](04-core-server-cli.md)

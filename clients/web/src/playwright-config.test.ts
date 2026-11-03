@@ -27,3 +27,13 @@ describe('Playwright web server ownership (HS2-BJ00D1)', () => {
     expect(server?.url).toBe(`${config.use?.baseURL}/__hotsheet-test-server/${id}`);
   });
 });
+
+describe('Playwright web server lifetime (HS2-F6F8MA)', () => {
+  it('binds the detached Vite group to the runner through the owned launcher’s stdin', () => {
+    const server = Array.isArray(config.webServer) ? config.webServer[0] : config.webServer;
+    // A runner ended by SIGTERM or SIGKILL skips Playwright's teardown; stdin EOF must stop Vite.
+    expect(server?.command).toMatch(
+      /^node scripts\/owned-server\.mjs --exit-on-stdin-eof -- node node_modules\/vite\/bin\/vite\.js /u,
+    );
+  });
+});

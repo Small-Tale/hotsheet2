@@ -1887,6 +1887,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-BJ00D1` runs actual Vite servers on owned loopback ports, proves identity isolation and taken-port refusal, then stops one while the other keeps serving. This is a headless process test; no browser or user host is used.
 - Manual: none; lifecycle synchronization and isolation are automated.
 
+### Interrupted browser runs release the Vite fixture server (HS2-F6F8MA)
+
+- Behavior: Playwright's detached `webServer` group runs Vite through `clients/web/scripts/owned-server.mjs --exit-on-stdin-eof`; when the runner ends by any signal (including `SIGTERM` and `SIGKILL`, which skip Playwright's teardown), the closed stdin pipe stops Vite (`SIGTERM`, then `SIGKILL` after the grace) and the launcher sweeps its own live group. Ownership is the launcher's child handle and its own group only; no pid, name, or port lookup (docs/12 §12.7.10).
+- Unit: `clients/web/scripts/owned-server.test.mjs # HS2-F6F8MA` covers argument parsing, EOF/error/signal stop, single stop, grace force-kill, no signal after reap, exit-code propagation, group sweep only when leading, and the opt-in stdin binding. `clients/web/src/playwright-config.test.ts # HS2-F6F8MA` pins the launcher command.
+- End to end: `clients/web/scripts/owned-server.e2e.test.mjs # HS2-F6F8MA` launches real processes the way Playwright does and proves runner `SIGKILL`/`SIGTERM` release the owned port and every owned descendant (same-group straggler, detached stdin-bound descendant), foreign same-command processes survive, `SIGTERM`-ignoring servers are force-killed, and a real Vite tree including esbuild exits; fixtures are identified by pid and start time.
+- Manual: none; reproduced before and after the fix with an interrupted `npx playwright test` stage (ticket HS2-F6F8MA notes).
+
 ### Generic MCP HTTP redirect confinement (HS2-0BTSX8)
 
 - Behavior: generic proxied tool GETs and mutations reject every 3xx before decoding a body, preserve the original status, and never follow the Location. The anonymous auth-diagnostic health probe uses the same no-redirect agent and accepts only 2xx metadata. CoreBackend and existing success/error/partial/truncated contracts remain unchanged. Separate startup/presence owners are HS2-081PXN.

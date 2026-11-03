@@ -51,7 +51,9 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   webServer: {
-    command: `npm run dev:hot -- --port ${port}`,
+    // The runner's stdin pipe bounds the server's lifetime: a runner ended by SIGTERM or SIGKILL
+    // skips Playwright's teardown of this detached group, so EOF stops Vite instead (HS2-F6F8MA).
+    command: `node scripts/owned-server.mjs --exit-on-stdin-eof -- node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/__hotsheet-test-server/${serverId}`,
     reuseExistingServer: false,
     env: { HOTSHEET_VITE_CACHE_DIR: viteCacheDir, HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: serverId },
