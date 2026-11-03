@@ -1663,17 +1663,27 @@ export async function startHotSheetWebClient() {
   const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
   const api = () => new Api(project()?.apiPath ?? '');
   const advisoryClaimResource = createAdvisoryClaimResource(api);
-  const advisoryWorker = (() => {
+  // Created on first advisory use, never at startup: a page whose random source fails must
+  // still boot and show its other surfaces (HS2-2MZWZT broke HS2-3ZBQDG by minting it eagerly).
+  let advisoryWorkerId: string | undefined;
+  const advisoryWorker = () => {
+    if (advisoryWorkerId !== undefined) return advisoryWorkerId;
+    let saved: string | null = null;
     try {
-      const saved = sessionStorage.getItem('hotsheet:advisory-worker');
-      if (saved) return saved;
-      const created = `web-${browserRandomId()}`;
-      sessionStorage.setItem('hotsheet:advisory-worker', created);
-      return created;
+      saved = sessionStorage.getItem('hotsheet:advisory-worker');
     } catch {
-      return `web-${browserRandomId()}`;
+      // Storage can be unavailable; the worker id then lasts for this page only.
     }
-  })();
+    advisoryWorkerId = saved ?? `web-${browserRandomId()}`;
+    if (saved === null) {
+      try {
+        sessionStorage.setItem('hotsheet:advisory-worker', advisoryWorkerId);
+      } catch {
+        // Same: keep the in-memory id.
+      }
+    }
+    return advisoryWorkerId;
+  };
   const advisoryOperationKey = (checkout: string, connection: string, nativeId: string) =>
     `hotsheet:advisory-operation:${JSON.stringify([checkout, connection, nativeId])}`;
   const advisoryOperation = (checkout: string, connection: string, nativeId: string) => {
@@ -1751,10 +1761,10 @@ export async function startHotSheetWebClient() {
       loading: state.loading,
       busy: state.busy,
       error: state.error,
-      worker: advisoryWorker,
+      worker: advisoryWorker(),
       operationId: activeAdvisoryOperationId(
         state.status,
-        advisoryWorker,
+        advisoryWorker(),
         advisoryOperation(current.id, ticket.connection_id, ticket.native_id),
       ),
     };
@@ -1776,7 +1786,7 @@ export async function startHotSheetWebClient() {
       await advisoryClaimResource.refresh();
       return;
     }
-    const own = state.status?.projection.claims.find((claim) => claim.worker === advisoryWorker);
+    const own = state.status?.projection.claims.find((claim) => claim.worker === advisoryWorker());
     if (
       action === 'advisory-claim' &&
       (!state.status?.remote_verified ||
@@ -1810,7 +1820,7 @@ export async function startHotSheetWebClient() {
             type: action === 'advisory-renew' ? ('renew' as const) : ('claim' as const),
             expires_unix_ms: action === 'advisory-claim' ? expires : (renewExpiry ?? expires),
           };
-    const result = await advisoryClaimResource.submit({ worker: advisoryWorker, operation_id: operationId, kind });
+    const result = await advisoryClaimResource.submit({ worker: advisoryWorker(), operation_id: operationId, kind });
     if (result && action === 'advisory-claim')
       setAdvisoryClaimAttempt(current.id, ticket.connection_id, ticket.native_id);
     if (result && action === 'advisory-release')
