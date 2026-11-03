@@ -11097,15 +11097,36 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     )
     .unwrap();
     // External writes are reflected by the production watcher, not a reader-side scan.
+    // The create and the close are separate writes, so the create's event can arrive before
+    // the close is indexed: re-check after each event for this ticket (HS2-868RZV).
+    let legacy_backlinks_uri = format!(
+        "/checkouts/{target_project}/tickets/{}/duplicate-backlinks",
+        target["qualified_id"].as_str().unwrap()
+    );
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if external_updates.recv().await.unwrap().id == legacy_id.to_string() {
+            if external_updates.recv().await.unwrap().id != legacy_id.to_string() {
+                continue;
+            }
+            let indexed = body_json(
+                app.clone()
+                    .oneshot(authed("GET", &legacy_backlinks_uri, None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if indexed["backlinks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["title"] == "legacy duplicate")
+            {
                 break;
             }
         }
     })
     .await
-    .unwrap();
+    .expect("the watcher indexes the legacy duplicate close");
     let inaccessible_checkout = tempfile::tempdir().unwrap();
     let inaccessible_store = inaccessible_checkout.path().join("broken.hs2");
     FsStore::init(&inaccessible_store, &StoreMetadata::new("OFF")).unwrap();
