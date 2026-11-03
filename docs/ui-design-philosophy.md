@@ -17,9 +17,16 @@ does not fork Kerf's guidance.
 - `Needs review` names feedback-needed state. Live AI work is signaled by a
   renewable claim, while `Started` and `started_phase` are durable ticket state.
   Keep those meanings distinct in badges and timelines.
-- Routine ticket text edits keep a controlled draft, a 150 ms local recovery
-  debounce, and one server write on blur, page hide, or explicit finish. The
-  edit-start value is the merge base. The exact contract is in [AGENTS.md](../AGENTS.md).
+- Ticket text editing deviates from Kerf's "Text, state, and continuity" section,
+  which persists routine edits after a short debounce (HS2-RE1PS6). Hot Sheet
+  never writes to the server while the user is typing, so one editing session makes
+  one write and one Git commit instead of one per pause, and nothing this client
+  typed can return as "their" version. Keystrokes update the controlled draft and,
+  after 150 ms, a local recovery copy keyed by project, ticket, and field that keeps
+  the edit-start value. One server write follows blur, page hide, or an explicit
+  finish, merged against that value. Reopening restores an unsaved copy; discrete
+  edits such as tag chips save immediately. See [06-clients.md](06-clients.md)
+  §6.3 for the full contract.
 - Permission decisions remain visible across projects. Their automatic timers are
   explicit per-project choices and pause when hidden. See
   [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.

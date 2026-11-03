@@ -37,10 +37,10 @@ exact provider-neutral next steps.
 ## Client behavior
 
 Hot Sheet's Tauri web UI uses Kerf for application state, routing, lists, API
-resources, rendering, and event delegation. Read the installed Kerf guidance and
-`clients/web/ai/component-catalog-extension.json` before selecting a component.
-The project-specific UI decisions are in `docs/ui-design-philosophy.md` and
-`docs/design-guidelines.md`; those documents point to Kerf for shared conventions.
+resources, rendering, and event delegation. Its consumer catalog extension is
+`clients/web/ai/component-catalog-extension.json`. The project-specific UI
+decisions are in `docs/ui-design-philosophy.md` and `docs/design-guidelines.md`;
+those documents point to Kerf for shared conventions.
 Web Awesome Pro requires a separate license decision. The validated Web Awesome
 integration and browser tests live in `spikes/kerf-webawesome/`, with rationale in
 `docs/09-technology-decisions.md`. Its form controls emit host-level `input` and
@@ -50,31 +50,24 @@ List and column tickets share one responsive ticket-summary component contract,
 including narrow horizontal sizes. App-owned component styles stay beside their
 modules and are represented in `clients/web/kerf.components.json`; regenerate the
 catalog after changes. Symbolic client icons use official Lucide assets through
-the shared icon component, with an accessible name for icon-only controls. Every
-actionable context-menu item has a meaningful icon. If several Lucide metaphors
-fit equally well, ask the maintainer which one to standardize.
+the shared icon component. If several Lucide metaphors fit equally well, ask the
+maintainer which one to standardize.
 
 Application state updates use WebSockets or genuine long polling with cursor replay
 and bounded failure backoff. Fixed-interval network polling is not allowed. Local
 display timers must not issue requests. Cover idle request rate and reconnection.
 
-Ticket text editors save to the server on blur, page hide, or explicit finish,
-never while the user is typing. A 150 ms debounced local recovery copy is keyed
-by project, ticket, and field and retains the value at edit start. Merge against
-that value, keep the draft visible while saving, and restore an unsaved draft when
-the editor reopens. Ordinary text fields have no routine Save/Cancel buttons;
-discrete edits can save immediately, and object creation can submit explicitly.
-Cover rapid coalescing, composed-editor focus moves, edits after save, and reload
-recovery.
+Ticket text editors depart from Kerf's debounced server write: they never write
+to the server while the user is typing (HS2-RE1PS6). The exact contract is in
+`docs/ui-design-philosophy.md`. Cover rapid coalescing, composed-editor focus
+moves, edits after save, and reload recovery.
 
 ## Push policy and verification
 
 Push policy: `push-per-ticket`. The maintainer has authorized routine
 fast-forward pushes of verified ticket commits to `origin/main`; do not ask again.
-Commit a finished ticket before starting the next one. After pushing, confirm the
-remote contains the commit and use `node scripts/ci-gate.mjs status --covers
-<full-sha>` to check the successful `main` CI run. A remote run never replaces a
-failing local gate.
+After pushing, check the covering `main` CI run with `node scripts/ci-gate.mjs
+status --covers <full-sha>`. A remote run never replaces a failing local gate.
 
 Per-commit `CI` runs Linux x86_64 only (HS2-WSE3FJ). Linux arm64, Windows x86_64
 and arm64, macOS Apple Silicon, and the Tauri desktop targets run in the
@@ -91,9 +84,9 @@ warrants broader checks. Client-only
 changes do not routinely run unrelated Rust suites. Full browser and platform
 regression remain in CI; run the full browser suite locally only for a specific
 unresolved risk and record that reason. Review overlapping UI changes once as an
-authorized batch at wide, medium, and narrow sizes including resize transitions.
-Never use an environment assertion to bypass receipt verification. Preserve local
-edits and use a clean worktree when the current checkout is dirty.
+authorized batch. Never use an environment assertion to bypass receipt
+verification. Preserve local edits and use a clean worktree when the current
+checkout is dirty.
 
 HS2-EJ8JTG is this project's deviation from the shared Testing Philosophy's
 note-only tier declaration and full-affected T2 wording. Set exactly one
@@ -152,8 +145,8 @@ lockfiles are already covered by gitgist's built-in list:
 ## Project references
 
 The codebase map is `docs/CODEBASE-MAP.md`; requirements status is in
-`docs/README.md`; feature coverage is in `docs/TEST-COVERAGE.md`. Update them when
-their source behavior changes. The manual plan is `docs/manual-test-plan.md`.
+`docs/README.md`; feature coverage is in `docs/TEST-COVERAGE.md`. The manual plan
+is `docs/manual-test-plan.md`.
 Rust tests use `cargo nextest run`; web tests run from `clients/web`; migrator tests
 run from `migrator/`. Prefer `node scripts/test-quiet.mjs` for quiet affected suites.
 The terminal-sizing arbiter, merge and sync logic, claims, indexes, auth, migration,
