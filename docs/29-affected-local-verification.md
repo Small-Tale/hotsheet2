@@ -137,7 +137,11 @@ The exact-input receipt records the ticket profile, budget, tier, selected and d
 The diagnostic text explaining whether a ticket came from `--ticket` or the clean commit
 subject is excluded from the key; the qualified ticket, tags and effective settings remain
 exact inputs, so a bare push check reuses the ticket gate's receipt (HS2-Q5XAAK).
-Changing the budget or analyzed set changes the receipt key. Gate code and config
+Changing the budget or analyzed set changes the receipt key. The key also hashes the
+build and browser environment, including the Playwright worker count, retry allowance and
+quarantine opt-in (`HOTSHEET_PLAYWRIGHT_WORKERS`, `HOTSHEET_PLAYWRIGHT_RETRIES`,
+`HOTSHEET_RUN_QUARANTINED`), because each changes what a browser run proves (HS2-XW38CB).
+Gate code and config
 changes still force the full fallback. The executor reports actual elapsed time
 beside the budget after success or failure. Covering main CI checks the deferred
 stages before completion. HS2-DAA8AB owns quiet-host selected-versus-full outcome

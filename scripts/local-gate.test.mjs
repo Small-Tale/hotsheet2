@@ -117,6 +117,30 @@ test('HS2-RS0FFT receipts reuse unchanged inputs and invalidate toolchain and ba
   assert.throws(() => runGate({ ...f.options, verify: true }), /No valid/);
 });
 
+test('HS2-XW38CB Playwright worker, retry and quarantine overrides are receipt inputs', (t) => {
+  const f = fixture(t);
+  const key = () => prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1', budgetMs: 300000 }).key;
+  const names = ['HOTSHEET_PLAYWRIGHT_WORKERS', 'HOTSHEET_PLAYWRIGHT_RETRIES', 'HOTSHEET_RUN_QUARANTINED'];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  t.after(() => {
+    for (const name of names)
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+  });
+  for (const name of names) delete process.env[name];
+  const baseline = key();
+  for (const [name, value] of [
+    ['HOTSHEET_PLAYWRIGHT_WORKERS', '1'],
+    ['HOTSHEET_PLAYWRIGHT_RETRIES', '2'],
+    ['HOTSHEET_RUN_QUARANTINED', '1'],
+  ]) {
+    process.env[name] = value;
+    assert.notEqual(key(), baseline, name);
+    delete process.env[name];
+    assert.equal(key(), baseline, `${name} reset restores the original identity`);
+  }
+});
+
 test('HS2-GN06JT budget and analyzed set are exact receipt inputs', (t) => {
   const f = fixture(t);
   const one = prepare(f.repo, undefined, false, f.options.versions, { tier: 'T1', budgetMs: 300000 });

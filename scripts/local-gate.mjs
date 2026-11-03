@@ -357,6 +357,11 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
       'CARGO_TARGET_DIR',
       'PLAYWRIGHT_BROWSER',
       'PLAYWRIGHT_BROWSERS_PATH',
+      // HS2-XW38CB: clients/web/playwright.config.ts reads these; a different worker count,
+      // retry allowance or quarantine opt-in is a different browser run, not the same evidence.
+      'HOTSHEET_PLAYWRIGHT_WORKERS',
+      'HOTSHEET_PLAYWRIGHT_RETRIES',
+      'HOTSHEET_RUN_QUARANTINED',
     ].map((name) => [name, process.env[name] ?? null]),
   );
   // HS2-Q5XAAK: discovery explains the plan but does not change the verified inputs.
