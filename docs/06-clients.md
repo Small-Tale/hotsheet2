@@ -4215,17 +4215,18 @@ that took about 20 s on a slow cellular link (HS2-K93QHA; measured with
 `npm run profile:terminal-replay`, see [the responsiveness profile](22-ui-responsiveness-profile.md)).
 A viewer now negotiates its replay on the attach URL:
 
-| Parameter          | Meaning                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| `replay_protocol`  | `2` opts in to announced replay frames. Without it, every other parameter is ignored.       |
-| `replay_max_bytes` | The most replay the viewer keeps: its scrollback plus one screen, times 192 bytes per line. |
-| `replay_encoding`  | `deflate-raw` when the browser can decode it (`DecompressionStream`).                       |
-| `resume_from`      | On a reconnect: `<stream>:<offset>`, the output position the viewer has applied.            |
+| Parameter           | Meaning                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `replay_protocol`   | `2` opts in to announced replay frames. Without it, every other parameter is ignored.       |
+| `replay_max_bytes`  | The most replay the viewer keeps: its scrollback plus one screen, times 192 bytes per line. |
+| `replay_encoding`   | `deflate-raw` when the browser can decode it (`DecompressionStream`).                       |
+| `resume_from`       | On a reconnect: `<stream>:<offset>`, the output position the viewer has applied.            |
+| `replay_tail_bytes` | Send this much of a large first replay first (32 KiB from a non-loopback host).             |
 
 An opted-in server sends `{"terminal_frame":{"kind","encoding","bytes","stream","end_offset"}}`
 before each replay payload. `kind` is `replay` for the attach's first replay, `replace` for a later
-snapshot that replaces the emulator (a lag resync), and `resume` for missed output appended on a
-reconnect. `bytes` is the uncompressed length. `stream` (16 hex digits) identifies this PTY's
+snapshot that replaces the emulator (a lag resync), `resume` for missed output appended on a
+reconnect, and `tail` for the end of a large first replay sent ahead of it. `bytes` is the uncompressed length. `stream` (16 hex digits) identifies this PTY's
 output, chosen when it spawns, and `end_offset` counts every byte it has produced up to the end
 of the payload. A PTY reopened under the same terminal id gets a new `stream`, so an old offset
 never resumes into different output. The server trims the
@@ -4246,6 +4247,21 @@ sees no position), and an older server ignores them. Measured on the profile's p
 reconnect after a dropped socket received 0 replay bytes and was live again in about 0.56 s on
 the slow profile, most of it the first 250 ms reconnect backoff; before, it re-sent the whole
 replay (1.7 to 4.5 s after the cap and compression, 20 s originally).
+
+**Tail first.** A viewer on a non-loopback host (a phone or another computer reaching the
+server over the network) asks for `replay_tail_bytes=32768`. When the capped first replay is
+more than twice that, the server sends a parser-safe 32 KiB `tail` first, then the whole replay
+as a `replace`, both before any live output and both at the same stream position. The tail
+paints at once while the rest transfers; the whole replay then resets the emulator in one
+parser write. A reader who has already scrolled up into the tail keeps the same distance from
+the bottom across that replacement. Resumes, lag replacements, and small replays are never
+split, and a loopback viewer (the desktop app) skips the tail because parsing the whole replay
+locally is faster than parsing it twice. A tail can start inside a full-screen program's state
+(for example its alternate screen); the whole replay that follows repairs it within the same
+transfer. `mountTerminalViewport` accepts `progressiveReplay` to override the host default.
+Measured on the profile's throttled phone, first paint on the slow profile is now 0.5 to 0.8 s
+for every workload and ring size, including dense text (4.5 s after the cap and compression
+alone), and the whole replay arrives 0.5 to 4.3 s after mount.
 
 The viewer applies frames strictly in server order: a compressed replay decodes
 asynchronously, and later frames wait behind it. A payload that fails to decode, or decodes to

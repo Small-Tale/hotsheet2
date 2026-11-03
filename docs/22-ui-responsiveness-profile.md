@@ -201,6 +201,9 @@ With the viewer-sized cap and deflate-raw replay (§6.7.9 of [the client spec](0
 The profile also drops each phone viewer's socket after it paints and times the reconnect.
 With resume by stream offset, the reconnect carried 0 replay bytes and was live in about
 0.56 s on the slow profile, mostly the first 250 ms reconnect backoff.
+Phone runs request the tail-first replay explicitly (the proxy is on loopback, which would
+otherwise opt out). With it, first paint on the slow profile was 0.5 to 0.8 s for every
+workload and ring size, including dense text.
 Results and the decision are recorded on `HS2-K93QHA`; metrics are written to
 `clients/web/target/performance-traces/hs2-k93qha-replay-metrics.json`.
 

@@ -367,7 +367,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, live scrollback limit updates, input, leased claims, server-size scaling, and reconnect lifecycle
-    src/terminal-replay-stream.ts # Opt-in attach replay negotiation: URL parameters, frame headers, ordered async deflate-raw decoding (HS2-K93QHA)
+    src/terminal-replay-stream.ts # Opt-in attach replay negotiation: URL parameters, frame headers, ordered async deflate-raw decoding, stream positions for resume, tail-first default by host (HS2-K93QHA)
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-long-press.ts # Touch long-press controller (500 ms, 10px tolerance) that opens the terminal edit menu (HS2-KKP8YJ)
     src/terminal-touch-selection.ts # Touch text selection: point→buffer cell, word bounds, anchored drag range, and the controller the long-press drives (HS2-EYR96N)
@@ -514,7 +514,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)
     tests/terminal-replay-profile.spec.ts  #   Opt-in cold-attach replay profile: replay bytes, compression sizes, throttled phone time to paint, retained heap (`profile:terminal-replay`, HS2-K93QHA)
-    tests/terminal-replay.spec.ts # Real-server wide/phone attach: capped compressed replay paints, then live output in order (HS2-K93QHA)
+    tests/terminal-replay.spec.ts # Real-server wide/phone attach: capped compressed replay, reconnect resume, tail-first with held whole replay and kept scroll position (HS2-K93QHA)
     tests/ticket-page-fixture.ts # ticketsJson(request, rows): Playwright fake mirroring the real checkout ticket page envelope/plain-list split with client-derived counts (HS2-5T7QHE)
     tests/platform-labels.ts # Host-platform reveal labels (Finder / File Explorer / file manager) so specs pass on macOS and Linux CI (HS2-6H4M85)
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
@@ -691,7 +691,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per home/project in a short private per-user /tmp namespace (pinning adopted legacy home socket namespaces across idle exits), using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in routes/terminals.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
       src/routes/orchestration.rs # authenticated shared target adapters and bounded metadata; TLS loopback admin fence in tls.rs
       src/routes/terminals/mod.rs # /terminal-limits PUT and POST /terminal-limits/reconcile apply effective replay capacity to running direct PTYs or send the broker resize_replay op (HS2-56G204, HS2-1HYDSY)
-      src/routes/terminals/replay.rs # Opt-in replay framing for terminal attach: viewer-sized cap at a parser-safe start, deflate-raw off the async workers, legacy frames for old viewers (HS2-K93QHA)
+      src/routes/terminals/replay.rs # Opt-in replay framing for terminal attach: viewer-sized cap at a parser-safe start, deflate-raw off the async workers, resume by stream position, tail-first then whole replay, legacy frames for old viewers (HS2-K93QHA)
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot); attachment annotation PUT uses the shared store validator on default and checkout routes
       tests/terminal_connection_attribution.rs # Pending trusted permission hook projection/events versus absent/wrong/correct MCP terminal leases, plus absent/stale hook ids without terminal guessing (HS2-HBA9Z8)
       src/routes/session_messages.rs # POST /connections/{id}/message (HS2-PEJ962): per-terminal SessionPush adapters, push-capable launch wiring (loopback port + random password), stable error codes, `message` connection action

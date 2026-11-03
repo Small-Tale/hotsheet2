@@ -70,7 +70,7 @@ describe('terminal WebSocket bridge', () => {
     const resolve = (project: string, terminal: string) =>
       `ws://127.0.0.1:9/terminals/${terminal}/attach?secret=s&project=${project}`;
     const target = await browserTerminalAttachTarget(
-      '/__hotsheet/project-api/p/terminals/main/attach?replay_protocol=2&replay_max_bytes=4096&replay_encoding=deflate-raw&resume_from=77&secret=forged&other=1',
+      '/__hotsheet/project-api/p/terminals/main/attach?replay_protocol=2&replay_max_bytes=4096&replay_encoding=deflate-raw&resume_from=77&replay_tail_bytes=32768&secret=forged&other=1',
       resolve,
     );
     const url = new URL(target ?? '');
@@ -80,6 +80,7 @@ describe('terminal WebSocket bridge', () => {
     expect(url.searchParams.get('replay_max_bytes')).toBe('4096');
     expect(url.searchParams.get('replay_encoding')).toBe('deflate-raw');
     expect(url.searchParams.get('resume_from')).toBe('77');
+    expect(url.searchParams.get('replay_tail_bytes')).toBe('32768');
     expect(url.searchParams.has('other')).toBe(false);
     expect(withTerminalReplayParams('not a url', new URLSearchParams('other=1'))).toBe('not a url');
   });

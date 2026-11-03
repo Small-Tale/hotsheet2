@@ -31,6 +31,8 @@ pub(crate) struct ReplayParams {
     replay_encoding: Option<String>,
     #[serde(default)]
     resume_from: Option<String>,
+    #[serde(default)]
+    replay_tail_bytes: Option<String>,
 }
 
 /// What one viewer negotiated.
@@ -41,6 +43,8 @@ pub(crate) struct ReplayOptions {
     deflate: bool,
     /// The stream position the viewer has applied output up to, on a reconnect.
     resume_from: Option<StreamPosition>,
+    /// Send this much of the replay's tail first, then the whole replay (phase 4).
+    tail_bytes: Option<usize>,
 }
 
 impl From<&ReplayParams> for ReplayOptions {
@@ -62,6 +66,11 @@ impl From<&ReplayParams> for ReplayOptions {
                 .filter(|bytes| *bytes > 0),
             deflate: params.replay_encoding.as_deref() == Some("deflate-raw"),
             resume_from: params.resume_from.as_deref().and_then(parse_position),
+            tail_bytes: params
+                .replay_tail_bytes
+                .as_deref()
+                .and_then(|value| value.parse::<usize>().ok())
+                .filter(|bytes| *bytes > 0),
         }
     }
 }
@@ -76,6 +85,9 @@ pub(crate) enum ReplayKind {
     Replace,
     /// Only the output after the viewer's `resume_from`, appended to its emulator.
     Resume,
+    /// The end of the first replay, sent ahead of it so a slow link paints at once; the whole
+    /// replay follows immediately as a `replace`, before any live output.
+    Tail,
 }
 
 #[derive(Serialize)]
@@ -133,8 +145,10 @@ pub(crate) async fn replay_messages(
 ) -> Vec<Message> {
     if !options.framed {
         return match kind {
-            // Legacy viewers never send `resume_from`, so only callers' kinds reach here.
-            ReplayKind::Replay | ReplayKind::Resume => vec![Message::Binary(data.into())],
+            // Legacy viewers never opt in, so only callers' kinds reach here.
+            ReplayKind::Replay | ReplayKind::Resume | ReplayKind::Tail => {
+                vec![Message::Binary(data.into())]
+            }
             ReplayKind::Replace => vec![terminal_replay_control(), Message::Binary(data.into())],
         };
     }
@@ -162,6 +176,28 @@ pub(crate) async fn replay_messages(
             },
         ),
     };
+    // Tail first: a short parser-safe end of the replay paints while the whole replay transfers.
+    let tail = match (kind, options.tail_bytes) {
+        (ReplayKind::Replay, Some(tail)) if data.len() > tail.saturating_mul(2) => {
+            Some(hotsheet_terminals::replay_suffix(&data, tail).to_vec())
+        }
+        _ => None,
+    };
+    let Some(tail) = tail else {
+        return framed_payload(options, kind, data, position).await;
+    };
+    let mut messages = framed_payload(options, ReplayKind::Tail, tail, position).await;
+    messages.extend(framed_payload(options, ReplayKind::Replace, data, position).await);
+    messages
+}
+
+/// The header and payload for one announced replay.
+async fn framed_payload(
+    options: ReplayOptions,
+    kind: ReplayKind,
+    data: Vec<u8>,
+    position: Option<StreamPosition>,
+) -> Vec<Message> {
     let bytes = data.len();
     let (encoding, payload) = if options.deflate && bytes >= MIN_DEFLATE_BYTES {
         // A large replay takes tens of milliseconds to deflate: keep it off the async workers.
@@ -247,7 +283,8 @@ mod tests {
                 framed: true,
                 max_bytes: None,
                 deflate: false,
-                resume_from: None
+                resume_from: None,
+                tail_bytes: None
             }
         );
         assert_eq!(
@@ -256,7 +293,8 @@ mod tests {
                 framed: true,
                 max_bytes: None,
                 deflate: false,
-                resume_from: None
+                resume_from: None,
+                tail_bytes: None
             }
         );
         assert_eq!(
@@ -265,7 +303,8 @@ mod tests {
                 framed: true,
                 max_bytes: Some(4096),
                 deflate: true,
-                resume_from: None
+                resume_from: None,
+                tail_bytes: None
             }
         );
     }
@@ -400,6 +439,94 @@ mod tests {
                 params(&format!("replay_protocol=2&resume_from={bad}")).resume_from,
                 None,
                 "{bad}"
+            );
+        }
+    }
+
+    /// HS2-K93QHA phase 4: a large first replay goes out as a parser-safe tail, then the whole
+    /// replay as a replacement, both before live output; small replays, resumes, and lag
+    /// replacements are never split.
+    #[tokio::test]
+    async fn hs2_k93qha_a_large_first_replay_sends_its_tail_then_the_whole_replay() {
+        let output: Vec<u8> = (0..400)
+            .flat_map(|line| {
+                format!("\x1b[3{}mline {line} \u{e9}\x1b[0m\r\n", line % 8).into_bytes()
+            })
+            .collect();
+        let end = at(output.len() as u64);
+        let tailed = params("replay_protocol=2&replay_tail_bytes=1000");
+        let messages = replay_messages(tailed, ReplayKind::Replay, output.clone(), Some(end)).await;
+        assert_eq!(messages.len(), 4);
+        let tail = hotsheet_terminals::replay_suffix(&output, 1000);
+        assert!(
+            tail.len() <= 1000 && tail.len() > 900,
+            "tail {}",
+            tail.len()
+        );
+        assert_eq!(
+            text(&messages[0]),
+            serde_json::json!({"terminal_frame": {"kind": "tail", "encoding": "identity", "bytes": tail.len(), "stream": "00000000000000ab", "end_offset": output.len()}})
+        );
+        assert_eq!(binary(&messages[1]), tail);
+        assert_eq!(text(&messages[2])["terminal_frame"]["kind"], "replace");
+        assert_eq!(
+            text(&messages[2])["terminal_frame"]["end_offset"],
+            output.len()
+        );
+        assert_eq!(binary(&messages[3]), output);
+
+        // Compressed, capped: the tail comes from the capped replay and both are deflated.
+        let options = params(
+            "replay_protocol=2&replay_tail_bytes=2048&replay_max_bytes=6000&replay_encoding=deflate-raw",
+        );
+        let messages =
+            replay_messages(options, ReplayKind::Replay, output.clone(), Some(end)).await;
+        let capped = hotsheet_terminals::replay_suffix(&output, 6000);
+        assert_eq!(
+            text(&messages[0])["terminal_frame"]["encoding"],
+            "deflate-raw"
+        );
+        assert_eq!(text(&messages[2])["terminal_frame"]["bytes"], capped.len());
+        let mut inflated = Vec::new();
+        flate2::read::DeflateDecoder::new(&binary(&messages[3])[..])
+            .read_to_end(&mut inflated)
+            .unwrap();
+        assert_eq!(inflated, capped);
+
+        // Not split: a replay within twice the tail, a resume, a lag replacement, a bad value.
+        for (query, kind, expected) in [
+            (
+                "replay_protocol=2&replay_tail_bytes=100000",
+                ReplayKind::Replay,
+                "replay",
+            ),
+            (
+                "replay_protocol=2&replay_tail_bytes=1000&resume_from=ab:0",
+                ReplayKind::Replay,
+                "resume",
+            ),
+            (
+                "replay_protocol=2&replay_tail_bytes=1000",
+                ReplayKind::Replace,
+                "replace",
+            ),
+            (
+                "replay_protocol=2&replay_tail_bytes=x",
+                ReplayKind::Replay,
+                "replay",
+            ),
+            (
+                "replay_protocol=2&replay_tail_bytes=0",
+                ReplayKind::Replay,
+                "replay",
+            ),
+        ] {
+            let messages = replay_messages(params(query), kind, output.clone(), Some(end)).await;
+            assert_eq!(messages.len(), 2, "{query}");
+            assert_eq!(
+                text(&messages[0])["terminal_frame"]["kind"],
+                expected,
+                "{query}"
             );
         }
     }

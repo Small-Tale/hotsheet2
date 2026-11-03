@@ -309,3 +309,57 @@ async fn hs2_k93qha_a_reconnect_resumes_with_only_missed_output() {
 async fn hs2_k93qha_a_broker_reconnect_resumes_with_only_missed_output() {
     resume_appends_only_missed_output(true).await;
 }
+
+async fn tail_then_whole_replay_then_live_output(broker: bool) {
+    let fixture = fixture(broker).await;
+    let id = colored_terminal(fixture.addr, "tail").await;
+    let full = full_replay(fixture.addr, &id).await;
+
+    let mut ws = connect(
+        fixture.addr,
+        &id,
+        "&replay_protocol=2&replay_tail_bytes=1024&replay_encoding=deflate-raw",
+    )
+    .await;
+    let tail_header = json(&next(&mut ws).await);
+    assert_eq!(
+        tail_header["terminal_frame"]["kind"], "tail",
+        "broker={broker}"
+    );
+    let tail = inflate_or_identity(&tail_header, binary(next(&mut ws).await));
+    assert_eq!(tail, hotsheet_terminals::replay_suffix(&full, 1024));
+    let whole_header = json(&next(&mut ws).await);
+    assert_eq!(
+        whole_header["terminal_frame"]["kind"], "replace",
+        "broker={broker}"
+    );
+    assert_eq!(
+        whole_header["terminal_frame"]["end_offset"],
+        tail_header["terminal_frame"]["end_offset"]
+    );
+    let whole = inflate_or_identity(&whole_header, binary(next(&mut ws).await));
+    assert_eq!(whole, full, "broker={broker}");
+
+    ws.send(WsMessage::Text("after-tail\n".into()))
+        .await
+        .unwrap();
+    live_output_until(&mut ws, "after-tail").await;
+}
+
+fn inflate_or_identity(header: &serde_json::Value, payload: Vec<u8>) -> Vec<u8> {
+    if header["terminal_frame"]["encoding"] == "deflate-raw" {
+        inflate(&payload)
+    } else {
+        payload
+    }
+}
+
+#[tokio::test]
+async fn hs2_k93qha_tail_first_then_the_whole_replay_then_live_output() {
+    tail_then_whole_replay_then_live_output(false).await;
+}
+
+#[tokio::test]
+async fn hs2_k93qha_broker_tail_first_then_the_whole_replay_then_live_output() {
+    tail_then_whole_replay_then_live_output(true).await;
+}

@@ -308,7 +308,7 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
             const heapBefore = (await cdp.send('Runtime.getHeapUsage')).usedSize;
             const origin = proxy ? 'ws://127.0.0.1:' + String(proxy.port) : server.url.replace(/^http/, 'ws');
             await page.evaluate(
-              async ({ url, marker }) => {
+              async ({ url, marker, progressiveReplay }) => {
                 const overlay = document.createElement('section');
                 overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#111;';
                 const element = document.createElement('div');
@@ -334,15 +334,27 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
                   requestAnimationFrame(watch);
                 };
                 requestAnimationFrame(watch);
-                mountTerminalViewport(element, { url });
+                mountTerminalViewport(element, { url, progressiveReplay });
               },
-              { url: origin + path, marker: MARKER },
+              // The proxy is on loopback, so ask for the phone's remote-host behavior explicitly.
+              { url: origin + path, marker: MARKER, progressiveReplay: device === PHONE },
             );
             await expect
               .poll(() => page.evaluate(() => (window as ProfileWindow).__replayProfile?.paintedAt), {
                 timeout: 120_000,
               })
               .toBeGreaterThan(0);
+            // With tail-first, wait for the whole replay too before reading the timings.
+            await expect
+              .poll(
+                () =>
+                  page.evaluate(() => {
+                    const profile = (window as ProfileWindow).__replayProfile!;
+                    return profile.header?.includes('"tail"') !== true || profile.frames.length >= 2;
+                  }),
+                { timeout: 120_000 },
+              )
+              .toBe(true);
             const state = await page.evaluate(() => (window as ProfileWindow).__replayProfile!);
             const surface = page.locator('.terminal-viewport--dedicated').last();
             const renderer = await surface.getAttribute('data-renderer');
@@ -377,6 +389,8 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
               replayWireBytes: state.replayWireBytes ?? null,
               replayHeader: state.header ?? null,
               replayReceivedMs: since(state.replayAt),
+              // With tail-first, the whole replay is the second binary frame.
+              wholeReplayReceivedMs: state.header?.includes('"tail"') === true ? since(state.frames[1]?.at) : null,
               paintedMs: since(state.paintedAt),
               clientParseRenderMs: state.replayAt === undefined ? null : Math.round(state.paintedAt! - state.replayAt),
               retainedHeapBytes: heapAfter - heapBefore,

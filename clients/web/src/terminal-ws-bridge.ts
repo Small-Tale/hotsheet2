@@ -41,6 +41,7 @@ export const TERMINAL_REPLAY_PARAMS = [
   'replay_max_bytes',
   'replay_encoding',
   'resume_from',
+  'replay_tail_bytes',
 ] as const;
 
 export function withTerminalReplayParams(target: string, browser: URLSearchParams): string {

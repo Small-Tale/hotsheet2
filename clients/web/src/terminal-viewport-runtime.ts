@@ -35,8 +35,10 @@ import { createLongPressController } from './terminal-long-press';
 import {
   createTerminalInboundSequencer,
   nextTerminalStreamPosition,
+  TERMINAL_REPLAY_TAIL_BYTES,
   terminalAttachUrl,
   type TerminalInbound,
+  terminalProgressiveReplayDefault,
   terminalReplayCompressionSupported,
   terminalReplayMaxBytes,
   type TerminalStreamPosition,
@@ -346,6 +348,7 @@ type TerminalRuntimeOptions = {
   mobileColumns?: () => number;
   /** Sticky key-bar modifiers (HS2-CKS78M): read on each key, consumed after a one-shot applies. */
   modifiers?: { current: () => TerminalModifiers; consume: () => void };
+  progressiveReplay?: boolean;
 };
 
 export function mountTerminalViewportRuntime(element: HTMLElement, options: TerminalRuntimeOptions): () => void {
@@ -364,6 +367,7 @@ function initializeTerminalViewport(
     onTicketReference,
     mobileColumns,
     modifiers,
+    progressiveReplay = terminalProgressiveReplayDefault(url),
   }: TerminalRuntimeOptions,
   own: OwnTerminalResource,
 ): void {
@@ -489,6 +493,8 @@ function initializeTerminalViewport(
     replacementReplayPending = false,
     // The output-stream position this emulator has applied, when the server reports one (HS2-K93QHA).
     streamPosition: TerminalStreamPosition | undefined,
+    // The emulator shows only a replay's tail until the whole replay that follows it.
+    tailShown = false,
     parked = false,
     webglParked = false,
     livenessSupported = false,
@@ -884,6 +890,8 @@ function initializeTerminalViewport(
         compression: terminalReplayCompressionSupported(),
         // A reconnect asks for only the output it missed (HS2-K93QHA).
         ...(connectedOnce && streamPosition !== undefined ? { resumeFrom: streamPosition } : {}),
+        // Across a real network a large replay paints its tail first (HS2-K93QHA).
+        ...(progressiveReplay ? { tailBytes: TERMINAL_REPLAY_TAIL_BYTES } : {}),
       }),
     );
     socket = current;
@@ -973,6 +981,13 @@ function initializeTerminalViewport(
         replacementReplayPending = false;
         initialReplay = false;
       }
+      // The whole replay that follows a tail keeps a reader's place: a user who scrolled up into
+      // the tail stays the same distance from the bottom (HS2-K93QHA).
+      const keepFromBottom =
+        frame.header?.kind === 'replace' && tailShown
+          ? terminal.buffer.active.baseY - terminal.buffer.active.viewportY
+          : 0;
+      tailShown = frame.header?.kind === 'tail';
       let bytes = frame.bytes;
       if (initialReplay) {
         initialReplay = false;
@@ -982,7 +997,13 @@ function initializeTerminalViewport(
         replacementReplayPending = false;
         bytes = terminalReplacementPayload(bytes);
       }
-      terminal.write(bytes);
+      if (keepFromBottom <= 0) {
+        terminal.write(bytes);
+        return;
+      }
+      terminal.write(bytes, () => {
+        terminal.scrollToLine(Math.max(0, terminal.buffer.active.baseY - keepFromBottom));
+      });
     };
     const disconnected = () => {
       if (socket !== current || disposed) return;

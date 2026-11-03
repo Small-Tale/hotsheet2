@@ -10,10 +10,12 @@
  */
 
 export const TERMINAL_REPLAY_PROTOCOL = 2;
+/** How much of a large first replay a remote viewer asks to receive first (phase 4). */
+export const TERMINAL_REPLAY_TAIL_BYTES = 32 * 1024;
 /** The server's own history-to-replay rule (`REPLAY_BYTES_PER_LINE`, HS2-Y5DYC0). */
 export const TERMINAL_REPLAY_BYTES_PER_LINE = 192;
 
-export type TerminalReplayKind = 'replay' | 'replace' | 'resume';
+export type TerminalReplayKind = 'replay' | 'replace' | 'resume' | 'tail';
 export type TerminalReplayEncoding = 'identity' | 'deflate-raw';
 
 export interface TerminalFrameHeader {
@@ -39,6 +41,8 @@ export interface TerminalReplayRequest {
   compression: boolean;
   /** On a reconnect: the stream position this viewer has applied output up to. */
   resumeFrom?: TerminalStreamPosition;
+  /** Ask for this much of a large first replay ahead of the whole replay. */
+  tailBytes?: number;
 }
 
 export type InflateRaw = (bytes: Uint8Array<ArrayBuffer>) => Promise<Uint8Array<ArrayBuffer>>;
@@ -72,7 +76,24 @@ export function terminalAttachUrl(url: string, request: TerminalReplayRequest, b
   if (request.resumeFrom !== undefined)
     attach.searchParams.set('resume_from', `${request.resumeFrom.stream}:${String(request.resumeFrom.offset)}`);
   else attach.searchParams.delete('resume_from');
+  if (request.tailBytes !== undefined) attach.searchParams.set('replay_tail_bytes', String(request.tailBytes));
+  else attach.searchParams.delete('replay_tail_bytes');
   return attach.toString();
+}
+
+/**
+ * Whether a viewer should ask for its replay tail first: only across a real network. A loopback
+ * host (the desktop app, a local browser) parses the whole replay faster than it would paint a
+ * tail and then parse the whole replay again.
+ */
+export function terminalProgressiveReplayDefault(url: string, base?: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(url, base ?? (typeof location === 'undefined' ? undefined : location.href)).hostname;
+  } catch {
+    return false;
+  }
+  return !['localhost', '127.0.0.1', '[::1]', '::1'].includes(hostname) && !hostname.endsWith('.localhost');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -90,7 +111,7 @@ export function parseTerminalFrameHeader(value: string): TerminalFrameHeader | u
   }
   if (!isRecord(parsed) || !isRecord(parsed.terminal_frame)) return undefined;
   const { kind, encoding, bytes, stream, end_offset: offset } = parsed.terminal_frame;
-  if (kind !== 'replay' && kind !== 'replace' && kind !== 'resume') return undefined;
+  if (kind !== 'replay' && kind !== 'replace' && kind !== 'resume' && kind !== 'tail') return undefined;
   if (encoding !== 'identity' && encoding !== 'deflate-raw') return undefined;
   if (!isCount(bytes)) return undefined;
   if (stream === undefined && offset === undefined) return { kind, encoding, bytes };

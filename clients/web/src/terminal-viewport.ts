@@ -329,6 +329,8 @@ export interface TerminalViewportOptions {
   mobileColumns?: () => number;
   /** Sticky key-bar modifiers applied to special keys and the next typed character (HS2-CKS78M). */
   modifiers?: { current: () => TerminalModifiers; consume: () => void };
+  /** Ask for a large replay's tail first; defaults to on for a non-loopback host (HS2-K93QHA). */
+  progressiveReplay?: boolean;
 }
 
 export function mountTerminalViewport(
@@ -341,6 +343,7 @@ export function mountTerminalViewport(
     onTicketReference,
     mobileColumns,
     modifiers,
+    progressiveReplay,
   }: TerminalViewportOptions,
 ): () => void {
   return mountTerminalRuntime(element, async () => {
@@ -358,6 +361,7 @@ export function mountTerminalViewport(
         onTicketReference,
         mobileColumns,
         modifiers,
+        progressiveReplay,
       });
   });
 }

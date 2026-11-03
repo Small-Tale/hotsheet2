@@ -9,6 +9,7 @@ import {
   parseTerminalFrameHeader,
   terminalAttachUrl,
   type TerminalInbound,
+  terminalProgressiveReplayDefault,
   terminalReplayCompressionSupported,
   terminalReplayMaxBytes,
   type TerminalStreamPosition,
@@ -257,5 +258,52 @@ describe('terminal replay stream (HS2-K93QHA)', () => {
     });
     expect(position).toBeUndefined();
     expect(nextTerminalStreamPosition(position, { bytes: bytes('live') })).toBeUndefined();
+  });
+
+  it('asks for a tail first only across a real network (phase 4)', () => {
+    for (const url of [
+      'ws://127.0.0.1:4174/terminals/t/attach',
+      'ws://localhost/terminals/t/attach',
+      'ws://[::1]:9/terminals/t/attach',
+      'ws://app.localhost/terminals/t/attach',
+    ])
+      expect(terminalProgressiveReplayDefault(url)).toBe(false);
+    expect(terminalProgressiveReplayDefault('ws://192.168.1.20:4174/terminals/t/attach')).toBe(true);
+    expect(terminalProgressiveReplayDefault('wss://host.example/terminals/t/attach')).toBe(true);
+    expect(terminalProgressiveReplayDefault('/__hotsheet/project-api/p/terminals/t/attach', 'http://phone.lan/')).toBe(
+      true,
+    );
+    expect(terminalProgressiveReplayDefault('/__hotsheet/project-api/p/terminals/t/attach', 'http://127.0.0.1/')).toBe(
+      false,
+    );
+    expect(terminalProgressiveReplayDefault('ws://[bad', 'not a base')).toBe(false);
+    const tailed = new URL(
+      terminalAttachUrl('ws://h/a?replay_tail_bytes=9', { maxBytes: 9, compression: false, tailBytes: 32768 }),
+    );
+    expect(tailed.searchParams.get('replay_tail_bytes')).toBe('32768');
+    const whole = new URL(terminalAttachUrl('ws://h/a?replay_tail_bytes=9', { maxBytes: 9, compression: false }));
+    expect(whole.searchParams.has('replay_tail_bytes')).toBe(false);
+    expect(parseTerminalFrameHeader(header('tail', 'deflate-raw', 4))?.kind).toBe('tail');
+  });
+
+  it('delivers a compressed tail then the compressed whole replay before live output', async () => {
+    const { pending, inflate } = controlledInflate(),
+      delivered: string[] = [];
+    const sequencer = createTerminalInboundSequencer((frame) => delivered.push(describeFrame(frame)), vi.fn(), inflate);
+    sequencer.push(header('tail', 'deflate-raw', 4));
+    sequencer.push(buffer('t'));
+    sequencer.push(header('replace', 'deflate-raw', 5));
+    sequencer.push(buffer('w'));
+    sequencer.push(buffer('live'));
+    pending[0].resolve(encoder.encode('tail'));
+    await vi.waitFor(() => {
+      expect(pending).toHaveLength(2);
+    });
+    expect(delivered).toEqual(['tail/identity:tail']);
+    pending[1].resolve(encoder.encode('whole'));
+    await vi.waitFor(() => {
+      expect(delivered).toHaveLength(3);
+    });
+    expect(delivered.slice(1)).toEqual(['replace/identity:whole', 'live:live']);
   });
 });
