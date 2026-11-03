@@ -6105,17 +6105,50 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         "--remote",
         remote.to_str().unwrap(),
     ];
+    // HS2-PN848F: the shared .mcp.json stays portable, so bootstrap also registers an
+    // absolute override in Claude Code's local scope for this checkout.
+    let claude_config = root.path().join("claude-user/.claude.json");
+    let mcp_bin = root.path().join("bin/hotsheet-mcp");
+    std::fs::create_dir_all(mcp_bin.parent().unwrap()).unwrap();
+    std::fs::write(&mcp_bin, "").unwrap();
+    let mut user_bytes = None;
     for expected in ["Initialized standalone", "Reused standalone"] {
         Command::cargo_bin("hotsheet-cli")
             .unwrap()
             .env("HOTSHEET_HOME", &home)
+            .env("HOTSHEET_CLAUDE_USER_CONFIG", &claude_config)
+            .env("HOTSHEET_MCP_BIN", &mcp_bin)
             .args(args)
             .assert()
             .success()
             .stdout(predicate::str::contains(expected))
             .stdout(predicate::str::contains("Set up Claude Code"))
-            .stdout(predicate::str::contains("origin is configured"));
+            .stdout(predicate::str::contains("origin is configured"))
+            .stdout(predicate::str::contains("Notice:").not());
+        let bytes = std::fs::read(&claude_config).unwrap();
+        if let Some(previous) = &user_bytes {
+            assert_eq!(
+                previous, &bytes,
+                "a second bootstrap leaves the override as is"
+            );
+        }
+        user_bytes = Some(bytes);
     }
+    let user: serde_json::Value = serde_json::from_slice(&user_bytes.unwrap()).unwrap();
+    let project_abs = project.canonicalize().unwrap();
+    let entry = &user["projects"][project_abs.to_str().unwrap()]["mcpServers"]["hotsheet"];
+    assert_eq!(entry["command"], mcp_bin.to_str().unwrap());
+    assert_eq!(
+        entry["args"],
+        serde_json::json!(["--project", project_abs.to_str().unwrap()])
+    );
+    let shared: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(shared["mcpServers"]["hotsheet"]["command"], "hotsheet-mcp");
+    assert_eq!(
+        shared["mcpServers"]["user-server"]["command"],
+        "user-command"
+    );
 
     assert_eq!(
         hotsheet_ticketing::FsStore::open(&store)

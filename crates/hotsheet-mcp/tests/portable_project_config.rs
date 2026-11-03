@@ -51,43 +51,44 @@ fn portable_project_entry_opens_its_linked_store_and_lists_tools() {
     assert!(reply["result"]["tools"].as_array().is_some());
 }
 
+/// Answer one HTTP request per body with that JSON body; returns the raw requests.
+fn serve_project(listener: std::net::TcpListener, bodies: &[&str]) -> Vec<String> {
+    let mut paths = Vec::new();
+    for body in bodies {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0; 4096];
+        loop {
+            let count = stream.read(&mut buffer).unwrap();
+            assert!(count > 0, "client closed before sending the request");
+            request.extend_from_slice(&buffer[..count]);
+            let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length:")
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                })
+                .unwrap_or(0);
+            if request.len() >= header_end + 4 + length {
+                break;
+            }
+        }
+        paths.push(String::from_utf8_lossy(&request).into_owned());
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+    }
+    paths
+}
+
 #[test]
 fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart() {
-    fn serve_project(listener: std::net::TcpListener, bodies: &[&str]) -> Vec<String> {
-        let mut paths = Vec::new();
-        for body in bodies {
-            let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-                .unwrap();
-            let mut request = Vec::new();
-            let mut buffer = [0; 4096];
-            loop {
-                let count = stream.read(&mut buffer).unwrap();
-                assert!(count > 0, "client closed before sending the request");
-                request.extend_from_slice(&buffer[..count]);
-                let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n")
-                else {
-                    continue;
-                };
-                let headers = String::from_utf8_lossy(&request[..header_end]);
-                let length = headers
-                    .lines()
-                    .find_map(|line| {
-                        line.to_ascii_lowercase()
-                            .strip_prefix("content-length:")
-                            .and_then(|value| value.trim().parse::<usize>().ok())
-                    })
-                    .unwrap_or(0);
-                if request.len() >= header_end + 4 + length {
-                    break;
-                }
-            }
-            paths.push(String::from_utf8_lossy(&request).into_owned());
-            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
-        }
-        paths
-    }
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let bootstrap = home.join("server-bootstrap.hs2");
@@ -279,4 +280,137 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
         Some("POST /projects/open HTTP/1.1")
     );
     assert!(replacement_paths[1].starts_with("GET /checkouts/code-project/tickets"));
+}
+
+/// HS2-PN848F: a GUI-launched client gets launchd's minimal PATH and may start the server
+/// outside the checkout. With a shared `.mcp.json`, setup's Claude local-scope override
+/// carries absolute paths, so it still opens this checkout through the machine server; the
+/// portable shared command alone is not found on that PATH.
+#[test]
+fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let bootstrap = home.join("server-bootstrap.hs2");
+    FsStore::init(&bootstrap, &StoreMetadata::new("HS")).unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+        .register_sources(&project, None, None, vec![], None)
+        .unwrap();
+    std::fs::write(
+        project.join(".mcp.json"),
+        r#"{"mcpServers":{"other":{"command":"other-mcp"}}}"#,
+    )
+    .unwrap();
+    let claude_config = root.path().join("claude/.claude.json");
+    // SAFETY: nextest runs each test in its own process, and no other thread is running.
+    unsafe {
+        std::env::set_var("HOTSHEET_CLAUDE_USER_CONFIG", &claude_config);
+        std::env::set_var("HOTSHEET_MCP_BIN", env!("CARGO_BIN_EXE_hotsheet-mcp"));
+    }
+    hotsheet_cli::setup::run_setup_in(&bootstrap, &project, Some("claude"), false, &[]).unwrap();
+
+    let shared: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(shared["mcpServers"]["hotsheet"]["command"], "hotsheet-mcp");
+    assert_eq!(
+        shared["mcpServers"]["hotsheet"]["args"],
+        serde_json::json!(["--project", "."])
+    );
+    let user: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&claude_config).unwrap()).unwrap();
+    let project_abs = project.canonicalize().unwrap();
+    let entry = &user["projects"][project_abs.to_str().unwrap()]["mcpServers"]["hotsheet"];
+    let command = entry["command"].as_str().unwrap();
+    assert_eq!(command, env!("CARGO_BIN_EXE_hotsheet-mcp"));
+    let args: Vec<&str> = entry["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|arg| arg.as_str().unwrap())
+        .collect();
+    assert_eq!(args, ["--project", project_abs.to_str().unwrap()]);
+
+    let gui_path = "/usr/bin:/bin:/usr/sbin:/sbin";
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let portable = Command::new("hotsheet-mcp")
+        .args(["--project", "."])
+        .current_dir(&elsewhere)
+        .env_clear()
+        .env("PATH", gui_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    assert!(
+        portable.is_err(),
+        "the bare shared command must not resolve on a GUI PATH"
+    );
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &bootstrap);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        &instance,
+        serde_json::json!({
+            "pid":std::process::id(),
+            "url":format!("http://{address}"),
+            "secret":"synthetic-secret",
+            "store_path":bootstrap.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        serve_project(listener, &[r#"{"checkout":{"id":"code-project"}}"#, "[]"])
+    });
+    let mut launch = Command::new(command);
+    launch
+        .args(&args)
+        .current_dir(&elsewhere)
+        .env_clear()
+        .env("PATH", gui_path)
+        .env("HOTSHEET_HOME", &home);
+    for (name, value) in entry["env"].as_object().unwrap() {
+        launch.env(name, value.as_str().unwrap());
+    }
+    let mut child = launch
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(
+        stdin,
+        "{}",
+        serde_json::json!({
+            "jsonrpc":"2.0", "id":1, "method":"tools/call",
+            "params":{"name":"hotsheet_query","arguments":{}}
+        })
+    )
+    .unwrap();
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["id"], 1);
+    assert_ne!(reply["result"]["isError"], true, "{reply}");
+    let requests = server.join().unwrap();
+    assert_eq!(
+        requests[0].lines().next(),
+        Some("POST /projects/open HTTP/1.1")
+    );
+    assert!(
+        requests[0].contains(&serde_json::to_string(project_abs.to_str().unwrap()).unwrap()),
+        "the server opens the checkout, not the launch directory: {}",
+        requests[0]
+    );
+    assert!(requests[1].starts_with("GET /checkouts/code-project/tickets"));
 }

@@ -313,6 +313,10 @@ pub(crate) fn cmd_bootstrap(
         for path in &report.wrote {
             println!("  wrote {path}");
         }
+        // HS2-PN848F: launch limitations and other user actions, as `setup` prints them.
+        for notice in &report.notices {
+            println!("  Notice: {}", notice.message());
+        }
     }
 
     println!(

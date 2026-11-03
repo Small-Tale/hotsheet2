@@ -41,6 +41,9 @@ format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--project", "{project}"]
+# HS2-PN848F: when .mcp.json is shared, also register an absolute entry in Claude Code's
+# local MCP scope (~/.claude.json, per checkout), which overrides the portable shared one.
+local_layer = "claude-local-scope"
 
 [drive]
 # Claude is driven the HS1 play-button way: a turn injected into a running `claude`

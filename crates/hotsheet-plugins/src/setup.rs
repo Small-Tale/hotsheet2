@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use hotsheet_ticketing::settings::{Scope, Settings, SettingsError};
 
+use crate::mcp_local_layer::{LocalMcpBlock, LocalMcpEdit, LocalMcpOutcome};
 use crate::{Plugin, all_plugins, default_dirs};
 
 pub const PUSH_POLICY_SETTING: &str = "push_policy";
@@ -136,6 +137,21 @@ pub enum SetupNotice {
         installed_version: u64,
         bundled_version: u64,
     },
+    /// HS2-PN848F: `path` is shared with other MCP servers, so its Hot Sheet entry is the
+    /// portable `hotsheet-mcp --project .`, and the client has no per-checkout local layer
+    /// that could carry absolute paths.
+    SharedMcpWithoutLocalLayer {
+        tool: String,
+        path: String,
+    },
+    /// HS2-PN848F: the client has a local layer, but setup could not register the absolute
+    /// override there, so only the portable shared entry is in effect.
+    McpLocalOverrideSkipped {
+        tool: String,
+        path: String,
+        local_path: String,
+        reason: String,
+    },
 }
 
 impl SetupNotice {
@@ -151,6 +167,17 @@ impl SetupNotice {
                 bundled_version,
             } => format!(
                 "Bundled guidance section {section} v{bundled_version} was preserved in {path} because its local v{installed_version} body differs. Review the section and setup diagnosis before editing it."
+            ),
+            Self::SharedMcpWithoutLocalLayer { tool, path } => format!(
+                "{path} is shared with other MCP servers, so its Hot Sheet entry runs the portable `hotsheet-mcp --project .`. {tool} has no per-checkout local MCP config for absolute paths, so it starts Hot Sheet only when hotsheet-mcp is on its PATH and it launches the server in this checkout. An app opened from the Dock or Finder may have neither; start {tool} from a shell in this checkout or add hotsheet-mcp's directory to the GUI PATH."
+            ),
+            Self::McpLocalOverrideSkipped {
+                tool,
+                path,
+                local_path,
+                reason,
+            } => format!(
+                "{path} is shared with other MCP servers, so its Hot Sheet entry runs the portable `hotsheet-mcp --project .`. Setup did not add the absolute {tool} local override to {local_path} because {reason}. An app opened from the Dock or Finder may not find hotsheet-mcp or this checkout."
             ),
         }
     }
@@ -177,7 +204,8 @@ pub struct SetupPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PlannedChange {
-    /// Project-relative, except a machine-local Git exclude file outside the project.
+    /// Project-relative, except machine-local files outside the project: a Git exclude
+    /// file or a client's user config holding its local MCP layer (HS2-PN848F).
     pub path: String,
     pub action: PlannedAction,
 }
@@ -228,15 +256,53 @@ pub enum ArtifactStatus {
 enum PlannedOperation {
     Write(PathBuf, Vec<u8>),
     Remove(PathBuf, PathBuf),
+    /// Replayed against the client's user config at apply time (HS2-PN848F).
+    MergeLocalMcp(PathBuf, Vec<LocalMcpEdit>),
 }
 
 #[derive(Default)]
 struct PlanFs {
     original: BTreeMap<PathBuf, Option<Vec<u8>>>,
     current: BTreeMap<PathBuf, Option<Vec<u8>>>,
+    /// Claude Code's user config, which holds its per-checkout local MCP scope (HS2-PN848F).
+    claude_user_config: Option<PathBuf>,
+    /// Edits to `claude_user_config`, replayed on the live file instead of overwriting it.
+    local_mcp_edits: Vec<LocalMcpEdit>,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Unit tests' Claude user config and absolute MCP binary, so no test reads the
+    /// process environment or the developer's real `~/.claude.json` (HS2-PN848F).
+    static TEST_LOCAL_LAYER: std::cell::RefCell<Option<(PathBuf, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn claude_user_config() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some((path, _)) = TEST_LOCAL_LAYER.with(|layer| layer.borrow().clone()) {
+        return Some(path);
+    }
+    crate::mcp_local_layer::claude_user_config_path()
+}
+
+fn absolute_mcp_command(fallback: &str) -> String {
+    #[cfg(test)]
+    if let Some((_, command)) = TEST_LOCAL_LAYER.with(|layer| layer.borrow().clone()) {
+        return command;
+    }
+    mcp_command(fallback)
 }
 
 impl PlanFs {
+    /// A plan for setup or refresh, which may also edit the client's local MCP layer.
+    fn for_setup() -> Self {
+        Self {
+            claude_user_config: claude_user_config(),
+            ..Self::default()
+        }
+    }
+
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
         match self.current.get(path) {
             Some(Some(bytes)) => Ok(bytes.clone()),
@@ -292,6 +358,12 @@ impl PlanFs {
             .filter_map(|(path, current)| {
                 if self.original.get(path) == Some(current) {
                     return None;
+                }
+                if self.claude_user_config.as_ref() == Some(path) {
+                    return Some(PlannedOperation::MergeLocalMcp(
+                        path.clone(),
+                        self.local_mcp_edits.clone(),
+                    ));
                 }
                 Some(match current {
                     Some(contents) => PlannedOperation::Write(path.clone(), contents.clone()),
@@ -907,7 +979,7 @@ pub fn plan_refresh_setup_in(
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[PathBuf],
 ) -> Result<SetupPlan, SetupError> {
-    let mut fs = PlanFs::default();
+    let mut fs = PlanFs::for_setup();
     let policy = read_push_policy(&fs, project_dir)?;
     let external_guidance = rulesync_owns_guidance(&fs, project_dir)?;
     let all = all_plugins(plugin_dirs)
@@ -1068,6 +1140,14 @@ fn apply_operations_unlocked(operations: Vec<PlannedOperation>) -> Result<(), Se
         match operation {
             PlannedOperation::Write(path, contents) => {
                 write_file(&path, &String::from_utf8_lossy(&contents))?
+            }
+            PlannedOperation::MergeLocalMcp(path, edits) => {
+                crate::mcp_local_layer::apply_to_file(&path, &edits).map_err(|source| {
+                    SetupError::Io {
+                        path: path.display().to_string(),
+                        source,
+                    }
+                })?;
             }
             PlannedOperation::Remove(project, path) => {
                 if path.is_file() {
@@ -1318,6 +1398,19 @@ fn remove_disabled_tool_artifacts(
     let mcp = &plugin.manifest.mcp.target;
     if crate::is_safe_rel_path(mcp) && !claimed.contains(mcp) {
         report.record(mcp, remove_mcp_entry(fs, project, plugin)?);
+        if plugin.manifest.mcp.local_layer.is_some() {
+            let edit = LocalMcpEdit {
+                project_key: crate::mcp_local_layer::project_key(project),
+                server: plugin.manifest.mcp.server_name.clone(),
+                bundled_command: plugin.manifest.mcp.command.clone(),
+                entry: None,
+            };
+            if let (Some(path), Ok(true)) =
+                (fs.claude_user_config.clone(), plan_local_mcp(fs, edit))
+            {
+                report.record(&path.display().to_string(), Some(Change::Edited));
+            }
+        }
     }
     if let Some(spec) = &plugin.manifest.hooks {
         if crate::is_safe_rel_path(&spec.target) && !claimed.contains(&spec.target) {
@@ -1395,17 +1488,6 @@ fn remove_managed_file(
     Ok(Some(Change::Removed))
 }
 
-/// Whether an installed MCP `command` launches Hot Sheet's MCP binary (`bundled` is the
-/// manifest command; the installed one may be an absolute sibling path or a `.exe`).
-fn is_hotsheet_mcp_command(installed: &str, bundled: &str) -> bool {
-    let stem = |command: &str| {
-        Path::new(command)
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-    };
-    stem(installed).is_some_and(|installed| Some(installed) == stem(bundled))
-}
-
 /// Remove a disabled tool's Hot Sheet MCP server entry (HS2-ZTGX6P): the entry named by
 /// the manifest whose command is Hot Sheet's MCP binary. Unrelated servers and settings in
 /// a shared config are kept; a config that held only Hot Sheet's entry is deleted.
@@ -1421,7 +1503,9 @@ fn remove_mcp_entry(
     };
     let name = spec.server_name.as_str();
     let owned = |command: Option<&str>| {
-        command.is_some_and(|command| is_hotsheet_mcp_command(command, &spec.command))
+        command.is_some_and(|command| {
+            crate::mcp_local_layer::is_hotsheet_command(command, &spec.command)
+        })
     };
     let rendered = match spec.format.as_str() {
         format @ ("claude-json" | "opencode-json") => {
@@ -1789,7 +1873,7 @@ fn setup_plugins(
     plugins: Vec<Plugin>,
     refresh_targets: Option<&[String]>,
 ) -> Result<Vec<SetupReport>, SetupError> {
-    let mut fs = PlanFs::default();
+    let mut fs = PlanFs::for_setup();
     let result = setup_plugins_with_fs(&mut fs, store_path, project_dir, plugins, refresh_targets);
     // Explicit setup historically leaves earlier tools' successful writes in place if a
     // later tool fails. Refresh/diagnose use the pure plan, but retain this direct path.
@@ -1930,8 +2014,8 @@ fn setup_plugins_with_fs(
                 }
             }
             wrote.extend(write_additional_skills(fs, project_dir, p));
-            wrote.push(write_mcp(fs, project_dir, &store_abs, p)?);
-            let mut notices = Vec::new();
+            let (mcp, mut notices) = write_mcp(fs, project_dir, &store_abs, p)?;
+            wrote.push(mcp);
             if let Some(blocked) = blocked_guidance.remove(&p.manifest.instructions.target) {
                 notices.extend(blocked);
             }
@@ -2863,17 +2947,19 @@ fn write_additional_skills(fs: &mut PlanFs, project: &Path, plugin: &Plugin) -> 
 
 /// Register the `hotsheet-mcp` server in the tool's MCP config, merge-safe. The writer is
 /// chosen by the manifest's `format` (a host helper keyed on the format, not the tool id —
-/// docs/05 §5.3), so a new tool with a known format needs no code.
+/// docs/05 §5.3), so a new tool with a known format needs no code. Returns the written path
+/// and any launch limitation the user should know about (HS2-PN848F).
 fn write_mcp(
     fs: &mut PlanFs,
     project: &Path,
     store_abs: &Path,
     p: &Plugin,
-) -> Result<String, SetupError> {
+) -> Result<(String, Vec<SetupNotice>), SetupError> {
     let rel = &p.manifest.mcp.target;
     let target = project.join(rel);
     let name = &p.manifest.mcp.server_name;
     let (command, args, locally_owned) = mcp_entry(fs, project, store_abs, p);
+    let (absolute_command, absolute_args) = absolute_mcp_launch(project, store_abs, p);
 
     match p.manifest.mcp.format.as_str() {
         "claude-json" => write_mcp_json(fs, &target, name, &command, &args)?,
@@ -2889,7 +2975,15 @@ fn write_mcp(
     if locally_owned {
         ensure_local_git_exclude(fs, project, rel)?;
     }
-    Ok(rel.clone())
+    let notices = write_mcp_local_layer(
+        fs,
+        project,
+        p,
+        locally_owned,
+        &absolute_command,
+        &absolute_args,
+    );
+    Ok((rel.clone(), notices))
 }
 
 /// A shared project config may be committed, so its Hot Sheet entry must contain no
@@ -2901,30 +2995,136 @@ fn mcp_entry(
     store_abs: &Path,
     p: &Plugin,
 ) -> (String, Vec<String>, bool) {
+    if mcp_config_locally_owned(fs, project, p) {
+        let (command, args) = absolute_mcp_launch(project, store_abs, p);
+        (command, args, true)
+    } else {
+        (p.manifest.mcp.command.clone(), p.mcp_args("."), false)
+    }
+}
+
+/// Whether the tool's MCP config is Hot Sheet's alone (absent, or holding only Hot Sheet's
+/// server), so setup may write machine paths into it and exclude it from Git.
+fn mcp_config_locally_owned(fs: &PlanFs, project: &Path, p: &Plugin) -> bool {
     let target = project.join(&p.manifest.mcp.target);
-    let locally_owned = !fs.exists(&target)
+    !fs.exists(&target)
         || is_hotsheet_only_mcp_config(
             fs,
             &target,
             &p.manifest.mcp.format,
             &p.manifest.mcp.server_name,
-        );
-    if locally_owned {
-        let project_abs = project
-            .canonicalize()
-            .unwrap_or_else(|_| project.to_path_buf());
-        let path = if p.is_builtin() {
-            &project_abs
-        } else {
-            store_abs
-        };
-        (
-            mcp_command(&p.manifest.mcp.command),
-            p.mcp_args(&path.to_string_lossy()),
-            true,
         )
+}
+
+/// The machine-specific launch: the absolute `hotsheet-mcp` and the absolute project (or,
+/// for a third-party plugin, store) path.
+fn absolute_mcp_launch(project: &Path, store_abs: &Path, p: &Plugin) -> (String, Vec<String>) {
+    let project_abs = project
+        .canonicalize()
+        .unwrap_or_else(|_| project.to_path_buf());
+    let path = if p.is_builtin() {
+        &project_abs
     } else {
-        (p.manifest.mcp.command.clone(), p.mcp_args("."), false)
+        store_abs
+    };
+    (
+        absolute_mcp_command(&p.manifest.mcp.command),
+        p.mcp_args(&path.to_string_lossy()),
+    )
+}
+
+/// Keep the client's per-checkout local MCP layer in step with a shared config
+/// (HS2-PN848F). A shared config gets an absolute override where the client has a local
+/// layer, or a notice where it has none. A Hot Sheet-only config already carries absolute
+/// paths, so only an override an earlier shared setup left behind is refreshed.
+fn write_mcp_local_layer(
+    fs: &mut PlanFs,
+    project: &Path,
+    p: &Plugin,
+    locally_owned: bool,
+    command: &str,
+    args: &[String],
+) -> Vec<SetupNotice> {
+    let tool = p.manifest.product_name.clone();
+    let path = p.manifest.mcp.target.clone();
+    let Some(layer) = p.manifest.mcp.local_layer else {
+        return if locally_owned {
+            Vec::new()
+        } else {
+            vec![SetupNotice::SharedMcpWithoutLocalLayer { tool, path }]
+        };
+    };
+    match layer {
+        crate::McpLocalLayer::ClaudeLocalScope => {}
+    }
+    let edit = LocalMcpEdit {
+        project_key: crate::mcp_local_layer::project_key(project),
+        server: p.manifest.mcp.server_name.clone(),
+        bundled_command: p.manifest.mcp.command.clone(),
+        entry: Some(crate::mcp_local_layer::claude_entry(
+            command,
+            args,
+            mcp_env_json(),
+        )),
+    };
+    let local_path = fs
+        .claude_user_config
+        .as_ref()
+        .map_or_else(|| "~/.claude.json".to_string(), |p| p.display().to_string());
+    if locally_owned && !has_local_mcp_entry(fs, &edit) {
+        return Vec::new();
+    }
+    let result = if Path::new(command).is_absolute() {
+        plan_local_mcp(fs, edit).map(|_| ())
+    } else {
+        Err("Hot Sheet could not find an absolute hotsheet-mcp next to the running binary or in HOTSHEET_MCP_BIN".to_string())
+    };
+    match result {
+        Err(reason) if !locally_owned => vec![SetupNotice::McpLocalOverrideSkipped {
+            tool,
+            path,
+            local_path,
+            reason,
+        }],
+        _ => Vec::new(),
+    }
+}
+
+/// Whether the client's local layer already has a Hot Sheet server for this checkout.
+fn has_local_mcp_entry(fs: &PlanFs, edit: &LocalMcpEdit) -> bool {
+    let Some(path) = &fs.claude_user_config else {
+        return false;
+    };
+    let removal = LocalMcpEdit {
+        entry: None,
+        ..edit.clone()
+    };
+    fs.read_to_string(path).is_ok_and(|contents| {
+        matches!(
+            crate::mcp_local_layer::apply(Some(&contents), &removal),
+            LocalMcpOutcome::Changed(_)
+        )
+    })
+}
+
+/// Plan one edit of the client's user config. `Ok(true)` when it changes the file.
+fn plan_local_mcp(fs: &mut PlanFs, edit: LocalMcpEdit) -> Result<bool, String> {
+    let Some(path) = fs.claude_user_config.clone() else {
+        return Err("no home directory is set".to_string());
+    };
+    let contents = match fs.read_to_string(&path) {
+        Ok(contents) => Some(contents),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err(LocalMcpBlock::Unreadable.reason().to_string()),
+    };
+    match crate::mcp_local_layer::apply(contents.as_deref(), &edit) {
+        LocalMcpOutcome::Unchanged => Ok(false),
+        LocalMcpOutcome::Changed(next) => {
+            fs.write(&path, next.as_bytes());
+            fs.local_mcp_edits.push(edit);
+            Ok(true)
+        }
+        LocalMcpOutcome::Blocked(block) => Err(block.reason().to_string()),
     }
 }
 
@@ -6609,5 +6809,287 @@ args = []
                 "[{id}] instructions.md has drifted from the canonical plugins/claude/instructions.md; edit the canonical and re-copy so the shared instruction body stays identical"
             );
         }
+    }
+
+    /// Points this test thread's local MCP layer at a temp Claude user config and a fake
+    /// absolute `hotsheet-mcp` (HS2-PN848F); dropping it restores the default.
+    struct LocalLayer {
+        dir: tempfile::TempDir,
+    }
+
+    impl LocalLayer {
+        fn new(command: &str) -> Self {
+            let layer = Self {
+                dir: tempfile::tempdir().unwrap(),
+            };
+            layer.set_command(command);
+            layer
+        }
+
+        fn path(&self) -> PathBuf {
+            self.dir.path().join(".claude.json")
+        }
+
+        fn set_command(&self, command: &str) {
+            let path = self.path();
+            TEST_LOCAL_LAYER.with(|layer| *layer.borrow_mut() = Some((path, command.into())));
+        }
+
+        fn read(&self) -> Option<serde_json::Value> {
+            std::fs::read_to_string(self.path())
+                .ok()
+                .map(|text| serde_json::from_str(&text).unwrap())
+        }
+
+        fn entry(&self, project: &Path) -> serde_json::Value {
+            let key = project.canonicalize().unwrap().display().to_string();
+            self.read().unwrap_or_default()["projects"][&key]["mcpServers"]["hotsheet"].clone()
+        }
+    }
+
+    impl Drop for LocalLayer {
+        fn drop(&mut self) {
+            TEST_LOCAL_LAYER.with(|layer| *layer.borrow_mut() = None);
+        }
+    }
+
+    const SHARED_CLAUDE_MCP: &str = "{\n  \"mcpServers\": {\n    \"other\": {\n      \"command\": \"other-mcp\"\n    }\n  }\n}\n";
+
+    #[test]
+    fn hs2_pn848f_shared_claude_config_gets_an_absolute_local_override() {
+        let fixture = Sharing::new();
+        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        std::fs::write(fixture.project.path().join(".mcp.json"), SHARED_CLAUDE_MCP).unwrap();
+        std::fs::write(
+            layer.path(),
+            r#"{"numStartups":4,"projects":{"/elsewhere":{"allowedTools":["Bash"]}}}"#,
+        )
+        .unwrap();
+
+        let reports = fixture.setup("claude");
+        assert!(
+            reports.iter().all(|report| report.notices.is_empty()),
+            "{reports:?}"
+        );
+        // The committed config stays portable ...
+        let shared = std::fs::read_to_string(fixture.project.path().join(".mcp.json")).unwrap();
+        let shared_json: serde_json::Value = serde_json::from_str(&shared).unwrap();
+        assert_eq!(
+            shared_json["mcpServers"]["hotsheet"]["command"],
+            "hotsheet-mcp"
+        );
+        assert_eq!(
+            shared_json["mcpServers"]["hotsheet"]["args"],
+            serde_json::json!(["--project", "."])
+        );
+        assert_eq!(shared_json["mcpServers"]["other"]["command"], "other-mcp");
+        assert!(!shared.contains("/opt/a"));
+        // ... and Claude's local scope for this checkout carries absolute paths.
+        let project_abs = fixture.project.path().canonicalize().unwrap();
+        assert_eq!(
+            layer.entry(fixture.project.path()),
+            serde_json::json!({
+                "type": "stdio",
+                "command": "/opt/a/hotsheet-mcp",
+                "args": ["--project", project_abs.display().to_string()],
+                "env": { "HOTSHEET_ACTOR_ROLE": "ai" },
+            })
+        );
+        let user = layer.read().unwrap();
+        assert_eq!(user["numStartups"], 4);
+        assert_eq!(
+            user["projects"]["/elsewhere"]["allowedTools"],
+            serde_json::json!(["Bash"])
+        );
+
+        // Idempotent: a second setup and a refresh plan change nothing.
+        let user_bytes = std::fs::read(layer.path()).unwrap();
+        fixture.setup("claude");
+        assert_eq!(std::fs::read(layer.path()).unwrap(), user_bytes);
+        assert_eq!(
+            std::fs::read_to_string(fixture.project.path().join(".mcp.json")).unwrap(),
+            shared
+        );
+        let enabled: HashSet<String> = ["claude".to_string()].into();
+        let plan = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &[fixture.plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        let user_label = layer.path().display().to_string();
+        assert!(
+            !plan.changes.iter().any(|change| change.path == user_label),
+            "{:?}",
+            plan.changes
+        );
+
+        // The binary moved: refresh points the override at the new path only.
+        layer.set_command("/opt/b/hotsheet-mcp");
+        let plan = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &[fixture.plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        assert!(plan.changes.contains(&PlannedChange {
+            path: user_label.clone(),
+            action: PlannedAction::Write,
+        }));
+        // Claude rewrote its file between planning and applying; the replay keeps it.
+        let mut live = layer.read().unwrap();
+        live["numStartups"] = 5.into();
+        std::fs::write(layer.path(), live.to_string()).unwrap();
+        apply_setup_plan(plan).unwrap();
+        assert_eq!(
+            layer.entry(fixture.project.path())["command"],
+            "/opt/b/hotsheet-mcp"
+        );
+        assert_eq!(layer.read().unwrap()["numStartups"], 5);
+        assert_eq!(
+            std::fs::read_to_string(fixture.project.path().join(".mcp.json")).unwrap(),
+            shared
+        );
+
+        // Disabling Claude removes only Hot Sheet's override.
+        let report = fixture.refresh(&[]);
+        assert!(
+            report
+                .removed
+                .iter()
+                .any(|removal| removal.edited.contains(&user_label)),
+            "{report:?}"
+        );
+        assert_eq!(layer.entry(fixture.project.path()), serde_json::Value::Null);
+        assert_eq!(layer.read().unwrap()["numStartups"], 5);
+    }
+
+    #[test]
+    fn hs2_pn848f_hotsheet_only_claude_config_needs_no_local_override() {
+        let fixture = Sharing::new();
+        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let reports = fixture.setup("claude");
+        assert!(reports.iter().all(|report| report.notices.is_empty()));
+        let own: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(fixture.project.path().join(".mcp.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            own["mcpServers"]["hotsheet"]["command"],
+            "/opt/a/hotsheet-mcp"
+        );
+        assert!(layer.read().is_none(), "no user config is created");
+
+        // An override left by an earlier shared setup is kept current, not left stale.
+        let key = fixture
+            .project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .display()
+            .to_string();
+        std::fs::write(
+            layer.path(),
+            serde_json::json!({"projects": {&key: {"mcpServers": {"hotsheet": {
+                "type": "stdio", "command": "/old/hotsheet-mcp", "args": [], "env": {}
+            }}}}})
+            .to_string(),
+        )
+        .unwrap();
+        fixture.setup("claude");
+        assert_eq!(
+            layer.entry(fixture.project.path())["command"],
+            "/opt/a/hotsheet-mcp"
+        );
+    }
+
+    #[test]
+    fn hs2_pn848f_shared_configs_without_a_local_layer_report_the_limitation() {
+        let fixture = Sharing::new();
+        let _layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        let project = fixture.project.path();
+        std::fs::create_dir_all(project.join(".codex")).unwrap();
+        std::fs::create_dir_all(project.join(".agents")).unwrap();
+        std::fs::write(
+            project.join(".codex/config.toml"),
+            "[mcp_servers.other]\ncommand = \"other-mcp\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            project.join("opencode.json"),
+            r#"{"mcp":{"other":{"type":"local","command":["other-mcp"]}}}"#,
+        )
+        .unwrap();
+        std::fs::write(project.join(".agents/mcp_config.json"), SHARED_CLAUDE_MCP).unwrap();
+        for (tool, product, path) in [
+            ("codex", "Codex CLI", ".codex/config.toml"),
+            ("opencode", "OpenCode", "opencode.json"),
+            ("antigravity", "Antigravity", ".agents/mcp_config.json"),
+        ] {
+            let reports = fixture.setup(tool);
+            let notice = SetupNotice::SharedMcpWithoutLocalLayer {
+                tool: product.into(),
+                path: path.into(),
+            };
+            assert!(reports[0].notices.contains(&notice), "{tool}: {reports:?}");
+            assert!(notice.message().contains("hotsheet-mcp --project ."));
+            let shared = std::fs::read_to_string(project.join(path)).unwrap();
+            assert!(!shared.contains("/opt/a"), "{tool} stays portable");
+        }
+
+        // A Hot Sheet-only config already has absolute paths, so nothing is reported.
+        let fresh = Sharing::new();
+        for tool in ["codex", "opencode", "antigravity"] {
+            let notices = &fresh.setup(tool)[0].notices;
+            assert!(
+                !notices
+                    .iter()
+                    .any(|notice| matches!(notice, SetupNotice::SharedMcpWithoutLocalLayer { .. })),
+                "{tool}: {notices:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_pn848f_claude_override_that_cannot_be_written_is_reported() {
+        let fixture = Sharing::new();
+        let layer = LocalLayer::new("/opt/a/hotsheet-mcp");
+        std::fs::write(fixture.project.path().join(".mcp.json"), SHARED_CLAUDE_MCP).unwrap();
+        let key = fixture
+            .project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .display()
+            .to_string();
+        let user = serde_json::json!({"projects": {&key: {"mcpServers": {
+            "hotsheet": {"command": "my-own-server"}
+        }}}})
+        .to_string();
+        std::fs::write(layer.path(), &user).unwrap();
+        let reports = fixture.setup("claude");
+        assert!(
+            matches!(
+                reports[0].notices.as_slice(),
+                [SetupNotice::McpLocalOverrideSkipped { reason, .. }] if reason.contains("same-named server")
+            ),
+            "{reports:?}"
+        );
+        assert_eq!(std::fs::read_to_string(layer.path()).unwrap(), user);
+
+        // Without an absolute binary the override would be no better than the shared entry.
+        std::fs::remove_file(layer.path()).unwrap();
+        layer.set_command("hotsheet-mcp");
+        let reports = fixture.setup("claude");
+        assert!(
+            matches!(
+                reports[0].notices.as_slice(),
+                [SetupNotice::McpLocalOverrideSkipped { reason, .. }] if reason.contains("absolute hotsheet-mcp")
+            ),
+            "{reports:?}"
+        );
+        assert!(layer.read().is_none());
     }
 }

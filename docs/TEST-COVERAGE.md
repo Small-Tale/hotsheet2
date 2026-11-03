@@ -504,6 +504,22 @@ linked-store resolution from a nested checkout directory, and
 `crates/hotsheet-mcp/tests/portable_project_config.rs` exercises the real shim
 with `--path .` and a linked store.
 
+HS2-PN848F covers GUI-launched clients whose shared MCP config keeps the portable
+command. `crates/hotsheet-plugins/src/mcp_local_layer.rs` unit-tests the Claude
+local-scope edit (new and existing files, unrelated state kept, refresh after the
+binary moves, removal, unreadable files and user-owned servers left alone, apply-time
+replay). `crates/hotsheet-plugins/src/setup.rs` (`hs2_pn848f_*`) checks the shared
+`.mcp.json` stays portable while the override is absolute, idempotent re-runs and
+refresh plans, the binary-move refresh, disable removal, no override for a Hot
+Sheet-only config, and the limitation notice for Codex, OpenCode, and Antigravity.
+`crates/hotsheet-cli/tests/cli.rs`
+(`bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent`) checks headless
+bootstrap writes the same override idempotently. `crates/hotsheet-mcp/tests/portable_project_config.rs`
+launches the override's command with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` from an
+unrelated directory, asserts it opens the checkout through the machine server, and
+asserts the bare shared command does not resolve on that PATH. Real GUI launches are
+manual (`docs/manual-test-plan.md`).
+
 HS2-W857P0 covers exact ticket-number ranking in the duplicate-close target
 picker. `clients/web/src/ticket-close.test.ts` checks stable ordering across exact,
 case-insensitive, and title matches; `clients/web/tests/ticket-close.spec.ts`

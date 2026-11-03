@@ -26,3 +26,8 @@ HOTSHEET_AI_TOOL_PROBES = { value = "off", force = true }
 # outlive tests (788 per full suite), and tests would read each developer's global config.
 # GIT_CONFIG_GLOBAL survives `git::command`'s repository-env scrub and local transports.
 GIT_CONFIG_GLOBAL = { value = ".cargo/test-gitconfig", force = true, relative = true }
+# HS2-PN848F: setup registers an absolute Hot Sheet MCP override in Claude Code's local
+# scope (the user's `.claude.json`) when a project's `.mcp.json` is shared. Without this,
+# any test that sets up Claude against a shared config would edit the developer's real
+# `~/.claude.json`. Tests that assert the override pass their own file.
+HOTSHEET_CLAUDE_USER_CONFIG = { value = "target/test-claude-user-config/.claude.json", force = true, relative = true }

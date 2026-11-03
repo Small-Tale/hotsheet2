@@ -26,6 +26,7 @@ pub mod guidance_interview;
 pub mod guidance_recommendations;
 pub mod guidance_sources;
 pub mod guidance_updates;
+pub mod mcp_local_layer;
 pub mod rulesync_consolidation;
 pub mod rulesync_updates;
 pub mod setup;
@@ -409,6 +410,23 @@ pub struct Mcp {
     pub server_name: String,
     pub command: String,
     pub args: Vec<String>,
+    /// The client's per-checkout MCP layer that overrides `target` for this checkout without
+    /// being committed (HS2-PN848F). When `target` is shared with other servers it keeps the
+    /// portable `command --project .` entry, and setup also writes an absolute entry here so
+    /// a GUI-launched client finds the binary and checkout. `None` means the client has no
+    /// such layer; setup then reports the limitation instead.
+    #[serde(default)]
+    pub local_layer: Option<McpLocalLayer>,
+}
+
+/// A client-owned MCP layer layered over a project's shared MCP config (HS2-PN848F).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum McpLocalLayer {
+    /// Claude Code's `local` MCP scope: `projects["<checkout realpath>"].mcpServers` in
+    /// `$CLAUDE_CONFIG_DIR/.claude.json` (default `~/.claude.json`), which takes
+    /// precedence over the project's `.mcp.json`.
+    #[serde(rename = "claude-local-scope")]
+    ClaudeLocalScope,
 }
 
 /// A loaded plugin: its manifest, the (flat) set of files bundled with it, and where

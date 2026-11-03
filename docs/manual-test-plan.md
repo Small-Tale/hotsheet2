@@ -158,6 +158,19 @@ keeps its draft and reports the server conflict. Retry or discard, then confirm
 the displayed ticket matches the server result. Inspect the failed-save banner
 at wide and phone widths.
 
+### GUI-launched MCP clients (HS2-PN848F)
+
+Use a synthetic Git checkout whose `.mcp.json` already holds an unrelated server, and run
+`hotsheet-cli bootstrap` or `setup claude` for it. Open the checkout in a GUI-launched
+Claude client (Dock or Finder, not a shell) and confirm the Hot Sheet tools appear;
+`ps eww` on the `hotsheet-mcp` child should show launchd's minimal `PATH`, and
+`claude mcp get hotsheet` in the checkout should report `Local config` with absolute
+paths. Move the `hotsheet-mcp` binary, reopen the project, and confirm the override
+follows it. For a shared Codex, OpenCode, or Antigravity config, confirm setup prints the
+limitation notice; a GUI-launched client then connects only if `hotsheet-mcp` is on its
+PATH and it starts in the checkout. Record each launch's PATH, working directory, and
+result in the ticket.
+
 ### Repository setup and paging (HS2-J4WR11)
 
 - In a project folder without Git, open Repository Status at wide and narrow widths. Initialize, enter an unavailable remote, retry with a valid remote, and confirm existing files remain untracked.

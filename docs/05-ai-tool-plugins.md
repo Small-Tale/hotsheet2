@@ -559,9 +559,32 @@ MCP config is excluded the same way. A pre-existing config with unrelated user c
 remains visible to git while the Hot Sheet entry is merged into it. That shared entry
 uses `hotsheet-mcp --project .`: the shim resolves the code project and opens its
 configured sources through the machine-local server, keeping the committed config
-free of local binary and ticket-store paths (HS2-TSXSH6). The tool must find
-`hotsheet-mcp` on its launch `PATH`; if its GUI environment does not, install the
-shim on that `PATH` or keep its MCP entry in a local-only tool config. In a linked git
+free of local binary and ticket-store paths (HS2-TSXSH6). That form only works when the
+tool finds `hotsheet-mcp` on its launch `PATH` and starts the server in the checkout. An
+app opened from the Dock or Finder gets launchd's minimal `PATH`
+(`/usr/bin:/bin:/usr/sbin:/sbin`) and may use another working directory, so setup also
+covers each client's local layer (HS2-PN848F):
+
+| Client      | Shared config             | Per-checkout local layer                                                                                                                                                 | What setup does for a shared config                                                   |
+| ----------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| Claude Code | `.mcp.json`               | `local` MCP scope: `projects["<checkout realpath>"].mcpServers` in `$CLAUDE_CONFIG_DIR/.claude.json` (default `~/.claude.json`), which takes precedence over `.mcp.json` | Registers `hotsheet` there with the absolute `hotsheet-mcp` and absolute project path |
+| Codex       | `.codex/config.toml`      | None documented; project config is the highest file layer                                                                                                                | Prints a limitation notice                                                            |
+| OpenCode    | `opencode.json`           | None documented; project config is the highest standard file                                                                                                             | Prints a limitation notice                                                            |
+| Antigravity | `.agents/mcp_config.json` | None documented beside the global `~/.gemini/config/mcp_config.json`                                                                                                     | Prints a limitation notice                                                            |
+
+The plugin manifest declares the layer (`[mcp] local_layer = "claude-local-scope"`), so
+the host never branches on the tool id. The Claude override is idempotent and refreshed on
+every setup or refresh, so a moved binary is picked up on the next project open. It edits
+only Hot Sheet's server in that one project entry: an unreadable user file or a same-named
+server with another command is left alone and reported as a notice, and the planned edit
+is replayed against the file's current contents at apply time because Claude Code rewrites
+that file itself. A Hot Sheet-only `.mcp.json` already carries absolute paths, so setup
+writes no override for it but keeps an earlier one current. Disabling Claude removes the
+override. Tests point the file at `HOTSHEET_CLAUDE_USER_CONFIG`, which
+`.cargo/config.toml` forces to a repository-local path. `setup` and `bootstrap` print each
+limitation as a `Notice:` line and `--json` reports it as `shared_mcp_without_local_layer`
+or `mcp_local_override_skipped`; for those clients, start the tool from a shell in the
+checkout or add the shim's directory to the GUI `PATH`. In a linked git
 worktree the entry goes to the common directory's `info/exclude` (via the gitdir's
 `commondir`), because git never reads a per-worktree exclude file (HS2-8XTDZP).
 
@@ -1977,7 +2000,9 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > presence lease, and the badge correctly read "MCP not connected" while Claude reported
 > the server healthy. `npm run server:rebuild` builds and installs the shim with the CLI.
 > A config shared with user-owned entries instead records the portable bare command and
-> `--project .`; the shim resolves the code project from the working directory.
+> `--project .`; the shim resolves the code project from the working directory. Claude
+> Code additionally gets the absolute command in its `local` MCP scope (HS2-PN848F,
+> §5.1a).
 >
 > **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
 > restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a
