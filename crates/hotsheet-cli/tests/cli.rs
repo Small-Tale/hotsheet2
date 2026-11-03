@@ -2871,6 +2871,9 @@ fn hs2_sfvwn5_synthetic_credentials_persist_between_cli_processes() {
 /// resets the client's connection; both made device sign-in tests flaky.
 fn read_http_request(stream: &mut std::net::TcpStream) -> String {
     use std::io::Read;
+    // HS2-9EDKDQ: macOS accepted sockets inherit a nonblocking listener's mode (as in
+    // HS2-013E3P); a read before the client's bytes arrive would fail with WouldBlock.
+    stream.set_nonblocking(false).unwrap();
     let mut buf = [0; 4096];
     let mut request = Vec::new();
     loop {
