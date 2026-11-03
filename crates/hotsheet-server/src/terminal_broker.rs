@@ -53,6 +53,7 @@ impl TerminalBroker {
 
         let mut child = match is_live(&socket) {
             Ok(true) => {
+                warn_on_dead_namespace(&socket, "adopted");
                 return Ok(Self {
                     socket,
                     project,
@@ -60,10 +61,19 @@ impl TerminalBroker {
                     legacy_list_only: Arc::default(),
                 });
             }
-            Ok(false) => spawn_broker(&socket, &project)?,
+            Ok(false) => {
+                if hotsheet_terminals::bootstrap::probe().is_dead() {
+                    tracing::warn!(
+                        "this server's macOS bootstrap namespace is dead; the terminal broker it \
+                         spawns will inherit it (HS2-CY01TZ). Relaunch Hot Sheet from the Dock or Finder"
+                    );
+                }
+                spawn_broker(&socket, &project)?
+            }
             Err(error) => return Err(error.into()),
         };
         wait_for_broker_startup(&socket, &mut child)?;
+        warn_on_dead_namespace(&socket, "spawned");
         Ok(Self {
             socket,
             project,
@@ -214,6 +224,42 @@ fn wait_for_broker_startup(
         child_state,
         last_probe.as_deref().unwrap_or("not observed")
     )
+}
+
+/// Log once when a broker's bootstrap namespace is dead (HS2-CY01TZ). The broker itself refuses
+/// to spawn new terminals in that state with the same recovery text; this warning makes the
+/// state visible at startup instead of at the first terminal launch.
+fn warn_on_dead_namespace(socket: &Path, how: &str) {
+    match broker_health(socket) {
+        Ok(Some(health)) if health.is_dead() => tracing::warn!(
+            broker = how,
+            socket = %socket.display(),
+            "{}",
+            hotsheet_terminals::bootstrap::DEAD_BOOTSTRAP_MESSAGE
+        ),
+        Ok(_) => {}
+        Err(error) => tracing::debug!(%error, "terminal broker health probe failed"),
+    }
+}
+
+/// The broker's bootstrap namespace state, `None` for a broker that predates the `health` op.
+fn broker_health(socket: &Path) -> std::io::Result<Option<hotsheet_terminals::BootstrapHealth>> {
+    use std::io::{BufRead, Write};
+    let mut stream = hotsheet_terminals::broker_socket::connect_probe(socket)?;
+    let timeout = Some(std::time::Duration::from_millis(500));
+    stream.set_read_timeout(timeout)?;
+    stream.set_write_timeout(timeout)?;
+    let mut line = serde_json::to_string(&BrokerRequest::Health)?;
+    line.push('\n');
+    stream.write_all(line.as_bytes())?;
+    let mut reply = String::new();
+    std::io::BufReader::new(stream).read_line(&mut reply)?;
+    match serde_json::from_str::<BrokerResponse>(&reply) {
+        Ok(BrokerResponse::Health { bootstrap }) => Ok(Some(bootstrap)),
+        Ok(BrokerResponse::Err { message }) if message.starts_with("bad request") => Ok(None),
+        Ok(other) => Err(unexpected(other)),
+        Err(error) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
+    }
 }
 
 /// A missing/refused socket is confirmed absent. Connect timeout, permission errors,
@@ -656,6 +702,49 @@ mod tests {
         let info = broker.info("t1").await.unwrap().unwrap();
         assert!(info.alive);
         assert!(!broker.legacy_list_only.load(Ordering::Relaxed));
+    }
+
+    /// A one-shot broker that answers the first request line with `reply`.
+    fn one_reply_broker(socket: &Path, reply: &'static str) -> std::thread::JoinHandle<String> {
+        use std::io::{BufRead, Write};
+        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut request = String::new();
+            std::io::BufReader::new(&stream)
+                .read_line(&mut request)
+                .unwrap();
+            (&stream).write_all(reply.as_bytes()).unwrap();
+            (&stream).write_all(b"\n").unwrap();
+            request
+        })
+    }
+
+    #[test]
+    fn hs2_cy01tz_broker_health_reads_dead_and_tolerates_a_legacy_broker() {
+        let home = legacy_home();
+        let dead = home.path().join("dead.sock");
+        let served = one_reply_broker(
+            &dead,
+            r#"{"result":"health","bootstrap":{"state":"dead","code":268435459}}"#,
+        );
+        let health = broker_health(&dead).unwrap().unwrap();
+        assert!(health.is_dead(), "{health:?}");
+        assert_eq!(served.join().unwrap().trim(), r#"{"op":"health"}"#);
+
+        // A broker that predates the op rejects it as a bad request: unknown, not an error.
+        let legacy = home.path().join("legacy.sock");
+        let served = one_reply_broker(
+            &legacy,
+            r#"{"result":"err","message":"bad request: unknown variant `health`"}"#,
+        );
+        assert_eq!(broker_health(&legacy).unwrap(), None);
+        served.join().unwrap();
+
+        // The adoption warning path never fails startup, whatever the broker answers.
+        let missing = home.path().join("missing.sock");
+        assert!(broker_health(&missing).is_err());
+        warn_on_dead_namespace(&missing, "adopted");
     }
 
     #[test]

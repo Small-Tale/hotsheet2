@@ -716,6 +716,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       #   resize_replay is a backward-compatible request that updates retention for running broker PTYs (HS2-56G204)
       src/viewer_output.rs   #   Back-pressure-safe attach output (HS2-J52ZJ7): pump_viewer_output drains a Terminal's fan-out into a bounded 32-frame queue, coalescing while the viewer is slow (PendingOutput) and replacing from scrollback only past 256 KiB; shared by the server attach and the broker stream
       src/broker_socket.rs   # Short per-user/home/project socket namespace; private-directory validation, exclusive no-follow ownership locks, stale-owned-socket recovery and inode-matched cleanup
+      src/bootstrap.rs       # macOS Mach bootstrap namespace probe (live/dead/indeterminate); broker `health` op and dead-namespace spawn refusal (HS2-CY01TZ)
       src/bin/broker.rs      #   `hotsheet-terminal-broker <socket> <project>` binary: bind the UDS + serve_broker until killed
       src/bin/fake_agent.rs  #   `hs-fake-agent` — deterministic PTY-byte emulator for terminal E2E (OSC 133/7/9 + spinner + print/hold/exit as a left-to-right script), HS2-1GJY50
       tests/fake_agent.rs    #   integrated terminal E2E: hs-fake-agent drives busy/cwd/progress/output→idle→exit + spinner detection, in one realistic sequence

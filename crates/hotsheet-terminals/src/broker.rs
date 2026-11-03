@@ -44,6 +44,9 @@ fn now_ms() -> u64 {
 pub enum Request {
     /// Protocol-level liveness check (stronger than merely accepting a socket connection).
     Ping,
+    /// The broker's macOS bootstrap namespace state, answered with [`Response::Health`]
+    /// (HS2-CY01TZ). Brokers that predate it answer `Err { "bad request: …" }`.
+    Health,
     /// Open (or reattach to) a terminal `id` running `command`.
     Open {
         id: String,
@@ -161,6 +164,10 @@ fn stream_default_true() -> bool {
 pub enum Response {
     /// Reply to [`Request::Ping`].
     Pong,
+    /// Reply to [`Request::Health`].
+    Health {
+        bootstrap: crate::bootstrap::BootstrapHealth,
+    },
     PushInfo {
         push: BrokerPushState,
     },
@@ -536,6 +543,9 @@ async fn handle_request(
     let key = |id: &str| (project.to_string(), id.to_string());
     match req {
         Request::Ping => Response::Pong,
+        Request::Health => Response::Health {
+            bootstrap: crate::bootstrap::probe(),
+        },
         Request::Open {
             id,
             kind,
@@ -567,6 +577,14 @@ async fn handle_request(
                     }
                 }),
             };
+            // A new PTY would inherit this broker's dead bootstrap namespace and fail in
+            // confusing ways; reattaching to a live terminal stays allowed (HS2-CY01TZ).
+            let reattach = manager.get(&key(&id)).is_some_and(|term| term.is_alive());
+            if !reattach && crate::bootstrap::probe().is_dead() {
+                return Response::Err {
+                    message: crate::bootstrap::DEAD_BOOTSTRAP_MESSAGE.to_owned(),
+                };
+            }
             match manager.get_or_spawn_with_status(key(&id), spec) {
                 Ok((term, spawned)) => {
                     if spawned {

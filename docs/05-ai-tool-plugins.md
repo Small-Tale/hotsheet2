@@ -928,6 +928,19 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   falls back to `list`, which also carries no scrollback, so a long-lived older broker gets
   the same relief without a restart. MCP presence sweeps check lease pids with a direct
   `kill(pid, 0)` rather than spawning `kill -0`.
+- **Dead bootstrap namespace (HS2-CY01TZ, macOS).** A process inherits its Mach bootstrap
+  port from whatever launched it. A long-lived broker can outlive that context and keep a
+  dead port; every terminal it spawns then inherits it, and FSEvents watchers, DNS, Keychain,
+  user lookup (opendirectoryd), `pgrep`/`sysmond` and WindowServer (Chromium launch, screen
+  capture) all fail with `MACH_SEND_INVALID_DEST`. That looks like sandbox, network or
+  credential trouble. The broker therefore answers a `health` op with one cheap
+  `bootstrap_look_up` of `com.apple.system.opendirectoryd.libinfo` (`live`, `dead`,
+  `indeterminate`, or `unsupported` off macOS). Only `dead` (`MACH_SEND_INVALID_DEST`)
+  changes behavior: the broker refuses to spawn a new terminal with an error naming the
+  recovery (`hotsheet-cli serve --stop --kill-all-terminals`, then relaunch Hot Sheet from
+  the Dock or Finder), while reattaching to a live terminal still works. The server logs the
+  same warning when it adopts or spawns a dead broker, and when its own namespace is dead
+  before spawning one. A broker that predates `health` is treated as unknown.
 - **Compact broker byte payloads (HS2-9R751Y).** Byte payloads (attach scrollback and
   output frames, attach input, `read` scrollback) decode from either a legacy JSON number
   array or a base64 string (`hotsheet_terminals::WireBytes`), so mixed versions always

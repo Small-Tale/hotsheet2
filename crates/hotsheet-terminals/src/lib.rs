@@ -13,6 +13,7 @@
 //! decisions) — HS2-A6R5QV/HS2-XTTTMV/HS2-BD7Q74. The detached broker keeps these sessions
 //! alive across server stops/restarts and feeds busy state into the connection registry.
 
+pub mod bootstrap;
 pub mod broker;
 pub mod broker_socket;
 pub mod busy;
@@ -28,6 +29,7 @@ pub mod terminal;
 pub mod viewer_output;
 pub mod wire_bytes;
 
+pub use bootstrap::BootstrapHealth;
 pub use broker::{
     BrokerClient, BrokerPushState, BrokerStream, BrokerStreamReader, BrokerStreamWriter,
     BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse,
