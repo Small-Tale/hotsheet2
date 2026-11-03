@@ -23,6 +23,9 @@ pub(crate) struct WorkerQuery {
     connection_id: Option<String>,
     after: Option<String>,
     wait_ms: Option<u64>,
+    /// Also list past workers (HS2-V9BXWF); the default view reports only their count.
+    #[serde(default)]
+    include_past: bool,
 }
 
 struct CancelWatch(Arc<AtomicBool>);
@@ -115,7 +118,12 @@ pub(crate) async fn checkout_workers(
     let coordinator = std::sync::Arc::new(coordinator);
     let snapshot = coordinator.snapshot(now).map_err(worker_error)?;
     let (observations, _) = observe_connections(&state, &checkout).await?;
-    let view = WorkerView::from_snapshot(&snapshot, now, &observations, true);
+    let project = if query.include_past {
+        WorkerView::from_snapshot_including_past
+    } else {
+        WorkerView::from_snapshot
+    };
+    let view = project(&snapshot, now, &observations, true);
     if after.as_deref() != Some(&view.cursor) || wait_ms == 0 {
         revalidate(&state, &checkout, &source_id, &source_locator)?;
         return Ok(Json(view));
@@ -159,7 +167,7 @@ pub(crate) async fn checkout_workers(
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let snapshot = coordinator.snapshot(now).map_err(worker_error)?;
         let (observations, _) = observe_connections(&state, &checkout).await?;
-        let updated = WorkerView::from_snapshot(&snapshot, now, &observations, true);
+        let updated = project(&snapshot, now, &observations, true);
         if updated.cursor != after || wake == 0 {
             revalidate(&state, &checkout, &source_id, &source_locator)?;
             return Ok(Json(updated));

@@ -217,6 +217,11 @@ pub struct Assignment {
     pub scope: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transitions: Vec<AssignmentTransition>,
+    /// Regular `## Coordination retirement` note on the assignment's closed ticket that
+    /// retired this record to done (HS2-V9BXWF). Additive: absent from every other record,
+    /// so older executables of the same schema still read the pool.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retirement_note: Option<String>,
 }
 
 /// Tentative ordered intent. An operation id identifies one proposed placement,
@@ -379,6 +384,11 @@ pub struct Snapshot {
     pub source_support: Vec<SourceSupport>,
     #[serde(default)]
     pub planned: Vec<PlannedTicket>,
+    /// Non-done assignment ids whose selected-source ticket is closed (completed, verified,
+    /// archived, deleted or moved). They are terminal for display and `finish`, and
+    /// `retire-finished` retires them; the pool record itself is unchanged (HS2-V9BXWF).
+    #[serde(default)]
+    pub finished_assignments: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -437,6 +447,7 @@ mod snapshot_compatibility_tests {
             "live_dispatcher",
             "dispatch_blockers",
             "planned",
+            "finished_assignments",
         ] {
             encoded.as_object_mut().unwrap().remove(field);
         }

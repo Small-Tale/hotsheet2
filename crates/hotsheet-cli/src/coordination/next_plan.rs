@@ -290,6 +290,7 @@ impl Coordinator {
                 suspension_history: Vec::new(),
                 scope: entry.scope,
                 transitions: Vec::new(),
+                retirement_note: None,
             },
             check,
         )

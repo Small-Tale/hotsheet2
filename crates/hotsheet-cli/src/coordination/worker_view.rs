@@ -86,6 +86,11 @@ pub struct WorkerView {
     pub source_support: Vec<SourceSupport>,
     /// A headless read has no host connection registry to inspect.
     pub connection_coverage: bool,
+    /// Expired sessions holding no non-terminal assignment, live claim or plan entry
+    /// (HS2-V9BXWF). The default view omits them and reports only this count; a view
+    /// built with `include_past` lists them in `workers` as well.
+    #[serde(default)]
+    pub past_workers: usize,
 }
 
 impl WorkerView {
@@ -114,13 +119,41 @@ impl WorkerView {
 
     /// Compose one worker per exact coordination identity, including disconnected
     /// sessions with retained assignments and claim holders without a session.
+    /// Past workers are omitted (HS2-V9BXWF); see [`Self::from_snapshot_including_past`].
     pub fn from_snapshot(
         snapshot: &Snapshot,
         now: i64,
         connections: &BTreeMap<String, ConnectionObservation>,
         connection_coverage: bool,
     ) -> Self {
+        Self::project(snapshot, now, connections, connection_coverage, false)
+    }
+
+    /// The same projection, also listing expired sessions that hold nothing (HS2-V9BXWF).
+    pub fn from_snapshot_including_past(
+        snapshot: &Snapshot,
+        now: i64,
+        connections: &BTreeMap<String, ConnectionObservation>,
+        connection_coverage: bool,
+    ) -> Self {
+        Self::project(snapshot, now, connections, connection_coverage, true)
+    }
+
+    fn project(
+        snapshot: &Snapshot,
+        now: i64,
+        connections: &BTreeMap<String, ConnectionObservation>,
+        connection_coverage: bool,
+        include_past: bool,
+    ) -> Self {
         let state = &snapshot.state;
+        // HS2-V9BXWF: an assignment on a closed ticket is terminal for display; the
+        // pool keeps the record for audit.
+        let finished: BTreeSet<&str> = snapshot
+            .finished_assignments
+            .iter()
+            .map(String::as_str)
+            .collect();
         let mut rows = BTreeMap::<String, WorkerRow>::new();
         for (role, session) in state
             .integrator
@@ -173,7 +206,11 @@ impl WorkerView {
             .map(|entry| (entry.ticket.qualified(), entry))
             .collect();
         let mut tickets = BTreeMap::<String, Vec<WorkerTicket>>::new();
-        for assignment in state.assignments.values().filter(|a| a.phase.pending()) {
+        for assignment in state
+            .assignments
+            .values()
+            .filter(|a| a.phase.pending() && !finished.contains(a.id.as_str()))
+        {
             let key = assignment.ticket.qualified();
             let detail = queue.get(&key);
             tickets
@@ -297,8 +334,21 @@ impl WorkerView {
                 });
             row.planned.push(planned.clone());
         }
+        // HS2-V9BXWF: an expired session that holds nothing and has no observed live
+        // connection is a past worker, hidden from the default view.
+        let (past, current): (Vec<_>, Vec<_>) = rows.into_values().partition(|row| {
+            row.role.is_some()
+                && row.availability == Availability::Disconnected
+                && row.connection_available != Some(true)
+                && row.tickets.is_empty()
+                && row.planned.is_empty()
+        });
+        let past_workers = past.len();
+        let mut workers = current;
+        if include_past {
+            workers.extend(past);
+        }
         // Explicit role order is an interaction contract; stable ids break ties.
-        let mut workers: Vec<_> = rows.into_values().collect();
         workers.sort_by_key(|row| {
             let order = match row.role {
                 Some(Role::Integrator) => 0,
@@ -340,6 +390,7 @@ impl WorkerView {
             uncovered_sources,
             source_support: snapshot.source_support.clone(),
             connection_coverage,
+            past_workers,
         }
     }
 }
@@ -464,6 +515,7 @@ mod tests {
             live_claims: Vec::new(),
             source_support: Vec::new(),
             planned: Vec::new(),
+            finished_assignments: Vec::new(),
         }
     }
 
@@ -493,6 +545,7 @@ mod tests {
             suspension_history: Vec::new(),
             scope: Vec::new(),
             transitions: Vec::new(),
+            retirement_note: None,
         }
     }
 
@@ -803,5 +856,104 @@ mod tests {
         // Leave room for scheduler contention in the full suite while still
         // proving cancellation returns well before the watch timeout.
         assert!(started.elapsed() < Duration::from_secs(15));
+    }
+
+    #[test]
+    fn hs2_v9bxwf_finished_assignments_and_past_workers_leave_the_default_view() {
+        let mut snapshot = snapshot();
+        snapshot.state.integrator =
+            Some(session("integrator", "gen-1", 300, ReturnRoute::HumanRelay));
+        for (id, expires) in [
+            ("stale", 100),
+            ("active", 100),
+            ("idle", 100),
+            ("live", 300),
+        ] {
+            snapshot.state.workers.insert(
+                id.into(),
+                session(id, "gen-1", expires, ReturnRoute::HumanRelay),
+            );
+        }
+        // A review-returned code handoff on a closed ticket.
+        let mut returned = assignment("stale", "gen-1", "F", Phase::Blocked);
+        returned.commit = Some("a".repeat(40));
+        returned.handoff = Some(HandoffEvidence::Code {
+            commit: "a".repeat(40),
+        });
+        returned.recovery_note = Some("note-r".into());
+        assert!(returned.returned_for_review());
+        let open = assignment("active", "gen-1", "G", Phase::Handoff);
+        // An unregistered holder whose only record is a findings handoff on a closed ticket.
+        let mut ghost = assignment("ghost", "gen-0", "H", Phase::Handoff);
+        ghost.handoff = Some(HandoffEvidence::Findings {
+            note_id: "note-f".into(),
+        });
+        for a in [returned, open, ghost] {
+            snapshot.state.assignments.insert(a.id.clone(), a);
+        }
+        snapshot.finished_assignments = vec!["operation-F".into(), "operation-H".into()];
+        let view = WorkerView::from_snapshot(&snapshot, 250, &BTreeMap::new(), false);
+        let ids: Vec<_> = view.workers.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["integrator", "active", "live"]);
+        assert_eq!(view.past_workers, 2, "stale and idle are past workers");
+        assert_eq!(view.workers[1].availability, Availability::Disconnected);
+        assert_eq!(view.workers[1].tickets.len(), 1);
+        assert!(
+            !view
+                .workers
+                .iter()
+                .any(|row| row.availability == Availability::UnresolvedClaimHolder),
+            "a holder whose only records are finished is not an unresolved row"
+        );
+
+        let all = WorkerView::from_snapshot_including_past(&snapshot, 250, &BTreeMap::new(), false);
+        let ids: Vec<_> = all.workers.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["integrator", "active", "idle", "live", "stale"]);
+        assert_eq!(all.past_workers, 2);
+        assert!(
+            all.workers
+                .iter()
+                .all(|row| row.id != "stale" || row.tickets.is_empty())
+        );
+        assert_eq!(
+            all.cursor, view.cursor,
+            "the option never changes the cursor"
+        );
+
+        // Reopening the ticket (finished set empties) restores the held record and worker.
+        snapshot.finished_assignments.clear();
+        let reopened = WorkerView::from_snapshot(&snapshot, 250, &BTreeMap::new(), false);
+        let ids: Vec<_> = reopened.workers.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["integrator", "active", "live", "stale", "ghost"]);
+        assert_eq!(reopened.past_workers, 1);
+        assert_eq!(
+            reopened.workers[4].availability,
+            Availability::UnresolvedClaimHolder
+        );
+
+        // A renewed lease or an observed live connection is never past.
+        snapshot.finished_assignments = vec!["operation-F".into(), "operation-H".into()];
+        snapshot.state.workers.get_mut("idle").unwrap().return_route =
+            ReturnRoute::Terminal("connection-idle".into());
+        let observed = BTreeMap::from([(
+            "connection-idle".into(),
+            ConnectionObservation {
+                connection_id: "connection-idle".into(),
+                tool: "claude".into(),
+                kind: "pty".into(),
+                role: Some("worker".into()),
+                busy: Some(false),
+                observed_alive: Some(true),
+            },
+        )]);
+        let connected = WorkerView::from_snapshot(&snapshot, 250, &observed, true);
+        assert!(connected.workers.iter().any(|row| row.id == "idle"));
+        assert_eq!(connected.past_workers, 1);
+        snapshot.state.workers.get_mut("stale").unwrap().expires_at = 400;
+        let renewed = WorkerView::from_snapshot(&snapshot, 250, &observed, true);
+        assert!(renewed.workers.iter().any(|row| row.id == "stale"
+            && row.availability == Availability::Live
+            && row.tickets.is_empty()));
+        assert_eq!(renewed.past_workers, 0);
     }
 }

@@ -2206,6 +2206,7 @@ Use the same prefix, with `--project` before the subcommand:
 | `mark --id <integrator> --session <generation> --assignment <id> --phase <phase>`                                                                                                                                                                              | Record code integration/CI or findings verification, then resolution after ticket completion. Multiple code CI records may coexist.                                                |
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                                     | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
 | `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                               | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
+| `retire-finished --id <integrator> --session <generation> [--dry-run]`                                                                                                                                                                                         | Retire every non-done assignment whose selected-source ticket is closed, including review returns and findings handoffs, with an inspection note on each ticket (HS2-V9BXWF).      |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                                                                            | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                                                                         | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
@@ -2503,6 +2504,33 @@ source coverage and unsupported provider capabilities remain explicit. Assignmen
 phase, ticket Started phase, live claim, worker availability, and process busy are
 separate fields. Consumers should reconnect from the last applied cursor after a
 transient error with bounded backoff.
+
+**Finished tickets and past workers (HS2-V9BXWF).** A non-done assignment whose
+selected-source ticket is closed (completed, verified, archived, deleted or moved)
+is terminal for the Workers view and for `finish`, including a review-returned
+handoff and a findings handoff that can no longer be verified because claims refuse
+closed tickets. The snapshot lists these ids as `finished_assignments`; the semantic
+cursor includes them, so closing a ticket wakes waiting readers. The pool keeps each
+record unchanged for audit until `retire-finished` runs. A registered session whose
+lease has expired and that holds no non-terminal assignment, live claim, plan entry or
+observed live connection is a past worker. The default view omits past workers and
+reports their count as `past_workers`; `coordination workers --include-past` and the
+route's `include_past=true` list them too. An assignment on another source keeps its
+phase, because its ticket status is not read here.
+
+`retire-finished` is the one supported step that retires these records, so an
+integrator never edits the pool file. It needs the exact live integrator session. For
+each finished record whose ticket has no live claim, it reuses or appends a regular
+`## Coordination retirement` note naming the assignment id as a whitespace-separated
+token, with its worker, previous phase, ticket status and evidence. Under the ticket
+mutation lock and the pool lock it then checks every record again and records `done`
+with a `done` transition and `retirement_note`. Original evidence, the review-return
+note and the transition history stay. A closed ticket with a live claim, another
+source, or a record that changed during the run is reported under `skipped` with its
+reason. `--dry-run` writes nothing. A rerun is a no-op, and a run interrupted after a
+note was written reuses that note. `retirement_note` is an additive field at the same
+schema, so older executables still open the pool. The findings `mark --phase done`
+check also accepts an archived or otherwise closed ticket, not only a completed one.
 
 #### Three-role guidance and setup (HS2-7E5R4A)
 

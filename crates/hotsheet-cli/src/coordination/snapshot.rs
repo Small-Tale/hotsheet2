@@ -154,6 +154,13 @@ impl Coordinator {
                 ),
             })
             .collect::<Vec<_>>();
+        let finished_assignments = finished_assignments(
+            &state,
+            selected_connection.as_deref(),
+            selected_tickets.as_deref(),
+        );
+        // A closing ticket changes the Workers view without changing the pool, so the
+        // finished set is part of the semantic cursor (HS2-V9BXWF).
         let cursor = format!(
             "{:x}",
             Sha256::digest(serde_json::to_vec(&(
@@ -161,7 +168,8 @@ impl Coordinator {
                 &local_queue,
                 &uncovered_sources,
                 &live_claims,
-                &source_support
+                &source_support,
+                &finished_assignments
             ))?)
         );
         Ok(Snapshot {
@@ -177,6 +185,7 @@ impl Coordinator {
             live_claims,
             source_support,
             planned,
+            finished_assignments,
         })
     }
 
@@ -196,6 +205,33 @@ impl Coordinator {
             Sha256::digest(serde_json::to_vec(&semantic)?)
         ))
     }
+}
+
+/// Non-done assignments on a closed ticket of the selected local source (HS2-V9BXWF).
+/// Another source's ticket status is unknown here, so its records stay non-terminal.
+pub(super) fn finished_assignments(
+    state: &State,
+    selected_connection: Option<&str>,
+    selected_tickets: Option<&[hotsheet_model::Ticket]>,
+) -> Vec<String> {
+    let (Some(connection), Some(tickets)) = (selected_connection, selected_tickets) else {
+        return Vec::new();
+    };
+    let closed: std::collections::HashSet<String> = tickets
+        .iter()
+        .filter(|ticket| !ops::is_open(ticket))
+        .map(|ticket| ticket.id.to_string())
+        .collect();
+    state
+        .assignments
+        .values()
+        .filter(|assignment| {
+            assignment.phase.pending()
+                && assignment.ticket.connection_id == connection
+                && closed.contains(&assignment.ticket.native_id)
+        })
+        .map(|assignment| assignment.id.clone())
+        .collect()
 }
 
 fn plan_reasons(

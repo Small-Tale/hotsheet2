@@ -48,6 +48,7 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         suspension_history: Vec::new(),
         scope: Vec::new(),
         transitions: Vec::new(),
+        retirement_note: None,
     }
 }
 

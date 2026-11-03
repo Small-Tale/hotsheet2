@@ -799,7 +799,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
   `coordination/worker_view.rs` projects exact sessions, assignments and claims;
-  `coordination workers` and MCP `hotsheet_workers` expose the headless read.
+  `coordination workers` and MCP `hotsheet_workers` expose the headless read;
+  records on closed tickets are terminal and expired idle sessions are past workers,
+  shown only with `--include-past` (HS2-V9BXWF).
   `crates/hotsheet-server/src/routes/checkout_workers.rs` adds authenticated
   registered-checkout observations and an event-backed worker cursor (HS2-DBECD0).
   `parse_cli` isolates the large debug Clap builder on an explicit 8 MiB parser
@@ -1058,7 +1060,9 @@ local Git common directory and explicitly refreshes read-only completion evidenc
 `review_return.rs` preserves rejected code/findings handoffs and enables structured
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),
-`snapshot.rs` source-scoped queue facts/cursors, and `wait.rs` filesystem-event waits
+`retire.rs` backs `coordination retire-finished`, retiring records whose ticket is
+closed with a ticket inspection note and an additive `retirement_note` (HS2-V9BXWF),
+`snapshot.rs` source-scoped queue facts/cursors (including `finished_assignments`), and `wait.rs` filesystem-event waits
 and known lease deadlines. `authority.rs` owns the single assignment authority
 (integrator or dispatcher), the integrator's published integration report, dispatcher
 scope/base/blocker rules, the schema-three write fence and schema-four switch, and the

@@ -10,6 +10,9 @@ mod findings_review_return_tests;
 mod next_plan;
 #[cfg(test)]
 mod next_plan_tests;
+mod retire;
+#[cfg(test)]
+mod retire_tests;
 mod review_return;
 #[cfg(test)]
 mod review_return_tests;
@@ -40,6 +43,7 @@ pub use contract::{
     PrerequisiteGate, ReturnRoute, Role, Session, Snapshot, State, TransitionActor, TransitionKind,
     WaitRequest,
 };
+pub use retire::{RetiredAssignment, RetirementReport, SkippedRetirement};
 
 pub struct Coordinator {
     pub(crate) directory: PathBuf,
@@ -749,19 +753,30 @@ impl Coordinator {
                 "provider queue cannot be declared drained without its query/event adapter"
             );
         }
+        // HS2-V9BXWF: an assignment whose selected-source ticket is closed is terminal
+        // for `finish`, including review-returned and findings handoffs.
+        let finished: std::collections::HashSet<&str> = snapshot
+            .finished_assignments
+            .iter()
+            .map(String::as_str)
+            .collect();
         self.change(|state| {
             Self::integrator(state, integrator, generation, now)?;
             ensure!(
-                !state.assignments.values().any(|a| matches!(
-                    a.phase,
-                    Phase::Offered
-                        | Phase::Accepted
-                        | Phase::Handoff
-                        | Phase::Verifying
-                        | Phase::Integrating
-                        | Phase::SuspendedIntegration
-                        | Phase::Ci
-                )),
+                !state
+                    .assignments
+                    .values()
+                    .any(|a| !finished.contains(a.id.as_str())
+                        && matches!(
+                            a.phase,
+                            Phase::Offered
+                                | Phase::Accepted
+                                | Phase::Handoff
+                                | Phase::Verifying
+                                | Phase::Integrating
+                                | Phase::SuspendedIntegration
+                                | Phase::Ci
+                        )),
                 "work or CI remains in flight"
             );
             state.stopped = Some(reason.into());

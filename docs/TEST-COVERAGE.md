@@ -1879,6 +1879,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-cli/tests/coordination.rs # hs2_xcmavt_real_cli_plan_revision_and_dispatch_replay`, `crates/hotsheet-server/tests/http.rs # hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim`, and `crates/hotsheet-mcp/src/lib.rs # hs2_dbecd0_worker_tool_matches_registered_headless_projection` exercise the real CLI, authenticated server and MCP surfaces.
 - Manual: connected multi-session Codex/Claude pilot and app UI remain HS2-K1QNGC, HS2-E9SR7R and HS2-1Z3T0Z.
 
+### Retiring stale coordination state for finished tickets (HS2-V9BXWF)
+
+- Behavior: a non-done assignment on a closed selected-source ticket is terminal for the Workers view and `finish` (snapshot `finished_assignments`, included in the cursor). Expired sessions holding no non-terminal work are past workers: hidden by default, counted in `past_workers`, listed with `coordination workers --include-past` or `include_past=true`. `coordination retire-finished [--dry-run]` writes or reuses one regular `## Coordination retirement` note per ticket and moves each record to `done` with `retirement_note`, skipping live claims, other sources and records that changed during the run. Findings `mark --phase done` accepts any closed ticket.
+- Unit: `crates/hotsheet-cli/src/coordination/retire_tests.rs # hs2_v9bxwf_*` covers each stuck state (review-returned code on an archived ticket, findings handoff on an archived ticket blocking `finish`, review-returned findings on an archived ticket), released worker and integration fence for completed/verified tickets, live-claim skip, dry run, interrupted-run note reuse, integrator fencing, foreign-source skip and idempotent rerun; `crates/hotsheet-cli/src/coordination/worker_view.rs # hs2_v9bxwf_finished_assignments_and_past_workers_leave_the_default_view` covers the projection, including reopen, renewal and an observed connection.
+- End to end: `crates/hotsheet-cli/tests/coordination_retire.rs # hs2_v9bxwf_cli_retires_findings_handoff_on_archived_ticket_with_inspection_note` drives real CLI processes through claim, findings handoff, archive, Workers read, dry run, retirement, rerun and `finish`.
+- Manual: none; the web Workers "show past workers" control is follow-up work.
+
 ### Deferred composer title focus (HS2-2QR67T)
 
 - Behavior: initial outside-to-title focus remains available on each opening, while delayed open/restore/attachment callbacks preserve a newer focus choice inside the composer. Existing project/surface epoch guards and draft/attachment ownership are unchanged.

@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 18 -->
+<!-- hotsheet-skill-version: 19 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -159,6 +159,11 @@ worktree, and commit; add a durable inspection note. Only then use `coordination
 This fences the old reservation as blocked. Resolve it explicitly with mailbox `done`
 before a replacement assignment; that mailbox state does not complete the ticket.
 Ended independent app sessions require human resume (HS2-4H7D8D), not promised wake.
+Records whose ticket is already closed (completed, verified or archived), including
+review returns and unverifiable findings handoffs, no longer count as in flight. Retire
+them in one step with `coordination retire-finished` and integrator id/session, after a
+`--dry-run` review; it writes an inspection note on each ticket and keeps each record
+for audit (HS2-V9BXWF). Never edit the pool file by hand.
 
 ## Return a reviewed handoff for corrections
 

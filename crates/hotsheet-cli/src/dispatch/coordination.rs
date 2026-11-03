@@ -71,6 +71,19 @@ enum CoordinationCmd {
         /// Maximum event wait (default 30 seconds, capped at 30 seconds).
         #[arg(long)]
         wait_ms: Option<u64>,
+        /// Also list past workers: expired sessions that hold no non-terminal work.
+        #[arg(long)]
+        include_past: bool,
+    },
+    /// Retire every non-done assignment whose ticket is closed (completed, verified,
+    /// archived, deleted or moved), including review returns and findings handoffs.
+    /// Writes a regular inspection note on each ticket and keeps the record for audit.
+    RetireFinished {
+        #[command(flatten)]
+        integrator: Identity,
+        /// Report what would be retired without writing notes or the pool.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Replace ordered tentative intent; this never claims or changes a ticket.
     PlanReplace {
@@ -400,7 +413,25 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&assigned)?);
             return Ok(());
         }
-        CoordinationCmd::Workers { after, wait_ms } => {
+        CoordinationCmd::RetireFinished {
+            integrator: i,
+            dry_run,
+        } => {
+            let report = coordinator.retire_finished(
+                &i.id,
+                &i.session,
+                time::OffsetDateTime::now_utc(),
+                hotsheet_ticketing::actor::note_actor(ctx.actor.as_ref()),
+                dry_run,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        CoordinationCmd::Workers {
+            after,
+            wait_ms,
+            include_past,
+        } => {
             let wait_ms = wait_ms.unwrap_or(30_000);
             anyhow::ensure!(wait_ms <= 30_000, "wait_ms must be at most 30000");
             let snapshot = match after {
@@ -412,7 +443,12 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 )?,
                 None => coordinator.snapshot(now)?,
             };
-            let view = hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot(
+            let project = if include_past {
+                hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot_including_past
+            } else {
+                hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot
+            };
+            let view = project(
                 &snapshot,
                 time::OffsetDateTime::now_utc().unix_timestamp(),
                 &std::collections::BTreeMap::new(),
@@ -696,6 +732,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     suspension_history: Vec::new(),
                     scope,
                     transitions: Vec::new(),
+                    retirement_note: None,
                 },
                 check,
             )?;
@@ -892,12 +929,11 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     require_findings_claim(&ticket, &i.id, time::OffsetDateTime::now_utc())?;
                 }
                 if phase == Phase::Done {
+                    // HS2-V9BXWF: an archived (or otherwise closed) findings ticket is
+                    // finished too; only an open ticket blocks resolving its mailbox.
                     anyhow::ensure!(
-                        matches!(
-                            ticket.status,
-                            hotsheet_model::Status::Completed | hotsheet_model::Status::Verified
-                        ),
-                        "complete the findings ticket before resolving its mailbox"
+                        !ops::is_open(&ticket),
+                        "complete or close the findings ticket before resolving its mailbox"
                     );
                 }
             }
