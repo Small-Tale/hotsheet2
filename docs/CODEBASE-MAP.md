@@ -783,6 +783,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (ephemeral Linux Secret Service for encrypted permission tests; Windows credential/vault checks) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
+  .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
+  scripts/platform-matrix.mjs # Platform target ids, runners and target selection for platforms.yml's plan job (HS2-31RGRK; tests: platform-matrix.test.mjs)
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns, GitHub/GitLab/Jira providers)
   .env                       # gitignored, machine-local live-provider settings as 1Password refs; `op run --env-file=.env -- …` (docs/12 §12.7.6)
 ```

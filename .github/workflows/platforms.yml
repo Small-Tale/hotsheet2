@@ -1,0 +1,404 @@
+# HS2-31RGRK: the full test suite on every supported platform, plus the Tauri desktop shell.
+# It runs daily, by hand, and from the release flow (HS2-5PEWKJ) through workflow_call; it never
+# runs per commit. Per-commit CI stays Linux x86_64 only (the maintainer policy, 2026-11-03).
+#
+# The name must not be `CI`: scripts/ci-gate.mjs counts only push runs of the `CI` workflow on
+# main, so a daily or manual run here never covers a ticket's per-commit gate.
+#
+# Targets come from scripts/platform-matrix.mjs. Each target is a stable job name
+# (`linux-arm64`, `tauri-macos-arm64`, ...) that HS2-C6P32J keys failure tickets on.
+# A target that does not pass yet reports red rather than being hidden with continue-on-error;
+# HS2-F2ZVT3, HS2-V9NQ3Y, HS2-QW8GWJ, HS2-J9795K and HS2-D11EBT own making them pass.
+name: Platforms
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Targets: all, core, tauri, or a comma-separated list of target ids'
+        type: string
+        default: all
+  workflow_call:
+    inputs:
+      targets:
+        description: 'Targets: all, core, tauri, or a comma-separated list of target ids'
+        type: string
+        default: all
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  plan:
+    name: plan targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      core: ${{ steps.plan.outputs.core }}
+      has_core: ${{ steps.plan.outputs.has_core }}
+      tauri: ${{ steps.plan.outputs.tauri }}
+      has_tauri: ${{ steps.plan.outputs.has_tauri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the platform targets
+        id: plan
+        env:
+          TARGETS: ${{ inputs.targets || 'all' }}
+        run: node scripts/platform-matrix.mjs --targets "$TARGETS"
+
+  core:
+    name: ${{ matrix.target }}
+    needs: plan
+    if: needs.plan.outputs.has_core == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.core) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure a git identity (tests create + commit git stores)
+        run: |
+          git config --global user.name "Hot Sheet CI"
+          git config --global user.email "ci@smalltale.invalid"
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Cache cargo + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.target }}-cargo-platform-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ matrix.target }}-cargo-platform-
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install native build and Secret Service dependencies (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libsecret-tools gnome-keyring dbus-user-session
+
+      - name: Install native build dependencies (macOS)
+        if: matrix.os == 'macos'
+        run: brew install dav1d meson ninja nasm pkgconf
+
+      - name: Activate the MSVC compiler for native AVIF libraries (Windows)
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install the AVIF decoder for the native build (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          TRIPLET: ${{ matrix.vcpkg_triplet }}
+          HOST_TRIPLET: ${{ matrix.vcpkg_host_triplet }}
+        run: |
+          python -m pip install meson ninja
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          & $vcpkg install "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed'
+          $pkgconf = Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe"
+          $pkgconfig = Join-Path $installed "$env:TRIPLET/lib/pkgconfig"
+          if (!(Test-Path $pkgconf) -or !(Test-Path (Join-Path $pkgconfig 'dav1d.pc'))) {
+            throw 'dav1d or pkgconf is missing from the vcpkg installation'
+          }
+          "PKG_CONFIG=$pkgconf" >> $env:GITHUB_ENV
+          "PKG_CONFIG_PATH=$pkgconfig" >> $env:GITHUB_ENV
+          "CC=cl" >> $env:GITHUB_ENV
+
+      - name: Install git-filter-repo for compaction tests
+        run: |
+          python=$(command -v python || command -v python3)
+          "$python" -m venv "$RUNNER_TEMP/git-filter-repo"
+          bin="$RUNNER_TEMP/git-filter-repo/bin"
+          [ -d "$bin" ] || bin="$RUNNER_TEMP/git-filter-repo/Scripts"
+          "$bin/python" -m pip install git-filter-repo==2.47.0
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            clients/web/package-lock.json
+            migrator/package-lock.json
+
+      # Every suite below runs even when an earlier suite fails, so one red step never hides
+      # another; they all wait for this last setup step.
+      - name: Install Node dependencies
+        id: ready
+        run: |
+          npm ci
+          npm ci --prefix clients/web
+          npm ci --prefix migrator
+
+      - name: Format
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo lint
+
+      - name: Rust tests
+        id: rust
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: ${{ matrix.test_wrapper }} cargo nextest run --all-features
+
+      # nextest writes this JUnit report on every run (.config/nextest.toml, HS2-3PX1E4).
+      - name: Slowest Rust tests
+        if: ${{ !cancelled() && steps.rust.outcome != 'skipped' }}
+        run: node scripts/test-profile.mjs --top 15 --nextest target/nextest/default/junit.xml || true
+
+      # HS2-1R2RGQ: name the archive members requesting MSVCRTD (LNK4098) for HS2-PN8D9F.
+      # Diagnostic only; it runs after the native build, even a failed one, and changes no flags.
+      - name: Report native CRT directives on Windows
+        if: ${{ !cancelled() && matrix.os == 'windows' }}
+        run: node scripts/windows-crt-directives.mjs --target target --output target/crt-directives/report.json
+
+      - name: Upload the native CRT directive report
+        if: ${{ !cancelled() && matrix.os == 'windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-crt-directives-${{ matrix.target }}
+          path: target/crt-directives/report.json
+          if-no-files-found: error
+
+      # HS2-9E879K: relink one affected test with the linker's /VERBOSE output and correlate the archive
+      # members it selects with the HS2-1R2RGQ candidates for HS2-6W1S76. No CRT or link flag changes.
+      - name: Correlate CRT candidates with one current affected link
+        if: ${{ !cancelled() && matrix.os == 'windows' }}
+        env:
+          CC: cl
+        run: node scripts/windows-crt-link-correlation.mjs --target target --directives target/crt-directives/report.json --output target/crt-directives/link-correlation.json
+
+      - name: Upload the CRT link correlation report
+        if: ${{ !cancelled() && matrix.os == 'windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-crt-link-correlation-${{ matrix.target }}
+          path: target/crt-directives/link-correlation.json
+          if-no-files-found: error
+
+      - name: Web client lint, typecheck, unit tests, and production build
+        id: web
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        working-directory: clients/web
+        run: |
+          npm run lint
+          npm run typecheck
+          HOTSHEET_VITEST_BUILD=always npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
+          npm run build
+
+      - name: Slowest web unit tests
+        if: ${{ !cancelled() && steps.web.outcome != 'skipped' }}
+        working-directory: clients/web
+        run: node ../../scripts/test-profile.mjs --top 15 --vitest target/vitest-report.json || true
+
+      - name: Migrator tests + coverage (vitest + Rust-import conformance)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        working-directory: migrator
+        run: |
+          npm run lint
+          npm run test:coverage
+
+      - name: Prefer the Ubuntu archive for Playwright dependencies
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' && matrix.os == 'linux' }}
+        run: bash .github/scripts/prefer-ubuntu-archive.sh
+
+      - name: Install Playwright Chromium, WebKit, and their dependencies
+        id: browsers
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        working-directory: clients/web
+        timeout-minutes: 30
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium webkit; then
+              exit 0
+            fi
+            echo "::warning::Playwright install attempt $attempt failed"
+            sleep $((attempt * 15))
+          done
+          echo "::error::Playwright install failed after three bounded attempts"
+          exit 1
+
+      # The layout specs are calibrated against metric-compatible UI fonts (HS2-6H4M85).
+      - name: Pin the browsers' UI font to Liberation Sans (Linux)
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' && matrix.os == 'linux' }}
+        run: |
+          sudo apt-get install -y fonts-liberation
+          mkdir -p ~/.config/fontconfig
+          cp .github/fontconfig/fonts.conf ~/.config/fontconfig/fonts.conf
+          fc-match system-ui | grep -q 'Liberation Sans'
+
+      # HS2-63ZK8W: build the isolated real-server fixtures once, before any browser case.
+      - name: Build isolated browser fixtures
+        id: fixtures
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        working-directory: clients/web
+        run: npm run test:fixtures
+
+      - name: Full Playwright suite
+        id: playwright
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        working-directory: clients/web
+        timeout-minutes: 180
+        env:
+          HOTSHEET_MEDIA_TEST_VIDEO: tests/fixtures/video-scrub.mp4
+          # Bounded retries, listed below for follow-up tickets (HS2-8YHY6V, docs/test-quarantine.md).
+          HOTSHEET_PLAYWRIGHT_RETRIES: '2'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: playwright-junit.xml
+        run: ${{ matrix.test_wrapper }} npx playwright test --fully-parallel --workers=2 --reporter=dot,json,junit
+
+      - name: Browser tests that needed a retry
+        if: ${{ !cancelled() && steps.playwright.outcome != 'skipped' }}
+        working-directory: clients/web
+        run: node ../../scripts/playwright-retries.mjs playwright-report.json --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Slowest browser tests
+        if: ${{ !cancelled() && steps.playwright.outcome != 'skipped' }}
+        working-directory: clients/web
+        run: node ../../scripts/test-profile.mjs --top 20 --playwright playwright-report.json || true
+
+      - name: Upload test reports and failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-reports-${{ matrix.target }}
+          path: |
+            target/nextest/default/junit.xml
+            clients/web/target/vitest-report.json
+            clients/web/playwright-report.json
+            clients/web/playwright-junit.xml
+            clients/web/test-results/
+            migrator/coverage/lcov.info
+          retention-days: 14
+          if-no-files-found: ignore
+
+  tauri:
+    name: ${{ matrix.target }}
+    needs: plan
+    if: needs.plan.outputs.has_tauri == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.tauri) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Cache cargo + targets
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            clients/web/src-tauri/target
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ matrix.target }}-cargo-
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install native build and WebKitGTK dependencies (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- update
+          sudo apt-get -o Dir::Etc::SourceList=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::SourceParts=- install -y libdav1d-dev meson ninja-build cmake nasm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+      - name: Install native build dependencies (macOS)
+        if: matrix.os == 'macos'
+        run: brew install dav1d meson ninja nasm pkgconf
+
+      - name: Activate the MSVC compiler for native AVIF libraries (Windows)
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install the AVIF decoder for the native build (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          TRIPLET: ${{ matrix.vcpkg_triplet }}
+          HOST_TRIPLET: ${{ matrix.vcpkg_host_triplet }}
+        run: |
+          python -m pip install meson ninja
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          & $vcpkg install "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed'
+          "PKG_CONFIG=$(Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe")" >> $env:GITHUB_ENV
+          "PKG_CONFIG_PATH=$(Join-Path $installed "$env:TRIPLET/lib/pkgconfig")" >> $env:GITHUB_ENV
+          "CC=cl" >> $env:GITHUB_ENV
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            clients/web/package-lock.json
+            migrator/package-lock.json
+
+      - name: Install Node dependencies
+        run: |
+          npm ci --prefix clients/web
+          npm ci --prefix migrator
+
+      # Builds the web bundle, the bridge, the release server/CLI/MCP binaries, and stages them as
+      # the shell's external binaries. setup-node's official Node binary is the bundled runtime.
+      - name: Prepare the desktop resources
+        id: prepare
+        working-directory: clients/web
+        run: npm run desktop:prepare
+
+      - name: Desktop shell Rust tests
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: cargo nextest run --manifest-path clients/web/src-tauri/Cargo.toml --config-file .config/nextest.toml --no-tests=warn
+
+      # Unsigned: no signing identity or updater key is configured here. Signing, notarization and
+      # per-architecture installers belong to HS2-BYXA4V and the release work.
+      - name: Unsigned desktop build
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: clients/web
+        run: npx tauri build --ci ${{ matrix.bundle_args }} --config '{"build":{"beforeBuildCommand":""}}'
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-reports-${{ matrix.target }}
+          path: clients/web/src-tauri/target/nextest/default/junit.xml
+          retention-days: 14
+          if-no-files-found: ignore

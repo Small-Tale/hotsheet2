@@ -66,6 +66,7 @@ export const ROOT_TOOLING_TESTS = [
   'main-integration-authority',
   'main-integration-window',
   'macos-dev-signing',
+  'platform-matrix',
 ];
 const rootTestCommand = (names) => `node --test ${names.map((name) => `scripts/${name}.test.mjs`).join(' ')}`;
 

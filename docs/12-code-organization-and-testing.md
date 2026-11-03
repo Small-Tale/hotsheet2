@@ -902,6 +902,28 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   may only edit designated throwaway issues: the Jira ones are `HS2T-1`..`HS2T-3`
   (summary prefix `[HS2 benchmark]`, label `hs2-benchmark`), named in the local `.env` as
   `HOTSHEET_BENCH_JIRA_ISSUES` / `HOTSHEET_BENCH_JIRA_ISSUE`.
+- **Full-platform workflow (HS2-31RGRK) — built:** `.github/workflows/platforms.yml`
+  (workflow name `Platforms`) runs the full suite daily, on manual dispatch and through
+  `workflow_call` for the release flow (HS2-5PEWKJ). It never runs per commit, and
+  `scripts/ci-gate.mjs` counts only push runs of the `CI` workflow, so a platform run never
+  covers a ticket's per-commit gate. Targets come from `scripts/platform-matrix.mjs`:
+  `linux-x86_64` (`ubuntu-latest`), `linux-arm64` (`ubuntu-24.04-arm`), `windows-x86_64`
+  (`windows-latest`), `windows-arm64` (`windows-11-arm`) and `macos-arm64` (`macos-latest`).
+  Each target runs fmt, `cargo lint`, `cargo nextest run --all-features`, web
+  lint/typecheck/unit/build, migrator lint and coverage, and the whole Playwright suite
+  (Chromium and WebKit) after the isolated fixture build. Every suite runs even when an
+  earlier one fails, and each target uploads its JUnit and JSON reports and Playwright
+  failure output as `platform-reports-<target>`. Windows targets install dav1d from vcpkg
+  with the `x64-windows-static-md` or `arm64-windows-static-md` triplet and keep the
+  HS2-1R2RGQ/HS2-9E879K CRT directive and link-correlation reports
+  (`windows-crt-directives-<target>`, `windows-crt-link-correlation-<target>`). The Tauri desktop shell is its own `tauri-<target>` job
+  per desktop OS and architecture: `npm run desktop:prepare`, the `clients/web/src-tauri`
+  tests under nextest, and an unsigned `tauri build` (an `.app` bundle on macOS, no
+  installer elsewhere; signed installers belong to HS2-BYXA4V). `fail-fast` is off and no
+  step uses `continue-on-error`: a target that does not pass yet reports red under its
+  stable job name for HS2-C6P32J, and the per-platform tickets HS2-F2ZVT3, HS2-V9NQ3Y,
+  HS2-QW8GWJ, HS2-J9795K and HS2-D11EBT own making it pass. Dispatch a subset with
+  `gh workflow run platforms.yml --ref main -f targets=<all|core|tauri|id,id>`.
 - **Local live-provider settings (HS2-5PC0WA):** live-provider tests read their settings
   from a gitignored `.env` at the repo root whose secret values are 1Password references
   (`op://…`), resolved only at run time with
