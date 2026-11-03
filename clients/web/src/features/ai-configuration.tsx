@@ -154,6 +154,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     const descriptor = aiTools.value.find((item) => item.id === tool),
       declared = descriptor?.permission_modes?.find((item) => item.id === mode);
     if (!declared) return false;
+    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
     if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return false;
     const current = providerSelection(aiDefaults.value, aiTools.value, tool);
     void saveAiDefaults(
@@ -234,6 +235,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     if (!current || !connectionId || !mode) return;
     const declared = conversationAiSelection(connectionId).permissionModes.find((item) => item.id === mode);
     if (!declared) return;
+    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
     if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return;
     conversationSelections.value = {
       ...conversationSelections.value,

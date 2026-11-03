@@ -78,6 +78,51 @@ describe('web ESLint policy', () => {
         'export function createTrailingTask<T>(delayMs: number, run: (value: T) => void): TrailingTask<T> {',
       ]);
     });
+
+    it('HS2-ECT6FE rejects every form of the web APIs the desktop webview cannot show (HS2-JVSFES, HS2-WMZ6Z5)', async () => {
+      const forms = [
+        "alert('a');",
+        "confirm('a');",
+        "prompt('a');",
+        "window.alert('a');",
+        "window.confirm('a');",
+        "window.prompt('a');",
+        "globalThis.confirm('a');",
+        "self.prompt('a');",
+        "open('https://example.test');",
+        "window.open('https://example.test');",
+        "globalThis.open('https://example.test');",
+      ];
+      const [result] = await eslint.lintText(`${forms.join('\n')}\n`, {
+        filePath: join(webRoot, 'src/child-process.ts'),
+      });
+      const banned = new Set(['no-alert', 'no-restricted-globals', 'no-restricted-properties']);
+      const flaggedLines = new Set(
+        result.messages.filter((message) => banned.has(message.ruleId ?? '')).map((message) => message.line),
+      );
+      expect([...flaggedLines].sort((left, right) => left - right)).toEqual(forms.map((_, index) => index + 1));
+    });
+
+    it('HS2-ECT6FE caps the remaining desktop-incompatible call sites until HS2-6S1346 and HS2-0A7FWS fix them', () => {
+      const counts = { dialogs: 0, windowOpen: 0 };
+      const scan = (directory: string) => {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          const path = join(directory, entry.name);
+          if (entry.isDirectory()) scan(path);
+          else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+            const source = readFileSync(path, 'utf8');
+            counts.dialogs +=
+              source.match(/eslint-disable-next-line no-alert, no-restricted-properties -- .*HS2-6S1346/g)?.length ?? 0;
+            counts.windowOpen +=
+              source.match(/eslint-disable-next-line no-restricted-properties -- .*HS2-0A7FWS/g)?.length ?? 0;
+          }
+        }
+      };
+      scan(join(webRoot, 'src'));
+      // These counts only decrease: each fix removes its suppression.
+      expect(counts.dialogs).toBeLessThanOrEqual(8);
+      expect(counts.windowOpen).toBeLessThanOrEqual(2);
+    });
   });
 
   it('HS2-6ABCVC keeps the four Kerf packages on one exact version', () => {
@@ -91,24 +136,6 @@ describe('web ESLint policy', () => {
     for (const version of versions) {
       expect(version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
     }
-  });
-
-  it('HS2-JVSFES prevents new browser-native prompts while HS2-WMZ6Z5 retires existing ones', () => {
-    const prompts: Record<string, number> = {};
-    const scan = (directory: string, prefix = '') => {
-      for (const entry of readdirSync(directory, { withFileTypes: true })) {
-        const relative = `${prefix}${entry.name}`;
-        if (entry.isDirectory()) {
-          if (entry.name !== 'ux-demo') scan(join(directory, entry.name), `${relative}/`);
-        } else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
-          const source = readFileSync(join(directory, entry.name), 'utf8');
-          const count = source.match(/\b(?:window|globalThis)\.prompt\s*\(/g)?.length ?? 0;
-          if (count) prompts[relative] = count;
-        }
-      }
-    };
-    scan(import.meta.dirname);
-    expect(prompts).toEqual({});
   });
 
   it('HS2-WMZ6Z5 runs all replacement-parent flows in the required WebKit route', () => {

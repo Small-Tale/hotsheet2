@@ -435,6 +435,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
     if (
       !connection?.busy ||
       !connection.actions?.includes('interrupt') ||
+      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
       !window.confirm(`Stop the active ${tool} turn?`)
     )
       return;

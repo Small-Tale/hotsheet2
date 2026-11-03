@@ -4445,6 +4445,7 @@ export async function startHotSheetWebClient() {
       commandStopConfirmation.value = true;
       return;
     }
+    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
     if (command.confirmation && !window.confirm(command.confirmation)) return;
     if (command.kind === 'shell') {
       const terminalId = await createShellCommandTerminal(command, current);

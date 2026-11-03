@@ -44,7 +44,8 @@ does not fork Kerf's guidance.
 - Browser-native `window.prompt` dialogs are unsupported in the desktop shell. Use in-app
   input flows; the terminal drawer's unnecessary message action was removed (HS2-JVSFES).
   The remaining filename, command-group, and AI-launch prompts use controlled in-app inputs
-  (HS2-WMZ6Z5); a source policy test prevents production native prompts.
+  (HS2-WMZ6Z5). ESLint now rejects every native `alert`, `confirm`, `prompt`, and
+  `window.open` call (HS2-ECT6FE); see [tauri-desktop.md](tauri-desktop.md).
 
 ## Hot Sheet ticket lessons
 

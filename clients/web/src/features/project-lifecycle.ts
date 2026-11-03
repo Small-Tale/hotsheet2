@@ -405,6 +405,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     if (
       !current ||
       (!current.hs1CleanupEligible && !repair) ||
+      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
       !window.confirm(
         repair
           ? 'Repair this project’s old Hot Sheet 1 saved-project and channel registrations? The verified backup and project files will be kept.'
@@ -879,6 +880,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
     const webBase = enterprise?.origin ?? 'https://github.com',
       enterpriseUrl = webBase === 'https://github.com' ? undefined : webBase;
+    // eslint-disable-next-line no-restricted-properties -- Desktop opens no new window; system-browser routing is HS2-0A7FWS.
     githubPopup = window.open('', GITHUB_POPUP, GITHUB_POPUP_FEATURES);
     let provideCode!: (code: string) => void, withholdCode!: (reason: unknown) => void;
     const code = new Promise<string>((resolve, reject) => {
@@ -955,6 +957,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   function reopenGitHubSignIn() {
     const current = githubAuth.value;
     if (current?.state !== 'waiting') return;
+    // eslint-disable-next-line no-restricted-properties -- Desktop opens no new window; system-browser routing is HS2-0A7FWS.
     githubPopup = window.open(current.verificationUri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
   }
 

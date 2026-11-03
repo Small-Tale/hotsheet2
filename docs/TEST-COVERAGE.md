@@ -1628,6 +1628,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: Server HTTP checkout flow covers two requests, newest answer first, and Needs Review until the older request closes. Browser provider flow covers two pending actions, response and acknowledgement, wide and phone presentation.
 - Live: `crates/hotsheet-extsync/tests/feedback_replies_live.rs` (ignored, write opt-in per provider) runs the same reply order against the disposable GitHub, GitLab, and Jira test projects through the real adapters, re-reads after each step, and copies the issue into a Git store with one request open and again once both are answered (HS2-WT82VP). It passed on all three on 2026-11-04; Jira leaves its throwaway issue open because the adapter has no close or status transition without a project workflow mapping.
 
+### Desktop-incompatible web APIs (HS2-ECT6FE)
+
+- Behavior: client source never calls `alert`, `confirm`, `prompt`, or `window.open`, which do nothing in the desktop webview. Remaining call sites carry reasoned suppressions naming HS2-6S1346 or HS2-0A7FWS.
+- Unit: `clients/web/src/eslint-policy.test.ts` lints every banned form through the real ESLint config and caps the suppression counts.
+- End to end: none; runtime desktop behavior is the `Platforms` workflow's tauri targets.
+
 ### Repository client workflow (HS2-J4WR11)
 
 - Behavior: Repository setup, remote validation/retry, status refresh, and detail paging keep project-owned responses; stale responses cannot replace a new project's state, and empty pages can reset and refill.

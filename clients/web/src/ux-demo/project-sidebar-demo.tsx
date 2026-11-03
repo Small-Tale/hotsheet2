@@ -282,6 +282,7 @@ export function selectCommandEditorRow(id: string, intent: { toggle?: boolean; r
   commandEditorSelectionAnchor = id;
 }
 export function addCommandEditorGroup() {
+  // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
   const name = window.prompt('New group name')?.trim();
   if (name && !commandEditorExtraGroups.value.includes(name))
     commandEditorExtraGroups.value = [...commandEditorExtraGroups.value, name];

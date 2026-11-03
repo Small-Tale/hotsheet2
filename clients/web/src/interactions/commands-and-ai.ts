@@ -635,6 +635,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const rater = feedbackRaterId();
       const wireRating = rating === 'helpful' ? 'helpful' : 'not_helpful';
       const previous = ticket.notes.find((note) => note.ai_feedback?.target === targetId && note.actor?.id === rater);
+      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
       if (previous?.ai_feedback?.rating === wireRating && window.confirm('Withdraw your previous rating?')) {
         void updateSelected({
           ai_feedback: { target: targetId, rating: null },
