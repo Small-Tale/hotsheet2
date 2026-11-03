@@ -2,6 +2,7 @@
 
 use crate::AppState;
 use crate::dto::WsParams;
+use crate::routes::terminals::replay::{ReplayKind, ReplayOptions, ReplayParams, replay_messages};
 use crate::routes::terminals::term_key;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
@@ -21,8 +22,10 @@ pub(crate) async fn attach_terminal(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<WsParams>,
+    Query(replay): Query<ReplayParams>,
     ws: WebSocketUpgrade,
 ) -> Response {
+    let replay = ReplayOptions::from(&replay);
     if params.secret.as_deref() != Some(state.secret.as_str()) {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
@@ -40,12 +43,13 @@ pub(crate) async fn attach_terminal(
             }
         }
         let socket_path = tb.socket.clone();
-        return ws.on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id, state));
+        return ws
+            .on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id, state, replay));
     }
     let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
         return (StatusCode::NOT_FOUND, "no such terminal").into_response();
     };
-    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term, state, id))
+    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term, state, id, replay))
 }
 
 fn default_true() -> bool {
@@ -131,11 +135,6 @@ fn terminal_size_message(cols: u16, rows: u16, driven_by: Option<&str>) -> Messa
     Message::Text(serde_json::to_string(&msg).unwrap_or_default().into())
 }
 
-/// A replay after initial attach replaces the viewer's emulator state rather than appending.
-fn terminal_replay_control() -> Message {
-    Message::Text(r#"{"terminal_replay":"replace"}"#.into())
-}
-
 /// Sent first on every attach: this server answers `terminal_ping` probes (HS2-51HQ3S). A
 /// viewer only sends probes after this frame, so an older server never sees one as PTY input,
 /// and a viewer only treats a silent socket as dead once it knows pongs would arrive.
@@ -166,6 +165,8 @@ const CONTROL_QUEUE: usize = 8;
 /// One queued frame for a viewer's WebSocket writer.
 enum Outbound {
     Frame(ViewerFrame),
+    /// The attach's first replay, which the broker path receives after the attach starts.
+    Replay(Vec<u8>),
     /// The liveness hello, which the broker path sends after its replay-then-size preamble.
     LivenessHello,
 }
@@ -177,11 +178,12 @@ impl From<ViewerFrame> for Outbound {
 }
 
 /// The WebSocket messages for one queued frame, in order.
-fn outbound_messages(outbound: Outbound) -> Vec<Message> {
+async fn outbound_messages(outbound: Outbound, replay: ReplayOptions) -> Vec<Message> {
     match outbound {
         Outbound::Frame(ViewerFrame::Output(data)) => vec![Message::Binary(data.into())],
+        Outbound::Replay(data) => replay_messages(replay, ReplayKind::Replay, data).await,
         Outbound::Frame(ViewerFrame::Replace(data)) => {
-            vec![terminal_replay_control(), Message::Binary(data.into())]
+            replay_messages(replay, ReplayKind::Replace, data).await
         }
         Outbound::Frame(ViewerFrame::Size(d)) => {
             vec![terminal_size_message(
@@ -201,13 +203,14 @@ async fn write_viewer(
     mut sink: SplitSink<WebSocket, Message>,
     mut frames: mpsc::Receiver<Outbound>,
     mut control: mpsc::Receiver<Message>,
+    replay: ReplayOptions,
 ) {
     loop {
         let messages = tokio::select! {
             biased;
             Some(message) = control.recv() => vec![message],
             frame = frames.recv() => match frame {
-                Some(frame) => outbound_messages(frame),
+                Some(frame) => outbound_messages(frame, replay).await,
                 None => break,
             },
         };
@@ -238,6 +241,7 @@ async fn terminal_attach_loop(
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
     state: AppState,
     terminal_id: String,
+    replay: ReplayOptions,
 ) {
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
@@ -248,8 +252,10 @@ async fn terminal_attach_loop(
 
     // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
     // atomically clear stale emulator state without blanking while waiting for a payload.
-    if socket.send(Message::Binary(snapshot.into())).await.is_err() {
-        return;
+    for message in replay_messages(replay, ReplayKind::Replay, snapshot).await {
+        if socket.send(message).await.is_err() {
+            return;
+        }
     }
     // The size channel only reports changes, so a viewer of a stable-size terminal would never
     // learn the PTY grid. Report the applied size right after the replay (HS2-7Y1BQ2); the size
@@ -299,7 +305,7 @@ async fn terminal_attach_loop(
             }
         }
     });
-    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
+    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx, replay));
 
     loop {
         tokio::select! {
@@ -387,7 +393,8 @@ async fn pump_broker_output(
                         pending.replace_with(data.into_vec());
                     } else {
                         received_initial_replay = true;
-                        if pending.push(data.into_vec(), &frames).is_err() {
+                        // Nothing is pending before the first replay, so this keeps order.
+                        if frames.send(Outbound::Replay(data.into_vec())).await.is_err() {
                             return;
                         }
                     }
@@ -432,6 +439,7 @@ async fn broker_attach_loop(
     broker_socket: std::path::PathBuf,
     id: String,
     state: AppState,
+    replay: ReplayOptions,
 ) {
     let stream = match hotsheet_terminals::BrokerStream::open(&broker_socket, &id).await {
         Ok(s) => s,
@@ -442,7 +450,7 @@ async fn broker_attach_loop(
     let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
     let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
     let pump = tokio::spawn(pump_broker_output(broker_out, frames_tx, state, id.clone()));
-    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
+    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx, replay));
 
     loop {
         tokio::select! {
@@ -499,10 +507,8 @@ async fn broker_attach_loop(
 
 #[cfg(test)]
 mod terminal_text_tests {
-    use super::{
-        TerminalText, classify_terminal_text, terminal_liveness_hello, terminal_pong,
-        terminal_replay_control,
-    };
+    use super::{TerminalText, classify_terminal_text, terminal_liveness_hello, terminal_pong};
+    use crate::routes::terminals::replay::terminal_replay_control;
     use axum::extract::ws::Message;
 
     #[test]

@@ -40,6 +40,8 @@ futures-util.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 base64.workspace = true
+# Replay compression for terminal attach (HS2-K93QHA).
+flate2.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 clap.workspace = true

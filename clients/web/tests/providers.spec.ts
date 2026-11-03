@@ -755,7 +755,7 @@ async function haltedSessionFixture(page: Page) {
       if (index >= 0) sockets.splice(index, 1);
     });
   });
-  await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+  await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
     void route.close();
   });
   const emit = async (kind: string, id = 'halt-worker') => {
@@ -1234,7 +1234,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
           await route.abort().catch(() => undefined);
         }
       });
-    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       void route.close();
     });
     await page.goto('/');
@@ -8854,7 +8854,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
         });
         await route.fulfill({ response });
       });
-    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => void route.close());
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => void route.close());
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -8943,7 +8943,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
           await route.abort().catch(() => undefined);
         }
       });
-    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       void route.close();
     });
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -9100,7 +9100,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
           await route.abort().catch(() => undefined);
         }
       });
-    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       void route.close();
     });
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -9253,7 +9253,7 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
         })
       : route.fallback(),
   );
-  await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+  await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
     void route.close();
   });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -9346,7 +9346,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
           await route.abort().catch(() => undefined);
         }
       });
-    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       const id = decodeURIComponent(new URL(route.url()).pathname.split('/').at(-2)!),
         upstream = new WebSocket(attachUrl(id)),
         pending: Array<string | Buffer> = [],
@@ -20156,7 +20156,7 @@ for (const viewport of [
     const ptyRoutes: import('@playwright/test').WebSocketRoute[] = [];
     const ptyInputs: string[] = [];
     if (ptyProfile)
-      await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+      await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
         ptyRoutes.push(route);
         route.onMessage((message) => {
           if (typeof message === 'string' && !message.startsWith('{')) {

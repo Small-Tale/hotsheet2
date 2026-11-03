@@ -13,6 +13,7 @@ import {
   installTerminalWebSocketBridge,
   isProjectWebSocketPath,
   webSocketRawText,
+  withTerminalReplayParams,
 } from './terminal-ws-bridge';
 
 const servers: Array<{ close(callback: () => void): void }> = [];
@@ -63,6 +64,23 @@ describe('terminal WebSocket bridge', () => {
     await expect(
       browserTerminalAttachTarget('/__hotsheet/project-api/project/terminals', resolve),
     ).resolves.toBeUndefined();
+  });
+
+  it('forwards only the replay negotiation parameters to the authenticated upstream (HS2-K93QHA)', async () => {
+    const resolve = (project: string, terminal: string) =>
+      `ws://127.0.0.1:9/terminals/${terminal}/attach?secret=s&project=${project}`;
+    const target = await browserTerminalAttachTarget(
+      '/__hotsheet/project-api/p/terminals/main/attach?replay_protocol=2&replay_max_bytes=4096&replay_encoding=deflate-raw&secret=forged&other=1',
+      resolve,
+    );
+    const url = new URL(target ?? '');
+    expect(url.searchParams.get('secret')).toBe('s');
+    expect(url.searchParams.get('project')).toBe('p');
+    expect(url.searchParams.get('replay_protocol')).toBe('2');
+    expect(url.searchParams.get('replay_max_bytes')).toBe('4096');
+    expect(url.searchParams.get('replay_encoding')).toBe('deflate-raw');
+    expect(url.searchParams.has('other')).toBe(false);
+    expect(withTerminalReplayParams('not a url', new URLSearchParams('other=1'))).toBe('not a url');
   });
 
   it('awaits asynchronous supervision before resolving a reconnect target', async () => {

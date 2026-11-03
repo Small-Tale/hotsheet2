@@ -100,7 +100,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
       });
       await route.fulfill({ response });
     });
-    await page.routeWebSocket('**/terminals/*/attach', (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       route.connectToServer();
     });
     await page.routeWebSocket(/\/ws\/sync(?:\?.*)?$/, (route) => {

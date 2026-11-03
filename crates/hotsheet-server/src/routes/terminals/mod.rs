@@ -6,6 +6,7 @@ mod attach;
 pub(crate) mod claude_usage;
 pub(crate) mod codex_watch;
 pub(crate) mod launch;
+mod replay;
 mod signals;
 
 pub(crate) use attach::attach_terminal;

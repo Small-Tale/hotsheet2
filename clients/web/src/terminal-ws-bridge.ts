@@ -23,13 +23,27 @@ export async function browserTerminalAttachTarget(
   resolveTarget: TargetResolver = projectTerminalWebSocketUrl,
 ): Promise<string | undefined> {
   if (!requestUrl) return undefined;
-  const match = new URL(requestUrl, 'http://localhost').pathname.match(browserAttach);
+  const request = new URL(requestUrl, 'http://localhost'),
+    match = request.pathname.match(browserAttach);
   if (!match) return undefined;
   try {
-    return await resolveTarget(decodeURIComponent(match[1]), decodeURIComponent(match[2]));
+    const target = await resolveTarget(decodeURIComponent(match[1]), decodeURIComponent(match[2]));
+    return target === undefined ? undefined : withTerminalReplayParams(target, request.searchParams);
   } catch {
     return undefined;
   }
+}
+
+/** The attach parameters a viewer negotiates its replay with (HS2-K93QHA). Only these pass from
+ * the credential-free browser path to the authenticated upstream, which ignores any it predates. */
+export const TERMINAL_REPLAY_PARAMS = ['replay_protocol', 'replay_max_bytes', 'replay_encoding'] as const;
+
+export function withTerminalReplayParams(target: string, browser: URLSearchParams): string {
+  const present = TERMINAL_REPLAY_PARAMS.filter((name) => browser.has(name));
+  if (present.length === 0) return target;
+  const url = new URL(target);
+  for (const name of present) url.searchParams.set(name, browser.get(name) ?? '');
+  return url.toString();
 }
 
 export async function browserProjectWebSocketTarget(

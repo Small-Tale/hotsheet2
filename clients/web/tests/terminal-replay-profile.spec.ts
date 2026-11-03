@@ -34,7 +34,9 @@ const GENERATOR = [
   'if kind == "git-log":',
   '    log = subprocess.run(["git", "-C", repo, "log", "--color=always", "--stat", "-n", "4000"], capture_output=True).stdout',
   '    while written < target:',
-  '        emit(log[: target - written + 4096])',
+  // Cut at a line end: a cut inside an SGR sequence would swallow the end marker's first byte.
+  '        chunk = log[: target - written + 4096]',
+  '        emit(chunk[: chunk.rfind(b"\\n") + 1] or chunk)',
   'elif kind == "agent":',
   '    words = "the replay terminal viewer server attach frame ticket bytes render scroll phone network cursor buffer".split()',
   '    tick = 0',
@@ -219,7 +221,10 @@ interface ProfileWindow {
     mountAt: number;
     openAt?: number;
     frames: { at: number; bytes: number }[];
-    markerFrameAt?: number;
+    /** The first binary frame, which is always the attach replay (compressed or not). */
+    replayAt?: number;
+    replayWireBytes?: number;
+    header?: string;
     paintedAt?: number;
   };
 }
@@ -261,7 +266,7 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
           const page = await context.newPage();
           try {
             const cdp = await context.newCDPSession(page);
-            await page.addInitScript((marker) => {
+            await page.addInitScript(() => {
               const NativeWebSocket = window.WebSocket;
               window.WebSocket = class extends NativeWebSocket {
                 constructor(url: string | URL, protocols?: string | string[]) {
@@ -272,15 +277,19 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
                     state.openAt ??= performance.now();
                   });
                   this.addEventListener('message', (event: MessageEvent) => {
+                    if (typeof event.data === 'string' && event.data.startsWith('{"terminal_frame"'))
+                      state.header ??= event.data;
                     if (!(event.data instanceof ArrayBuffer)) return;
                     const at = performance.now();
                     state.frames.push({ at, bytes: event.data.byteLength });
-                    if (state.markerFrameAt === undefined && new TextDecoder().decode(event.data).includes(marker))
-                      state.markerFrameAt = at;
+                    if (state.replayAt === undefined) {
+                      state.replayAt = at;
+                      state.replayWireBytes = event.data.byteLength;
+                    }
                   });
                 }
               };
-            }, MARKER);
+            });
             await page.goto('/');
             await cdp.send('Emulation.setCPUThrottlingRate', { rate: device.cpuSlowdown });
             await cdp.send('HeapProfiler.collectGarbage');
@@ -336,10 +345,11 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
               replayBytes: replay.length,
               framesBeforePaint: state.frames.filter((frame) => frame.at <= state.paintedAt!).length,
               openMs: since(state.openAt),
-              replayReceivedMs: since(state.markerFrameAt),
+              replayWireBytes: state.replayWireBytes ?? null,
+              replayHeader: state.header ?? null,
+              replayReceivedMs: since(state.replayAt),
               paintedMs: since(state.paintedAt),
-              clientParseRenderMs:
-                state.markerFrameAt === undefined ? null : Math.round(state.paintedAt! - state.markerFrameAt),
+              clientParseRenderMs: state.replayAt === undefined ? null : Math.round(state.paintedAt! - state.replayAt),
               retainedHeapBytes: heapAfter - heapBefore,
             };
             results.push(result);

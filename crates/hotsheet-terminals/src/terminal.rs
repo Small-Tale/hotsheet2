@@ -213,6 +213,25 @@ impl Ring {
     }
 }
 
+/// The longest suffix of `replay` no longer than `max` bytes that starts where the ring could
+/// have started: outside an escape sequence and not on a UTF-8 continuation byte (HS2-K93QHA).
+/// `replay` must itself begin at such a boundary, as every ring snapshot does. A suffix that
+/// cannot fit (`max` shorter than the last safe span) is empty.
+pub fn replay_suffix(replay: &[u8], max: usize) -> &[u8] {
+    if replay.len() <= max {
+        return replay;
+    }
+    let first = replay.len() - max;
+    let mut ansi = AnsiState::Ground;
+    for (index, &byte) in replay.iter().enumerate() {
+        if index >= first && matches!(ansi, AnsiState::Ground) && byte & 0xc0 != 0x80 {
+            return &replay[index..];
+        }
+        ansi = ansi.advance(byte);
+    }
+    &[]
+}
+
 /// Owns retained and live output as one synchronization boundary. Publishing and taking a
 /// snapshot+subscription are mutually exclusive, so a chunk is either in the snapshot or in
 /// the receiver created with it, never both and never neither (HS2-5W0V9M).
@@ -836,6 +855,24 @@ mod tests {
         let mut utf8 = Ring::new(2);
         utf8.push("A€B".as_bytes());
         assert_eq!(utf8.snapshot(), b"B");
+    }
+
+    /// HS2-K93QHA: a viewer-sized replay cap trims exactly where the ring itself would.
+    #[test]
+    fn hs2_k93qha_replay_suffix_matches_ring_trimming() {
+        assert_eq!(replay_suffix(b"prefix\x1b[38;5;61mOK", 5), b"OK");
+        assert_eq!(replay_suffix("A€B".as_bytes(), 2), b"B");
+        assert_eq!(replay_suffix(b"short", 64), b"short");
+        assert_eq!(replay_suffix(b"\x1b]0;title\x07", 3), b"");
+        assert_eq!(replay_suffix(b"abc", 0), b"");
+        let output: Vec<u8> = (0..400)
+            .flat_map(|line| format!("\x1b[3{}m{line} é\x1b[0m\r\n", line % 8).into_bytes())
+            .collect();
+        for cap in [1, 7, 64, 333, 1024, output.len()] {
+            let mut ring = Ring::new(cap);
+            ring.push(&output);
+            assert_eq!(replay_suffix(&output, cap), ring.snapshot(), "cap {cap}");
+        }
     }
 
     #[test]

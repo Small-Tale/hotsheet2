@@ -195,6 +195,9 @@ one WebSocket frame of the full ring, so transfer dominates on cellular
 (3.84 MB took 19.6 s to arrive on the slow profile and 3.7 s on the LTE
 profile), while phone-throttled parse and render took 0.27 to 0.66 s.
 Agent output deflated about 10x, Git logs about 5x, and dense text 1.3x.
+With the viewer-sized cap and deflate-raw replay (§6.7.9 of [the client spec](06-clients.md)), the same
+3.84 MB Git-log attach sent 187 KB and painted in 1.7 s on the slow profile (was 20.3 s) and
+0.8 s on LTE (was 4.5 s); dense text, the worst case, still took 4.5 s on the slow profile.
 Results and the decision are recorded on `HS2-K93QHA`; metrics are written to
 `clients/web/target/performance-traces/hs2-k93qha-replay-metrics.json`.
 

@@ -32,6 +32,13 @@ import {
 } from './terminal-keys';
 import { onTerminalLimitsChange } from './terminal-limits';
 import { createLongPressController } from './terminal-long-press';
+import {
+  createTerminalInboundSequencer,
+  terminalAttachUrl,
+  type TerminalInbound,
+  terminalReplayCompressionSupported,
+  terminalReplayMaxBytes,
+} from './terminal-replay-stream';
 import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
@@ -867,9 +874,25 @@ function initializeTerminalViewport(
     initialReplay = true;
     livenessSupported = false;
     element.dataset.connection = 'connecting';
-    const current = new WebSocket(url);
+    const current = new WebSocket(
+      terminalAttachUrl(url, {
+        maxBytes: terminalReplayMaxBytes(terminal.options.scrollback ?? 0, terminal.rows),
+        compression: terminalReplayCompressionSupported(),
+      }),
+    );
     socket = current;
     current.binaryType = 'arraybuffer';
+    // Frames apply in server order, including behind an asynchronously decoded replay (HS2-K93QHA).
+    const inbound = createTerminalInboundSequencer(
+      (frame) => {
+        if (socket === current) handleInbound(frame);
+      },
+      () => {
+        if (socket !== current) return;
+        abandonSocket();
+        reconnectNow();
+      },
+    );
     current.addEventListener('open', () => {
       if (socket !== current) return;
       // Every attach begins with the broker/server's authoritative scrollback snapshot. Defer
@@ -909,16 +932,19 @@ function initializeTerminalViewport(
           signalInteractionThrottled();
         }
       }
-      if (typeof event.data === 'string') {
-        const liveness = terminalLivenessFrame(event.data);
+      inbound.push(event.data);
+    });
+    const handleInbound = (frame: TerminalInbound) => {
+      if (frame.type === 'text') {
+        const liveness = terminalLivenessFrame(frame.value);
         if (liveness === 'hello') livenessSupported = true;
         if (liveness) return;
-        if (isTerminalReplacementReplay(event.data)) {
+        if (isTerminalReplacementReplay(frame.value)) {
           replacementReplayPending = true;
           initialReplay = true;
           return;
         }
-        const size = parseTerminalSizeMessage(event.data);
+        const size = parseTerminalSizeMessage(frame.value);
         if (!size) return;
         serverSize = size.pty_size;
         const drivenByViewer = size.driven_by === viewerId;
@@ -930,24 +956,22 @@ function initializeTerminalViewport(
         queueMicrotask(tiled ? layoutTile : reconcileScale);
         return;
       }
-      const write = (value: ArrayBuffer) => {
-        let bytes = new Uint8Array(value);
-        if (initialReplay) {
-          initialReplay = false;
-          if (fixedPresentation() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
-        }
-        if (replacementReplayPending) {
-          replacementReplayPending = false;
-          bytes = terminalReplacementPayload(bytes);
-        }
-        terminal.write(bytes);
-      };
-      if (event.data instanceof Blob) {
-        void event.data.arrayBuffer().then(write);
-        return;
+      // An announced replacement resets the emulator like the legacy replace control.
+      if (frame.header?.kind === 'replace') {
+        replacementReplayPending = true;
+        initialReplay = true;
       }
-      if (event.data instanceof ArrayBuffer) write(event.data);
-    });
+      let bytes = frame.bytes;
+      if (initialReplay) {
+        initialReplay = false;
+        if (fixedPresentation() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
+      }
+      if (replacementReplayPending) {
+        replacementReplayPending = false;
+        bytes = terminalReplacementPayload(bytes);
+      }
+      terminal.write(bytes);
+    };
     const disconnected = () => {
       if (socket !== current || disposed) return;
       if (heartbeat !== undefined) window.clearInterval(heartbeat);

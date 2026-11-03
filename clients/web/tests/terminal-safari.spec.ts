@@ -93,7 +93,7 @@ for (const width of [390, 1280]) {
         });
         await route.fulfill({ response });
       });
-      await page.routeWebSocket('**/terminals/*/attach', (route) => {
+      await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
         const upstream = route.connectToServer(),
           connection = {
             viewers: new Set<string>(),

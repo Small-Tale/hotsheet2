@@ -4207,6 +4207,37 @@ update their scrollback limit when history changes, without remounting; a scaled
 keeps no duplicate scrollback. Lowering the warm-terminal limit evicts extra parked terminals
 immediately (HS2-ZWVDTZ).
 
+### 6.7.9 Attach replay negotiation
+
+A cold attach used to send the whole replay buffer as one uncompressed WebSocket frame, and
+nothing painted until it had fully arrived. At the 3.84 MB default for 20,000 history lines,
+that took about 20 s on a slow cellular link (HS2-K93QHA; measured with
+`npm run profile:terminal-replay`, see [the responsiveness profile](22-ui-responsiveness-profile.md)).
+A viewer now negotiates its replay on the attach URL:
+
+| Parameter          | Meaning                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `replay_protocol`  | `2` opts in to announced replay frames. Without it, every other parameter is ignored.       |
+| `replay_max_bytes` | The most replay the viewer keeps: its scrollback plus one screen, times 192 bytes per line. |
+| `replay_encoding`  | `deflate-raw` when the browser can decode it (`DecompressionStream`).                       |
+
+An opted-in server sends `{"terminal_frame":{"kind","encoding","bytes"}}` before each replay
+payload. `kind` is `replay` for the attach's first replay and `replace` for a later snapshot that
+replaces the emulator (a lag resync). `bytes` is the uncompressed length. The server trims the
+replay to `replay_max_bytes` at the same parser-safe boundary its replay buffer uses, and
+deflates it when it is at least 1 KiB. Compression runs off the async workers. Live output is
+never framed or compressed. Measured ratios were about 10x for agent transcripts, 5x for Git
+logs, and 1.3x for dense random text.
+
+The viewer applies frames strictly in server order: a compressed replay decodes
+asynchronously, and later frames wait behind it. A payload that fails to decode, or decodes to
+the wrong length, abandons the socket and reattaches. Both the direct and broker paths frame
+replays in the server, so the broker protocol is unchanged. The local web bridge forwards only
+these parameters to the authenticated upstream. Compatibility runs both ways: an older server
+ignores the parameters, and the viewer treats its unannounced binary frame as an identity
+replay. An older viewer never opts in and keeps the legacy frames, including the
+`{"terminal_replay":"replace"}` control.
+
 ## 6.8 Notes, reader mode & editing
 
 > **Web implementation shipped** (HS2-F3SS63). Keep HS1's reader mode + feedback

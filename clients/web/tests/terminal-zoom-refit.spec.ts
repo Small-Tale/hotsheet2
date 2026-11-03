@@ -47,7 +47,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
       });
       await route.fulfill({ response });
     });
-    await page.routeWebSocket('**/terminals/*/attach', (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       const upstream = route.connectToServer();
       route.onMessage((message) => {
         upstream.send(message);

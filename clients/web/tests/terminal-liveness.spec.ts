@@ -48,7 +48,7 @@ async function withDrawerTerminal(
       });
       await route.fulfill({ response });
     });
-    await page.routeWebSocket('**/terminals/*/attach', (route) => {
+    await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       const state: Attach = { blackholed: false, fromPage: [] };
       attaches.push(state);
       const upstream = route.connectToServer();
