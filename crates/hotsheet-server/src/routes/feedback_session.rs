@@ -1,4 +1,6 @@
 //! HS2-25TP3N: route a human ticket note to a live AI session in its checkout.
+//! HS2-H9Z9KZ: external provider tickets use the same routing best-effort, without a
+//! persisted delivery record; the human note itself is the durable record.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -10,7 +12,7 @@ use axum::http::StatusCode;
 use hotsheet_aitools::session_push::PushMessage;
 use hotsheet_model::{AttachmentActorRole, NoteKind, Status, Ticket, Ulid};
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::{checkouts::Checkout, ops};
+use hotsheet_ticketing::{ApiNote, ApiTicket, checkouts::Checkout, ops};
 use serde::{Deserialize, Serialize};
 
 use crate::api_error::ApiError;
@@ -72,6 +74,11 @@ pub(crate) enum Delivery {
     Start {
         note_id: String,
     },
+    /// Best-effort delivery failed; the saved note reaches the AI when it next reads the
+    /// ticket (HS2-H9Z9KZ).
+    NotShared {
+        note_id: String,
+    },
 }
 
 fn choice(candidate: &Candidate) -> SessionChoice {
@@ -102,6 +109,23 @@ pub(crate) fn note_to_notify(ticket: &Ticket) -> Option<&hotsheet_model::Note> {
                     .actor
                     .as_ref()
                     .is_some_and(|actor| actor.role == AttachmentActorRole::Human)
+        })
+}
+
+/// The provider-ticket form of [`note_to_notify`]: the newly appended regular note on a Started
+/// ticket, written by a human. Providers such as GitHub read comments back without an actor, so
+/// authorship comes from the write request (`request_human`) or a stored human actor. Not
+/// Working reports are a separate operation and never notify (HS2-25TP3N).
+pub(crate) fn api_note_to_notify(ticket: &ApiTicket, request_human: bool) -> Option<&ApiNote> {
+    (ticket.status == Status::Started)
+        .then(|| ticket.notes.last())
+        .flatten()
+        .filter(|note| {
+            note.kind == NoteKind::Regular
+                && match note.actor.as_ref() {
+                    Some(actor) => actor.role == AttachmentActorRole::Human,
+                    None => request_human,
+                }
         })
 }
 
@@ -213,15 +237,19 @@ fn record_delivery(
     }
 }
 
+/// Send one notification. `record` names the Git store and ticket that receive a durable
+/// delivery activity note and duplicate guard; provider tickets pass `None` and are
+/// best-effort only (HS2-H9Z9KZ).
 async fn deliver(
     state: &AppState,
-    entry: &StoreEntry,
-    ticket: &Ticket,
+    record: Option<(&StoreEntry, Ulid)>,
     note_id: &str,
     candidate: Candidate,
     text: String,
 ) -> Result<Delivery, ApiError> {
-    if !reserve(state, entry, &ticket.id, note_id) {
+    if let Some((entry, ticket_id)) = record
+        && !reserve(state, entry, &ticket_id, note_id)
+    {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             "feedback notification already delivered or in progress",
@@ -249,8 +277,7 @@ async fn deliver(
         Channel::Drive => match state.client_drives.get(&connection_id) {
             Ok(info) if info.busy => {
                 let state = state.clone();
-                let entry = entry.clone();
-                let ticket_id = ticket.id;
+                let record = record.map(|(entry, ticket_id)| (entry.clone(), ticket_id));
                 let queued_note_id = note_id.to_string();
                 let id = connection_id.clone();
                 tokio::spawn(async move {
@@ -273,7 +300,9 @@ async fn deliver(
                             .await
                             {
                                 Ok(()) => {
-                                    record_delivery(&state, &entry, &ticket_id, &note_id, &id)
+                                    if let Some((entry, ticket_id)) = &record {
+                                        record_delivery(&state, entry, ticket_id, &note_id, &id);
+                                    }
                                 }
                                 Err(error) => {
                                     tracing::warn!(
@@ -321,7 +350,9 @@ async fn deliver(
             .remove(note_id);
         return Err(error);
     }
-    record_delivery(state, entry, &ticket.id, note_id, &connection_id);
+    if let Some((entry, ticket_id)) = record {
+        record_delivery(state, entry, &ticket_id, note_id, &connection_id);
+    }
     Ok(Delivery::Sent {
         note_id: note_id.into(),
         connection_id,
@@ -348,8 +379,7 @@ pub(crate) async fn after_human_note(
             let text = message(&ticket.slug, response);
             match deliver(
                 state,
-                entry,
-                ticket,
+                Some((entry, ticket.id)),
                 &note_id,
                 candidate.clone(),
                 text.clone(),
@@ -366,7 +396,9 @@ pub(crate) async fn after_human_note(
                     Some(
                         match route(&checkout.root, source, None, remaining.clone()) {
                             Route::Direct(next) => {
-                                match deliver(state, entry, ticket, &note_id, next, text).await {
+                                match deliver(state, Some((entry, ticket.id)), &note_id, next, text)
+                                    .await
+                                {
                                     Ok(delivery) => delivery,
                                     Err(error) => {
                                         tracing::warn!(
@@ -396,6 +428,69 @@ pub(crate) async fn after_human_note(
     }
 }
 
+/// HS2-H9Z9KZ: route a human note (including a FEEDBACK NEEDED answer) on a provider ticket. The claimed
+/// session comes from a safe advisory claim (Jira); otherwise one reachable session, a human
+/// choice, or Start, exactly as for Git. Nothing is persisted, and a failed send reports
+/// [`Delivery::NotShared`] so the client can say the AI was not told immediately.
+pub(crate) async fn after_provider_note(
+    state: &AppState,
+    checkout: &Checkout,
+    source: &str,
+    ticket: &ApiTicket,
+    request_human: bool,
+) -> Option<Delivery> {
+    let note = api_note_to_notify(ticket, request_human)?;
+    let note_id = note.id.clone();
+    let text = message(&ticket.slug, note.response_to.is_some());
+    let all = candidates(state, checkout, source).await;
+    let claim = {
+        let (state, checkout_id, source, native_id) = (
+            state.clone(),
+            checkout.id.clone(),
+            source.to_string(),
+            ticket.native_id.clone(),
+        );
+        tokio::task::spawn_blocking(move || {
+            crate::provider_advisory_claims::safe_claim_worker(
+                &state,
+                &checkout_id,
+                &source,
+                &native_id,
+            )
+        })
+        .await
+        .ok()
+        .flatten()
+    };
+    Some(
+        match route(&checkout.root, source, claim.as_deref(), all.clone()) {
+            Route::Direct(candidate) => {
+                match deliver(state, None, &note_id, candidate.clone(), text.clone()).await {
+                    Ok(delivery) => delivery,
+                    Err(error) => {
+                        tracing::warn!(?error, note_id, "provider feedback session unreachable");
+                        let remaining = all
+                            .into_iter()
+                            .filter(|other| other.id != candidate.id)
+                            .collect::<Vec<_>>();
+                        match route(&checkout.root, source, None, remaining) {
+                            Route::Direct(next) => deliver(state, None, &note_id, next, text)
+                                .await
+                                .unwrap_or(Delivery::NotShared { note_id }),
+                            _ => Delivery::NotShared { note_id },
+                        }
+                    }
+                }
+            }
+            Route::Choose(candidates) => Delivery::Choose {
+                note_id,
+                sessions: candidates.iter().map(choice).collect(),
+            },
+            Route::Start => Delivery::Start { note_id },
+        },
+    )
+}
+
 #[derive(Deserialize)]
 pub(crate) struct ChooseSessionReq {
     pub(crate) connection_id: String,
@@ -409,36 +504,61 @@ pub(crate) async fn choose_feedback_session(
 ) -> Result<Json<Delivery>, ApiError> {
     let (checkout, _) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
-    if source.provider != "git" {
-        return Err(ApiError::new(
-            StatusCode::METHOD_NOT_ALLOWED,
-            "feedback session delivery is not supported for this source",
-        ));
-    }
-    let entry = state
-        .hosted_source(&source)
-        .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "ticket source is not hosted"))?;
-    let ticket = entry
-        .resolve(&native_id)?
-        .ok_or_else(|| ApiError::not_found(&native_id))?;
-    let note = ticket
-        .notes
-        .iter()
-        .find(|note| note.id.to_string() == note_id)
-        .filter(|note| {
-            note.kind == NoteKind::Regular
-                && note
-                    .actor
-                    .as_ref()
-                    .is_some_and(|actor| actor.role == AttachmentActorRole::Human)
-        })
-        .ok_or_else(|| ApiError::not_found(&note_id))?;
-    if ticket.status != Status::Started {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "ticket is no longer Started",
-        ));
-    }
+    // A human regular note on a Started ticket, read from the ticket's own source.
+    let human_note = |kind: NoteKind, role: Option<AttachmentActorRole>| {
+        kind == NoteKind::Regular && role == Some(AttachmentActorRole::Human)
+    };
+    let (slug, response, record) = if source.provider == "git" {
+        let entry = state
+            .hosted_source(&source)
+            .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "ticket source is not hosted"))?;
+        let ticket = entry
+            .resolve(&native_id)?
+            .ok_or_else(|| ApiError::not_found(&native_id))?;
+        let note = ticket
+            .notes
+            .iter()
+            .find(|note| note.id.to_string() == note_id)
+            .filter(|note| human_note(note.kind, note.actor.as_ref().map(|actor| actor.role)))
+            .ok_or_else(|| ApiError::not_found(&note_id))?;
+        if ticket.status != Status::Started {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "ticket is no longer Started",
+            ));
+        }
+        let response = note.response_to.is_some();
+        (ticket.slug.clone(), response, Some((entry, ticket.id)))
+    } else {
+        // HS2-H9Z9KZ: provider tickets are delivered best-effort, without a durable record.
+        let provider = crate::routes::providers::provider_for(&state, &source.connection_id)?;
+        let lookup = native_id.clone();
+        let ticket = tokio::task::spawn_blocking(move || provider.get(&lookup))
+            .await
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+            .map_err(crate::routes::providers::provider_transfer_error)?;
+        let note = ticket
+            .notes
+            .iter()
+            .find(|note| note.id == note_id)
+            // Comments read back without an actor are accepted; the client only offers the
+            // chooser for a note its human user just saved.
+            .filter(|note| {
+                note.kind == NoteKind::Regular
+                    && note
+                        .actor
+                        .as_ref()
+                        .is_none_or(|actor| actor.role == AttachmentActorRole::Human)
+            })
+            .ok_or_else(|| ApiError::not_found(&note_id))?;
+        if ticket.status != Status::Started {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "ticket is no longer Started",
+            ));
+        }
+        (ticket.slug.clone(), note.response_to.is_some(), None)
+    };
     let candidate = candidates(&state, &checkout, &source.connection_id)
         .await
         .into_iter()
@@ -449,9 +569,12 @@ pub(crate) async fn choose_feedback_session(
                 "session is not reachable in this project and source",
             )
         })?;
-    let text = message(&ticket.slug, note.response_to.is_some());
+    let text = message(&slug, response);
+    let record = record
+        .as_ref()
+        .map(|(entry, ticket_id)| (entry, *ticket_id));
     Ok(Json(
-        deliver(&state, &entry, &ticket, &note_id, candidate, text).await?,
+        deliver(&state, record, &note_id, candidate, text).await?,
     ))
 }
 
@@ -503,6 +626,87 @@ mod tests {
                 Channel::Terminal
             },
         }
+    }
+
+    fn provider_ticket(
+        status: Status,
+        kind: NoteKind,
+        role: Option<AttachmentActorRole>,
+    ) -> ApiTicket {
+        let at = hotsheet_model::Timestamp::new("2026-11-03T00:00:00Z");
+        let mut model = Ticket::new(
+            Ulid::new(),
+            "ENG-9",
+            "Synthetic",
+            "task",
+            at.clone(),
+            at.clone(),
+        );
+        model.status = status;
+        model.notes.push(hotsheet_model::Note {
+            id: Ulid::new(),
+            kind,
+            kind_explicit: true,
+            created_at: at.clone(),
+            edited_at: at,
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: role.map(|role| hotsheet_model::NoteActor { role, id: None }),
+            text: "Synthetic note".into(),
+        });
+        ApiTicket::from(&model)
+    }
+
+    #[test]
+    fn hs2_h9z9kz_provider_trigger_matches_the_git_human_note_rule() {
+        use AttachmentActorRole::{Ai, Human};
+        // (status, kind, stored actor, request was human, notifies)
+        let cases = [
+            (Status::Started, NoteKind::Regular, Some(Human), false, true),
+            (Status::Started, NoteKind::Regular, Some(Ai), true, false),
+            // GitHub-style read-back: no stored actor, so the write request decides.
+            (Status::Started, NoteKind::Regular, None, true, true),
+            (Status::Started, NoteKind::Regular, None, false, false),
+            (
+                Status::Started,
+                NoteKind::Activity,
+                Some(Human),
+                true,
+                false,
+            ),
+            (
+                Status::Completed,
+                NoteKind::Regular,
+                Some(Human),
+                true,
+                false,
+            ),
+            (Status::NotStarted, NoteKind::Regular, None, true, false),
+        ];
+        for (status, kind, role, request_human, expected) in cases {
+            let ticket = provider_ticket(status, kind, role);
+            assert_eq!(
+                api_note_to_notify(&ticket, request_human).is_some(),
+                expected,
+                "{status:?} {kind:?} {role:?} {request_human}"
+            );
+        }
+    }
+
+    #[test]
+    fn hs2_h9z9kz_not_shared_is_a_distinct_wire_status() {
+        assert_eq!(
+            serde_json::to_value(Delivery::NotShared {
+                note_id: "n".into()
+            })
+            .unwrap(),
+            serde_json::json!({"status": "not_shared", "note_id": "n"})
+        );
     }
 
     #[test]

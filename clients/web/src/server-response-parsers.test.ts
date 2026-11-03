@@ -13,6 +13,7 @@ import {
   parseCommandRun,
   parseCorruptTicketPaths,
   parseCustomView,
+  parseFeedbackDelivery,
   parseFullTicket,
   parseGitHubAuthStatus,
   parseGuidanceBatchReview,
@@ -411,4 +412,13 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
       fetchMock.mockRestore();
     }
   });
+});
+
+it('accepts the best-effort not_shared feedback delivery status (HS2-H9Z9KZ)', () => {
+  expect(parseFeedbackDelivery({ status: 'not_shared', note_id: 'note-1' })).toEqual({
+    status: 'not_shared',
+    note_id: 'note-1',
+  });
+  expect(() => parseFeedbackDelivery({ status: 'not_shared' })).toThrow();
+  expect(() => parseFeedbackDelivery({ status: 'unknown', note_id: 'note-1' })).toThrow();
 });

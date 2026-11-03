@@ -792,7 +792,9 @@ export interface CorruptTicket {
 export type FeedbackDelivery =
   | { status: 'sent' | 'queued'; note_id: string; connection_id: string }
   | { status: 'choose'; note_id: string; sessions: Array<{ id: string; tool: string }> }
-  | { status: 'start'; note_id: string };
+  | { status: 'start'; note_id: string }
+  /** Best-effort delivery failed; the saved note reaches the AI when it next reads the ticket (HS2-H9Z9KZ). */
+  | { status: 'not_shared'; note_id: string };
 
 export interface FullTicket extends TicketRow {
   details: string;

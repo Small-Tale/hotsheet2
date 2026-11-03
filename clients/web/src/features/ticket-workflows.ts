@@ -289,6 +289,14 @@ export interface TicketWorkflowDependencies {
 /** Ticket mutation, selection, transfer, attachment, close, and composer workflows. */
 export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) {
   const feedbackDelivery = signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>();
+  /** Show the saved note's notification outcome; `choose` and `start` render in the inspector. */
+  function announceFeedbackDelivery(ticketId: string, delivery: FeedbackDelivery) {
+    feedbackDelivery.value = { ticketId, delivery };
+    if (delivery.status === 'sent') showToast('The AI session was notified.');
+    if (delivery.status === 'queued') showToast('The AI session will be notified after its current turn.');
+    // HS2-H9Z9KZ: delivery is best-effort; the note stays on the ticket for the AI's next read.
+    if (delivery.status === 'not_shared') showToast('Saved, but the AI session could not be told right now.');
+  }
   async function chooseFeedbackSession(ticketId: string, connectionId: string) {
     const current = project();
     const ticket = tickets.value.find((item) => item.qualified_id === ticketId);
@@ -664,12 +672,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                 base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
               );
               updated = result.ticket;
-              if (result.feedbackDelivery) {
-                feedbackDelivery.value = { ticketId: ticket.qualified_id, delivery: result.feedbackDelivery };
-                if (result.feedbackDelivery.status === 'sent') showToast('The AI session was notified.');
-                if (result.feedbackDelivery.status === 'queued')
-                  showToast('The AI session will be notified after its current turn.');
-              }
+              if (result.feedbackDelivery) announceFeedbackDelivery(ticket.qualified_id, result.feedbackDelivery);
             }
             localTicketChangeAcknowledgements.acknowledge(current.id, {
               store: updated.connection_id,

@@ -625,7 +625,7 @@ export const parseFeedbackDelivery: ResponseParser<FeedbackDelivery> = (value) =
   if (!isRecord(value) || typeof value.note_id !== 'string') return invalid('feedback delivery');
   if ((value.status === 'sent' || value.status === 'queued') && typeof value.connection_id === 'string')
     return value as FeedbackDelivery;
-  if (value.status === 'start') return value as FeedbackDelivery;
+  if (value.status === 'start' || value.status === 'not_shared') return value as FeedbackDelivery;
   if (
     value.status === 'choose' &&
     Array.isArray(value.sessions) &&

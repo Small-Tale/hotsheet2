@@ -266,6 +266,42 @@ pub fn replay_pending_once(
     Ok(settled)
 }
 
+/// The single live advisory claim's worker, only when routing to it is safe (HS2-H9Z9KZ):
+/// remote-verified, not provisional, not conflicted, and exactly one claim. A non-Jira source
+/// or any read failure means there is no claimed session to prefer.
+pub(crate) fn safe_claim_worker(
+    state: &AppState,
+    checkout: &str,
+    connection_id: &str,
+    native_id: &str,
+) -> Option<String> {
+    let (project_scope, provider) = source(state, checkout, connection_id, native_id).ok()?;
+    let ticket = TicketRef {
+        connection_id: connection_id.to_string(),
+        native_id: native_id.to_string(),
+    };
+    let now_ms = now_epoch().saturating_mul(1000);
+    let status = local_status(
+        state,
+        &project_scope,
+        &ticket,
+        provider.advisory_claims(native_id, now_ms, 60_000),
+        now_ms,
+    )
+    .ok()?;
+    match status.projection.claims.as_slice() {
+        [claim]
+            if status.remote_verified
+                && !status.provisional
+                && status.automatic_handoff_safe
+                && !status.projection.conflicted =>
+        {
+            Some(claim.worker.clone())
+        }
+        _ => None,
+    }
+}
+
 pub async fn get_advisory_claim(
     State(state): State<AppState>,
     Path((checkout, connection_id, native_id)): Path<(String, String, String)>,

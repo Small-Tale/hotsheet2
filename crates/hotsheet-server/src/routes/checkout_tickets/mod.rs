@@ -761,7 +761,28 @@ pub(crate) async fn update_checkout_ticket(
     let (checkout, settings) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
+        // HS2-H9Z9KZ: the same trigger as a Git note, delivered best-effort.
+        let notify = req.note.as_deref().is_some_and(|note| !note.is_empty())
+            && req.note_id.is_none()
+            && req.ai_feedback.is_none();
+        // Providers such as GitHub read comments back without an actor; the request decides.
+        let request_human = crate::api_error::parse_actor(req.actor.as_ref())
+            .ok()
+            .flatten()
+            .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human);
         let (ticket, timing) = do_provider_update(&state, &source.connection_id, &native_id, req)?;
+        let feedback_delivery = if notify {
+            feedback_session::after_provider_note(
+                &state,
+                &checkout,
+                &source.connection_id,
+                &ticket,
+                request_human,
+            )
+            .await
+        } else {
+            None
+        };
         return Ok((
             provider_timing_headers(timing, started.elapsed()),
             Json(CheckoutUpdateResult {
@@ -769,7 +790,7 @@ pub(crate) async fn update_checkout_ticket(
                     store: source.connection_id.clone(),
                     ticket: contextualize_api_ticket(ticket, &settings)?,
                 },
-                feedback_delivery: None,
+                feedback_delivery,
             }),
         ));
     }

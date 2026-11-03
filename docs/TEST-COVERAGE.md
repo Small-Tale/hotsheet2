@@ -54,8 +54,13 @@ does not trigger delivery. `clients/web/src/components/ticket-inspector.test.ts`
 checks the nonmodal chooser/start controls; the real-server browser flow in
 `clients/web/tests/feedback-session-choice.spec.ts` saves a human note, chooses a
 session, and checks wide/medium/narrow/wide rendering. Live external-tool
-delivery remains a manual integration check; external-provider ticket routing is
-HS2-H9Z9KZ.
+delivery remains a manual integration check. HS2-H9Z9KZ unit tests in the same
+module pin the provider trigger (request authorship when a provider reads comments
+back without an actor) and the `not_shared` wire status;
+`crates/hotsheet-server/tests/provider_feedback_http.rs` drives the real checkout
+PATCH on a synthetic Started GitHub issue: a human note returns a start offer with
+exactly one provider write, a foreign session cannot be chosen, and an AI note does
+not notify.
 
 HS2-E9SR7R covers the Workers read projection, source-qualified and operation-aware merge and state
 grouping in `clients/web/src/worker-view-model.test.ts`; cursor replay, cancellation,
