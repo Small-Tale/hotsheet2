@@ -535,6 +535,14 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
         issues += 1;
     }
 
+    // Every ticket store is a Git repository or a tracked designated root within one
+    // (docs/02 §2.1/§2.2). A store under an unrelated checkout must not borrow its
+    // history (HS2-ABV2J3).
+    if let Some(diagnostic) = store.git_owner().diagnostic(path) {
+        println!("  ! {diagnostic}");
+        issues += 1;
+    }
+
     issues += print_repository_size(path, project);
 
     print_onboarding_report(path, project);

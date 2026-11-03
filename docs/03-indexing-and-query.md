@@ -221,6 +221,21 @@ therefore parse only committed or uncommitted changed ticket files rather than s
 the tree — O(changes), not O(tickets). A missing baseline or non-Git store uses the safe
 full walk.
 
+The baseline must come from the repository that owns the store (HS2-ABV2J3,
+`hotsheet_ticketing::store_git`). One scrubbed `rev-parse` classifies the store as
+**owned** (its root is a working-tree top level, including a linked worktree's `.git`
+file), **designated** (a subdirectory whose `hotsheet-store.json` the enclosing repository
+tracks; diff and status stay scoped to that subtree), **unowned** (an enclosing checkout
+that does not track it, such as a store under an ignored `target/`), no repository, or
+unavailable (bare or failing Git). Only owned and designated stores with a commit supply a
+baseline; an unborn branch, an unowned layout and the other states take the full walk and
+clear any stored baseline, so an unrelated parent's HEAD never hides a write. The index
+stores the owner key beside HEAD and trusts a warm delta only when the key still matches;
+a legacy cache without a key, a replaced repository, or a stored HEAD the repository no
+longer has also takes one full walk. The worktree delta includes ignored ticket files.
+`hotsheet-cli doctor` reports unowned, repository-less and unavailable layouts with the
+recovery step.
+
 **Full reindex** (`hotsheet reindex`, or automatic when `index_meta.schemaVersion`
 is stale, or when the index file is missing/corrupt): drop and rebuild from a full
 store walk. Because the index is disposable this is always safe.

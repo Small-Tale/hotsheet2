@@ -1754,11 +1754,11 @@ impl FsStore {
 
     // ---- git-diff fast path (docs/03 §3.4, HS2-90) --------------------------------
 
-    /// The current `HEAD` commit id, or `None` if the store isn't a git repo yet or has
-    /// no commits. Used to detect a HEAD move (commit/pull/checkout) for the incremental
-    /// reindex fast path.
+    /// The owning repository's `HEAD` commit id, or `None` if the store has no owning
+    /// repository (see [`FsStore::git_owner`]) or no commits yet. An unrelated enclosing
+    /// checkout's `HEAD` is never returned (HS2-ABV2J3).
     pub fn head_commit(&self) -> Option<String> {
-        git_stdout(&self.root, &["rev-parse", "HEAD"]).map(|s| s.trim().to_string())
+        self.git_owner().head().map(str::to_owned)
     }
 
     /// Whether the working tree + index are clean (no uncommitted changes). The fast path
@@ -1812,14 +1812,17 @@ impl FsStore {
     /// `--no-renames` makes both sides of a rename appear independently, which lets
     /// the index reconcile the old deletion and the new file without parsing Git's
     /// rename display syntax. Untracked ticket files are included so direct editor or
-    /// script writes become visible without a full store walk.
+    /// script writes become visible without a full store walk. Ignored ticket files are
+    /// included too: an ignore rule must not hide a write from the index (HS2-ABV2J3).
     pub fn changed_ticket_ids_in_worktree(&self) -> Result<Vec<Ulid>, StoreError> {
         let out = git_stdout(
             &self.root,
             &[
                 "status",
                 "--porcelain=v1",
+                "-z",
                 "--untracked-files=all",
+                "--ignored=traditional",
                 "--no-renames",
                 "--",
                 "tickets",
@@ -1828,9 +1831,10 @@ impl FsStore {
         .ok_or_else(|| StoreError::Git("`git status --porcelain tickets` failed".into()))?;
 
         let mut ids = Vec::new();
-        for line in out.lines() {
-            // Porcelain v1 prefixes each path with two status columns and a space.
-            let path = line.get(3..).unwrap_or_default().trim_matches('"');
+        for entry in out.split('\0') {
+            // Porcelain v1 prefixes each path with two status columns and a space; `-z`
+            // leaves the path unquoted.
+            let path = entry.get(3..).unwrap_or_default();
             if let Some(id) = Path::new(path)
                 .file_stem()
                 .and_then(|s| s.to_str())

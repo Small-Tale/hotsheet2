@@ -100,6 +100,11 @@ A project references multiple stores because (per the ticket):
   gets commits, history, branches, and the semantic merge driver locally — there is
   just nothing to fetch or push. So even purely local tickets keep full git history,
   and git is their backup too.
+- A designated root counts only when its enclosing repository tracks the store's
+  `hotsheet-store.json`. A store that merely sits inside an unrelated checkout (for
+  example under its ignored `target/`) is not owned by it: Hot Sheet never borrows that
+  checkout's history for the store, and `hotsheet-cli doctor` names the recovery
+  (make the store its own repository, or track it as a designated root) (HS2-ABV2J3).
 - `sync.mode: git-remote` stores have a remote and participate in push/pull;
   `local-only` stores have none. `visibility: local` additionally marks a store as
   private to this machine/user — gitignored from the _project_ repo (or kept as its

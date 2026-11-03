@@ -573,6 +573,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; explicit schema-1/2 migration to guarded random-suffix schema 3; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
+      src/store_git.rs       #   which repository owns a store (HS2-ABV2J3): StoreGitOwner Owned/Designated/Unowned/NoRepository/Unavailable + actionable diagnostic; git_baseline() = owner key + HEAD + dirty ticket ids (incl. ignored) for the index fast path
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/terminal_limits.rs #   Machine-wide terminal limit keys (terminal.history_lines / replay_bytes / warm_terminals), ranges, memory-tier defaults, and replay-from-history sizing (HS2-Y5DYC0)

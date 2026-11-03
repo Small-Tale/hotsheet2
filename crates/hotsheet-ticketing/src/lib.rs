@@ -43,6 +43,7 @@ pub mod saved_views;
 pub mod secrets;
 pub mod settings;
 pub mod store;
+pub mod store_git;
 pub mod sync;
 pub mod terminal_limits;
 pub mod wire;

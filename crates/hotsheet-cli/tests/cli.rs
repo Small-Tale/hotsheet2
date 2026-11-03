@@ -6689,6 +6689,47 @@ fn doctor_reports_ok_on_a_healthy_store() {
 }
 
 #[test]
+fn hs2_abv2j3_doctor_reports_a_store_its_enclosing_repository_does_not_own() {
+    let parent = tempfile::tempdir().unwrap();
+    let git = |dir: &Path, args: &[&str]| {
+        let status = hotsheet_ticketing::git::command_in(dir)
+            .args([
+                "-c",
+                "user.name=Hot Sheet Test",
+                "-c",
+                "user.email=test@localhost",
+            ])
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(parent.path(), &["init", "-q", "-b", "main"]);
+    std::fs::write(parent.path().join(".gitignore"), "target/\n").unwrap();
+    git(parent.path(), &["add", "--", ".gitignore"]);
+    git(parent.path(), &["commit", "-q", "-m", "parent"]);
+    let store = parent.path().join("target/store");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+
+    hs(&store)
+        .arg("doctor")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("does not track it"))
+        .stdout(predicate::str::contains("git -C"));
+
+    // The diagnostic's own-repository recovery, then the ordinary init, is healthy.
+    git(&store, &["init", "-q", "-b", "main"]);
+    hs(&store).arg("init").assert().success();
+    hs(&store)
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("does not track it").not());
+}
+
+#[test]
 fn doctor_lists_corrupt_tickets_without_aborting_on_the_first() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

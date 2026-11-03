@@ -11,6 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use hotsheet_model::{Ticket, Ulid, parse_file};
+use hotsheet_ticketing::store_git::StoreGitBaseline;
 use hotsheet_ticketing::{FsStore, SortKey, TicketCollection, TicketQuery};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
@@ -20,6 +21,9 @@ use sha2::{Digest, Sha256};
 /// content hash are never re-derived, and an older process sharing the file would keep
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K).
 const SCHEMA_VERSION: i64 = 21;
+
+/// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
+const GIT_OWNER_META: &str = "git_owner";
 
 /// How long an index connection waits for another process's write lock.
 const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -722,35 +726,40 @@ impl Index {
         // though it no longer appears in the current status. This makes warm reads
         // O(changed ticket files) instead of O(all ticket files), without hiding direct
         // edits made outside Hot Sheet.
-        if let (Some(current), Some(stored)) = (store.head_commit(), self.get_meta("head")?) {
-            let mut ids = if stored == current {
-                Vec::new()
-            } else {
-                store
-                    .changed_ticket_ids_between(&stored, &current)
-                    .map_err(|e| IndexError::Store(e.to_string()))?
-            };
-            let current_dirty = store
-                .changed_ticket_ids_in_worktree()
-                .map_err(|e| IndexError::Store(e.to_string()))?;
-            ids.extend(current_dirty.iter().copied());
-            ids.extend(self.previous_dirty_ids()?);
-            ids.sort();
-            ids.dedup();
-
-            let result = self.reconcile_ids(store, ids)?;
-            self.set_meta("head", &current)?;
-            self.set_meta(
-                "dirty_ticket_ids",
-                &serde_json::to_string(
-                    &current_dirty
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>(),
-                )
-                .unwrap_or_else(|_| "[]".into()),
-            )?;
-            return Ok(result);
+        //
+        // The baseline is trusted only when the store's own repository (or the enclosing
+        // repository that tracks it as a designated root) recorded it. An unrelated
+        // parent checkout, an owner change, or a cache from before owner tracking takes
+        // the full walk instead (HS2-ABV2J3).
+        let baseline = store
+            .git_baseline()
+            .map_err(|e| IndexError::Store(e.to_string()))?;
+        if let Some(baseline) = baseline {
+            let stored_head = self.get_meta("head")?;
+            let stored_owner = self.get_meta(GIT_OWNER_META)?;
+            if let (Some(stored), true) = (
+                stored_head,
+                stored_owner.as_deref() == Some(baseline.owner_key.as_str()),
+            ) {
+                // A stored HEAD the repository no longer has (rewritten or replaced
+                // history) cannot produce a delta; fall through to the full walk.
+                let committed = if stored == baseline.head {
+                    Some(Vec::new())
+                } else {
+                    store
+                        .changed_ticket_ids_between(&stored, &baseline.head)
+                        .ok()
+                };
+                if let Some(mut ids) = committed {
+                    ids.extend(baseline.dirty.iter().copied());
+                    ids.extend(self.previous_dirty_ids()?);
+                    ids.sort();
+                    ids.dedup();
+                    let result = self.reconcile_ids(store, ids)?;
+                    self.write_git_state(&baseline)?;
+                    return Ok(result);
+                }
+            }
         }
         let result = self.reconcile_full(store)?;
         self.record_git_state(store)?;
@@ -805,18 +814,37 @@ impl Index {
             .collect())
     }
 
+    /// Record the store's current Git baseline after a full walk, or clear any older
+    /// one when the store has no trusted baseline now.
     fn record_git_state(&self, store: &FsStore) -> Result<(), IndexError> {
-        let Some(head) = store.head_commit() else {
-            return Ok(());
-        };
-        let dirty = store
-            .changed_ticket_ids_in_worktree()
-            .map_err(|e| IndexError::Store(e.to_string()))?;
-        self.set_meta("head", &head)?;
+        match store
+            .git_baseline()
+            .map_err(|e| IndexError::Store(e.to_string()))?
+        {
+            Some(baseline) => self.write_git_state(&baseline),
+            None => {
+                self.conn.execute(
+                    "DELETE FROM index_meta WHERE key IN ('head', 'dirty_ticket_ids', ?1)",
+                    params![GIT_OWNER_META],
+                )?;
+                Ok(())
+            }
+        }
+    }
+
+    fn write_git_state(&self, baseline: &StoreGitBaseline) -> Result<(), IndexError> {
+        self.set_meta(GIT_OWNER_META, &baseline.owner_key)?;
+        self.set_meta("head", &baseline.head)?;
         self.set_meta(
             "dirty_ticket_ids",
-            &serde_json::to_string(&dirty.iter().map(ToString::to_string).collect::<Vec<_>>())
-                .unwrap_or_else(|_| "[]".into()),
+            &serde_json::to_string(
+                &baseline
+                    .dirty
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap_or_else(|_| "[]".into()),
         )?;
         Ok(())
     }
@@ -1358,5 +1386,7 @@ fn fts_query(text: Option<&str>) -> Option<String> {
     (!q.is_empty()).then_some(q)
 }
 
+#[cfg(test)]
+mod git_owner_tests;
 #[cfg(test)]
 mod tests;
