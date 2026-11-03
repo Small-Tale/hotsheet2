@@ -162,6 +162,8 @@ mod tests {
         for encoding in [BytesEncoding::Array, BytesEncoding::Base64] {
             let frame = StreamOut::Scrollback {
                 data: WireBytes::new(replay.clone(), encoding),
+                stream: None,
+                end_offset: None,
             };
             let started = std::time::Instant::now();
             let line = serde_json::to_string(&frame).unwrap();
@@ -170,7 +172,7 @@ mod tests {
             for _ in 0..10 {
                 let parsed: StreamOut = serde_json::from_str(&line).unwrap();
                 assert!(
-                    matches!(parsed, StreamOut::Scrollback { ref data } if data.len() == replay.len())
+                    matches!(parsed, StreamOut::Scrollback { ref data, .. } if data.len() == replay.len())
                 );
             }
             let parsed = started.elapsed() / 10;

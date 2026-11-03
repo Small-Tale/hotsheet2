@@ -9,6 +9,7 @@
 //! frame as an identity replay. Older viewers never opt in and keep the legacy frames.
 
 use axum::extract::ws::Message;
+use hotsheet_terminals::StreamPosition;
 use serde::{Deserialize, Serialize};
 use std::io::Write as _;
 
@@ -28,6 +29,8 @@ pub(crate) struct ReplayParams {
     replay_max_bytes: Option<String>,
     #[serde(default)]
     replay_encoding: Option<String>,
+    #[serde(default)]
+    resume_from: Option<String>,
 }
 
 /// What one viewer negotiated.
@@ -36,6 +39,8 @@ pub(crate) struct ReplayOptions {
     framed: bool,
     max_bytes: Option<usize>,
     deflate: bool,
+    /// The stream position the viewer has applied output up to, on a reconnect.
+    resume_from: Option<StreamPosition>,
 }
 
 impl From<&ReplayParams> for ReplayOptions {
@@ -56,6 +61,7 @@ impl From<&ReplayParams> for ReplayOptions {
                 .and_then(|value| value.parse::<usize>().ok())
                 .filter(|bytes| *bytes > 0),
             deflate: params.replay_encoding.as_deref() == Some("deflate-raw"),
+            resume_from: params.resume_from.as_deref().and_then(parse_position),
         }
     }
 }
@@ -68,6 +74,8 @@ pub(crate) enum ReplayKind {
     Replay,
     /// A later snapshot that replaces the viewer's emulator state (a lag resync).
     Replace,
+    /// Only the output after the viewer's `resume_from`, appended to its emulator.
+    Resume,
 }
 
 #[derive(Serialize)]
@@ -76,6 +84,25 @@ struct FrameHeader {
     encoding: &'static str,
     /// Uncompressed payload length.
     bytes: usize,
+    /// The output stream's id (16 hex digits) and the offset just past the payload, when the
+    /// terminal reports them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_offset: Option<u64>,
+}
+
+/// A `resume_from` value: `<stream id in hex>:<offset>`.
+fn parse_position(value: &str) -> Option<StreamPosition> {
+    let (stream, offset) = value.split_once(':')?;
+    Some(StreamPosition {
+        stream: u64::from_str_radix(stream, 16).ok()?,
+        end_offset: offset.parse().ok()?,
+    })
+}
+
+fn stream_id(stream: u64) -> String {
+    format!("{stream:016x}")
 }
 
 #[derive(Serialize)]
@@ -102,16 +129,38 @@ pub(crate) async fn replay_messages(
     options: ReplayOptions,
     kind: ReplayKind,
     data: Vec<u8>,
+    position: Option<StreamPosition>,
 ) -> Vec<Message> {
     if !options.framed {
         return match kind {
-            ReplayKind::Replay => vec![Message::Binary(data.into())],
+            // Legacy viewers never send `resume_from`, so only callers' kinds reach here.
+            ReplayKind::Replay | ReplayKind::Resume => vec![Message::Binary(data.into())],
             ReplayKind::Replace => vec![terminal_replay_control(), Message::Binary(data.into())],
         };
     }
-    let data = match options.max_bytes {
-        Some(max) if data.len() > max => hotsheet_terminals::replay_suffix(&data, max).to_vec(),
-        _ => data,
+    // A reconnecting viewer gets only what it missed while that is still retained and no larger
+    // than a fresh replay would be; otherwise it falls back to a full replacement.
+    let resumed = match (kind, options.resume_from, position) {
+        // Only an offset in this same output stream can resume: a PTY reopened under the same
+        // terminal id starts a new stream.
+        (ReplayKind::Replay, Some(from), Some(at)) if from.stream == at.stream => {
+            hotsheet_terminals::replay_after(&data, at.end_offset, from.end_offset)
+                .filter(|missed| options.max_bytes.is_none_or(|max| missed.len() <= max))
+                .map(<[u8]>::to_vec)
+        }
+        _ => None,
+    };
+    let (kind, data) = match resumed {
+        Some(missed) => (ReplayKind::Resume, missed),
+        None => (
+            kind,
+            match options.max_bytes {
+                Some(max) if data.len() > max => {
+                    hotsheet_terminals::replay_suffix(&data, max).to_vec()
+                }
+                _ => data,
+            },
+        ),
     };
     let bytes = data.len();
     let (encoding, payload) = if options.deflate && bytes >= MIN_DEFLATE_BYTES {
@@ -132,6 +181,8 @@ pub(crate) async fn replay_messages(
             kind,
             encoding,
             bytes,
+            stream: position.map(|at| stream_id(at.stream)),
+            end_offset: position.map(|at| at.end_offset),
         },
     };
     vec![
@@ -145,6 +196,13 @@ pub(crate) async fn replay_messages(
 mod tests {
     use super::*;
     use std::io::Read as _;
+
+    fn at(end_offset: u64) -> StreamPosition {
+        StreamPosition {
+            stream: 0xab,
+            end_offset,
+        }
+    }
 
     fn params(query: &str) -> ReplayOptions {
         let params: ReplayParams = serde_json::from_value(serde_json::Value::Object(
@@ -188,7 +246,8 @@ mod tests {
             ReplayOptions {
                 framed: true,
                 max_bytes: None,
-                deflate: false
+                deflate: false,
+                resume_from: None
             }
         );
         assert_eq!(
@@ -196,7 +255,8 @@ mod tests {
             ReplayOptions {
                 framed: true,
                 max_bytes: None,
-                deflate: false
+                deflate: false,
+                resume_from: None
             }
         );
         assert_eq!(
@@ -204,7 +264,8 @@ mod tests {
             ReplayOptions {
                 framed: true,
                 max_bytes: Some(4096),
-                deflate: true
+                deflate: true,
+                resume_from: None
             }
         );
     }
@@ -212,10 +273,11 @@ mod tests {
     #[tokio::test]
     async fn hs2_k93qha_legacy_viewers_keep_the_unframed_replay_frames() {
         let legacy = ReplayOptions::default();
-        let replay = replay_messages(legacy, ReplayKind::Replay, b"abc".to_vec()).await;
+        let replay =
+            replay_messages(legacy, ReplayKind::Replay, b"abc".to_vec(), Some(at(3))).await;
         assert_eq!(replay.len(), 1);
         assert_eq!(binary(&replay[0]), b"abc");
-        let replace = replay_messages(legacy, ReplayKind::Replace, b"abc".to_vec()).await;
+        let replace = replay_messages(legacy, ReplayKind::Replace, b"abc".to_vec(), None).await;
         assert_eq!(
             text(&replace[0]),
             serde_json::json!({"terminal_replay": "replace"})
@@ -229,12 +291,18 @@ mod tests {
             .flat_map(|line| format!("\x1b[32mline {line}\x1b[0m\r\n").into_bytes())
             .collect();
         let options = params("replay_protocol=2&replay_max_bytes=8192&replay_encoding=deflate-raw");
-        let messages = replay_messages(options, ReplayKind::Replace, output.clone()).await;
+        let messages = replay_messages(
+            options,
+            ReplayKind::Replace,
+            output.clone(),
+            Some(at(90_000)),
+        )
+        .await;
         let header = text(&messages[0]);
         let expected = hotsheet_terminals::replay_suffix(&output, 8192);
         assert_eq!(
             header,
-            serde_json::json!({"terminal_frame": {"kind": "replace", "encoding": "deflate-raw", "bytes": expected.len()}})
+            serde_json::json!({"terminal_frame": {"kind": "replace", "encoding": "deflate-raw", "bytes": expected.len(), "stream": "00000000000000ab", "end_offset": 90_000}})
         );
         let compressed = binary(&messages[1]);
         assert!(compressed.len() < expected.len() / 3);
@@ -248,18 +316,91 @@ mod tests {
     #[tokio::test]
     async fn hs2_k93qha_small_and_unrequested_replays_stay_identity() {
         let identity = params("replay_protocol=2");
-        let messages = replay_messages(identity, ReplayKind::Replay, vec![b'x'; 4096]).await;
+        let messages = replay_messages(identity, ReplayKind::Replay, vec![b'x'; 4096], None).await;
         assert_eq!(
             text(&messages[0]),
             serde_json::json!({"terminal_frame": {"kind": "replay", "encoding": "identity", "bytes": 4096}})
         );
         assert_eq!(binary(&messages[1]).len(), 4096);
         let small = params("replay_protocol=2&replay_encoding=deflate-raw");
-        let messages = replay_messages(small, ReplayKind::Replay, Vec::new()).await;
+        let messages = replay_messages(small, ReplayKind::Replay, Vec::new(), Some(at(0))).await;
         assert_eq!(
             text(&messages[0]),
-            serde_json::json!({"terminal_frame": {"kind": "replay", "encoding": "identity", "bytes": 0}})
+            serde_json::json!({"terminal_frame": {"kind": "replay", "encoding": "identity", "bytes": 0, "stream": "00000000000000ab", "end_offset": 0}})
         );
         assert!(binary(&messages[1]).is_empty());
+    }
+
+    /// HS2-K93QHA phase 3: a reconnect resumes only while its offset is retained and the gap
+    /// is no larger than a fresh replay; otherwise it falls back to a full capped replay.
+    #[tokio::test]
+    async fn hs2_k93qha_reconnects_resume_inside_the_window_and_fall_back_outside_it() {
+        let data = b"0123456789".to_vec();
+        let resume = |from: &str, max: &str| {
+            params(&format!(
+                "replay_protocol=2&resume_from=ab:{from}&replay_max_bytes={max}"
+            ))
+        };
+        // Retained, small gap: only the missed bytes, appended.
+        let messages = replay_messages(
+            resume("107", "64"),
+            ReplayKind::Replay,
+            data.clone(),
+            Some(at(110)),
+        )
+        .await;
+        assert_eq!(
+            text(&messages[0]),
+            serde_json::json!({"terminal_frame": {"kind": "resume", "encoding": "identity", "bytes": 3, "stream": "00000000000000ab", "end_offset": 110}})
+        );
+        assert_eq!(binary(&messages[1]), b"789");
+        // Fully caught up: an empty resume is still the attach boundary.
+        let messages = replay_messages(
+            resume("110", "64"),
+            ReplayKind::Replay,
+            data.clone(),
+            Some(at(110)),
+        )
+        .await;
+        assert_eq!(text(&messages[0])["terminal_frame"]["kind"], "resume");
+        assert!(binary(&messages[1]).is_empty());
+        // Evicted, future, unknown-offset, too-large gap, and replace: full replay instead.
+        for (options, end, kind) in [
+            (resume("99", "64"), Some(at(110)), ReplayKind::Replay),
+            (resume("111", "64"), Some(at(110)), ReplayKind::Replay),
+            (resume("105", "64"), None, ReplayKind::Replay),
+            (resume("100", "4"), Some(at(110)), ReplayKind::Replay),
+            (resume("107", "64"), Some(at(110)), ReplayKind::Replace),
+            // The same terminal id reopened as a new PTY: another stream never resumes.
+            (
+                resume("107", "64"),
+                Some(StreamPosition {
+                    stream: 0xcd,
+                    end_offset: 110,
+                }),
+                ReplayKind::Replay,
+            ),
+        ] {
+            let messages = replay_messages(options, kind, data.clone(), end).await;
+            let header = text(&messages[0]);
+            assert_ne!(
+                header["terminal_frame"]["kind"], "resume",
+                "{options:?} {end:?}"
+            );
+            let expected: &[u8] = if options.max_bytes == Some(4) {
+                b"6789"
+            } else {
+                &data
+            };
+            assert_eq!(binary(&messages[1]), expected, "{options:?}");
+        }
+        // A malformed position is ignored, never an error.
+        for bad in ["-1", "107", "zz:1", "ab:-1", "ab:"] {
+            assert_eq!(
+                params(&format!("replay_protocol=2&resume_from={bad}")).resume_from,
+                None,
+                "{bad}"
+            );
+        }
     }
 }

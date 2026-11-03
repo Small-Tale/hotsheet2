@@ -13,7 +13,7 @@ export const TERMINAL_REPLAY_PROTOCOL = 2;
 /** The server's own history-to-replay rule (`REPLAY_BYTES_PER_LINE`, HS2-Y5DYC0). */
 export const TERMINAL_REPLAY_BYTES_PER_LINE = 192;
 
-export type TerminalReplayKind = 'replay' | 'replace';
+export type TerminalReplayKind = 'replay' | 'replace' | 'resume';
 export type TerminalReplayEncoding = 'identity' | 'deflate-raw';
 
 export interface TerminalFrameHeader {
@@ -21,6 +21,14 @@ export interface TerminalFrameHeader {
   encoding: TerminalReplayEncoding;
   /** Uncompressed payload length. */
   bytes: number;
+  /** The output-stream position just past the payload, when the terminal reports one. */
+  position?: TerminalStreamPosition;
+}
+
+/** A point in one PTY's output stream: its id and the count of bytes it has produced. */
+export interface TerminalStreamPosition {
+  stream: string;
+  offset: number;
 }
 
 export type TerminalInbound =
@@ -29,6 +37,8 @@ export type TerminalInbound =
 export interface TerminalReplayRequest {
   maxBytes: number;
   compression: boolean;
+  /** On a reconnect: the stream position this viewer has applied output up to. */
+  resumeFrom?: TerminalStreamPosition;
 }
 
 export type InflateRaw = (bytes: Uint8Array<ArrayBuffer>) => Promise<Uint8Array<ArrayBuffer>>;
@@ -59,6 +69,9 @@ export function terminalAttachUrl(url: string, request: TerminalReplayRequest, b
   attach.searchParams.set('replay_max_bytes', String(Math.max(1, Math.floor(request.maxBytes))));
   if (request.compression) attach.searchParams.set('replay_encoding', 'deflate-raw');
   else attach.searchParams.delete('replay_encoding');
+  if (request.resumeFrom !== undefined)
+    attach.searchParams.set('resume_from', `${request.resumeFrom.stream}:${String(request.resumeFrom.offset)}`);
+  else attach.searchParams.delete('resume_from');
   return attach.toString();
 }
 
@@ -76,11 +89,29 @@ export function parseTerminalFrameHeader(value: string): TerminalFrameHeader | u
     return undefined;
   }
   if (!isRecord(parsed) || !isRecord(parsed.terminal_frame)) return undefined;
-  const { kind, encoding, bytes } = parsed.terminal_frame;
-  if (kind !== 'replay' && kind !== 'replace') return undefined;
+  const { kind, encoding, bytes, stream, end_offset: offset } = parsed.terminal_frame;
+  if (kind !== 'replay' && kind !== 'replace' && kind !== 'resume') return undefined;
   if (encoding !== 'identity' && encoding !== 'deflate-raw') return undefined;
-  if (typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes < 0) return undefined;
-  return { kind, encoding, bytes };
+  if (!isCount(bytes)) return undefined;
+  if (stream === undefined && offset === undefined) return { kind, encoding, bytes };
+  if (typeof stream !== 'string' || !/^[0-9a-f]{16}$/.test(stream) || !isCount(offset)) return undefined;
+  return { kind, encoding, bytes, position: { stream, offset } };
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * The stream position after applying `frame` (HS2-K93QHA): an announced replay sets it (unknown
+ * for an older broker); live output advances a known position by its length.
+ */
+export function nextTerminalStreamPosition(
+  current: TerminalStreamPosition | undefined,
+  frame: { bytes: Uint8Array; header?: TerminalFrameHeader },
+): TerminalStreamPosition | undefined {
+  if (frame.header) return frame.header.position;
+  return current === undefined ? undefined : { stream: current.stream, offset: current.offset + frame.bytes.length };
 }
 
 export const inflateRaw: InflateRaw = async (bytes) => {

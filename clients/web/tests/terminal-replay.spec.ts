@@ -28,6 +28,9 @@ declare global {
   interface Window {
     __replayFrames?: Frame[];
     __replayUrls?: string[];
+    __replaySockets?: WebSocket[];
+    /** While set, new terminal sockets fail to connect, holding the viewer disconnected. */
+    __blockReplaySockets?: boolean;
   }
 }
 
@@ -35,11 +38,14 @@ async function recordSockets(page: Page) {
   await page.addInitScript(() => {
     window.__replayFrames = [];
     window.__replayUrls = [];
+    window.__replaySockets = [];
     const NativeWebSocket = window.WebSocket;
     window.WebSocket = class extends NativeWebSocket {
       constructor(url: string | URL, protocols?: string | string[]) {
-        super(url, protocols ?? []);
-        if (!String(url).includes('/terminals/')) return;
+        const terminal = String(url).includes('/terminals/');
+        super(terminal && window.__blockReplaySockets === true ? 'ws://127.0.0.1:9/blocked' : url, protocols ?? []);
+        if (!terminal || window.__blockReplaySockets === true) return;
+        window.__replaySockets?.push(this);
         window.__replayUrls?.push(String(url));
         this.addEventListener('message', (event: MessageEvent) => {
           window.__replayFrames?.push(
@@ -134,3 +140,71 @@ for (const viewport of [
     }
   });
 }
+
+test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const server = await realTicketServer();
+  try {
+    const terminal = await server.request<{ id: string }>('/terminals', 'POST', {
+      command: 'python3',
+      args: ['-u', '-c', PRINTER],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
+      .toContain('REPLAY-READY');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await recordSockets(page);
+    await page.goto('/');
+    const surface = await mountViewport(
+      page,
+      `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`,
+    );
+    const rows = surface.locator('.xterm-rows');
+    await expect(rows).toContainText('REPLAY-READY');
+
+    // Drop the socket and hold the viewer offline while the terminal produces output.
+    await page.evaluate(() => {
+      window.__blockReplaySockets = true;
+      window.__replayFrames = [];
+      window.__replaySockets?.[0]?.close();
+    });
+    await expect(surface).toHaveAttribute('data-connection', 'reconnecting');
+    // The input route answers with an empty body, so post it directly.
+    const input = await fetch(`${server.url}/terminals/${terminal.id}/input`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+      body: JSON.stringify({ data: 'while-away\n' }),
+    });
+    expect(input.ok).toBe(true);
+    await expect
+      .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
+      .toContain('echo:while-away');
+    await page.evaluate(() => {
+      window.__blockReplaySockets = false;
+    });
+    await expect(rows).toContainText('echo:while-away');
+    await expect(surface).toHaveAttribute('data-connection', 'connected');
+
+    const urls = await page.evaluate(() => window.__replayUrls ?? []);
+    expect(urls).toHaveLength(2);
+    expect(new URL(urls[1]).searchParams.get('resume_from')).toMatch(/^[0-9a-f]{16}:[1-9]\d*$/);
+    const frames = await page.evaluate(() => window.__replayFrames ?? []);
+    const header = JSON.parse(frames[0].text ?? '{}') as { terminal_frame?: { kind: string; bytes: number } };
+    expect(header.terminal_frame?.kind).toBe('resume');
+    expect(header.terminal_frame?.bytes).toBeLessThan(200);
+    // Appended, not replaced: the earlier history is still there and nothing repeats.
+    const text = await rows.innerText();
+    expect(text.split('echo:while-away')).toHaveLength(2);
+    expect(text.split('REPLAY-READY')).toHaveLength(2);
+    expect(text).toContain('replay line 03999');
+
+    // Live output keeps flowing after the resume.
+    await surface.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.type('after-resume');
+    await page.keyboard.press('Enter');
+    await expect(rows).toContainText('echo:after-resume');
+  } finally {
+    await server.stop();
+  }
+});

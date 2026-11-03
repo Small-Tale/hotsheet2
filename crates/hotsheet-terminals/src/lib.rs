@@ -43,7 +43,8 @@ pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
 pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 pub use terminal::{
-    ProcessProvenance, SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind, replay_suffix,
+    ProcessProvenance, Replay, SCROLLBACK_BYTES, StreamPosition, TermError, TermSpec, Terminal,
+    TerminalKind, replay_after, replay_suffix,
 };
 pub use viewer_output::{
     MAX_COALESCED_BYTES, PendingOutput, VIEWER_QUEUE_FRAMES, ViewerClosed, ViewerFrame,

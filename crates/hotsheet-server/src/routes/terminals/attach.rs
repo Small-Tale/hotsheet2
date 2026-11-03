@@ -165,8 +165,12 @@ const CONTROL_QUEUE: usize = 8;
 /// One queued frame for a viewer's WebSocket writer.
 enum Outbound {
     Frame(ViewerFrame),
-    /// The attach's first replay, which the broker path receives after the attach starts.
-    Replay(Vec<u8>),
+    /// The attach's first replay, which the broker path receives after the attach starts, and
+    /// its stream position when the broker reports one (HS2-K93QHA).
+    Replay {
+        data: Vec<u8>,
+        position: Option<hotsheet_terminals::StreamPosition>,
+    },
     /// The liveness hello, which the broker path sends after its replay-then-size preamble.
     LivenessHello,
 }
@@ -181,9 +185,11 @@ impl From<ViewerFrame> for Outbound {
 async fn outbound_messages(outbound: Outbound, replay: ReplayOptions) -> Vec<Message> {
     match outbound {
         Outbound::Frame(ViewerFrame::Output(data)) => vec![Message::Binary(data.into())],
-        Outbound::Replay(data) => replay_messages(replay, ReplayKind::Replay, data).await,
-        Outbound::Frame(ViewerFrame::Replace(data)) => {
-            replay_messages(replay, ReplayKind::Replace, data).await
+        Outbound::Replay { data, position } => {
+            replay_messages(replay, ReplayKind::Replay, data, position).await
+        }
+        Outbound::Frame(ViewerFrame::Replace { data, position }) => {
+            replay_messages(replay, ReplayKind::Replace, data, position).await
         }
         Outbound::Frame(ViewerFrame::Size(d)) => {
             vec![terminal_size_message(
@@ -245,14 +251,21 @@ async fn terminal_attach_loop(
 ) {
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
-    let (snapshot, rx) = term.subscribe_with_scrollback();
+    let (snapshot, rx) = term.subscribe_with_replay();
     let (_, mut notification_rx) = term.subscribe_with_scrollback();
     let size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
     // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
     // atomically clear stale emulator state without blanking while waiting for a payload.
-    for message in replay_messages(replay, ReplayKind::Replay, snapshot).await {
+    let replay_messages = replay_messages(
+        replay,
+        ReplayKind::Replay,
+        snapshot.data,
+        Some(snapshot.position),
+    )
+    .await;
+    for message in replay_messages {
         if socket.send(message).await.is_err() {
             return;
         }
@@ -387,14 +400,19 @@ async fn pump_broker_output(
                 }
             }
             frame = broker.next(), if !pending.over_cap() => match frame {
-                Ok(Some(S::Scrollback { data })) => {
+                Ok(Some(S::Scrollback { data, stream, end_offset })) => {
                     scanner = hotsheet_terminals::OscScanner::new();
+                    // An older broker reports no position, which disables resume.
+                    let position = stream.zip(end_offset).map(|(stream, end_offset)| {
+                        hotsheet_terminals::StreamPosition { stream, end_offset }
+                    });
                     if received_initial_replay {
-                        pending.replace_with(data.into_vec());
+                        pending.replace_with(data.into_vec(), position);
                     } else {
                         received_initial_replay = true;
                         // Nothing is pending before the first replay, so this keeps order.
-                        if frames.send(Outbound::Replay(data.into_vec())).await.is_err() {
+                        let replay = Outbound::Replay { data: data.into_vec(), position };
+                        if frames.send(replay).await.is_err() {
                             return;
                         }
                     }

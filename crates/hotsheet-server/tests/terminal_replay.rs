@@ -166,7 +166,7 @@ async fn capped_compressed_replay_then_live_output(broker: bool) {
     let expected = hotsheet_terminals::replay_suffix(&full, 8192);
     assert_eq!(
         header,
-        serde_json::json!({"terminal_frame": {"kind": "replay", "encoding": "deflate-raw", "bytes": expected.len()}}),
+        serde_json::json!({"terminal_frame": {"kind": "replay", "encoding": "deflate-raw", "bytes": expected.len(), "stream": header["terminal_frame"]["stream"], "end_offset": full.len()}}),
         "broker={broker}"
     );
     let compressed = binary(next(&mut framed).await);
@@ -207,4 +207,105 @@ async fn hs2_k93qha_unknown_protocol_values_keep_the_legacy_replay() {
     let replay = binary(next(&mut ws).await);
     assert!(replay.len() > 8192);
     assert!(String::from_utf8_lossy(&replay).contains("READY"));
+}
+
+async fn send_input(addr: SocketAddr, id: &str, text: &'static str) {
+    let url = format!("http://{addr}/terminals/{id}/input");
+    tokio::task::spawn_blocking(move || {
+        ureq::post(&url)
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&serde_json::json!({ "data": text }).to_string())
+            .unwrap();
+    })
+    .await
+    .unwrap();
+}
+
+/// The legacy full replay right now (no output is trimmed in these small terminals, so its
+/// length is the stream's end offset).
+async fn full_replay(addr: SocketAddr, id: &str) -> Vec<u8> {
+    let mut ws = connect(addr, id, "").await;
+    let replay = binary(next(&mut ws).await);
+    let _ = ws.close(None).await;
+    replay
+}
+
+async fn resume_appends_only_missed_output(broker: bool) {
+    let fixture = fixture(broker).await;
+    let addr = fixture.addr;
+    let id = colored_terminal(addr, "resume").await;
+
+    // First attach: learn the end offset, then count live bytes as a viewer does.
+    let mut ws = connect(addr, &id, "&replay_protocol=2&replay_encoding=deflate-raw").await;
+    let header = json(&next(&mut ws).await);
+    let stream = header["terminal_frame"]["stream"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(stream.len(), 16);
+    let mut offset = header["terminal_frame"]["end_offset"].as_u64().unwrap();
+    let _ = binary(next(&mut ws).await);
+    ws.send(WsMessage::Text("first\n".into())).await.unwrap();
+    let mut seen = String::new();
+    while !seen.contains("first") {
+        if let WsMessage::Binary(bytes) = next(&mut ws).await {
+            offset += bytes.len() as u64;
+            seen.push_str(&String::from_utf8_lossy(&bytes));
+        }
+    }
+    ws.close(None).await.unwrap();
+
+    // Output produced while no viewer is attached.
+    send_input(addr, &id, "while-away\n").await;
+    let mut full = full_replay(addr, &id).await;
+    while !String::from_utf8_lossy(&full).contains("while-away\r\n") {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        full = full_replay(addr, &id).await;
+    }
+
+    // Reconnect from the counted offset: exactly the missed bytes, appended.
+    let mut ws = connect(
+        addr,
+        &id,
+        &format!("&replay_protocol=2&replay_max_bytes=8192&resume_from={stream}:{offset}"),
+    )
+    .await;
+    let header = json(&next(&mut ws).await);
+    let missed = &full[usize::try_from(offset).unwrap()..];
+    assert_eq!(
+        header,
+        serde_json::json!({"terminal_frame": {"kind": "resume", "encoding": "identity", "bytes": missed.len(), "stream": stream, "end_offset": full.len()}}),
+        "broker={broker}"
+    );
+    assert_eq!(binary(next(&mut ws).await), missed, "broker={broker}");
+    ws.send(WsMessage::Text("after-resume\n".into()))
+        .await
+        .unwrap();
+    live_output_until(&mut ws, "after-resume").await;
+    let _ = ws.close(None).await;
+
+    // An offset outside the window (or larger than the cap allows) gets a full capped replay.
+    let mut ws = connect(
+        addr,
+        &id,
+        &format!("&replay_protocol=2&replay_max_bytes=4096&resume_from={stream}:0"),
+    )
+    .await;
+    let header = json(&next(&mut ws).await);
+    assert_eq!(
+        header["terminal_frame"]["kind"], "replay",
+        "broker={broker}"
+    );
+    assert!(header["terminal_frame"]["bytes"].as_u64().unwrap() <= 4096);
+}
+
+#[tokio::test]
+async fn hs2_k93qha_a_reconnect_resumes_with_only_missed_output() {
+    resume_appends_only_missed_output(false).await;
+}
+
+#[tokio::test]
+async fn hs2_k93qha_a_broker_reconnect_resumes_with_only_missed_output() {
+    resume_appends_only_missed_output(true).await;
 }

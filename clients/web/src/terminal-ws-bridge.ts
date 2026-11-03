@@ -36,7 +36,12 @@ export async function browserTerminalAttachTarget(
 
 /** The attach parameters a viewer negotiates its replay with (HS2-K93QHA). Only these pass from
  * the credential-free browser path to the authenticated upstream, which ignores any it predates. */
-export const TERMINAL_REPLAY_PARAMS = ['replay_protocol', 'replay_max_bytes', 'replay_encoding'] as const;
+export const TERMINAL_REPLAY_PARAMS = [
+  'replay_protocol',
+  'replay_max_bytes',
+  'replay_encoding',
+  'resume_from',
+] as const;
 
 export function withTerminalReplayParams(target: string, browser: URLSearchParams): string {
   const present = TERMINAL_REPLAY_PARAMS.filter((name) => browser.has(name));

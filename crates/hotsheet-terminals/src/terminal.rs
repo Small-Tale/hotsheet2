@@ -176,6 +176,8 @@ struct Ring {
     buf: VecDeque<RetainedByte>,
     cap: usize,
     ansi: AnsiState,
+    /// Every byte ever pushed (HS2-K93QHA): the stream offset just past the newest byte.
+    end: u64,
 }
 impl Ring {
     fn new(cap: usize) -> Self {
@@ -183,9 +185,11 @@ impl Ring {
             buf: VecDeque::new(),
             cap,
             ansi: AnsiState::Ground,
+            end: 0,
         }
     }
     fn push(&mut self, bytes: &[u8]) {
+        self.end += bytes.len() as u64;
         for &b in bytes {
             let safe_start = matches!(self.ansi, AnsiState::Ground) && b & 0xc0 != 0x80;
             self.buf.push_back(RetainedByte {
@@ -211,6 +215,61 @@ impl Ring {
     fn snapshot(&self) -> Vec<u8> {
         self.buf.iter().map(|byte| byte.value).collect()
     }
+    fn replay(&self, stream: u64) -> Replay {
+        Replay {
+            data: self.snapshot(),
+            position: StreamPosition {
+                stream,
+                end_offset: self.end,
+            },
+        }
+    }
+}
+
+/// A point in one terminal's output stream (HS2-K93QHA). `stream` identifies this PTY's output
+/// (a random id chosen when it spawns), so an offset from a previous PTY that reused the same
+/// terminal id is never mistaken for one in this stream. `end_offset` counts every byte the
+/// stream has produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamPosition {
+    pub stream: u64,
+    pub end_offset: u64,
+}
+
+/// A replay snapshot and the stream position just past its last byte (HS2-K93QHA), so a viewer
+/// that has applied output up to some offset can be sent only what follows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Replay {
+    pub data: Vec<u8>,
+    pub position: StreamPosition,
+}
+
+impl Replay {
+    /// The retained bytes after `offset`, when the replay still holds everything from there.
+    pub fn after(&self, offset: u64) -> Option<&[u8]> {
+        replay_after(&self.data, self.position.end_offset, offset)
+    }
+}
+
+/// A fresh output-stream id: unique per spawned PTY in practice, never security-relevant.
+fn new_stream_id() -> u64 {
+    use std::hash::BuildHasher as _;
+    static SPAWNED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let count = SPAWNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::collections::hash_map::RandomState::new().hash_one((nanos, count, std::process::id()))
+}
+
+/// The bytes of a replay ending at `end_offset` that follow `offset`, when the replay still
+/// holds everything from there (HS2-K93QHA). A future or evicted offset yields `None`.
+pub fn replay_after(data: &[u8], end_offset: u64, offset: u64) -> Option<&[u8]> {
+    let start = end_offset.checked_sub(data.len() as u64)?;
+    if offset < start || offset > end_offset {
+        return None;
+    }
+    data.get(usize::try_from(offset - start).ok()?..)
 }
 
 /// The longest suffix of `replay` no longer than `max` bytes that starts where the ring could
@@ -238,6 +297,8 @@ pub fn replay_suffix(replay: &[u8], max: usize) -> &[u8] {
 struct OutputReplay {
     ring: Mutex<Ring>,
     tx: broadcast::Sender<Vec<u8>>,
+    /// This PTY's output-stream id (HS2-K93QHA).
+    stream: u64,
 }
 
 impl OutputReplay {
@@ -245,6 +306,7 @@ impl OutputReplay {
         Self {
             ring: Mutex::new(Ring::new(bytes)),
             tx: broadcast::channel(chunks).0,
+            stream: new_stream_id(),
         }
     }
 
@@ -267,9 +329,14 @@ impl OutputReplay {
     }
 
     fn subscribe_with_snapshot(&self) -> (Vec<u8>, broadcast::Receiver<Vec<u8>>) {
+        let (replay, receiver) = self.subscribe_with_replay();
+        (replay.data, receiver)
+    }
+
+    fn subscribe_with_replay(&self) -> (Replay, broadcast::Receiver<Vec<u8>>) {
         let ring = self.ring.lock_or_recover();
         let receiver = self.tx.subscribe();
-        (ring.snapshot(), receiver)
+        (ring.replay(self.stream), receiver)
     }
 }
 
@@ -706,6 +773,12 @@ impl Terminal {
         self.output.subscribe_with_snapshot()
     }
 
+    /// [`subscribe_with_scrollback`](Self::subscribe_with_scrollback) with the snapshot's end
+    /// offset, so the first live chunk the receiver yields starts exactly there (HS2-K93QHA).
+    pub fn subscribe_with_replay(&self) -> (Replay, broadcast::Receiver<Vec<u8>>) {
+        self.output.subscribe_with_replay()
+    }
+
     /// Write input bytes to the terminal (keystrokes / a command) and wait for the PTY to take
     /// them. Blocks the calling thread; async callers use [`write_async`](Self::write_async) or
     /// [`queue_input`](Self::queue_input). All three share one FIFO, so input stays ordered.
@@ -873,6 +946,52 @@ mod tests {
             ring.push(&output);
             assert_eq!(replay_suffix(&output, cap), ring.snapshot(), "cap {cap}");
         }
+    }
+
+    /// HS2-K93QHA: the end offset counts every byte, survives trimming and resizing, and a
+    /// replay answers exactly the retained bytes after an offset.
+    #[test]
+    fn hs2_k93qha_replay_offsets_survive_trimming_and_resize() {
+        let at = |end_offset| StreamPosition {
+            stream: 7,
+            end_offset,
+        };
+        let mut ring = Ring::new(8);
+        assert_eq!(
+            ring.replay(7),
+            Replay {
+                data: Vec::new(),
+                position: at(0)
+            }
+        );
+        assert_eq!(ring.replay(7).after(0), Some(&b""[..]));
+        ring.push(b"abcdef");
+        ring.push(b"ghij");
+        let replay = ring.replay(7);
+        assert_eq!(
+            replay,
+            Replay {
+                data: b"cdefghij".to_vec(),
+                position: at(10)
+            }
+        );
+        assert_eq!(replay.after(10), Some(&b""[..]));
+        assert_eq!(replay.after(7), Some(&b"hij"[..]));
+        assert_eq!(replay.after(2), Some(&b"cdefghij"[..]));
+        assert_eq!(replay.after(1), None, "evicted bytes cannot be resumed");
+        assert_eq!(replay.after(11), None, "a future offset is never trusted");
+        ring.resize(3);
+        ring.push(b"k");
+        let replay = ring.replay(7);
+        assert_eq!(
+            replay,
+            Replay {
+                data: b"ijk".to_vec(),
+                position: at(11)
+            }
+        );
+        assert_eq!(replay.after(8), Some(&b"ijk"[..]));
+        assert_eq!(replay.after(7), None);
     }
 
     #[test]

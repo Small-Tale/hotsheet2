@@ -15,7 +15,7 @@
 //!   behind the viewer's output is.
 
 use crate::sizing::Decision;
-use crate::terminal::{SCROLLBACK_BYTES, Terminal};
+use crate::terminal::{SCROLLBACK_BYTES, StreamPosition, Terminal};
 use std::sync::Arc;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::{self, error::TrySendError};
@@ -34,8 +34,12 @@ pub const MAX_COALESCED_BYTES: usize = SCROLLBACK_BYTES;
 pub enum ViewerFrame {
     /// Live PTY output, possibly several chunks coalesced, appended to the viewer's emulator.
     Output(Vec<u8>),
-    /// A scrollback snapshot that replaces the viewer's emulator state.
-    Replace(Vec<u8>),
+    /// A scrollback snapshot that replaces the viewer's emulator state, with the stream
+    /// position just past its last byte when the source knows it (HS2-K93QHA).
+    Replace {
+        data: Vec<u8>,
+        position: Option<StreamPosition>,
+    },
     /// The PTY size the arbiter applied.
     Size(Decision),
 }
@@ -49,6 +53,8 @@ pub struct ViewerClosed;
 pub struct PendingOutput {
     bytes: Vec<u8>,
     replace: bool,
+    /// The stream position just past the pending replacement, when known.
+    replace_end: Option<StreamPosition>,
 }
 
 impl PendingOutput {
@@ -85,14 +91,20 @@ impl PendingOutput {
                 Err(TrySendError::Full(())) => {}
             }
         }
+        if self.replace {
+            if let Some(end) = &mut self.replace_end {
+                end.end_offset += chunk.len() as u64;
+            }
+        }
         self.bytes.extend_from_slice(&chunk);
         Ok(())
     }
 
     /// Replace everything pending with a scrollback snapshot, which already contains it.
-    pub fn replace_with(&mut self, snapshot: Vec<u8>) {
+    pub fn replace_with(&mut self, snapshot: Vec<u8>, position: Option<StreamPosition>) {
         self.bytes = snapshot;
         self.replace = true;
+        self.replace_end = position;
     }
 
     /// The pending frame, leaving nothing pending.
@@ -102,7 +114,10 @@ impl PendingOutput {
         }
         let bytes = std::mem::take(&mut self.bytes);
         let frame = if std::mem::take(&mut self.replace) {
-            ViewerFrame::Replace(bytes)
+            ViewerFrame::Replace {
+                data: bytes,
+                position: self.replace_end.take(),
+            }
         } else {
             ViewerFrame::Output(bytes)
         };
@@ -123,9 +138,9 @@ impl PendingOutput {
 
 /// Resubscribe from a fresh snapshot that supersedes everything pending.
 fn resync(term: &Terminal, output: &mut broadcast::Receiver<Vec<u8>>, pending: &mut PendingOutput) {
-    let (snapshot, replacement) = term.subscribe_with_scrollback();
+    let (snapshot, replacement) = term.subscribe_with_replay();
     *output = replacement;
-    pending.replace_with(snapshot);
+    pending.replace_with(snapshot.data, Some(snapshot.position));
 }
 
 /// Forward a terminal's live output and size decisions to one viewer's frame queue until the
@@ -218,15 +233,35 @@ mod tests {
         let mut pending = PendingOutput::default();
         pending.push(b"fills the queue".to_vec(), &tx).unwrap();
         pending.push(b"stale".to_vec(), &tx).unwrap();
-        pending.replace_with(Vec::new());
+        let at = |end_offset| StreamPosition {
+            stream: 3,
+            end_offset,
+        };
+        pending.replace_with(Vec::new(), Some(at(40)));
         assert!(!pending.is_empty(), "an empty replay is still a boundary");
-        // Output after the snapshot appends to it.
+        // Output after the snapshot appends to it and moves its end offset (HS2-K93QHA).
         pending.push(b"after".to_vec(), &tx).unwrap();
         assert_eq!(
             pending.take(),
-            Some(ViewerFrame::Replace(b"after".to_vec()))
+            Some(ViewerFrame::Replace {
+                data: b"after".to_vec(),
+                position: Some(at(45))
+            })
         );
         assert_eq!(pending.take(), None);
+        // An unknown offset (an older broker) stays unknown.
+        pending.replace_with(b"x".to_vec(), None);
+        pending.push(b"y".to_vec(), &tx).unwrap();
+        assert_eq!(
+            pending.take(),
+            Some(ViewerFrame::Replace {
+                data: b"xy".to_vec(),
+                position: None
+            })
+        );
+        // Plain output after a replacement no longer carries its offset.
+        pending.push(b"z".to_vec(), &tx).unwrap();
+        assert_eq!(pending.take(), Some(ViewerFrame::Output(b"z".to_vec())));
     }
 
     #[test]

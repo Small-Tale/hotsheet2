@@ -113,8 +113,16 @@ pub enum Request {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "frame", rename_all = "snake_case")]
 pub enum StreamOut {
-    /// The initial scrollback replay (and a re-sync snapshot after a lag).
-    Scrollback { data: WireBytes },
+    /// The initial scrollback replay (and a re-sync snapshot after a lag). `stream` and
+    /// `end_offset` give the output-stream position just past its last byte (HS2-K93QHA);
+    /// brokers that predate them omit both, and servers that predate them ignore both.
+    Scrollback {
+        data: WireBytes,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        end_offset: Option<u64>,
+    },
     /// A live PTY output chunk as it arrives.
     Output { data: WireBytes },
     /// The size arbiter's applied PTY size: sent once right after the initial replay
@@ -430,8 +438,10 @@ async fn write_stream_frames(
             ViewerFrame::Output(data) => StreamOut::Output {
                 data: WireBytes::new(data, encoding),
             },
-            ViewerFrame::Replace(data) => StreamOut::Scrollback {
+            ViewerFrame::Replace { data, position } => StreamOut::Scrollback {
                 data: WireBytes::new(data, encoding),
+                stream: position.map(|at| at.stream),
+                end_offset: position.map(|at| at.end_offset),
             },
             ViewerFrame::Size(d) => StreamOut::Size {
                 cols: d.cols,
@@ -465,14 +475,16 @@ async fn stream_terminal(
 
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
-    let (snapshot, out_rx) = term.subscribe_with_scrollback();
+    let (snapshot, out_rx) = term.subscribe_with_replay();
     let size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
     write_line(
         &mut write,
         &StreamOut::Scrollback {
-            data: wire(snapshot),
+            data: wire(snapshot.data),
+            stream: Some(snapshot.position.stream),
+            end_offset: Some(snapshot.position.end_offset),
         },
     )
     .await?;
@@ -841,7 +853,7 @@ impl BrokerStreamReader {
                 Some(l) => {
                     let frame: StreamOut =
                         serde_json::from_str(&l).map_err(std::io::Error::other)?;
-                    if let StreamOut::Scrollback { data } | StreamOut::Output { data } = &frame
+                    if let StreamOut::Scrollback { data, .. } | StreamOut::Output { data } = &frame
                         && data.encoding() == BytesEncoding::Base64
                     {
                         self.base64_proven.store(true, Ordering::Release);
@@ -1025,6 +1037,44 @@ mod tests {
         );
         prune_exited_pushes(&pushes);
         assert!(!pushes.lock().unwrap().contains_key("ended"));
+    }
+
+    /// HS2-K93QHA: the scrollback end offset is optional on the wire both ways, so an older
+    /// broker's frame still parses (no resume) and an older server ignores the new field.
+    #[test]
+    fn hs2_k93qha_scrollback_end_offset_is_backward_compatible() {
+        let old: StreamOut =
+            serde_json::from_str(r#"{"frame":"scrollback","data":[104,105]}"#).unwrap();
+        assert!(
+            matches!(old, StreamOut::Scrollback { ref data, stream: None, end_offset: None } if data.len() == 2)
+        );
+        let new = StreamOut::Scrollback {
+            data: WireBytes::new(b"hi".to_vec(), BytesEncoding::Array),
+            stream: Some(7),
+            end_offset: Some(42),
+        };
+        let line = serde_json::to_string(&new).unwrap();
+        assert_eq!(
+            line,
+            r#"{"frame":"scrollback","data":[104,105],"stream":7,"end_offset":42}"#
+        );
+        let unknown = StreamOut::Scrollback {
+            data: WireBytes::new(Vec::new(), BytesEncoding::Array),
+            stream: None,
+            end_offset: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&unknown).unwrap(),
+            r#"{"frame":"scrollback","data":[]}"#
+        );
+        // An older reader models the frame without the field and must still accept it.
+        #[derive(serde::Deserialize)]
+        #[serde(tag = "frame", rename_all = "snake_case")]
+        enum OldStreamOut {
+            Scrollback { data: Vec<u8> },
+        }
+        let OldStreamOut::Scrollback { data } = serde_json::from_str(&line).unwrap();
+        assert_eq!(data, b"hi");
     }
 
     #[test]
@@ -1483,7 +1533,7 @@ mod tests {
                 return true;
             }
             match tokio::time::timeout(Duration::from_millis(200), stream.next()).await {
-                Ok(Ok(Some(StreamOut::Scrollback { data })))
+                Ok(Ok(Some(StreamOut::Scrollback { data, .. })))
                 | Ok(Ok(Some(StreamOut::Output { data }))) => acc.extend_from_slice(&data),
                 Ok(Ok(Some(_))) => {} // size/other frames — ignore
                 Ok(Ok(None)) | Ok(Err(_)) => return false, // stream closed
@@ -1757,7 +1807,7 @@ mod tests {
         let mut stream = BrokerStream::open(&sock, "compact").await.unwrap();
         assert_eq!(stream.input_encoding(), BytesEncoding::Array);
         match stream.next().await.unwrap() {
-            Some(StreamOut::Scrollback { data }) => {
+            Some(StreamOut::Scrollback { data, .. }) => {
                 assert_eq!(data.encoding(), BytesEncoding::Base64)
             }
             other => panic!("expected the replay first, got {other:?}"),
@@ -1806,7 +1856,7 @@ mod tests {
 
         let mut stream = BrokerStream::open(&sock, "t").await.unwrap();
         match stream.next().await.unwrap() {
-            Some(StreamOut::Scrollback { data }) => {
+            Some(StreamOut::Scrollback { data, .. }) => {
                 assert_eq!(
                     (&*data, data.encoding()),
                     (&b"hi"[..], BytesEncoding::Array)

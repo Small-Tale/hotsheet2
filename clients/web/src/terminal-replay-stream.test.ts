@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createTerminalInboundSequencer,
   inflateRaw,
+  nextTerminalStreamPosition,
   parseTerminalFrameHeader,
   terminalAttachUrl,
   type TerminalInbound,
   terminalReplayCompressionSupported,
   terminalReplayMaxBytes,
+  type TerminalStreamPosition,
 } from './terminal-replay-stream';
 
 const encoder = new TextEncoder();
@@ -189,5 +191,71 @@ describe('terminal replay stream (HS2-K93QHA)', () => {
     await Promise.resolve();
     expect(delivered).toEqual([]);
     expect(onCorrupt).not.toHaveBeenCalled();
+  });
+
+  it('parses resume headers and stream positions, rejecting malformed ones (phase 3)', () => {
+    const frame = (extra: Record<string, unknown>) =>
+      JSON.stringify({ terminal_frame: { kind: 'resume', encoding: 'identity', bytes: 3, ...extra } });
+    expect(parseTerminalFrameHeader(frame({ stream: '00000000000000ab', end_offset: 9 }))).toEqual({
+      kind: 'resume',
+      encoding: 'identity',
+      bytes: 3,
+      position: { stream: '00000000000000ab', offset: 9 },
+    });
+    for (const bad of [
+      { end_offset: 9 },
+      { stream: '00000000000000ab' },
+      { stream: 'AB', end_offset: 9 },
+      { stream: 12, end_offset: 9 },
+      ...[-1, 1.5, '9', Number.MAX_SAFE_INTEGER + 2].map((offset) => ({
+        stream: '00000000000000ab',
+        end_offset: offset,
+      })),
+    ])
+      expect(parseTerminalFrameHeader(frame(bad))).toBeUndefined();
+  });
+
+  it('adds resume_from only for a known position', () => {
+    const resumed = new URL(
+      terminalAttachUrl('ws://h/a?resume_from=1', {
+        maxBytes: 9,
+        compression: true,
+        resumeFrom: { stream: '00000000000000ab', offset: 0 },
+      }),
+    );
+    expect(resumed.searchParams.get('resume_from')).toBe('00000000000000ab:0');
+    const fresh = new URL(terminalAttachUrl('ws://h/a?resume_from=1', { maxBytes: 9, compression: true }));
+    expect(fresh.searchParams.has('resume_from')).toBe(false);
+  });
+
+  it('tracks the stream position across replay, live, resume, replace, a new PTY, and an older server', () => {
+    const bytes = (text: string) => encoder.encode(text);
+    const header = (kind: 'replay' | 'replace' | 'resume', stream: string, offset: number) =>
+      ({ kind, encoding: 'identity', bytes: 0, position: { stream, offset } }) as const;
+    const a = '00000000000000aa',
+      b = '00000000000000bb';
+    let position: TerminalStreamPosition | undefined;
+    // Live output before any announced replay (an older server) has no position to advance.
+    position = nextTerminalStreamPosition(position, { bytes: bytes('legacy') });
+    expect(position).toBeUndefined();
+    position = nextTerminalStreamPosition(position, { bytes: bytes('hello'), header: header('replay', a, 105) });
+    position = nextTerminalStreamPosition(position, { bytes: bytes('ab') });
+    position = nextTerminalStreamPosition(position, { bytes: bytes('') });
+    position = nextTerminalStreamPosition(position, { bytes: bytes('cde') });
+    expect(position).toEqual({ stream: a, offset: 110 });
+    position = nextTerminalStreamPosition(position, { bytes: bytes('fg'), header: header('resume', a, 112) });
+    expect(position).toEqual({ stream: a, offset: 112 });
+    position = nextTerminalStreamPosition(position, { bytes: bytes('x'), header: header('replace', a, 500) });
+    expect(position).toEqual({ stream: a, offset: 500 });
+    // The terminal id reopened as a new PTY: the replay re-bases onto the new stream.
+    position = nextTerminalStreamPosition(position, { bytes: bytes('x'), header: header('replay', b, 1) });
+    expect(position).toEqual({ stream: b, offset: 1 });
+    // A replay from an older broker carries no position, which disables the next resume.
+    position = nextTerminalStreamPosition(position, {
+      bytes: bytes('x'),
+      header: { kind: 'replay', encoding: 'identity', bytes: 1 },
+    });
+    expect(position).toBeUndefined();
+    expect(nextTerminalStreamPosition(position, { bytes: bytes('live') })).toBeUndefined();
   });
 });

@@ -226,7 +226,10 @@ interface ProfileWindow {
     replayWireBytes?: number;
     header?: string;
     paintedAt?: number;
+    /** The first binary frame and preceding header on each socket, by socket index. */
+    firstBinaries: { socket: number; at: number; bytes: number; header?: string }[];
   };
+  __profileSockets?: InstanceType<typeof globalThis.WebSocket>[];
 }
 
 test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, testInfo) => {
@@ -273,6 +276,15 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
                   super(url, protocols ?? []);
                   const state = (window as ProfileWindow).__replayProfile;
                   if (!state || !String(url).includes('/terminals/')) return;
+                  const socket = ((window as ProfileWindow).__profileSockets ??= []).push(this) - 1;
+                  let header: string | undefined;
+                  this.addEventListener('message', (event: MessageEvent) => {
+                    if (typeof event.data === 'string' && event.data.startsWith('{"terminal_frame"'))
+                      header ??= event.data;
+                    if (!(event.data instanceof ArrayBuffer)) return;
+                    if (state.firstBinaries.some((entry) => entry.socket === socket)) return;
+                    state.firstBinaries.push({ socket, at: performance.now(), bytes: event.data.byteLength, header });
+                  });
                   this.addEventListener('open', () => {
                     state.openAt ??= performance.now();
                   });
@@ -308,7 +320,11 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
                 document.body.append(overlay);
                 const modulePath = '/src/terminal-viewport.ts';
                 const { mountTerminalViewport } = await import(/* @vite-ignore */ modulePath);
-                const state: NonNullable<ProfileWindow['__replayProfile']> = { mountAt: performance.now(), frames: [] };
+                const state: NonNullable<ProfileWindow['__replayProfile']> = {
+                  mountAt: performance.now(),
+                  frames: [],
+                  firstBinaries: [],
+                };
                 (window as ProfileWindow).__replayProfile = state;
                 const watch = () => {
                   if (element.querySelector('.xterm-rows')?.textContent.includes(marker)) {
@@ -331,6 +347,19 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
             const surface = page.locator('.terminal-viewport--dedicated').last();
             const renderer = await surface.getAttribute('data-renderer');
             const scrollbackLimit = await surface.getAttribute('data-scrollback-limit');
+            // A reconnect after a dropped socket, still throttled: the viewer reattaches after its
+            // first 250 ms backoff and replays (or, with resume, receives only missed output).
+            const closedAt = await page.evaluate(() => {
+              const sockets = (window as ProfileWindow).__profileSockets ?? [];
+              sockets[sockets.length - 1].close();
+              return performance.now();
+            });
+            await expect
+              .poll(() => page.evaluate(() => (window as ProfileWindow).__replayProfile!.firstBinaries.length), {
+                timeout: 120_000,
+              })
+              .toBe(2);
+            const reconnect = await page.evaluate(() => (window as ProfileWindow).__replayProfile!.firstBinaries[1]);
             await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
             await cdp.send('HeapProfiler.collectGarbage');
             const heapAfter = (await cdp.send('Runtime.getHeapUsage')).usedSize;
@@ -351,6 +380,9 @@ test('profiles cold terminal attach replay (HS2-K93QHA)', async ({ browser }, te
               paintedMs: since(state.paintedAt),
               clientParseRenderMs: state.replayAt === undefined ? null : Math.round(state.paintedAt! - state.replayAt),
               retainedHeapBytes: heapAfter - heapBefore,
+              reconnectMs: Math.round(reconnect.at - closedAt),
+              reconnectWireBytes: reconnect.bytes,
+              reconnectHeader: reconnect.header ?? null,
             };
             results.push(result);
             console.log(JSON.stringify(result));

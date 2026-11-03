@@ -198,6 +198,9 @@ Agent output deflated about 10x, Git logs about 5x, and dense text 1.3x.
 With the viewer-sized cap and deflate-raw replay (§6.7.9 of [the client spec](06-clients.md)), the same
 3.84 MB Git-log attach sent 187 KB and painted in 1.7 s on the slow profile (was 20.3 s) and
 0.8 s on LTE (was 4.5 s); dense text, the worst case, still took 4.5 s on the slow profile.
+The profile also drops each phone viewer's socket after it paints and times the reconnect.
+With resume by stream offset, the reconnect carried 0 replay bytes and was live in about
+0.56 s on the slow profile, mostly the first 250 ms reconnect backoff.
 Results and the decision are recorded on `HS2-K93QHA`; metrics are written to
 `clients/web/target/performance-traces/hs2-k93qha-replay-metrics.json`.
 

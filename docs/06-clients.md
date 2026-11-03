@@ -4220,19 +4220,37 @@ A viewer now negotiates its replay on the attach URL:
 | `replay_protocol`  | `2` opts in to announced replay frames. Without it, every other parameter is ignored.       |
 | `replay_max_bytes` | The most replay the viewer keeps: its scrollback plus one screen, times 192 bytes per line. |
 | `replay_encoding`  | `deflate-raw` when the browser can decode it (`DecompressionStream`).                       |
+| `resume_from`      | On a reconnect: `<stream>:<offset>`, the output position the viewer has applied.            |
 
-An opted-in server sends `{"terminal_frame":{"kind","encoding","bytes"}}` before each replay
-payload. `kind` is `replay` for the attach's first replay and `replace` for a later snapshot that
-replaces the emulator (a lag resync). `bytes` is the uncompressed length. The server trims the
+An opted-in server sends `{"terminal_frame":{"kind","encoding","bytes","stream","end_offset"}}`
+before each replay payload. `kind` is `replay` for the attach's first replay, `replace` for a later
+snapshot that replaces the emulator (a lag resync), and `resume` for missed output appended on a
+reconnect. `bytes` is the uncompressed length. `stream` (16 hex digits) identifies this PTY's
+output, chosen when it spawns, and `end_offset` counts every byte it has produced up to the end
+of the payload. A PTY reopened under the same terminal id gets a new `stream`, so an old offset
+never resumes into different output. The server trims the
 replay to `replay_max_bytes` at the same parser-safe boundary its replay buffer uses, and
 deflates it when it is at least 1 KiB. Compression runs off the async workers. Live output is
 never framed or compressed. Measured ratios were about 10x for agent transcripts, 5x for Git
 logs, and 1.3x for dense random text.
 
+**Resume on reconnect.** The viewer tracks its position: an announced payload sets it, and
+each live output frame adds its length. A reconnect sends that position as `resume_from`. When
+the stream matches and the terminal still retains every byte after the offset, and the gap is no larger
+than `replay_max_bytes`, the server sends only those bytes as `resume` and the viewer appends
+them without resetting the emulator. Otherwise it sends a full capped `replay`, which resets the
+emulator as before. A dropped connection therefore costs only the output it missed, not the
+whole replay again. The detached broker's `scrollback` frame carries optional `stream` and
+`end_offset` fields for this; an older broker omits them, which disables resume (the viewer
+sees no position), and an older server ignores them. Measured on the profile's phone, a
+reconnect after a dropped socket received 0 replay bytes and was live again in about 0.56 s on
+the slow profile, most of it the first 250 ms reconnect backoff; before, it re-sent the whole
+replay (1.7 to 4.5 s after the cap and compression, 20 s originally).
+
 The viewer applies frames strictly in server order: a compressed replay decodes
 asynchronously, and later frames wait behind it. A payload that fails to decode, or decodes to
 the wrong length, abandons the socket and reattaches. Both the direct and broker paths frame
-replays in the server, so the broker protocol is unchanged. The local web bridge forwards only
+replays in the server. The local web bridge forwards only
 these parameters to the authenticated upstream. Compatibility runs both ways: an older server
 ignores the parameters, and the viewer treats its unannounced binary frame as an identity
 replay. An older viewer never opts in and keeps the legacy frames, including the

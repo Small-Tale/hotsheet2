@@ -34,10 +34,12 @@ import { onTerminalLimitsChange } from './terminal-limits';
 import { createLongPressController } from './terminal-long-press';
 import {
   createTerminalInboundSequencer,
+  nextTerminalStreamPosition,
   terminalAttachUrl,
   type TerminalInbound,
   terminalReplayCompressionSupported,
   terminalReplayMaxBytes,
+  type TerminalStreamPosition,
 } from './terminal-replay-stream';
 import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
@@ -485,6 +487,8 @@ function initializeTerminalViewport(
     initialReplay = true,
     connectedOnce = false,
     replacementReplayPending = false,
+    // The output-stream position this emulator has applied, when the server reports one (HS2-K93QHA).
+    streamPosition: TerminalStreamPosition | undefined,
     parked = false,
     webglParked = false,
     livenessSupported = false,
@@ -878,6 +882,8 @@ function initializeTerminalViewport(
       terminalAttachUrl(url, {
         maxBytes: terminalReplayMaxBytes(terminal.options.scrollback ?? 0, terminal.rows),
         compression: terminalReplayCompressionSupported(),
+        // A reconnect asks for only the output it missed (HS2-K93QHA).
+        ...(connectedOnce && streamPosition !== undefined ? { resumeFrom: streamPosition } : {}),
       }),
     );
     socket = current;
@@ -956,10 +962,16 @@ function initializeTerminalViewport(
         queueMicrotask(tiled ? layoutTile : reconcileScale);
         return;
       }
-      // An announced replacement resets the emulator like the legacy replace control.
+      streamPosition = nextTerminalStreamPosition(streamPosition, frame);
+      // An announced replacement resets the emulator like the legacy replace control; a resume
+      // appends exactly the output this viewer missed.
       if (frame.header?.kind === 'replace') {
         replacementReplayPending = true;
         initialReplay = true;
+      }
+      if (frame.header?.kind === 'resume') {
+        replacementReplayPending = false;
+        initialReplay = false;
       }
       let bytes = frame.bytes;
       if (initialReplay) {
