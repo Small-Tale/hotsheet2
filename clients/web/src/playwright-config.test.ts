@@ -32,8 +32,10 @@ describe('Playwright web server lifetime (HS2-F6F8MA)', () => {
   it('binds the detached Vite group to the runner through the owned launcher’s stdin', () => {
     const server = Array.isArray(config.webServer) ? config.webServer[0] : config.webServer;
     // A runner ended by SIGTERM or SIGKILL skips Playwright's teardown; stdin EOF must stop Vite.
+    // `exec` keeps the launcher the group leader under any POSIX `sh -c`, including dash.
     expect(server?.command).toMatch(
-      /^node scripts\/owned-server\.mjs --exit-on-stdin-eof -- node node_modules\/vite\/bin\/vite\.js /u,
+      /^(exec )?node scripts\/owned-server\.mjs --exit-on-stdin-eof -- node node_modules\/vite\/bin\/vite\.js /u,
     );
+    expect(server?.command.startsWith('exec ')).toBe(process.platform !== 'win32');
   });
 });

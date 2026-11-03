@@ -71,9 +71,10 @@ afterEach(() => {
 });
 
 function processInfo(pid) {
-  const result = spawnSync('ps', ['-o', 'pgid=,lstart=', '-p', String(pid)], { encoding: 'utf8' });
-  const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(result.stdout);
-  return match ? { pgid: Number(match[1]), started: match[2] } : null;
+  const result = spawnSync('ps', ['-o', 'pgid=,stat=,lstart=', '-p', String(pid)], { encoding: 'utf8' });
+  const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(result.stdout);
+  // A zombie has released its port and every resource; only its reaper can still remove the row.
+  return match && !match[2].startsWith('Z') ? { pgid: Number(match[1]), started: match[3] } : null;
 }
 
 function record(pid) {
@@ -162,7 +163,8 @@ function startRunner(command) {
 }
 
 function launch(serverArgs, launcherArgs = ['--exit-on-stdin-eof']) {
-  return `node ${launcher} ${launcherArgs.join(' ')} -- node ${join(fixtures, 'server.cjs')} ${serverArgs}`;
+  // `exec`, exactly as playwright.config.ts: without it Ubuntu's dash stays the group leader.
+  return `exec node ${launcher} ${launcherArgs.join(' ')} -- node ${join(fixtures, 'server.cjs')} ${serverArgs}`;
 }
 
 async function startOwned(mode, launcherArgs) {
@@ -203,7 +205,11 @@ async function expectReleased({ owned, port }) {
 
 it('runs the server in the launcher-led group Playwright creates for its webServer (HS2-F6F8MA)', async () => {
   const run = await startOwned('plain');
-  // `sh -c` execs the launcher, so it leads the detached group and the server shares it.
+  // `sh -c exec` makes the shell's pid the launcher itself, so it leads the detached group and the
+  // server shares it. Without `exec`, dash would keep that pid and leave the launcher a plain member.
+  expect(spawnSync('ps', ['-o', 'comm=', '-p', String(run.owned.launcher.pid)], { encoding: 'utf8' }).stdout).toMatch(
+    /node/u,
+  );
   expect(run.owned.launcher.pgid).toBe(run.owned.launcher.pid);
   expect(run.owned.server.pgid).toBe(run.owned.launcher.pid);
   expect(await listening(run.port)).toBe(true);

@@ -53,7 +53,10 @@ export default defineConfig({
   webServer: {
     // The runner's stdin pipe bounds the server's lifetime: a runner ended by SIGTERM or SIGKILL
     // skips Playwright's teardown of this detached group, so EOF stops Vite instead (HS2-F6F8MA).
-    command: `node scripts/owned-server.mjs --exit-on-stdin-eof -- node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port}`,
+    // `exec` makes the launcher replace Playwright's `sh -c` and lead the group it sweeps: Ubuntu's
+    // dash otherwise keeps the shell as leader and the launcher's same-group sweep never runs.
+    // Windows runs the command through cmd.exe, which has no `exec` and no process groups.
+    command: `${process.platform === 'win32' ? '' : 'exec '}node scripts/owned-server.mjs --exit-on-stdin-eof -- node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/__hotsheet-test-server/${serverId}`,
     reuseExistingServer: false,
     env: { HOTSHEET_VITE_CACHE_DIR: viteCacheDir, HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: serverId },
