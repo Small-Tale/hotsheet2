@@ -1626,6 +1626,7 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Behavior: Every new feedback request stays open until a regular reply or `No response needed` note names it in `response_to`; unrelated notes and later requests leave it open. Legacy notes keep the prior sequential interpretation. `feedback_for` remains AI thumbs metadata.
 - Unit: Model transition permutations and file round trip; merge of a request and reply from separate branches; provider comment metadata round trip; web state and note action tests.
 - End to end: Server HTTP checkout flow covers two requests, newest answer first, and Needs Review until the older request closes. Browser provider flow covers two pending actions, response and acknowledgement, wide and phone presentation.
+- Live: `crates/hotsheet-extsync/tests/feedback_replies_live.rs` (ignored, write opt-in per provider) runs the same reply order against the disposable GitHub, GitLab, and Jira test projects through the real adapters, re-reads after each step, and copies the issue into a Git store with one request open and again once both are answered (HS2-WT82VP). It passed on all three on 2026-11-04; Jira leaves its throwaway issue open because the adapter has no close or status transition without a project workflow mapping.
 
 ### Repository client workflow (HS2-J4WR11)
 
