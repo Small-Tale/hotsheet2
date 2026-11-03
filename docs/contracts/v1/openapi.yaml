@@ -52,6 +52,353 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /remote-checkouts/{checkout}/resolution:
+    get:
+      operationId: getCheckoutResolutionMetadata
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResolutionProjection'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/inspect:
+    description: Machine-local fresh candidate inspection; writes no binding, manifest, reservation or grant.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: inspectTargetCandidate
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetInspection'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectTarget'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/targets:
+    get:
+      operationId: listTargetDeclarations
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetManifestView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: addTargetDeclaration
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetManifestView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTarget'
+    put:
+      operationId: replaceTargetDeclarations
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetManifestView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceTargets'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/targets/{target}:
+    patch:
+      operationId: renameTargetDeclaration
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetManifestView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameTarget'
+    delete:
+      operationId: removeTargetDeclaration
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetManifestView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveTarget'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/binding:
+    description: Serving-machine literal-loopback administration. GET/DELETE support orphan cleanup before
+      runtime/identity/provider construction.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: getMachineTargetBinding
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetBindingView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    put:
+      operationId: bindMachineTarget
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetResolution'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindTarget'
+    delete:
+      operationId: unbindMachineTarget
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetBindingView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnbindTarget'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/resolve:
+    description: Machine-local fresh resolution; no cached authority or delegated grant.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: resolveMachineTarget
+      responses:
+        '200':
+          description: Explicit source-qualified target workflow result; metadata is never a delegated grant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetResolution'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -6188,25 +6535,30 @@ paths:
       - name: connection_id
         in: path
         required: true
-        schema: { type: string }
+        schema:
+          type: string
       - name: id
         in: path
         required: true
-        schema: { type: string }
+        schema:
+          type: string
   /checkouts/{checkout}/providers/{connection_id}/tickets/{id}/advisory-claim:
     parameters:
       - name: checkout
         in: path
         required: true
-        schema: { type: string }
+        schema:
+          type: string
       - name: connection_id
         in: path
         required: true
-        schema: { type: string }
+        schema:
+          type: string
       - name: id
         in: path
         required: true
-        schema: { type: string }
+        schema:
+          type: string
     get:
       operationId: getProviderAdvisoryClaim
       description: Reconcile and replay at most 16 provisional intents for this qualified ticket.
@@ -11763,7 +12115,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [path]
+              required:
+                - path
               additionalProperties: false
               properties:
                 path:
@@ -11780,7 +12133,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [diff, truncated]
+                required:
+                  - diff
+                  - truncated
                 additionalProperties: false
                 properties:
                   diff:
@@ -11880,6 +12235,528 @@ components:
           schema:
             $ref: '#/components/schemas/Ticket'
   schemas:
+    TargetRef:
+      type: object
+      required:
+        - owner_checkout_id
+        - target_id
+      properties:
+        owner_checkout_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+      additionalProperties: false
+    TargetDeclaration:
+      type: object
+      required:
+        - target_id
+        - state
+        - label
+      properties:
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        state:
+          enum:
+            - active
+            - removed
+        label:
+          type: string
+          minLength: 1
+          maxLength: 256
+        expected_repository_identity:
+          anyOf:
+            - type: string
+              maxLength: 2048
+            - type: 'null'
+      additionalProperties: false
+    TargetManifestView:
+      type: object
+      required:
+        - enabled
+        - revision
+        - targets
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetDeclaration'
+          maxItems: 256
+      additionalProperties: false
+    ReplaceTargets:
+      type: object
+      required:
+        - targets
+      properties:
+        expected_revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetDeclaration'
+          maxItems: 256
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    AddTarget:
+      type: object
+      required:
+        - label
+      properties:
+        expected_revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        target_id:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 256
+        expected_repository_identity:
+          anyOf:
+            - type: string
+              maxLength: 2048
+            - type: 'null'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    RenameTarget:
+      type: object
+      required:
+        - expected_revision
+        - label
+      properties:
+        expected_revision:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        label:
+          type: string
+          minLength: 1
+          maxLength: 256
+        expected_repository_identity:
+          type:
+            - string
+            - 'null'
+          maxLength: 2048
+        clear_expected_repository_identity:
+          type: boolean
+          default: false
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    RemoveTarget:
+      type: object
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    TargetDestination:
+      oneOf:
+        - type: object
+          required:
+            - kind
+            - server_id
+            - checkout_id
+            - checkout_authority
+          properties:
+            kind:
+              const: local
+            server_id:
+              type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            checkout_id:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+            checkout_authority:
+              type: string
+              pattern: ^[a-f0-9]{64}$
+          additionalProperties: false
+        - type: object
+          required:
+            - kind
+            - registration_id
+            - identity
+            - checkout_id
+            - checkout_authority
+          properties:
+            kind:
+              const: remote
+            registration_id:
+              type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            identity:
+              $ref: '#/components/schemas/ReviewedRemoteIdentity'
+            checkout_id:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
+            checkout_authority:
+              type: string
+              pattern: ^[a-f0-9]{64}$
+          additionalProperties: false
+      description: Explicit reviewed identity only; no origin, credential, locator or filesystem path. Capabilities confer no grant.
+    TargetSourceState:
+      enum:
+        - available
+        - missing
+        - disabled
+        - review_required
+        - identity_changed
+        - unsupported
+    TargetSource:
+      type: object
+      required:
+        - connection_id
+        - provider
+        - identity
+        - state
+        - capabilities
+      properties:
+        connection_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 80
+        identity:
+          anyOf:
+            - type: string
+              pattern: ^[a-f0-9]{64}$
+            - type: 'null'
+        state:
+          $ref: '#/components/schemas/TargetSourceState'
+        capabilities:
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/ProviderCapabilities'
+                - properties:
+                    query_fields:
+                      type: array
+                      items:
+                        type: string
+                        maxLength: 80
+                      maxItems: 32
+            - type: 'null'
+      additionalProperties: false
+    CheckoutResolutionProjection:
+      type: object
+      required:
+        - schema_version
+        - server_id
+        - checkout_id
+        - checkout_authority
+        - sources
+      properties:
+        schema_version:
+          const: 1
+        server_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        checkout_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        checkout_authority:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetSource'
+          maxItems: 64
+      additionalProperties: false
+      description:
+        Strict version-1, 256KiB maximum authenticated metadata. Empty/unavailable sources do not supply usable
+        authority. No delegated grant.
+    InspectTarget:
+      type: object
+      required:
+        - destination
+      properties:
+        destination:
+          oneOf:
+            - type: object
+              required:
+                - kind
+                - checkout_id
+              properties:
+                kind:
+                  const: local
+                checkout_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
+              additionalProperties: false
+            - type: object
+              required:
+                - kind
+                - registration_id
+                - checkout_id
+              properties:
+                kind:
+                  const: remote
+                registration_id:
+                  type: string
+                  pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+                checkout_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
+              additionalProperties: false
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    TargetInspection:
+      type: object
+      required:
+        - destination
+        - projection
+        - stale
+        - usable
+      properties:
+        destination:
+          $ref: '#/components/schemas/TargetDestination'
+        projection:
+          $ref: '#/components/schemas/CheckoutResolutionProjection'
+        stale:
+          const: false
+        usable:
+          const: false
+      additionalProperties: false
+      description:
+        Fresh as-of candidate for explicit read-confirm-bind. No binding/reservation/manifest/grant write; never
+        usable authority itself.
+    TargetBindingAudit:
+      type: object
+      required:
+        - revision
+        - action
+        - previous_destination
+        - destination
+        - at_ms
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        action:
+          enum:
+            - bind
+            - review
+            - unbind
+        previous_destination:
+          anyOf:
+            - $ref: '#/components/schemas/TargetDestination'
+            - type: 'null'
+        destination:
+          anyOf:
+            - $ref: '#/components/schemas/TargetDestination'
+            - type: 'null'
+        at_ms:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    CachedTargetSource:
+      type: object
+      required:
+        - connection_id
+        - provider
+        - identity
+      properties:
+        connection_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        provider:
+          type: string
+          maxLength: 80
+        identity:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+      additionalProperties: false
+    TargetFailure:
+      enum:
+        - unreachable
+        - unauthorized
+        - source_missing
+        - identity_changed
+        - unsupported_metadata
+        - missing_credentials
+        - revoked
+        - trust_failed
+        - redirect
+        - response_limit
+        - invalid_response
+        - disabled_source
+        - review_required
+        - target_removed
+    TargetBindingView:
+      type: object
+      required:
+        - target
+        - revision
+        - destination
+        - checked_at_ms
+        - confirmed_at_ms
+        - last_failure
+        - last_confirmed_sources
+        - review_history
+        - stale
+      properties:
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        revision:
+          type: integer
+          minimum: 0
+        destination:
+          anyOf:
+            - $ref: '#/components/schemas/TargetDestination'
+            - type: 'null'
+        checked_at_ms:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        confirmed_at_ms:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        last_failure:
+          anyOf:
+            - $ref: '#/components/schemas/TargetFailure'
+            - type: 'null'
+        last_confirmed_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/CachedTargetSource'
+          maxItems: 64
+        review_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetBindingAudit'
+          maxItems: 32
+        stale:
+          type: boolean
+      additionalProperties: false
+    BindTarget:
+      type: object
+      required:
+        - target
+        - expected_manifest_revision
+        - expected_binding_revision
+        - previous_destination
+        - destination
+      properties:
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        expected_manifest_revision:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        expected_binding_revision:
+          type: integer
+          minimum: 0
+        previous_destination:
+          anyOf:
+            - $ref: '#/components/schemas/TargetDestination'
+            - type: 'null'
+        destination:
+          $ref: '#/components/schemas/TargetDestination'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    UnbindTarget:
+      type: object
+      required:
+        - target
+        - expected_binding_revision
+        - previous_destination
+      properties:
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        expected_binding_revision:
+          type: integer
+          minimum: 0
+        previous_destination:
+          anyOf:
+            - $ref: '#/components/schemas/TargetDestination'
+            - type: 'null'
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    TargetResolution:
+      type: object
+      required:
+        - declaration
+        - binding
+        - state
+        - reason
+        - stale
+        - usable
+        - sources
+      properties:
+        declaration:
+          $ref: '#/components/schemas/TargetDeclaration'
+        binding:
+          $ref: '#/components/schemas/TargetBindingView'
+        state:
+          enum:
+            - unbound
+            - connecting
+            - reachable
+            - unreachable
+            - unauthorized
+            - source_missing
+            - identity_changed
+        reason:
+          anyOf:
+            - $ref: '#/components/schemas/TargetFailure'
+            - type: 'null'
+        stale:
+          type: boolean
+        usable:
+          type: boolean
+        sources:
+          anyOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/TargetSource'
+              maxItems: 64
+            - type: 'null'
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:
@@ -11926,6 +12803,12 @@ components:
             - available
             - inaccessible
             - identity_changed
+        resolution_metadata_version:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          description: Optional bounded resolution endpoint version; absent/null means unknown or unsupported.
       additionalProperties: true
     ReviewedRemoteIdentity:
       type: object
@@ -14859,51 +15742,97 @@ components:
       additionalProperties: false
     AdvisoryClaimRequest:
       type: object
-      required: [worker, operation_id, kind]
+      required:
+        - worker
+        - operation_id
+        - kind
       properties:
-        worker: { type: string }
-        operation_id: { type: string }
-        provisional: { type: boolean, default: false }
+        worker:
+          type: string
+        operation_id:
+          type: string
+        provisional:
+          type: boolean
+          default: false
         kind:
           type: object
-          required: [type]
+          required:
+            - type
           properties:
-            type: { type: string, enum: [claim, renew, release] }
-            expires_unix_ms: { type: integer, format: int64 }
+            type:
+              type: string
+              enum:
+                - claim
+                - renew
+                - release
+            expires_unix_ms:
+              type: integer
+              format: int64
     AdvisoryClaimStatus:
       type: object
       required:
-        [projection, provisional, remote_verified, automatic_handoff_safe, pending_operation_ids, pending_operations]
+        - projection
+        - provisional
+        - remote_verified
+        - automatic_handoff_safe
+        - pending_operation_ids
+        - pending_operations
       properties:
         projection:
           type: object
-          required: [claims, conflicted, invalid_markers]
+          required:
+            - claims
+            - conflicted
+            - invalid_markers
           properties:
             claims:
               type: array
               items:
                 type: object
-                required: [worker, operation_id, expires_unix_ms]
+                required:
+                  - worker
+                  - operation_id
+                  - expires_unix_ms
                 properties:
-                  worker: { type: string }
-                  operation_id: { type: string }
-                  expires_unix_ms: { type: integer, format: int64 }
-            conflicted: { type: boolean }
-            invalid_markers: { type: integer, minimum: 0 }
-        provisional: { type: boolean }
-        remote_verified: { type: boolean }
-        automatic_handoff_safe: { type: boolean }
+                  worker:
+                    type: string
+                  operation_id:
+                    type: string
+                  expires_unix_ms:
+                    type: integer
+                    format: int64
+            conflicted:
+              type: boolean
+            invalid_markers:
+              type: integer
+              minimum: 0
+        provisional:
+          type: boolean
+        remote_verified:
+          type: boolean
+        automatic_handoff_safe:
+          type: boolean
         pending_operation_ids:
           type: array
-          items: { type: string }
+          items:
+            type: string
         pending_operations:
           type: array
           items:
             type: object
-            required: [operation_id, state]
+            required:
+              - operation_id
+              - state
             properties:
-              operation_id: { type: string }
-              state: { type: string, enum: [queued, confirmed, needs_attention, expired] }
+              operation_id:
+                type: string
+              state:
+                type: string
+                enum:
+                  - queued
+                  - confirmed
+                  - needs_attention
+                  - expired
     ProviderCapabilities:
       type: object
       properties:

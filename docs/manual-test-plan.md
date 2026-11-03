@@ -843,3 +843,37 @@ readback in separate runs; neither may publish the new write, and a retry must
 recover. At 1,000 total issue keys with no eligible v2 key, verify the write
 is refused before PUT. At more than 1,000 keys, reads stop for operator
 recovery. Retain every v1 marker even when expired or released.
+
+## Orchestration target declarations and bindings (HS2-4J6V46)
+
+Use disposable machine homes, synthetic projects and credentials only. No rendered
+interface is added by this ticket. The synthetic automated CLI/HTTP/MCP flows pass;
+this operator checklist has not been run with real paired devices.
+
+1. From a provider-only registered project, use explicit `-C <configured-host-source>`
+   and `--project <checkout-id>`. Read an absent declaration without creating a file;
+   add a retained target ULID, rename/reorder, remove and repeat with current/stale
+   revisions. Confirm tombstones cannot be dropped, reused or resurrected, and a
+   rename-back rotates revision. Correct a descriptive repository hint through PUT.
+2. Inspect a local checkout and a paired remote checkout. Confirm path-free candidate
+   identity/capabilities, `usable:false`, no binding/reservation/manifest writes and
+   no credential export. Bind explicitly with the inspected destination and expected
+   revisions; perform a fresh resolve. Retarget/revoke after inspect: bind must fail
+   until a new deliberate inspection/review succeeds.
+3. Stop/restart a synthetic peer, renew its same-CA leaf and review a same-identity
+   address move. A fresh retry recovers without target rebind. Change server/CA,
+   checkout or source authority: preserve the old binding as stale/unusable and
+   require old/new identity review. Test partial missing provider config, disabled
+   sources, unsupported metadata and an older peer with no advertisement.
+4. Exercise CLI, authenticated HTTP, and actual MCP `--path`, `--server`, `--project`
+   parents through list/add/rename/remove/bind/unbind/resolve plus inspect. Check
+   wrong bearer, read-only/denied roles and off-box writer denial of all binding,
+   resolve and inspect operations before credential/network access.
+5. Corrupt/remove the owning project registration, provider config, manifest and
+   identity. Exact binding read/unbind must remain available without source/runtime
+   construction or project recreation. For an existing project wrapper, stale cached
+   routes fail plainly; they must not start a server or reopen the owner for cleanup.
+6. Check bounded input/output, redirect refusal, mismatched post-response identity,
+   atomic old/new persistence, quota exhaustion with existing-key disable, and
+   interleaved delayed success/failure/review/unbind/revoke. Equal/backward clocks
+   never revive an obsolete proof. No target ticket/AI/grant operation is dispatched.

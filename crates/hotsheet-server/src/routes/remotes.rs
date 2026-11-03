@@ -102,6 +102,9 @@ pub(crate) async fn hosted_checkouts(
                         })
                         .collect(),
                     state,
+                    resolution_metadata_version: Some(
+                        hotsheet_ticketing::orchestration::ORCHESTRATION_VERSION,
+                    ),
                 }
             })
             .collect();

@@ -367,7 +367,7 @@ fn check_review(binding: &Binding, request: &ReviewRemote) -> Result<(), RemoteE
     Ok(())
 }
 
-fn read_credentials(
+pub(super) fn read_credentials(
     binding: &Binding,
     secrets: &dyn SecretStore,
 ) -> Result<RemoteCredentials, RemoteFailure> {
@@ -383,8 +383,8 @@ fn read_credentials(
     serde_json::from_str(&encoded).map_err(|_| RemoteFailure::MissingCredentials)
 }
 
-fn verified_probe(
-    transport: &dyn RemoteTransport,
+pub(super) fn verified_probe<T: RemoteTransport + ?Sized>(
+    transport: &T,
     origin: &str,
     credentials: &RemoteCredentials,
     expected: &ReviewedRemoteIdentity,

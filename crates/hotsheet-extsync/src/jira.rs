@@ -1483,7 +1483,7 @@ fn capabilities() -> ProviderCapabilities {
         .collect(),
     }
 }
-fn validate_key(value: &str) -> Result<(), ProviderError> {
+pub(crate) fn validate_key(value: &str) -> Result<(), ProviderError> {
     if value.is_empty()
         || !value
             .chars()

@@ -13,6 +13,8 @@ pub mod github_webhook_setup;
 pub mod gitlab;
 pub mod jira;
 mod native_id;
+mod source_resolution;
+pub use source_resolution::source_resolution;
 pub mod note_trailer;
 pub mod source_connect;
 

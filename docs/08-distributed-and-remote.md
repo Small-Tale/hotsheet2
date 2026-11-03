@@ -171,6 +171,13 @@ in model arguments, and refuses nonlocal backends before reading the file. MCP's
 new registry requests refuse redirects; HS2-0BTSX8 separately owns the pre-existing
 generic MCP HTTP redirect guard gap.
 
+HS2-4J6V46 adds a separately versioned, path-free checkout resolution projection
+and read-confirm-bind target workflow ([26](26-orchestration-projects.md) §26.4).
+Its optional discovery advertisement lets old peers report unsupported metadata
+explicitly. Inspect/bind/resolve use existing paired trust and credentials without
+exporting them; cached discovery and technical capabilities confer no target grant.
+The target adapters are authored source pending verification at this checkpoint.
+
 This foundation supplies reviewed, authenticated identities for HS2-4J6V46 target
 bindings and HS2-42B2FD aggregate views. It adds no automatic clone, UI picker,
 orchestration manifest, queue fan-out or second claim coordinator.

@@ -195,6 +195,26 @@ struct ProjectBackend {
 }
 
 impl ProjectBackend {
+    // HS2-4J6V46: cleanup must not reopen/register a missing owner or start/relink
+    // a server. A stale cached endpoint returns its ordinary connection/auth error.
+    fn route_for_request(
+        &self,
+        method: &str,
+        path: &str,
+    ) -> Result<(String, String), BackendError> {
+        if hotsheet_cli::orchestration::is_cleanup_request(method, path) {
+            return self
+                .route
+                .lock()
+                .map(|route| (route.0.clone(), route.1.clone()))
+                .map_err(|_| BackendError {
+                    status: None,
+                    message: "cached machine route is unavailable".into(),
+                });
+        }
+        self.current_route()
+    }
+
     fn current_route(&self) -> Result<(String, String), BackendError> {
         let bootstrap = self.home.join("server-bootstrap.hs2");
         let server = hotsheet_cli::external_launch::ensure_running_server(&bootstrap, &self.home)
@@ -237,7 +257,7 @@ impl Backend for ProjectBackend {
         path: &str,
         query: &[(String, String)],
     ) -> Result<serde_json::Value, BackendError> {
-        let (url, secret) = self.current_route()?;
+        let (url, secret) = self.route_for_request("GET", path)?;
         HttpBackend::new(url, secret).get(path, query)
     }
 
@@ -247,7 +267,7 @@ impl Backend for ProjectBackend {
         path: &str,
         body: &serde_json::Value,
     ) -> Result<serde_json::Value, BackendError> {
-        let (url, secret) = self.current_route()?;
+        let (url, secret) = self.route_for_request(method, path)?;
         HttpBackend::new(url, secret).send(method, path, body)
     }
 }
@@ -353,3 +373,6 @@ mod tests {
         assert!(!backend.machine_local());
     }
 }
+
+#[cfg(test)]
+mod project_cleanup_tests;

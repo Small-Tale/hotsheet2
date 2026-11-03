@@ -29,6 +29,7 @@ pub mod image_crop;
 pub mod merge;
 pub mod metrics;
 pub mod ops;
+pub mod orchestration;
 pub mod overlay;
 pub mod phase_report;
 pub mod phase_timing;

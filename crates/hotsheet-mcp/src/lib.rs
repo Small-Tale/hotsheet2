@@ -10,6 +10,7 @@
 //! - [`HttpBackend`] — proxies a running `hotsheet-server` over HTTP, for
 //!   index-backed reads + instant broadcast when a server is up.
 
+mod orchestration_tools;
 pub mod presence;
 mod remote_tools;
 
@@ -136,6 +137,7 @@ fn base_tools_list() -> Value {
     let str_prop = |desc: &str| json!({ "type": "string", "description": desc });
     json!({ "tools": [
         remote_tools::definition(),
+        orchestration_tools::definition(),
         {
             "name": "hotsheet_providers",
             "description": "List configured ticket-provider connections and their structured capabilities.",
@@ -576,6 +578,7 @@ fn render_result(value: &Value) -> String {
 /// Tools that change state; each accepts `actor_role` / `actor_id` (HS2-RD4M29).
 const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_remotes",
+    "hotsheet_targets",
     "hotsheet_annotate_attachment",
     "hotsheet_rename_attachment",
     "hotsheet_delete_attachment",
@@ -691,6 +694,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
         "hotsheet_remotes" => remote_tools::dispatch(args, backend),
+        "hotsheet_targets" => orchestration_tools::dispatch(args, backend),
         "hotsheet_annotate_attachment" => {
             if args.get("connection").is_some() {
                 return Err("media annotations require a git-backed ticket".into());
@@ -1297,7 +1301,8 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 
 mod core_backend {
     use super::{
-        Backend, BackendError, checkout_array_result, decode_checkout_reference, remote_tools,
+        Backend, BackendError, checkout_array_result, decode_checkout_reference,
+        orchestration_tools, remote_tools,
     };
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
@@ -1318,6 +1323,7 @@ mod core_backend {
     /// through injected closures so tests can be deterministic.
     pub struct CoreBackend {
         remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
+        orchestration_runtime: Option<Arc<hotsheet_cli::orchestration::OrchestrationRuntime>>,
         store: FsStore,
         /// Explicit project identity for checkout-scoped calls. Store-only/serverless
         /// calls leave this absent and retain legacy store-owned settings behavior.
@@ -1338,6 +1344,7 @@ mod core_backend {
             Self {
                 store,
                 remote_runtime: None,
+                orchestration_runtime: None,
                 checkout: None,
                 checkout_registry: checkout_registry(),
                 now: Box::new(default_now),
@@ -1353,6 +1360,7 @@ mod core_backend {
             Self {
                 checkout: Some(checkout),
                 remote_runtime: self.remote_runtime.clone(),
+                orchestration_runtime: self.orchestration_runtime.clone(),
                 checkout_registry: self.checkout_registry.clone(),
                 store,
                 now: Box::new(default_now),
@@ -1396,6 +1404,47 @@ mod core_backend {
             Ok(Arc::new(hotsheet_cli::remote_servers::RemoteRuntime::live(
                 home,
             )))
+        }
+
+        pub fn with_orchestration_runtime(
+            mut self,
+            runtime: hotsheet_cli::orchestration::OrchestrationRuntime,
+        ) -> Self {
+            self.orchestration_runtime = Some(Arc::new(runtime));
+            self
+        }
+
+        fn orchestration_request(
+            &self,
+            method: &str,
+            path: &str,
+            body: &Value,
+        ) -> Result<Value, BackendError> {
+            let home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .ok_or_else(|| bad_request("machine registry home is unavailable"))?;
+            if let Some(result) =
+                hotsheet_cli::orchestration::request_cleanup_now(home, method, path, body)
+            {
+                return result.map_err(orchestration_tools::backend_error);
+            }
+            if let Some(runtime) = &self.orchestration_runtime {
+                return runtime
+                    .request_now(method, path, body)
+                    .map_err(orchestration_tools::backend_error);
+            }
+            hotsheet_cli::orchestration::OrchestrationRuntime::live(
+                home,
+                self.checkout_registry.clone(),
+                hotsheet_ticketing::ProviderConfigRegistry::new(
+                    self.store.root().join("providers.json"),
+                ),
+            )
+            .and_then(|runtime| runtime.request_now(method, path, body))
+            .map_err(orchestration_tools::backend_error)
         }
 
         /// Override the clock + minter (deterministic tests).
@@ -1715,6 +1764,9 @@ mod core_backend {
             true
         }
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+            if hotsheet_cli::orchestration::is_path(path) {
+                return self.orchestration_request("GET", path, &Value::Null);
+            }
             if remote_tools::is_registry_path(path) {
                 return self
                     .remote_runtime()?
@@ -2089,6 +2141,9 @@ mod core_backend {
 
     impl CoreBackend {
         fn route(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            if hotsheet_cli::orchestration::is_path(path) {
+                return self.orchestration_request(method, path, body);
+            }
             if remote_tools::is_registry_path(path) {
                 return self
                     .remote_runtime()?
@@ -3540,16 +3595,25 @@ impl Backend for HttpBackend {
 
 impl HttpBackend {
     fn guard_registry_origin(&self, path: &str) -> Result<(), BackendError> {
-        if remote_tools::is_registry_path(path) && !self.machine_local() {
+        if (remote_tools::is_registry_path(path)
+            || hotsheet_cli::orchestration::is_machine_path(path))
+            && !self.machine_local()
+        {
             return Err(BackendError {
                 status: Some(403),
-                message: "remote registry administration requires a machine-local backend".into(),
+                message: if hotsheet_cli::orchestration::is_machine_path(path) {
+                    "target binding administration requires a machine-local backend".into()
+                } else {
+                    "remote registry administration requires a machine-local backend".into()
+                },
             });
         }
         Ok(())
     }
     fn remote_registry_agent(&self, path: &str) -> ureq::Agent {
-        if remote_tools::is_registry_path(path) {
+        if remote_tools::is_registry_path(path)
+            || hotsheet_cli::orchestration::is_machine_path(path)
+        {
             // HS2-1Y45MZ: enrollment must not leave its explicitly selected local service.
             ureq::AgentBuilder::new()
                 .redirects(0)

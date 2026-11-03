@@ -155,6 +155,9 @@ pub struct RemoteCheckout {
     pub name: String,
     pub sources: Vec<RemoteSource>,
     pub state: RemoteCheckoutState,
+    /// Optional bounded metadata endpoint advertisement. Older peers are explicit unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_metadata_version: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -208,6 +208,7 @@ type LiveProviderCache = Arc<
 #[derive(Clone)]
 pub struct AppState {
     remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
+    orchestration_runtime: Option<Arc<hotsheet_cli::orchestration::OrchestrationRuntime>>,
     store: FsStore,
     /// Identity of the primary store at startup. An unscoped route must never silently
     /// switch to a different store placed at the same path (HS2-34XE8B).
@@ -542,6 +543,7 @@ impl AppState {
         Self {
             store,
             remote_runtime: None,
+            orchestration_runtime: None,
             primary_instance_id,
             secret,
             events,
@@ -765,6 +767,7 @@ impl AppState {
         self.machine_home = Arc::new(home);
         self.managed_secrets = ManagedSecretCache::default();
         self.remote_runtime = None;
+        self.orchestration_runtime = None;
         self
     }
 
@@ -774,6 +777,15 @@ impl AppState {
         runtime: hotsheet_cli::remote_servers::RemoteRuntime,
     ) -> Self {
         self.remote_runtime = Some(Arc::new(runtime));
+        self
+    }
+
+    /// Explicit target ports for hermetic synthetic compositions (HS2-4J6V46).
+    pub fn with_orchestration_runtime(
+        mut self,
+        runtime: hotsheet_cli::orchestration::OrchestrationRuntime,
+    ) -> Self {
+        self.orchestration_runtime = Some(Arc::new(runtime));
         self
     }
 
@@ -1780,6 +1792,34 @@ pub fn app(state: AppState) -> Router {
             axum::routing::put(routes::remotes::review).delete(routes::remotes::revoke),
         )
         .route("/remotes/{id}/checkouts", get(routes::remotes::discover))
+        .route(
+            "/remote-checkouts/{checkout}/resolution",
+            get(routes::orchestration::read),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/inspect",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets",
+            get(routes::orchestration::read)
+                .post(routes::orchestration::write)
+                .put(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}",
+            axum::routing::patch(routes::orchestration::write).delete(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/binding",
+            get(routes::orchestration::read)
+                .put(routes::orchestration::write)
+                .delete(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/resolve",
+            get(routes::orchestration::read),
+        )
         // A client may supervise this process but never owns it: restart is accepted only
         // after mutation admission closes and all server-owned work is proven quiescent.
         .route("/lifecycle/quiescence", get(lifecycle_quiescence))

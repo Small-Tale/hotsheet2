@@ -1,9 +1,10 @@
 # 26. Orchestration Projects
 
-> **Status: Design only (HS2-4JFP0S).** An orchestration project has its own
-> tickets and coordinates explicitly named target projects. No orchestration
-> storage, commands, or routes in this document are shipped yet. The
-> implementation tickets created by HS2-1WQDH3 own those surfaces.
+> **Status: Partial (HS2-4J6V46).** Shared declarations, reviewed machine bindings
+> and the headless CLI, authenticated HTTP and MCP target adapters are implemented
+> and covered by automated tests; the OpenAPI contract is regenerated. Workspace UI,
+> grants, ticket relationships and dispatch remain design work under their separate
+> implementation tickets.
 
 ## 26.1 Boundary and existing foundations
 
@@ -26,15 +27,22 @@ execution primitive; orchestration does not add a second claim coordinator.
 
 The orchestration checkout declares targets in a versioned
 `.hotsheet2/orchestration.json` file beside its project settings. Version 1 has
-`schema_version: 1` and a `targets` list. Each entry has an immutable random ULID
+`schema_version: 1`, an opaque canonical ULID `revision`, and a `targets` list. Each entry has an immutable random ULID
 `target_id`, `state: active|removed`, a human label, and optional normalized,
 credential-free expected repository identity. A label or repository URL is
 descriptive, never an authorization token or lookup key. The file contains no
 origins, bearer secrets, certificate material, local paths, or
 customer data. IDs are never recycled; removal marks an entry `removed` and
-retains its id while any orchestration ticket refers to it. Reordering or
+retains its id. Version 1 retains all tombstones and rejects PUT requests that
+drop any existing id; it has no reference-graph garbage collector. Reordering or
 renaming an entry preserves its id. Duplicate ids, unsupported versions, and
-malformed entries fail explicitly.
+malformed entries fail explicitly. Missing reads return disabled/empty without
+creating a file. The file is limited to 1 MiB and 256 entries including tombstones;
+labels are bounded to 256 bytes and repository hints to 2,048 bytes. Locked atomic
+writes preserve either complete old or new data. Every actual mutation rotates the
+opaque revision, including rename-back; timestamps do not authorize a write. A
+stale revision conflicts even if the desired contents are already present. Read,
+reconcile the retained id, and deliberately retry with the current revision.
 
 Each machine binds a declared `target_id` to one existing mounted checkout in its
 machine-local Hot Sheet registry. The binding records the authenticated pairing
@@ -46,7 +54,30 @@ review of the old and new identities and leaves an audit event. An unbound targe
 is visible as unbound, not silently removed. If a remote server changes address,
 its existing pairing/registry path updates the origin without changing the logical
 target id. If its identity cannot be verified, the binding becomes unavailable
-until reviewed.
+until reviewed. Binding keys are qualified by `(owner_checkout_id, target_id)`;
+another clone does not borrow a binding just because it has the same target id.
+The destination pins reviewed server/CA, checkout and source authority, not origin
+or a permanent remote-registration revision. A freshly verified same-identity
+address move, leaf renewal or restart therefore needs no target rebind.
+
+`${HOTSHEET_HOME}/orchestration-bindings.json` is a separate version-1 machine
+registry with public per-binding revisions and bounded old/new identity audit.
+It contains no bearer, credential reference, origin or local filesystem path.
+A source authority is a sorted multiset of provider-owned nonsecret identities;
+labels, source ids, defaults and capability advertisements do not define it.
+Metadata-only source projection does not initialize stores or contact provider
+accounts, and provider-only projects do not require Git.
+
+A valid bind/review reserves a private per-key ordering token before probing. This
+is conservatively latest-started: a newer admitted attempt invalidates an older
+in-flight result even if the newer candidate fails. Reservation does not change
+reviewed destination, public revision, cache or audit. Candidate B's failure does
+not poison a still-reviewed A. An initial failed or raced attempt can leave only a
+revision-zero, unbound, unobserved intent with no history or authority. Repeated
+unbind also fences pending activation without advancing an already-unbound public
+revision. The registry retains at most 256 keys including intents, 32 audit entries
+and 64 cached source identifiers per key; the per-key budget is 64 KiB with a
+16 MiB + 1 KiB whole-file limit. Existing keys remain disableable at capacity.
 
 The declaration belongs to the orchestration _checkout_, independently of which
 source holds its tickets. The same target can appear in several orchestration
@@ -56,9 +87,9 @@ target registration; a cycle never triggers recursive work automatically.
 
 The headless remote-server identity/registry boundary is implemented separately by
 HS2-1Y45MZ ([08](08-distributed-and-remote.md) §8.2.1). It exposes reviewed server/CA
-identity and fresh path-free checkout discovery; this document's target declaration,
-binding and dispatch remain separate implementation work. Cached remote observations
-never authorize target resolution or mutation.
+identity and fresh path-free checkout discovery. HS2-4J6V46 adds the target model
+and bounded checkout-resolution projection; dispatch remains separate work.
+Cached remote observations never authorize target resolution or mutation.
 
 ## 26.3 Ticket relationships and identity
 
@@ -83,24 +114,87 @@ outbound relationship.
 
 ## 26.4 Headless and service contract
 
-CLI and authenticated server operations share one core transaction and the same
-validation errors. Proposed headless surface:
+CLI, authenticated HTTP and MCP use one shared runtime over the core transaction.
+The CLI emits JSON for all target operations. `--project` is the registered owning
+checkout id; `-C` selects the existing host source that owns `providers.json`, not a
+target's default Git store. Missing host configuration produces an actionable
+error and never creates a hidden store or source. For a provider-only project:
 
-- `hotsheet-cli orchestration target list|add|rename|remove --project <checkout>`
-  reads or changes the shared declaration. `add` allocates and returns the id;
-  `remove` records a tombstone when links exist.
-- `hotsheet-cli orchestration target bind --project <checkout> --target <id> --server <registered-server-id> --checkout <reference>`
-  changes only the machine-local binding; `unbind` takes the project and target
-  ids.
-- `hotsheet-cli orchestration target resolve --project <checkout> --target <id> --json`
-  returns declared, bound, reachable, and source-capability state without
-  exposing secrets.
-- `GET/PUT /checkouts/{id}/orchestration/targets` operates on declarations with
-  a revision precondition. `GET/PUT/DELETE` at
-  `/checkouts/{id}/orchestration/bindings/{target_id}` operates on the serving
-  machine's local binding with an explicit identity confirmation on rebind.
-  Equivalent MCP read and mutation tools use the same core functions and auth
-  checks.
+```sh
+hotsheet-cli -C <configured-host-source> orchestration target list --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration target inspect <destination-checkout-id> --project <owner-checkout-id>
+hotsheet-cli -C <configured-host-source> orchestration target inspect <remote-checkout-id> --registration-id <reviewed-remote-id> --project <owner-checkout-id>
+```
+
+`inspect` is a fresh machine-local read-confirm-bind step. It uses the existing
+reviewed registry, credential owner and transport, then returns a path-free
+candidate `destination` and `projection`, `stale:false`, `usable:false`, and no
+binding. It writes no manifest, binding, reservation or grant. Copy only the public
+candidate destination into an explicit bind request; no credential export or
+manual secret workaround is needed. A later bind probes again and checks its own
+CAS and proof, so a candidate cannot survive a later retarget or revoke as authority.
+
+- `target list` reads shared declarations without peer requests or secret access.
+  `list --target-id <id>` reads that exact stale local binding for reconciliation.
+- `target add --target-id <retained-ULID> --label <label>` creates an active entry.
+  Omit `--expected-revision` only for an absent manifest; otherwise pass the last
+  read opaque revision. Omitting the id allocates and returns a random id, but
+  callers retain an id before retryable setup. Never use a label as an idempotency
+  key or silently allocate a replacement after a revision conflict. MCP
+  `target_id` and `registration_id` must be strings when present; null and other
+  JSON types fail before backend dispatch. Only omission selects generation or
+  local inspect defaults; tool inputSchema is not runtime enforcement.
+- `target rename <id> --label <label> --expected-revision <revision>` and
+  `target remove <id> --expected-revision <revision>` preserve immutable identity;
+  remove retains the tombstone. Rename also accepts
+  `--expected-repository-identity <URI>` or `--clear-expected-repository-identity`
+  to correct the descriptive hint with the same revision precondition; supplying
+  both fails without a write. MCP and full declaration PUT expose the same metadata
+  correction without changing target identity or binding authority.
+- `target bind <id> --expected-manifest-revision <revision>
+--expected-binding-revision <number> --destination '<public candidate JSON>'`
+  explicitly confirms identity. A review additionally supplies
+  `--previous-destination '<exact old destination JSON>'`; initial/unbound requests
+  use revision zero and a null previous destination.
+- `target unbind <id> --expected-binding-revision <number>` supplies the exact old
+  destination when bound. It and `list --target-id` bypass `-C` resolution, checkout,
+  provider, manifest, identity and runtime construction for orphan cleanup. An
+  existing `--project` MCP wrapper uses only its cached service for these two
+  cleanup requests, without reopening/registering a lost owner or starting a
+  server; a stale endpoint returns an ordinary connection/auth error.
+- `target resolve <id>` explicitly probes and returns fresh selection metadata only
+  after final guards. Fresh metadata is never delegated permission to mutate tickets.
+
+HTTP declares the same request/response types:
+
+| Route                                                       | Methods and purpose                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/targets`                  | GET declarations; POST add; PUT complete retained-id replacement            |
+| `/checkouts/{owner}/orchestration/targets/{target}`         | PATCH rename; DELETE tombstone                                              |
+| `/checkouts/{owner}/orchestration/targets/{target}/binding` | GET cached machine binding; PUT explicit bind/review; DELETE machine unbind |
+| `/checkouts/{owner}/orchestration/targets/{target}/resolve` | GET fresh target resolution                                                 |
+| `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding/grant write                       |
+| `/remote-checkouts/{checkout}/resolution`                   | GET bounded path-free hosting metadata                                      |
+
+All endpoints require the normal bearer and retain device-role authorization.
+Every binding read/write, resolve and inspect additionally requires literal
+loopback at the serving machine; an off-box writer cannot use its enrollment as a
+credential proxy. Ordinary declaration and hosting-metadata reads remain available
+to authorized readers. MCP `hotsheet_targets` exposes the same actions and inherits
+the selected owning checkout. The tool checks machine locality before any backend
+request; the HTTP backend also checks the actual destination origin. Only the
+machine-wide `hotsheet_remotes` tool excludes implicit project selection.
+
+The hosting endpoint advertises optional `resolution_metadata_version:1` in basic
+checkout discovery. Older peers without it, or unsupported versions, report unknown/
+unsupported metadata rather than invented Git capabilities. The strict version-1
+projection is limited to 256 KiB, 64 sources, and 32 capability query fields of
+80 bytes each. It returns verified provider identities and advertised capabilities,
+never raw locators, account names, credential references or a full provider descriptor.
+Git identities come from existing verified store metadata; external identities use
+provider-owned validated endpoint and repository/project fields. URL/userinfo/query/
+fragment/control/whitespace-bearing malformed locators require review before an
+identity can be published. Explicit configured endpoint ports retain their identity.
 
 Requests naming an orchestration ticket identify its owning checkout and source
 explicitly when ambiguous. Target ticket writes later route through the target's
@@ -118,7 +212,18 @@ and is marked stale while unreachable; a mutation never executes against stale
 state. A target with several sources requires an explicit source for a create.
 Unsupported provider operations report capability errors, not a fallback write
 to a different source. Concurrent manifest writes use a revision precondition and
-return a conflict rather than dropping another editor's target.
+return a conflict rather than dropping another editor's target. Stable server and
+checkout identity checks precede source availability; empty or partially missing
+source identity reports `source_missing`, while an entirely available changed
+source authority reports `identity_changed`.
+
+Network calls occur outside locks. Finalization holds checkout-source → provider
+configuration → manifest → binding → local remote-registry guards through durable
+commit and response construction. Inspection uses the relevant lock subset and
+constructs its response under those guards. The remote proof fences local registry
+review/revoke/observation changes; peer metadata remains verified as-of its bounded
+response, not a distributed atomic transaction. Private ordering tokens are neither
+public revisions nor timestamps. List caches are always stale and never usable.
 
 Old checkouts have no orchestration file and behave exactly as ordinary projects.
 Enabling orchestration creates a version-1 file without changing existing ticket

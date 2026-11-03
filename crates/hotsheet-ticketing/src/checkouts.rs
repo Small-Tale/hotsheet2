@@ -2,6 +2,9 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+mod source_observation;
+pub use source_observation::CheckoutSourceProof;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::{self, Write};
@@ -338,6 +341,15 @@ pub struct OpenSourceSelection {
 pub(crate) struct LockedCheckoutRegistry<'a> {
     registry: &'a CheckoutRegistry,
     _lock: FileLock,
+}
+
+impl LockedCheckoutRegistry<'_> {
+    /// HS2-4J6V46: resolve under the held link lock for source observations.
+    pub(crate) fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
+        let mut entries = self.registry.read_locked()?.checkouts;
+        entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
+        resolve_checkout(entries, reference)
+    }
 }
 
 /// HS2-6H8ZY6: strict metadata prepared before entering the provider owner.

@@ -11860,3 +11860,358 @@ fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
         .failure();
     assert_eq!(read()["title"], "Synthetic explicit kind");
 }
+
+fn hs2_4j6v46_command(home: &Path, source: &Path, capability: bool) -> Command {
+    for directory in [
+        "user-home",
+        "codex-home",
+        "config",
+        "data",
+        "state",
+        "cache",
+        "tmp",
+    ] {
+        std::fs::create_dir_all(home.join(directory)).unwrap();
+    }
+    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    command
+        .timeout(std::time::Duration::from_secs(20))
+        .current_dir(home)
+        .env("HOME", home.join("user-home"))
+        .env("CODEX_HOME", home.join("codex-home"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("HOTSHEET_HOME", home)
+        .env("HOTSHEET_CACHE_DIR", home.join("cache"))
+        .env("TMPDIR", home.join("tmp"))
+        .env("HOTSHEET_AI_TOOL_PROBES", "off")
+        .env_remove("HOTSHEET_STORE")
+        .env_remove("HOTSHEET_SERVER")
+        .env_remove("HOTSHEET_SECRET")
+        .env_remove("HOTSHEET_TERMINAL_ID")
+        .env_remove("HOTSHEET_ACTOR_ROLE")
+        .env_remove("HOTSHEET_ACTOR_ID");
+    if capability {
+        command.arg("--test-fixture-capabilities");
+    } else {
+        command
+            .args(["--test-fixture-credentials", "-C"])
+            .arg(source)
+            .args(["orchestration", "target"]);
+    }
+    command
+}
+fn hs2_4j6v46_capability(home: &Path) {
+    let output = hs2_4j6v46_command(home, home, true).output().unwrap();
+    assert!(output.status.success());
+    let capability: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        capability["isolated_native_credentials"], true,
+        "build owned debug CLI with explicit test-permission-vault feature"
+    );
+}
+fn hs2_4j6v46_value(home: &Path, source: &Path, owner: &str, args: &[&str]) -> serde_json::Value {
+    let output = hs2_4j6v46_command(home, source, false)
+        .args(args)
+        .args(["--project", owner])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+#[test]
+fn hs2_4j6v46_actual_cli_provider_only_setup_and_orphan_cleanup_bypass_missing_corrupt_host_source()
+{
+    use hotsheet_ticketing::{
+        ProviderConfigRegistry, ProviderConnection,
+        checkouts::{CheckoutRegistry, TicketSource},
+    };
+    use serde_json::json;
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("host-config");
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir(&source).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    hs2_4j6v46_capability(&home);
+    let providers = ProviderConfigRegistry::new(source.join("providers.json"));
+    providers
+        .save(&[ProviderConnection {
+            id: "synthetic".into(),
+            provider: "github".into(),
+            locator: "synthetic/repo".into(),
+            name: None,
+            default: false,
+            disabled: false,
+            settings: serde_json::Value::Null,
+        }])
+        .unwrap();
+    let registry = CheckoutRegistry::new(home.join("checkouts.json"));
+    let owner = registry
+        .register_registered_sources(
+            &providers,
+            &project,
+            None,
+            None,
+            vec![TicketSource {
+                connection_id: "synthetic".into(),
+                provider: "github".into(),
+                locator: "synthetic/repo".into(),
+            }],
+            None,
+        )
+        .unwrap();
+    let candidate = hs2_4j6v46_value(&home, &source, &owner.id, &["inspect", &owner.id]);
+    assert_eq!(candidate["usable"], false);
+    assert!(!home.join("orchestration-bindings.json").exists());
+    assert!(!project.join(".hotsheet2/orchestration.json").exists());
+    let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    let added = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &["add", "--target-id", id, "--label", "Synthetic"],
+    );
+    let before = std::fs::read(project.join(".hotsheet2/orchestration.json")).unwrap();
+    hs2_4j6v46_command(&home, &source, false)
+        .args([
+            "add",
+            "--project",
+            &owner.id,
+            "--target-id",
+            id,
+            "--label",
+            "Synthetic",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("conflict"));
+    assert_eq!(
+        std::fs::read(project.join(".hotsheet2/orchestration.json")).unwrap(),
+        before
+    );
+    let renamed = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "rename",
+            id,
+            "--expected-revision",
+            added["revision"].as_str().unwrap(),
+            "--label",
+            "Renamed",
+            "--expected-repository-identity",
+            "https://repo.example.test/group/project",
+        ],
+    );
+    assert_eq!(renamed["targets"][0]["target_id"], id);
+    assert_eq!(renamed["targets"][0]["label"], "Renamed");
+    assert_eq!(
+        renamed["targets"][0]["expected_repository_identity"],
+        "https://repo.example.test/group/project"
+    );
+    assert_ne!(renamed["revision"], added["revision"]);
+    assert_eq!(
+        hs2_4j6v46_value(&home, &source, &owner.id, &["list"]),
+        renamed
+    );
+    let manifest = project.join(".hotsheet2/orchestration.json");
+    let before = std::fs::read(&manifest).unwrap();
+    hs2_4j6v46_command(&home, &source, false)
+        .args([
+            "rename",
+            id,
+            "--project",
+            &owner.id,
+            "--expected-revision",
+            renamed["revision"].as_str().unwrap(),
+            "--label",
+            "Wrong",
+            "--expected-repository-identity",
+            "https://repo.example.test/other",
+            "--clear-expected-repository-identity",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(std::fs::read(&manifest).unwrap(), before);
+    let cleared = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "rename",
+            id,
+            "--expected-revision",
+            renamed["revision"].as_str().unwrap(),
+            "--label",
+            "Renamed",
+            "--clear-expected-repository-identity",
+        ],
+    );
+    assert_eq!(cleared["targets"][0]["target_id"], id);
+    assert_eq!(cleared["targets"][0]["label"], "Renamed");
+    assert!(
+        cleared["targets"][0]
+            .get("expected_repository_identity")
+            .is_none()
+    );
+    assert_ne!(cleared["revision"], renamed["revision"]);
+    assert_eq!(
+        hs2_4j6v46_value(&home, &source, &owner.id, &["list"]),
+        cleared
+    );
+    let before = std::fs::read(&manifest).unwrap();
+    hs2_4j6v46_command(&home, &source, false)
+        .args([
+            "rename",
+            id,
+            "--project",
+            &owner.id,
+            "--expected-revision",
+            renamed["revision"].as_str().unwrap(),
+            "--label",
+            "Stale",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("conflict"));
+    assert_eq!(std::fs::read(&manifest).unwrap(), before);
+    assert_eq!(
+        hs2_4j6v46_value(
+            &home,
+            &source,
+            &owner.id,
+            &[
+                "rename",
+                id,
+                "--expected-revision",
+                cleared["revision"].as_str().unwrap(),
+                "--label",
+                "Renamed",
+                "--clear-expected-repository-identity",
+            ]
+        ),
+        cleared
+    );
+    let after_clear = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "rename",
+            id,
+            "--expected-revision",
+            cleared["revision"].as_str().unwrap(),
+            "--label",
+            "After clear",
+        ],
+    );
+    assert_eq!(after_clear["targets"][0]["target_id"], id);
+    assert_eq!(after_clear["targets"][0]["label"], "After clear");
+    assert!(
+        after_clear["targets"][0]
+            .get("expected_repository_identity")
+            .is_none()
+    );
+    assert_ne!(after_clear["revision"], cleared["revision"]);
+    let cleared = after_clear;
+    assert!(!home.join("orchestration-bindings.json").exists());
+    let destination = candidate["destination"].to_string();
+    let bound = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "bind",
+            id,
+            "--expected-manifest-revision",
+            cleared["revision"].as_str().unwrap(),
+            "--expected-binding-revision",
+            "0",
+            "--destination",
+            &destination,
+        ],
+    );
+    assert_eq!(bound["usable"], true);
+    assert_eq!(
+        hs2_4j6v46_value(&home, &source, &owner.id, &["resolve", id])["usable"],
+        true
+    );
+    assert_eq!(
+        hs2_4j6v46_value(&home, &source, &owner.id, &["list"])["targets"][0]["target_id"],
+        id
+    );
+    let removed = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "remove",
+            id,
+            "--expected-revision",
+            cleared["revision"].as_str().unwrap(),
+        ],
+    );
+    assert_eq!(removed["targets"][0]["state"], "removed");
+    std::fs::write(registry.path(), b"corrupt registry").unwrap();
+    std::fs::write(home.join("server-identity.json"), b"corrupt identity").unwrap();
+    std::fs::remove_file(providers.path()).unwrap();
+    std::fs::remove_dir_all(&source).unwrap();
+    assert_eq!(
+        hs2_4j6v46_value(&home, &source, &owner.id, &["list", "--target-id", id])["revision"],
+        1
+    );
+    std::fs::write(&source, b"corrupt host source").unwrap();
+    assert_eq!(
+        hs2_4j6v46_value(
+            &home,
+            &source,
+            &owner.id,
+            &[
+                "unbind",
+                id,
+                "--expected-binding-revision",
+                "1",
+                "--previous-destination",
+                &destination
+            ]
+        )["revision"],
+        2
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), b"corrupt host source");
+    assert_eq!(
+        std::fs::read(home.join("server-identity.json")).unwrap(),
+        b"corrupt identity"
+    );
+    assert_eq!(std::fs::read(registry.path()).unwrap(), b"corrupt registry");
+    assert!(!source.join(".git").exists());
+    assert!(!project.join(".git").exists());
+    assert!(!home.join("test-native-credentials").exists());
+    let wire = std::fs::read_to_string(home.join("orchestration-bindings.json")).unwrap();
+    assert!(!wire.contains("credential"));
+    assert!(!wire.contains(&home.to_string_lossy().to_string()));
+    assert_eq!(removed["targets"][0]["target_id"], json!(id));
+}
+#[test]
+fn hs2_4j6v46_cli_missing_host_config_is_actionable_without_creating_identity_or_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("missing-host");
+    hs2_4j6v46_capability(&home);
+    hs2_4j6v46_command(&home, &source, false)
+        .args(["list", "--project", "owner-0123456789ab"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("-C <existing-host-source>"));
+    assert!(!source.exists());
+    assert!(!home.join("server-identity.json").exists());
+    assert!(!home.join("checkouts.json").exists());
+}

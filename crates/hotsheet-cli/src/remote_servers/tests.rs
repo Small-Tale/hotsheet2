@@ -165,3 +165,152 @@ fn hs2_1y45mz_transport_confirms_the_authenticated_identity_after_checkout_disco
     );
     worker.join().unwrap();
 }
+
+fn hs2_4j6v46_projection() -> hotsheet_ticketing::orchestration::CheckoutProjection {
+    use hotsheet_ticketing::orchestration::{
+        CheckoutProjection, SourceState, TargetSource, checkout_authority,
+    };
+    let sources = vec![TargetSource {
+        connection_id: "synthetic".into(),
+        provider: "synthetic".into(),
+        identity: Some("a".repeat(64)),
+        state: SourceState::Available,
+        capabilities: Some(hotsheet_ticketing::ProviderCapabilities::git()),
+    }];
+    CheckoutProjection {
+        schema_version: 1,
+        server_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".into(),
+        checkout_id: "synthetic-checkout".into(),
+        checkout_authority: checkout_authority(&sources).unwrap(),
+        sources,
+    }
+}
+#[test]
+fn hs2_4j6v46_metadata_transport_confirms_server_and_checkout_after_bounded_response() {
+    use hotsheet_ticketing::orchestration::TargetFailure;
+    use hotsheet_ticketing::remote_servers::RemoteCheckoutTransport;
+    for changed_server in [false, true] {
+        let projection = hs2_4j6v46_projection();
+        let confirmed = json!({"generation":"hs2","protocol":1,"server_id":if changed_server {"01ARZ3NDEKTSV4RRFFQ69G5FAW"}else{projection.server_id.as_str()}});
+        let (origin, worker) = peer(vec![
+            response(200, "", &serde_json::to_string(&projection).unwrap()),
+            response(200, "", &confirmed.to_string()),
+        ]);
+        let result = MtlsRemoteTransport.checkout_projection(
+            &origin,
+            &credentials(),
+            &projection.checkout_id,
+        );
+        if changed_server {
+            assert_eq!(result.unwrap_err(), TargetFailure::IdentityChanged);
+        } else {
+            assert_eq!(result.unwrap(), projection);
+        }
+        worker.join().unwrap();
+    }
+    let mut projection = hs2_4j6v46_projection();
+    projection.checkout_id = "other-checkout".into();
+    let confirmed = json!({"generation":"hs2","protocol":1,"server_id":projection.server_id});
+    let (origin, worker) = peer(vec![
+        response(200, "", &serde_json::to_string(&projection).unwrap()),
+        response(200, "", &confirmed.to_string()),
+    ]);
+    assert_eq!(
+        MtlsRemoteTransport
+            .checkout_projection(&origin, &credentials(), "synthetic-checkout")
+            .unwrap_err(),
+        TargetFailure::IdentityChanged
+    );
+    worker.join().unwrap();
+}
+#[test]
+fn hs2_4j6v46_metadata_transport_limits_old_peers_private_errors_and_partial_data() {
+    use hotsheet_ticketing::orchestration::{MAX_PROJECTION_BYTES, TargetFailure};
+    use hotsheet_ticketing::remote_servers::RemoteCheckoutTransport;
+    for (status, headers, body, expected) in [
+        (
+            404,
+            "",
+            "synthetic-private-detail".into(),
+            TargetFailure::UnsupportedMetadata,
+        ),
+        (
+            401,
+            "",
+            "synthetic-private-detail".into(),
+            TargetFailure::Unauthorized,
+        ),
+        (
+            500,
+            "",
+            "synthetic-private-detail".into(),
+            TargetFailure::InvalidResponse,
+        ),
+        (200, "", "not JSON".into(), TargetFailure::InvalidResponse),
+        (
+            200,
+            "x-hotsheet-partial: true\r\n",
+            "{}".into(),
+            TargetFailure::ResponseLimit,
+        ),
+        (
+            200,
+            "x-hotsheet-truncated: true\r\n",
+            "{}".into(),
+            TargetFailure::ResponseLimit,
+        ),
+        (
+            200,
+            "",
+            "x".repeat(MAX_PROJECTION_BYTES + 1),
+            TargetFailure::ResponseLimit,
+        ),
+    ] {
+        let (origin, worker) = peer(vec![response(status, headers, &body)]);
+        let error = MtlsRemoteTransport
+            .checkout_projection(&origin, &credentials(), "synthetic-checkout")
+            .unwrap_err();
+        assert_eq!(error, expected);
+        assert!(!error.to_string().contains("synthetic-private-detail"));
+        worker.join().unwrap();
+    }
+}
+#[test]
+fn hs2_4j6v46_metadata_transport_refuses_redirect_and_route_relocation_before_request() {
+    use hotsheet_ticketing::orchestration::TargetFailure;
+    use hotsheet_ticketing::remote_servers::RemoteCheckoutTransport;
+    let destination = TcpListener::bind("127.0.0.1:0").unwrap();
+    destination.set_nonblocking(true).unwrap();
+    let headers = format!(
+        "Location: http://{}/stolen\r\n",
+        destination.local_addr().unwrap()
+    );
+    let (origin, worker) = peer(vec![response(302, &headers, "")]);
+    assert_eq!(
+        MtlsRemoteTransport
+            .checkout_projection(&origin, &credentials(), "synthetic-checkout")
+            .unwrap_err(),
+        TargetFailure::Redirect
+    );
+    worker.join().unwrap();
+    assert_eq!(
+        destination.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    for id in [
+        "",
+        ".",
+        "..",
+        "../other",
+        "x?token=synthetic",
+        "x#fragment",
+        "x%2Fother",
+    ] {
+        assert_eq!(
+            MtlsRemoteTransport
+                .checkout_projection("https://unrequested.example.test", &credentials(), id)
+                .unwrap_err(),
+            TargetFailure::InvalidResponse
+        );
+    }
+}

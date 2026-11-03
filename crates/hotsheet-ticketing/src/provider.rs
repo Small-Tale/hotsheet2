@@ -3,6 +3,9 @@
 //! Provider-native ids stay strings at this boundary. The built-in git provider is
 //! the only adapter that translates them to ULIDs and delegates to [`crate::ops`].
 
+mod source_observation;
+pub use source_observation::ProviderConfigurationProof;
+
 use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -260,20 +263,7 @@ impl ProviderConfigRegistry {
         publication: Publication,
         change: impl FnOnce(&mut Vec<ProviderConnection>) -> Result<T, E>,
     ) -> Result<T, E> {
-        use std::fs::OpenOptions;
-        let io = |error| E::from(ProviderError::from(StoreError::Io(error)));
-        let lock_path = self.path.with_extension("json.lock");
-        if let Some(parent) = lock_path.parent() {
-            std::fs::create_dir_all(parent).map_err(io)?;
-        }
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(lock_path)
-            .map_err(io)?;
-        let _guard = crate::file_lock::FileLock::acquire(file).map_err(io)?;
+        let _guard = self.lock_configuration().map_err(E::from)?;
         let mut connections = self.load().map_err(E::from)?;
         let before = connections.clone();
         let result = change(&mut connections)?;
@@ -282,6 +272,24 @@ impl ProviderConfigRegistry {
             self.publish_unlocked(&connections).map_err(E::from)?;
         }
         Ok(result)
+    }
+
+    /// The stable sibling lock shared by every configuration writer and by the
+    /// held source-observation proof (HS2-4J6V46).
+    pub(crate) fn lock_configuration(&self) -> Result<crate::file_lock::FileLock, ProviderError> {
+        use std::fs::OpenOptions;
+        let lock_path = self.path.with_extension("json.lock");
+        if let Some(parent) = lock_path.parent() {
+            std::fs::create_dir_all(parent).map_err(StoreError::Io)?;
+        }
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(StoreError::Io)?;
+        crate::file_lock::FileLock::acquire(file).map_err(|error| StoreError::Io(error).into())
     }
 
     /// Disable or re-enable one connection (HS2-SF6W34). Idempotent; `None` when no such

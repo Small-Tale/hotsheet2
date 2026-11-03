@@ -169,7 +169,13 @@ async fn enforce_client_access(
     // HS2-1Y45MZ: remote enrollment manages this machine's secrets; mounted peers
     // may discover its identity/checkouts, but cannot administer its other bindings.
     if !access.loopback
-        && (request.uri().path() == "/remotes" || request.uri().path().starts_with("/remotes/"))
+        && (request.uri().path() == "/remotes"
+            || request.uri().path().starts_with("/remotes/")
+            || hotsheet_cli::orchestration::is_machine_path(request.uri().path())
+            || request
+                .extensions()
+                .get::<axum::extract::MatchedPath>()
+                .is_some_and(|path| hotsheet_cli::orchestration::is_machine_path(path.as_str())))
     {
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -327,6 +333,96 @@ mod tests {
                 .unwrap();
             assert_eq!(response.status(), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn hs2_4j6v46_binding_resolve_and_inspect_are_serving_machine_local_for_every_role() {
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+        };
+        use tower::ServiceExt;
+        for path in [
+            "/checkouts/owner/orchestration/targets/id/binding",
+            "/checkouts/owner/orchestration/targets/id/resolve",
+            "/checkouts/owner/orchestration/inspect",
+        ] {
+            for role in [
+                hotsheet_tls::DeviceRole::ReadWrite,
+                hotsheet_tls::DeviceRole::ReadOnly,
+                hotsheet_tls::DeviceRole::Deny,
+            ] {
+                let router = axum::Router::new()
+                    .route(
+                        path,
+                        axum::routing::get(|| async { StatusCode::OK })
+                            .post(|| async { StatusCode::OK })
+                            .put(|| async { StatusCode::OK })
+                            .delete(|| async { StatusCode::OK }),
+                    )
+                    .layer(axum::middleware::from_fn(enforce_client_access))
+                    .layer(axum::Extension(ClientAccess {
+                        role,
+                        loopback: false,
+                    }));
+                for method in ["GET", "POST", "PUT", "DELETE"] {
+                    assert_eq!(
+                        router
+                            .clone()
+                            .oneshot(
+                                Request::builder()
+                                    .method(method)
+                                    .uri(path)
+                                    .body(Body::empty())
+                                    .unwrap()
+                            )
+                            .await
+                            .unwrap()
+                            .status(),
+                        StatusCode::FORBIDDEN
+                    );
+                }
+            }
+        }
+        let metadata = "/checkouts/owner/orchestration/targets";
+        let router = axum::Router::new()
+            .route(
+                metadata,
+                axum::routing::get(|| async { StatusCode::OK }).post(|| async { StatusCode::OK }),
+            )
+            .layer(axum::middleware::from_fn(enforce_client_access))
+            .layer(axum::Extension(ClientAccess {
+                role: hotsheet_tls::DeviceRole::ReadOnly,
+                loopback: false,
+            }));
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(metadata)
+                        .body(Body::empty())
+                        .unwrap()
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            router
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(metadata)
+                        .body(Body::empty())
+                        .unwrap()
+                )
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
     }
 
     /// Decode the first certificate in a PEM to DER (test/verify helper).

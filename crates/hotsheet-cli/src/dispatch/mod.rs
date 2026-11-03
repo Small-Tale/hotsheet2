@@ -9,6 +9,7 @@ mod claim_process;
 pub(crate) mod claims;
 pub(crate) mod coordination;
 pub(crate) mod notify;
+pub(crate) mod orchestration;
 pub(crate) mod providers;
 pub(crate) mod remotes;
 pub(crate) mod server;
@@ -36,6 +37,7 @@ pub(crate) struct Ctx {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Group {
     Remote,
+    Orchestration,
     Store,
     Tickets,
     Providers,
@@ -51,6 +53,7 @@ impl Cmd {
         use Cmd::*;
         match self {
             Remote(_) => Group::Remote,
+            Orchestration(_) => Group::Orchestration,
             Coordination(_) => Group::Coordination,
             Notify { .. } => Group::Notify,
             Init { .. }
@@ -155,6 +158,7 @@ impl Cmd {
             self,
             Cmd::Init { .. }
                 | Cmd::Remote(_)
+                | Cmd::Orchestration(_)
                 | Cmd::Bootstrap { .. }
                 | Cmd::Link { .. }
                 | Cmd::Checkout { .. }
@@ -178,6 +182,7 @@ impl Cmd {
             self,
             Cmd::ClaimRun { .. }
                 | Cmd::Remote(_)
+                | Cmd::Orchestration(_)
                 | Cmd::Init { .. }
                 | Cmd::Coordination(_)
                 | Cmd::Bootstrap { .. }
@@ -212,6 +217,7 @@ impl Cmd {
 pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     match cmd.group() {
         Group::Remote => remotes::run(cmd, ctx),
+        Group::Orchestration => orchestration::run(cmd, ctx),
         Group::Store => store::run(cmd, ctx),
         Group::Tickets => tickets::run(cmd, ctx),
         Group::Providers => providers::run(cmd, ctx),

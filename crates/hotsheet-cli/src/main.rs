@@ -10,6 +10,7 @@ mod dispatch;
 
 use dispatch::coordination::CoordinationArgs;
 use dispatch::notify::NotifyCmd;
+use dispatch::orchestration::OrchestrationArgs;
 use dispatch::providers::{
     AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, GithubRecoverArgs, KeyCmd,
     ProviderConnectArgs,
@@ -81,6 +82,8 @@ impl Cli {
 enum Cmd {
     /// Register, review and discover explicitly paired remote Hot Sheet servers.
     Remote(RemoteArgs),
+    /// Declare and explicitly bind project targets without creating ticket sources.
+    Orchestration(OrchestrationArgs),
     /// Coordinate independent local integrator/worker sessions with durable exact assignments.
     Coordination(CoordinationArgs),
     /// Initialize a git-backed store here, or create and link a standalone one.

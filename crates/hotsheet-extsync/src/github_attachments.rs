@@ -175,7 +175,7 @@ impl GitHubAttachmentRepository {
     }
 }
 
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."

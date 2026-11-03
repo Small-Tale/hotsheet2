@@ -152,23 +152,7 @@ impl RemoteTransport for MtlsRemoteTransport {
         origin: &str,
         credentials: &RemoteCredentials,
     ) -> Result<RemoteSnapshot, RemoteFailure> {
-        let normalized = normalize_remote_origin(origin).map_err(|_| RemoteFailure::TrustFailed)?;
-        if normalized != origin {
-            return Err(RemoteFailure::TrustFailed);
-        }
-        credentials
-            .trust_fingerprint(origin)
-            .map_err(|_| RemoteFailure::TrustFailed)?;
-        let mut builder = ureq::AgentBuilder::new()
-            .redirects(0)
-            .timeout_connect(Duration::from_secs(5))
-            .timeout_read(Duration::from_secs(10))
-            .timeout_write(Duration::from_secs(5))
-            .timeout(Duration::from_secs(15));
-        if origin.starts_with("https://") {
-            builder = builder.tls_config(Arc::new(client_config(credentials)?));
-        }
-        let agent = builder.build();
+        let agent = remote_agent(origin, credentials)?;
         let identity: RemoteIdentity = get(&agent, origin, "/remote-identity", credentials)?;
         identity.validate()?;
         let checkouts: Vec<hotsheet_ticketing::remote_servers::RemoteCheckout> =
@@ -185,6 +169,74 @@ impl RemoteTransport for MtlsRemoteTransport {
             checkouts,
         })
     }
+}
+
+impl hotsheet_ticketing::remote_servers::RemoteCheckoutTransport for MtlsRemoteTransport {
+    fn checkout_projection(
+        &self,
+        origin: &str,
+        credentials: &RemoteCredentials,
+        checkout_id: &str,
+    ) -> Result<
+        hotsheet_ticketing::orchestration::CheckoutProjection,
+        hotsheet_ticketing::orchestration::TargetFailure,
+    > {
+        use hotsheet_ticketing::orchestration::{
+            CheckoutProjection, MAX_PROJECTION_BYTES, TargetFailure,
+        };
+        // Registered ids use unreserved ASCII. Explicitly reject dot path segments;
+        // never let an id relocate this authenticated request to another endpoint.
+        if checkout_id.is_empty()
+            || checkout_id.len() > 160
+            || matches!(checkout_id, "." | "..")
+            || !checkout_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        {
+            return Err(TargetFailure::InvalidResponse);
+        }
+        let agent = remote_agent(origin, credentials).map_err(TargetFailure::from)?;
+        let projection: CheckoutProjection = get_limited(
+            &agent,
+            origin,
+            &format!("/remote-checkouts/{checkout_id}/resolution"),
+            credentials,
+            MAX_PROJECTION_BYTES,
+        )
+        .map_err(TargetFailure::from)?;
+        // The registry verified the peer before this call. Confirm again after the
+        // bounded metadata response; a restart/replacement cannot lend it identity.
+        let confirmed: RemoteIdentity =
+            get(&agent, origin, "/remote-identity", credentials).map_err(TargetFailure::from)?;
+        confirmed.validate().map_err(TargetFailure::from)?;
+        if projection.server_id != confirmed.server_id || projection.checkout_id != checkout_id {
+            return Err(TargetFailure::IdentityChanged);
+        }
+        Ok(projection)
+    }
+}
+
+fn remote_agent(
+    origin: &str,
+    credentials: &RemoteCredentials,
+) -> Result<ureq::Agent, RemoteFailure> {
+    let normalized = normalize_remote_origin(origin).map_err(|_| RemoteFailure::TrustFailed)?;
+    if normalized != origin {
+        return Err(RemoteFailure::TrustFailed);
+    }
+    credentials
+        .trust_fingerprint(origin)
+        .map_err(|_| RemoteFailure::TrustFailed)?;
+    let mut builder = ureq::AgentBuilder::new()
+        .redirects(0)
+        .timeout_connect(Duration::from_secs(5))
+        .timeout_read(Duration::from_secs(10))
+        .timeout_write(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15));
+    if origin.starts_with("https://") {
+        builder = builder.tls_config(Arc::new(client_config(credentials)?));
+    }
+    Ok(builder.build())
 }
 
 fn client_config(credentials: &RemoteCredentials) -> Result<rustls::ClientConfig, RemoteFailure> {
@@ -230,6 +282,16 @@ fn get<T: DeserializeOwned>(
     path: &str,
     credentials: &RemoteCredentials,
 ) -> Result<T, RemoteFailure> {
+    get_limited(agent, origin, path, credentials, MAX_REMOTE_RESPONSE_BYTES)
+}
+
+fn get_limited<T: DeserializeOwned>(
+    agent: &ureq::Agent,
+    origin: &str,
+    path: &str,
+    credentials: &RemoteCredentials,
+    limit: usize,
+) -> Result<T, RemoteFailure> {
     let result = agent
         .get(&format!("{origin}{path}"))
         .set("X-Hotsheet-Secret", &credentials.bearer_secret)
@@ -263,10 +325,10 @@ fn get<T: DeserializeOwned>(
     let mut bytes = Vec::new();
     response
         .into_reader()
-        .take((MAX_REMOTE_RESPONSE_BYTES + 1) as u64)
+        .take((limit + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|_| RemoteFailure::Unreachable)?;
-    if bytes.len() > MAX_REMOTE_RESPONSE_BYTES {
+    if bytes.len() > limit {
         return Err(RemoteFailure::ResponseLimit);
     }
     serde_json::from_slice(&bytes).map_err(|_| RemoteFailure::InvalidResponse)

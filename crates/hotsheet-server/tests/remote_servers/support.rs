@@ -113,6 +113,10 @@ pub(super) fn runtime(home: &Path, memory: &Arc<Memory>) -> RemoteRuntime {
 }
 
 pub(super) fn cli(home: &Path, arguments: &[&str]) -> Value {
+    cli_named(home, &["remote"], arguments)
+}
+
+pub(super) fn cli_named(home: &Path, prefix: &[&str], arguments: &[&str]) -> Value {
     let binary = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"))
         .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
     assert!(
@@ -130,7 +134,8 @@ pub(super) fn cli(home: &Path, arguments: &[&str]) -> Value {
         "rebuild the owned debug CLI with hotsheet-aitools/test-permission-vault before this suite"
     );
     let output = isolated_command(&binary, home)
-        .args(["--test-fixture-credentials", "remote"])
+        .arg("--test-fixture-credentials")
+        .args(prefix)
         .args(arguments)
         .output()
         .unwrap();
@@ -151,6 +156,7 @@ fn isolated_command(binary: &Path, home: &Path) -> std::process::Command {
         "config",
         "data",
         "state",
+        "tmp",
     ] {
         std::fs::create_dir_all(home.join(directory)).unwrap();
     }
@@ -165,6 +171,9 @@ fn isolated_command(binary: &Path, home: &Path) -> std::process::Command {
         .env("HOTSHEET_HOME", home)
         .env("HOTSHEET_CACHE_DIR", home.join("cache"))
         .env("HOTSHEET_AI_TOOL_PROBES", "off")
+        .env("TMPDIR", home.join("tmp"))
+        .env("TEMP", home.join("tmp"))
+        .env("TMP", home.join("tmp"))
         .env_remove("HOTSHEET_STORE")
         .env_remove("HOTSHEET_SERVER")
         .env_remove("HOTSHEET_SECRET")
@@ -228,6 +237,19 @@ pub(super) fn expired_credentials(paths: &Paths) -> RemoteCredentials {
 }
 
 pub(super) fn mcp(home: &Path, backend: &[&str], arguments: Value) -> Value {
+    mcp_named(home, backend, "hotsheet_remotes", arguments)
+}
+
+pub(super) fn mcp_named(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Value {
+    let reply = mcp_reply(home, backend, tool, arguments);
+    assert_eq!(reply["result"]["isError"], false, "{reply}");
+    serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+}
+pub(super) fn mcp_rejected(home: &Path, backend: &[&str], tool: &str, arguments: Value) {
+    let reply = mcp_reply(home, backend, tool, arguments);
+    assert_eq!(reply["result"]["isError"], true, "{reply}");
+}
+fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Value {
     use std::io::Write;
     use std::process::{Child, Stdio};
     struct OwnedChild(Option<Child>);
@@ -239,6 +261,25 @@ pub(super) fn mcp(home: &Path, backend: &[&str], arguments: Value) -> Value {
             }
         }
     }
+    // HS2-4J6V46: every project child must select this already-live owned test
+    // process, never bootstrap/launch a real daemon during fixture startup.
+    let project_record = if backend.contains(&"--project") {
+        let bootstrap = home.join("server-bootstrap.hs2");
+        let path = hotsheet_cli::external_launch::instance_path(home, &bootstrap);
+        let bytes = std::fs::read(&path).expect("owned project fixture instance required");
+        let record: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(record["pid"].as_u64(), Some(u64::from(std::process::id())));
+        assert_eq!(
+            record["store_path"].as_str(),
+            bootstrap.canonicalize().unwrap().to_str()
+        );
+        let live = hotsheet_cli::external_launch::discover_running_server(&bootstrap, home)
+            .expect("owned fixture process must be live");
+        assert!(hotsheet_ticketing::remote_servers::remote_registry_origin_is_loopback(&live.url));
+        Some((path, bytes))
+    } else {
+        None
+    };
     let sibling = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"));
     let cli = sibling.with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
     let checked = isolated_command(&cli, home)
@@ -264,7 +305,7 @@ pub(super) fn mcp(home: &Path, backend: &[&str], arguments: Value) -> Value {
             input,
             "{}",
             serde_json::json!({"jsonrpc":"2.0", "id":1, "method":"tools/call",
-            "params":{"name":"hotsheet_remotes", "arguments":arguments}})
+            "params":{"name":tool, "arguments":arguments}})
         )
         .unwrap();
     }
@@ -285,6 +326,8 @@ pub(super) fn mcp(home: &Path, backend: &[&str], arguments: Value) -> Value {
     assert!(!String::from_utf8_lossy(&output.stdout).contains(SECRET));
     assert!(!String::from_utf8_lossy(&output.stderr).contains(SECRET));
     let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(reply["result"]["isError"], false, "{reply}");
-    serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+    if let Some((path, bytes)) = project_record {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+    reply
 }

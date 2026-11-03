@@ -168,7 +168,7 @@ The numbered requirements docs (source of truth for behavior; status in
 - [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md) — AI note feedback synthesis (HS2-355565)
 - [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
 - [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
-- [26-orchestration-projects.md](26-orchestration-projects.md) — Design-only orchestration project targets, bindings, links, and headless contracts (HS2-4JFP0S)
+- [26-orchestration-projects.md](26-orchestration-projects.md) — Partial target source implementation (HS2-4J6V46), pending verification; links/grants/dispatch remain design (HS2-4JFP0S)
 - [32-notifier-plugins.md](32-notifier-plugins.md) — Notifier plugins: capabilities, rendering, built-ins, external protocol, rules, router, CLI/REST (HS2-R5HTZN)
 
 Versioned client HTTP and event contracts live in
@@ -546,6 +546,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
       src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps + summary_hex/confidence note tokens; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
+      src/orchestration/ # HS2-4J6V46 shared manifest CAS/tombstones, bounded machine bindings, latest-started reservations and guarded resolution (source pending verification)
       src/remote_servers/ # HS2-1Y45MZ locked, versioned machine registry and injected credential/transport workflow
                           # transition_tests.rs pins total credential obligations and clock-independent observation CAS races
       src/lib.rs             #   mint_ulid(clock, rng)
@@ -606,6 +607,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
+      src/orchestration.rs; src/orchestration/ # shared target runtime/request dispatcher + real owner proof composition; CLI/server/MCP parity and orphan cleanup
+      src/dispatch/orchestration.rs # headless target operations and inspect; cleanup before -C/config/identity construction
       src/remote_servers.rs # shared mTLS enrollment/discovery runtime for CLI, server and MCP
       src/dispatch/remotes.rs # headless remote identity/list/register/review/revoke/checkouts
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release/optional claim-run guarded child (HS2-MFYYJ9), Trash `restore`/`purge-trash`, activate-format, providers/provider-ls/get/new/edit/close/assign/restore/report-not-working/delete-note/attach/disable/enable/remove, github-sign-in/github-connect (incl. assets-repository attachment settings, HS2-HSA64D), provider-connect gitlab|jira (HS2-65KYVP), provider-copy/move, git-ticket batch/delete-note/attachment-rename/attachment-delete/attachment-metadata/attachment-actor/annotate, feedback-synthesis, hook-diagnose/permission-hook, setup/plugins/settings/server/lifecycle/workflows; the clap `Cli`/`Cmd` tree, worklist refresh, and helpers shared across groups (`resolve`, `now_ts`, note-input/`TicketEdit` modifier parsing, AI-default resolution, `urlencoding_component`); per-group arg/subcommand types, helpers, and `cmd_*` implementations live in `src/dispatch/` (HS2-3CE018)
@@ -668,6 +671,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/routes/terminals/codex_watch.rs # one Codex thread watch per terminal: started on a Codex SessionStart, replaced/closed on newer session, SessionEnd, kill, shell exit; maps failed turns onto the terminal halt and completed Codex token usage into ticket metrics (HS2-MN865E/HS2-J14225; `AppState::with_default_codex_home` for hermetic tests)
       src/routes/terminals/claude_usage.rs # native Claude prompt/stop hook boundaries: transcript byte cursor, connected-session validation, unique ticket-claim snapshot, retryable turn identity and deduplicated numeric usage event (HS2-W2GNTT/F8578J)
       src/terminal_names.rs  #   user terminal tab names in machine-local settings (`terminal.names`): read/normalize/serialized set, startup prune of ended terminals' names (`retain_live`, HS2-8A0FYR); PUT /terminals/{id}/name + `terminal_renamed` event in routes/terminals.rs (HS2-89FPV1); POST/DELETE /terminals/{id}/halt + `terminal_halted` event + `TerminalInfo.halt` (in-memory halted AI sessions, HS2-HJ4D1H); POST/DELETE /terminals/{id}/ai-connection + `terminal_ai_connection` event + `TerminalInfo.ai_connection` (sessions whose SessionStart hook reported in, HS2-EV1XK3)
+      src/orchestration_tools.rs # hotsheet_targets selection/CAS parity and actual-origin machine fences; ProjectBackend cached cleanup branch leaves normal recovery intact
       src/presence.rs        #   which checkouts clients have open: change-stream leases per (checkout, tab), explicit close, unhost candidates (HS2-ARJ9J1)
       src/mcp_presence.rs    #   live hotsheet-mcp leases (HS2-HNXE38): pure registry (15 s heartbeat, 45 s TTL, pid sweep) emitting project/terminal scope transitions; routes/mcp_presence.rs serves POST/GET /mcp-presence + DELETE /mcp-presence/{lease}, `mcp_presence` events, `TerminalInfo.mcp_connected`
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up) + ≤6-hourly purge_all_trash retention sweep (HS2-MWDR19) + SizeLevels/sync_all_with_sizes: per-store size level, `repository_size` change event on a rise past a GitHub limit (HS2-KKFEY5)
@@ -680,6 +684,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/concurrent_start.rs # Real server subprocesses started at once on one store (HS2-585JCP): exactly one stays registered + holds the writer lock; the rest exit
       tests/terminal_broker.rs # Creation-kind HTTP/broker integration: shell/AI creation, OSC8 independence, reattach and server-restart preservation
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per home/project in a short private per-user /tmp namespace (pinning adopted legacy home socket namespaces across idle exits), using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in routes/terminals.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
+      src/routes/orchestration.rs # authenticated shared target adapters and bounded metadata; TLS loopback admin fence in tls.rs
       src/routes/terminals/mod.rs # /terminal-limits PUT and POST /terminal-limits/reconcile apply effective replay capacity to running direct PTYs or send the broker resize_replay op (HS2-56G204, HS2-1HYDSY)
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot); attachment annotation PUT uses the shared store validator on default and checkout routes
       tests/terminal_connection_attribution.rs # Pending trusted permission hook projection/events versus absent/wrong/correct MCP terminal leases, plus absent/stale hook ids without terminal guessing (HS2-HBA9Z8)

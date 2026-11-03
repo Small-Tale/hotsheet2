@@ -1,6 +1,8 @@
 //! HS2-1Y45MZ: machine-local reviewed remote bindings; transport and secrets are ports.
 
+mod checkout_observation;
 mod contract;
+pub use checkout_observation::{RemoteCheckoutProof, RemoteCheckoutTransport};
 mod registry;
 mod workflow;
 

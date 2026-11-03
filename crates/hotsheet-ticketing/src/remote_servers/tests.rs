@@ -7,6 +7,8 @@ use hotsheet_sync::LockExt;
 use super::*;
 use crate::{SecretError, SecretStore};
 
+#[path = "checkout_observation_tests.rs"]
+mod checkout_observations;
 #[path = "transition_tests.rs"]
 mod transitions;
 
@@ -96,6 +98,7 @@ fn snapshot(server_id: &str) -> RemoteSnapshot {
                 provider: "git".into(),
             }],
             state: RemoteCheckoutState::Available,
+            resolution_metadata_version: None,
         }],
     }
 }

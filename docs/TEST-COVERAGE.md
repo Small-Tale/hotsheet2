@@ -1414,6 +1414,7 @@ on the visible right edge and captures the resulting scrolled terminal.
 | tier-tag-testing-policy | docs/12-code-organization-and-testing.md; docs/29-affected-local-verification.md | HS2-local T0/T1 budget and uncapped analyzed T2 deviation uses authoritative tier tags, cites deferred checks and covering CI, and keeps shared role mirrors in sync (HS2-EJ8JTG) | `scripts/instruction-policy.test.mjs # HS2-EJ8JTG` | — | HS2-K1QNGC # live policy outcome | unit-only |
 | mcp-startup-presence-redirects | docs/05-ai-tool-plugins.md | Project-open and presence reject 3xx before trusting the body or following Location while preserving startup, timeout and trusted registry relocation (HS2-081PXN) | `crates/hotsheet-mcp/src/presence/redirect_tests.rs`; `crates/hotsheet-mcp/src/presence.rs` | `crates/hotsheet-mcp/tests/startup_presence_redirects.rs`; `crates/hotsheet-mcp/tests/portable_project_config.rs`; `crates/hotsheet-mcp/tests/registry_presence.rs` | — | double-covered |
 | remote-registry-foundation | docs/08-distributed-and-remote.md; docs/26-orchestration-projects.md | Versioned machine-local pairing, explicit trust/revision review, opaque credentials, stale-safe discovery and headless CLI/service/MCP parity (HS2-1Y45MZ) | `crates/hotsheet-ticketing/src/remote_servers/tests.rs`; `crates/hotsheet-cli/src/remote_servers/tests.rs`; `crates/hotsheet-mcp/src/remote_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers.rs` | docs/manual-test-plan.md # Remote registry foundation | double-covered |
+| orchestration-target-bindings | docs/26-orchestration-projects.md; docs/08-distributed-and-remote.md | Shared retained-id CAS declarations, explicit reviewed machine bindings, strict optional MCP IDs, composed hint set/clear CAS, inspect/no-grant metadata and headless parity (HS2-4J6V46) | `crates/hotsheet-ticketing/src/orchestration/`; `crates/hotsheet-cli/src/orchestration/tests.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-cli/tests/cli.rs # HS2-4J6V46`; `crates/hotsheet-server/tests/remote_servers/orchestration.rs` | docs/manual-test-plan.md # Orchestration target declarations and bindings | planned |
 
 <!-- coverage-matrix:end -->
 
@@ -2008,3 +2009,25 @@ locking and timeouts are unchanged; this verifies the fixture boundary, not a
 production persistence defect.
 
 - **Ticket-flow and usage dashboards (HS2-38RJMK):** `crates/hotsheet-server/tests/http.rs # checkout_analytics_reports_linked_store_and_missing_checkout` covers the checkout-scoped real API. `clients/web/src/stats-summary.test.ts` covers shared-store deduplication, UTC throughput gaps, unavailable provider counts, and small cost formatting. `clients/web/tests/providers.spec.ts # shows the project confidence calibration from the real server` now exercises the shipped Stats dashboard and cross-project switch at wide, medium, narrow, and restored-wide sizes. Historical cumulative flow requires HS2-XKXE7V.
+
+### Orchestration target declarations and bindings (HS2-4J6V46)
+
+Verified 2026-11-03: all 66 ticket tests compile and pass, together with the full
+ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regenerated.
+
+- Core transition sources cover absent reads, opaque revision ABA/CAS, retained
+  tombstones, strict versions/quota/special paths, atomic publish failures, bounded
+  caches/audit, latest-started reservations, candidate failure preservation, safe
+  revision-zero intents, repeated/absent unbind and out-of-order proofs.
+- Real owner sources pin held checkout/provider/remote guards, coalesced lock paths,
+  captured Git rows through availability ABA, missing destination directories,
+  metadata privacy/grammar, old-peer unknowns and revoked/changed identity proofs.
+- Shared runtime/request sources exercise all seven operations and inspect, same
+  owner/destination, zero-request lists, no binding writes from inspect, explicit
+  bind after retarget/revoke and independent orphan cleanup.
+- Adapter sources cover actual CLI provider-only flows with explicit isolated
+  credential capability, actual CoreBackend/tool project inheritance, wrapper
+  cached cleanup and origin denial, HTTP bearer/role/loopback checks, bounded
+  metadata transport redirects/limits/identity confirmation, synthetic real TLS
+  CLI inspect/bind and actual project/path/server MCP stdio compositions.
+- UI, grants, ticket proxying and dispatch are outside this headless model.
