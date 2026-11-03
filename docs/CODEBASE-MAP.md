@@ -1119,7 +1119,8 @@ The production host in `clients/web/src/local-host.ts` pins its own binaries to 
 snapshot and keeps a separate durable hook CLI under the machine home.
 `clients/web/src/dev-signing.ts` applies an explicitly configured, stable macOS development
 signature to ad hoc snapshot copies; `scripts/setup-macos-dev-signing.sh` creates the
-machine-local identity. Distribution signatures and build outputs remain intact (HS2-FYXRRM).
+machine-local identity from the bundle `scripts/macos-dev-signing-identity.sh` writes
+(system LibreSSL, RSA key, random PKCS#12 passphrase, which macOS `security import` accepts). Distribution signatures and build outputs remain intact (HS2-FYXRRM).
 The setup resolver in
 `crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks.
 For a production snapshot, detected from its environment or binary path, it prefers the

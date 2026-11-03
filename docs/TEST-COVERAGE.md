@@ -375,7 +375,10 @@ HS2-FYXRRM signs only ad hoc macOS host snapshot copies with the configured
 development identity. `clients/web/src/dev-signing.test.ts` covers absent/invalid
 configuration, distinct server and CLI identifiers, distribution signature preservation,
 and signing failure; `clients/web/src/local-host.test.ts` covers snapshot wiring.
-The certificate setup and repeated rebuild prompt count are manual macOS checks.
+`scripts/macos-dev-signing.test.mjs` creates the identity bundle with Homebrew OpenSSL
+first on PATH and imports it into a throwaway keychain, pinning the macOS 27 import
+failure of the first setup run. Trusting the certificate in the user's store and the
+repeated rebuild prompt count remain manual macOS checks.
 
 HS2-GDF4ZJ coordinates four direct-poll slots across independent tabs with Web
 Locks and paces zero-wait polls when locks are unavailable. `change-poll-slots.test.ts`

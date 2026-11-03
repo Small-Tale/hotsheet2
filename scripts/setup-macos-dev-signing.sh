@@ -6,7 +6,7 @@ if [[ "$(uname -s)" != Darwin ]]; then
   echo 'This setup is for macOS only.' >&2
   exit 1
 fi
-for command in openssl security codesign mktemp; do
+for command in /usr/bin/openssl security codesign mktemp; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required command: $command" >&2
     exit 1
@@ -32,21 +32,12 @@ fi
 
 temporary="$(mktemp -d "${TMPDIR:-/tmp}/hotsheet-dev-signing.XXXXXX")"
 trap 'rm -rf "$temporary"' EXIT
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
-  -subj '/CN=Hot Sheet Local Development Code Signing' \
-  -addext 'basicConstraints=critical,CA:TRUE' \
-  -addext 'keyUsage=digitalSignature' -addext 'extendedKeyUsage=codeSigning' \
-  -keyout "$temporary/key.pem" -out "$temporary/cert.pem" >/dev/null 2>&1
-openssl pkcs12 -export -inkey "$temporary/key.pem" -in "$temporary/cert.pem" \
-  -out "$temporary/identity.p12" -passout pass: >/dev/null 2>&1
-identity="$(openssl x509 -in "$temporary/cert.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
-if [[ ! "$identity" =~ ^[0-9A-Fa-f]{40}$ ]]; then
-  echo 'Could not derive the development certificate fingerprint.' >&2
-  exit 1
-fi
+identity="$(bash "$(dirname "$0")/macos-dev-signing-identity.sh" "$temporary")"
 
 # The imported private key cannot be exported; only /usr/bin/codesign may use it.
-security import "$temporary/identity.p12" -f pkcs12 -P '' -x -T /usr/bin/codesign >/dev/null
+# The throwaway passphrase protects only the temporary bundle removed on exit.
+security import "$temporary/identity.p12" -f pkcs12 -P "$(cat "$temporary/passphrase")" -x \
+  -T /usr/bin/codesign >/dev/null
 # Trust is restricted to code signing in this user's trust store, not SSL or system trust.
 security add-trusted-cert -r trustRoot -p codeSign "$temporary/cert.pem" >/dev/null
 if ! security find-identity -v -p codesigning | grep -qi "$identity"; then
