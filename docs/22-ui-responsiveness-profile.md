@@ -179,6 +179,25 @@ machines. Metrics and before/after-resume screenshots are attached to
 `HS2-527G7P`. The narrow profile mounts a standalone dedicated viewport;
 the phone drawer's 80xM grid policy can still select DOM in the full app.
 
+`npm run profile:terminal-replay` (HS2-K93QHA) measures a cold terminal attach.
+For each replay size (262 144 bytes, and the 960 000 and 3 840 000 byte defaults
+for 5 000 and 20 000 history lines) and each synthetic workload (this
+repository's colored `git log --stat`, a generated agent transcript with spinner
+redraws, and dense random text), it captures the server's scrollback frame from
+Node and records its deflate and Brotli sizes. It then mounts a dedicated
+viewport in Chromium at desktop size and at phone size with a 4x CPU slowdown,
+on loopback and through an in-test TCP proxy that paces each direction at
+1.6 Mbps down, 750 kbps up, 150 ms RTT (Lighthouse's mobile preset) or
+9 Mbps down, 1.5 Mbps up, 85 ms RTT. It records the time until the replay frame
+arrives, until the end marker is painted in the DOM renderer, and the retained
+heap after garbage collection. The November 2026 local baseline: the replay is
+one WebSocket frame of the full ring, so transfer dominates on cellular
+(3.84 MB took 19.6 s to arrive on the slow profile and 3.7 s on the LTE
+profile), while phone-throttled parse and render took 0.27 to 0.66 s.
+Agent output deflated about 10x, Git logs about 5x, and dense text 1.3x.
+Results and the decision are recorded on `HS2-K93QHA`; metrics are written to
+`clients/web/target/performance-traces/hs2-k93qha-replay-metrics.json`.
+
 ## Baseline observations
 
 The warm main project costs much more to reveal than the one-ticket project.

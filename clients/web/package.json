@@ -44,6 +44,7 @@
     "profile:pty:real": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && HOTSHEET_REAL_PTY_PROFILE=1 playwright test tests/real-pty-profile.spec.ts --workers=1",
     "profile:worker:real": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && node scripts/change-stream-worker-profile.mjs",
     "profile:pty:firefox": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && HOTSHEET_FIREFOX_PTY_PROFILE=1 playwright test tests/firefox-pty-profile.spec.ts --workers=1",
+    "profile:terminal-replay": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && HOTSHEET_TERMINAL_REPLAY_PROFILE=1 playwright test tests/terminal-replay-profile.spec.ts --workers=1",
     "stress:scale": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins --features hotsheet-aitools/test-permission-vault && node scripts/scale-stress.mjs",
     "catalog:generate": "kerf-component-catalog --write"
   },

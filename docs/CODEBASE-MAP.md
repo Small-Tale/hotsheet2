@@ -512,6 +512,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/change-stream-shared-worker.spec.ts # Two browser tabs through the real SharedWorker: one browser WebSocket, separate tab events and lifecycle (HS2-NP7R42)
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)
+    tests/terminal-replay-profile.spec.ts  #   Opt-in cold-attach replay profile: replay bytes, compression sizes, throttled phone time to paint, retained heap (`profile:terminal-replay`, HS2-K93QHA)
     tests/ticket-page-fixture.ts # ticketsJson(request, rows): Playwright fake mirroring the real checkout ticket page envelope/plain-list split with client-derived counts (HS2-5T7QHE)
     tests/platform-labels.ts # Host-platform reveal labels (Finder / File Explorer / file manager) so specs pass on macOS and Linux CI (HS2-6H4M85)
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules

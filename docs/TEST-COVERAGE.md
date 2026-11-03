@@ -616,6 +616,10 @@ bare transport; wide and narrow after screenshots are attached to the ticket.
 `clients/web/tests/firefox-pty-profile.spec.ts`: WebGL desktop/narrow
 throughput, a DOM-forced desktop comparison, and WebGL-to-DOM park/resume
 with painted glyph captures.
+`HS2-K93QHA` adds the opt-in cold-attach replay profile in
+`clients/web/tests/terminal-replay-profile.spec.ts`: replay frame size,
+compression sizes, throttled phone time to paint, and retained heap. It is a
+measurement, not behavior coverage.
 `HS2-DM2SK3` covers early parking of outgoing keep-alive viewports in
 `clients/web/src/features/terminal-viewports.test.ts`, full desktop/narrow
 project return in `clients/web/tests/terminal-project-switch.spec.ts`, and
