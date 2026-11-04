@@ -19134,28 +19134,33 @@ for (const viewport of [
     await launcher.dispatchEvent('click');
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
       title = composer.locator('input[name="new-ticket-title"]');
+    // HS2-4EJ8GD: the dialog's open animation can move focus back to the title, so blur it (or
+    // capture) only once the composer has finished opening.
+    const composerSettled = () =>
+      expect
+        .poll(() =>
+          composer.evaluate(
+            (element) =>
+              (element instanceof HTMLDialogElement
+                ? element
+                : element.shadowRoot!.querySelector('dialog')!
+              ).getAnimations().length,
+          ),
+        )
+        .toBe(0);
     await expect(title).toBeVisible();
     // A focused native TextField keeps the pending request out of the way while the title is being
     // edited. Once editing focus leaves, the popup lifts above the composer (HS2-MAE27T).
     await expect(title).toBeFocused();
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(false);
+    await composerSettled();
     await title.evaluate((element) => {
       (element as HTMLInputElement).blur();
     });
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await expect(popup).toBeFocused();
     // Capture once the composer's open animation settles, so the evidence shows the real stacking.
-    await expect
-      .poll(() =>
-        composer.evaluate(
-          (element) =>
-            (element instanceof HTMLDialogElement
-              ? element
-              : element.shadowRoot!.querySelector('dialog')!
-            ).getAnimations().length,
-        ),
-      )
-      .toBe(0);
+    await composerSettled();
     await page.screenshot({ path: `target/visual-captures/hs2-mae27t-permission-over-composer-${viewport.width}.png` });
     for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
       const button = popup.getByRole('button', { name, exact: true });
@@ -19194,6 +19199,7 @@ for (const viewport of [
     await launcher.dispatchEvent('click');
     await expect(title).toBeVisible();
     await expect(title).toBeFocused();
+    await composerSettled();
     await title.evaluate((element) => {
       (element as HTMLInputElement).blur();
     });
