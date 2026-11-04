@@ -430,3 +430,90 @@ fn hs2_bak4bc_findings_handoff_on_a_blocked_ticket_is_verified_and_finished() {
         assert_eq!(reason(&f, &ticket).as_deref(), Some(REASON));
     }
 }
+
+/// HS2-KBK83M (maintainer decision 2026-11-04: "Require review-return"): coordination
+/// `done` stays closed-only for findings, and accepted findings that leave the ticket
+/// open or blocked go through review-return, from Handoff or from Verifying.
+#[test]
+fn hs2_kbk83m_open_blocked_findings_route_through_review_return() {
+    for from_verifying in [false, true] {
+        let f = Fixture::new();
+        let ticket = f.ticket();
+        for (role, id, session) in [
+            ("integrator", "integrator", "root"),
+            ("worker", "worker", "worker-session"),
+        ] {
+            f.run(&["register", "--role", role, "--id", id, "--session", session]);
+        }
+        let base = git(&f.project, &["rev-parse", "HEAD"]);
+        f.assign("findings", &ticket, &base, "root");
+        f.cli(&["claim", &ticket.slug, "--worker", "worker", "--eta", "10m"]);
+        worker(&f, "findings", "accepted", &[]);
+        let findings = note(
+            &f,
+            &ticket,
+            "## Findings handoff\nSynthetic findings: still waits on a synthetic dependency."
+                .into(),
+        );
+        f.cli(&["edit", &ticket.slug, "--blocked-reason", REASON]);
+        f.cli(&["release", &ticket.slug, "--worker", "worker"]);
+        worker(&f, "findings", "handoff", &["--findings-note", &findings]);
+
+        if from_verifying {
+            f.cli(&[
+                "claim",
+                &ticket.slug,
+                "--worker",
+                "integrator",
+                "--eta",
+                "10m",
+            ]);
+            let verifying = mark_output(&f, "findings", "verifying");
+            assert!(
+                verifying.status.success(),
+                "{}",
+                String::from_utf8_lossy(&verifying.stderr)
+            );
+            // Done on the open, blocked ticket is refused and names the supported route.
+            let done = mark_output(&f, "findings", "done");
+            assert!(!done.status.success());
+            let stderr = String::from_utf8_lossy(&done.stderr);
+            assert!(
+                stderr.contains("complete or close the findings ticket"),
+                "{stderr}"
+            );
+            assert!(stderr.contains("review-return"), "{stderr}");
+            // Returning while the integrator still holds the claim is refused.
+            let early_review = note(
+                &f,
+                &ticket,
+                format!("## Review return\nfindings {findings}\nAccepted; ticket stays blocked."),
+            );
+            let held = blocked_coord_output(&f, &return_args("findings", &early_review));
+            assert!(!held.status.success(), "a held claim blocks the return");
+            f.cli(&["release", &ticket.slug, "--worker", "integrator"]);
+        }
+
+        let review = note(
+            &f,
+            &ticket,
+            format!("## Review return\nfindings {findings}\nAccepted; ticket stays blocked."),
+        );
+        let returned = f.run(&return_args("findings", &review));
+        assert!(returned.state.assignments["findings"].returned_for_review());
+        // A replay with the same evidence is idempotent; different evidence is refused.
+        let replay = f.run(&return_args("findings", &review));
+        assert!(replay.state.assignments["findings"].returned_for_review());
+        let other = note(
+            &f,
+            &ticket,
+            format!("## Review return\nfindings {findings}\nA different return."),
+        );
+        let conflicting = blocked_coord_output(&f, &return_args("findings", &other));
+        assert!(!conflicting.status.success());
+        // The ticket keeps its status and its blocked reason.
+        let stored = f.store.read_ticket(&ticket.id).unwrap();
+        assert!(ops::is_open(&stored));
+        assert_eq!(stored.blocked_reason.as_deref(), Some(REASON));
+    }
+}

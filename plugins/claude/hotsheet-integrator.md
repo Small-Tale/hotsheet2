@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 20 -->
+<!-- hotsheet-skill-version: 21 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -270,7 +270,10 @@ the mailbox `verifying`. A `blocked_reason` does not refuse the claim (HS2-BAK4B
 claim prints it, and verification re-evaluates it, updating or clearing a reason the
 findings show is wrong or out of date. Check the note's evidence and scope, required coverage and
 follow-ups, then complete the ticket with the evidence note id and release the claim.
-Mark the mailbox `done` only after the ticket is Completed or Verified. An interrupted
+Mark the mailbox `done` only after the ticket is Completed or Verified. When the
+findings are accepted but the ticket stays open (for example still blocked), do not
+mark `done`: release the claim and `review-return` the handoff with a `## Review return`
+note; `done` refuses an open ticket and names that route (HS2-KBK83M). An interrupted
 verification resumes from the durable note and `verifying` phase; repeat the same
 operation id/session rather than fabricating a commit or marking success blocked.
 There is no Git merge, push, or remote CI for a findings-only outcome.

@@ -931,9 +931,13 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 if phase == Phase::Done {
                     // HS2-V9BXWF: an archived (or otherwise closed) findings ticket is
                     // finished too; only an open ticket blocks resolving its mailbox.
+                    // HS2-KBK83M: findings that leave the ticket open (for example still
+                    // blocked) are not Done; the integrator review-returns them instead.
                     anyhow::ensure!(
                         !ops::is_open(&ticket),
-                        "complete or close the findings ticket before resolving its mailbox"
+                        "complete or close the findings ticket before resolving its mailbox; \
+                         to accept findings that leave the ticket open, release your claim \
+                         and use review-return (HS2-KBK83M)"
                     );
                 }
             }

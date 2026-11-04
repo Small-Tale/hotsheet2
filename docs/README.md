@@ -242,7 +242,8 @@ Verifying; correction operations remain separate and originals stay fenced
 (HS2-AEBJYN).
 Explicit claims take blocked tickets and print the reason to re-evaluate; automatic
 selection still skips them, so a findings handoff on a blocked ticket can be verified
-(HS2-BAK4BC). Done on a still-open findings ticket remains open under HS2-KBK83M.
+(HS2-BAK4BC). Findings that leave the ticket open are review-returned, because `done`
+requires a closed ticket (HS2-KBK83M).
 Typed findings handoffs verify exact regular-note evidence without a code commit
 or CI (HS2-A1F615). Their schema-three CLI migrates version-one/two pools on first open, fencing older
 mutators that do not preserve returned findings;

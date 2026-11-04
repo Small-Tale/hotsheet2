@@ -282,6 +282,12 @@ default store's. The `hotsheet-server` HTTP regression
 the store attribution, four concurrent requests for three tickets, the drained
 queue, and the 409 and 404 refusals.
 
+HS2-KBK83M: `hotsheet-cli` `tests/coordination_findings_return.rs`
+`hs2_kbk83m_open_blocked_findings_route_through_review_return` walks a blocked findings
+handoff to review-return from Handoff and from Verifying, with `done` refused (naming
+review-return), a held claim refusing the return, idempotent replay, conflicting evidence
+refused, and the status and blocked reason kept.
+
 HS2-BAK4BC covers explicit claims of blocked tickets. `hotsheet-ticketing`
 `src/ops/claim_blocked_tests.rs` walks claim, idempotent retry, renew, release, and
 reclaim of a blocked ticket with its reason kept; clearing and then setting the reason

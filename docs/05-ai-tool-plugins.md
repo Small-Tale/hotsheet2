@@ -1170,6 +1170,9 @@ dispatcher assignment, but an exact claim takes them: a blocked reason is a note
 state that the holder may need to update, re-evaluate, or clear. The claim and renew output
 names the reason (CLI `Blocked: <reason>.`, MCP `blocked_notice`), and a findings handoff on a
 blocked ticket can be verified because the integrator's claim succeeds (HS2-BAK4BC).
+Coordination `done` still requires a closed ticket. Accepted findings that leave the ticket
+open (for example still blocked) are review-returned instead; the `done` refusal names that
+route (HS2-KBK83M).
 Each successful claim, renewal, and explicit release is also appended to `claim_history`.
 For telemetry, a worker interval starts at a `claim` event; renewals replace its current
 deadline; a `release` ends it at that event's time, while an absent release ends it at the
