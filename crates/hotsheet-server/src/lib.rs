@@ -200,6 +200,31 @@ pub const MAX_ATTACHMENT_BODY_BYTES: usize = 100 * 1024 * 1024;
 /// Browser-generated JPEG posters are small even for large source videos.
 pub const MAX_VIDEO_POSTER_BODY_BYTES: usize = 5 * 1024 * 1024;
 
+/// Background work a project open schedules and never waits for (HS2-DRWSTR). An
+/// [`AppState::with_open_background_hook`] observer sees each start and finish on the
+/// background thread that runs the work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenBackgroundWork {
+    SetupRefreshStarted,
+    SetupRefreshFinished,
+    WorklistRegenerationStarted,
+    WorklistRegenerationFinished,
+}
+
+type OpenBackgroundHook = Arc<dyn Fn(OpenBackgroundWork) + Send + Sync>;
+
+/// A cheap handle that reports open-background work to the test hook, if one is set.
+#[derive(Clone)]
+pub(crate) struct OpenBackgroundObserver(Option<OpenBackgroundHook>);
+
+impl OpenBackgroundObserver {
+    pub(crate) fn notify(&self, work: OpenBackgroundWork) {
+        if let Some(hook) = &self.0 {
+            hook(work);
+        }
+    }
+}
+
 /// Shared server state (cheaply cloned into each handler).
 type LiveProviderCache = Arc<
     Mutex<std::collections::HashMap<String, (String, Arc<dyn hotsheet_ticketing::TicketProvider>)>>,
@@ -343,6 +368,8 @@ pub struct AppState {
     ai_tool_discovery: Arc<ai_tool_discovery::AiToolDiscoveryConfig>,
     /// Checkout ids with a background setup refresh in flight; repeated opens coalesce.
     setup_refreshes: Arc<Mutex<std::collections::HashSet<String>>>,
+    /// Test observer of a project open's background work (HS2-DRWSTR); `None` in production.
+    open_background_hook: Option<OpenBackgroundHook>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
     terminal_server_url: Arc<Mutex<Option<String>>>,
     /// AI sessions in terminals that halted on an API error, by terminal id (HS2-HJ4D1H).
@@ -592,6 +619,7 @@ impl AppState {
             ai_tool_generation: Arc::default(),
             ai_tool_discovery: Arc::default(),
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            open_background_hook: None,
             terminal_server_url: Arc::new(Mutex::new(None)),
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -1197,6 +1225,23 @@ impl AppState {
             .as_deref()
             .cloned()
             .unwrap_or_else(hotsheet_aitools::launch_safety::default_codex_home)
+    }
+
+    /// Observe a project open's background setup refresh and worklist regeneration
+    /// (hermetic tests; HS2-DRWSTR). The hook runs on the background thread doing the work,
+    /// so a test may block in it to hold that work while it proves the open already
+    /// responded, instead of bounding the open by wall-clock time.
+    pub fn with_open_background_hook(
+        mut self,
+        hook: impl Fn(OpenBackgroundWork) + Send + Sync + 'static,
+    ) -> Self {
+        self.open_background_hook = Some(Arc::new(hook));
+        self
+    }
+
+    /// The open-background observer alone, so background work need not hold all of state.
+    pub(crate) fn open_background_observer(&self) -> OpenBackgroundObserver {
+        OpenBackgroundObserver(self.open_background_hook.clone())
     }
 
     /// Override plugin search roots (for hermetic hosts and integration tests).

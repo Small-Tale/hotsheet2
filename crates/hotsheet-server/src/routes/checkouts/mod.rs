@@ -104,7 +104,9 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
             |source| std::path::PathBuf::from(&source.locator),
         );
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
+    let observer = state.open_background_observer();
     tokio::task::spawn_blocking(move || {
+        observer.notify(crate::OpenBackgroundWork::SetupRefreshStarted);
         if let Err(error) = settings.migrate_existing() {
             tracing::warn!(%error, "settings migration failed");
         }
@@ -122,6 +124,7 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
             let mut active = active.lock_or_recover();
             active.remove(&id);
         }
+        observer.notify(crate::OpenBackgroundWork::SetupRefreshFinished);
     });
 }
 
@@ -170,13 +173,16 @@ fn schedule_worklist_regeneration(
     let checkout = checkout.clone();
     let host = state.host.clone();
     let refresher = state.worklist_refresher.clone();
+    let observer = state.open_background_observer();
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         // Run on the shared refresher so it never overlaps a write's refresh (HS2-Z99TJN).
         refresher.request(std::path::PathBuf::from(&checkout.root), move || {
+            observer.notify(crate::OpenBackgroundWork::WorklistRegenerationStarted);
             if let Err(error) = regenerate_checkout_worklist_indexed(&host, &checkout) {
                 tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
             }
+            observer.notify(crate::OpenBackgroundWork::WorklistRegenerationFinished);
         });
     });
 }

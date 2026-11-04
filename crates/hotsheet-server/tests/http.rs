@@ -7526,6 +7526,55 @@ async fn adding_a_newer_store_is_rejected_before_the_checkout_or_host_changes() 
     assert!(checkout["sources"].as_array().unwrap().is_empty());
 }
 
+/// Generous bound that turns a regression (an open awaiting its held background work, or
+/// that work never finishing) into a failure instead of a hung test. It is not a speed
+/// claim: the passing path never waits on it (HS2-DRWSTR).
+const OPEN_BACKGROUND_HANG_GUARD: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Holds one kind of a project open's background work at its start until the test
+/// releases it, and reports when it finishes (HS2-DRWSTR). This proves "the open does not
+/// wait for this work" by event order instead of by the open's wall-clock time.
+struct OpenBackgroundGate {
+    release: Option<std::sync::mpsc::Sender<()>>,
+    finished: tokio::sync::mpsc::UnboundedReceiver<()>,
+}
+
+impl OpenBackgroundGate {
+    fn install(
+        st: AppState,
+        start: hotsheet_server::OpenBackgroundWork,
+        finish: hotsheet_server::OpenBackgroundWork,
+    ) -> (AppState, Self) {
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let held = Mutex::new(held);
+        let (done, finished) = tokio::sync::mpsc::unbounded_channel();
+        let st = st.with_open_background_hook(move |work| {
+            if work == start {
+                // Blocks this background thread until `release` sends or is dropped.
+                let _ = held.lock().unwrap().recv();
+            } else if work == finish {
+                let _ = done.send(());
+            }
+        });
+        (
+            st,
+            Self {
+                release: Some(release),
+                finished,
+            },
+        )
+    }
+
+    /// Let the held work run, then wait for it to finish.
+    async fn release_and_finish(&mut self) {
+        drop(self.release.take());
+        tokio::time::timeout(OPEN_BACKGROUND_HANG_GUARD, self.finished.recv())
+            .await
+            .expect("released open background work did not finish")
+            .expect("open background hook dropped before the work finished");
+    }
+}
+
 #[tokio::test]
 async fn opening_project_refreshes_stale_setup_in_the_background() {
     let (_primary, st) = state();
@@ -7574,12 +7623,18 @@ args = ["--path", "{store}"]
     )
     .unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let application = app(st
-        .with_checkout_registry(registry.path().join("checkouts.json"))
-        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let (st, mut refresh) = OpenBackgroundGate::install(
+        st.with_checkout_registry(registry.path().join("checkouts.json"))
+            .with_plugin_dirs(vec![plugins.path().to_path_buf()]),
+        hotsheet_server::OpenBackgroundWork::SetupRefreshStarted,
+        hotsheet_server::OpenBackgroundWork::SetupRefreshFinished,
+    );
+    let application = app(st);
 
+    // The refresh is held at its start, so the open can only respond if it does not wait
+    // for it (HS2-DRWSTR).
     let opened = tokio::time::timeout(
-        std::time::Duration::from_secs(1),
+        OPEN_BACKGROUND_HANG_GUARD,
         application.clone().oneshot(authed(
             "POST",
             "/projects/open",
@@ -7587,19 +7642,17 @@ args = ["--path", "{store}"]
         )),
     )
     .await
-    .expect("project open must not wait for setup refresh")
+    .expect("project open must not wait for the held setup refresh")
     .unwrap();
     assert_eq!(opened.status(), StatusCode::CREATED);
-    for _ in 0..50 {
-        let ready = std::fs::read_to_string(checkout.join("AGENTS.md"))
-            .is_ok_and(|text| text.contains("Current managed instructions"))
-            && checkout.join(".fixture/skills/hotsheet/SKILL.md").is_file()
-            && checkout.join(".fixture/mcp.json").is_file();
-        if ready {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
+    assert!(
+        std::fs::read_to_string(checkout.join("AGENTS.md"))
+            .unwrap()
+            .contains("stale"),
+        "the held setup refresh must not have rewritten AGENTS.md yet"
+    );
+    assert!(!checkout.join(".fixture/mcp.json").exists());
+    refresh.release_and_finish().await;
     let instructions = std::fs::read_to_string(checkout.join("AGENTS.md")).unwrap();
     assert!(instructions.contains("User instructions."));
     assert!(instructions.contains("Current managed instructions."));
@@ -7869,11 +7922,18 @@ async fn opening_project_regenerates_its_worklist_after_responding() {
     )
     .unwrap();
     let registry = tempfile::tempdir().unwrap();
-    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let (st, mut regeneration) = OpenBackgroundGate::install(
+        st.with_checkout_registry(registry.path().join("checkouts.json")),
+        hotsheet_server::OpenBackgroundWork::WorklistRegenerationStarted,
+        hotsheet_server::OpenBackgroundWork::WorklistRegenerationFinished,
+    );
+    let application = app(st);
     let worklist = checkout.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
 
+    // The regeneration is held at its start, so the open can only respond if it does not
+    // wait for it (HS2-DRWSTR).
     let response = tokio::time::timeout(
-        std::time::Duration::from_secs(1),
+        OPEN_BACKGROUND_HANG_GUARD,
         application.oneshot(authed(
             "POST",
             "/projects/open",
@@ -7881,7 +7941,7 @@ async fn opening_project_regenerates_its_worklist_after_responding() {
         )),
     )
     .await
-    .expect("project open must not wait for worklist generation")
+    .expect("project open must not wait for the held worklist generation")
     .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     assert!(
@@ -7889,15 +7949,13 @@ async fn opening_project_regenerates_its_worklist_after_responding() {
         "the deferred worklist refresh should not run on the response path"
     );
 
-    for _ in 0..50 {
-        if std::fs::read_to_string(&worklist)
-            .is_ok_and(|body| body.contains("Background worklist ticket"))
-        {
-            return;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    panic!("project open did not regenerate worklist.md within 1s");
+    regeneration.release_and_finish().await;
+    assert!(
+        std::fs::read_to_string(&worklist)
+            .unwrap()
+            .contains("Background worklist ticket"),
+        "project open did not regenerate worklist.md"
+    );
 }
 
 /// HS2-Z99TJN: a write refreshes its checkout worklist on the background refresher, and a
