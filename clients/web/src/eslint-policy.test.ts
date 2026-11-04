@@ -37,7 +37,10 @@ describe('web ESLint policy', () => {
     expect(profile).toContain('lastVisibleChurnSlug');
   });
 
-  describe('HS2-RY22P6 shares configuration setup across actual Node lint proofs', () => {
+  // HS2-X3JM3J: each proof runs the real ESLint route; a typed lint of a src/ path builds the
+  // TypeScript program inside its case (2-13 s on a loaded gate host). The budget covers that work;
+  // no lint result is cached.
+  describe('HS2-RY22P6 shares configuration setup across actual Node lint proofs', { timeout: 30_000 }, () => {
     const webRoot = join(import.meta.dirname, '..');
     const eslint = new ESLint({ cwd: webRoot });
     const scripts = readdirSync(join(webRoot, 'scripts'))
