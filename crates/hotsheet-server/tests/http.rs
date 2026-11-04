@@ -11815,7 +11815,9 @@ async fn repository_compaction_previews_only_old_closed_git_attachments() {
             String::from_utf8_lossy(&output.stderr)
         );
     };
-    git(store_dir.path(), &["init", "-q", "-b", "main"]);
+    // HS2-726EXJ: state() already made the store its own repository, so name its branch
+    // explicitly instead of relying on a re-init (which ignores --initial-branch).
+    git(store_dir.path(), &["branch", "-M", "main"]);
     git(store_dir.path(), &["config", "user.name", "Test"]);
     git(
         store_dir.path(),

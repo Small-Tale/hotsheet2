@@ -157,6 +157,8 @@ mod tests {
             String::from_utf8_lossy(&out.stdout).trim().to_owned()
         };
         assert_eq!(get("maintenance.auto"), "false");
+        // HS2-726EXJ: one initial branch on every git version, matching CI.
+        assert_eq!(get("init.defaultBranch"), "master");
         assert_eq!(get("user.email"), "test@example.invalid");
     }
 

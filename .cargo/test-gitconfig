@@ -9,3 +9,9 @@
 	auto = false
 [gc]
 	auto = 0
+# HS2-726EXJ: pin the initial branch. Git's built-in default differs by version (Apple
+# Git 2.54 here, Linux CI's git elsewhere), so a test that assumed `main` after an
+# owner-aware `git init` passed locally and failed in CI. `master` matches CI, so a
+# branch-name assumption fails locally first.
+[init]
+	defaultBranch = master
