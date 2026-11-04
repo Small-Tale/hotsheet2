@@ -3405,7 +3405,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const popup = await popupPromise;
   await expect(popup).toHaveURL(/component=tag-chip/);
   await popup.close();
-  await expect(reader.locator('[data-component="note-card"]')).toHaveCount(6);
+  // READER_NOTES includes the HS2-EWF0FT multi-line and lettered CHOICE note.
+  await expect(reader.locator('[data-component="note-card"]')).toHaveCount(7);
   await reader.locator('[data-component="note-card"]').first().scrollIntoViewIfNeeded();
   await reader.screenshot({ path: 'target/visual-captures/hs2-cdpb73-reader-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -3420,7 +3421,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await noteHistory.scrollIntoViewIfNeeded();
   await reader.screenshot({ path: 'target/visual-captures/hs2-hnh0m6-markdown-links-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(reader.getByRole('heading', { name: 'Notes, 6 notes' })).toBeVisible();
+  await expect(reader.getByRole('heading', { name: 'Notes, 7 notes' })).toBeVisible();
   await expect(reader.locator('.ticket-inspector-panel')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
   const readerContentWidth = await reader.locator('.ticket-inspector-panel').boundingBox();
@@ -3464,8 +3465,9 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
-  // Both feedback-needed fixtures (single and multi CHOICE group, HS2-83YCDP) offer a response box.
-  await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toHaveCount(2);
+  // All three feedback-needed fixtures (single and multi CHOICE group, HS2-83YCDP, and the
+  // HS2-EWF0FT multi-line and lettered group) offer a response box.
+  await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toHaveCount(3);
   await expect(reader.getByRole('textbox', { name: 'Feedback response' }).first()).toBeVisible();
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toHaveValue(/keep the response/i);
   await reader.getByRole('button', { name: 'Edit Ticket details' }).getByRole('heading').first().click();
@@ -5797,7 +5799,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const blockedSection = inspector.locator('.ticket-info-panel__blocked-section');
   const detailsSection = inspector.locator('.ticket-info-panel__details-section');
   expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
-  await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(6);
+  // READER_NOTES includes the HS2-EWF0FT multi-line and lettered CHOICE note.
+  await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(7);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
   const firstNoteBody = firstNote.locator('.note-card__body');
   await expect(firstNoteBody).toHaveAttribute('aria-label', 'Edit note');
