@@ -141,3 +141,18 @@ test('HS2-WTETE8 installs Playwright browsers before the web unit tests that lau
   assert.ok(step('Prefer the Ubuntu archive for Playwright dependencies') < browsers);
   assert.ok(browsers < step('Build isolated browser fixtures'));
 });
+
+test('HS2-MM68CT names the MSVC linker after activating MSVC in every Windows job', () => {
+  const activate = '- name: Activate the MSVC compiler for native AVIF libraries (Windows)';
+  const point = '- name: Point rustc at the MSVC linker (Windows)';
+  const count = (needle) => workflow.split(needle).length - 1;
+  assert.equal(count(point), count(activate));
+  assert.ok(count(point) >= 2, 'both the core and Tauri Windows jobs set the linker');
+  for (let at = workflow.indexOf(activate); at !== -1; at = workflow.indexOf(activate, at + 1)) {
+    const next = workflow.indexOf('- name:', at + activate.length);
+    assert.equal(workflow.indexOf(point, at), next, 'the linker step directly follows MSVC activation');
+  }
+  // It selects the VC tools link.exe and exports the host target's cargo linker variable.
+  assert.match(workflow, /VC\\Tools\\MSVC/);
+  assert.match(workflow, /'CARGO_TARGET_' \+ \(\$hostTriple\.ToUpper\(\) -replace '-', '_'\) \+ '_LINKER'/);
+});
