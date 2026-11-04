@@ -710,7 +710,13 @@ adds Codex queue and daemon commands, CLI external/setup and migration children,
 configured server commands, code-review difftools, repository open helpers,
 Rulesync and guidance source probes, and the detached broker supervisor. A
 detached launch stays unresolved until its supervisor observes an exit; the
-record does not claim that the child remains alive.
+record does not claim that the child remains alive. Identifiers are bounded record
+content (ASCII alphanumerics and `-_.:`, at most 128 bytes), never path components:
+a record's file is named only by its launch ULID. The journal refuses a path,
+unicode, or free-text identifier rather than encoding it, so no machine-local path
+enters a record. A terminal's project identifier is the store's 16-hex project id
+in both hosting modes, the detached broker and the in-process `--no-terminal-broker`
+server (HS2-F0S155).
 
 **Ownership-aware stop (HS2-9AWEX5).** `lifecycle::stop_decision` makes an explicit stop
 refuse a server whose registration names the pinned launcher `local-host-snapshot` (the

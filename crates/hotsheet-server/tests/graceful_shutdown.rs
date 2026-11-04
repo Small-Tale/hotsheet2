@@ -853,3 +853,72 @@ fn real_server_responses_carry_a_date_header_for_client_clock_sampling() {
     server.sigterm();
     assert!(server.exits_within(Duration::from_secs(5)).success());
 }
+
+/// HS2-F0S155: an in-process terminal (`--no-terminal-broker`) writes its journal record
+/// with the store's bounded project id, as the detached broker does, instead of logging
+/// "process journal unavailable: invalid input parameter" for the store path. After the
+/// server is killed, the record stays unresolved and names the dead supervisor: the
+/// evidence `hotsheet-cli processes` offers for investigating a possibly orphaned shell.
+#[test]
+fn hs2_f0s155_in_process_terminal_writes_a_bounded_journal_record() {
+    let mut server = Server::start(1_000);
+    let info = server.ready();
+    let response = ureq::post(&format!("{}/terminals", info.url))
+        .set("x-hotsheet-secret", &info.secret)
+        .set("content-type", "application/json")
+        .timeout(Duration::from_secs(30))
+        .send_string(&json!({ "command": "/bin/sh", "id": "f0s155-shell" }).to_string())
+        .unwrap_or_else(|error| panic!("open terminal failed: {error}: {}", server.log()));
+    assert_eq!(response.status(), 200);
+
+    let home = server._fixture.path().join("home");
+    let store = server._fixture.path().join("store");
+    let journal = ProcessJournal::at(&home);
+    // The record is written synchronously by the spawn the response waited for.
+    let terminals: Vec<ProcessRecord> = journal
+        .list()
+        .unwrap()
+        .into_iter()
+        .filter(|record| record.purpose == Purpose::TerminalShell)
+        .collect();
+    assert_eq!(terminals.len(), 1, "one terminal record: {}", server.log());
+    let record = &terminals[0];
+    assert_eq!(record.session_id.as_deref(), Some("f0s155-shell"));
+    assert_eq!(
+        record.project_id.as_deref(),
+        Some(hotsheet_tls::project_id(&store).as_str())
+    );
+    assert_eq!(record.supervisor, "machine-server");
+    assert_eq!(record.supervisor_pid, server.child.id());
+    assert_eq!(record.exit_reason, None);
+    let serialized = serde_json::to_string(record).unwrap();
+    assert!(
+        !serialized.contains(&store.display().to_string()),
+        "no machine-local path in the record: {serialized}"
+    );
+    assert!(
+        !server.log().contains("journal unavailable"),
+        "journal failure logged: {}",
+        server.log()
+    );
+
+    // A crashed supervisor observes no exit, so the record stays unresolved.
+    // SAFETY: the positive pid belongs to this fixture's child.
+    assert_eq!(
+        unsafe { libc::kill(server.child.id() as i32, libc::SIGKILL) },
+        0
+    );
+    let _ = server.exits_within(Duration::from_secs(5));
+    let after = journal
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|candidate| candidate.launch_id == record.launch_id)
+        .expect("the record survives its supervisor");
+    assert_eq!(after.exit_reason, None);
+    assert_eq!(after.ended_ms, None);
+    assert_eq!(after.supervisor_pid, record.supervisor_pid);
+    // The record's pid is the investigation handle; reap the shell if it outlived the PTY.
+    // SAFETY: the pid was spawned by this fixture's server moments ago.
+    unsafe { libc::kill(after.pid as i32, libc::SIGKILL) };
+}

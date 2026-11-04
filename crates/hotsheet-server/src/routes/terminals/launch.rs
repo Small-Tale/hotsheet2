@@ -142,7 +142,9 @@ pub(crate) async fn open_terminal(
         provenance: Some(hotsheet_terminals::ProcessProvenance {
             machine_home: state.machine_home().to_path_buf(),
             supervisor: "machine-server".into(),
-            project_id: term_key(&state, &id).0,
+            // The store's bounded project id, as the detached broker records it. The term
+            // key's store path is a machine-local path the journal rejects (HS2-F0S155).
+            project_id: hotsheet_tls::project_id(state.store.root()),
             session_id: id.clone(),
             binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
         }),

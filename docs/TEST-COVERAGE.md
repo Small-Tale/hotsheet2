@@ -257,6 +257,18 @@ enter records. Existing Codex queue/daemon, CLI launch/setup, server configured
 command, code-review, broker, guidance, and Rulesync suites exercise the adapted
 launch paths; manual inspection compares a detached record with its supervisor.
 
+HS2-F0S155 covers journal identifier handling and in-process terminal records.
+`hotsheet-process-journal` unit tests refuse path-shaped (`/`, `\`, `..` traversal),
+unicode, zero-width, empty, and over-long identifiers in every field. They keep each
+record file named by its launch ULID inside the journal directory, accept the store
+project id and checkout id formats, and read back and finish a record in the broker's
+existing format. `crates/hotsheet-server/tests/graceful_shutdown.rs` starts the real
+binary with `--no-terminal-broker` and opens a shell terminal. It asserts exactly one
+`terminal_shell` record with the terminal id, the store project id, and the server
+supervisor PID; no machine-local path in the record; and no "journal unavailable"
+line. After a SIGKILL of the server, the record stays unresolved and names the dead
+supervisor.
+
 HS2-6ZA2RN covers Project guidance's toolbar search with
 `clients/web/src/guidance-search-model.test.ts` for text, owner/tag chips,
 suggestions, and clearing; `clients/web/tests/guidance.spec.ts` exercises the

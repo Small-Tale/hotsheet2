@@ -593,6 +593,96 @@ mod tests {
         assert_eq!(journal.list().unwrap(), vec![recovered]);
     }
 
+    /// HS2-F0S155: identifiers are record content, never path components. A path-shaped,
+    /// traversal-shaped, or non-ASCII id is refused with no record written; bounded ids,
+    /// including `..`, stay readable because a record's file name is only its launch ULID.
+    #[test]
+    fn hs2_f0s155_identifier_handling_keeps_paths_out_and_records_in_place() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        let too_long = "a".repeat(129);
+        for rejected in [
+            "/Users/someone/store",
+            "store/.hotsheet",
+            "..\\..\\escape",
+            "../../escape",
+            "caf\u{e9}",
+            "\u{30d7}\u{30ed}\u{30b8}\u{30a7}\u{30af}\u{30c8}",
+            "id\u{200b}",
+            "has space",
+            "",
+            too_long.as_str(),
+        ] {
+            for field in ["project", "session", "supervisor", "revision"] {
+                let mut bad = meta(1);
+                match field {
+                    "project" => bad.project_id = Some(rejected.into()),
+                    "session" => bad.session_id = Some(rejected.into()),
+                    "supervisor" => bad.supervisor = rejected.into(),
+                    _ => bad.binary_revision = Some(rejected.into()),
+                }
+                assert_eq!(
+                    journal.start(bad).unwrap_err().kind(),
+                    io::ErrorKind::InvalidInput,
+                    "{field} id {rejected:?} must be refused"
+                );
+            }
+        }
+        assert_eq!(journal.list().unwrap(), Vec::new());
+
+        // The store project id (16 hex, as the broker records it), a checkout id
+        // (`folder-shortpathhash`), the longest id, and dot-only ids are accepted.
+        let longest = "a".repeat(128);
+        for accepted in [
+            "0123456789abcdef",
+            "hotsheet2-1a2b3c4d",
+            longest.as_str(),
+            "..",
+            ".",
+        ] {
+            let mut ok = meta(2);
+            ok.project_id = Some(accepted.into());
+            ok.session_id = Some(accepted.into());
+            let record = journal.start(ok).unwrap();
+            assert_eq!(record.project_id.as_deref(), Some(accepted));
+        }
+        let names: Vec<String> = fs::read_dir(home.path().join("processes"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names.len(), 5);
+        for name in &names {
+            let stem = name.strip_suffix(".json").expect("only record files");
+            ulid::Ulid::from_string(stem).expect("record file named by its launch ULID");
+        }
+        assert_eq!(fs::read_dir(home.path()).unwrap().count(), 1);
+        assert_eq!(journal.list().unwrap().len(), 5);
+    }
+
+    /// HS2-F0S155: a record the detached broker wrote before the fix still reads back,
+    /// and an unended one still finishes; the in-process fix changes no file format.
+    #[test]
+    fn hs2_f0s155_existing_broker_records_remain_readable() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        journal.prepare_dir().unwrap();
+        let launch_id = ulid::Ulid::new().to_string();
+        let started = now_ms();
+        let existing = format!(
+            r#"{{"launch_id":"{launch_id}","pid":4242,"supervisor_pid":4241,"supervisor":"terminal-broker","purpose":"terminal_shell","project_id":"0123456789abcdef","session_id":"01M6TERMINAL","binary_revision":null,"started_ms":{started},"ended_ms":null,"exit_reason":null}}"#
+        );
+        fs::write(journal.path(&launch_id), existing).unwrap();
+        let records = journal.list().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].purpose, Purpose::TerminalShell);
+        assert_eq!(records[0].project_id.as_deref(), Some("0123456789abcdef"));
+        assert_eq!(records[0].exit_reason, None);
+        let ended = journal.finish(&launch_id, ExitReason::Killed).unwrap();
+        assert_eq!(ended.exit_reason, Some(ExitReason::Killed));
+        journal.start(meta(5)).unwrap();
+        assert_eq!(journal.list().unwrap().len(), 2);
+    }
+
     #[test]
     fn hs2_gdcmxe_prunes_old_and_excess_records() {
         let home = tempfile::tempdir().unwrap();
