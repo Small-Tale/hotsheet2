@@ -760,8 +760,16 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   );
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.selectDrawerItem.selector, (_event, target) => {
-      const tab = target.closest<HTMLElement>('[data-tab-kind]');
-      selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
+      const tab = target.closest<HTMLElement>('[data-tab-kind]'),
+        // A pending tab (HS2-AQ40G7) has no tab kind, so the app-tab menus and Delete skip it.
+        pending = target.closest<HTMLElement>('[data-pending-tab-id]');
+      selectDrawerItem(
+        tab?.dataset.terminalId ||
+          tab?.dataset.chatId ||
+          pending?.dataset.pendingTabId ||
+          data(target).itemId ||
+          'grid',
+      );
     }),
   );
   lifetime.add(

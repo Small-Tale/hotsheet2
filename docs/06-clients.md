@@ -3651,6 +3651,18 @@ shown for a dedicated full-size terminal.
 The drawer rail keeps the New drawer item (+) action beside the last tab and the Hide terminal
 drawer action at the rail's trailing edge (the TabBar's `end` slot; its wrapper fills the rail,
 HS2-RGF5NE).
+Adding or removing a drawer item never passes through the Project grid (HS2-AQ40G7), because
+the grid mounts every terminal as a tile, reparenting live instances and claiming each tile's PTY
+size. A new terminal, AI shell, or AI chat appears at once as a selected pending tab (Kerf
+`TabBarItem` `pending`, with a trailing `LoadingSpinner`), and the drawer content shows a busy
+`EmptyState` ("Starting Claude…"). The pending tab is not closable, draggable, or remembered as
+the drawer selection. When the server answers, the placeholder stays under the created id until
+the refreshed snapshot carries the item, and then the live tab replaces it in place. If the
+person selected another tab meanwhile, the new item does not take the selection. A failed create
+removes the placeholder, returns to the previously selected tab, and reports the reason: a
+terminal failure shows a toast and keeps the drawer message, and an AI chat failure keeps the
+app error. Closing the selected tab selects its neighbor before the delete request, and returns
+to the tab if the delete fails. Only closing the last tab shows the grid.
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action
 buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the

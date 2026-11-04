@@ -1,8 +1,9 @@
-import { signal } from 'kerfjs';
+import { effect, signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ToolConnection } from '../api';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import { drawerSelectionView, type PendingDrawerTab } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
 import type { DrawerAIChat } from '../project-drive';
 import { createTerminalDrawerController } from './terminal-drawer';
@@ -41,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function owner() {
+function owner(tabIds: () => string[] = () => ['t1', 't2', 'ai-chat:c']) {
   const bindings = {
       projects: signal([project]),
       selectedProjectId: signal('a'),
@@ -51,6 +52,7 @@ function owner() {
       terminalDrawerTransitioning: signal(false),
       terminalDrawerSelected: signal('grid'),
       terminalDrawerChatsByProject: signal<Record<string, DrawerAIChat[]>>({}),
+      terminalDrawerPendingByProject: signal<Record<string, PendingDrawerTab[]>>({}),
       terminalDashboardLoading: signal(false),
       terminalDashboardMessage: signal(''),
       terminalVisibility: signal({ activeGroupId: 'all', groups: [] } as never),
@@ -79,7 +81,7 @@ function owner() {
     aiToolLabel: (tool) => tool,
     settleTerminalDrawerGeometry: vi.fn(),
     terminalSession: () => undefined,
-    currentDrawerTabIds: () => ['t1', 't2', 'ai-chat:c'],
+    currentDrawerTabIds: tabIds,
     activateOpenProject: () => undefined,
     refreshActivatedProject: vi.fn(async () => undefined),
     refreshProject: vi.fn(async () => undefined),
@@ -216,5 +218,175 @@ describe('terminal drawer owner (HS2-BSSWGV)', () => {
     expect(bindings.terminalDashboardLoading.value).toBe(false);
     expect(calls.persistDrawerTabOrder).not.toHaveBeenCalled();
     expect(bindings.terminalDrawerSelected.value).toBe('t1');
+  });
+});
+
+describe('drawer add and remove transitions (HS2-AQ40G7)', () => {
+  type Bindings = ReturnType<typeof owner>['bindings'];
+  const sessions = (...ids: string[]) =>
+    [{ projectId: 'a', sessions: ids.map((id) => ({ id })) }] as unknown as TerminalDashboardGroup[];
+  const projectA = <T>(record: Partial<Record<string, T[]>>): T[] => record.a ?? [];
+  /** Every view the drawer would render, recorded on each signal write, collapsed to its changes. */
+  function recordViews(bindings: Bindings) {
+    const views: string[] = [];
+    const dispose = effect(() => {
+      const live = new Set([
+          ...(bindings.terminalGroups.value.find((group) => group.projectId === 'a')?.sessions ?? []).map(
+            (session) => session.id,
+          ),
+          ...projectA(bindings.terminalDrawerChatsByProject.value).map((chat) => chat.id),
+        ]),
+        view = drawerSelectionView(
+          bindings.terminalDrawerSelected.value,
+          live,
+          projectA(bindings.terminalDrawerPendingByProject.value),
+        ),
+        label = view.kind === 'live' ? view.id : view.kind === 'pending' ? `pending:${view.tab.name}` : 'grid';
+      if (views.at(-1) !== label) views.push(label);
+    });
+    return { views, dispose };
+  }
+  function gate<T>() {
+    let release: (value: T) => void = () => undefined;
+    const promise = new Promise<T>((resolve) => {
+      release = resolve;
+    });
+    return { promise, release };
+  }
+
+  it('selects a pending tab at once and replaces it in place with the created terminal', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    bindings.terminalDrawerSelected.value = 't1';
+    const created = gate<Response>();
+    fetchMock.mockImplementation(() => created.promise);
+    calls.refreshTerminalDashboard.mockImplementation(async () => {
+      bindings.terminalGroups.value = sessions('t1', 't3');
+    });
+    const { views, dispose } = recordViews(bindings);
+    const run = drawer.createProjectTerminal({ tool: 'claude', model: 'm', effort: 'e' });
+    // Requested: the placeholder is selected before the server answers.
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([
+      { id: expect.stringMatching(/^pending:/), name: 'claude', kind: 'terminal' },
+    ]);
+    expect(bindings.terminalDrawerSelected.value).toMatch(/^pending:/);
+    // A placeholder is never remembered as the drawer selection.
+    expect(stored.get('hotsheet.project.a.terminal-drawer-selection')).toBeUndefined();
+    created.release(
+      new Response(JSON.stringify({ id: 't3', alive: true, busy: false, cwd: '/work/a' }), { status: 201 }),
+    );
+    await run;
+    expect(bindings.terminalDrawerSelected.value).toBe('t3');
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+    expect(drawer.pendingTerminalFocus).toEqual({ projectId: 'a', terminalId: 't3' });
+    expect(views).toEqual(['t1', 'pending:claude', 't3']);
+    dispose();
+  });
+
+  it('removes a failed placeholder, returns to the previous tab, and reports why', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    bindings.terminalDrawerSelected.value = 't1';
+    fetchMock.mockImplementation(() => Promise.resolve(new Response('no pty', { status: 500 })));
+    const { views, dispose } = recordViews(bindings);
+    await drawer.createProjectTerminal();
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+    expect(bindings.terminalDrawerSelected.value).toBe('t1');
+    expect(bindings.terminalDashboardMessage.value).not.toBe('');
+    expect(calls.showToast).toHaveBeenCalledWith(expect.stringMatching(/^Terminal could not start: /));
+    expect(views).toEqual(['t1', 'pending:Terminal', 't1']);
+    dispose();
+  });
+
+  it('leaves the selection alone when the person moved to another tab while the terminal started', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1', 't2');
+    bindings.terminalDrawerSelected.value = 't1';
+    const created = gate<Response>();
+    fetchMock.mockImplementation(() => created.promise);
+    calls.refreshTerminalDashboard.mockImplementation(async () => {
+      bindings.terminalGroups.value = sessions('t1', 't2', 't3');
+    });
+    const run = drawer.createProjectTerminal();
+    drawer.selectDrawerItem('t2');
+    created.release(
+      new Response(JSON.stringify({ id: 't3', alive: true, busy: false, cwd: '/work/a' }), { status: 201 }),
+    );
+    await run;
+    expect(bindings.terminalDrawerSelected.value).toBe('t2');
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+  });
+
+  it('swaps a pending AI chat for its chat tab in one update and restores the selection on failure', async () => {
+    const { drawer, bindings } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    bindings.terminalDrawerSelected.value = 't1';
+    const created = gate<Response>();
+    fetchMock.mockImplementation(() => created.promise);
+    const { views, dispose } = recordViews(bindings);
+    const run = drawer.createDrawerAIChat({ tool: 'claude', model: 'm', effort: 'e' }, { connectionId: 'c2' });
+    expect(bindings.terminalDrawerSelected.value).toMatch(/^pending:/);
+    created.release(
+      new Response(JSON.stringify({ id: 'c2', tool: 'claude', project: '/work/a', role: 'main', busy: false }), {
+        status: 200,
+      }),
+    );
+    await run;
+    expect(bindings.terminalDrawerSelected.value).toBe('ai-chat:c2');
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+    expect(views).toEqual(['t1', 'pending:claude chat', 'ai-chat:c2']);
+
+    fetchMock.mockImplementation(() => Promise.resolve(new Response('down', { status: 502 })));
+    await drawer.createDrawerAIChat({ tool: 'claude', model: 'm', effort: 'e' }, { connectionId: 'c3' });
+    expect(bindings.terminalDrawerSelected.value).toBe('ai-chat:c2');
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+    expect(bindings.error.value).not.toBe('');
+    expect(views.slice(-2)).toEqual(['pending:claude chat', 'ai-chat:c2']);
+    dispose();
+  });
+
+  it('selects the neighbor before deleting the selected tab, and the grid only after the last one', async () => {
+    let order = ['t1', 't2'];
+    const { drawer, bindings, calls } = owner(() => order);
+    bindings.terminalGroups.value = sessions('t1', 't2');
+    bindings.terminalDrawerSelected.value = 't1';
+    const deleted = gate<Response>();
+    fetchMock.mockImplementation(() => deleted.promise);
+    calls.refreshTerminalDashboard.mockImplementation(async () => {
+      bindings.terminalGroups.value = sessions('t2');
+    });
+    const { views, dispose } = recordViews(bindings);
+    const run = drawer.closeDrawerTabIds(['t1']);
+    // The neighbor is selected while the delete is still in flight.
+    expect(bindings.terminalDrawerSelected.value).toBe('t2');
+    deleted.release(new Response(null, { status: 204 }));
+    await run;
+    expect(views).toEqual(['t1', 't2']);
+    order = ['t2'];
+
+    // Closing the last tab keeps the existing empty behavior: the Project grid.
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+    calls.refreshTerminalDashboard.mockImplementation(async () => {
+      bindings.terminalGroups.value = sessions();
+    });
+    await drawer.closeDrawerTabIds(['t2']);
+    expect(bindings.terminalDrawerSelected.value).toBe('grid');
+    expect(views).toEqual(['t1', 't2', 'grid']);
+    dispose();
+  });
+
+  it('closes a selected AI chat straight to its neighbor', async () => {
+    const { drawer, bindings } = owner();
+    bindings.terminalGroups.value = sessions('t1', 't2');
+    bindings.terminalDrawerChatsByProject.value = {
+      a: [{ id: 'ai-chat:c', connectionId: 'c', tool: 'claude', name: 'chat' }],
+    };
+    bindings.terminalDrawerSelected.value = 'ai-chat:c';
+    const { views, dispose } = recordViews(bindings);
+    await drawer.closeDrawerTabIds(['ai-chat:c']);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(bindings.terminalDrawerSelected.value).toBe('t2');
+    expect(views).toEqual(['ai-chat:c', 't2']);
+    dispose();
   });
 });

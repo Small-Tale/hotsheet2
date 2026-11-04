@@ -1,7 +1,9 @@
 import './terminal-drawer.css';
 
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
@@ -30,7 +32,12 @@ import {
   X,
 } from 'lucide';
 
-import { orderedDrawerTabIds } from '../drawer-tab-order';
+import {
+  drawerSelectionView,
+  orderedDrawerTabIds,
+  type PendingDrawerTab,
+  visiblePendingDrawerTabs,
+} from '../drawer-tab-order';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
@@ -72,6 +79,11 @@ export interface TerminalDrawerProps {
   sessions: TerminalDashboardSession[];
   chatTabs?: TerminalDrawerChatTab[];
   tabOrder?: string[];
+  /**
+   * Requested items still being created (HS2-AQ40G7): each shows as a pending tab, and a selected one
+   * fills the drawer with a busy placeholder instead of the Project grid until its instance arrives.
+   */
+  pendingTabs?: readonly PendingDrawerTab[];
   width: number;
   height: number;
   fitAcross: number;
@@ -161,6 +173,7 @@ export function TerminalDrawer({
   sessions,
   chatTabs = [],
   tabOrder = [],
+  pendingTabs = [],
   width,
   height,
   fitAcross,
@@ -181,10 +194,11 @@ export function TerminalDrawer({
   touchClipboard = false,
   hostActionsAvailable = hostActionsAvailableHere(),
 }: TerminalDrawerProps) {
-  const selected =
-      sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
-        ? selectedId
-        : 'grid',
+  const liveIds = new Set([...sessions.map((session) => session.id), ...chatTabs.map((chat) => chat.id)]),
+    view = drawerSelectionView(selectedId, liveIds, pendingTabs),
+    selected = view.kind === 'live' ? view.id : view.kind === 'pending' ? view.tab.id : 'grid',
+    selectedPending = view.kind === 'pending' ? view.tab : undefined,
+    shownPendingTabs = visiblePendingDrawerTabs(pendingTabs, liveIds),
     selectedSession = sessions.find((session) => session.id === selected),
     selectedChat = chatTabs.find((chat) => chat.id === selected),
     // HS2-5DHHPV: a touch-first desktop gets rail Copy/Paste for the selected terminal (phones use focus mode).
@@ -323,13 +337,34 @@ export function TerminalDrawer({
           />
         );
       }),
+      ...shownPendingTabs.map((tab) => (
+        // Named and still opening (Kerf `pending`): selectable, but not closable or draggable.
+        <TabBarItem
+          id={tab.id}
+          name={tab.name}
+          selected={selected === tab.id}
+          pending
+          size="compact"
+          labelMaxWidth={width <= 768 ? 112 : 144}
+          selectAction="select-drawer-item"
+          rootAttributes={{ 'data-pending-tab-id': tab.id }}
+          leading={
+            tab.kind === 'ai-chat' ? (
+              <LucideIcon icon={MessageSquare} name="message-square" />
+            ) : (
+              <LucideIcon icon={SquareTerminal} name="square-terminal" />
+            )
+          }
+          trailing={<LoadingSpinner size="s" />}
+        />
+      )),
     ];
   return (
     <section
       class="terminal-drawer"
       data-component="terminal-drawer"
       data-project-id={projectId}
-      data-mode={selectedChat ? 'ai-chat' : selected === 'grid' ? 'grid' : 'dedicated'}
+      data-mode={selectedChat ? 'ai-chat' : selectedPending ? 'pending' : selected === 'grid' ? 'grid' : 'dedicated'}
       data-maximized={String(maximized)}
       data-focus-mode={String(focusMode)}
       data-terminal-drawer-measure="true"
@@ -460,6 +495,8 @@ export function TerminalDrawer({
           selectedChat.content
         ) : selectedSession ? (
           <TerminalSession session={selectedSession} mobile={mobile} focus={focusMode} />
+        ) : selectedPending ? (
+          <EmptyState title={`Starting ${selectedPending.name}…`} busy />
         ) : (
           <TerminalDashboard
             groups={[{ projectId, projectName, sessions, chats: gridChats, itemOrder: orderedIds }]}

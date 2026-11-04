@@ -105,6 +105,7 @@ import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
+import { type PendingDrawerTab } from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createAnnouncerController } from '../features/announcer-controller';
 import { createBoardColumnPaging } from '../features/board-column-paging';
@@ -641,6 +642,7 @@ export async function startHotSheetWebClient() {
     showToast,
   });
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
+    terminalDrawerPendingByProject = signal<Record<string, PendingDrawerTab[]>>({}),
     terminalDrawerOrderByProject = signal<Record<string, string[]>>({});
   const magnifiedTerminalKey = signal<string | undefined>(undefined),
     terminalVisibility = signal(parseTerminalVisibilityState(localStorage.getItem(TERMINAL_VISIBILITY_STORAGE_KEY))),
@@ -2419,6 +2421,7 @@ export async function startHotSheetWebClient() {
     terminalDrawerTransitioning,
     terminalDrawerSelected,
     terminalDrawerChatsByProject,
+    terminalDrawerPendingByProject,
     terminalDashboardLoading,
     terminalDashboardMessage,
     terminalVisibility,
@@ -4339,6 +4342,7 @@ export async function startHotSheetWebClient() {
       projectProjectionById,
       customViewsByProject,
       terminalDrawerChatsByProject,
+      terminalDrawerPendingByProject,
       commandSettingsDraftsByProject,
       commandSettingsMessagesByProject,
       commandSettingsSelectedByProject,
@@ -4720,6 +4724,7 @@ export async function startHotSheetWebClient() {
         terminalDrawerFitAcross,
         terminalDrawerFitHigh,
         terminalDrawerSelected,
+        terminalDrawerPendingByProject,
         terminalDrawerMaximized,
         mobileTerminalFocus,
         mobileMagnifiedTerminal,

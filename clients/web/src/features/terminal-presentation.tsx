@@ -19,6 +19,7 @@ import type { StatsDashboardState } from '../components/stats-dashboard';
 import { type MobileMagnifiedTerminal, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalDrawerChatTab, type TerminalDrawerProps } from '../components/terminal-drawer';
 import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-composition-surfaces';
+import type { PendingDrawerTab } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
@@ -57,6 +58,8 @@ export interface TerminalPresentationDependencies {
     terminalDrawerFitAcross: Signal<number>;
     terminalDrawerFitHigh: Signal<number>;
     terminalDrawerSelected: Signal<string>;
+    /** Requested drawer items still being created, rendered as pending tabs (HS2-AQ40G7). */
+    terminalDrawerPendingByProject: Signal<Record<string, PendingDrawerTab[]>>;
     terminalDrawerMaximized: Signal<boolean>;
     mobileTerminalFocus: Signal<MobileTerminalFocusState>;
     /** Phone-only magnified-terminal chrome inputs; undefined on wider viewports (HS2-WMN626). */
@@ -117,6 +120,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDrawerFitAcross,
     terminalDrawerFitHigh,
     terminalDrawerSelected,
+    terminalDrawerPendingByProject,
     terminalDrawerMaximized,
     mobileTerminalFocus,
     mobileMagnifiedTerminal,
@@ -314,6 +318,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       sessions: (group?.sessions ?? []).map((session) => ({ ...session, canMessage: messageable.has(session.id) })),
       chatTabs,
       tabOrder: drawerTabOrder(current.id),
+      pendingTabs: terminalDrawerPendingByProject.value[current.id] ?? [],
       width: terminalDrawerBounds.value.width,
       height: terminalDrawerBounds.value.height,
       fitAcross: terminalDrawerFitAcross.value,

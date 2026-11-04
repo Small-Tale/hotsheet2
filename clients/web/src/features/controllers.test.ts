@@ -2431,6 +2431,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     terminals: {
       terminalGroups: groups,
       terminalGridFullscreen: signal(false),
+      terminalDrawerPendingByProject: signal({}),
       drawerTabOrder: () => ['ai-chat:chat-a'],
       terminalDashboardSize: dimensions,
       terminalFitAcross: signal(2),

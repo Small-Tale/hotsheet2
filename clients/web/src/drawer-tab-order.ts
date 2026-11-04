@@ -104,3 +104,47 @@ export function drawerTabSelectionAfterClose(
     'grid'
   );
 }
+
+/**
+ * A drawer item the person asked for whose instance is still being created (HS2-AQ40G7). It is
+ * selected at once so the drawer never falls back to the Project grid while the create resolves;
+ * `resolvedId` names the created terminal or chat until that item reaches the drawer's snapshot.
+ */
+export interface PendingDrawerTab {
+  id: string;
+  name: string;
+  kind: 'terminal' | 'ai-chat';
+  resolvedId?: string;
+}
+
+export const PENDING_DRAWER_TAB_PREFIX = 'pending:';
+
+export function isPendingDrawerTabId(id: string): boolean {
+  return id.startsWith(PENDING_DRAWER_TAB_PREFIX);
+}
+
+/** Pending tabs still shown: a resolved one disappears once its live item is present. */
+export function visiblePendingDrawerTabs(
+  pending: readonly PendingDrawerTab[],
+  liveIds: ReadonlySet<string>,
+): PendingDrawerTab[] {
+  return pending.filter((tab) => tab.resolvedId === undefined || !liveIds.has(tab.resolvedId));
+}
+
+export type DrawerSelectionView =
+  { kind: 'live'; id: string } | { kind: 'pending'; tab: PendingDrawerTab } | { kind: 'grid' };
+
+/**
+ * What the drawer shows for its selection (HS2-AQ40G7): a live terminal or chat; a pending tab's
+ * placeholder, also while the selection already names the created item that has not arrived yet;
+ * otherwise the Project grid.
+ */
+export function drawerSelectionView(
+  selectedId: string,
+  liveIds: ReadonlySet<string>,
+  pending: readonly PendingDrawerTab[],
+): DrawerSelectionView {
+  if (liveIds.has(selectedId)) return { kind: 'live', id: selectedId };
+  const tab = pending.find((item) => item.id === selectedId || item.resolvedId === selectedId);
+  return tab ? { kind: 'pending', tab } : { kind: 'grid' };
+}

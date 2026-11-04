@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import {
   drawerInputFocusRequestStillOwned,
+  drawerSelectionView,
   drawerTabCloseIds,
   drawerTabFocusRequestStillOwned,
   drawerTabOrderStorageKey,
   drawerTabSelectionAfterClose,
+  isPendingDrawerTabId,
   loadDrawerTabOrder,
   orderedDrawerTabIds,
   parseDrawerTabOrder,
+  type PendingDrawerTab,
   reorderDrawerTabIds,
   saveDrawerTabOrder,
   selectedDrawerInput,
+  visiblePendingDrawerTabs,
 } from './drawer-tab-order';
 
 describe('drawer tab ordering', () => {
@@ -101,5 +105,34 @@ describe('drawer tab ordering', () => {
     expect(loadDrawerTabOrder(storage, 'project')).toEqual(['terminal-a', 'chat-a']);
     expect(parseDrawerTabOrder('{')).toEqual([]);
     expect(parseDrawerTabOrder('["one",1,"one",""]')).toEqual(['one']);
+  });
+});
+
+describe('pending drawer tabs (HS2-AQ40G7)', () => {
+  const live = new Set(['t1', 'ai-chat:c']);
+  const pending: PendingDrawerTab = { id: 'pending:1', name: 'Claude shell', kind: 'terminal' };
+
+  it('shows a pending placeholder, never the grid, from request through arrival of the created item', () => {
+    // Requested: the pending tab itself is selected.
+    expect(drawerSelectionView('pending:1', live, [pending])).toEqual({ kind: 'pending', tab: pending });
+    expect(visiblePendingDrawerTabs([pending], live)).toEqual([pending]);
+    // Created but not yet in the snapshot: the selection names the new id and still shows the placeholder.
+    const resolved = { ...pending, resolvedId: 't2' };
+    expect(drawerSelectionView('t2', live, [resolved])).toEqual({ kind: 'pending', tab: resolved });
+    expect(visiblePendingDrawerTabs([resolved], live)).toEqual([resolved]);
+    // Arrived: the live item replaces the placeholder in place.
+    const arrived = new Set([...live, 't2']);
+    expect(drawerSelectionView('t2', arrived, [resolved])).toEqual({ kind: 'live', id: 't2' });
+    expect(visiblePendingDrawerTabs([resolved], arrived)).toEqual([]);
+  });
+
+  it('keeps live selections and the explicit grid, and falls back to the grid for an unknown id', () => {
+    expect(drawerSelectionView('ai-chat:c', live, [pending])).toEqual({ kind: 'live', id: 'ai-chat:c' });
+    expect(drawerSelectionView('grid', live, [pending])).toEqual({ kind: 'grid' });
+    expect(drawerSelectionView('gone', live, [])).toEqual({ kind: 'grid' });
+    // Removing the placeholder (a failed create) leaves its id unknown.
+    expect(drawerSelectionView('pending:1', live, [])).toEqual({ kind: 'grid' });
+    expect(isPendingDrawerTabId('pending:1')).toBe(true);
+    expect(isPendingDrawerTabId('t1')).toBe(false);
   });
 });

@@ -41,6 +41,40 @@ const render = (selectedId: string = 'grid') =>
     }),
   );
 describe('TerminalDrawer', () => {
+  it('HS2-AQ40G7 shows a selected pending tab with a busy placeholder instead of the Project grid', () => {
+    const pending = (selectedId: string, resolvedId?: string, live = sessions) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: live,
+          pendingTabs: [{ id: 'pending:1', name: 'Claude', kind: 'terminal', ...(resolvedId ? { resolvedId } : {}) }],
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId,
+        }),
+      );
+    const requested = pending('pending:1');
+    expect(requested).toContain('data-mode="pending"');
+    expect(requested).toContain('data-pending-tab-id="pending:1"');
+    expect(requested).toContain('data-pending="true"');
+    expect(requested).toContain('Starting Claude…');
+    expect(requested).not.toContain('data-component="terminal-dashboard"');
+    // Created but not yet in the snapshot: still the placeholder, never the grid.
+    const resolving = pending('three', 'three');
+    expect(resolving).toContain('data-mode="pending"');
+    expect(resolving).not.toContain('data-component="terminal-dashboard"');
+    // Arrived: the live tab replaces the placeholder.
+    const arrived = pending('three', 'three', [...sessions, { ...sessions[1], id: 'three', title: 'Claude 1' }]);
+    expect(arrived).toContain('data-mode="dedicated"');
+    expect(arrived).not.toContain('data-pending-tab-id');
+    // An unselected pending tab leaves the current view alone.
+    expect(pending('one')).toContain('data-mode="dedicated"');
+    expect(pending('one')).toContain('data-pending-tab-id="pending:1"');
+  });
+
   it('HS2-JVSFES omits the removed message action even on a capable selected terminal', () => {
     expect(render('one')).not.toContain('Message AI Session');
     const markup = String(

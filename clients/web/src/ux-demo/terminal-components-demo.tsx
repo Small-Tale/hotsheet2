@@ -291,6 +291,21 @@ export function TerminalDrawerDemo() {
           selectedId="working-chat"
         />
       </CatalogExample>
+      {/* A requested AI shell still starting: its pending tab is selected and the drawer shows a busy
+          placeholder instead of passing through the Project grid (HS2-AQ40G7). */}
+      <CatalogExample label="Starting Drawer Item" viewport={{ ...drawerFrame, height: 'medium' }}>
+        <TerminalDrawer
+          projectId="demo-pending"
+          projectName="Demo project"
+          sessions={[{ ...shell, projectId: 'demo-pending' }]}
+          pendingTabs={[{ id: 'pending:demo', name: 'Claude', kind: 'terminal' }]}
+          width={900}
+          height={320}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="pending:demo"
+        />
+      </CatalogExample>
       {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
       <CatalogExample label="Touch-First Desktop" viewport={drawerFrame}>
         <TerminalDrawer

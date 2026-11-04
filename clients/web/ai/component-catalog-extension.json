@@ -1973,7 +1973,7 @@
       "id": "terminal-drawer",
       "name": "TerminalDrawer",
       "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, the selected chat's toolbar controls in its tab toolbar, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, the selected chat's toolbar controls in its tab toolbar, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, hook-only sessions whose hotsheet-mcp is not connected, and a selected pending tab with a busy placeholder while a requested item starts (HS2-AQ40G7).",
       "useWhen": [
         "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected."
       ],

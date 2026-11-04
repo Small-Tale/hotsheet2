@@ -1,4 +1,4 @@
-import type { Signal } from 'kerfjs';
+import { batch, type Signal } from 'kerfjs';
 
 import { type AiToolDefaults, Api, ApiHttpError, type CommandDefinition, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
@@ -8,6 +8,9 @@ import {
   drawerInputFocusRequestStillOwned,
   drawerTabFocusRequestStillOwned,
   drawerTabSelectionAfterClose,
+  isPendingDrawerTabId,
+  PENDING_DRAWER_TAB_PREFIX,
+  type PendingDrawerTab,
   selectedDrawerInput,
 } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
@@ -29,6 +32,8 @@ export interface TerminalDrawerDependencies {
   terminalDrawerTransitioning: Signal<boolean>;
   terminalDrawerSelected: Signal<string>;
   terminalDrawerChatsByProject: Signal<Record<string, DrawerAIChat[]>>;
+  /** Requested drawer items still being created, shown as pending tabs (HS2-AQ40G7). */
+  terminalDrawerPendingByProject: Signal<Record<string, PendingDrawerTab[]>>;
   terminalDashboardLoading: Signal<boolean>;
   terminalDashboardMessage: Signal<string>;
   terminalVisibility: Signal<TerminalVisibilityState>;
@@ -76,6 +81,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     terminalDrawerTransitioning,
     terminalDrawerSelected,
     terminalDrawerChatsByProject,
+    terminalDrawerPendingByProject,
     terminalDashboardLoading,
     terminalDashboardMessage,
     showToast,
@@ -108,6 +114,51 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   let terminalDrawerTransitionTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
   let drawerInputFocusGeneration = 0;
+  let pendingTabSequence = 0;
+  /**
+   * Select a new pending tab at once, so the drawer shows a busy placeholder rather than falling back
+   * to the Project grid (which would mount and resize every terminal) while the create resolves
+   * (HS2-AQ40G7). Returns the tab and the selection to restore if the create fails.
+   */
+  function beginPendingTab(projectId: string, name: string, kind: PendingDrawerTab['kind']) {
+    const tab: PendingDrawerTab = { id: `${PENDING_DRAWER_TAB_PREFIX}${++pendingTabSequence}`, name, kind },
+      previous = terminalDrawerSelected.value;
+    terminalDrawerPendingByProject.value = {
+      ...terminalDrawerPendingByProject.value,
+      [projectId]: [...(terminalDrawerPendingByProject.value[projectId] ?? []), tab],
+    };
+    if (previous !== tab.id) exitMobileTerminalFocus();
+    // Not remembered: a reload never restores a placeholder.
+    terminalDrawerSelected.value = tab.id;
+    return { tab, previous };
+  }
+  function updatePendingTab(projectId: string, id: string, next: PendingDrawerTab | undefined) {
+    const tabs = terminalDrawerPendingByProject.value[projectId] ?? [];
+    if (!tabs.some((tab) => tab.id === id)) return;
+    terminalDrawerPendingByProject.value = {
+      ...terminalDrawerPendingByProject.value,
+      [projectId]: next ? tabs.map((tab) => (tab.id === id ? next : tab)) : tabs.filter((tab) => tab.id !== id),
+    };
+  }
+  /** Whether the person still has the pending tab selected, so its result may take the selection. */
+  function pendingTabSelected(projectId: string, tab: PendingDrawerTab) {
+    return project()?.id === projectId && terminalDrawerSelected.value === tab.id;
+  }
+  /**
+   * A failed create removes its placeholder and returns to where the person was. The caller records
+   * the reason where it persists; `toast` also announces it when that record may be out of view.
+   */
+  function failPendingTab(
+    projectId: string,
+    pending: { tab: PendingDrawerTab; previous: string },
+    message: string,
+    toast: boolean,
+  ) {
+    // Select first: removing a still-selected placeholder would leave the selection unknown (the grid).
+    if (pendingTabSelected(projectId, pending.tab)) selectDrawerItem(pending.previous, false);
+    updatePendingTab(projectId, pending.tab.id, undefined);
+    if (toast) showToast(`${pending.tab.name} could not start: ${message}`);
+  }
   function focusDrawerTab(projectId: string, id: string) {
     const scheduled = document.activeElement;
     requestAnimationFrame(() =>
@@ -151,7 +202,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     );
   }
   function requestDrawerInputFocus(projectId: string, id: string, chat: DrawerAIChat | undefined) {
-    if (id === 'grid') return;
+    if (id === 'grid' || isPendingDrawerTabId(id)) return;
     if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
     focusDrawerInput(projectId);
   }
@@ -197,7 +248,8 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     if (chat) conversationConnectionId.value = chat.connectionId;
     terminalDrawerSelected.value = id;
     if (current) {
-      localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`, id);
+      if (!isPendingDrawerTabId(id))
+        localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`, id);
       if (focusInput) requestDrawerInputFocus(current.id, id, chat);
     }
   }
@@ -237,8 +289,12 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   async function createProjectTerminal(selection?: AiToolDefaults) {
     const current = project();
     if (!current) return;
+    const pending = beginPendingTab(current.id, selection ? aiToolLabel(selection.tool) : 'Terminal', 'terminal');
     await queueTerminalCreate(async () => {
-      if (project()?.id !== current.id) return;
+      if (project()?.id !== current.id) {
+        updatePendingTab(current.id, pending.tab.id, undefined);
+        return;
+      }
       terminalDashboardLoading.value = true;
       terminalDashboardMessage.value = '';
       try {
@@ -249,14 +305,24 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         persistTerminalVisibility(
           hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${created.id}`),
         );
-        pendingTerminalFocus = { projectId: current.id, terminalId: created.id };
-        selectDrawerItem(created.id);
+        // The placeholder stays under the created id until the refreshed snapshot carries the
+        // terminal, then the live tab replaces it in place (HS2-AQ40G7).
+        updatePendingTab(current.id, pending.tab.id, { ...pending.tab, resolvedId: created.id });
+        const selected = pendingTabSelected(current.id, pending.tab);
+        if (selected) {
+          pendingTerminalFocus = { projectId: current.id, terminalId: created.id };
+          selectDrawerItem(created.id);
+        }
         await refreshTerminalDashboard();
-        focusDrawerTab(current.id, created.id);
+        updatePendingTab(current.id, pending.tab.id, undefined);
+        if (selected) focusDrawerTab(current.id, created.id);
       } catch (reason) {
+        const message = reason instanceof Error ? reason.message : String(reason);
         pendingTerminalFocus = undefined;
-        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
+        terminalDashboardMessage.value = message;
         terminalDashboardLoading.value = false;
+        // The drawer message persists in the Project grid; the toast reaches a person on another tab.
+        failPendingTab(current.id, pending, message, true);
       }
     });
   }
@@ -305,6 +371,8 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       setTerminalDrawerVisible(true);
       return existing;
     }
+    const name = options.drive ? `${aiToolLabel(selection.tool)} Drive` : `${aiToolLabel(selection.tool)} chat`,
+      pending = beginPendingTab(current.id, name, 'ai-chat');
     drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
     try {
       const created = await new Api(current.apiPath).createToolConnection({
@@ -315,7 +383,10 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         effort: selection.effort,
         ...(selection.permission_mode ? { permission_mode: selection.permission_mode } : {}),
       });
-      if (project()?.id !== current.id) return;
+      if (project()?.id !== current.id) {
+        updatePendingTab(current.id, pending.tab.id, undefined);
+        return;
+      }
       driveConnectionsByProject.value = {
         ...driveConnectionsByProject.value,
         [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
@@ -326,22 +397,29 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         id: `ai-chat:${created.id}`,
         connectionId: created.id,
         tool: selection.tool,
-        name: options.drive ? `${aiToolLabel(selection.tool)} Drive` : `${aiToolLabel(selection.tool)} chat`,
+        name,
         model: selection.model,
         effort: selection.effort,
         permissionMode: created.permission_mode ?? selection.permission_mode,
         drive: options.drive,
       };
-      terminalDrawerChatsByProject.value = {
-        ...terminalDrawerChatsByProject.value,
-        [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
-      };
+      // The chat tab joins the drawer, takes the selection, and retires its placeholder in one
+      // update, so no render sees the selection unknown (HS2-AQ40G7).
+      batch(() => {
+        terminalDrawerChatsByProject.value = {
+          ...terminalDrawerChatsByProject.value,
+          [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
+        };
+        selectDrawerItem(tab.id);
+        updatePendingTab(current.id, pending.tab.id, undefined);
+      });
       persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
-      selectDrawerItem(tab.id);
       setTerminalDrawerVisible(true);
       return tab;
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      const message = reason instanceof Error ? reason.message : String(reason);
+      error.value = message;
+      failPendingTab(current.id, pending, message, false);
     } finally {
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
@@ -358,28 +436,11 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       closingTerminals = closing.filter((id) => terminalIds.has(id));
     if (closing.length === 0) return;
     appTabContextMenu.value = undefined;
-    if (closingTerminals.length) {
-      terminalDashboardLoading.value = true;
-      try {
-        await Promise.all(closingTerminals.map((id) => new Api(current.apiPath).deleteTerminal(id)));
-        await refreshTerminalDashboard();
-      } catch (reason) {
-        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
-        terminalDashboardLoading.value = false;
-        return;
-      }
-    }
-    const nextSelected = drawerTabSelectionAfterClose(order, terminalDrawerSelected.value, closing),
-      selectionChanges = nextSelected !== terminalDrawerSelected.value,
-      before = terminalDrawerChatsByProject.value[current.id] ?? [];
-    terminalDrawerChatsByProject.value = {
-      ...terminalDrawerChatsByProject.value,
-      [current.id]: before.filter((item) => !requested.has(item.id)),
-    };
-    persistDrawerTabOrder(
-      current.id,
-      order.filter((id) => !requested.has(id)),
-    );
+    const previousSelected = terminalDrawerSelected.value,
+      nextSelected = drawerTabSelectionAfterClose(order, previousSelected, closing),
+      selectionChanges = nextSelected !== previousSelected;
+    // Select the neighbor before the closed item leaves the drawer's snapshot, so the drawer goes
+    // straight to it instead of showing the Project grid in between (HS2-AQ40G7).
     if (selectionChanges) {
       // Closing from the tab bar keeps keyboard focus on the tabs, so repeated Delete keeps
       // closing; do not also schedule input focus into the newly selected item.
@@ -388,6 +449,31 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       pendingTerminalFocus = undefined;
       focusDrawerTab(current.id, nextSelected);
     }
+    if (closingTerminals.length) {
+      terminalDashboardLoading.value = true;
+      try {
+        await Promise.all(closingTerminals.map((id) => new Api(current.apiPath).deleteTerminal(id)));
+        await refreshTerminalDashboard();
+      } catch (reason) {
+        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
+        terminalDashboardLoading.value = false;
+        // The tab stays open, so return to it unless the person has moved on meanwhile.
+        if (selectionChanges && terminalDrawerSelected.value === nextSelected)
+          selectDrawerItem(previousSelected, false);
+        return;
+      }
+      // Removing the closed tab re-renders the strip; keep keyboard focus on the selected neighbor.
+      if (selectionChanges && terminalDrawerSelected.value === nextSelected) focusDrawerTab(current.id, nextSelected);
+    }
+    const before = terminalDrawerChatsByProject.value[current.id] ?? [];
+    terminalDrawerChatsByProject.value = {
+      ...terminalDrawerChatsByProject.value,
+      [current.id]: before.filter((item) => !requested.has(item.id)),
+    };
+    persistDrawerTabOrder(
+      current.id,
+      order.filter((id) => !requested.has(id)),
+    );
   }
   async function closeTerminalIds(ids: readonly string[]) {
     await closeDrawerTabIds(ids);
