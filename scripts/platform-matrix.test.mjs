@@ -128,3 +128,16 @@ test('HS2-31RGRK builds and tests the Tauri desktop shell as its own targets', (
   assert.match(tauri, /libwebkit2gtk-4\.1-dev/);
   assert.doesNotMatch(tauri, /APPLE_SIGNING_IDENTITY|TAURI_SIGNING_PRIVATE_KEY/, 'the daily build is unsigned');
 });
+
+test('HS2-WTETE8 installs Playwright browsers before the web unit tests that launch Chromium', () => {
+  const step = (name) => {
+    const at = workflow.indexOf(`- name: ${name}`);
+    assert.notEqual(at, -1, `missing step: ${name}`);
+    return at;
+  };
+  const browsers = step('Install Playwright Chromium, WebKit, and their dependencies');
+  // The binaries project's local-host and stable-dev e2e tests run inside this step.
+  assert.ok(browsers < step('Web client lint, typecheck, unit tests, and production build'));
+  assert.ok(step('Prefer the Ubuntu archive for Playwright dependencies') < browsers);
+  assert.ok(browsers < step('Build isolated browser fixtures'));
+});

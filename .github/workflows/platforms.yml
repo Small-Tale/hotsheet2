@@ -208,28 +208,8 @@ jobs:
           path: target/crt-directives/link-correlation.json
           if-no-files-found: error
 
-      - name: Web client lint, typecheck, unit tests, and production build
-        id: web
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        working-directory: clients/web
-        run: |
-          npm run lint
-          npm run typecheck
-          HOTSHEET_VITEST_BUILD=always npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
-          npm run build
-
-      - name: Slowest web unit tests
-        if: ${{ !cancelled() && steps.web.outcome != 'skipped' }}
-        working-directory: clients/web
-        run: node ../../scripts/test-profile.mjs --top 15 --vitest target/vitest-report.json || true
-
-      - name: Migrator tests + coverage (vitest + Rust-import conformance)
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        working-directory: migrator
-        run: |
-          npm run lint
-          npm run test:coverage
-
+      # The web unit run includes the binaries project, whose local-host and stable-dev e2e tests
+      # launch Chromium, so browsers install first, as in ci.yml (HS2-WTETE8).
       - name: Prefer the Ubuntu archive for Playwright dependencies
         if: ${{ !cancelled() && steps.ready.outcome == 'success' && matrix.os == 'linux' }}
         run: bash .github/scripts/prefer-ubuntu-archive.sh
@@ -260,6 +240,28 @@ jobs:
           fc-match system-ui | grep -q 'Liberation Sans'
 
       # HS2-63ZK8W: build the isolated real-server fixtures once, before any browser case.
+      - name: Web client lint, typecheck, unit tests, and production build
+        id: web
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        working-directory: clients/web
+        run: |
+          npm run lint
+          npm run typecheck
+          HOTSHEET_VITEST_BUILD=always npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
+          npm run build
+
+      - name: Slowest web unit tests
+        if: ${{ !cancelled() && steps.web.outcome != 'skipped' }}
+        working-directory: clients/web
+        run: node ../../scripts/test-profile.mjs --top 15 --vitest target/vitest-report.json || true
+
+      - name: Migrator tests + coverage (vitest + Rust-import conformance)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        working-directory: migrator
+        run: |
+          npm run lint
+          npm run test:coverage
+
       - name: Build isolated browser fixtures
         id: fixtures
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
