@@ -56,6 +56,28 @@ export function isTerminalReplacementReplay(value: string): boolean {
   }
 }
 
+/**
+ * DOM events that are human text input into a terminal (HS2-1YX5VS). They, together with a pointer
+ * press or focus, are what count as an interaction for PTY sizing. xterm's `onData` is not: it also
+ * carries the emulator's automatic replies to the program's queries, which every attached viewer sends.
+ */
+export const TERMINAL_USER_INPUT_EVENTS = ['keydown', 'paste', 'input'] as const;
+/** How long after a user gesture mounted a viewport its first eligible claim still counts as that gesture. */
+export const TERMINAL_GESTURE_CLAIM_WINDOW_MS = 5_000;
+
+/** When a user gesture (a tap or click that mounted this viewport) is active, the mount time; else undefined. */
+export function terminalGestureClaimAtMount(
+  browser: { userActivation?: { isActive: boolean } } | undefined,
+  now: number,
+): number | undefined {
+  return browser?.userActivation?.isActive === true ? now : undefined;
+}
+
+/** True when a gesture-mounted viewport's eligible claim should be sent as interacting (HS2-1YX5VS). */
+export function terminalGestureClaimDue(mountedAt: number | undefined, now: number, eligible: boolean): boolean {
+  return mountedAt !== undefined && eligible && now - mountedAt <= TERMINAL_GESTURE_CLAIM_WINDOW_MS;
+}
+
 /** Liveness protocol (HS2-51HQ3S): the server's attach hello, probe, and reply frames. */
 export const TERMINAL_PING_INTERVAL_MS = 5_000;
 /** No inbound frame for this long, despite answered probes, means the socket is dead. */

@@ -12,6 +12,7 @@ import {
   TERMINAL_DASHBOARD_ROWS,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
+  TERMINAL_GESTURE_CLAIM_WINDOW_MS,
   TERMINAL_INPUT_PROBE_TIMEOUT_MS,
   TERMINAL_PENDING_INPUT_LIMIT,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
@@ -22,6 +23,8 @@ import {
   terminalBrowserWebSocketUrl,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalGestureClaimAtMount,
+  terminalGestureClaimDue,
   terminalInputNeedsProbe,
   terminalInverseScalePercent,
   terminalPhysicalScale,
@@ -256,5 +259,23 @@ describe('focusYieldsToNewTerminal (HS2-FB4DKM)', () => {
   });
   it('keeps focus in a real field the user moved to', () => {
     expect(focusYieldsToNewTerminal(held(undefined), doc)).toBe(false);
+  });
+});
+
+describe('gesture-opened sizing claims (HS2-1YX5VS)', () => {
+  it('records the mount time only while a user gesture is active', () => {
+    expect(terminalGestureClaimAtMount({ userActivation: { isActive: true } }, 1_000)).toBe(1_000);
+    expect(terminalGestureClaimAtMount({ userActivation: { isActive: false } }, 1_000)).toBeUndefined();
+    // Browsers without the User Activation API, and the unit harness, never claim by gesture.
+    expect(terminalGestureClaimAtMount({}, 1_000)).toBeUndefined();
+    expect(terminalGestureClaimAtMount(undefined, 1_000)).toBeUndefined();
+  });
+
+  it('is due for an eligible claim inside the gesture window only', () => {
+    expect(terminalGestureClaimDue(1_000, 1_000, true)).toBe(true);
+    expect(terminalGestureClaimDue(1_000, 1_000 + TERMINAL_GESTURE_CLAIM_WINDOW_MS, true)).toBe(true);
+    expect(terminalGestureClaimDue(1_000, 1_001 + TERMINAL_GESTURE_CLAIM_WINDOW_MS, true)).toBe(false);
+    expect(terminalGestureClaimDue(1_000, 1_000, false)).toBe(false);
+    expect(terminalGestureClaimDue(undefined, 1_000, true)).toBe(false);
   });
 });

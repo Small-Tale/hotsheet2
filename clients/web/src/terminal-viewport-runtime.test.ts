@@ -53,6 +53,7 @@ vi.mock('@xterm/xterm', () => ({
     blur = vi.fn();
     scrollToBottom = vi.fn();
     scrollLines = vi.fn();
+    paste = vi.fn();
     modes = { applicationCursorKeysMode: false };
     selection = '';
     hasSelection = vi.fn(() => this.selection !== '');
@@ -344,6 +345,10 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'hotsheet-terminal-key',
         'hotsheet-terminal-paste',
         'hotsheet-terminal-read-text',
+        // HS2-1YX5VS: typing, pasting, and text entry are the human input that keeps sizing authority.
+        'input',
+        'keydown',
+        'paste',
         TERMINAL_VIEWPORT_PARK_EVENT,
         // HS2-EYD24K: the owner moves the emulator between the drawer and a grid tile.
         TERMINAL_VIEWPORT_PRESENTATION_EVENT,
@@ -1358,8 +1363,18 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
         for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
           if (type === 'focusin') handler();
       },
+      /** The program's query reply or a typed key, as xterm reports both through `onData`. */
+      data: (value: string) => {
+        terminal.dataHandler?.(value);
+      },
+      fire: (type: string, event: Event = new Event(type)) => {
+        for (const [name, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+          if (name === type) handler(event);
+      },
       claims: () =>
         sent
+          // Plain terminal input (typed keys, query replies) is not a control frame.
+          .filter((value) => value.startsWith('{'))
           .map((value) => (JSON.parse(value) as { resize?: Record<string, unknown> }).resize)
           .filter((value): value is Record<string, unknown> => Boolean(value)),
     };
@@ -1460,6 +1475,99 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     view.show();
     expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, interacting: true, visible: true });
     view.dispose();
+  });
+
+  /** A settled, visible magnified viewport on an open socket that has not interacted yet. */
+  function settledMagnified() {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    view.show();
+    return view;
+  }
+  const interactions = (view: ReturnType<typeof mountMagnified>) =>
+    view.claims().filter((claim) => claim.interacting).length;
+
+  // HS2-1YX5VS: every xterm attached to a PTY answers the program's queries (cursor position, device
+  // attributes, focus reports) through onData. Counting that as a keystroke made idle viewers on two
+  // devices hand PTY sizing back and forth about once a second.
+  it('never treats xterm query replies as an interaction, but typing is one (HS2-1YX5VS)', () => {
+    const view = settledMagnified();
+    expect(interactions(view)).toBe(0);
+    for (const reply of ['\u001b[12;1R', '\u001b[?62;22c', '\u001b[I', '\u001b[O']) view.data(reply);
+    expect(interactions(view)).toBe(0);
+    expect(view.claims().length).toBeGreaterThan(0);
+    // A real key press is the human interaction; the following onData input stays plain input.
+    view.fire('keydown');
+    view.data('a');
+    expect(interactions(view)).toBe(1);
+    // Steady typing is throttled to one interacting claim a second.
+    view.fire('keydown');
+    view.fire('input');
+    expect(interactions(view)).toBe(1);
+    view.dispose();
+  });
+
+  it.each(['keydown', 'paste', 'input'])('counts a %s event as an interaction (HS2-1YX5VS)', (type) => {
+    const view = settledMagnified();
+    view.fire(type);
+    expect(view.claims().filter((claim) => claim.interacting)).toEqual([
+      expect.objectContaining({ cols: 80, rows: 24, focus: true, visible: true, interacting: true }),
+    ]);
+    view.dispose();
+  });
+
+  it('counts the phone key bar and paste actions as interactions (HS2-1YX5VS)', () => {
+    const keyBar = settledMagnified();
+    keyBar.fire('hotsheet-terminal-key', new CustomEvent('hotsheet-terminal-key', { detail: { key: 'Escape' } }));
+    expect(interactions(keyBar)).toBe(1);
+    keyBar.dispose();
+    const paste = settledMagnified();
+    paste.fire('hotsheet-terminal-paste', new CustomEvent('hotsheet-terminal-paste', { detail: { text: 'ls' } }));
+    expect(interactions(paste)).toBe(1);
+    paste.dispose();
+  });
+
+  it('does not count replaying buffered input or query replies after a reconnect (HS2-1YX5VS)', () => {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    // The program's reply arrives while the socket is still opening: it is buffered, not an interaction.
+    view.data('\u001b[12;1R');
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    view.show();
+    expect(view.claims().length).toBeGreaterThan(0);
+    expect(interactions(view)).toBe(0);
+    view.dispose();
+  });
+
+  it('sends the first eligible claim as interacting only for a viewport a user gesture opened (HS2-1YX5VS)', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/150.0', userActivation: { isActive: true } });
+    const opened = mountMagnified({ cols: 180, rows: 50 });
+    opened.socket.readyState = 1;
+    opened.socket.dispatchEvent(new Event('open'));
+    opened.fit(180, 50);
+    opened.runFrames();
+    // Not yet visible: the arbiter would ignore it, so the gesture waits for the first eligible claim.
+    expect(interactions(opened)).toBe(0);
+    opened.show();
+    expect(opened.claims().filter((claim) => claim.interacting)).toEqual([
+      expect.objectContaining({ focus: true, visible: true, interacting: true }),
+    ]);
+    // Later geometry claims are passive again.
+    opened.fit(120, 30);
+    opened.runFrames();
+    expect(interactions(opened)).toBe(1);
+    opened.dispose();
+
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/150.0', userActivation: { isActive: false } });
+    const restored = settledMagnified();
+    expect(restored.claims().length).toBeGreaterThan(0);
+    expect(interactions(restored)).toBe(0);
+    restored.dispose();
   });
 
   it('sends no deferred interaction when nothing interacted before the first settle', () => {

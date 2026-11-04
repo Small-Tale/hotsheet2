@@ -9,15 +9,21 @@
 //! (which never handled remotes) to all viewports.
 //!
 //! The default policy is **focus-follows** (tmux window-size latest): the PTY follows the
-//! most-recently-focused visible viewport, with a short **focus-hold** so a rapid focus flip
-//! doesn't thrash the size. Everything here is a **pure state machine with an injected clock**
-//! (`now_ms` passed in), so it gets transition-matrix + adversarial-sequence tests directly.
+//! visible, sizing-eligible viewport a human most recently interacted with, with a short
+//! **focus-hold** so a rapid flip doesn't thrash the size. Only claims the client marks
+//! `interacting` count as human interaction; a first claim, a reconnect, an eligibility change,
+//! or a heartbeat never takes the size from the last-interacted viewport (HS2-1YX5VS).
+//! Everything here is a **pure state machine with an injected clock** (`now_ms` passed in), so
+//! it gets transition-matrix + adversarial-sequence tests directly.
 
 use std::collections::HashMap;
 
 /// Hold the current size for this long after a focus change before following the new
 /// viewport — debounces a rapid focus flip (`docs/06` §6.7 `SIZE_FOCUS_HOLD_MS`).
 pub const SIZE_FOCUS_HOLD_MS: u64 = 500;
+/// How many disconnected viewports' interaction times the arbiter remembers, so a viewport that
+/// reconnects under the same id regains its place instead of ranking as never interacted.
+pub const SIZE_DEPARTED_MEMORY: usize = 64;
 /// Ignore a resize smaller than this many rows/cols of delta (avoid churn on ±1).
 pub const SIZE_MIN_DELTA: u16 = 2;
 /// Don't resize the PTY more often than this (`SIZE_RESIZE_MIN_INTERVAL_MS`). This keeps
@@ -41,8 +47,9 @@ pub struct ViewportClaim {
     /// size control from the device the user last actually touched (HS2-3ZBQDG).
     pub interacting: bool,
     /// When this viewport last saw a genuine interaction — the recency tiebreak. The arbiter
-    /// advances it only on an interacting claim, a focus gain, or a viewport's first claim; a
-    /// plain heartbeat preserves the prior value (see [`SizeArbiter::upsert`]).
+    /// takes it from an interacting claim only; any other claim keeps the viewport's prior value
+    /// (0 for a viewport that never interacted), whatever the caller passed (see
+    /// [`SizeArbiter::upsert`], HS2-1YX5VS).
     pub activity_at_ms: u64,
 }
 
@@ -69,11 +76,24 @@ pub struct Decision {
     pub driven_by: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Seen {
+    seq: u64,
+    claimed_at_ms: u64,
+}
+
 /// Arbitrates a PTY's size across many viewport claims.
 #[derive(Debug)]
 pub struct SizeArbiter {
     policy: SizePolicy,
     claims: HashMap<String, ViewportClaim>,
+    /// Per live viewport: its attach order (the final tiebreak) and when its last claim arrived
+    /// (the lease clock for [`Self::expire`]).
+    seen: HashMap<String, Seen>,
+    next_seq: u64,
+    /// The interaction times of recently disconnected viewports, bounded by
+    /// [`SIZE_DEPARTED_MEMORY`], restored when the same viewport id claims again (HS2-1YX5VS).
+    departed: HashMap<String, u64>,
     /// The last size actually applied to the PTY (guards min-delta + min-interval).
     applied: Option<(u16, u16)>,
     /// The viewport whose claim produced `applied` (`None` for a seeded spawn size or a
@@ -102,6 +122,9 @@ impl SizeArbiter {
         Self {
             policy,
             claims: HashMap::new(),
+            seen: HashMap::new(),
+            next_seq: 0,
+            departed: HashMap::new(),
             applied: None,
             applied_by: None,
             applied_at_ms: 0,
@@ -137,39 +160,62 @@ impl SizeArbiter {
         self.claims.len()
     }
 
-    /// Add or update a viewport's claim. When a viewport *newly* takes focus and isn't already
-    /// the driver, that starts the focus-hold clock so a rapid flip doesn't switch the driver.
+    /// Add or update a viewport's claim. When a viewport *newly* becomes eligible or is
+    /// interacted with and isn't already the driver, that starts the focus-hold clock so a rapid
+    /// flip doesn't switch the driver.
     ///
-    /// The recency tiebreak (`activity_at_ms`) tracks genuine **interaction**, not the steady
-    /// heartbeat every viewport streams: a first claim, a focus gain, or an explicitly
-    /// interacting claim advances it to `now_ms`; a plain heartbeat keeps the viewport's prior
-    /// interaction time. Without this, two focused devices' interleaved heartbeats would
-    /// ping-pong "latest focused" and thrash the PTY size, leaving the device the user isn't
-    /// touching (e.g. a phone) rendering the other device's size (HS2-3ZBQDG).
+    /// The recency tiebreak (`activity_at_ms`) tracks genuine **interaction** only: an
+    /// interacting claim sets it to `now_ms`; every other claim keeps the viewport's prior
+    /// interaction time. A viewport's first claim, a reconnect, a sizing-eligibility gain, and a
+    /// heartbeat are passive, so none of them can take the size from the viewport a human last
+    /// touched (HS2-3ZBQDG, HS2-1YX5VS). A viewport that reconnects under the same id regains
+    /// the interaction time it had when it left.
     pub fn upsert(&mut self, mut claim: ViewportClaim, now_ms: u64) {
         let prev = self.claims.get(&claim.viewer_id);
         let gained_focus = claim.focus && prev.is_none_or(|p| !p.focus);
-        // A non-driver viewport that gains focus *or* is actively interacted with is a takeover
-        // candidate; arm the focus-hold so a rapid device flip (or a stray double-tap) must
+        // A non-driver viewport that gains eligibility *or* is actively interacted with is a
+        // takeover candidate; arm the focus-hold so a rapid flip (or a stray double-tap) must
         // persist for SIZE_FOCUS_HOLD_MS before it actually switches the driver.
         let starts_takeover = (gained_focus || claim.interacting)
             && self.driver.as_deref() != Some(claim.viewer_id.as_str());
         if starts_takeover {
             self.focus_changed_at_ms = now_ms;
         }
-        if !(claim.interacting || gained_focus || prev.is_none()) {
-            // A non-interacting heartbeat: preserve the prior interaction recency.
-            if let Some(previous) = prev {
-                claim.activity_at_ms = previous.activity_at_ms;
-            }
+        if claim.interacting {
+            claim.activity_at_ms = now_ms;
+        } else {
+            claim.activity_at_ms = match prev {
+                Some(previous) => previous.activity_at_ms,
+                None => self.departed.get(&claim.viewer_id).copied().unwrap_or(0),
+            };
         }
+        self.departed.remove(&claim.viewer_id);
+        let seq = match self.seen.get(&claim.viewer_id) {
+            Some(seen) => seen.seq,
+            None => {
+                self.next_seq += 1;
+                self.next_seq
+            }
+        };
+        self.seen.insert(
+            claim.viewer_id.clone(),
+            Seen {
+                seq,
+                claimed_at_ms: now_ms,
+            },
+        );
         self.claims.insert(claim.viewer_id.clone(), claim);
     }
 
     /// Drop a viewport (it disconnected). If it was the driver, the size recomputes
     /// immediately on the next `decide` (self-heal — no hold on a disconnect).
     pub fn remove(&mut self, viewer_id: &str) {
-        self.claims.remove(viewer_id);
+        self.seen.remove(viewer_id);
+        if let Some(gone) = self.claims.remove(viewer_id)
+            && gone.activity_at_ms > 0
+        {
+            self.remember_departed(gone.viewer_id, gone.activity_at_ms);
+        }
         if self.driver.as_deref() == Some(viewer_id) {
             self.driver = None;
         }
@@ -179,13 +225,27 @@ impl SizeArbiter {
         }
     }
 
-    /// Drop viewports whose last claim is older than `lease_ms` (missed heartbeats). Returns
-    /// how many were expired.
+    fn remember_departed(&mut self, viewer_id: String, activity_at_ms: u64) {
+        if self.departed.len() >= SIZE_DEPARTED_MEMORY
+            && !self.departed.contains_key(&viewer_id)
+            && let Some(oldest) = self
+                .departed
+                .iter()
+                .min_by_key(|(_, at)| **at)
+                .map(|(id, _)| id.clone())
+        {
+            self.departed.remove(&oldest);
+        }
+        self.departed.insert(viewer_id, activity_at_ms);
+    }
+
+    /// Drop viewports whose last claim (of any kind, heartbeats included) is older than
+    /// `lease_ms`. Returns how many were expired.
     pub fn expire(&mut self, now_ms: u64, lease_ms: u64) -> usize {
         let stale: Vec<String> = self
-            .claims
+            .seen
             .iter()
-            .filter(|(_, c)| now_ms.saturating_sub(c.activity_at_ms) > lease_ms)
+            .filter(|(_, seen)| now_ms.saturating_sub(seen.claimed_at_ms) > lease_ms)
             .map(|(id, _)| id.clone())
             .collect();
         for id in &stale {
@@ -275,7 +335,7 @@ impl SizeArbiter {
         })
     }
 
-    /// Focus-follows: the most-recently-focused visible viewport drives. A *different* live
+    /// Focus-follows: the most-recently-interacted eligible viewport drives. A *different* live
     /// viewport only takes over once it has held focus for `SIZE_FOCUS_HOLD_MS` (debounce); a
     /// disconnected driver recomputes immediately (self-heal); nothing focused holds current.
     fn focus_follows(&mut self, now_ms: u64) -> Option<Decision> {
@@ -316,11 +376,25 @@ impl SizeArbiter {
         })
     }
 
+    /// The eligible (focused and visible) viewport with the newest human interaction. Ties —
+    /// for example several viewports that never interacted — prefer the current driver, then
+    /// the earliest attached, so the choice never depends on map order (HS2-1YX5VS).
     fn latest_focused(&self) -> Option<&ViewportClaim> {
+        let driver = self.driver.as_deref();
         self.claims
             .values()
             .filter(|c| c.focus && c.visible)
-            .max_by_key(|c| c.activity_at_ms)
+            .max_by_key(|c| {
+                let seq = self
+                    .seen
+                    .get(&c.viewer_id)
+                    .map_or(u64::MAX, |seen| seen.seq);
+                (
+                    c.activity_at_ms,
+                    driver == Some(c.viewer_id.as_str()),
+                    std::cmp::Reverse(seq),
+                )
+            })
     }
 }
 
@@ -727,5 +801,257 @@ mod tests {
             a.decide(1600).is_none(),
             "no takeover after the old deadline"
         );
+    }
+
+    /// Every decision an arbiter makes while `step` feeds it claims, as `(at, driver, cols)`.
+    fn decisions(
+        a: &mut SizeArbiter,
+        from: u64,
+        to: u64,
+        every: u64,
+        mut step: impl FnMut(&mut SizeArbiter, u64),
+    ) -> Vec<(u64, String, u16)> {
+        let mut out = Vec::new();
+        let mut t = from;
+        while t <= to {
+            step(a, t);
+            if let Some(d) = a.decide(t) {
+                out.push((t, d.driven_by.unwrap_or_default(), d.cols));
+            }
+            t += every;
+        }
+        out
+    }
+
+    /// A desk that the user typed in drives, then a phone attaches and stays passive.
+    fn desk_driving_with_a_passive_phone() -> SizeArbiter {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 1_000);
+        assert_eq!(a.decide(1_000).unwrap().driven_by.as_deref(), Some("desk"));
+        a.upsert(claim("phone", 80, 24, true, 0), 2_000);
+        assert!(a.decide(2_000).is_none(), "a passive arrival never resizes");
+        a
+    }
+
+    /// HS2-1YX5VS: a passive viewer's first claim, repeated geometry claims (ResizeObserver
+    /// jitter), visibility flips, and heartbeats never take the size from the viewport a human
+    /// last interacted with, and two idle viewers never resize the PTY.
+    #[test]
+    fn passive_claims_never_take_the_size_from_the_last_interacted_viewport() {
+        let mut a = desk_driving_with_a_passive_phone();
+        let mut jitter = 0u16;
+        let churn = decisions(&mut a, 2_100, 60_000, 100, |a, t| {
+            jitter = (jitter + 1) % 3;
+            // The phone's observer reports a slightly different grid every 100 ms and its
+            // visibility blinks; the desk heartbeats every 5 s.
+            a.upsert(claim("phone", 80 + jitter, 24 + jitter, true, t), t);
+            if t % 1_000 == 0 {
+                a.upsert(
+                    ViewportClaim {
+                        visible: t % 2_000 == 0,
+                        ..claim("phone", 80, 24, true, t)
+                    },
+                    t,
+                );
+            }
+            if t % 5_000 == 0 {
+                a.upsert(claim("desk", 200, 50, true, t), t);
+            }
+        });
+        assert_eq!(churn, vec![], "two idle viewers never resize the PTY");
+        assert_eq!(a.driver.as_deref(), Some("desk"));
+    }
+
+    /// HS2-1YX5VS: a passive viewer that reconnects (drop, then a fresh first claim under the
+    /// same id) is still passive and does not take the size.
+    #[test]
+    fn a_passive_viewer_reconnecting_does_not_take_the_size() {
+        let mut a = desk_driving_with_a_passive_phone();
+        for round in 0..5u64 {
+            let t = 3_000 + round * 1_000;
+            a.remove("phone");
+            assert!(
+                a.decide(t).is_none(),
+                "the passive phone leaving changes nothing"
+            );
+            a.upsert(claim("phone", 80, 24, true, 0), t);
+            assert!(a.decide(t + SIZE_FOCUS_HOLD_MS).is_none());
+        }
+        assert_eq!(a.driver.as_deref(), Some("desk"));
+    }
+
+    /// HS2-1YX5VS: an interaction hands the size over after the hold, back and forth, and each
+    /// handoff resizes exactly once while the other side keeps heartbeating.
+    #[test]
+    fn interaction_hands_the_size_back_and_forth() {
+        let mut a = desk_driving_with_a_passive_phone();
+        let mut handoffs = Vec::new();
+        for (round, who) in ["phone", "desk", "phone", "desk"].into_iter().enumerate() {
+            let t = 10_000 + round as u64 * 10_000;
+            let (cols, rows) = if who == "phone" { (80, 24) } else { (200, 50) };
+            a.upsert(interacting_claim(who, cols, rows, true, 0), t);
+            assert!(a.decide(t).is_none(), "held at t={t}");
+            let other = if who == "phone" {
+                ("desk", 200, 50)
+            } else {
+                ("phone", 80, 24)
+            };
+            handoffs.extend(decisions(&mut a, t + 100, t + 9_000, 100, |a, now| {
+                if now % 1_000 == 0 {
+                    a.upsert(claim(other.0, other.1, other.2, true, 0), now);
+                }
+            }));
+        }
+        assert_eq!(
+            handoffs,
+            vec![
+                (10_500, "phone".into(), 80),
+                (20_500, "desk".into(), 200),
+                (30_500, "phone".into(), 80),
+                (40_500, "desk".into(), 200),
+            ]
+        );
+    }
+
+    /// HS2-1YX5VS: with three viewers, the most recently interacted one drives; the others'
+    /// passive claims and reconnects never displace it.
+    #[test]
+    fn three_viewers_follow_the_most_recent_interaction() {
+        let mut a = desk_driving_with_a_passive_phone();
+        a.upsert(claim("tablet", 120, 40, true, 0), 2_500);
+        assert!(a.decide(2_500).is_none());
+        a.upsert(interacting_claim("tablet", 120, 40, true, 0), 5_000);
+        assert_eq!(
+            a.decide(5_000 + SIZE_FOCUS_HOLD_MS).map(|d| d.driven_by),
+            Some(Some("tablet".into()))
+        );
+        // The desk and phone reconnect and heartbeat; the tablet keeps the size.
+        a.remove("desk");
+        a.remove("phone");
+        a.upsert(claim("desk", 200, 50, true, 0), 7_000);
+        a.upsert(claim("phone", 80, 24, true, 0), 7_000);
+        assert!(a.decide(8_000).is_none());
+        // The tablet leaves: the desk interacted more recently than the phone, so it drives.
+        a.remove("tablet");
+        assert_eq!(
+            a.decide(9_000).map(|d| d.driven_by),
+            Some(Some("desk".into()))
+        );
+    }
+
+    /// HS2-1YX5VS: when the authority disconnects, a survivor drives at once (self-heal). If the
+    /// authority comes back under the same id it regains the size, because its last interaction
+    /// is still the newest; if someone interacted elsewhere meanwhile, it does not.
+    #[test]
+    fn the_authority_regains_the_size_after_a_reconnect_unless_someone_interacted_since() {
+        let mut a = desk_driving_with_a_passive_phone();
+        a.upsert(interacting_claim("phone", 80, 24, true, 0), 3_000);
+        assert_eq!(
+            a.decide(3_000 + SIZE_FOCUS_HOLD_MS).map(|d| d.driven_by),
+            Some(Some("phone".into()))
+        );
+        // The phone's socket drops: the desk takes over immediately.
+        a.remove("phone");
+        assert_eq!(
+            a.decide(5_000).map(|d| d.driven_by),
+            Some(Some("desk".into()))
+        );
+        // The phone reconnects passively: it was the last device touched, so it drives again
+        // once the focus-hold confirms it stayed.
+        a.upsert(claim("phone", 80, 24, true, 0), 6_000);
+        assert!(a.decide(6_000).is_none(), "held");
+        assert_eq!(
+            a.decide(6_000 + SIZE_FOCUS_HOLD_MS).map(|d| d.driven_by),
+            Some(Some("phone".into()))
+        );
+        // It drops again, and this time the user types on the desk before it returns.
+        a.remove("phone");
+        assert!(a.decide(7_000).is_some());
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 7_500);
+        assert!(a.decide(7_500).is_none(), "the desk already drives");
+        a.upsert(claim("phone", 80, 24, true, 0), 8_000);
+        assert!(
+            a.decide(9_000).is_none(),
+            "the returning phone is older than the desk's interaction"
+        );
+        assert_eq!(a.driver.as_deref(), Some("desk"));
+    }
+
+    /// HS2-1YX5VS: a lone viewer drives even if it never interacted; a second viewer that never
+    /// interacted ties with it and the current driver keeps the size, whatever the map order.
+    #[test]
+    fn a_lone_viewer_drives_and_ties_keep_the_current_driver() {
+        for order in [["first", "second"], ["second", "first"]] {
+            let mut a = SizeArbiter::default();
+            a.upsert(claim(order[0], 100, 40, true, 0), 0);
+            assert_eq!(
+                a.decide(0).map(|d| d.driven_by),
+                Some(Some(order[0].into()))
+            );
+            a.upsert(claim(order[1], 60, 20, true, 0), 1_000);
+            assert!(a.decide(5_000).is_none(), "a tie keeps the driver");
+            // The driver leaves: the remaining viewer drives at once.
+            a.remove(order[0]);
+            assert_eq!(
+                a.decide(6_000).map(|d| d.driven_by),
+                Some(Some(order[1].into()))
+            );
+        }
+        // With no driver at all, the earliest attached of several passive viewers drives.
+        let mut a = SizeArbiter::default();
+        a.set_applied(80, 24);
+        for id in ["v3", "v1", "v2"] {
+            a.upsert(
+                ViewportClaim {
+                    visible: false,
+                    ..claim(id, 100, 40, true, 0)
+                },
+                0,
+            );
+        }
+        assert!(a.decide(0).is_none(), "nothing visible holds the size");
+        for id in ["v2", "v1", "v3"] {
+            a.upsert(claim(id, 100, 40, true, 0), 1_000);
+        }
+        assert_eq!(
+            a.decide(1_000).map(|d| d.driven_by),
+            Some(Some("v3".into()))
+        );
+    }
+
+    /// HS2-1YX5VS: the departed-viewer memory is bounded, dropping the oldest interaction.
+    #[test]
+    fn the_departed_memory_is_bounded() {
+        let mut a = SizeArbiter::default();
+        let count = SIZE_DEPARTED_MEMORY as u64 + 10;
+        for i in 0..count {
+            let id = format!("v{i}");
+            a.upsert(interacting_claim(&id, 80, 24, true, 0), 1 + i);
+            a.remove(&id);
+        }
+        assert_eq!(a.departed.len(), SIZE_DEPARTED_MEMORY);
+        assert!(!a.departed.contains_key("v0"), "the oldest was forgotten");
+        assert!(a.departed.contains_key(&format!("v{}", count - 1)));
+        // A viewer that never interacted leaves nothing behind.
+        a.upsert(claim("passive", 80, 24, true, 0), 500);
+        a.remove("passive");
+        assert!(!a.departed.contains_key("passive"));
+    }
+
+    /// HS2-1YX5VS: the lease clock is the last claim of any kind, so a viewport that heartbeats
+    /// but never interacts is not expired.
+    #[test]
+    fn expire_measures_the_last_claim_not_the_last_interaction() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("busy", 80, 24, true, 0), 0);
+        a.upsert(claim("quiet", 80, 24, true, 0), 0);
+        a.upsert(claim("busy", 80, 24, true, 0), 4_000);
+        assert_eq!(
+            a.expire(5_000, 3_000),
+            1,
+            "only the silent viewport expires"
+        );
+        assert_eq!(a.viewer_count(), 1);
+        assert!(a.claims.contains_key("busy"));
     }
 }

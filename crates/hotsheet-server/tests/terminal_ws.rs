@@ -1054,3 +1054,99 @@ async fn a_slow_broker_viewer_under_heavy_output_still_gets_input_to_the_pty() {
     });
     slow_viewer_input_reaches_the_pty(addr, "flood-broker").await;
 }
+
+/// Every `{pty_size}` frame `ws` receives within `window`, as (cols, rows, driver or "").
+async fn size_frames_within(
+    ws: &mut TestWs,
+    window: std::time::Duration,
+) -> Vec<(u64, u64, String)> {
+    let mut frames = Vec::new();
+    let _ = tokio::time::timeout(window, async {
+        while let Some(Ok(msg)) = ws.next().await {
+            if let WsMessage::Text(t) = msg
+                && let Ok(v) = serde_json::from_str::<serde_json::Value>(&t)
+                && let Some(size) = v.get("pty_size")
+            {
+                frames.push((
+                    size["cols"].as_u64().unwrap(),
+                    size["rows"].as_u64().unwrap(),
+                    v["driven_by"].as_str().unwrap_or("").to_string(),
+                ));
+            }
+        }
+    })
+    .await;
+    frames
+}
+
+fn claim_frame(viewer: &str, cols: u16, rows: u16, interacting: bool) -> WsMessage {
+    WsMessage::Text(
+        format!(
+            r#"{{"resize":{{"viewer_id":"{viewer}","cols":{cols},"rows":{rows},"focus":true,"visible":true,"interacting":{interacting}}}}}"#
+        )
+        .into(),
+    )
+}
+
+/// HS2-1YX5VS: through the real attach, a passive second viewer's claims, observer jitter, and
+/// reconnects never resize a PTY that another viewer's user last typed in; only its own
+/// interaction takes the size, once.
+#[tokio::test]
+async fn a_passive_viewer_never_resizes_the_pty_until_its_user_interacts() {
+    let (_d, addr, id) = boot_with_cat().await;
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut desk, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        expect_replay_then_size(&mut desk).await,
+        (80, 24, String::new())
+    );
+    desk.send(claim_frame("desk", 160, 48, true)).await.unwrap();
+    assert_eq!(
+        next_size_frame(&mut desk).await,
+        Some((160, 48, "desk".into()))
+    );
+
+    // The phone attaches, reconnects twice, and streams passive claims at a jittering grid.
+    for _ in 0..3 {
+        let (mut phone, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+        assert_eq!(
+            expect_replay_then_size(&mut phone).await,
+            (160, 48, "desk".into())
+        );
+        for step in 0..10u16 {
+            phone
+                .send(claim_frame("phone", 80 + step % 3, 24, false))
+                .await
+                .unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        phone.close(None).await.unwrap();
+    }
+    let (mut phone, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        expect_replay_then_size(&mut phone).await,
+        (160, 48, "desk".into())
+    );
+    phone
+        .send(claim_frame("phone", 80, 24, false))
+        .await
+        .unwrap();
+    desk.send(claim_frame("desk", 160, 48, false))
+        .await
+        .unwrap();
+    assert_eq!(
+        size_frames_within(&mut desk, std::time::Duration::from_millis(1_500)).await,
+        vec![],
+        "passive claims and reconnects never resize the PTY"
+    );
+
+    // The phone's user types: after the focus hold the phone drives, exactly once.
+    phone
+        .send(claim_frame("phone", 80, 24, true))
+        .await
+        .unwrap();
+    assert_eq!(
+        size_frames_within(&mut desk, std::time::Duration::from_millis(1_500)).await,
+        vec![(80, 24, "phone".to_string())]
+    );
+}

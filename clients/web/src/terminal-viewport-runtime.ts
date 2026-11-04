@@ -64,6 +64,7 @@ import {
   TERMINAL_PING_INTERVAL_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
+  TERMINAL_USER_INPUT_EVENTS,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
   TERMINAL_VIEWPORT_PRESENTATION_EVENT,
@@ -71,6 +72,8 @@ import {
   TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalGestureClaimAtMount,
+  terminalGestureClaimDue,
   terminalInputNeedsProbe,
   terminalInverseScalePercent,
   terminalLivenessFrame,
@@ -511,7 +514,9 @@ function initializeTerminalViewport(
     magnifiedPresentation = insideMagnified(),
     tileGridSize: { cols: number; rows: number } | undefined,
     tileCanClaim = false,
-    tileWebglReleased = false;
+    tileWebglReleased = false,
+    // Set while a user gesture that mounted this viewport may still claim PTY sizing (HS2-1YX5VS).
+    gestureClaim = terminalGestureClaimAtMount(typeof navigator === 'undefined' ? undefined : navigator, Date.now());
   own(() => {
     disposed = true;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
@@ -576,8 +581,12 @@ function initializeTerminalViewport(
     element.dataset.viewportVisible = String(claimVisible);
     if (socket?.readyState !== WebSocket.OPEN) return;
     if (!fixedPresentation() && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
-    const size = claimDimensions();
-    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, false));
+    const size = claimDimensions(),
+      // A viewport the user just opened (a tap or click that mounted it) takes PTY sizing with its first
+      // eligible claim; a passive mount, a reconnect, or a later claim does not (HS2-1YX5VS).
+      interacting = terminalGestureClaimDue(gestureClaim, Date.now(), sizingFocus && claimVisible);
+    if (interacting) gestureClaim = undefined;
+    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, interacting));
   };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
   // makes this the "last interacted" viewport, so it takes over PTY sizing (HS2-3ZBQDG).
@@ -604,6 +613,7 @@ function initializeTerminalViewport(
     const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, true));
     lastInteractionAt = Date.now();
+    gestureClaim = undefined;
   };
   // Typing fires per keystroke; throttle the interacting claim so steady typing doesn't flood the
   // socket while still keeping this device's recency fresh.
@@ -917,10 +927,10 @@ function initializeTerminalViewport(
       attempt = 0;
       element.dataset.connection = 'connected';
       fitAndClaim();
+      // The keys that produced buffered input already signalled their interaction (HS2-1YX5VS).
       if (pendingInput) {
         current.send(pendingInput);
         pendingInput = '';
-        signalInteractionThrottled();
       }
       if (autoFocus) terminal.focus();
       lastInboundAt = Date.now();
@@ -943,7 +953,6 @@ function initializeTerminalViewport(
         if (pendingInput) {
           current.send(pendingInput);
           pendingInput = '';
-          signalInteractionThrottled();
         }
       }
       inbound.push(event.data);
@@ -1352,6 +1361,10 @@ function initializeTerminalViewport(
     element.addEventListener('focusout', focus);
     element.addEventListener('pointerdown', signalInteraction);
     element.addEventListener('focusin', signalInteraction);
+    // Typing, pasting, and text entry (including a phone keyboard's composition) are the human input
+    // that keeps this viewport's sizing authority fresh; xterm's own query replies are not (HS2-1YX5VS).
+    // Capture them: xterm stops the propagation of every key it handles.
+    for (const type of TERMINAL_USER_INPUT_EVENTS) element.addEventListener(type, signalInteractionThrottled, true);
     element.addEventListener('pointerdown', reconnectNow);
     element.addEventListener('focusin', reconnectNow);
     own(() => {
@@ -1362,6 +1375,8 @@ function initializeTerminalViewport(
       element.removeEventListener('focusout', focus);
       element.removeEventListener('pointerdown', signalInteraction);
       element.removeEventListener('focusin', signalInteraction);
+      for (const type of TERMINAL_USER_INPUT_EVENTS)
+        element.removeEventListener(type, signalInteractionThrottled, true);
     });
   }
   // Typing after a quiet spell holds the input and probes the socket at once (HS2-J52ZJ7): the reply
@@ -1394,8 +1409,11 @@ function initializeTerminalViewport(
         holdInputBehindProbe(current, value);
         return;
       }
+      // `onData` also carries xterm's automatic replies to the program's queries (cursor position,
+      // device attributes, focus reports), which every attached viewer sends. Only the DOM events
+      // below count as a human interaction, so those replies cannot hand PTY sizing back and forth
+      // between idle viewers (HS2-1YX5VS).
       current.send(value);
-      signalInteractionThrottled();
       return;
     }
     pendingInput = bufferTerminalInput(pendingInput, value);
@@ -1423,6 +1441,7 @@ function initializeTerminalViewport(
           applicationCursor: terminal.modes.applicationCursorKeysMode,
         });
       if (!sequence) return;
+      signalInteractionThrottled();
       modifiers?.consume();
       // Typing into the terminal returns the viewport to the newest output, as a physical key does.
       terminal.scrollToBottom();
@@ -1441,6 +1460,7 @@ function initializeTerminalViewport(
     const paste = (event: Event) => {
       const text = (event as CustomEvent<TerminalPasteDetail>).detail.text;
       if (!text) return;
+      signalInteractionThrottled();
       terminal.scrollToBottom();
       pasting = true;
       try {

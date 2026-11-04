@@ -3865,6 +3865,24 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // on attach
   keeps the prior value. Without this, two sizing-eligible devices' interleaved 5-second heartbeats
   would ping-pong "most recent focus" and thrash the PTY size, leaving the device the user
   isn't touching (e.g. a phone) rendering the other device's size (**HS2-3ZBQDG**).
+- Interaction comes from DOM user events only: a pointer press, focus, `keydown`, `paste`,
+  `input` (captured, because xterm stops the keys it handles), the phone key bar, and the paste
+  action. xterm's `onData` is not an interaction. It also carries the emulator's automatic replies
+  to the program's queries (cursor position, device attributes, focus reports), which every
+  attached viewer sends. Counting those replies as keystrokes made a desktop drawer and a phone
+  hand the size back and forth about once a second while both sat idle: each resize made the
+  TUI query again (**HS2-1YX5VS**). Replaying input buffered across a reconnect is not an
+  interaction either; the keys that produced it already were.
+- A viewport opened by a user gesture (the page has transient user activation when it mounts)
+  sends its first visible, eligible claim within 5 s as interacting, so opening a terminal on a
+  device makes that device the authority. A passive mount (restoring a page) or a reconnect does
+  not (**HS2-1YX5VS**).
+- On the server, a viewport's first claim, a reconnect, and a sizing-eligibility gain are passive:
+  they arm the focus-hold but never advance recency. Of the eligible viewports, the one with the
+  newest interaction drives; ties prefer the current driver, then the earliest attached. A viewport
+  that disconnects leaves its interaction time behind (the last 64 are remembered), so the
+  authority that reconnects under the same id regains the size after the hold, while a passive
+  viewer that reconnects stays passive (**HS2-1YX5VS**).
 - The protocol retains the historical `focus` field name, but the web client uses it as
   **sizing eligibility**. Visible grid previews and visible interactive terminals are eligible;
   keyboard focus only controls input and never changes a terminal's local geometry
@@ -3936,6 +3954,10 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
 - **When no eligible viewport remains, hold the current size** (don't resize on mere
   visibility changes) — glancing at a terminal from a second device must not reflow
   it.
+- **The authority leaving self-heals at once.** When the driving viewport disconnects, the
+  eligible survivor with the newest interaction drives immediately (no hold). If the departed
+  authority reconnects and nobody interacted elsewhere meanwhile, it takes the size back once
+  the focus-hold confirms it stayed (**HS2-1YX5VS**).
 
 **Anti-thrash guards** (named so implementation has targets; tune later):
 

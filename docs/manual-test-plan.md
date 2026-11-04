@@ -346,6 +346,11 @@ the default-on path is checked by hand.
    "empty"/clipped terminal on the phone). Then interact on the phone (tap/type) and
    confirm the PTY follows the phone after the focus-hold; interact back on the desktop
    and confirm it follows the desktop. Interaction, not the heartbeat, transfers control.
+   HS2-1YX5VS — repeat with a TUI that queries the terminal after a resize (Claude Code,
+   `htop`, or `vim`) open in the desktop bottom drawer and the phone looking at the same
+   terminal. Leave both idle for a minute and confirm the TUI never redraws at a different
+   size. Reload the phone and toggle its Wi-Fi: a passive reconnect must not take the size
+   from the device you last typed on.
 5. HS2-SA08XA — on a real phone, open the Workspace grid and magnify a terminal. Confirm it
    fills the screen (no 5:3 letterbox), keeps 80×24 scaled to the available frame, and that a
    full-width TUI (e.g. `nano`, `htop`) renders without horizontal wrapping. Rotate the device
