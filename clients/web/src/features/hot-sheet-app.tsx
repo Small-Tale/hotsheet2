@@ -17,6 +17,7 @@ import { AiLaunchDialog } from '../components/ai-launch-dialog';
 import { AppError } from '../components/app-error';
 import { AppLoadingIndicator } from '../components/app-loading-indicator';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
+import { ConfirmationDialog } from '../components/confirmation-dialog';
 import type { ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { Hs1MigrationDialog } from '../components/hs1-migration';
@@ -57,6 +58,7 @@ import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ti
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import type { ConfirmationWorkflow } from '../confirmation';
 import { syncConversationScroll } from '../conversation-scroll';
 import { draftFiles } from '../draft-file-recovery';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
@@ -80,6 +82,8 @@ export interface HotSheetAppDependencies {
   activeTicketCollectionKey: () => string;
   aiConversationSurface: () => SafeHtml | null;
   aiFeedbackDialog: Signal<AiFeedbackDialogState | undefined>;
+  /** The shared in-app confirmation (HS2-6S1346). */
+  confirmation: ConfirmationWorkflow;
   appRoot: HTMLElement;
   appTabContextMenu: Signal<
     { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
@@ -227,6 +231,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,
+    confirmation,
     appRoot,
     appTabContextMenu,
     attachmentMenuSurfaceProps,
@@ -528,6 +533,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         {changeEvidenceSurface()}
         <BulkTicketDialog state={bulkTicketDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
+        <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer
           expanded={composerExpanded.value}
           title={composerTitle.value}

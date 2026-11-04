@@ -6798,6 +6798,166 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await page.screenshot({ path: 'target/visual-captures/hs2-prbgrb-provider-reseed.png', fullPage: true });
 });
 
+/** The shared in-app confirmation (HS2-6S1346); the desktop webview shows no window.confirm. */
+function confirmationDialog(page: Page, name: string) {
+  return page.getByRole('alertdialog', { name });
+}
+
+test('HS2-6S1346 asks in app before Bypass permissions: Escape and Cancel keep the mode, focus returns, confirm saves', async ({
+  page,
+}) => {
+  const settingsPuts: Array<Record<string, unknown>> = [];
+  await mockProject(page);
+  await page.route('**/ai-tools*', (route) =>
+    route.fulfill({
+      json: aiToolCatalog.map((tool) => ({
+        ...tool,
+        actions: [...tool.actions, 'change_permission_mode'],
+        ...(tool.id === 'claude'
+          ? {
+              default_permission_mode: 'auto',
+              permission_modes: [
+                { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
+                {
+                  id: 'bypassPermissions',
+                  label: 'Bypass permissions',
+                  warning: 'Claude can run any command without asking.',
+                },
+              ],
+            }
+          : {}),
+      })),
+    }),
+  );
+  page.on('dialog', (dialog) => {
+    throw new Error(`Unexpected native dialog: ${dialog.type()}`);
+  });
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/ai-settings'))
+      settingsPuts.push(request.postDataJSON() as Record<string, unknown>);
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]');
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
+  const chooseBypass = async () => {
+    await claudeMode.locator('.kui-select__trigger').click();
+    await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();
+  };
+  const optIn = confirmationDialog(page, 'Use Bypass permissions?');
+  const cancel = optIn.getByRole('button', { name: 'Cancel' }),
+    confirm = optIn.getByRole('button', { name: 'Use Bypass permissions' });
+
+  // Escape cancels, keeps the saved mode, and returns focus to the control that asked.
+  await chooseBypass();
+  await expect(optIn).toBeVisible();
+  await expect(optIn).toHaveAccessibleDescription('Claude can run any command without asking.');
+  const [cancelBox, confirmBox] = await Promise.all([cancel.boundingBox(), confirm.boundingBox()]);
+  expect(cancelBox && confirmBox && cancelBox.x + cancelBox.width <= confirmBox.x).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(optIn).toHaveCount(0);
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
+  await expect
+    .poll(() =>
+      claudeMode.evaluate((select) => select.contains(document.activeElement) || select === document.activeElement),
+    )
+    .toBe(true);
+  expect(settingsPuts).toHaveLength(0);
+
+  // The real dialog at wide, medium, and narrow widths, light and dark, across the resize transition.
+  await chooseBypass();
+  await expect(optIn).toBeVisible();
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [state, width] of [
+      ['wide', 1440],
+      ['medium', 1024],
+      ['narrow', 390],
+      ['wide-return', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expect
+        .poll(async () => {
+          const box = await optIn.boundingBox();
+          return Boolean(box && box.x >= 0 && box.x + box.width <= width && box.width > 0);
+        })
+        .toBe(true);
+      await expect(confirm).toBeInViewport({ ratio: 1 });
+      await expect(cancel).toBeInViewport({ ratio: 1 });
+      // Settle the dialog and the app's own resize transitions behind it before each capture.
+      await page.evaluate(async () => {
+        const motion = document
+          .getAnimations()
+          .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime));
+        await Promise.all(motion.map((animation) => animation.finished.catch(() => undefined)));
+      });
+      await page.screenshot({ path: `target/visual-captures/hs2-6s1346-bypass-${scheme}-${state}.png` });
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // Cancel keeps the mode; confirming saves it.
+  await cancel.click();
+  await expect(optIn).toHaveCount(0);
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
+  expect(settingsPuts).toHaveLength(0);
+  await chooseBypass();
+  await confirm.click();
+  await expect(optIn).toHaveCount(0);
+  await expect(claudeMode).toHaveJSProperty('value', 'bypassPermissions');
+  await expect
+    .poll(() => settingsPuts.at(-1)?.providers)
+    .toMatchObject({
+      claude: { permission_mode: 'bypassPermissions' },
+    });
+});
+
+test('HS2-6S1346 confirms a saved command in app: Cancel runs nothing, Run Command runs it', async ({ page }) => {
+  const runs: string[] = [];
+  await mockProject(page);
+  await page.route('**/__hotsheet/project-api/demo-checkout/commands', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: [
+            {
+              id: 'deploy',
+              title: 'Deploy preview',
+              program: '/usr/bin/true',
+              args: [],
+              group: 'Release',
+              confirmation: 'This publishes the preview build.',
+            },
+          ],
+        })
+      : route.fallback(),
+  );
+  page.on('dialog', (dialog) => {
+    throw new Error(`Unexpected native dialog: ${dialog.type()}`);
+  });
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/commands/deploy/run')) runs.push(path);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const trigger = page.getByRole('button', { name: 'Deploy preview' });
+  const dialog = confirmationDialog(page, 'Deploy preview?');
+  await trigger.click();
+  await expect(dialog).toHaveAccessibleDescription('This publishes the preview build.');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(runs).toHaveLength(0);
+  await trigger.click();
+  await dialog.getByRole('button', { name: 'Run Command' }).click();
+  await expect.poll(() => runs).toHaveLength(1);
+});
+
 test('picks per-project and per-chat AI permission modes and shows the active mode on the chat tab (HS2-NHRDMW)', async ({
   page,
 }) => {
@@ -6864,14 +7024,15 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   await claudeMode.locator('.kui-select__trigger').click();
   await claudeMode.locator('.kui-select__option[data-value="auto"]').click();
   await expect.poll(() => settingsPuts.at(-1)?.providers).toMatchObject({ claude: { permission_mode: 'auto' } });
-  // A mode that removes a safety net is an explicit opt-in: declining keeps the saved mode.
+  // A mode that removes a safety net is an explicit opt-in: declining keeps the saved mode. The
+  // question is the in-app confirmation; the desktop webview shows no window.confirm (HS2-6S1346).
   const putsBeforeDecline = settingsPuts.length;
-  page.once('dialog', (dialog) => {
-    expect(dialog.message()).toContain('Claude can run any command without asking.');
-    void dialog.dismiss();
-  });
   await claudeMode.locator('.kui-select__trigger').click();
   await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();
+  const optIn = page.getByRole('alertdialog', { name: 'Use Bypass permissions?' });
+  await expect(optIn).toContainText('Claude can run any command without asking.');
+  await optIn.getByRole('button', { name: 'Cancel' }).click();
+  await expect(optIn).toHaveCount(0);
   await expect(claudeMode).toHaveJSProperty('value', 'auto');
   expect(settingsPuts).toHaveLength(putsBeforeDecline);
   await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Claude asks only for risky actions.');
@@ -6965,9 +7126,12 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   await expect(claudeMode).toHaveJSProperty('value', 'auto');
   await claudeMode.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-yas0fr-auto-default-390.png' });
-  page.once('dialog', (dialog) => void dialog.accept());
   await claudeMode.locator('.kui-select__trigger').click();
   await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();
+  await page
+    .getByRole('alertdialog', { name: 'Use Bypass permissions?' })
+    .getByRole('button', { name: 'Use Bypass permissions' })
+    .click();
   await expect(claudeMode).toHaveJSProperty('value', 'bypassPermissions');
   await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Warning: Claude can run any command');
   const settings = page.locator('[data-component="ai-tool-settings"]');
@@ -21050,8 +21214,11 @@ for (const width of [1280, 390]) {
     await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(2);
     await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
-    page.once('dialog', (dialog) => dialog.accept());
     await reloaded.getByRole('button', { name: 'Not Helpful — Stop Suggestions Like This' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Withdraw your rating?' })
+      .getByRole('button', { name: 'Withdraw Rating' })
+      .click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(3);
     await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
     await expect(reloaded).toContainText('Withdrawn.');
@@ -21771,8 +21938,11 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
       },
     ]);
   await page.screenshot({ path: 'target/visual-captures/hs2-ndda7p-project-drive-claude-wide.png', fullPage: true });
-  page.once('dialog', (dialog) => dialog.accept());
   await drawer.getByRole('button', { name: 'Stop Claude' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Stop the active Claude turn?' })
+    .getByRole('button', { name: 'Stop Turn' })
+    .click();
   await expect(drive).toHaveAccessibleName('Drive with Claude');
   expect(driveRequests.at(-1)).toEqual({
     path: '/__hotsheet/project-api/demo-checkout/drive/connections/hotsheet-sidebar-claude-demo-checkout/interrupt',
@@ -22034,8 +22204,11 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await dialog.screenshot({ path: 'target/visual-captures/hs2-zkvw4p-usage-unselected-phone.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-narrow.png' });
-  page.once('dialog', (nativeDialog) => nativeDialog.accept());
   await conversationHost.getByRole('button', { name: 'Stop Codex' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Stop the active Codex turn?' })
+    .getByRole('button', { name: 'Stop Turn' })
+    .click();
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-293gfj-light-dismiss-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -22584,8 +22757,11 @@ async function runLongTurnUntilStuck(
     await expect.poll(() => readers.size).toBe(2);
     page.off('request', onRequest);
   }
-  page.once('dialog', (dialog) => void dialog.accept());
   await line.getByRole('button', { name: 'Stop Codex' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Stop the active Codex turn?' })
+    .getByRole('button', { name: 'Stop Turn' })
+    .click();
   if (parallelStopPolls) expect(await parallelStopPolls).toEqual([true, true]);
   // The page clock is frozen after runFor. A transport between WebSocket retries
   // needs its virtual retry timer to advance before it can read the done event.
@@ -22951,8 +23127,11 @@ for (const [server, content] of [
     } else {
       await expect(line).toContainText(/Running Bash · 5m \d+s/);
     }
-    page.once('dialog', (dialog) => void dialog.accept());
     await line.getByRole('button', { name: 'Stop Codex' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Stop the active Codex turn?' })
+      .getByRole('button', { name: 'Stop Turn' })
+      .click();
     await expect(line).toHaveCount(0);
   });
 
@@ -25289,7 +25468,14 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
   await updatedAnnotation.click();
-  page.once('dialog', (dialog) => dialog.accept());
+  // Erasing asks nothing; markup undo covers it (HS2-6S1346). Undo restores the erased annotation
+  // without a write, and erasing again keeps it erased.
+  await gallery.getByRole('button', { name: 'Erase selected annotation' }).click();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(updatedAnnotation).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await updatedAnnotation.click();
   await gallery.getByRole('button', { name: 'Erase selected annotation' }).click();
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(0);
   await expect.poll(() => writes.length).toBe(1);

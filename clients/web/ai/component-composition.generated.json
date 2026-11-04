@@ -1720,6 +1720,82 @@
       }
     },
     {
+      "key": "hotsheet-web:confirmation-dialog",
+      "package": "hotsheet-web",
+      "id": "confirmation-dialog",
+      "name": "ConfirmationDialog",
+      "kind": "component",
+      "purpose": "Ask one in-app question before an action undo cannot cover, with Cancel leading and the confirming action trailing; the desktop webview shows no window.confirm.",
+      "publicExports": [
+        {
+          "name": "ConfirmationDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/confirmation-dialog.tsx",
+        "src/confirmation.ts",
+        "src/confirmation-interactions.ts"
+      ],
+      "source": "src/components/confirmation-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": true,
+        "helpers": [
+          "wireConfirmation"
+        ],
+        "sources": [
+          {
+            "export": "wireConfirmation",
+            "source": "src/confirmation-interactions.ts"
+          }
+        ],
+        "obligations": [
+          "Render the request from createConfirmation's current signal and wire its root with wireConfirmation, so its buttons, Escape, and the close button answer the request."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/confirmation-dialog.tsx",
+        "composition": "src/components/confirmation-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:connection-details-dialog",
       "package": "hotsheet-web",
       "id": "connection-details-dialog",

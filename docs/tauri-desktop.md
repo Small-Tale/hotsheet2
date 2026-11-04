@@ -79,14 +79,15 @@ The desktop shell runs the web client in the platform webview (WKWebView on macO
 through wry 0.57. These standard browser APIs do nothing there, so client source must
 not use them (HS2-ECT6FE):
 
-| API                                                                    | Why                                                                                         | Use instead                                                      |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `alert`, `confirm`, `prompt` (bare, `window.`, `globalThis.`, `self.`) | wry's WKWebView UI delegate implements no JavaScript dialog panel, only the file-open panel | In-app Kerf dialogs or undo; remaining call sites are HS2-6S1346 |
-| `window.open`, `open`                                                  | wry creates no new window without a handler, and the shell registers none                   | System-browser routing, HS2-0A7FWS                               |
+| API                                                                    | Why                                                                                         | Use instead                                                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `alert`, `confirm`, `prompt` (bare, `window.`, `globalThis.`, `self.`) | wry's WKWebView UI delegate implements no JavaScript dialog panel, only the file-open panel | The shared `ConfirmationDialog` (HS2-6S1346), in-app input dialogs, or undo |
+| `window.open`, `open`                                                  | wry creates no new window without a handler, and the shell registers none                   | System-browser routing, HS2-0A7FWS                                          |
 
 ESLint enforces the list for `clients/web/src` (`no-alert`, `no-restricted-globals`,
 `no-restricted-properties`). `src/eslint-policy.test.ts` proves every form is rejected
-and caps the remaining reasoned suppressions so they only decrease. `target="_blank"`
+and allows no `no-alert` suppression; it caps the remaining `window.open` suppressions so
+they only decrease. `target="_blank"`
 links are tracked with `window.open` in HS2-0A7FWS. `window.print` is supported
 (Tauri routes it to its native print command), and the Notification API goes through
 `tauri-plugin-notification`. Tauri runtime behavior is checked by the `Platforms`

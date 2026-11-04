@@ -46,6 +46,11 @@ does not fork Kerf's guidance.
   The remaining filename, command-group, and AI-launch prompts use controlled in-app inputs
   (HS2-WMZ6Z5). ESLint now rejects every native `alert`, `confirm`, `prompt`, and
   `window.open` call (HS2-ECT6FE); see [tauri-desktop.md](tauri-desktop.md).
+- A question before an action that undo cannot cover uses the shared in-app
+  `ConfirmationDialog` through `createConfirmation().request(...)` (HS2-6S1346), never a
+  per-feature dialog. Erasing a gallery annotation asks nothing, because markup undo and
+  Discard Changes cover it; withdrawing an AI rating confirms because it drops the
+  explanation, and declining edits the feedback instead.
 
 ## Hot Sheet ticket lessons
 

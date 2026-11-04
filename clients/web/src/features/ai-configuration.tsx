@@ -10,9 +10,17 @@ import {
   withDefaultProvider,
   withProviderSelection,
 } from '../ai-provider-defaults';
-import { type AiToolDefaults, type AiToolDescriptor, Api, type CommandDefinition, type ToolConnection } from '../api';
+import {
+  type AiPermissionMode,
+  type AiToolDefaults,
+  type AiToolDescriptor,
+  Api,
+  type CommandDefinition,
+  type ToolConnection,
+} from '../api';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
+import type { Confirm } from '../confirmation';
 import { syncControlledOpen } from '../controlled-open';
 import { conversationTranscriptMarkdown } from '../conversation-export';
 import { syncConversationScroll } from '../conversation-scroll';
@@ -21,6 +29,8 @@ import { isPopupMenuOpen } from '../popup-menu-state';
 import { compatibleAiEffort, type DrawerAIChat, keptEffort } from '../project-drive';
 
 export interface AiConfigurationDependencies {
+  /** The shared in-app confirmation for warned permission modes (HS2-6S1346). */
+  confirm: Confirm;
   selectedProjectId: Signal<string>;
   project: () => Project | undefined;
   conversationConnectionId: Signal<string | undefined>;
@@ -54,7 +64,17 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     updateConversation,
     commandSettingsDefinitions,
     commandSettingsEditingId,
+    confirm,
   } = dependencies;
+  /** A mode that removes a safety net runs only after this explicit, in-app opt-in (HS2-6S1346). */
+  function confirmPermissionMode(mode: AiPermissionMode) {
+    return confirm({
+      title: `Use ${mode.label}?`,
+      message: mode.warning,
+      confirmLabel: `Use ${mode.label}`,
+      tone: 'danger',
+    });
+  }
   const aiTools = signal<AiToolDescriptor[]>([]),
     aiDefaults = signal<AiToolDefaults>({ tool: 'codex' }),
     aiSettingsLoading = signal(false),
@@ -148,14 +168,14 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
 
   /**
    * Save one provider's default permission mode for this project (HS2-NHRDMW). A mode that removes a
-   * safety net (its descriptor carries a `warning`) is an explicit opt-in: the user confirms it first.
+   * safety net (its descriptor carries a `warning`) is an explicit opt-in: the user confirms it first in
+   * the in-app confirmation (HS2-6S1346). Resolves whether the mode was saved.
    */
-  function selectDefaultPermissionMode(mode: string, tool = aiDefaults.value.tool) {
+  async function selectDefaultPermissionMode(mode: string, tool = aiDefaults.value.tool) {
     const descriptor = aiTools.value.find((item) => item.id === tool),
       declared = descriptor?.permission_modes?.find((item) => item.id === mode);
     if (!declared) return false;
-    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-    if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return false;
+    if (declared.warning && !(await confirmPermissionMode(declared))) return false;
     const current = providerSelection(aiDefaults.value, aiTools.value, tool);
     void saveAiDefaults(
       withProviderSelection(aiDefaults.value, tool, {
@@ -229,14 +249,13 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
    * Switch the active chat's permission mode (HS2-NHRDMW). It applies from the chat's next turn on and
    * stays with that chat; a warned mode needs an explicit confirmation.
    */
-  function selectConversationPermissionMode(mode: string) {
+  async function selectConversationPermissionMode(mode: string) {
     const current = project(),
       connectionId = conversationConnectionId.value;
     if (!current || !connectionId || !mode) return;
     const declared = conversationAiSelection(connectionId).permissionModes.find((item) => item.id === mode);
     if (!declared) return;
-    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-    if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return;
+    if (declared.warning && !(await confirmPermissionMode(declared))) return;
     conversationSelections.value = {
       ...conversationSelections.value,
       [connectionId]: { ...conversationSelections.value[connectionId], permission_mode: mode },

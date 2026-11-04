@@ -330,8 +330,11 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await page.setViewportSize({ width: 760, height: 720 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-narrow.png'), animations: 'disabled' });
-  page.once('dialog', (prompt) => prompt.accept());
   await banner.getByRole('button', { name: 'Delete Old Files…' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Delete the old Hot Sheet 1 files?' })
+    .getByRole('button', { name: 'Delete Old Files' })
+    .click();
   await expect(banner).toHaveCount(0);
   expect(state.deleted).toBe(true);
   await expect(jobBanner).toHaveCount(0);
@@ -386,15 +389,21 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
   await banner.screenshot({ path: testInfo.outputPath('hs1-registration-repair-banner.png'), animations: 'disabled' });
 
   state.legacyRunning = true;
-  page.once('dialog', (prompt) => prompt.accept());
   await banner.getByRole('button', { name: 'Repair Old App Registration…' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Repair the old Hot Sheet 1 registration?' })
+    .getByRole('button', { name: 'Repair Registration' })
+    .click();
   await expect(page.locator('.app-error')).toContainText('Hot Sheet 1 is still running');
   await expect(banner).toBeVisible();
   expect(state.repair).toBe(true);
 
   state.legacyRunning = false;
-  page.once('dialog', (prompt) => prompt.accept());
   await banner.getByRole('button', { name: 'Repair Old App Registration…' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Repair the old Hot Sheet 1 registration?' })
+    .getByRole('button', { name: 'Repair Registration' })
+    .click();
   await expect(banner).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Repaired the old Hot Sheet 1 project registration');
   await reloadRestoredProject(page);

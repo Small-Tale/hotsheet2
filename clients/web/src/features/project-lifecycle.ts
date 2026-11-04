@@ -14,6 +14,7 @@ import { copyWhenReady } from '../clipboard-when-ready';
 import { resolveTicketSourceColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
+import type { Confirm } from '../confirmation';
 import { githubAccountEndpoint } from '../github-account-endpoint';
 import { githubAttachmentSettings } from '../github-attachment-settings';
 import { githubSignInOrigin } from '../github-sign-in-origin';
@@ -67,6 +68,8 @@ export interface ProjectLifecycleDependencies {
   observeTerminalDrawer: () => void;
   requestProjectRefresh: (project: Project) => Promise<unknown>;
   showToast: (message: string) => void;
+  /** The shared in-app confirmation (HS2-6S1346). */
+  confirm: Confirm;
 }
 
 /** Own project opening, restoration, migration, and ticket-provider setup state and actions. */
@@ -402,17 +405,24 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   async function removeOldHs1Data() {
     const current = dependencies.project();
     const repair = Boolean(current?.hs1RegistrationRepairAvailable && !current.hs1CleanupEligible);
-    if (
-      !current ||
-      (!current.hs1CleanupEligible && !repair) ||
-      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-      !window.confirm(
-        repair
-          ? 'Repair this project’s old Hot Sheet 1 saved-project and channel registrations? The verified backup and project files will be kept.'
-          : 'Delete the old Hot Sheet 1 files from this project? Backups will be kept.',
-      )
-    )
-      return;
+    if (!current || (!current.hs1CleanupEligible && !repair)) return;
+    // Both change files outside the app's undo, so they are confirmed in app (HS2-6S1346).
+    const proceed = await dependencies.confirm(
+      repair
+        ? {
+            title: 'Repair the old Hot Sheet 1 registration?',
+            message:
+              'This repairs the project’s old Hot Sheet 1 saved-project and channel registrations. The verified backup and project files are kept.',
+            confirmLabel: 'Repair Registration',
+          }
+        : {
+            title: 'Delete the old Hot Sheet 1 files?',
+            message: 'This deletes the old Hot Sheet 1 files from this project. Backups are kept.',
+            confirmLabel: 'Delete Old Files',
+            tone: 'danger',
+          },
+    );
+    if (!proceed) return;
     try {
       const result = await localBridge.removeHs1Data(current.id);
       dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));

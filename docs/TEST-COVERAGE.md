@@ -1665,8 +1665,8 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 ### Desktop-incompatible web APIs (HS2-ECT6FE)
 
-- Behavior: client source never calls `alert`, `confirm`, `prompt`, or `window.open`, which do nothing in the desktop webview. Remaining call sites carry reasoned suppressions naming HS2-6S1346 or HS2-0A7FWS.
-- Unit: `clients/web/src/eslint-policy.test.ts` lints every banned form through the real ESLint config and caps the suppression counts.
+- Behavior: client source never calls `alert`, `confirm`, `prompt`, or `window.open`, which do nothing in the desktop webview. No native dialog call remains (HS2-6S1346); the remaining `window.open` call sites carry reasoned suppressions naming HS2-0A7FWS.
+- Unit: `clients/web/src/eslint-policy.test.ts` lints every banned form through the real ESLint config, allows no `no-alert` suppression, and caps the `window.open` suppressions.
 - End to end: none; runtime desktop behavior is the `Platforms` workflow's tauri targets.
 
 ### Repository client workflow (HS2-J4WR11)
@@ -1891,6 +1891,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `tests/native-prompt-replacements.spec.ts` covers all three real application parents, real attachment/command storage, controlled values, failure/retry/later edits, cancellation/reopen, keyboard focus, and wide/medium/narrow/wide-return captures. AI launch delivery is intercepted at its existing API boundary so no real provider starts. Existing provider modifier-launch and kept-group tests retain their behavioral assertions using the in-app dialogs.
 - Linked-reader regression (HS2-QRP14P): `tests/ticket-reader-stack.spec.ts # HS2-W8VEMP` edits the inline filename and finishes on blur while retaining owning-project/provider-qualified routing, batch label/purpose, upload, rename payload/rendering, deletion, cleanup and zero source-project writes.
 - Manual: packaged Tauri smoke and real provider launch remain in the manual plan; browser tests do not claim native-host verification.
+
+### In-app confirmation (HS2-6S1346)
+
+- Behavior: actions that undo cannot cover ask through one shared workflow, `createConfirmation().request(...)`, rendered as the Kerf alert `ConfirmationDialog` (Cancel leading, the confirming action trailing). It resolves true on confirm and false on Cancel, Escape, or the close button; concurrent requests show one at a time in order and settle independently; focus returns to the opener. Call sites: a saved command's declared `confirmation`, warned AI permission modes (project default and per chat, including Bypass permissions), stopping an active AI turn, Hot Sheet 1 cleanup and registration repair, and withdrawing an AI feedback rating (declining edits the feedback instead). Erasing a gallery annotation asks nothing: the markup undo stack and Discard Changes cover it.
+- Unit: `clients/web/src/confirmation.test.ts` (confirm, cancel, Escape/close-button cancel, focus return and its skips, two concurrent requests, stale-answer guard, cancel-all, dialog markup and action order); `src/features/controllers.test.ts # HS2-6S1346` (warned chat permission mode both decisions); the zero `no-alert` suppression cap in `src/eslint-policy.test.ts`.
+- End to end: `clients/web/tests/providers.spec.ts # HS2-6S1346` drives the real application parents: Bypass permissions (Escape and Cancel keep the mode and return focus, confirming saves; wide/medium/narrow/wide-return captures in light and dark) and a saved command's confirmation (Cancel runs nothing, Run Command runs it). The same file answers the in-app dialog for stopping an active turn and withdrawing an AI rating, and erases a gallery annotation, undoes it with Cmd/Ctrl+Z without a write, and erases it again; `tests/hs1-migration.spec.ts` answers Hot Sheet 1 cleanup and registration repair. `tests/ux-demo.spec.ts # HS2-6S1346` covers the catalog demo's queued requests, Escape, focus return, settings, and Reset.
+- Manual: the packaged desktop app's dialog is covered by the `Platforms` tauri targets, not locally.
 
 ### Scoped handoff readiness (HS2-NNSWDS)
 

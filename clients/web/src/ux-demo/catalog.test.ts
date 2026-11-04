@@ -120,6 +120,7 @@ describe('UX demo catalog', () => {
       'project-close-dialog',
       'conversation-export-dialog',
       'command-run-dialog',
+      'confirmation-dialog',
       'note-composer',
       'note-card',
       'ai-conversation',

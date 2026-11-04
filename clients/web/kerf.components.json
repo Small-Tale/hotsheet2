@@ -7733,6 +7733,86 @@
       }
     },
     {
+      "id": "confirmation-dialog",
+      "name": "ConfirmationDialog",
+      "kind": "component",
+      "purpose": "Ask one in-app question before an action undo cannot cover, with Cancel leading and the confirming action trailing; the desktop webview shows no window.confirm.",
+      "source": "src/components/confirmation-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "ConfirmationDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/confirmation-dialog.tsx",
+        "src/confirmation.ts",
+        "src/confirmation-interactions.ts"
+      ],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": true,
+          "helpers": ["wireConfirmation"],
+          "sources": [
+            {
+              "export": "wireConfirmation",
+              "source": "src/confirmation-interactions.ts"
+            }
+          ],
+          "obligations": [
+            "Render the request from createConfirmation's current signal and wire its root with wireConfirmation, so its buttons, Escape, and the close button answer the request."
+          ]
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/confirmation-dialog.tsx",
+        "composition": "src/components/confirmation-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "An action needs the person's answer first because undo or recovery cannot safely cover it: await createConfirmation().request(...)."
+        ],
+        "avoidWhen": [
+          "Undo or recovery covers the action; act at once and keep it undoable.",
+          "The question needs input beyond yes or no; compose a task dialog instead."
+        ],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "attachment-filename-editor",
       "name": "AttachmentFilenameEditor",
       "kind": "component",

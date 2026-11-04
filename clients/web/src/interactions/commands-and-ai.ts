@@ -30,6 +30,8 @@ import { TERMINAL_LIMIT_FIELDS } from '../components/terminal-memory-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash-settings';
 import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import type { ConfirmationWorkflow } from '../confirmation';
+import { wireConfirmation } from '../confirmation-interactions';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { syncControlledOpen } from '../controlled-open';
 import { type ConversationExportDraft } from '../conversation-export';
@@ -136,10 +138,12 @@ export interface CommandAndAiInteractionsDependencies {
   readonly selectConversationProvider: (providerId: string) => Promise<void>;
   readonly selectConversationModel: (model: string) => void;
   readonly selectConversationEffort: (effort: string) => void;
-  readonly selectConversationPermissionMode: (mode: string) => void;
+  readonly selectConversationPermissionMode: (mode: string) => Promise<void>;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly canGiveFeedback: () => boolean;
   readonly aiFeedbackDialog: Signal<AiFeedbackDialogState | undefined>;
+  /** The shared in-app confirmation (HS2-6S1346). */
+  readonly confirmation: ConfirmationWorkflow;
   readonly updateSelected: (patch: Record<string, unknown>) => Promise<boolean>;
   readonly showToast: (message: string) => void;
   commandLongPressFired: boolean;
@@ -190,8 +194,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly saveAiDefaults: (value: AiToolDefaults) => Promise<void>;
   readonly selectDefaultModel: (model: string, tool?: string) => void;
   readonly selectDefaultEffort: (effort: string, tool?: string) => void;
-  /** Returns false when the mode was not saved (unknown, or a warned mode the user declined). */
-  readonly selectDefaultPermissionMode: (mode: string, tool?: string) => boolean;
+  /** Resolves false when the mode was not saved (unknown, or a warned mode the user declined). */
+  readonly selectDefaultPermissionMode: (mode: string, tool?: string) => Promise<boolean>;
   readonly selectDefaultProvider: (tool: string) => void;
   readonly restoreCommandEditorAfterManualModel: (state: ManualModelDialogState | undefined) => void;
   readonly aiDefaults: Signal<AiToolDefaults>;
@@ -238,6 +242,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     wireInputDialogs(document.body, { ai: dependencies.aiLaunchDialog, group: dependencies.commandGroupDialog }),
   );
+  lifetime.add(wireConfirmation(document.body, dependencies.confirmation));
   const {
     commandGroupExpanded,
     persistWorkspacePreferences,
@@ -303,6 +308,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     selectedTicket,
     canGiveFeedback,
     aiFeedbackDialog,
+    confirmation,
     updateSelected,
     showToast,
     runCommand,
@@ -635,32 +641,50 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const rater = feedbackRaterId();
       const wireRating = rating === 'helpful' ? 'helpful' : 'not_helpful';
       const previous = ticket.notes.find((note) => note.ai_feedback?.target === targetId && note.actor?.id === rater);
-      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-      if (previous?.ai_feedback?.rating === wireRating && window.confirm('Withdraw your previous rating?')) {
-        void updateSelected({
-          ai_feedback: { target: targetId, rating: null },
-          actor: { role: 'human', id: rater },
-        }).then((saved) => {
-          if (saved) showToast('AI feedback withdrawn.');
-        });
+      const openFeedback = () => {
+        aiFeedbackDialog.value = {
+          ticketId: ticket.id,
+          target: targetId,
+          rating: wireRating,
+          rater,
+          explanation: previous?.ai_feedback?.explanation ?? '',
+          revising: Boolean(previous),
+        };
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            // Open the rendered Kerf dialog now (not on the next render) so the field can take focus.
+            syncControlledOpen(document);
+            const dialog = document.querySelector<Control>(COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector);
+            dialog?.querySelector<HTMLTextAreaElement>('[name="ai-feedback-explanation"]')?.focus();
+          }),
+        );
+      };
+      if (previous?.ai_feedback?.rating !== wireRating) {
+        openFeedback();
         return;
       }
-      aiFeedbackDialog.value = {
-        ticketId: ticket.id,
-        target: targetId,
-        rating: wireRating,
-        rater,
-        explanation: previous?.ai_feedback?.explanation ?? '',
-        revising: Boolean(previous),
-      };
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          // Open the rendered Kerf dialog now (not on the next render) so the field can take focus.
-          syncControlledOpen(document);
-          const dialog = document.querySelector<Control>(COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector);
-          dialog?.querySelector<HTMLTextAreaElement>('[name="ai-feedback-explanation"]')?.focus();
-        }),
-      );
+      // Pressing the current rating again offers to withdraw it. Withdrawal drops the explanation and
+      // has no undo, so it is confirmed in app; declining revises the feedback instead (HS2-6S1346).
+      void confirmation
+        .request({
+          title: 'Withdraw your rating?',
+          message: 'Withdrawing removes this rating and its explanation.',
+          confirmLabel: 'Withdraw Rating',
+          cancelLabel: 'Edit Feedback',
+          tone: 'danger',
+        })
+        .then((withdraw) => {
+          if (!withdraw) {
+            openFeedback();
+            return;
+          }
+          void updateSelected({
+            ai_feedback: { target: targetId, rating: null },
+            actor: { role: 'human', id: rater },
+          }).then((saved) => {
+            if (saved) showToast('AI feedback withdrawn.');
+          });
+        });
     }),
   );
   lifetime.add(
@@ -1414,8 +1438,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         tool = block?.dataset.aiProvider,
         control = target as Control;
       if (!tool) return;
-      if (!selectDefaultPermissionMode(control.value, tool) && block.dataset.permissionMode)
-        control.value = block.dataset.permissionMode;
+      void selectDefaultPermissionMode(control.value, tool).then((saved) => {
+        if (!saved && block.dataset.permissionMode) control.value = block.dataset.permissionMode;
+      });
     }),
   );
   lifetime.add(

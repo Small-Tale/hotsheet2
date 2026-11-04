@@ -12,6 +12,7 @@ import { demoModule as choiceCard } from './choice-card-demo';
 import { demoModule as commandRunDialog } from './command-run-dialog-demo';
 import { demoModule as confidenceBadge } from './confidence-badge-demo';
 import { demoModule as confidenceCalibration } from './confidence-calibration-demo';
+import { demoModule as confirmationDialog } from './confirmation-dialog-demo';
 import { demoModule as connectionDetails } from './connection-details-demo';
 import { demoModule as contentComponents } from './content-components-demo';
 import { demoModule as contentTransition } from './content-transition-demo';
@@ -92,6 +93,7 @@ export const demoModules: readonly DemoModule[] = [
   ticketCollections,
   notWorkingDialog,
   commandRunDialog,
+  confirmationDialog,
   toolbar,
   toolbarText,
   providerIcon,

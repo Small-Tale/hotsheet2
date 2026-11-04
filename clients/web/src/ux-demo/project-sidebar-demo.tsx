@@ -12,8 +12,11 @@ import type {
   GuidanceOverview,
   GuidanceRecommendationReport,
 } from '../api';
+import { createCommandGroupDialog } from '../command-group-dialog';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
+import { addCommandGroupName } from '../command-settings-workflow';
 import { AiToolSettings } from '../components/ai-tool-settings';
+import { CommandGroupDialog } from '../components/command-group-dialog';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/command-settings-editor';
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
@@ -27,6 +30,7 @@ import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
+import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { loadLucideCatalog } from '../lucide-catalog';
 import { DemoEvent } from './components/demo-event';
@@ -281,11 +285,14 @@ export function selectCommandEditorRow(id: string, intent: { toggle?: boolean; r
   commandEditorSelection.value = [id];
   commandEditorSelectionAnchor = id;
 }
+/** The production New Command Group dialog over the fixture commands (HS2-6S1346; no window.prompt). */
+export const commandEditorGroupDialog = createCommandGroupDialog((_project, name) => {
+  const result = addCommandGroupName(name, commandEditorCommands.value, commandEditorExtraGroups.value);
+  if (result.groups) commandEditorExtraGroups.value = result.groups;
+  return result.message;
+});
 export function addCommandEditorGroup() {
-  // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-  const name = window.prompt('New group name')?.trim();
-  if (name && !commandEditorExtraGroups.value.includes(name))
-    commandEditorExtraGroups.value = [...commandEditorExtraGroups.value, name];
+  commandEditorGroupDialog.open('demo');
 }
 export function deleteCommandEditorGroup(group: string) {
   commandEditorExtraGroups.value = commandEditorExtraGroups.value.filter((item) => item !== group);
@@ -322,6 +329,7 @@ export function CommandSettingsEditorDemo() {
         iconSearch={commandEditorIconSearch.value}
         message={commandEditorMessage.value}
       />
+      <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
     </CatalogExample>
   );
 }
@@ -866,6 +874,7 @@ export function TerminalOperationsSidebarDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireProjectSidebarDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  demoListeners.add(wireInputDialogs(root, { group: commandEditorGroupDialog }));
   // The production CommandSettingsEditor handlers over the fixture command list (HS2-RWY78R).
   demoListeners.add(
     wireCommandSettingsEditor(root, {

@@ -200,7 +200,10 @@ command saves with CLI settings edits across processes (HS2-KYP8ZT).
 signals, API calls, in-app group creation, popovers, and the rendered command surfaces.
 `command-group-dialog.ts`, `ai-launch-dialog.ts`, and `attachment-filename-editing.ts` own
 controlled prompt replacements; matching components and delegated input/filename interactions
-serve production and catalog compositions (HS2-WMZ6Z5).
+serve production and catalog compositions (HS2-WMZ6Z5). `confirmation.ts` owns the shared
+in-app confirmation queue, `components/confirmation-dialog.tsx` renders it, and
+`confirmation-interactions.ts` answers it; the runtime creates one workflow and passes its
+`request` to features in place of `window.confirm` (HS2-6S1346).
 
 Development request-stage tracing lives in `clients/web/src/dev-request-timing.ts`
 (bridge header marks), `request-observer.ts` and `api.ts` (browser milestones),

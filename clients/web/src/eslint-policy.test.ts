@@ -106,7 +106,7 @@ describe('web ESLint policy', () => {
       expect([...flaggedLines].sort((left, right) => left - right)).toEqual(forms.map((_, index) => index + 1));
     });
 
-    it('HS2-ECT6FE caps the remaining desktop-incompatible call sites until HS2-6S1346 and HS2-0A7FWS fix them', () => {
+    it('HS2-ECT6FE HS2-6S1346 allows no native dialog and caps window.open until HS2-0A7FWS fixes it', () => {
       const counts = { dialogs: 0, windowOpen: 0 };
       const scan = (directory: string) => {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -114,16 +114,17 @@ describe('web ESLint policy', () => {
           if (entry.isDirectory()) scan(path);
           else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
             const source = readFileSync(path, 'utf8');
-            counts.dialogs +=
-              source.match(/eslint-disable-next-line no-alert, no-restricted-properties -- .*HS2-6S1346/g)?.length ?? 0;
+            // Any suppressed alert, confirm, or prompt counts, whatever ticket its reason names.
+            counts.dialogs += source.match(/eslint-disable[^\n]*\bno-alert\b/g)?.length ?? 0;
             counts.windowOpen +=
               source.match(/eslint-disable-next-line no-restricted-properties -- .*HS2-0A7FWS/g)?.length ?? 0;
           }
         }
       };
       scan(join(webRoot, 'src'));
-      // These counts only decrease: each fix removes its suppression.
-      expect(counts.dialogs).toBeLessThanOrEqual(8);
+      // These counts only decrease: each fix removes its suppression. Confirmations use the shared
+      // in-app ConfirmationDialog (HS2-6S1346).
+      expect(counts.dialogs).toBe(0);
       expect(counts.windowOpen).toBeLessThanOrEqual(2);
     });
   });

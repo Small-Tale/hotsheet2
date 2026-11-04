@@ -6,6 +6,7 @@ import { Api, type CommandDefinition, type FullTicket, type RepositoryFile, type
 import { setRememberedPermissionPreview } from '../components/permission-request-card';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { MobileMagnifiedTerminal, TerminalDashboardGroup } from '../components/terminal-dashboard';
+import { createConfirmation } from '../confirmation';
 import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
@@ -1736,8 +1737,10 @@ function chatOwners() {
     showToast: vi.fn(),
     error: signal(''),
   };
+  const confirmation = createConfirmation({ focused: () => undefined });
   const ai = createAiConfigurationController({
     ...common,
+    confirm: confirmation.request,
     selectedProjectId,
     conversationSelections,
     conversationOpen: signal(false),
@@ -1771,10 +1774,41 @@ function chatOwners() {
     selectDrawerItem: vi.fn(),
     setTerminalDrawerVisible: vi.fn(),
   });
-  return { ...common, active, selectedProjectId, conversationSelections, ai, archive };
+  return { ...common, active, selectedProjectId, conversationSelections, ai, archive, confirmation };
 }
 
 describe('conversation feature transitions (HS2-DHYGXJ)', () => {
+  it('HS2-6S1346 applies a warned chat permission mode only after the in-app confirmation', async () => {
+    const state = chatOwners();
+    state.ai.aiTools.value = [
+      {
+        ...state.ai.aiTools.value[0],
+        permission_modes: [
+          { id: 'ask', label: 'Ask' },
+          { id: 'bypass', label: 'Bypass permissions', warning: 'Codex can run any command without asking.' },
+        ],
+      },
+    ];
+    await state.ai.selectConversationPermissionMode('ask');
+    expect(state.confirmation.current.value).toBeUndefined();
+    expect(state.conversationSelections.value['chat-a']).toMatchObject({ permission_mode: 'ask' });
+    const declined = state.ai.selectConversationPermissionMode('bypass');
+    expect(state.confirmation.current.value).toMatchObject({
+      title: 'Use Bypass permissions?',
+      message: 'Codex can run any command without asking.',
+      confirmLabel: 'Use Bypass permissions',
+      tone: 'danger',
+    });
+    state.confirmation.cancel();
+    await declined;
+    expect(state.conversationSelections.value['chat-a']).toMatchObject({ permission_mode: 'ask' });
+    const accepted = state.ai.selectConversationPermissionMode('bypass');
+    state.confirmation.confirm();
+    await accepted;
+    expect(state.conversationSelections.value['chat-a']).toMatchObject({ permission_mode: 'bypass' });
+    expect(state.confirmation.current.value).toBeUndefined();
+  });
+
   it('HS2-WMZ6Z5 cancels a whole launch, normalizes provider defaults, and refuses a retargeted project', async () => {
     const state = chatOwners();
     const plain = await state.ai.aiLaunchConfiguration('ai-shell', false);

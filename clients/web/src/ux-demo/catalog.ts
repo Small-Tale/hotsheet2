@@ -205,6 +205,7 @@ export const demoCatalog: DemoCategory[] = [
           ]),
           cataloged('conversation-export-dialog', ['content-transition', 'choice-card']),
           cataloged('command-run-dialog'),
+          cataloged('confirmation-dialog', ['surface-scaffold', 'button', 'text', 'row']),
         ],
       },
       {

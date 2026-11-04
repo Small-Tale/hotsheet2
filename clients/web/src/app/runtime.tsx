@@ -97,6 +97,7 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { createComposerRestoreIntent } from '../composer-restore-intent';
+import { createConfirmation } from '../confirmation';
 import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
@@ -310,6 +311,8 @@ export async function startHotSheetWebClient() {
     refreshProject: () => refreshProject({ showLoading: false }),
   });
   const aiFeedbackDialog = signal<AiFeedbackDialogState | undefined>(undefined);
+  // The shared in-app confirmation; the desktop webview shows no window.confirm (HS2-6S1346).
+  const confirmation = createConfirmation();
   const ticketCountsByProject = signal<Record<string, CheckoutTicketCounts>>({});
   const partialSourcesByProject = signal<Record<string, boolean>>({});
   // The server-authoritative 7-day completion trend and today's completion count, retained per project so a
@@ -1060,6 +1063,7 @@ export async function startHotSheetWebClient() {
   } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences, tickets });
   const driveConversations = createDriveConversationsController({
     projects,
+    confirm: confirmation.request,
     project: () => project(),
     error,
     terminalDrawerChatsByProject,
@@ -1098,6 +1102,7 @@ export async function startHotSheetWebClient() {
   } = driveConversations;
 
   const aiConfigurationController = createAiConfigurationController({
+    confirm: confirmation.request,
     selectedProjectId,
     project: () => project(),
     conversationConnectionId,
@@ -1294,6 +1299,7 @@ export async function startHotSheetWebClient() {
   });
   const projectLifecycleController = createProjectLifecycleController({
     projects,
+    confirm: confirmation.request,
     selectedProjectId,
     selectedView,
     loading,
@@ -4459,8 +4465,16 @@ export async function startHotSheetWebClient() {
       commandStopConfirmation.value = true;
       return;
     }
-    // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-    if (command.confirmation && !window.confirm(command.confirmation)) return;
+    if (
+      command.confirmation &&
+      !(await confirmation.request({
+        // Command titles are verb phrases ("Run checks", "Deploy"), so the title is the question.
+        title: `${command.title}?`,
+        message: command.confirmation,
+        confirmLabel: 'Run Command',
+      }))
+    )
+      return;
     if (command.kind === 'shell') {
       const terminalId = await createShellCommandTerminal(command, current);
       if (terminalId)
@@ -5069,6 +5083,7 @@ export async function startHotSheetWebClient() {
     activeTicketCollectionKey,
     aiConversationSurface,
     aiFeedbackDialog,
+    confirmation,
     appRoot,
     appTabContextMenu,
     attachmentMenuSurfaceProps,
@@ -5615,6 +5630,7 @@ export async function startHotSheetWebClient() {
     feedbackResponseDrafts,
     canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback),
     aiFeedbackDialog,
+    confirmation,
     updateSelected,
     dismissFeedbackRequest,
     runCommand,

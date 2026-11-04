@@ -10833,3 +10833,47 @@ test('opens row, thumbnail, and gallery attachment menus through production open
     await expect(menu).toHaveCount(0);
   }
 });
+
+test('answers the shared ConfirmationDialog demo through production wiring, one queued request at a time (HS2-6S1346)', async ({
+  page,
+}) => {
+  page.on('dialog', (dialog) => {
+    throw new Error(`Unexpected native dialog: ${dialog.type()}`);
+  });
+  await page.goto('/ux-demo?component=confirmation-dialog');
+  const ask = page.getByRole('button', { name: 'Ask…' }),
+    dialog = page.getByRole('alertdialog', { name: 'Delete the old Hot Sheet 1 files?' }),
+    event = page.locator('[data-demo-event]');
+  await ask.click();
+  await expect(dialog).toHaveAccessibleDescription(
+    'This deletes the old Hot Sheet 1 files from this project. Backups are kept.',
+  );
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(event).toHaveText('Question: cancelled');
+  await expect(ask).toBeFocused();
+  await ask.click();
+  await dialog.getByRole('button', { name: 'Delete Old Files' }).click();
+  await expect(event).toHaveText('Question: confirmed');
+
+  await page.getByRole('button', { name: 'Ask Twice…' }).click();
+  await dialog.getByRole('button', { name: 'Delete Old Files (1 of 2)' }).click();
+  await expect(event).toHaveText('Questions: 1 confirmed');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(event).toHaveText('Questions: 1 confirmed, 2 cancelled');
+
+  await setDemoSettingsOpen(page, true);
+  const settings = page.locator('[data-settings="confirmation-dialog"]');
+  await settings.locator('[name="message"]').click();
+  await settings.locator('[name="cancel-label"]').click();
+  await ask.click();
+  await expect(dialog.getByRole('button', { name: 'Keep Files' })).toBeVisible();
+  await expect(dialog).not.toContainText('Backups are kept.');
+  await dialog.getByRole('button', { name: 'Keep Files' }).click();
+  await settings.getByRole('button', { name: 'Reset' }).click();
+  await expect(dialog).toHaveCount(0);
+  await ask.click();
+  await expect(dialog).toContainText('Backups are kept.');
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible();
+});

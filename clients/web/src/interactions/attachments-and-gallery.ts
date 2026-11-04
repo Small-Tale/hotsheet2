@@ -908,8 +908,9 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.deleteGalleryAnnotation.selector, () => {
       const id = attachmentGallerySelectedAnnotation.value;
-      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-      if (!id || !window.confirm('Delete this annotation?')) return;
+      // Erasing asks nothing: the markup undo stack records it (Cmd/Ctrl+Z) and nothing is written
+      // until markup finishes or the gallery closes, so undo covers it (HS2-6S1346).
+      if (!id) return;
       const before = snapshotAnnotations();
       attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter((item) => item.id !== id);
       attachmentGallerySelectedAnnotation.value = undefined;

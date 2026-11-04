@@ -11,6 +11,7 @@ import {
 import { type AiToolDefaults, Api, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
+import type { Confirm } from '../confirmation';
 import { syncControlledOpen } from '../controlled-open';
 import {
   type ConversationHistoryCursor,
@@ -67,6 +68,8 @@ export interface DriveConversationsDependencies {
   selectDrawerItem: (id: string) => void;
   setTerminalDrawerVisible: (visible: boolean) => void;
   showToast: (message: string) => void;
+  /** The shared in-app confirmation (HS2-6S1346). */
+  confirm: Confirm;
   /** Resolved lazily: the AI configuration owner is created after this one and reads its state. */
   aiConfiguration: () => AiConfiguration;
   /**
@@ -432,13 +435,16 @@ export function createDriveConversationsController(dependencies: DriveConversati
     if (!current || !connectionId) return;
     const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),
       tool = connection?.tool === 'claude' ? 'Claude' : 'Codex';
-    if (
-      !connection?.busy ||
-      !connection.actions?.includes('interrupt') ||
-      // eslint-disable-next-line no-alert, no-restricted-properties -- Shows nothing in the desktop webview; in-app replacement is HS2-6S1346.
-      !window.confirm(`Stop the active ${tool} turn?`)
-    )
-      return;
+    if (!connection?.busy || !connection.actions?.includes('interrupt')) return;
+    // Interrupting discards the in-flight turn and cannot be resumed, so it is confirmed in app (HS2-6S1346).
+    const stop = await dependencies.confirm({
+      title: `Stop the active ${tool} turn?`,
+      message: `${tool} stops working on this turn now. Its unfinished work is not resumed.`,
+      confirmLabel: 'Stop Turn',
+      cancelLabel: 'Keep Running',
+      tone: 'danger',
+    });
+    if (!stop) return;
     try {
       const updated = await new Api(current.apiPath).interruptToolTurn(connectionId);
       if (project()?.id === current.id)

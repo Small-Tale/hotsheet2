@@ -579,6 +579,28 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "confirmation-dialog",
+      "name": "ConfirmationDialog",
+      "kind": "component",
+      "purpose": "Ask one in-app question before an action undo cannot cover, with Cancel leading and the confirming action trailing; the desktop webview shows no window.confirm.",
+      "useWhen": [
+        "An action needs the person's answer first because undo or recovery cannot safely cover it: await createConfirmation().request(...)."
+      ],
+      "avoidWhen": [
+        "Undo or recovery covers the action; act at once and keep it undoable.",
+        "The question needs input beyond yes or no; compose a task dialog instead."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/confirmation-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "connection-details-dialog",
       "name": "ConnectionDetailsDialog",
       "kind": "component",
