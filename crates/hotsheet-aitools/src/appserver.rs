@@ -390,7 +390,13 @@ mod catalog_probe_tests {
         drop(guard);
         assert_gone(pid);
         let error = connecting.join().unwrap().unwrap_err();
-        assert!(error.to_string().contains("connection closed"), "{error}");
+        // HS2-ZF7KW6: the killed peer surfaces as EOF ("connection closed") when the read sees it
+        // first, or EPIPE when the pending write does; either proves the request failed early.
+        let message = error.to_string();
+        assert!(
+            message.contains("connection closed") || message.contains("Broken pipe"),
+            "{error}"
+        );
         assert!(
             killed.elapsed() < Duration::from_secs(10),
             "the pending initialize waited {:?} after its probe was killed",
