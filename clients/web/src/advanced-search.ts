@@ -158,6 +158,8 @@ function matchesTerm(ticket: TicketRow, value: string, now: number) {
   if (state === 'up-next') return ticket.up_next;
   if (state === 'active') return isTicketActivelyWorkedOn(ticket, now);
   if (state === 'needs-review') return ticket.needs_review ?? ticket.feedback_needed;
+  // HS2-2GCMY1: blocked means a non-empty blocked reason, as on the server.
+  if (state === 'blocked') return Boolean(ticket.blocked_reason?.trim());
   if (state === 'duplicate') return ticket.close_reason === 'duplicate';
   const statuses = lifecycleAliases[state];
   return statuses ? statuses.includes(ticket.status ?? '') : false;
@@ -217,7 +219,7 @@ export function usesBooleanSearchExpression(query: string) {
 export function usesAdvancedSearchExpression(query: string) {
   return (
     usesBooleanSearchExpression(query) ||
-    /(?:^|\s)is:(?:up-next|active|needs-review|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(
+    /(?:^|\s)is:(?:up-next|active|needs-review|blocked|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(
       query,
     )
   );

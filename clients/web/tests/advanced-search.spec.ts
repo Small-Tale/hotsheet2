@@ -54,6 +54,7 @@ const rows = [
     slug: 'HS2-BACKLOG',
     title: 'Backlogged parser task',
     status: 'backlog',
+    blocked_reason: 'Waits on the synthetic vendor',
     up_next: false,
     claimed_by: undefined,
     claim_lease_expires_at: undefined,
@@ -375,6 +376,14 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await search.fill('is:archived OR is:backlogged');
   await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
+  // HS2-2GCMY1: is:blocked follows the blocked reason, alone and composed.
+  await search.fill('is:blocked');
+  await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
+  await search.fill('is:active OR is:blocked');
+  await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);
   await search.fill('is:open ');
   await expect(page.locator('[data-component="search-field-token"][data-token-value="is:open"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();

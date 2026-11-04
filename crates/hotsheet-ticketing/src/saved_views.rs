@@ -223,6 +223,7 @@ const LIFECYCLES: &[&str] = &[
     "up-next",
     "active",
     "needs-review",
+    "blocked",
     "open",
     "closed",
     "duplicate",
@@ -567,6 +568,8 @@ fn is_state(state: &str, t: &Ticket, now: OffsetDateTime) -> bool {
                     .is_some_and(|expiry| expiry > now);
         }
         "needs-review" => return t.feedback_needed() || !t.review_requests.is_empty(),
+        // HS2-2GCMY1: the same definition claim-next uses: a non-empty blocked reason.
+        "blocked" => return crate::ops::is_blocked(t, &std::collections::HashSet::new()),
         "duplicate" => return t.close_reason == Some(CloseReason::Duplicate),
         "not-started" => &[Status::NotStarted],
         "started" => &[Status::Started],
@@ -728,6 +731,19 @@ mod tests {
         });
         assert!(matches("is:needs-review", &t));
         assert!(!matches("is:bogus", &t));
+    }
+
+    #[test]
+    fn hs2_2gcmy1_is_blocked_follows_the_blocked_reason() {
+        let mut t = ticket();
+        assert!(!matches("is:blocked", &t));
+        t.blocked_reason = Some("   ".into());
+        assert!(!matches("is:blocked", &t), "a blank reason does not block");
+        t.blocked_reason = Some("Waits on the vendor".into());
+        assert!(matches("is:blocked", &t) && matches("IS:BLOCKED", &t));
+        assert!(matches("is:blocked AND is:open", &t) && !matches("NOT is:blocked", &t));
+        t.blocked_reason = None;
+        assert!(matches("NOT is:blocked", &t));
     }
 
     #[test]

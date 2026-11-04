@@ -547,6 +547,11 @@ explicit review requests, and resolved feedback. Index tests check marker and re
 request filtering before a bounded page; the real-server checkout HTTP test checks
 note, description, and explicit request sources and feedback-resolution transitions.
 
+HS2-2GCMY1 covers `is:blocked`: `saved_views.rs # hs2_2gcmy1_is_blocked_follows_the_blocked_reason`
+checks blank, set, cleared, case, and Boolean forms; `advanced-search.test.ts` checks the web
+evaluator and advanced-expression detection; `ticket-search-field.test.ts` checks the syntax
+help chip; `tests/advanced-search.spec.ts` filters the shipped workspace search alone and in `OR`.
+
 HS2-DE9CMP covers Boolean structured search in the shared field and real workspace.
 Parser and field tests check quoted values, committed chips, and `NOT` membership;
 controller tests check complete cursor walks, source-qualified identity, `OR` scope,

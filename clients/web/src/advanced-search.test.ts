@@ -62,6 +62,18 @@ describe('advanced search semantics', () => {
     expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:archived', now))).toEqual([rows[5]]);
     expect(filterAdvancedSearchResults(rows, 'is:archived')).toEqual([rows[5]]);
   });
+  it('HS2-2GCMY1 matches is:blocked by a non-empty blocked reason, alone and in Boolean expressions', () => {
+    const blocked = row('HS2-BLOCKED', 'started', { blocked_reason: 'Waits on the vendor' });
+    const blank = row('HS2-BLANK', 'not_started', { blocked_reason: '   ' });
+    const clear = row('HS2-CLEAR', 'not_started');
+    const rows = [blocked, blank, clear];
+    expect(usesAdvancedSearchExpression('is:blocked')).toBe(true);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:blocked'))).toEqual([blocked]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'IS:BLOCKED'))).toEqual([blocked]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'NOT is:blocked'))).toEqual([blank, clear]);
+    expect(rows.filter((ticket) => matchesSearchExpression(ticket, 'is:blocked AND is:started'))).toEqual([blocked]);
+    expect(filterAdvancedSearchResults(rows, 'is:blocked')).toEqual([blocked]);
+  });
   it('matches review state in Boolean expressions and clears resolved feedback', () => {
     const feedback = row('HS2-FEEDBACK', 'started', { feedback_needed: true, needs_review: true });
     const requested = row('HS2-REQUEST', 'started', { needs_review: true });
