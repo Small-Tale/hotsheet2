@@ -1577,7 +1577,7 @@ test('represents every server-build details state with shared dialog geometry', 
   await expect(header).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
   const rows = dialog.locator('.kui-value-table__row');
-  await expect(rows).toHaveCount(6);
+  await expect(rows).toHaveCount(8);
   expect(
     await rows.nth(1).evaluate((node) => {
       const before = getComputedStyle(node, '::before');
