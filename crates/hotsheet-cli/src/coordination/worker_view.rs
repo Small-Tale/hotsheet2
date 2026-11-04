@@ -395,6 +395,19 @@ impl WorkerView {
     }
 }
 
+/// Observable progress of one worker-snapshot wait (HS2-QVWZDP).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WatchStep {
+    /// The watcher is registered and the initial cursor still matches.
+    Armed,
+    /// A cancellation-check slice elapsed without reading the source.
+    IdleSlice,
+    /// A relevant filesystem event or lease/deadline expiry re-read the source.
+    Rescanned,
+    /// The cancel flag ended the wait; the watcher drops on return.
+    Cancelled,
+}
+
 impl Coordinator {
     /// Long-poll the authoritative coordination snapshot without registering or
     /// renewing a session. Subscribing before the first read closes the race with
@@ -415,6 +428,18 @@ impl Coordinator {
         max_wait: Duration,
         cancelled: Option<&AtomicBool>,
     ) -> anyhow::Result<Snapshot> {
+        self.watch_worker_snapshot_observed(after, max_wait, cancelled, &mut |_| {})
+    }
+
+    /// The wait loop, reporting each [`WatchStep`] so tests can synchronize on
+    /// the watcher's real progress instead of wall time (HS2-QVWZDP).
+    fn watch_worker_snapshot_observed(
+        &self,
+        after: &str,
+        max_wait: Duration,
+        cancelled: Option<&AtomicBool>,
+        observe: &mut dyn FnMut(WatchStep),
+    ) -> anyhow::Result<Snapshot> {
         let (sender, receiver) = mpsc::channel();
         let mut watcher = notify::recommended_watcher(move |event| {
             let _ = sender.send(event);
@@ -429,8 +454,10 @@ impl Coordinator {
             return Ok(snapshot);
         }
         let deadline = Instant::now() + max_wait;
+        observe(WatchStep::Armed);
         loop {
             if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                observe(WatchStep::Cancelled);
                 return Ok(snapshot);
             }
             let now = time::OffsetDateTime::now_utc().unix_timestamp();
@@ -472,13 +499,20 @@ impl Coordinator {
                                 || path.starts_with(&tickets)
                         })
                 }
-                Err(mpsc::RecvTimeoutError::Timeout) => slice == wait,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    let expired = slice == wait;
+                    if !expired {
+                        observe(WatchStep::IdleSlice);
+                    }
+                    expired
+                }
                 Ok(Err(error)) => anyhow::bail!("worker view watch failed: {error}"),
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     anyhow::bail!("worker view watch disconnected; reconnect from cursor")
                 }
             };
             if relevant {
+                observe(WatchStep::Rescanned);
                 snapshot = self.snapshot(time::OffsetDateTime::now_utc().unix_timestamp())?;
                 if WorkerView::worker_state_cursor(&snapshot) != after {
                     return Ok(snapshot);
@@ -719,6 +753,71 @@ mod tests {
         );
     }
 
+    /// Hang guard for each step of an observed wait (HS2-QVWZDP). It bounds only
+    /// a regression (a wait that never wakes) and is not a latency claim: setup
+    /// under shared-host load has taken up to 28 s, so it allows twice that.
+    const HANG_GUARD: Duration = Duration::from_secs(60);
+
+    /// The longest a change-driven wait may run. Success returns on the event;
+    /// this only bounds a missed wake-up, and stays below [`HANG_GUARD`].
+    const CHANGE_WAIT: Duration = Duration::from_secs(30);
+
+    struct ObservedWait {
+        steps: mpsc::Receiver<WatchStep>,
+        done: mpsc::Receiver<Snapshot>,
+    }
+
+    impl ObservedWait {
+        fn start(
+            observer: Coordinator,
+            cursor: String,
+            max_wait: Duration,
+            cancelled: Option<std::sync::Arc<AtomicBool>>,
+        ) -> Self {
+            let (step_sender, steps) = mpsc::channel();
+            let (done_sender, done) = mpsc::channel();
+            std::thread::spawn(move || {
+                let snapshot = observer
+                    .watch_worker_snapshot_observed(
+                        &cursor,
+                        max_wait,
+                        cancelled.as_deref(),
+                        &mut |step| step_sender.send(step).unwrap(),
+                    )
+                    .unwrap();
+                done_sender.send(snapshot).unwrap();
+            });
+            Self { steps, done }
+        }
+
+        fn next_step(&self) -> WatchStep {
+            self.steps
+                .recv_timeout(HANG_GUARD)
+                .expect("watch step within the hang guard")
+        }
+
+        /// The returned snapshot plus every step after those already read. The
+        /// step channel closes only when the waiter's frame, including its
+        /// filesystem watcher, has been dropped.
+        fn finish(self) -> (Snapshot, Vec<WatchStep>) {
+            let snapshot = self
+                .done
+                .recv_timeout(HANG_GUARD)
+                .expect("wait returns within the hang guard");
+            let mut rest = Vec::new();
+            loop {
+                match self.steps.recv_timeout(HANG_GUARD) {
+                    Ok(step) => rest.push(step),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        panic!("waiter did not release its watcher")
+                    }
+                }
+            }
+            (snapshot, rest)
+        }
+    }
+
     #[test]
     fn hs2_dbecd0_cursor_replays_late_registration_without_network_polling() {
         let (root, coordinator) = crate::coordination::tests::fixture();
@@ -727,11 +826,10 @@ mod tests {
         let observer =
             Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
         let cursor = WorkerView::worker_state_cursor(&initial);
-        let wait = std::thread::spawn(move || {
-            observer
-                .watch_worker_snapshot(&cursor, Duration::from_secs(2))
-                .unwrap()
-        });
+        let wait = ObservedWait::start(observer, cursor, CHANGE_WAIT, None);
+        // Registering only after the watcher is armed proves the event wake-up
+        // rather than the initial-read fast path (HS2-QVWZDP).
+        assert_eq!(wait.next_step(), WatchStep::Armed);
         coordinator
             .register(
                 Role::Worker,
@@ -742,7 +840,8 @@ mod tests {
                 ReturnRoute::HumanRelay,
             )
             .unwrap();
-        let changed = wait.join().unwrap();
+        let (changed, steps) = wait.finish();
+        assert_woken_by_rescan(&steps);
         assert_ne!(
             WorkerView::worker_state_cursor(&changed),
             WorkerView::worker_state_cursor(&initial)
@@ -772,11 +871,8 @@ mod tests {
         let first_cursor = WorkerView::worker_state_cursor(&first);
         let observer =
             Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
-        let waiting = std::thread::spawn(move || {
-            observer
-                .watch_worker_snapshot(&first_cursor, Duration::from_secs(2))
-                .unwrap()
-        });
+        let waiting = ObservedWait::start(observer, first_cursor, CHANGE_WAIT, None);
+        assert_eq!(waiting.next_step(), WatchStep::Armed);
         coordinator
             .register(
                 Role::Worker,
@@ -787,7 +883,8 @@ mod tests {
                 ReturnRoute::HumanRelay,
             )
             .unwrap();
-        let renewed = waiting.join().unwrap();
+        let (renewed, steps) = waiting.finish();
+        assert_woken_by_rescan(&steps);
         assert_eq!(
             renewed.cursor, first.cursor,
             "shared status cursor intentionally normalizes live leases"
@@ -840,22 +937,38 @@ mod tests {
             .unwrap();
         let cursor = WorkerView::worker_state_cursor(&initial);
         let cancelled = std::sync::Arc::new(AtomicBool::new(false));
-        let flag = cancelled.clone();
         let observer =
             Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
-        let started = Instant::now();
-        let waiting = std::thread::spawn(move || {
-            observer
-                .watch_worker_snapshot_with_cancel(&cursor, Duration::from_secs(30), Some(&flag))
-                .unwrap()
-        });
-        std::thread::sleep(Duration::from_millis(100));
+        // An hour-long wait can return with an unchanged cursor within the hang
+        // guard only through cancellation, so no wall-clock bound is needed to
+        // tell cancellation from timeout under host load (HS2-QVWZDP).
+        let waiting = ObservedWait::start(
+            observer,
+            cursor,
+            Duration::from_secs(3600),
+            Some(cancelled.clone()),
+        );
+        assert_eq!(waiting.next_step(), WatchStep::Armed);
+        // Cancel only once the armed wait has idled through a check slice, so
+        // the flag interrupts a real wait and the idle slice is shown not to
+        // rescan.
+        assert_eq!(waiting.next_step(), WatchStep::IdleSlice);
         cancelled.store(true, Ordering::Relaxed);
-        let resumed = waiting.join().unwrap();
+        let (resumed, steps) = waiting.finish();
         assert_eq!(resumed.cursor, initial.cursor);
-        // Leave room for scheduler contention in the full suite while still
-        // proving cancellation returns well before the watch timeout.
-        assert!(started.elapsed() < Duration::from_secs(15));
+        let (last, idle) = steps.split_last().expect("cancellation step");
+        assert_eq!(*last, WatchStep::Cancelled);
+        assert!(
+            idle.iter().all(|step| *step == WatchStep::IdleSlice),
+            "idle checks never rescan the source: {steps:?}"
+        );
+    }
+
+    fn assert_woken_by_rescan(steps: &[WatchStep]) {
+        assert!(
+            !steps.is_empty() && steps.iter().all(|step| *step == WatchStep::Rescanned),
+            "an armed wait wakes only by rescanning on the change: {steps:?}"
+        );
     }
 
     #[test]
