@@ -30239,6 +30239,11 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     .await;
     assert_eq!(explicit["feedback_needed"], false);
     assert_eq!(explicit["notes"][0]["kind_explicit"], true);
+    // HS2-C1CFSH: written, with a warning that no request opened.
+    assert_eq!(
+        explicit["warnings"],
+        serde_json::json!([hotsheet_ticketing::ops::SUPPRESSED_FEEDBACK_MARKER_WARNING])
+    );
     let legacy = body_json(
         patch(
             path.clone(),
@@ -30248,6 +30253,7 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     )
     .await;
     assert_eq!(legacy["feedback_needed"], true);
+    assert!(legacy.get("warnings").is_none(), "{legacy}");
     let note = legacy["notes"]
         .as_array()
         .unwrap()
@@ -30263,6 +30269,11 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     )
     .await;
     assert_eq!(corrected["feedback_needed"], false);
+    assert_eq!(
+        corrected["warnings"],
+        serde_json::json!([hotsheet_ticketing::ops::SUPPRESSED_FEEDBACK_MARKER_WARNING]),
+        "a correction to regular keeps the marker suppressed and says so"
+    );
     let fixed = corrected["notes"]
         .as_array()
         .unwrap()
@@ -30289,6 +30300,87 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     }
     let read = body_json(app.oneshot(authed("GET", &path, None)).await.unwrap()).await;
     assert_eq!(read["title"], "Synthetic explicit kind");
+}
+
+/// HS2-C1CFSH and HS2-NVD36W through the provider route: an explicit regular marker note
+/// warns on append and on a text-only edit, a reply does not, and an answered typed
+/// request settles a details pointer for `feedback_needed` and `needs_review`.
+#[tokio::test]
+async fn hs2_c1cfsh_provider_route_warns_and_hs2_nvd36w_projection_settles() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Synthetic pointer","details":"FEEDBACK NEEDED is on this ticket."}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(created["feedback_needed"], true, "details only");
+    let uri = format!(
+        "/providers/{connection}/tickets/{}",
+        created["id"].as_str().unwrap()
+    );
+    let patch = |body: serde_json::Value| {
+        let app = app.clone();
+        let uri = uri.clone();
+        async move {
+            let response = app
+                .oneshot(authed("PATCH", &uri, Some(&body.to_string())))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            body_json(response).await
+        }
+    };
+    let warning = serde_json::json!([hotsheet_ticketing::ops::SUPPRESSED_FEEDBACK_MARKER_WARNING]);
+    let request = patch(serde_json::json!({"note":"Pick one","note_kind":"feedback_needed"})).await;
+    assert_eq!(request["feedback_needed"], true);
+    assert!(request.get("warnings").is_none(), "{request}");
+    let request_id = request["notes"][0]["id"].clone();
+    let answered = patch(serde_json::json!({
+        "note":"Option A","note_kind":"regular","response_to":request_id
+    }))
+    .await;
+    assert_eq!(answered["feedback_needed"], false, "{answered}");
+    assert_eq!(answered["needs_review"], false, "{answered}");
+    assert!(
+        answered.get("warnings").is_none(),
+        "a reply is regular: {answered}"
+    );
+    let plain = patch(serde_json::json!({"note":"Context","note_kind":"regular"})).await;
+    assert!(plain.get("warnings").is_none(), "{plain}");
+    let marker = patch(serde_json::json!({
+        "note":"FEEDBACK NEEDED: which layout?","note_kind":"regular"
+    }))
+    .await;
+    assert_eq!(marker["warnings"], warning, "{marker}");
+    assert_eq!(marker["feedback_needed"], false);
+    let context_id = plain["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["text"] == "Context")
+        .unwrap()["id"]
+        .clone();
+    let edited = patch(serde_json::json!({
+        "note_id":context_id,"note":"FEEDBACK NEEDED: and the color?"
+    }))
+    .await;
+    assert_eq!(edited["warnings"], warning, "{edited}");
+    assert_eq!(edited["feedback_needed"], false);
 }
 
 #[tokio::test]

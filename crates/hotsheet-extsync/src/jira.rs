@@ -551,6 +551,9 @@ impl JiraProvider {
             })
             .collect::<Vec<_>>();
         let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
+        let details = strip_transfer(&details_with_marker);
+        // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
+        let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: issue.key.clone(),
@@ -561,13 +564,13 @@ impl JiraProvider {
             id: issue.key.clone(),
             slug: issue.key,
             title: issue.fields.summary,
-            details: strip_transfer(&details_with_marker),
+            details,
             category: issue.fields.issue_type.name,
             priority,
             status,
             started_phase: None,
             up_next: false,
-            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
+            feedback_needed,
             needs_review: false,
             tags: issue.fields.labels,
             blocked_by: vec![],

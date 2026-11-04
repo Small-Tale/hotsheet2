@@ -3,6 +3,8 @@ import type { Note } from './api';
 type RelevantNote = Pick<Note, 'id' | 'kind' | 'created_at'> &
   Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback' | 'feedback_request' | 'response_to'>>;
 type FullFeedbackTicket = { feedback_needed?: boolean; details: string; notes: readonly RelevantNote[] };
+/** The fields that decide whether a note takes part in a feedback exchange. */
+type ExchangeNote = Pick<Note, 'kind'> & Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback'>>;
 
 export const DETAILS_FEEDBACK_ID = 'ticket-details';
 
@@ -57,14 +59,32 @@ export function isFeedbackNeeded(notes: readonly RelevantNote[]) {
   return latest?.kind === 'feedback_needed' && !notes.some((reply) => reply.response_to === latest.id);
 }
 
+/** Whether any note takes part in a feedback exchange: a typed or legacy request, a reply,
+ * or an ordinary note that would answer one. While one exists the details marker no longer
+ * decides feedback state (HS2-NVD36W); mirrors the core
+ * `Note::participates_in_feedback_exchange`. Presented kinds swap only between regular and
+ * feedback_needed, so raw and presented notes give the same answer. */
+export function hasFeedbackExchange(notes: readonly ExchangeNote[]): boolean {
+  return notes.some(
+    (note) => (note.kind === 'regular' || note.kind === 'feedback_needed') && !isAiThumbsFeedback(note),
+  );
+}
+
+/** Whether the ticket details themselves are the open request (HS2-NVD36W): the ticket
+ * needs feedback, the details carry an unquoted marker, and no note exchange exists. */
+export function detailsRequestFeedback(
+  feedbackNeeded: boolean,
+  details: string,
+  notes: readonly ExchangeNote[],
+): boolean {
+  return feedbackNeeded && textRequestsFeedback(details) && !hasFeedbackExchange(notes);
+}
+
 /** Preserve response UX when a newer client reads a full ticket from an older server
  * that predates the additive `feedback_needed` field on that wire shape. */
 export function fullTicketFeedbackNeeded(ticket: FullFeedbackTicket): boolean {
   if (typeof ticket.feedback_needed === 'boolean') return ticket.feedback_needed;
-  const hasExchange = ticket.notes.some(
-    (note) => (note.kind === 'regular' || note.kind === 'feedback_needed') && !isAiThumbsFeedback(note),
-  );
-  return hasExchange ? isFeedbackNeeded(ticket.notes) : textRequestsFeedback(ticket.details);
+  return hasFeedbackExchange(ticket.notes) ? isFeedbackNeeded(ticket.notes) : textRequestsFeedback(ticket.details);
 }
 
 /** Present each answered request as an ordinary note, preserving legacy response order. */
@@ -117,9 +137,5 @@ export function isStaleDescriptionFeedbackDismissal(
     Object.hasOwn(patch, 'note_id')
   )
     return false;
-  return (
-    !fullTicketFeedbackNeeded(ticket) ||
-    !textRequestsFeedback(ticket.details) ||
-    ticket.notes.some((note) => note.kind === 'feedback_needed')
-  );
+  return !detailsRequestFeedback(fullTicketFeedbackNeeded(ticket), ticket.details, ticket.notes);
 }

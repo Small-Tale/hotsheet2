@@ -157,7 +157,11 @@ pub struct ApiNote {
 }
 
 /// Provider-neutral review state for external trackers whose notes are native comments.
-pub fn api_feedback_needed(notes: &[ApiNote]) -> bool {
+///
+/// Mirrors [`hotsheet_model::Ticket::feedback_needed`] over already-inferred note kinds:
+/// the `details` marker decides only while no note takes part in a feedback exchange
+/// (HS2-NVD36W).
+pub fn api_feedback_needed(notes: &[ApiNote], details: &str) -> bool {
     if notes.iter().any(|request| {
         request.kind == NoteKind::FeedbackNeeded
             && request.feedback_request
@@ -181,12 +185,41 @@ pub fn api_feedback_needed(notes: &[ApiNote]) -> bool {
                 .cmp(&right.created_at)
                 .then(left.id.cmp(&right.id))
         })
-        .is_some_and(|note| {
-            note.kind == NoteKind::FeedbackNeeded
-                && !notes
-                    .iter()
-                    .any(|reply| reply.response_to.as_deref() == Some(note.id.as_str()))
-        })
+        .map_or_else(
+            || {
+                !notes.iter().any(api_note_participates_in_feedback_exchange)
+                    && hotsheet_model::Note::text_requests_feedback(details)
+            },
+            |note| {
+                note.kind == NoteKind::FeedbackNeeded
+                    && !notes
+                        .iter()
+                        .any(|reply| reply.response_to.as_deref() == Some(note.id.as_str()))
+            },
+        )
+}
+
+/// `ops::note_feedback_marker_warning` for a wire note after a provider edit (HS2-C1CFSH),
+/// matching the provider-native id or the preserved Hot Sheet note id.
+pub fn api_note_feedback_marker_warning(ticket: &ApiTicket, note_id: &str) -> Option<String> {
+    let note = ticket
+        .notes
+        .iter()
+        .find(|note| note.id == note_id || note.hotsheet_note_id.as_deref() == Some(note_id))?;
+    crate::ops::suppressed_feedback_marker_warning(
+        note.kind,
+        note.kind_explicit,
+        note.response_to.is_some(),
+        &note.text,
+    )
+}
+
+/// [`hotsheet_model::Note::participates_in_feedback_exchange`] for a wire note.
+fn api_note_participates_in_feedback_exchange(note: &ApiNote) -> bool {
+    matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
+        && note.ai_feedback.is_none()
+        && note.feedback_for.is_none()
+        && !hotsheet_model::Note::text_is_ai_thumbs_feedback(&note.text)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -241,6 +241,7 @@ pub(crate) fn do_update_with_ticket(
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
     // An edit may change only the confidence (HS2-CY4CWC); empty text is never written.
     let note_text_edit = req.note.filter(|t| !t.is_empty());
+    let mut written_note = None;
     let latest = match edit_note_id {
         Some(note_id) => {
             let edit = ops::NoteEditInput {
@@ -253,6 +254,7 @@ pub(crate) fn do_update_with_ticket(
             if edit.is_empty() {
                 updated
             } else {
+                written_note = Some(note_id);
                 ops::edit_note_with_metadata(&entry.store, &ticket.id, &note_id, now(), edit)?
             }
         }
@@ -260,7 +262,7 @@ pub(crate) fn do_update_with_ticket(
             Some(text) => ops::add_note_with_metadata(
                 &entry.store,
                 &ticket.id,
-                Ulid::new(),
+                *written_note.insert(Ulid::new()),
                 now(),
                 req.note_kind.unwrap_or(NoteKind::Regular),
                 ops::NoteMetadataInput {
@@ -286,6 +288,10 @@ pub(crate) fn do_update_with_ticket(
         response.warnings =
             ops::attachment_reference_warnings_with(&latest, &text, |needle| entry.resolve(needle));
     }
+    // HS2-C1CFSH: an explicit regular note never opens a request; say so.
+    response
+        .warnings
+        .extend(written_note.and_then(|id| ops::note_feedback_marker_warning(&latest, &id)));
     Ok((response, latest))
 }
 

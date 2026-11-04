@@ -18,7 +18,7 @@ import { CircleAlert, Plus } from 'lucide';
 import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
-import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
+import { DETAILS_FEEDBACK_ID, detailsRequestFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
@@ -181,8 +181,17 @@ function LoadedTicketInfoPanel({
   attachmentContext,
   contentLoading = false,
 }: TicketInfoPanelProps) {
-  const detailsFeedback =
-    feedbackNeeded && textRequestsFeedback(details) && !notes.some((note) => note.kind === 'feedback_needed');
+  // The details card asks only while no note exchange exists (HS2-NVD36W).
+  const detailsFeedback = detailsRequestFeedback(
+    feedbackNeeded,
+    details,
+    notes.map((note) => ({
+      kind: note.kind,
+      text: note.body,
+      feedback_for: note.feedbackFor,
+      ai_feedback: note.ratingMetadata,
+    })),
+  );
   const resolvedTagPopoverId = tagPopoverId ?? 'ticket-tag-popover';
   return (
     <TicketInspectorPanel

@@ -234,6 +234,32 @@ impl Note {
             && Self::infer_kind(self.kind, self.kind_explicit, &self.text)
                 == NoteKind::FeedbackNeeded
     }
+
+    /// Whether this note takes part in a feedback exchange: a typed or legacy request, a
+    /// linked or sequential reply, or any ordinary note that would answer one. While any
+    /// such note exists the ticket details marker no longer decides feedback state
+    /// (HS2-NVD36W); mirrors the web client's `hasFeedbackExchange`.
+    pub fn participates_in_feedback_exchange(&self) -> bool {
+        matches!(self.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
+            && !self.is_ai_thumbs_feedback()
+    }
+
+    /// Whether an explicitly `regular` note carries an unquoted feedback marker that its
+    /// kind suppresses (HS2-C1CFSH). Such a note never opens a request, which is almost
+    /// always an authoring mistake, so write paths warn about it. A linked reply is
+    /// intentionally regular and AI thumbs ratings are never requests, so both are exempt.
+    pub fn explicit_kind_suppresses_feedback_marker(
+        kind: NoteKind,
+        explicit: bool,
+        responds: bool,
+        text: &str,
+    ) -> bool {
+        kind == NoteKind::Regular
+            && explicit
+            && !responds
+            && !Self::text_is_ai_thumbs_feedback(text)
+            && Self::text_requests_feedback(text)
+    }
 }
 
 /// Durable metadata for one attachment payload.
@@ -771,6 +797,10 @@ impl Ticket {
     }
 
     /// Whether any independently tracked request or legacy sequential exchange is open.
+    ///
+    /// The ticket details marker decides only while no note takes part in a feedback
+    /// exchange (HS2-NVD36W): once a typed request, legacy request, or reply exists, the
+    /// notes alone decide, so answering a typed request also settles a details pointer.
     pub fn feedback_needed(&self) -> bool {
         let tracked_open = self.notes.iter().any(|request| {
             request.kind == NoteKind::FeedbackNeeded
@@ -798,7 +828,13 @@ impl Ticket {
                     .then(a.id.cmp(&b.id))
             })
             .map_or_else(
-                || Note::text_requests_feedback(&self.details),
+                || {
+                    !self
+                        .notes
+                        .iter()
+                        .any(Note::participates_in_feedback_exchange)
+                        && Note::text_requests_feedback(&self.details)
+                },
                 |note| {
                     Note::is_feedback_needed_request(note)
                         && !self
@@ -973,6 +1009,152 @@ mod tests {
                 "deleting the last linked response reopens its request"
             );
         }
+    }
+
+    /// HS2-NVD36W: an unquoted details marker, one typed request, and its linked reply.
+    #[test]
+    fn hs2_nvd36w_answered_typed_request_settles_a_details_marker() {
+        let mut ticket = Ticket {
+            details: "FEEDBACK NEEDED is on this ticket.".into(),
+            ..Ticket::default()
+        };
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA0",
+            NoteKind::Activity,
+            "2026-08-20T00:00:00Z",
+        ));
+        assert!(ticket.feedback_needed(), "details only: the marker decides");
+
+        let mut request = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:01:00Z",
+        );
+        request.feedback_request = true;
+        request.kind_explicit = true;
+        ticket.notes.push(request.clone());
+        assert!(ticket.feedback_needed(), "typed request open");
+
+        let mut reply = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        );
+        reply.response_to = Some(request.id);
+        reply.text = "Option A".into();
+        ticket.notes.push(reply);
+        assert!(
+            !ticket.feedback_needed(),
+            "an answered typed request settles the details pointer"
+        );
+
+        let mut second = request.clone();
+        second.id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA3").unwrap();
+        second.created_at = Timestamp::new("2026-08-20T00:03:00Z");
+        ticket.notes.push(second.clone());
+        assert!(ticket.feedback_needed(), "a second typed request opens");
+
+        let mut dismissal = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+            NoteKind::Regular,
+            "2026-08-20T00:04:00Z",
+        );
+        dismissal.response_to = Some(second.id);
+        dismissal.kind_explicit = true;
+        dismissal.text = "No response needed".into();
+        ticket.notes.push(dismissal);
+        assert!(!ticket.feedback_needed(), "dismissed second request");
+
+        ticket.notes.pop();
+        ticket.notes.pop();
+        ticket.notes.pop();
+        assert!(ticket.feedback_needed(), "deleting the reply reopens");
+        ticket.notes.pop();
+        assert!(
+            ticket.feedback_needed(),
+            "deleting the request returns control to the details marker"
+        );
+    }
+
+    /// HS2-NVD36W: a details marker yields to any note exchange, typed or legacy; AI
+    /// thumbs ratings and activity notes are not an exchange.
+    #[test]
+    fn hs2_nvd36w_details_marker_yields_only_to_exchange_notes() {
+        let mut ticket = Ticket {
+            details: "FEEDBACK NEEDED: pick one".into(),
+            ..Ticket::default()
+        };
+        let mut rating = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::Regular,
+            "2026-08-20T00:00:00Z",
+        );
+        rating.feedback_for = Some(Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA9").unwrap());
+        ticket.notes.push(rating);
+        assert!(
+            ticket.feedback_needed(),
+            "a thumbs rating is not an exchange"
+        );
+
+        let mut legacy = ticket.clone();
+        legacy.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:01:00Z",
+        ));
+        assert!(legacy.feedback_needed(), "legacy request open");
+        legacy.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(!legacy.feedback_needed(), "sequential reply answers it");
+
+        // A lone reply whose request was deleted still counts as an exchange.
+        let mut orphan = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+            NoteKind::Regular,
+            "2026-08-20T00:03:00Z",
+        );
+        orphan.response_to = Some(Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA8").unwrap());
+        ticket.notes.push(orphan);
+        assert!(!ticket.feedback_needed());
+
+        // A quoted details marker never opens one.
+        let quoted = Ticket {
+            details: "> FEEDBACK NEEDED".into(),
+            ..Ticket::default()
+        };
+        assert!(!quoted.feedback_needed());
+    }
+
+    #[test]
+    fn hs2_c1cfsh_explicit_regular_marker_is_flagged_only_when_suppressed() {
+        let suppressed = Note::explicit_kind_suppresses_feedback_marker;
+        let prompt = "FEEDBACK NEEDED: choose\n\nCHOICE: A | B";
+        assert!(suppressed(NoteKind::Regular, true, false, prompt));
+        assert!(
+            !suppressed(NoteKind::Regular, false, false, prompt),
+            "omitted kind infers"
+        );
+        assert!(!suppressed(NoteKind::FeedbackNeeded, true, false, prompt));
+        assert!(!suppressed(NoteKind::Activity, true, false, prompt));
+        assert!(
+            !suppressed(NoteKind::Regular, true, true, prompt),
+            "a reply is regular"
+        );
+        assert!(!suppressed(
+            NoteKind::Regular,
+            true,
+            false,
+            "> FEEDBACK NEEDED: quoted"
+        ));
+        assert!(!suppressed(
+            NoteKind::Regular,
+            true,
+            false,
+            "feedback needed in prose"
+        ));
     }
 
     #[test]

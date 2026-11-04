@@ -8048,6 +8048,67 @@ fn edit_allows_literal_backslash_n_in_markdown_code_or_with_explicit_override() 
     assert_eq!(ticket.notes[1].text, intentional_prose);
 }
 
+/// HS2-C1CFSH: an explicit regular note with an unquoted marker is written, opens no
+/// request, and warns; an omitted kind still infers a request without a warning.
+#[test]
+fn hs2_c1cfsh_edit_warns_when_explicit_regular_suppresses_a_feedback_marker() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Synthetic suppressed prompt");
+    let warning = format!(
+        "warning: {}",
+        hotsheet_ticketing::ops::SUPPRESSED_FEEDBACK_MARKER_WARNING
+    );
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "FEEDBACK NEEDED: which layout?",
+            "--note-kind",
+            "regular",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(warning.as_str()));
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert!(!ticket.feedback_needed());
+    let note_id = ticket.notes[0].id.to_string();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &note_id,
+            "--note",
+            "FEEDBACK NEEDED: still?",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(warning.as_str()));
+    hs(p)
+        .args(["edit", &slug, "--note", "FEEDBACK NEEDED: inferred"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "> FEEDBACK NEEDED",
+            "--note-kind",
+            "regular",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+}
+
 #[test]
 fn edit_accepts_notes_but_warns_about_unresolved_attachment_references() {
     let dir = tempfile::tempdir().unwrap();

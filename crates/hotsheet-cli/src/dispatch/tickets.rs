@@ -962,10 +962,11 @@ pub(crate) fn cmd_edit(
         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
     )?;
     let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
-    let warnings = note
+    let mut warnings = note
         .as_deref()
         .map(|text| ops::attachment_reference_warnings(&store, &updated, text))
         .unwrap_or_default();
+    let mut written_note = None;
     if let Some(note_id) = edit_note {
         let edit = ops::NoteEditInput {
             kind: note_kind,
@@ -976,12 +977,15 @@ pub(crate) fn cmd_edit(
         };
         if !edit.is_empty() {
             updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;
+            written_note = Some(note_id);
         }
     } else if let Some(text) = note {
+        let note_id = Ulid::new();
+        written_note = Some(note_id);
         updated = ops::add_note_with_metadata(
             &store,
             &ticket.id,
-            Ulid::new(),
+            note_id,
             now_ts(),
             note_kind.unwrap_or(NoteKind::Regular),
             ops::NoteMetadataInput {
@@ -996,6 +1000,8 @@ pub(crate) fn cmd_edit(
             text,
         )?;
     }
+    // HS2-C1CFSH: an explicit regular note never opens a request; say so.
+    warnings.extend(written_note.and_then(|id| ops::note_feedback_marker_warning(&updated, &id)));
     for warning in warnings {
         eprintln!("warning: {warning}");
     }

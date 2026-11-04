@@ -728,6 +728,9 @@ impl GitHubProvider {
             None
         };
         let native_id = issue.number.to_string();
+        let details = strip_transfer_markers(issue.body.clone().unwrap_or_default());
+        // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
+        let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
@@ -738,13 +741,13 @@ impl GitHubProvider {
             id: native_id.clone(),
             slug: format!("{}#{native_id}", self.config.repository),
             title: issue.title,
-            details: strip_transfer_markers(issue.body.clone().unwrap_or_default()),
+            details,
             category,
             priority,
             status,
             started_phase: None,
             up_next: status.is_active() && labels.iter().any(|label| label == "up-next"),
-            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
+            feedback_needed,
             needs_review: false,
             tags: labels
                 .into_iter()

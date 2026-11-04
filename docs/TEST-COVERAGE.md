@@ -1870,6 +1870,20 @@ discard flow remains covered by its existing real-router test.
 - Unit: `clients/web/src/feedback-needed.test.ts # isStaleDescriptionFeedbackDismissal (HS2-M6ETWA)` pins the description-only intent and stale state.
 - End to end: `clients/web/tests/feedback-dismissal-intent.spec.ts # HS2-M6ETWA` exercises current and stale real-server description dismissal in workspace and linked readers; the adjacent HS2-VBFSZJ description Respond case covers typed response and a further edit after reset.
 
+### Description marker yields to a note exchange (HS2-NVD36W)
+
+- Behavior: the details marker decides feedback state only while no Regular or `feedback_needed` note (other than AI thumbs feedback) exists. A typed request and its linked reply settle a details pointer; the description card shows Feedback needed and No response needed only while the description is the open request. Markdown tickets, the provider-neutral GitHub/GitLab/Jira projection, the provider page filter's `needs_review`, and the client share the rule.
+- Unit: `crates/hotsheet-model/src/ticket.rs # hs2_nvd36w_answered_typed_request_settles_a_details_marker, hs2_nvd36w_details_marker_yields_only_to_exchange_notes` (details only, request, answer, second request, dismissal, deletes; legacy sequential; thumbs; orphan reply; quoted marker); `crates/hotsheet-ticketing/src/provider.rs # hs2_nvd36w_provider_projection_matches_model_through_a_typed_exchange` (model, wire projection and filter agree at each step); `clients/web/src/feedback-needed.test.ts # details feedback yields to a note exchange (HS2-NVD36W)`.
+- End to end: `crates/hotsheet-server/tests/http.rs # hs2_c1cfsh_provider_route_warns_and_hs2_nvd36w_projection_settles`; `clients/web/tests/feedback-dismissal-intent.spec.ts # HS2-NVD36W` opens the reported shape in the shipped sidebar inspector and reader through the real rebuilt server (captures with `HOTSHEET_NVD36W_VISUAL_REVIEW=1`).
+- Manual: none new.
+
+### Explicit regular marker warning (HS2-C1CFSH)
+
+- Behavior: an append or edit that leaves an explicit Regular note (not a `response_to` reply) with an unquoted `FEEDBACK NEEDED` line is written unchanged and returns `ops::SUPPRESSED_FEEDBACK_MARKER_WARNING` from CLI (stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes. Omitted kinds, quoted markers, replies and typed requests do not warn.
+- Unit: `crates/hotsheet-model/src/ticket.rs # hs2_c1cfsh_explicit_regular_marker_is_flagged_only_when_suppressed`; `crates/hotsheet-ticketing/src/ops.rs # hs2_c1cfsh_explicit_regular_marker_note_warns_after_append_and_edit`; `crates/hotsheet-mcp/src/lib.rs # hs2_cv5nmc_mcp_explicit_intent_and_kind_correction`.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # hs2_c1cfsh_edit_warns_when_explicit_regular_suppresses_a_feedback_marker`; `crates/hotsheet-server/tests/http.rs # hs2_cv5nmc_api_explicit_intent_and_kind_correction, hs2_c1cfsh_provider_route_warns_and_hs2_nvd36w_projection_settles`.
+- Manual: none new. The read-time hint and fix belong to HS2-5E8Y9R.
+
 ### In-app prompt replacements (HS2-WMZ6Z5)
 
 - Behavior: inline attachment filenames save on blur/Enter, cancel with Escape, retain local recovery and failed drafts; command-group creation has explicit submission and validation; AI customization has whole-dialog cancellation and provider defaults for blank model and Provider Default effort, with declared effort choices and unsupported-model disable. Group-error recovery is fenced by operation generation, project identity, and message revision.

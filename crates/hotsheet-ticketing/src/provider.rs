@@ -846,24 +846,12 @@ pub fn filter_provider_ticket_page(
     query: &TicketQuery,
 ) -> Vec<ApiTicket> {
     for ticket in &mut tickets {
+        // One projection for every source (HS2-NVD36W): the notes as they stand now, which
+        // may include overlaid pending appends, decide; the details marker only without an
+        // exchange; an explicit regular note's marker text never opens one.
         ticket.needs_review = ticket.feedback_needed
             || !ticket.review_requests.is_empty()
-            || ticket
-                .notes
-                .iter()
-                .filter(|note| {
-                    matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
-                        && note.feedback_for.is_none()
-                        && note.ai_feedback.is_none()
-                })
-                .max_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)))
-                .map_or_else(
-                    || hotsheet_model::Note::text_requests_feedback(&ticket.details),
-                    |note| {
-                        note.kind == NoteKind::FeedbackNeeded
-                            || hotsheet_model::Note::text_requests_feedback(&note.text)
-                    },
-                );
+            || crate::wire::api_feedback_needed(&ticket.notes, &ticket.details);
     }
     tickets.retain(|ticket| {
         provider_text_matches(ticket, query.text.as_deref())
@@ -2972,6 +2960,108 @@ mod tests {
         let rows =
             filter_provider_ticket_page(provider.query(&TicketQuery::default()).unwrap(), &query);
         assert_eq!(rows[0].updated_at, "2026-08-27T00:00:00Z");
+    }
+
+    /// HS2-NVD36W: the Markdown model, the provider-neutral wire projection used by GitHub,
+    /// GitLab and Jira adapters, and the provider page filter agree at every step of a
+    /// details-marker plus typed request exchange.
+    #[test]
+    fn hs2_nvd36w_provider_projection_matches_model_through_a_typed_exchange() {
+        let (_dir, provider) = git_provider();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        provider
+            .create(
+                ctx(id, "2026-08-26T00:00:00Z"),
+                ProviderDraft {
+                    title: "details pointer".into(),
+                    category: "task".into(),
+                    priority: Priority::High,
+                    status: Status::Started,
+                    details: "FEEDBACK NEEDED is on this ticket.".into(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let native = id.to_string();
+        let check = |label: &str, expected: bool| {
+            let model = provider.store.read_ticket(&id).unwrap().feedback_needed();
+            let api = provider.get(&native).unwrap();
+            let wire = crate::wire::api_feedback_needed(&api.notes, &api.details);
+            let filtered = filter_provider_ticket_page(vec![api], &TicketQuery::default());
+            assert_eq!(model, expected, "{label}: model");
+            assert_eq!(wire, expected, "{label}: wire projection");
+            assert_eq!(filtered[0].needs_review, expected, "{label}: needs_review");
+        };
+        check("details only", true);
+        let note =
+            |note_id: &str, at: &str, kind, explicit, response_to: Option<&str>, text: &str| {
+                provider
+                    .add_note_with_metadata(
+                        &native,
+                        ctx(Ulid::from_string(note_id).unwrap(), at),
+                        kind,
+                        NoteMetadataInput {
+                            kind_explicit: explicit,
+                            response_to: response_to.map(str::to_string),
+                            ..Default::default()
+                        },
+                        text.into(),
+                    )
+                    .unwrap();
+            };
+        let first = "01ARZ3NDEKTSV4RRFFQ69G5FA1";
+        note(
+            first,
+            "2026-08-26T00:01:00Z",
+            NoteKind::FeedbackNeeded,
+            true,
+            None,
+            "Pick one",
+        );
+        check("typed request open", true);
+        note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            "2026-08-26T00:02:00Z",
+            NoteKind::Regular,
+            true,
+            Some(first),
+            "Option A",
+        );
+        check("typed request answered", false);
+        let second = "01ARZ3NDEKTSV4RRFFQ69G5FA3";
+        note(
+            second,
+            "2026-08-26T00:03:00Z",
+            NoteKind::FeedbackNeeded,
+            true,
+            None,
+            "And?",
+        );
+        check("second request open", true);
+        note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+            "2026-08-26T00:04:00Z",
+            NoteKind::Regular,
+            true,
+            Some(second),
+            "No response needed",
+        );
+        check("second request dismissed", false);
+        note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA5",
+            "2026-08-26T00:05:00Z",
+            NoteKind::Regular,
+            true,
+            None,
+            "FEEDBACK NEEDED pointer kept explicitly regular",
+        );
+        check(
+            "explicit regular marker never opens one (HS2-C1CFSH)",
+            false,
+        );
     }
 
     #[test]

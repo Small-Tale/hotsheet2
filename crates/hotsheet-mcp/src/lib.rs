@@ -2913,6 +2913,7 @@ mod core_backend {
                     .map_err(rule_err)?;
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
+                    let mut written_note = None;
                     let latest = match edit_note_id {
                         Some(note_id) => {
                             let edit = ops::NoteEditInput {
@@ -2925,6 +2926,7 @@ mod core_backend {
                             if edit.is_empty() {
                                 updated
                             } else {
+                                written_note = Some(note_id);
                                 ops::edit_note_with_metadata(
                                     &self.store,
                                     &t.id,
@@ -2939,7 +2941,7 @@ mod core_backend {
                             Some(text) => ops::add_note_with_metadata(
                                 &self.store,
                                 &t.id,
-                                (self.mint)(),
+                                *written_note.insert((self.mint)()),
                                 (self.now)(),
                                 new_note_kind.unwrap_or(NoteKind::Regular),
                                 ops::NoteMetadataInput {
@@ -2958,12 +2960,15 @@ mod core_backend {
                         },
                     };
                     let mut response = self.api(&latest)?;
-                    if let Some(text) = note_text {
-                        let warnings =
-                            ops::attachment_reference_warnings(&self.store, &latest, &text);
-                        if !warnings.is_empty() {
-                            response["warnings"] = serde_json::json!(warnings);
-                        }
+                    let mut warnings = note_text
+                        .map(|text| ops::attachment_reference_warnings(&self.store, &latest, &text))
+                        .unwrap_or_default();
+                    // HS2-C1CFSH: an explicit regular note never opens a request; say so.
+                    warnings.extend(
+                        written_note.and_then(|id| ops::note_feedback_marker_warning(&latest, &id)),
+                    );
+                    if !warnings.is_empty() {
+                        response["warnings"] = serde_json::json!(warnings);
                     }
                     Ok(response)
                 }
@@ -5707,8 +5712,22 @@ mod tests {
             json!({"id":id,"note":body,"note_kind":"regular"}),
         );
         assert_eq!(explicit["feedback_needed"], false);
+        // HS2-C1CFSH: the explicit regular note is written, and the result says it opened
+        // no request.
+        assert_eq!(
+            explicit["warnings"],
+            json!([ops::SUPPRESSED_FEEDBACK_MARKER_WARNING]),
+            "{explicit}"
+        );
         let legacy = call(&backend, "hotsheet_update", json!({"id":id,"note":body}));
         assert_eq!(legacy["feedback_needed"], true);
+        assert!(legacy.get("warnings").is_none(), "{legacy}");
+        let quoted = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note":"> FEEDBACK NEEDED quoted","note_kind":"regular"}),
+        );
+        assert!(quoted.get("warnings").is_none(), "{quoted}");
         let note = legacy["notes"]
             .as_array()
             .unwrap()

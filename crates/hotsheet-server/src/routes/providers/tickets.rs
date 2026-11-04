@@ -410,6 +410,12 @@ pub(crate) fn do_provider_update(
             ticket = provider
                 .edit_note_with_metadata(id, &note_id, timestamp, edit)
                 .map_err(provider_transfer_error)?;
+            // HS2-C1CFSH: an explicit regular note never opens a request; say so.
+            ticket
+                .warnings
+                .extend(hotsheet_ticketing::wire::api_note_feedback_marker_warning(
+                    &ticket, &note_id,
+                ));
         }
         (
             None,
@@ -417,6 +423,12 @@ pub(crate) fn do_provider_update(
                 text: Some(note), ..
             },
         ) => {
+            let marker_warning = ops::suppressed_feedback_marker_warning(
+                note_kind,
+                req.note_kind.is_some(),
+                req.response_to.is_some(),
+                &note,
+            );
             ticket = provider
                 .add_note_with_metadata(
                     id,
@@ -447,6 +459,7 @@ pub(crate) fn do_provider_update(
                     }
                     _ => provider_transfer_error(error),
                 })?;
+            ticket.warnings.extend(marker_warning);
         }
         _ => {}
     }

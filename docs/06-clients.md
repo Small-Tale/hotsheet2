@@ -4667,6 +4667,19 @@ refresh preserves that reply without comparing it to the request note or showing
 edit conflict; actual edits to existing notes still reconcile against their source text.
 When a description opens the exchange, activity/status notes remain neutral and the first
 regular note answers it. A later first-class feedback request supersedes the description.
+The description marker decides only while no note takes part in a feedback exchange: once
+any typed or legacy request, reply, or ordinary regular note exists (AI thumbs ratings
+excepted), the notes alone decide. Answering a typed request therefore also settles a
+description that merely points at it ("FEEDBACK NEEDED is on this ticket."), and the
+description card shows the Feedback needed treatment and its No response needed control
+only while the description itself is the open request (HS2-NVD36W). The core, the
+provider-neutral projection for GitHub, GitLab and Jira tickets, and the client apply the
+same rule.
+An explicitly `regular` note keeps its kind even when its text carries an unquoted
+`FEEDBACK NEEDED` line, so it opens no request. The note is still written, but CLI
+(stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes return a
+warning naming `note_kind feedback_needed` as the fix, after an append and after an edit
+that leaves such a note; linked replies are exempt (HS2-C1CFSH).
 For compatibility with HS1 and early HS2 automation, a regular note containing the
 case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
 kind at the wire boundary and participates in the same exchange. The phrase may appear

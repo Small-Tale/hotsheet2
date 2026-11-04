@@ -562,3 +562,63 @@ for (const surface of ['workspace', 'linked reader'] as const)
         }
       }
     });
+
+test('HS2-NVD36W settles a details pointer once its typed request is answered in the shipped inspector', async ({
+  page,
+}) => {
+  const server = await realTicketServer();
+  let releaseRefresh = () => {};
+  try {
+    // Synthetic shape of the report: an unquoted details pointer, one typed prompt, one reply.
+    const details = 'FEEDBACK NEEDED is on this ticket.',
+      ticket = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic answered pointer', details }),
+      path = `/tickets/${ticket.id}`,
+      asked = await server.request<FullTicket>(path, 'PATCH', {
+        note: 'FEEDBACK NEEDED: choose a synthetic option.',
+        note_kind: 'feedback_needed',
+      }),
+      request = asked.notes.find((note) => note.kind === 'feedback_needed')!;
+    expect(asked.feedback_needed).toBe(true);
+    const answered = await server.request<FullTicket>(path, 'PATCH', {
+      note: 'Synthetic option A',
+      note_kind: 'regular',
+      response_to: request.id,
+    });
+    expect(answered.feedback_needed).toBe(false);
+    expect(answered.needs_review).toBe(false);
+    const opened = await openFeedbackProjects(page, server, server, async () => {});
+    releaseRefresh = opened.releaseRefresh;
+    await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${ticket.slug}"]`).first().click();
+    const rail = page.locator('#app-right-rail');
+    await expect(rail.getByText('Synthetic option A')).toBeVisible();
+    await expect(rail.locator('[data-feedback-needed="true"]')).toHaveCount(0);
+    await rail.getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const reader = page.locator('[data-reader-active="true"]');
+    await expect(reader.getByText('Synthetic option A')).toBeVisible();
+    await expect(reader.locator('[data-details-feedback="true"]')).toHaveCount(0);
+    await expect(reader.locator('[data-feedback-needed="true"]')).toHaveCount(0);
+    await expect(reader.getByRole('button', { name: 'No Response Needed', exact: true })).toHaveCount(0);
+    if (process.env.HOTSHEET_NVD36W_VISUAL_REVIEW)
+      for (const [label, width] of [
+        ['wide', 1440],
+        ['narrow', 390],
+        ['wide-again', 1440],
+      ] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(reader.getByText('Synthetic option A')).toBeVisible();
+        // Capture the settled reader, not its opening transition.
+        await page.waitForFunction(() =>
+          document.getAnimations().every((animation) => animation.playState !== 'running'),
+        );
+        await page.screenshot({ path: test.info().outputPath(`hs2-nvd36w-after-${label}.png`) });
+      }
+    expect(opened.writes).toEqual([]);
+  } finally {
+    releaseRefresh();
+    try {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    } finally {
+      await server.stop();
+    }
+  }
+});

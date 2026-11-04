@@ -146,6 +146,12 @@ and `feedback_request` together and append an activity audit containing only the
 note id and previous/next kinds, preserving original authorship, text, creation time,
 responses and evidence. Replaying the same correction adds no duplicate audit.
 `feedback_draft` cannot replace a persisted kind because it is local-only.
+Because such a note opens no request, writers return a non-fatal warning when an
+append or edit leaves an explicit Regular note (other than a `response_to` reply) with
+an unquoted marker; the file is written unchanged (HS2-C1CFSH).
+A details-body marker counts as a request only while no note participates in a
+feedback exchange (any Regular or `feedback_needed` note other than AI thumbs
+feedback); typed requests and their replies therefore take precedence (HS2-NVD36W).
 Older readers ignore this marker and may still infer feedback; older writers may
 strip it. Upgrade every writer before relying on explicit intent. This additive
 marker does not claim compatibility with old inference semantics (HS2-CV5NMC).

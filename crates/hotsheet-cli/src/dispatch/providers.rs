@@ -905,6 +905,7 @@ pub(crate) fn cmd_provider_edit(
             ..Default::default()
         },
     )?;
+    let mut marker_warning = None;
     if let Some(note_id) = input.edit_note {
         let edit = ops::NoteEditInput {
             kind: input.note_kind,
@@ -915,8 +916,16 @@ pub(crate) fn cmd_provider_edit(
         };
         if !edit.is_empty() {
             ticket = provider.edit_note_with_metadata(id, &note_id, now, edit)?;
+            marker_warning =
+                hotsheet_ticketing::wire::api_note_feedback_marker_warning(&ticket, &note_id);
         }
     } else if let Some(note) = input.note {
+        marker_warning = ops::suppressed_feedback_marker_warning(
+            input.note_kind.unwrap_or(NoteKind::Regular),
+            input.note_kind.is_some(),
+            input.response_to.is_some(),
+            &note,
+        );
         ticket = provider.add_note_with_metadata(
             id,
             MutationContext {
@@ -935,6 +944,12 @@ pub(crate) fn cmd_provider_edit(
             },
             note,
         )?;
+    }
+    // HS2-C1CFSH: an explicit regular note never opens a request; say so on stderr and in
+    // the JSON result.
+    if let Some(warning) = marker_warning {
+        eprintln!("warning: {warning}");
+        ticket.warnings.push(warning);
     }
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())

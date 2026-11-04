@@ -1990,6 +1990,37 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
     attachment_reference_warnings_with(owner, text, |needle| resolve(store, needle))
 }
 
+/// The write-time warning for a note whose explicit `regular` kind suppresses an unquoted
+/// `FEEDBACK NEEDED` line (HS2-C1CFSH). The note is still written: an explicit kind wins,
+/// and some regular notes legitimately discuss the marker. Every append and edit path
+/// (CLI, MCP, server; Markdown and provider tickets) returns this alongside its result so
+/// an AI caller learns that no feedback request opened.
+pub const SUPPRESSED_FEEDBACK_MARKER_WARNING: &str = "note kind is explicitly regular, so its unquoted FEEDBACK NEEDED line does not open a feedback request; to ask for feedback use note kind feedback_needed (CLI --note-kind feedback_needed, MCP note_kind \"feedback_needed\"; pass the note id with that kind to correct an existing note), or quote the line with > to keep a regular note";
+
+/// [`SUPPRESSED_FEEDBACK_MARKER_WARNING`] when a note written with these properties carries
+/// a marker its explicit regular kind suppresses.
+pub fn suppressed_feedback_marker_warning(
+    kind: NoteKind,
+    kind_explicit: bool,
+    responds: bool,
+    text: &str,
+) -> Option<String> {
+    Note::explicit_kind_suppresses_feedback_marker(kind, kind_explicit, responds, text)
+        .then(|| SUPPRESSED_FEEDBACK_MARKER_WARNING.to_string())
+}
+
+/// [`suppressed_feedback_marker_warning`] for a stored note after an append or edit, so a
+/// text-only edit of an explicit regular note warns too.
+pub fn note_feedback_marker_warning(ticket: &Ticket, note_id: &Ulid) -> Option<String> {
+    let note = ticket.notes.iter().find(|note| note.id == *note_id)?;
+    suppressed_feedback_marker_warning(
+        note.kind,
+        note.kind_explicit,
+        note.response_to.is_some(),
+        &note.text,
+    )
+}
+
 /// [`attachment_reference_warnings`] resolving each `attachment:[TICKET-SLUG]` selector
 /// through `resolve`, so a server with a store index avoids walking the store for every
 /// cross-ticket reference (HS2-2MJCMV).
@@ -5384,6 +5415,77 @@ mod tests {
             Err(StoreError::InvalidNoteKindEdit)
         ));
         assert_eq!(std::fs::read(store.ticket_path(&id)).unwrap(), before);
+    }
+
+    /// HS2-C1CFSH: the write still succeeds, but the stored explicit regular note that
+    /// suppresses a marker yields the warning after an append, after a text-only edit, and
+    /// stops yielding it once its kind is corrected.
+    #[test]
+    fn hs2_c1cfsh_explicit_regular_marker_note_warns_after_append_and_edit() {
+        let (_dir, store) = store();
+        let id = titled(&store, "Synthetic suppressed prompt").id;
+        let note_id = Ulid::new();
+        let written = add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            ts("2026-11-04T01:00:00Z"),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                kind_explicit: true,
+                ..Default::default()
+            },
+            "Plain context first".into(),
+        )
+        .unwrap();
+        assert_eq!(note_feedback_marker_warning(&written, &note_id), None);
+        let edited = edit_note_with_metadata(
+            &store,
+            &id,
+            &note_id,
+            ts("2026-11-04T01:01:00Z"),
+            NoteEditInput {
+                text: Some("FEEDBACK NEEDED: which layout?\n\nCHOICE: Wide | Narrow".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!edited.feedback_needed(), "the explicit kind still wins");
+        let warning = note_feedback_marker_warning(&edited, &note_id).unwrap();
+        assert_eq!(warning, SUPPRESSED_FEEDBACK_MARKER_WARNING);
+        assert!(warning.contains("--note-kind feedback_needed"));
+        assert!(warning.contains("note_kind \"feedback_needed\""));
+        let corrected = edit_note_with_metadata(
+            &store,
+            &id,
+            &note_id,
+            ts("2026-11-04T01:02:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::FeedbackNeeded),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(corrected.feedback_needed());
+        assert_eq!(note_feedback_marker_warning(&corrected, &note_id), None);
+        assert_eq!(note_feedback_marker_warning(&corrected, &Ulid::new()), None);
+
+        let inferred = Ulid::new();
+        let legacy = add_note(
+            &store,
+            &id,
+            inferred,
+            ts("2026-11-04T01:03:00Z"),
+            NoteKind::Regular,
+            "FEEDBACK NEEDED: omitted kind infers a request".into(),
+        )
+        .unwrap();
+        assert_eq!(note_feedback_marker_warning(&legacy, &inferred), None);
+        assert_eq!(
+            suppressed_feedback_marker_warning(NoteKind::Regular, true, true, "FEEDBACK NEEDED"),
+            None,
+            "a linked reply is intentionally regular"
+        );
     }
 
     #[test]

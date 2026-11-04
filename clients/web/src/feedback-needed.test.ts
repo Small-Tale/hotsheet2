@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DETAILS_FEEDBACK_ID,
+  detailsRequestFeedback,
   fullTicketFeedbackNeeded,
+  hasFeedbackExchange,
   isFeedbackNeeded,
   isStaleDescriptionFeedbackDismissal,
   isStaleFeedbackDismissal,
@@ -42,6 +44,62 @@ describe('isStaleDescriptionFeedbackDismissal (HS2-M6ETWA)', () => {
       isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, {
         ...current,
         notes: [{ id: 'R1', kind: 'feedback_needed', created_at: '2026-10-29T00:00:00Z' }],
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('details feedback yields to a note exchange (HS2-NVD36W)', () => {
+  const details = 'FEEDBACK NEEDED is on this ticket.';
+  const request = {
+    id: 'R1',
+    kind: 'feedback_needed' as const,
+    created_at: '2026-11-04T00:01:00Z',
+    feedback_request: true,
+  };
+  const reply = { id: 'A1', kind: 'regular' as const, created_at: '2026-11-04T00:02:00Z', response_to: 'R1' };
+  const activity = note('X1', 'activity', '2026-11-04T00:00:00Z');
+  const rating = { ...note('T1', 'regular', '2026-11-04T00:03:00Z'), feedback_for: 'R1' };
+
+  it('treats requests, replies, and ordinary notes as an exchange but not activity or thumbs ratings', () => {
+    expect(hasFeedbackExchange([])).toBe(false);
+    expect(hasFeedbackExchange([activity, rating])).toBe(false);
+    expect(hasFeedbackExchange([request])).toBe(true);
+    expect(hasFeedbackExchange([reply])).toBe(true);
+    expect(hasFeedbackExchange([note('N1', 'regular', '2026-11-04T00:00:00Z')])).toBe(true);
+  });
+
+  it('walks details only, typed request, answered, second request, and dismissal', () => {
+    const shown = (feedbackNeeded: boolean, notes: Parameters<typeof hasFeedbackExchange>[0]) =>
+      detailsRequestFeedback(feedbackNeeded, details, notes);
+    expect(shown(true, [activity])).toBe(true);
+    expect(shown(true, [activity, request])).toBe(false);
+    // The reported shape: an older server still said feedback_needed after the reply.
+    expect(shown(true, [activity, request, reply])).toBe(false);
+    const second = { ...request, id: 'R2', created_at: '2026-11-04T00:04:00Z' };
+    const dismissal = { ...reply, id: 'A2', created_at: '2026-11-04T00:05:00Z', response_to: 'R2' };
+    expect(shown(true, [activity, request, reply, second])).toBe(false);
+    expect(shown(false, [activity, request, reply, second, dismissal])).toBe(false);
+    expect(detailsRequestFeedback(true, '> FEEDBACK NEEDED quoted', [])).toBe(false);
+    expect(shown(false, [])).toBe(false);
+  });
+
+  it('agrees with the core when an older server omits feedback_needed', () => {
+    expect(fullTicketFeedbackNeeded({ details, notes: [activity, request, reply] })).toBe(false);
+    expect(fullTicketFeedbackNeeded({ details, notes: [activity, request] })).toBe(true);
+    expect(fullTicketFeedbackNeeded({ details, notes: [activity, rating] })).toBe(true);
+  });
+
+  it('keeps a description dismissal only while the details are the open request', () => {
+    const dismissal = { note: NO_RESPONSE_NEEDED_NOTE, note_kind: 'regular' };
+    expect(isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, { details, notes: [activity] })).toBe(
+      false,
+    );
+    expect(
+      isStaleDescriptionFeedbackDismissal(DETAILS_FEEDBACK_ID, dismissal, {
+        feedback_needed: true,
+        details,
+        notes: [note('N1', 'regular', '2026-11-04T00:00:00Z')],
       }),
     ).toBe(true);
   });

@@ -365,6 +365,9 @@ impl GitLabProvider {
             })
             .collect::<Vec<_>>();
         let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
+        let details = strip_transfer(&body);
+        // Same projection as Markdown tickets, details marker included (HS2-NVD36W).
+        let feedback_needed = hotsheet_ticketing::wire::api_feedback_needed(&notes, &details);
         ApiTicket {
             connection_id: self.config.connection_id.clone(),
             native_id: native_id.clone(),
@@ -375,13 +378,13 @@ impl GitLabProvider {
             id: native_id.clone(),
             slug: format!("{}#{native_id}", self.config.project),
             title: issue.title,
-            details: strip_transfer(&body),
+            details,
             category,
             priority,
             status,
             started_phase: None,
             up_next: false,
-            feedback_needed: hotsheet_ticketing::wire::api_feedback_needed(&notes),
+            feedback_needed,
             needs_review: false,
             tags: issue
                 .labels
