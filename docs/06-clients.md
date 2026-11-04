@@ -508,7 +508,8 @@ preview/download, server directory browser) are separate design work.
   same local bridge as the dev server:
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
-  revalidates, and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
+  revalidates (`Cache-Control: no-cache` on `/`, `/index.html`, and every client route; HS2-XXENE2),
+  and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
   return 404. Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI, installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin
   directory (`cargo install --path`), and stops the running machine server (found via the bridge's

@@ -233,6 +233,16 @@ function cacheControl(value: string): MiddlewareHandler {
     context.res = new Response(context.res.body, { status: context.res.status, headers });
   };
 }
+/** Revalidate every application document, whichever route served it (HS2-XXENE2). */
+function documentNoCache(): MiddlewareHandler {
+  return async (context, next) => {
+    await next();
+    if (context.res.status !== 200 || !context.res.headers.get('content-type')?.startsWith('text/html')) return;
+    const headers = new Headers(context.res.headers);
+    headers.set('Cache-Control', 'no-cache');
+    context.res = new Response(context.res.body, { status: context.res.status, headers });
+  };
+}
 const DEVELOPMENT_ONLY = /^\/ux-demo(?:[/?]|$)/;
 
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
@@ -252,6 +262,9 @@ export function createLocalHostApp(
   app.use('/assets/*', cacheControl('public, max-age=31536000, immutable'));
   app.use('/assets/*', serveStatic({ root: distRoot }));
   app.all('/assets/*', (context) => context.notFound());
+  // `/` and `/index.html` are answered here, before the client-route fallback; a cached document
+  // would keep loading a stale bundle's hashed assets (HS2-XXENE2).
+  app.use('*', documentNoCache());
   app.use('*', serveStatic({ root: distRoot }));
   // Client-side routes resolve to the application document.
   app.get('*', cacheControl('no-cache'), serveStatic({ root: distRoot, path: 'index.html' }));

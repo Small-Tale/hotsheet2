@@ -44,7 +44,13 @@ describe('local production host (HS2-587N4D)', () => {
       expect(document.status).toBe(200);
       expect(await document.text()).toContain('<title>Hot Sheet</title>');
     }
-    expect((await host.request('/some/client/route')).headers.get('cache-control')).toBe('no-cache');
+    // HS2-XXENE2: every path that returns the application document revalidates.
+    for (const path of ['/', '/index.html', '/some/client/route']) {
+      expect((await host.request(path)).headers.get('cache-control')).toBe('no-cache');
+      expect((await host.request(path, { method: 'HEAD' })).headers.get('cache-control')).toBe('no-cache');
+    }
+    // Other static files keep their default caching; hashed assets stay immutable.
+    expect((await host.request('/manifest.webmanifest')).headers.get('cache-control')).toBeNull();
   });
 
   it('never serves development-only surfaces, even when the bridge defines them', async () => {
