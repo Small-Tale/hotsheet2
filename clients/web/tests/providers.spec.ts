@@ -17441,8 +17441,8 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
   await expect(popup).toContainText(action);
   await popup.screenshot({ path: 'target/visual-captures/hs2-777e9v-popup-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(350);
-  await popup.screenshot({ path: 'target/visual-captures/hs2-777e9v-popup-phone.png' });
+  await expect(phonePermissionPopup(page)).toContainText(action);
+  await phonePermissionPopup(page).screenshot({ path: 'target/visual-captures/hs2-777e9v-popup-phone.png' });
   await page.screenshot({ path: 'target/visual-captures/hs2-ksy290-reapproval-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
   await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
@@ -17797,6 +17797,12 @@ test('validates and applies the dedicated match editor through a real permission
   }
 });
 
+/** HS2-NESKN3: at phone width the shell renders the permission popup in its viewport-overlay slot,
+ * a new element, so a phone capture waits for that copy instead of the wide one. */
+function phonePermissionPopup(page: Page): Locator {
+  return page.locator('[data-component="app-shell"] > [data-component="permission-request-popup"]');
+}
+
 test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCSNZ0)', async ({ page }) => {
   await mockProject(page);
   const action = "curl -H 'Bearer private' https://site.test";
@@ -17854,7 +17860,14 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.setViewportSize({ width: 1280, height: 800 });
   await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-phone.png' });
+  // HS2-NESKN3: the phone shell renders the popup in its viewport-overlay slot, a new element.
+  // Wait for that copy, with the in-progress review kept, before capturing it.
+  const phonePopup = phonePermissionPopup(page);
+  await expect(phonePopup).toContainText('future matching actions without asking');
+  await expect(phonePopup.getByLabel('Reviewed permission pattern')).toHaveValue(
+    "curl -H 'Bearer {{token}}' https://site.test",
+  );
+  await phonePopup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-phone.png' });
   await popup.getByRole('button', { name: 'Confirm Allow This AI Session' }).click();
   await expect(popup).toHaveCount(0);
   expect(answers[0].pattern).toEqual({
@@ -31764,7 +31777,8 @@ test('auto-allows during an Always review, then remembers the rule before showin
   await expect(popup).not.toContainText('next.ts');
   await popup.screenshot({ path: 'target/visual-captures/hs2-wzk2qk-review-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await popup.screenshot({ path: 'target/visual-captures/hs2-wzk2qk-review-phone.png' });
+  await expect(phonePermissionPopup(page)).toContainText('Review the rule to remember');
+  await phonePermissionPopup(page).screenshot({ path: 'target/visual-captures/hs2-wzk2qk-review-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await popup.getByRole('button', { name: 'Confirm Always Allow' }).click();
   await expect.poll(() => remembered).toBe(1);
