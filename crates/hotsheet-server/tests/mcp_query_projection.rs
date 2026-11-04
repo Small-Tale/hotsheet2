@@ -56,7 +56,7 @@ fn keys(row: &Value) -> BTreeSet<&str> {
 #[tokio::test]
 async fn hs2_dxd7dz_connection_query_honors_compact_and_fields_through_the_mcp_shim() {
     let directory = tempfile::tempdir().unwrap();
-    let store = FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_default_codex_home(directory.path().join("no-codex-home"));
@@ -217,7 +217,7 @@ fn slugs(backend: &dyn hotsheet_mcp::Backend, arguments: &Value) -> Vec<String> 
 #[tokio::test]
 async fn hs2_dxd7dz_serverless_connection_date_ranges_match_the_server() {
     let directory = tempfile::tempdir().unwrap();
-    let store = FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_default_codex_home(directory.path().join("no-codex-home"));

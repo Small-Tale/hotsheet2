@@ -9,7 +9,7 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 fn portable_project_entry_opens_its_linked_store_and_lists_tools() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("ticket-store");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
     let project = root.path().join("project");
     let nested = project.join("src");
     std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
@@ -92,7 +92,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let bootstrap = home.join("server-bootstrap.hs2");
-    FsStore::init(&bootstrap, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&bootstrap, &StoreMetadata::new("HS")).unwrap();
     let project = root.path().join("project");
     let nested = project.join("src");
     std::fs::create_dir_all(&nested).unwrap();
@@ -182,7 +182,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
     assert_ne!(first["result"]["isError"], true);
 
     let linked_store = root.path().join("linked.hs2");
-    FsStore::init(&linked_store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&linked_store, &StoreMetadata::new("HS")).unwrap();
     registry
         .add_source(
             project.to_str().unwrap(),
@@ -322,7 +322,7 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let bootstrap = home.join("server-bootstrap.hs2");
-    FsStore::init(&bootstrap, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&bootstrap, &StoreMetadata::new("HS")).unwrap();
     let project = root.path().join("project");
     std::fs::create_dir_all(&project).unwrap();
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))

@@ -81,7 +81,7 @@ pub(super) fn state(root: &Path, home: &Path) -> AppState {
     let store = if root.join(hotsheet_ticketing::STORE_METADATA_FILE).is_file() {
         FsStore::open(root).unwrap()
     } else {
-        FsStore::init(root, &StoreMetadata::new("TST")).unwrap()
+        FsStore::init_git(root, &StoreMetadata::new("TST")).unwrap()
     };
     AppState::new(store, SECRET.into())
         .unwrap()

@@ -58,7 +58,7 @@ fn wait_for_instance(server: &mut Server, home: &Path, store: &Path, log: &Path)
 fn server_start_prunes_idle_older_generation_indexes_and_keeps_held_ones() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let index_dir = home.path().join("index");
     fs::create_dir_all(&index_dir).unwrap();
 

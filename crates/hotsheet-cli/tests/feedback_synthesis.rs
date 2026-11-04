@@ -9,7 +9,7 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path().join("home");
     let root = temp.path().join("tickets");
-    let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(&root, &StoreMetadata::new("HS")).unwrap();
     let id = Ulid::new();
     ops::create(
         &store,

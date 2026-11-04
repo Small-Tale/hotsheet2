@@ -1422,6 +1422,39 @@ repository owns its remotes, and sync reports no remote for a designated root ra
 rebasing or pushing the code repository. Bootstrap of an existing store that no
 repository owns repairs it with `git init` and the initial commit.
 
+**Ticket-store admission (HS2-726EXJ):** every entry point that selects a Git ticket
+store as a source calls one shared check, `admit_store(root, StoreRole)` in
+`crates/hotsheet-ticketing/src/store_git.rs`.
+
+| Role            | Admits                                                          | Refuses                                                              |
+| --------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `TicketSource`  | an Owned or Designated store                                    | NoRepository, Unowned, Unavailable, and the machine bootstrap anchor |
+| `MachineAnchor` | only `${HOTSHEET_HOME}/server-bootstrap.hs2`, with no Git check | any other store                                                      |
+
+The anchor is metadata-only by contract, so it can never become a checkout source or be
+wrapped in a `GitProvider`.
+
+The entry points:
+
+- **CLI:** `link` and `bootstrap`, through `link_store`.
+- **Checkout registry:** every new or changed Git link and every relink. This covers
+  `checkout register`, `checkout add-source`, project open, and the server's
+  checkout routes.
+- **Server:** `host_store`, behind `POST /stores`, project hosting and startup, and the
+  primary store, whose role comes from its path.
+- **Serverless MCP:** every store the backend opens.
+- **Providers and worklists:** `configured_provider` when it builds a `GitProvider`, and
+  checkout worklist generation.
+
+A refusal carries the ownership diagnostic and its exact recovery step: `git init`
+followed by `hotsheet-cli init`, or tracking the store as a designated root. The server
+answers 409, the CLI exits non-zero, and MCP returns a 409 error.
+
+`setup` identifies the anchor by its role rather than by path equality. It does not link
+an unadmitted store; it warns and leaves the project source-free. The check runs when a
+store is linked or first hosted, not on every request. A configured store that no longer
+qualifies is logged and skipped at server startup.
+
 **Headless first run (HS2-MNHGT3):** `init` prints the same read-only onboarding
 report available from `doctor --project <code-repo>`. It detects installed plugin
 tools and recommends explicit, idempotent `setup` commands. It recognizes HS1 only

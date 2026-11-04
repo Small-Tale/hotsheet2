@@ -40,7 +40,7 @@ async fn request_status(method: &'static str, url: String) -> u16 {
 #[tokio::test]
 async fn websocket_push_and_long_poll_fallback_share_one_replay_cursor() {
     let directory = tempfile::tempdir().unwrap();
-    let store = FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -90,7 +90,7 @@ async fn websocket_push_and_long_poll_fallback_share_one_replay_cursor() {
 async fn one_sync_socket_keeps_two_checkouts_present_and_closes_each_lease_separately() {
     let directory = tempfile::tempdir().unwrap();
     let primary =
-        FsStore::init(directory.path().join("primary"), &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(directory.path().join("primary"), &StoreMetadata::new("HS")).unwrap();
     let registry = directory.path().join("checkouts.json");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -110,7 +110,7 @@ async fn one_sync_socket_keeps_two_checkouts_present_and_closes_each_lease_separ
         let checkout = directory.path().join(name);
         let store = directory.path().join(format!("{name}-store"));
         std::fs::create_dir(&checkout).unwrap();
-        FsStore::init(&store, &StoreMetadata::new(prefix)).unwrap();
+        FsStore::init_git(&store, &StoreMetadata::new(prefix)).unwrap();
         let body = serde_json::json!({ "root": checkout, "stores": [store] }).to_string();
         let opened = request_json("POST", format!("{base}/projects/open"), Some(&body)).await;
         ids.push(opened["checkout"]["id"].as_str().unwrap().to_owned());

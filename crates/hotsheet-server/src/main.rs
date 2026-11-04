@@ -243,7 +243,13 @@ async fn main() -> Result<()> {
     let writer_lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let store = FsStore::open(&cli.path)?;
+    // HS2-726EXJ: the primary store is the machine bootstrap anchor (metadata-only by
+    // contract) or a ticket source the operator served directly, which must be an owned
+    // or designated Git store.
+    let store = FsStore::open_admitted(
+        &cli.path,
+        hotsheet_ticketing::store_git::StoreRole::of(&cli.path),
+    )?;
 
     let addr: SocketAddr = cli
         .bind

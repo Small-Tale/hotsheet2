@@ -110,6 +110,11 @@ A project references multiple stores because (per the ticket):
   every commit Hot Sheet makes there stages and records only the store's own paths,
   leaving the user's other staged changes, branch, and remotes alone (HS2-V6JEBR,
   docs/04 "Git ownership on init and recovery").
+- Only an owned or designated store is admitted as a ticket source: linking, checkout
+  sources, server hosting, the MCP backend, and Git providers all refuse any other layout
+  with the same recovery step. The machine bootstrap anchor
+  (`${HOTSHEET_HOME}/server-bootstrap.hs2`) is metadata-only and never a ticket source
+  (HS2-726EXJ, docs/04 "Ticket-store admission").
 - `sync.mode: git-remote` stores have a remote and participate in push/pull;
   `local-only` stores have none. `visibility: local` additionally marks a store as
   private to this machine/user — gitignored from the _project_ repo (or kept as its

@@ -1349,6 +1349,7 @@ mod core_backend {
     };
     use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
+    use hotsheet_ticketing::store_git::StoreRole;
     use hotsheet_ticketing::{
         ApiTicket, FsStore, GitProvider, NewTicket, NotWorkingReport, OpError, ProviderEvidence,
         ProviderRegistry, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
@@ -1359,6 +1360,13 @@ mod core_backend {
     use std::path::Path;
     use std::sync::Arc;
     use time::OffsetDateTime;
+
+    /// Open a store this backend selects as a ticket source (HS2-726EXJ): the serverless
+    /// counterpart of the server's hosting check, so an unowned or repository-less store, or
+    /// the machine bootstrap anchor, is refused with its recovery step (HTTP-like 409).
+    fn open_source(path: &Path) -> Result<FsStore, BackendError> {
+        FsStore::open_admitted(path, StoreRole::TicketSource).map_err(store_err)
+    }
 
     /// Serves the `hotsheet_*` tools straight from the store on disk — no server, no
     /// index (reads are an `ops::query` file scan, per `docs/04` §4.4). A running
@@ -1378,8 +1386,29 @@ mod core_backend {
 
     impl CoreBackend {
         /// Open the store at `path` with real wall-clock time + random ULIDs.
+        ///
+        /// HS2-726EXJ: the store is admitted for its role. A ticket store must be an
+        /// owned or designated Git store; the machine bootstrap anchor serves only its
+        /// machine-wide tools and is never wrapped in a `GitProvider` ([`Self::own_provider`]).
         pub fn open(path: &Path) -> Result<Self, StoreError> {
-            Ok(Self::new(FsStore::open(path)?))
+            Ok(Self::new(FsStore::open_admitted(
+                path,
+                StoreRole::of(path),
+            )?))
+        }
+
+        /// The `GitProvider` over this backend's own store, refused for the machine
+        /// bootstrap anchor (HS2-726EXJ).
+        fn own_provider(&self, connection_id: String) -> Result<GitProvider, BackendError> {
+            if hotsheet_ticketing::store_git::is_machine_anchor(self.store.root()) {
+                return Err(store_err(
+                    hotsheet_ticketing::store_git::AdmissionError::MachineAnchorAsSource {
+                        root: self.store.root().to_path_buf(),
+                    }
+                    .into(),
+                ));
+            }
+            Ok(GitProvider::new(connection_id, self.store.clone()))
         }
 
         /// Wrap an already-open store (used by tests via a `TempStore`).
@@ -1510,7 +1539,7 @@ mod core_backend {
         /// Open the destination store for a copy/move — serverless, `to` is its path.
         fn open_dest(&self, body: &Value) -> Result<FsStore, BackendError> {
             let to = str_field(body, "to").ok_or_else(|| bad_request("'to' is required"))?;
-            FsStore::open(Path::new(&to)).map_err(store_err)
+            open_source(Path::new(&to))
         }
 
         fn api(&self, ticket: &Ticket) -> Result<Value, BackendError> {
@@ -1542,7 +1571,7 @@ mod core_backend {
                     message,
                 })?
                 .into_iter()
-                .map(|source| FsStore::open(Path::new(&source.locator)).map_err(store_err))
+                .map(|source| open_source(Path::new(&source.locator)))
                 .collect::<Result<Vec<_>, _>>()?;
             let now = (self.now)();
             let lease = now.plus_minutes(lease_minutes(body));
@@ -1588,7 +1617,7 @@ mod core_backend {
             let stores = checkout
                 .stores
                 .iter()
-                .map(|p| FsStore::open(Path::new(p)).map_err(store_err))
+                .map(|p| open_source(Path::new(p)))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((checkout, stores))
         }
@@ -1872,6 +1901,12 @@ mod core_backend {
                 });
             }
             if path == "/providers" {
+                // The machine bootstrap anchor is not a ticket provider (HS2-726EXJ).
+                if hotsheet_ticketing::store_git::is_machine_anchor(self.store.root()) {
+                    return Ok(to_value(
+                        &Vec::<hotsheet_ticketing::ProviderDescriptor>::new(),
+                    ));
+                }
                 let descriptor = hotsheet_ticketing::GitProvider::new(
                     hotsheet_ticketing::git_connection_id(&self.store),
                     self.store.clone(),
@@ -2581,10 +2616,8 @@ mod core_backend {
                             "a Not Working report requires a note or at least one evidence attachment",
                         ));
                     }
-                    let provider = GitProvider::new(
-                        hotsheet_ticketing::git_connection_id(&self.store),
-                        self.store.clone(),
-                    );
+                    let provider =
+                        self.own_provider(hotsheet_ticketing::git_connection_id(&self.store))?;
                     let updated = provider
                         .report_not_working(
                             &ticket.id.to_string(),
@@ -2648,8 +2681,7 @@ mod core_backend {
                             if source.provider != "git" {
                                 return Err(bad_request("follow-up relationships are not supported by this source provider"));
                             }
-                            let source_store = FsStore::open(std::path::Path::new(&source.locator))
-                                .map_err(store_err)?;
+                            let source_store = open_source(std::path::Path::new(&source.locator))?;
                             let source_ticket = ops::resolve(&source_store, &reference.native_id)
                                 .map_err(store_err)?
                                 .ok_or_else(|| not_found(&reference.qualified()))?;
@@ -2737,8 +2769,7 @@ mod core_backend {
                         ));
                     }
                     let source_store =
-                        FsStore::open(std::path::Path::new(&source_connection.locator))
-                            .map_err(store_err)?;
+                        open_source(std::path::Path::new(&source_connection.locator))?;
                     let source_ticket = ops::resolve(&source_store, &source.native_id)
                         .map_err(store_err)?
                         .ok_or_else(|| not_found(&source.qualified()))?;
@@ -3059,14 +3090,10 @@ mod core_backend {
                     let locator = str_field(body, "destination_locator").ok_or_else(|| {
                         bad_request("destination_locator is required in serverless mode")
                     })?;
-                    let destination_store =
-                        FsStore::open(Path::new(&locator)).map_err(store_err)?;
+                    let destination_store = open_source(Path::new(&locator))?;
                     let registry = ProviderRegistry::default();
                     registry
-                        .register(Arc::new(GitProvider::new(
-                            source_connection.clone(),
-                            self.store.clone(),
-                        )))
+                        .register(Arc::new(self.own_provider(source_connection.clone())?))
                         .map_err(|e| bad_request(e.to_string()))?;
                     registry
                         .register(Arc::new(GitProvider::new(
@@ -3612,6 +3639,7 @@ mod core_backend {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
             | StoreError::InvalidNoteKindEdit => 400,
+            StoreError::Admission(_) => 409,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
             _ => 500,
         };
@@ -4206,7 +4234,7 @@ mod tests {
         let checkout_root = root.path().join("project");
         std::fs::create_dir(&checkout_root).unwrap();
         let store_root = root.path().join("BIG.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("BIG")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("BIG")).unwrap();
         seed_bounded_ticket_store(&store);
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
             root.path().join("home/checkouts.json"),
@@ -4263,7 +4291,7 @@ mod tests {
         let checkout_root = root.path().join("project");
         std::fs::create_dir(&checkout_root).unwrap();
         let store_root = root.path().join("HS.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         for title in ["Alpha", "Bravo"] {
             ops::create(
                 &store,
@@ -4347,7 +4375,7 @@ mod tests {
         let checkout_root = root.path().join("project");
         std::fs::create_dir(&checkout_root).unwrap();
         let store_root = root.path().join("tickets.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
             root.path().join("home/checkouts.json"),
         );
@@ -4423,7 +4451,7 @@ mod tests {
             ("BBB", ["charlie", "Bravo", "foxtrot"].as_slice()),
         ] {
             let store_root = root.path().join(format!("{prefix}.hs2"));
-            let store = FsStore::init(&store_root, &StoreMetadata::new(prefix)).unwrap();
+            let store = FsStore::init_git(&store_root, &StoreMetadata::new(prefix)).unwrap();
             for title in titles {
                 ops::create(
                     &store,
@@ -4587,7 +4615,7 @@ mod tests {
     #[test]
     fn corebackend_store_query_is_bounded_and_pages_with_page_after() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("BIG")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("BIG")).unwrap();
         seed_bounded_ticket_store(&store);
         let backend = CoreBackend::new(store);
         let get = |pairs: &[(&str, &str)]| {
@@ -4663,7 +4691,7 @@ mod tests {
     /// A CoreBackend over a fresh temp store (real ops, no server).
     fn core() -> (tempfile::TempDir, CoreBackend) {
         let dir = tempfile::tempdir().unwrap();
-        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, CoreBackend::new(store))
     }
 
@@ -4672,7 +4700,7 @@ mod tests {
     #[test]
     fn corebackend_renew_reports_an_expired_eta_by_its_clock() {
         let dir = tempfile::tempdir().unwrap();
-        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
         let clock = std::rc::Rc::new(std::cell::RefCell::new(Timestamp::new(
             "2026-08-19T00:00:00Z",
         )));
@@ -4716,7 +4744,7 @@ mod tests {
     fn corebackend_checkout_routes_isolate_auto_context_for_a_shared_store() {
         let root = tempfile::tempdir().unwrap();
         let store_root = root.path().join("tickets.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         let first_root = root.path().join("first");
         let second_root = root.path().join("second");
         std::fs::create_dir(&first_root).unwrap();
@@ -4794,7 +4822,7 @@ mod tests {
         let mut store_roots = Vec::new();
         for (prefix, titles) in [("AA", ["Bravo", "Delta"]), ("BB", ["Alpha", "Charlie"])] {
             let store_root = root.path().join(format!("{prefix}.hs2"));
-            let store = FsStore::init(&store_root, &StoreMetadata::new(prefix)).unwrap();
+            let store = FsStore::init_git(&store_root, &StoreMetadata::new(prefix)).unwrap();
             for title in titles {
                 ops::create(
                     &store,
@@ -4875,7 +4903,7 @@ mod tests {
     #[test]
     fn annotate_attachment_tool_uses_shared_store_and_attributed_activity() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let ticket = ops::create(
             &store,
             hotsheet_model::Ulid::new(),
@@ -4975,7 +5003,7 @@ mod tests {
     fn attachment_lifecycle_tools_use_checkout_and_persist_to_git_store() {
         let root = tempfile::tempdir().unwrap();
         let store_root = root.path().join("tickets.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         let checkout_root = root.path().join("project");
         std::fs::create_dir(&checkout_root).unwrap();
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
@@ -6371,7 +6399,7 @@ mod tests {
         let checkout_root = root.path().join("code");
         let store_root = root.path().join("store");
         std::fs::create_dir_all(&checkout_root).unwrap();
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         let run = |dir: &std::path::Path, args: &[&str]| {
             let status = hotsheet_ticketing::git::command()
                 .arg("-C")
@@ -6452,7 +6480,7 @@ mod tests {
                 .unwrap()
                 .success()
         );
-        let store = FsStore::init(&source, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&source, &StoreMetadata::new("HS")).unwrap();
         let registry_path = root.path().join("home/checkouts.json");
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
         let checkout = registry
@@ -6580,7 +6608,7 @@ mod tests {
     fn corebackend_cross_store_copy_and_move_over_mcp() {
         let (_srcd, backend) = core(); // source store, prefix HS
         let destd = tempfile::tempdir().unwrap();
-        let dest = FsStore::init(destd.path(), &StoreMetadata::new("DS")).unwrap();
+        let dest = FsStore::init_git(destd.path(), &StoreMetadata::new("DS")).unwrap();
         let to = destd.path().display().to_string();
 
         let created = call(
@@ -6642,7 +6670,7 @@ mod tests {
     fn corebackend_provider_copy_retries_resolve_one_destination_over_mcp() {
         let (_srcd, backend) = core();
         let destd = tempfile::tempdir().unwrap();
-        let dest = FsStore::init(destd.path(), &StoreMetadata::new("DS")).unwrap();
+        let dest = FsStore::init_git(destd.path(), &StoreMetadata::new("DS")).unwrap();
         let created = call(
             &backend,
             "hotsheet_create",
@@ -6802,9 +6830,9 @@ mod tests {
         let sibling_root = root.path().join("sibling.hs2");
         let project_root = root.path().join("project");
         std::fs::create_dir(&project_root).unwrap();
-        let primary = FsStore::init(&primary_root, &StoreMetadata::new("PRI")).unwrap();
-        let default = FsStore::init(&default_root, &StoreMetadata::new("DEF")).unwrap();
-        let sibling = FsStore::init(&sibling_root, &StoreMetadata::new("SIB")).unwrap();
+        let primary = FsStore::init_git(&primary_root, &StoreMetadata::new("PRI")).unwrap();
+        let default = FsStore::init_git(&default_root, &StoreMetadata::new("DEF")).unwrap();
+        let sibling = FsStore::init_git(&sibling_root, &StoreMetadata::new("SIB")).unwrap();
         let default_ticket = call(
             &CoreBackend::new(default.clone()),
             "hotsheet_create",
@@ -6866,7 +6894,7 @@ mod tests {
         let project_root = root.path().join("project");
         std::fs::create_dir(&project_root).unwrap();
         let primary =
-            FsStore::init(root.path().join("primary.hs2"), &StoreMetadata::new("PRI")).unwrap();
+            FsStore::init_git(root.path().join("primary.hs2"), &StoreMetadata::new("PRI")).unwrap();
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
             root.path().join("home/checkouts.json"),
         );
@@ -6915,14 +6943,60 @@ mod tests {
     }
 
     #[test]
+    /// HS2-726EXJ: the serverless backend admits only owned or designated Git stores. A
+    /// repository-less store is refused at `CoreBackend::open`, and a linked source whose
+    /// repository disappeared is refused at the next checkout-scoped call with a 409
+    /// carrying the recovery step.
+    fn hs2_726exj_serverless_mcp_refuses_unowned_ticket_stores() {
+        let root = tempfile::tempdir().unwrap();
+        let loose = root.path().join("loose.hs2");
+        FsStore::init(&loose, &StoreMetadata::new("LO")).unwrap();
+        let refused = CoreBackend::open(&loose).err().expect("refused");
+        assert!(
+            matches!(refused, hotsheet_ticketing::StoreError::Admission(_)),
+            "{refused:?}"
+        );
+        assert!(refused.to_string().contains("git -C"), "{refused}");
+
+        let primary =
+            FsStore::init_git(root.path().join("primary.hs2"), &StoreMetadata::new("PRI")).unwrap();
+        let source_root = root.path().join("project.hs2");
+        FsStore::init_git(&source_root, &StoreMetadata::new("TST")).unwrap();
+        let project_root = root.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &project_root,
+                Some("project"),
+                None,
+                vec![source_root.clone()],
+            )
+            .unwrap();
+        let backend = CoreBackend::open(primary.root())
+            .unwrap()
+            .with_checkout_registry(registry);
+        let query = json!({"checkout": checkout.id});
+        assert!(call(&backend, "hotsheet_query", query.clone())["error"].is_null());
+        std::fs::remove_dir_all(source_root.join(".git")).unwrap();
+        let error = call(&backend, "hotsheet_query", query)["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        assert!(error.contains("is not a Git repository"), "{error}");
+    }
+
+    #[test]
     fn hs2_em6ywp_corebackend_claims_the_linked_sibling_store() {
         let root = tempfile::tempdir().unwrap();
         let primary_root = root.path().join("primary.hs2");
         let sibling_root = root.path().join("project.hs2");
         let project_root = root.path().join("project");
         std::fs::create_dir(&project_root).unwrap();
-        let primary = FsStore::init(&primary_root, &StoreMetadata::new("PRI")).unwrap();
-        let sibling = FsStore::init(&sibling_root, &StoreMetadata::new("TST")).unwrap();
+        let primary = FsStore::init_git(&primary_root, &StoreMetadata::new("PRI")).unwrap();
+        let sibling = FsStore::init_git(&sibling_root, &StoreMetadata::new("TST")).unwrap();
         let created = call(
             &CoreBackend::new(sibling.clone()),
             "hotsheet_create",

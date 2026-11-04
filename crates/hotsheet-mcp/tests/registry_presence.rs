@@ -54,7 +54,7 @@ fn fake_server(listener: TcpListener, seen: mpsc::Sender<(String, String, String
 fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_eof() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();
@@ -115,7 +115,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
 fn serverless_shim_without_a_registered_server_stays_silent() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
         .arg("--path")
         .arg(store_dir.path())
@@ -151,7 +151,7 @@ fn serverless_shim_without_a_registered_server_stays_silent() {
 fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     // Connecting to port zero always fails. A released ephemeral port could be reused by
     // another parallel test's fake server, making the stale route appear live in CI.
     let dead = "http://127.0.0.1:0";
@@ -217,7 +217,7 @@ fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
     use std::os::unix::fs::PermissionsExt;
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();

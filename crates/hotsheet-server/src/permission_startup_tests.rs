@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 fn state() -> (tempfile::TempDir, AppState) {
     let directory = tempfile::tempdir().unwrap();
-    let store = FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = directory.path().join("rules.json");
     let state = AppState::new(store, "synthetic-secret".into())
         .unwrap()
@@ -68,7 +68,7 @@ async fn first_permission(router: &axum::Router) -> serde_json::Value {
 async fn stalled_vault_loader_leaves_http_available_and_rules_locked() {
     let (directory, state) = state();
     let extra = directory.path().join("extra-store");
-    FsStore::init(&extra, &StoreMetadata::new("EX")).unwrap();
+    FsStore::init_git(&extra, &StoreMetadata::new("EX")).unwrap();
     std::fs::write(
         directory.path().join("stores.json"),
         serde_json::json!({ "stores": [extra] }).to_string(),

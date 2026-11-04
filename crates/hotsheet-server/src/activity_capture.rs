@@ -149,7 +149,7 @@ mod activity_distillation_tests {
     #[test]
     fn enabled_deterministic_adapter_distills_live_activity_once() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
         ops::create(
             &store,
@@ -193,7 +193,7 @@ mod activity_distillation_tests {
     #[test]
     fn distilled_notes_resolve_their_ticket_through_the_hosted_index() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
         let ticket = ops::create(
             &store,
@@ -239,7 +239,7 @@ mod activity_distillation_tests {
     fn project_activity_distillation_uses_explicit_checkout_settings_for_a_shared_store() {
         let root = tempfile::tempdir().unwrap();
         let store_root = root.path().join("shared.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
         let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
         ops::create(
             &store,
@@ -313,7 +313,7 @@ mod activity_distillation_tests {
     #[test]
     fn distillation_is_disabled_by_default() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
         ops::create(
             &store,
@@ -340,7 +340,7 @@ mod activity_distillation_tests {
     #[test]
     fn noisy_activity_is_bounded_before_persistence_and_broadcast() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let state = AppState::new(store.clone(), "secret".into()).unwrap();
         let mut live = state.subscribe();
 

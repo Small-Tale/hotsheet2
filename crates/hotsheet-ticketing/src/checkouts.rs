@@ -246,6 +246,19 @@ impl From<ProviderError> for CheckoutError {
     }
 }
 
+/// HS2-726EXJ: a Git source joins a checkout only when its store is an owned or
+/// designated Git store and is not the machine bootstrap anchor. Checked once, when the
+/// link is created or changed; an existing link is not re-probed on every registration.
+/// A path that holds no store yet is left to the existing missing-store handling.
+fn admit_linked_git_source(source: &TicketSource) -> Result<(), CheckoutError> {
+    let path = Path::new(&source.locator);
+    if source.provider != "git" || !path.join(STORE_METADATA_FILE).is_file() {
+        return Ok(());
+    }
+    crate::store_git::admit_store(path, crate::store_git::StoreRole::TicketSource)
+        .map_err(|error| CheckoutError::Store(error.into()))
+}
+
 fn git_store_instance_id(source: &TicketSource) -> Result<Option<String>, CheckoutError> {
     let path = Path::new(&source.locator);
     if !path.join(STORE_METADATA_FILE).is_file() {
@@ -550,6 +563,9 @@ impl PreparedCheckoutLinks<'_> {
             .filter(|source| source.provider == "git")
         {
             let previous = before.and_then(|row| row.source(&source.connection_id));
+            if previous != Some(source) {
+                admit_linked_git_source(source)?;
+            }
             let affected = previous != Some(source)
                 || explicit_default == Some(source.connection_id.as_str())
                 || (before.and_then(|row| row.default_source.as_deref())
@@ -1855,6 +1871,7 @@ impl CheckoutRegistry {
                 canonical.display()
             )));
         }
+        admit_linked_git_source(&replacement)?;
         let replacement_store = FsStore::open_without_maintenance(&canonical)?;
         let destination_instance_id = replacement_store.metadata()?.instance_id;
         let _lock = self.acquire_lock()?;
@@ -2323,7 +2340,8 @@ mod tests {
             )
             .unwrap();
         let store_path = temp.path().join("project.hs2");
-        let store = FsStore::init(&store_path, &crate::store::StoreMetadata::new("HS2")).unwrap();
+        let store =
+            FsStore::init_git(&store_path, &crate::store::StoreMetadata::new("HS2")).unwrap();
         // Bootstrap writes the checkout's store link before it registers the source, so
         // the sourceless entry already reads back with a link-derived source here.
         std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
@@ -2511,8 +2529,8 @@ mod tests {
         let store_a = temp.path().join("tickets-a");
         let store_b = temp.path().join("tickets-b");
         std::fs::create_dir(&checkout).unwrap();
-        FsStore::init(&store_a, &crate::store::StoreMetadata::new("A")).unwrap();
-        FsStore::init(&store_b, &crate::store::StoreMetadata::new("B")).unwrap();
+        FsStore::init_git(&store_a, &crate::store::StoreMetadata::new("A")).unwrap();
+        FsStore::init_git(&store_b, &crate::store::StoreMetadata::new("B")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let saved = registry
             .register(
@@ -3091,7 +3109,7 @@ mod tests {
         let root = temp.path().join("app");
         let store = temp.path().join("app.hs2");
         std::fs::create_dir(&root).unwrap();
-        FsStore::init(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let git = TicketSource::git(&store);
         let github = TicketSource {
@@ -3191,8 +3209,8 @@ mod tests {
         let old_store = temp.path().join("old.hs2");
         let new_store = temp.path().join("new.hs2");
         std::fs::create_dir(&root).unwrap();
-        FsStore::init(&old_store, &crate::store::StoreMetadata::new("HS")).unwrap();
-        FsStore::init(&new_store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&old_store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&new_store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_store);
         let new = TicketSource::git(&new_store);
@@ -3276,7 +3294,7 @@ mod tests {
         let relocated = temp.path().join("relocated");
         let store = temp.path().join("tickets");
         std::fs::create_dir(&original).unwrap();
-        FsStore::init(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let before = registry
             .register(&original, Some("app"), None, vec![store.clone()])
@@ -3316,7 +3334,7 @@ mod tests {
         let original = temp.path().join("original");
         std::fs::create_dir(&first).unwrap();
         std::fs::create_dir(&second).unwrap();
-        FsStore::init(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry_path = temp.path().join("checkouts.json");
         let registry = CheckoutRegistry::new(&registry_path);
         let source = TicketSource::git(&linked);
@@ -3333,7 +3351,7 @@ mod tests {
         );
 
         std::fs::rename(&linked, &original).unwrap();
-        FsStore::init(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
         let restarted = CheckoutRegistry::new(&registry_path);
         let error = restarted
             .resolve(&first_checkout.id)
@@ -3378,7 +3396,7 @@ mod tests {
         for path in [&first, &second] {
             std::fs::create_dir(path).unwrap();
         }
-        FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_path);
         let first_checkout = registry
@@ -3411,7 +3429,7 @@ mod tests {
             .set_source_color(&first_checkout.id, &old.connection_id, "#3b82f6")
             .unwrap();
         let unrelated = temp.path().join("unrelated-store");
-        FsStore::init(&unrelated, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&unrelated, &crate::store::StoreMetadata::new("HS")).unwrap();
         let before_wrong_destination = registry.list().unwrap();
         assert!(
             registry
@@ -3493,8 +3511,9 @@ mod tests {
         for path in [&first, &second] {
             std::fs::create_dir(path).unwrap();
         }
-        let original = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
-        FsStore::init(&new_path, &original.metadata().unwrap()).unwrap();
+        let original =
+            FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&new_path, &original.metadata().unwrap()).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_path);
         let new = TicketSource::git(&new_path);
@@ -3525,7 +3544,7 @@ mod tests {
         let old_path = temp.path().join("old-store");
         let new_path = temp.path().join("new-store");
         std::fs::create_dir(&checkout).unwrap();
-        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry_path = temp.path().join("checkouts.json");
         let registry = CheckoutRegistry::new(&registry_path);
         let linked = registry
@@ -3581,8 +3600,8 @@ mod tests {
         let first = temp.path().join("first-store");
         let second = temp.path().join("second-store");
         std::fs::create_dir(&project).unwrap();
-        FsStore::init(&first, &crate::store::StoreMetadata::new("HS")).unwrap();
-        let added = FsStore::init(&second, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&first, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let added = FsStore::init_git(&second, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         registry
             .register(&project, None, None, vec![first.clone()])
@@ -3607,7 +3626,7 @@ mod tests {
         let backup = temp.path().join("original");
         std::fs::create_dir(&first).unwrap();
         std::fs::create_dir(&second).unwrap();
-        FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry_path = temp.path().join("checkouts.json");
         let registry = CheckoutRegistry::new(&registry_path);
         let a = registry
@@ -3628,7 +3647,7 @@ mod tests {
         std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
         std::fs::rename(&old_path, &backup).unwrap();
         let replacement =
-            FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+            FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let replacement_id = replacement.metadata().unwrap().instance_id.unwrap();
 
         assert!(
@@ -3677,7 +3696,7 @@ mod tests {
         let old_path = temp.path().join("old-store");
         let new_path = temp.path().join("new-store");
         std::fs::create_dir(&checkout).unwrap();
-        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry_path = temp.path().join("checkouts.json");
         let registry = CheckoutRegistry::new(&registry_path);
         let linked = registry
@@ -3721,7 +3740,7 @@ mod tests {
         let later_path = temp.path().join("later-store");
         std::fs::create_dir(&first).unwrap();
         std::fs::create_dir(&second).unwrap();
-        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry_path = temp.path().join("checkouts.json");
         let registry = CheckoutRegistry::new(&registry_path);
         let a = registry
@@ -3788,7 +3807,8 @@ mod tests {
         let checkout = temp.path().join("project");
         let store_path = temp.path().join("store");
         std::fs::create_dir(&checkout).unwrap();
-        let store = FsStore::init(&store_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let store =
+            FsStore::init_git(&store_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let linked = registry
             .register(&checkout, None, None, vec![store_path.clone()])
@@ -3935,7 +3955,7 @@ mod tests {
     fn connection_locator_updates_reach_every_linked_checkout() {
         let temp = tempfile::tempdir().unwrap();
         let store = temp.path().join("tickets");
-        FsStore::init(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&store, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
         let mut connection = ProviderConnection {

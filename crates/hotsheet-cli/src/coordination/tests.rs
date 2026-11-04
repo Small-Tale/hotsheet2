@@ -18,7 +18,7 @@ pub(super) fn fixture() -> (tempfile::TempDir, Coordinator) {
             .success()
     );
     let store = root.path().join("store");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
     let coordinator = Coordinator::open(&project, &store).unwrap();
     (root, coordinator)
 }

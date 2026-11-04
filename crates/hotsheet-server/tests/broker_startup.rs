@@ -146,7 +146,7 @@ fn long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_r
     )
     .unwrap();
     let store = fixture.path().join("store");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
     let project = hotsheet_tls::project_id(&store);
     let old_socket = home.join("broker").join(format!("{project}.sock"));
     assert!(old_socket.as_os_str().as_bytes().len() > 108);

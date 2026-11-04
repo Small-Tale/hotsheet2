@@ -108,7 +108,7 @@ fn create_blocked(base_or_backend: Result<&str, &dyn Backend>, title: &str) -> S
 #[tokio::test]
 async fn hs2_bak4bc_http_and_mcp_claims_take_a_blocked_ticket_on_a_real_server() {
     let directory = tempfile::tempdir().unwrap();
-    let store = FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_default_codex_home(directory.path().join("no-codex-home"));
@@ -169,7 +169,7 @@ async fn hs2_bak4bc_http_and_mcp_claims_take_a_blocked_ticket_on_a_real_server()
 #[test]
 fn hs2_bak4bc_serverless_mcp_claim_takes_a_blocked_ticket() {
     let directory = tempfile::tempdir().unwrap();
-    FsStore::init(directory.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(directory.path(), &StoreMetadata::new("HS")).unwrap();
     let backend = CoreBackend::open(directory.path()).unwrap();
     let slug = create_blocked(Err(&backend), "serverless blocked");
     mcp_claims_blocked(&backend, &slug);

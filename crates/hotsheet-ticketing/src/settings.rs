@@ -115,7 +115,7 @@ impl Scope {
 /// The machine-wide Hot Sheet 2 home (`${HOTSHEET_HOME}`, else `~/.hotsheet2`). Kept in
 /// sync with `hotsheet_plugins::hotsheet_home` but resolved here so `ticketing` stays free
 /// of a dependency on the plugin crate (`docs/12` §12.2.1). NOT `~/.hotsheet` (HS1's).
-fn hotsheet_home() -> PathBuf {
+pub(crate) fn hotsheet_home() -> PathBuf {
     if let Some(h) = std::env::var_os("HOTSHEET_HOME") {
         return PathBuf::from(h);
     }

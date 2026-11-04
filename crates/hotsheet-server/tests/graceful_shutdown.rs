@@ -129,7 +129,7 @@ impl Server {
         let home = fixture.path().join("home");
         fs::create_dir(&home).unwrap();
         let store = fixture.path().join("store");
-        FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
         let log = fixture.path().join("server.log");
         let (stdout, stderr) = output.unwrap_or_else(|| {
             let file = fs::File::create(&log).unwrap();

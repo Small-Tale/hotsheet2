@@ -102,7 +102,204 @@ pub struct StoreGitBaseline {
     pub dirty: Vec<Ulid>,
 }
 
+/// The machine bootstrap anchor's directory name under `${HOTSHEET_HOME}`. The anchor is a
+/// metadata-only store that hosts the machine server and machine-wide state; it holds no
+/// tickets by contract (HS2-726EXJ, docs/04 "Ticket-store admission").
+pub const MACHINE_ANCHOR_DIR: &str = "server-bootstrap.hs2";
+
+/// What a store is being opened for. Every source-selection entry point names one, so the
+/// one machine store allowed to skip the Git check cannot quietly become a ticket source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreRole {
+    /// A ticket source: linked to a checkout, hosted for clients, served over MCP, or
+    /// wrapped in a `GitProvider`. Requires an owned or designated Git store.
+    TicketSource,
+    /// The machine bootstrap anchor (`${HOTSHEET_HOME}/server-bootstrap.hs2`). Skips the Git
+    /// check but is never a checkout source or `GitProvider`.
+    MachineAnchor,
+}
+
+impl StoreRole {
+    /// The role a store at `root` is opened under: [`StoreRole::MachineAnchor`] exactly for
+    /// the machine bootstrap anchor, [`StoreRole::TicketSource`] otherwise.
+    #[must_use]
+    pub fn of(root: &Path) -> Self {
+        if is_machine_anchor(root) {
+            Self::MachineAnchor
+        } else {
+            Self::TicketSource
+        }
+    }
+}
+
+/// The machine bootstrap anchor for the current `${HOTSHEET_HOME}`.
+#[must_use]
+pub fn machine_anchor() -> PathBuf {
+    crate::settings::hotsheet_home().join(MACHINE_ANCHOR_DIR)
+}
+
+/// Whether `root` names the machine bootstrap anchor, comparing canonical paths when both
+/// exist so a relative path or symlinked home still matches.
+#[must_use]
+pub fn is_machine_anchor(root: &Path) -> bool {
+    is_anchor_of(root, &machine_anchor())
+}
+
+fn is_anchor_of(root: &Path, anchor: &Path) -> bool {
+    match (root.canonicalize(), anchor.canonicalize()) {
+        (Ok(root), Ok(anchor)) => root == anchor,
+        _ => root == anchor,
+    }
+}
+
+/// Why a store was refused for a role (HS2-726EXJ).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AdmissionError {
+    /// The store's Git layout is not a supported ticket store; the message is the
+    /// [`StoreGitOwner::diagnostic`] with its exact recovery step.
+    #[error("{diagnostic}")]
+    UnsupportedOwner {
+        root: PathBuf,
+        owner: Box<StoreGitOwner>,
+        diagnostic: String,
+    },
+    /// The machine bootstrap anchor was offered as a ticket source.
+    #[error(
+        "{} is Hot Sheet's machine bootstrap store, which holds no tickets; link a ticket store \
+         (`hotsheet-cli init --standalone` or `hotsheet-cli bootstrap`) instead",
+        root.display()
+    )]
+    MachineAnchorAsSource { root: PathBuf },
+    /// A store other than the machine bootstrap anchor claimed the anchor role.
+    #[error("{} is not Hot Sheet's machine bootstrap store", root.display())]
+    NotTheMachineAnchor { root: PathBuf },
+}
+
+/// Admit the store at `root` for `role` (HS2-726EXJ). The one check every source-selection
+/// entry point shares: checkout links and source registration, server hosting and its
+/// primary store, the MCP backend, provider construction, and worklist generation.
+///
+/// - [`StoreRole::TicketSource`] requires [`StoreGitOwner::is_supported`] and refuses the
+///   machine bootstrap anchor.
+/// - [`StoreRole::MachineAnchor`] accepts only the anchor itself and skips the Git check.
+///
+/// Costs one or two `git` subprocesses for a ticket source, so callers check once when
+/// they select or host a store, not on every request.
+pub fn admit_store(root: &Path, role: StoreRole) -> Result<(), AdmissionError> {
+    admit_store_with_anchor(root, role, &machine_anchor())
+}
+
+fn admit_store_with_anchor(
+    root: &Path,
+    role: StoreRole,
+    anchor_path: &Path,
+) -> Result<(), AdmissionError> {
+    let anchor = is_anchor_of(root, anchor_path);
+    match role {
+        StoreRole::MachineAnchor if anchor => Ok(()),
+        StoreRole::MachineAnchor => Err(AdmissionError::NotTheMachineAnchor {
+            root: root.to_path_buf(),
+        }),
+        StoreRole::TicketSource if anchor => Err(AdmissionError::MachineAnchorAsSource {
+            root: root.to_path_buf(),
+        }),
+        StoreRole::TicketSource => {
+            let owner = FsStore::git_owner_at(root);
+            match owner.diagnostic(root) {
+                None => Ok(()),
+                Some(diagnostic) => Err(AdmissionError::UnsupportedOwner {
+                    root: root.to_path_buf(),
+                    owner: Box::new(owner),
+                    diagnostic,
+                }),
+            }
+        }
+    }
+}
+
+/// Make sure a repository owns the existing store directory at `root`, by its
+/// [`StoreGitOwner`] rather than by the presence of `<root>/.git` (HS2-V6JEBR):
+///
+/// - **Owned:** nothing to do.
+/// - **Designated:** the enclosing repository already tracks the store; never nest a
+///   repository inside it.
+/// - **NoRepository / Unowned:** `git init` makes the store its own repository.
+/// - **Unavailable:** refused with the ownership diagnostic.
+///
+/// Idempotent: a second call on any result is a no-op.
+pub fn ensure_store_repository(root: &Path) -> Result<StoreGitOwner, StoreError> {
+    let owner = FsStore::git_owner_at(root);
+    match owner {
+        StoreGitOwner::Owned { .. } | StoreGitOwner::Designated { .. } => return Ok(owner),
+        StoreGitOwner::Unavailable { .. } => return Err(unsupported(root, owner)),
+        StoreGitOwner::NoRepository | StoreGitOwner::Unowned { .. } => {}
+    }
+    let output = crate::git::command()
+        .arg("-C")
+        .arg(root)
+        .args(["init", "--quiet"])
+        .output()?;
+    if !output.status.success() {
+        return Err(StoreError::Git(format!(
+            "init {} failed: {}",
+            root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let owner = FsStore::git_owner_at(root);
+    if owner.is_supported() {
+        Ok(owner)
+    } else {
+        Err(unsupported(root, owner))
+    }
+}
+
+fn unsupported(root: &Path, owner: StoreGitOwner) -> StoreError {
+    let diagnostic = owner.diagnostic(root).unwrap_or_default();
+    AdmissionError::UnsupportedOwner {
+        root: root.to_path_buf(),
+        owner: Box::new(owner),
+        diagnostic,
+    }
+    .into()
+}
+
 impl FsStore {
+    /// Initialize (or re-initialize) the store at `root` and settle its Git repository
+    /// with [`ensure_store_repository`] (HS2-V6JEBR). Classification happens before any
+    /// metadata is written, so a location Git cannot describe is refused untouched.
+    /// Re-running it changes nothing further.
+    pub fn init_with_repository(
+        root: impl Into<PathBuf>,
+        metadata: &crate::StoreMetadata,
+    ) -> Result<(Self, StoreGitOwner), StoreError> {
+        let root = root.into();
+        std::fs::create_dir_all(&root)?;
+        let owner = Self::git_owner_at(&root);
+        if let StoreGitOwner::Unavailable { .. } = owner {
+            return Err(unsupported(&root, owner));
+        }
+        let store = Self::init(&root, metadata)?;
+        let owner = ensure_store_repository(&root)?;
+        Ok((store, owner))
+    }
+
+    /// [`FsStore::init_with_repository`] for callers that only need the store: the
+    /// result is always an admitted ticket source (HS2-726EXJ).
+    pub fn init_git(
+        root: impl Into<PathBuf>,
+        metadata: &crate::StoreMetadata,
+    ) -> Result<Self, StoreError> {
+        Self::init_with_repository(root, metadata).map(|(store, _)| store)
+    }
+
+    /// Open the store at `root` and admit it for `role` ([`admit_store`]).
+    pub fn open_admitted(root: impl Into<PathBuf>, role: StoreRole) -> Result<Self, StoreError> {
+        let store = Self::open(root)?;
+        admit_store(store.root(), role)?;
+        Ok(store)
+    }
+
     /// Classify which Git repository, if any, owns this store. One scrubbed
     /// `rev-parse` call, plus one `ls-files` call only when the store is a
     /// subdirectory of an enclosing working tree.
@@ -265,5 +462,100 @@ mod tests {
         assert!(owner.is_supported());
         assert_eq!(owner.diagnostic(dir.path()), None);
         assert_eq!(store.git_baseline().unwrap(), None);
+    }
+
+    fn admit(root: &Path, role: StoreRole, anchor: &Path) -> Result<(), AdmissionError> {
+        admit_store_with_anchor(root, role, anchor)
+    }
+
+    /// HS2-726EXJ: each Git owner variant under the ticket-source role, including the
+    /// transitions a store can make between them, re-checked at the next selection.
+    #[test]
+    fn hs2_726exj_ticket_sources_require_an_owned_or_designated_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let anchor = dir.path().join("home").join(MACHINE_ANCHOR_DIR);
+        let source = StoreRole::TicketSource;
+
+        // NoRepository → refused with the recovery step; `git init` → admitted (Owned).
+        let loose = dir.path().join("loose");
+        FsStore::init(&loose, &StoreMetadata::new("HS")).unwrap();
+        let refused = admit(&loose, source, &anchor).unwrap_err();
+        assert!(
+            matches!(
+                &refused,
+                AdmissionError::UnsupportedOwner { owner, .. }
+                    if **owner == StoreGitOwner::NoRepository
+            ),
+            "{refused:?}"
+        );
+        assert!(refused.to_string().contains("git -C"), "{refused}");
+        git(&loose, &["init", "-q", "-b", "main"]);
+        admit(&loose, source, &anchor).unwrap();
+        // Owned → `.git` removed → refused again at the next selection.
+        std::fs::remove_dir_all(loose.join(".git")).unwrap();
+        assert!(admit(&loose, source, &anchor).is_err());
+
+        // Unowned under an enclosing repository → tracked (Designated) → admitted; then
+        // untracked again → refused.
+        let parent = dir.path().join("parent");
+        std::fs::create_dir_all(&parent).unwrap();
+        git(&parent, &["init", "-q", "-b", "main"]);
+        let nested = parent.join("tickets");
+        FsStore::init(&nested, &StoreMetadata::new("HS")).unwrap();
+        let refused = admit(&nested, source, &anchor).unwrap_err();
+        assert!(
+            refused.to_string().contains("does not track it"),
+            "{refused}"
+        );
+        git(&parent, &["add", "--", "tickets/hotsheet-store.json"]);
+        admit(&nested, source, &anchor).unwrap();
+        git(
+            &parent,
+            &["rm", "-q", "--cached", "--", "tickets/hotsheet-store.json"],
+        );
+        assert!(admit(&nested, source, &anchor).is_err());
+
+        // Unavailable (inside a bare repository) → refused.
+        let bare = dir.path().join("bare");
+        std::fs::create_dir_all(&bare).unwrap();
+        git(&bare, &["init", "-q", "--bare"]);
+        FsStore::init(&bare, &StoreMetadata::new("HS")).unwrap();
+        assert!(matches!(
+            admit(&bare, source, &anchor),
+            Err(AdmissionError::UnsupportedOwner { owner, .. })
+                if matches!(*owner, StoreGitOwner::Unavailable { .. })
+        ));
+    }
+
+    /// HS2-726EXJ: the machine bootstrap anchor skips the Git check under its own role but
+    /// is never a ticket source, even when a repository happens to own it; no other store
+    /// can claim the anchor role.
+    #[test]
+    fn hs2_726exj_the_machine_anchor_is_admitted_only_in_its_own_role() {
+        let dir = tempfile::tempdir().unwrap();
+        let anchor = dir.path().join("home").join(MACHINE_ANCHOR_DIR);
+        FsStore::init(&anchor, &StoreMetadata::new("HS")).unwrap();
+        admit(&anchor, StoreRole::MachineAnchor, &anchor).unwrap();
+        // Another spelling of the same directory is still the anchor.
+        let spelled = dir.path().join("home/./").join(MACHINE_ANCHOR_DIR);
+        admit(&spelled, StoreRole::MachineAnchor, &anchor).unwrap();
+        assert!(matches!(
+            admit(&anchor, StoreRole::TicketSource, &anchor),
+            Err(AdmissionError::MachineAnchorAsSource { .. })
+        ));
+        git(&anchor, &["init", "-q", "-b", "main"]);
+        assert!(matches!(
+            admit(&spelled, StoreRole::TicketSource, &anchor),
+            Err(AdmissionError::MachineAnchorAsSource { .. })
+        ));
+
+        let other = dir.path().join("other");
+        FsStore::init(&other, &StoreMetadata::new("HS")).unwrap();
+        git(&other, &["init", "-q", "-b", "main"]);
+        assert!(matches!(
+            admit(&other, StoreRole::MachineAnchor, &anchor),
+            Err(AdmissionError::NotTheMachineAnchor { .. })
+        ));
+        admit(&other, StoreRole::TicketSource, &anchor).unwrap();
     }
 }

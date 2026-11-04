@@ -30,6 +30,10 @@ pub(crate) fn checkout_source_error(
         hotsheet_ticketing::checkouts::CheckoutError::Endpoint(error) => {
             ApiError::new(StatusCode::CONFLICT, error.to_string())
         }
+        // HS2-726EXJ: the store exists but its Git layout or role refuses it.
+        hotsheet_ticketing::checkouts::CheckoutError::Store(
+            error @ hotsheet_ticketing::StoreError::Admission(_),
+        ) => ApiError::new(StatusCode::CONFLICT, error.to_string()),
         other => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
     }
 }
@@ -336,7 +340,13 @@ pub(crate) async fn register_checkout(
             sources,
             default_source,
         )
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+        .map_err(|error| match error {
+            // HS2-726EXJ: an existing store whose Git layout refuses it is a conflict.
+            hotsheet_ticketing::checkouts::CheckoutError::Store(
+                error @ hotsheet_ticketing::StoreError::Admission(_),
+            ) => ApiError::new(StatusCode::CONFLICT, error.to_string()),
+            other => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
+        })?;
     hotsheet_ticketing::worklist::regenerate_checkout(&entry)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     state.watch_checkout_repository(&entry);
@@ -1105,7 +1115,11 @@ pub(crate) fn checkout_lookup_error(
     use hotsheet_ticketing::checkouts::CheckoutError;
     let status = match error {
         CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
-        CheckoutError::Invalid(_) | CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
+        CheckoutError::Invalid(_)
+        | CheckoutError::Ambiguous(_)
+        | CheckoutError::Store(hotsheet_ticketing::StoreError::Admission(_)) => {
+            StatusCode::CONFLICT
+        }
         _ => StatusCode::BAD_REQUEST,
     };
     ApiError::new(status, error.to_string())

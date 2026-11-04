@@ -29,7 +29,7 @@ fn simultaneous_starts_leave_exactly_one_registered_server() {
     let home = fixture.path().join("home");
     fs::create_dir(&home).unwrap();
     let store = fixture.path().join("store");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
     let project = hotsheet_tls::project_id(&store);
     let instance = home.join("instances").join(format!("{project}.json"));
     let lock = home.join("instances").join(format!("{project}.lock"));

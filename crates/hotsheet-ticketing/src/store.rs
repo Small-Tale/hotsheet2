@@ -164,6 +164,12 @@ impl StoreMetadata {
     }
 }
 
+impl From<crate::store_git::AdmissionError> for StoreError {
+    fn from(error: crate::store_git::AdmissionError) -> Self {
+        Self::Admission(Box::new(error))
+    }
+}
+
 /// An error reading or writing the store.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -212,6 +218,9 @@ pub enum StoreError {
     UnsupportedStoreSchema { found: u32, supported: u32 },
     #[error("git {0}")]
     Git(String),
+    /// The store's Git owner or role does not admit it here (HS2-726EXJ).
+    #[error(transparent)]
+    Admission(Box<crate::store_git::AdmissionError>),
     /// A human tried to rewrite an AI's FEEDBACK NEEDED prompt; a reply must be a new note.
     #[error(
         "note {0} is an AI FEEDBACK NEEDED request; reply with a new note instead of editing it"
@@ -881,6 +890,12 @@ impl FsStore {
                 // This one-time legacy repair needs a repository-wide commit so Git
                 // records the cached deletion while leaving the ignored local file.
                 bounded_paths = None;
+            }
+        }
+        if let Some(paths) = bounded_paths.as_mut() {
+            *paths = committable_paths(&self.root, paths);
+            if paths.is_empty() {
+                return Ok(false);
             }
         }
         if let Some(paths) = &bounded_paths {
@@ -2261,6 +2276,54 @@ fn git(root: &Path, args: &[&str]) -> Result<(), StoreError> {
     git_paths(root, args, &[])
 }
 
+/// The paths a bounded commit can name: those on disk, plus missing ones Git still
+/// tracks (a deletion to record). A file that was never committed and is already gone,
+/// such as a ticket created and then purged before its queued commit ran, has nothing to
+/// record, and naming it would make `git add`/`commit` reject the whole commit
+/// (HS2-726EXJ fixture migration exposed this on real repositories).
+fn committable_paths(root: &Path, paths: &[PathBuf]) -> Vec<PathBuf> {
+    let missing: Vec<&PathBuf> = paths
+        .iter()
+        .filter(|path| fs::symlink_metadata(root.join(path)).is_err())
+        .collect();
+    if missing.is_empty() {
+        return paths.to_vec();
+    }
+    let relative = missing
+        .iter()
+        .map(|path| path.strip_prefix(root).unwrap_or(path))
+        .collect::<Vec<_>>();
+    let tracked = crate::git::command()
+        .env("LC_ALL", "C")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z", "--"])
+        .args(&relative)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            output
+                .stdout
+                .split(|byte| *byte == 0)
+                .filter(|entry| !entry.is_empty())
+                .map(|entry| root.join(String::from_utf8_lossy(entry).as_ref()))
+                .collect::<Vec<_>>()
+        });
+    let Some(tracked) = tracked else {
+        // Let Git report the real problem rather than guessing.
+        return paths.to_vec();
+    };
+    paths
+        .iter()
+        .filter(|path| {
+            fs::symlink_metadata(root.join(path)).is_ok()
+                || tracked.iter().any(|entry| entry == &root.join(path))
+        })
+        .cloned()
+        .collect()
+}
+
 fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreError> {
     let relative = paths
         .iter()
@@ -2845,6 +2908,35 @@ mod tests {
             FsStore::init(dir.path(), &StoreMetadata::new("HS")),
             Err(StoreError::InvalidStoreIdentity(_))
         ));
+    }
+
+    /// A ticket written and then removed before its queued path-scoped commit runs leaves
+    /// a path Git never knew. The commit records what remains rather than failing on it;
+    /// a tracked file's deletion is still recorded.
+    #[test]
+    fn hs2_726exj_a_bounded_commit_skips_paths_that_never_reached_git() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let kept = dir.path().join("tickets/kept.md");
+        let vanished = dir.path().join("tickets/vanished.md");
+        fs::write(&kept, "kept\n").unwrap();
+        assert!(
+            store
+                .autocommit_paths("one", &[kept.clone(), vanished.clone()])
+                .unwrap()
+        );
+        assert!(
+            !store
+                .autocommit_paths("none", std::slice::from_ref(&vanished))
+                .unwrap()
+        );
+        fs::remove_file(&kept).unwrap();
+        assert!(store.autocommit_paths("delete", &[kept, vanished]).unwrap());
+        assert_eq!(
+            git_stdout(dir.path(), &["status", "--porcelain"]).unwrap_or_default(),
+            ""
+        );
     }
 
     #[test]

@@ -2068,7 +2068,7 @@ mod terminal_permission_route_tests {
     #[test]
     fn every_terminal_route_carries_the_secret_project_and_server_once_known() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(root.path(), &StoreMetadata::new("HS")).unwrap();
         let machine_home = root.path().join("isolated-machine-home");
         let state = AppState::new(store.clone(), "secret".into())
             .unwrap()
@@ -2112,11 +2112,11 @@ mod terminal_permission_route_tests {
     fn terminal_uses_its_checkout_project_instead_of_the_primary_server_store() {
         let root = tempfile::tempdir().unwrap();
         let primary =
-            FsStore::init(root.path().join("primary.hs2"), &StoreMetadata::new("HS")).unwrap();
+            FsStore::init_git(root.path().join("primary.hs2"), &StoreMetadata::new("HS")).unwrap();
         let project = root.path().join("domotion");
         std::fs::create_dir_all(project.join("nested")).unwrap();
         let project_store =
-            FsStore::init(root.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
+            FsStore::init_git(root.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
         let registry_path = root.path().join("checkouts.json");
         CheckoutRegistry::new(&registry_path)
             .register(

@@ -1825,6 +1825,12 @@ pub(crate) fn configured_provider(
     let store = FsStore::open(path)?;
     let git_id = git_connection_id(&store);
     if connection_id == git_id {
+        // HS2-726EXJ: a GitProvider wraps only an admitted ticket source, never the
+        // machine bootstrap anchor that merely holds provider configuration.
+        hotsheet_ticketing::store_git::admit_store(
+            store.root(),
+            hotsheet_ticketing::store_git::StoreRole::TicketSource,
+        )?;
         return Ok(Arc::new(GitProvider::new(git_id, store)));
     }
     let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));

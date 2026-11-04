@@ -645,7 +645,7 @@ mod tests {
     #[test]
     fn continued_worker_pass_reuses_ticket_session_and_home() {
         let dir = tempfile::tempdir().unwrap();
-        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
         let id = Ulid::new();
         let sessions = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
         let ctx = LiveDriveCtx {
@@ -701,7 +701,7 @@ mod tests {
         let base = root.join("base");
         git(&["init", "-q", "--bare", "-b", "main", bare.to_str().unwrap()]);
         git(&["init", "-q", "-b", "main", base.to_str().unwrap()]);
-        let base_store = FsStore::init(&base, &StoreMetadata::new("HS")).unwrap();
+        let base_store = FsStore::init_git(&base, &StoreMetadata::new("HS")).unwrap();
         for i in 0..n {
             create(
                 &base_store,
@@ -745,7 +745,7 @@ mod tests {
 
     /// A local-only store (no remote) with an Up Next ticket.
     fn local_store(root: &Path) -> std::path::PathBuf {
-        let s = FsStore::init(root, &StoreMetadata::new("LO")).unwrap();
+        let s = FsStore::init_git(root, &StoreMetadata::new("LO")).unwrap();
         create(
             &s,
             Ulid::new(),
@@ -879,7 +879,7 @@ mod tests {
     fn coarse_activity_is_attributed_and_sent_without_a_live_tool() {
         let dir = tempfile::tempdir().unwrap();
         let store =
-            FsStore::init(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
+            FsStore::init_git(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
         let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink_events = captured.clone();
         let ctx = LiveDriveCtx {
@@ -913,7 +913,7 @@ mod tests {
     fn native_activity_maps_and_reuses_the_attributed_live_sink() {
         let dir = tempfile::tempdir().unwrap();
         let store =
-            FsStore::init(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
+            FsStore::init_git(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
         let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink_events = captured.clone();
         let ctx = LiveDriveCtx {

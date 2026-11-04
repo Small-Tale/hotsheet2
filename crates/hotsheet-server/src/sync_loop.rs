@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn shared_project_retention_drives_a_hosted_store_sweep_policy() {
         let store_root = tempfile::tempdir().unwrap();
-        let store = hotsheet_ticketing::FsStore::init(
+        let store = hotsheet_ticketing::FsStore::init_git(
             store_root.path(),
             &hotsheet_ticketing::StoreMetadata::new("HS"),
         )

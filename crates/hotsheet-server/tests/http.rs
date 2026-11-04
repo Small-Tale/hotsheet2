@@ -42,7 +42,7 @@ type RecordedClientPreparations =
 
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     // Codex halt detection must never reach the real ~/.codex daemon (HS2-MN865E).
     let codex_home = dir.path().join("no-codex-home");
     (
@@ -380,7 +380,7 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
     let (store_dir, base) = state();
     let checkout_dir = tempfile::tempdir().unwrap();
     let linked_dir = tempfile::tempdir().unwrap();
-    let linked_store = FsStore::init(linked_dir.path(), &StoreMetadata::new("LINK")).unwrap();
+    let linked_store = FsStore::init_git(linked_dir.path(), &StoreMetadata::new("LINK")).unwrap();
     let linked_source = hotsheet_ticketing::checkouts::TicketSource::git(linked_dir.path());
     let backend = Arc::new(FakeClientDriveBackend::default());
     let preparations = backend.preparations.clone();
@@ -477,8 +477,8 @@ async fn client_drive_requires_an_explicit_source_for_an_ambiguous_checkout() {
     let checkout_dir = tempfile::tempdir().unwrap();
     let first_dir = tempfile::tempdir().unwrap();
     let second_dir = tempfile::tempdir().unwrap();
-    FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
-    FsStore::init(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
+    FsStore::init_git(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+    FsStore::init_git(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
     let first = hotsheet_ticketing::checkouts::TicketSource::git(first_dir.path());
     let second = hotsheet_ticketing::checkouts::TicketSource::git(second_dir.path());
     let backend = Arc::new(FakeClientDriveBackend::default());
@@ -5217,7 +5217,7 @@ async fn ticket_mutation_does_not_wait_for_remote_publication() {
 
     let dir = tempfile::tempdir().unwrap();
     let remote = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     git(dir.path(), &["init", "-q"]);
     git(dir.path(), &["add", "-A"]);
     git(
@@ -5386,7 +5386,7 @@ fn providers_skip_ticket_parsing_and_a_stores_scan_does_not_stall_health() {
 
     let (_d, st) = state();
     let second_dir = tempfile::tempdir().unwrap();
-    let second = FsStore::init(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let second = FsStore::init_git(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
     let second_root = second.root().display().to_string();
     let register_body = serde_json::json!({ "path": second_dir.path() }).to_string();
     let release = Arc::new(AtomicBool::new(false));
@@ -5521,7 +5521,7 @@ fn registering_a_blocked_store_does_not_stall_other_requests() {
 
     let (_d, st) = state();
     let second_dir = tempfile::tempdir().unwrap();
-    let second = FsStore::init(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let second = FsStore::init_git(second_dir.path(), &StoreMetadata::new("BB")).unwrap();
     let second_root = second.root().display().to_string();
     let fifo = plant_ticket_fifo(&second);
     let register_body = serde_json::json!({ "path": second_dir.path() }).to_string();
@@ -5738,7 +5738,7 @@ fn opening_a_project_with_a_blocked_store_does_not_stall_other_requests() {
     let checkout = workspace.path().join("app");
     std::fs::create_dir(&checkout).unwrap();
     let ticket_store =
-        FsStore::init(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
+        FsStore::init_git(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
     let fifo = plant_ticket_fifo(&ticket_store);
     let registry = tempfile::tempdir().unwrap();
     let registry_path = registry.path().join("checkouts.json");
@@ -5826,7 +5826,7 @@ fn adding_a_blocked_checkout_source_does_not_stall_other_requests() {
     let checkout = workspace.path().join("app");
     std::fs::create_dir(&checkout).unwrap();
     let linked =
-        FsStore::init(workspace.path().join("linked"), &StoreMetadata::new("LNK")).unwrap();
+        FsStore::init_git(workspace.path().join("linked"), &StoreMetadata::new("LNK")).unwrap();
     let linked_root = linked.root().to_path_buf();
     let fifo = plant_ticket_fifo(&linked);
     let source = hotsheet_ticketing::checkouts::TicketSource::git(&linked_root);
@@ -6342,6 +6342,102 @@ fn health_answers_while_the_primary_store_scan_is_blocked() {
     }
 }
 
+/// HS2-726EXJ: `POST /stores` and the checkout source routes refuse a store no Git
+/// repository owns, or one an enclosing repository does not track, with 409 and the
+/// recovery step; the same store is admitted once it is its own repository, as the CLI
+/// `link` path is.
+#[tokio::test]
+async fn hs2_726exj_store_and_checkout_routes_refuse_unowned_ticket_stores() {
+    let (_d, st) = state();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let dir = tempfile::tempdir().unwrap();
+
+    // Repository-less store → refused by both families.
+    let loose = dir.path().join("loose.hs2");
+    FsStore::init(&loose, &StoreMetadata::new("LO")).unwrap();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(&serde_json::json!({ "path": loose }).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let message = body_json(resp).await.to_string();
+    assert!(message.contains("is not a Git repository"), "{message}");
+    assert!(message.contains("git -C"), "{message}");
+    let checkout = dir.path().join("code");
+    std::fs::create_dir_all(&checkout).unwrap();
+    let register = serde_json::json!({ "root": checkout, "stores": [loose] }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&register)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+
+    // Unowned beneath an enclosing repository that ignores it → refused.
+    let parent = dir.path().join("parent");
+    std::fs::create_dir_all(&parent).unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            hotsheet_ticketing::git::command_in(&parent)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(parent.join(".gitignore"), "target/\n").unwrap();
+    let unowned = parent.join("target/store");
+    FsStore::init(&unowned, &StoreMetadata::new("UN")).unwrap();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(&serde_json::json!({ "path": unowned }).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    assert!(
+        body_json(resp)
+            .await
+            .to_string()
+            .contains("does not track it")
+    );
+
+    // The diagnostic's own-repository recovery admits the store on the next selection.
+    assert!(
+        hotsheet_ticketing::git::command_in(&loose)
+            .args(["init", "-q", "-b", "main"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(&serde_json::json!({ "path": loose }).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&register)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
 #[tokio::test]
 async fn checkout_registry_is_authenticated_and_resolvable() {
     let (_d, st) = state();
@@ -6406,7 +6502,7 @@ async fn hs2_dbecd0_worker_view_uses_authenticated_registered_checkout_and_repla
             .unwrap()
             .success()
     );
-    FsStore::init(&tickets, &StoreMetadata::new("VIEW")).unwrap();
+    FsStore::init_git(&tickets, &StoreMetadata::new("VIEW")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let drives = st.drive_registry();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
@@ -6818,7 +6914,7 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
 
@@ -6889,7 +6985,7 @@ async fn opening_project_recovers_a_concurrently_duplicated_checkout_registry_su
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry_home = tempfile::tempdir().unwrap();
     let registry_path = registry_home.path().join("checkouts.json");
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
@@ -6968,7 +7064,7 @@ async fn opening_project_discovers_a_linked_ticket_store_without_a_source_choice
     let checkout = workspace.path().join("app");
     let linked = workspace.path().join("ticket-repository");
     std::fs::create_dir_all(checkout.join(".hotsheet2")).unwrap();
-    FsStore::init(&linked, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&linked, &StoreMetadata::new("APP")).unwrap();
     std::fs::write(
         checkout.join(".hotsheet2/store"),
         linked.to_string_lossy().as_bytes(),
@@ -7437,7 +7533,7 @@ async fn opening_project_refreshes_stale_setup_in_the_background() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     std::fs::write(checkout.join("AGENTS.md"), "User instructions.\n\n<!-- BEGIN hotsheet:fixture -->\nstale\n<!-- END hotsheet:fixture -->\n").unwrap();
     std::fs::write(
         ticket_store.join("hotsheet-settings.json"),
@@ -7549,7 +7645,7 @@ async fn opening_project_migrates_per_tool_copies_into_one_shared_section() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     std::fs::write(
         checkout.join("AGENTS.md"),
         "User instructions.\n\n<!-- BEGIN hotsheet:first -->\nstale\n<!-- END hotsheet:first -->\n\n<!-- BEGIN hotsheet:second -->\nstale\n<!-- END hotsheet:second -->\n",
@@ -7633,7 +7729,7 @@ async fn opening_project_with_an_empty_enabled_list_disables_every_tool() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     std::fs::write(checkout.join("AGENTS.md"), "User instructions.\n").unwrap();
     std::fs::write(
         ticket_store.join("hotsheet-settings.json"),
@@ -7758,7 +7854,7 @@ async fn opening_project_regenerates_its_worklist_after_responding() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    let store = FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let store = FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     ops::create(
         &store,
         Ulid::new(),
@@ -7816,7 +7912,7 @@ async fn a_write_burst_refreshes_the_worklist_off_the_request_to_the_last_state(
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    let store = FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let store = FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let ticket = ops::create(
         &store,
         Ulid::new(),
@@ -8020,7 +8116,7 @@ async fn hs2_6h8zy6_refused_project_open_does_not_host_its_git_store() {
     let project = workspace.path().join("synthetic-project");
     let store_path = workspace.path().join("synthetic.hs2");
     std::fs::create_dir(&project).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("SYN")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("SYN")).unwrap();
     FsStore::open(&store_path).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let checkouts = registry.path().join("checkouts.json");
@@ -8059,7 +8155,7 @@ async fn closing_the_last_open_project_unhosts_its_store_until_it_is_needed_agai
     let checkout = workspace.path().join("app");
     let store_path = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    let store = FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    let store = FsStore::init_git(&store_path, &StoreMetadata::new("AP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8193,7 +8289,7 @@ async fn a_terminal_without_osc7_keeps_its_checkout_store_hosted() {
     let checkout = workspace.path().join("app");
     let store_path = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("AP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8319,7 +8415,7 @@ async fn an_untagged_change_stream_keeps_every_project_store_hosted() {
     let checkout = workspace.path().join("app");
     let store_path = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("AP")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("AP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8371,7 +8467,7 @@ async fn checkout_search_matches_slug_details_and_notes() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8466,7 +8562,7 @@ async fn deleted_tickets_form_a_separate_trash_collection_and_count() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8584,7 +8680,7 @@ async fn empty_trash_purges_all_deleted_checkout_tickets_and_is_idempotent() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8682,7 +8778,7 @@ async fn all_collection_spans_every_lifecycle_collection_except_trash() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8827,7 +8923,7 @@ async fn trash_purge_preview_counts_without_purging_and_apply_keeps_recent_trash
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -8933,7 +9029,7 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -9149,7 +9245,7 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -9923,7 +10019,7 @@ async fn hs2_vhwwa6_encoded_checkout_path_reaches_the_ticket_route() {
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();
-    FsStore::init(extra.path(), &StoreMetadata::new("EX")).unwrap();
+    FsStore::init_git(extra.path(), &StoreMetadata::new("EX")).unwrap();
     let checkout = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
     // HS2-FQEESP: the poster cache is injected on AppState, never via a process-wide
@@ -10653,7 +10749,7 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     let _watch = hotsheet_server::spawn_watcher(st.clone()).unwrap();
     let mut external_updates = st.subscribe();
     let target_dir = tempfile::tempdir().unwrap();
-    let target_store = FsStore::init(target_dir.path(), &StoreMetadata::new("TG")).unwrap();
+    let target_store = FsStore::init_git(target_dir.path(), &StoreMetadata::new("TG")).unwrap();
     let source_checkout = tempfile::tempdir().unwrap();
     let source_alias_checkout = tempfile::tempdir().unwrap();
     let target_checkout = tempfile::tempdir().unwrap();
@@ -11129,7 +11225,7 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     .expect("the watcher indexes the legacy duplicate close");
     let inaccessible_checkout = tempfile::tempdir().unwrap();
     let inaccessible_store = inaccessible_checkout.path().join("broken.hs2");
-    FsStore::init(&inaccessible_store, &StoreMetadata::new("OFF")).unwrap();
+    FsStore::init_git(&inaccessible_store, &StoreMetadata::new("OFF")).unwrap();
     std::fs::write(inaccessible_store.join("hotsheet-store.json"), "{").unwrap();
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
         .register_sources(
@@ -11251,7 +11347,7 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
 async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_ticket_list() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();
-    let extra_store = FsStore::init(extra.path(), &StoreMetadata::new("EX")).unwrap();
+    let extra_store = FsStore::init_git(extra.path(), &StoreMetadata::new("EX")).unwrap();
     let checkout = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
@@ -15214,7 +15310,7 @@ async fn me_views_resolve_assigned_to_me_and_needs_my_review() {
     use hotsheet_ticketing::{NewTicket, ops};
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     // `me` resolves via `git config user.email`, so the store dir must be a repo with a
     // pinned local identity (deterministic regardless of global git config).
     hotsheet_ticketing::git::command()
@@ -15327,7 +15423,7 @@ async fn watcher_reindexes_an_external_write() {
     use hotsheet_ticketing::{NewTicket, ops};
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let state = AppState::new(store.clone(), SECRET.into()).unwrap();
     let _watch = hotsheet_server::spawn_watcher(state.clone()).unwrap();
     let app = app(state);
@@ -15548,7 +15644,7 @@ async fn watcher_regenerates_the_worklist() {
     use hotsheet_ticketing::{NewTicket, ops};
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let registry_path = dir.path().join("checkouts.json");
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
     registry
@@ -16397,7 +16493,7 @@ async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
         .to_string();
 
     let destination_dir = tempfile::tempdir().unwrap();
-    FsStore::init(destination_dir.path(), &StoreMetadata::new("DS")).unwrap();
+    FsStore::init_git(destination_dir.path(), &StoreMetadata::new("DS")).unwrap();
     let register_body = format!(r#"{{"path":"{}"}}"#, destination_dir.path().display());
     let destination_connection = body_json(
         app.clone()
@@ -17248,7 +17344,7 @@ async fn checkout_guidance_interview_requires_consent_and_keeps_answer_advisory(
 #[tokio::test]
 async fn setup_endpoint_preserves_rulesync_owned_instructions() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
     hotsheet_plugins::setup::set_guidance_owner_in(dir.path(), "rulesync").unwrap();
     std::fs::write(
@@ -17286,7 +17382,7 @@ async fn setup_endpoint_preserves_rulesync_owned_instructions() {
 #[tokio::test]
 async fn setup_endpoint_prepares_the_project_like_the_cli() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
 
     let resp = app(st.clone())
@@ -17363,7 +17459,7 @@ fn setting_up_a_tool_does_not_stall_other_requests() {
     use std::time::Duration;
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
     let agents = dir.path().join("AGENTS.md");
     let c_path = std::ffi::CString::new(agents.as_os_str().as_bytes()).unwrap();
@@ -17531,7 +17627,7 @@ async fn hosts_multiple_stores_and_serves_a_scoped_list() {
 
     // A second store on disk with one ticket.
     let dir2 = tempfile::tempdir().unwrap();
-    let store2 = FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let store2 = FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     ops::create(
         &store2,
         Ulid::new(),
@@ -17622,7 +17718,7 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
 
     // Register a second store, empty to start.
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -17724,8 +17820,8 @@ async fn hs2_av80c4_checkout_claim_next_serves_linked_stores_and_racing_workers(
     let (_primary, state) = state();
     let first = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();
-    FsStore::init(first.path(), &StoreMetadata::new("ONE")).unwrap();
-    FsStore::init(second.path(), &StoreMetadata::new("TWO")).unwrap();
+    FsStore::init_git(first.path(), &StoreMetadata::new("ONE")).unwrap();
+    FsStore::init_git(second.path(), &StoreMetadata::new("TWO")).unwrap();
     let project = tempfile::tempdir().unwrap();
     let empty_project = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
@@ -17851,7 +17947,7 @@ async fn hs2_av80c4_checkout_claim_next_serves_linked_stores_and_racing_workers(
 async fn hs2_em6ywp_checkout_claim_lifecycle_uses_sibling_store() {
     let (_primary, state) = state();
     let sibling = tempfile::tempdir().unwrap();
-    FsStore::init(sibling.path(), &StoreMetadata::new("TST")).unwrap();
+    FsStore::init_git(sibling.path(), &StoreMetadata::new("TST")).unwrap();
     let project = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
     let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
@@ -17991,7 +18087,7 @@ async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     // process-global environment (HS2-NYZ3PS).
     let home = tempfile::tempdir().unwrap();
     let dir1 = tempfile::tempdir().unwrap();
-    let store1 = FsStore::init(dir1.path(), &StoreMetadata::new("AA")).unwrap();
+    let store1 = FsStore::init_git(dir1.path(), &StoreMetadata::new("AA")).unwrap();
     let st = AppState::new(store1, SECRET.into())
         .unwrap()
         .with_machine_home(home.path());
@@ -18001,7 +18097,7 @@ async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
 
     // Register a second store.
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -18036,7 +18132,7 @@ async fn a_registered_store_gets_its_own_watcher() {
 
     // Register an empty second store.
     let dir2 = tempfile::tempdir().unwrap();
-    let store2 = FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let store2 = FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -18098,7 +18194,7 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 
     // A second store with its own ticket.
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -18879,7 +18975,7 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_project() {
     let checkout = other.path().join("domotion");
     std::fs::create_dir_all(&checkout).unwrap();
     let store =
-        FsStore::init(other.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
+        FsStore::init_git(other.path().join("domotion.hs2"), &StoreMetadata::new("DM")).unwrap();
     let registry_path = other.path().join("checkouts.json");
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
         .register(&checkout, None, None, vec![store.root().to_path_buf()])
@@ -19410,7 +19506,7 @@ async fn permissions_require_the_secret() {
 #[tokio::test]
 async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = dir.path().join("permissions.json");
     let st = AppState::new(store, SECRET.into())
         .unwrap()
@@ -19465,7 +19561,7 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 #[tokio::test]
 async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installed() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
         .unwrap()
@@ -19530,7 +19626,7 @@ async fn corrupt_encrypted_rules_fail_closed_before_an_always_answer_is_installe
 #[tokio::test]
 async fn remembered_web_request_lists_exact_action_only_after_authentication() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = dir.path().join("permissions.json");
     let st = AppState::new(store, SECRET.into())
         .unwrap()
@@ -19596,7 +19692,7 @@ async fn remembered_web_request_lists_exact_action_only_after_authentication() {
 async fn pending_permission_suggestions_are_review_only_until_explicit_pattern_approval() {
     const ACTION: &str = "API_TOKEN=abc123 npm test";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let state = AppState::new(store, SECRET.into()).unwrap();
     let bridge = state.permission_bridge();
@@ -19649,7 +19745,7 @@ async fn pending_permission_suggestions_are_review_only_until_explicit_pattern_a
 async fn reviewed_chat_pattern_round_trips_through_approval_and_settings_edit() {
     const ACTION: &str = "curl -H 'Bearer first' https://site.test";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let state = AppState::new(store, SECRET.into()).unwrap();
     let bridge = state.permission_bridge();
@@ -19728,7 +19824,7 @@ async fn reviewed_chat_pattern_round_trips_through_approval_and_settings_edit() 
 async fn remembered_bash_label_is_validated_before_resolving_and_stays_opaque() {
     const ACTION: &str = "curl https://private.example/token=secret";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
@@ -19792,7 +19888,7 @@ async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in
  {
     const ACTION: &str = "npm run test:unit -- --token=private-value";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
@@ -20005,7 +20101,7 @@ async fn secret_bearing_remembered_action_is_encrypted_at_rest_and_reviewable_in
 async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answers() {
     const ACTION: &str = "npm run test --token=private";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
     let checkout_root = dir.path().join("checkout");
@@ -20196,7 +20292,7 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
 async fn allow_once_can_finish_a_reviewed_rule_after_the_request_is_settled() {
     const ACTION: &str = "npm run test";
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
     let state = AppState::new(store, SECRET.into())
@@ -20335,7 +20431,7 @@ async fn allow_once_can_finish_a_reviewed_rule_after_the_request_is_settled() {
 #[tokio::test]
 async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let rules_path = dir.path().join("permissions.json");
     // SHA-256 of the exact action below: a pre-v2 approval would have auto-allowed it.
@@ -20383,7 +20479,7 @@ async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() 
 #[tokio::test]
 async fn chat_scoped_answers_cascade_list_and_revoke_through_real_routes() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let rules = dir.path().join("permissions.json");
     let project = dir.path().display().to_string();
     let st = AppState::new(store, SECRET.into())
@@ -20555,7 +20651,7 @@ async fn chat_scoped_answers_cascade_list_and_revoke_through_real_routes() {
 #[tokio::test]
 async fn remembering_and_revoking_permission_rules_emit_a_replayable_change_event() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project = dir.path().display().to_string();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
@@ -20667,8 +20763,8 @@ async fn remembering_and_revoking_permission_rules_emit_a_replayable_change_even
 async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
     let primary_dir = tempfile::tempdir().unwrap();
     let secondary_dir = tempfile::tempdir().unwrap();
-    let primary = FsStore::init(primary_dir.path(), &StoreMetadata::new("AA")).unwrap();
-    let secondary = FsStore::init(secondary_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let primary = FsStore::init_git(primary_dir.path(), &StoreMetadata::new("AA")).unwrap();
+    let secondary = FsStore::init_git(secondary_dir.path(), &StoreMetadata::new("BB")).unwrap();
     let rules_dir = primary_dir.path().join("permission-rules");
     let primary_rules = rules_dir.join("primary.json");
     let state = AppState::new(primary, SECRET.into())
@@ -20876,9 +20972,9 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
-    let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
+    let store = FsStore::init_git(&store_path, &StoreMetadata::new("SH")).unwrap();
     let other_store_path = root.path().join("other.hs2");
-    FsStore::init(&other_store_path, &StoreMetadata::new("OT")).unwrap();
+    FsStore::init_git(&other_store_path, &StoreMetadata::new("OT")).unwrap();
     let first_root = root.path().join("first");
     let second_root = root.path().join("second");
     let external_root = root.path().join("external-only");
@@ -21315,7 +21411,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
     let root = tempfile::tempdir().unwrap();
     let store_path = root.path().join("shared.hs2");
     let legacy_project = store_path.display().to_string();
-    let store = FsStore::init(&store_path, &StoreMetadata::new("SH")).unwrap();
+    let store = FsStore::init_git(&store_path, &StoreMetadata::new("SH")).unwrap();
     let first_root = root.path().join("first");
     let second_root = root.path().join("second");
     std::fs::create_dir_all(&first_root).unwrap();
@@ -21839,7 +21935,8 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
 #[tokio::test]
 async fn unknown_checkout_cannot_receive_a_durable_permission() {
     let root = tempfile::tempdir().unwrap();
-    let store = FsStore::init(root.path().join("store.hs2"), &StoreMetadata::new("SH")).unwrap();
+    let store =
+        FsStore::init_git(root.path().join("store.hs2"), &StoreMetadata::new("SH")).unwrap();
     let state = AppState::new(store, SECRET.into())
         .unwrap()
         .with_test_permission_rules(root.path().join("permissions").join("store.json"));
@@ -22030,7 +22127,7 @@ async fn cross_store_copy_and_move_between_hosted_stores() {
     let id = body_json(resp).await["id"].as_str().unwrap().to_string();
 
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("DS")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("DS")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -22123,7 +22220,7 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .to_string();
 
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("DS")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("DS")).unwrap();
     let registered = app
         .clone()
         .oneshot(authed(
@@ -22677,7 +22774,7 @@ async fn a_rate_limited_github_source_does_not_hide_local_tickets_and_recovers()
     let workspace = tempfile::tempdir().unwrap();
     let checkout = workspace.path().join("mixed");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(
+    FsStore::init_git(
         workspace.path().join("mixed.hs2"),
         &StoreMetadata::new("MIX"),
     )
@@ -22848,7 +22945,7 @@ async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
     let workspace = tempfile::tempdir().unwrap();
     let checkout = workspace.path().join("mixed");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(
+    FsStore::init_git(
         workspace.path().join("mixed.hs2"),
         &StoreMetadata::new("MIX"),
     )
@@ -22953,7 +23050,7 @@ async fn a_disabled_source_is_never_contacted_and_its_tickets_return_when_enable
     let workspace = tempfile::tempdir().unwrap();
     let checkout = workspace.path().join("mixed");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(
+    FsStore::init_git(
         workspace.path().join("mixed.hs2"),
         &StoreMetadata::new("MIX"),
     )
@@ -23129,7 +23226,7 @@ async fn checkout_pages_globally_merge_local_and_provider_sources_across_continu
     let checkout = workspace.path().join("mixed");
     let ticket_store = workspace.path().join("mixed.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("MIX")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("MIX")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let remote_rows = serde_json::json!([
         github_issue(11, "Alpha remote"),
@@ -23624,7 +23721,7 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     let home = tempfile::tempdir().unwrap();
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
         .with_machine_home(home.path())
@@ -23632,7 +23729,7 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     let app = app(st);
 
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -23660,7 +23757,7 @@ async fn startup_discovery_hosts_stores_from_stores_json() {
 
     // Two stores on disk; one listed in stores.json, one bogus path (must be skipped).
     let good = tempfile::tempdir().unwrap();
-    FsStore::init(good.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(good.path(), &StoreMetadata::new("BB")).unwrap();
     let stores_json = serde_json::json!({
         "stores": [good.path().to_string_lossy(), "/nonexistent/nope"]
     });
@@ -23668,7 +23765,7 @@ async fn startup_discovery_hosts_stores_from_stores_json() {
 
     // Primary store + discovery.
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
         .with_machine_home(home.path());
@@ -23697,7 +23794,7 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
 
     // Primary store + machine server.
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = AppState::new(store, SECRET.into())
         .unwrap()
         .with_machine_home(home.path());
@@ -23712,7 +23809,7 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
 
     // Register a second store at runtime; it advertises the same machine server.
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     let resp = app
         .clone()
@@ -23744,7 +23841,7 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
 fn injected_machine_homes_isolate_concurrent_states_in_one_process() {
     let homes: Vec<_> = (0..2).map(|_| tempfile::tempdir().unwrap()).collect();
     let store_dir = tempfile::tempdir().unwrap();
-    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let barrier = std::sync::Barrier::new(2);
     std::thread::scope(|scope| {
         for (thread, home) in homes.iter().enumerate() {
@@ -23780,7 +23877,7 @@ async fn background_sync_covers_every_hosted_store() {
 
     // Register a second (local-only, no-remote) store.
     let dir2 = tempfile::tempdir().unwrap();
-    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
     let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
     app.clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -23805,7 +23902,7 @@ async fn background_sync_announces_a_repository_size_crossing_to_linked_checkout
 
     let dir = tempfile::tempdir().unwrap();
     let store_root = dir.path().join("tickets");
-    let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
     let remote = dir.path().join("remote.git");
     let git = |cwd: &std::path::Path, args: &[&str]| {
         let status = hotsheet_ticketing::git::command()
@@ -24139,7 +24236,7 @@ async fn exact_ticket_claim_accepts_slug_and_rejects_a_live_second_worker() {
 #[tokio::test]
 async fn a_corrupt_ticket_file_does_not_block_opening_the_project() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
 
     // Two healthy tickets, created through the real server so they persist to the store.
     {
@@ -24276,7 +24373,7 @@ async fn checkout_value_keyset_continuations_survive_interleaved_mutations() {
         let workspace = tempfile::tempdir().unwrap();
         let checkout = workspace.path().join("app");
         std::fs::create_dir(&checkout).unwrap();
-        FsStore::init(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
+        FsStore::init_git(workspace.path().join("app.hs2"), &StoreMetadata::new("APP")).unwrap();
         let registry = tempfile::tempdir().unwrap();
         let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
         let opened = checkout_call(
@@ -24570,7 +24667,7 @@ async fn checkout_search_with_github_source_keeps_git_and_provider_matches() {
     transport.issues.lock().unwrap()[1]["title"] = "unrelated".into();
     let (router, _primary, _checkout, _registry) = paged_github_checkout(transport).await;
     let git_store = tempfile::tempdir().unwrap();
-    FsStore::init(git_store.path(), &StoreMetadata::new("LOCAL")).unwrap();
+    FsStore::init_git(git_store.path(), &StoreMetadata::new("LOCAL")).unwrap();
     let source = hotsheet_ticketing::checkouts::TicketSource::git(git_store.path());
     let added = checkout_call(
         &router,
@@ -24839,7 +24936,7 @@ async fn unpaged_checkout_arrays_are_bounded_and_flag_truncation() {
     let checkout = workspace.path().join("big");
     let ticket_store = workspace.path().join("big.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    let store = FsStore::init(&ticket_store, &StoreMetadata::new("BIG")).unwrap();
+    let store = FsStore::init_git(&ticket_store, &StoreMetadata::new("BIG")).unwrap();
     seed_bounded_ticket_store(&store);
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
@@ -24935,7 +25032,7 @@ async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let registry_path = registry.path().join("checkouts.json");
     let router = app(st.with_checkout_registry(&registry_path));
@@ -25030,7 +25127,7 @@ async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
 #[tokio::test]
 async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("BIG")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("BIG")).unwrap();
     seed_bounded_ticket_store(&store);
     let store_id = hotsheet_ticketing::git_connection_id(&store);
     let router = app(AppState::new(store, SECRET.into()).unwrap());
@@ -25100,7 +25197,7 @@ async fn store_level_ticket_lists_are_bounded_and_page_with_page_after() {
 #[tokio::test]
 async fn hs2_6yxgkh_provider_ticket_lists_are_bounded() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path(), &StoreMetadata::new("BIG")).unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("BIG")).unwrap();
     seed_bounded_ticket_store(&store);
     let connection = hotsheet_ticketing::git_connection_id(&store);
     let router = app(AppState::new(store, SECRET.into()).unwrap());
@@ -25860,7 +25957,7 @@ async fn replaced_linked_git_store_is_rejected_on_checkout_reads_after_restart()
     let registry_path = root.path().join("checkouts.json");
     std::fs::create_dir(&first).unwrap();
     std::fs::create_dir(&second).unwrap();
-    let store = FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(&linked, &StoreMetadata::new("HS")).unwrap();
     let ticket = ops::create(
         &store,
         Ulid::new(),
@@ -25891,7 +25988,7 @@ async fn replaced_linked_git_store_is_rejected_on_checkout_reads_after_restart()
         );
     }
     std::fs::rename(&linked, &original).unwrap();
-    FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&linked, &StoreMetadata::new("HS")).unwrap();
 
     let store_id = hotsheet_ticketing::checkouts::TicketSource::git(&linked).connection_id;
     assert_ne!(
@@ -25978,8 +26075,8 @@ async fn primary_store_replacement_conflicts_on_unscoped_routes_and_preserves_ot
     let primary_path = root.path().join("primary");
     let original_path = root.path().join("original");
     let secondary_path = root.path().join("secondary");
-    let primary = FsStore::init(&primary_path, &StoreMetadata::new("PR")).unwrap();
-    FsStore::init(&secondary_path, &StoreMetadata::new("SC")).unwrap();
+    let primary = FsStore::init_git(&primary_path, &StoreMetadata::new("PR")).unwrap();
+    FsStore::init_git(&secondary_path, &StoreMetadata::new("SC")).unwrap();
     // A legacy primary has no recorded identity until the server pins one at startup.
     let mut legacy = primary.metadata().unwrap();
     legacy.instance_id = None;
@@ -26023,7 +26120,7 @@ async fn primary_store_replacement_conflicts_on_unscoped_routes_and_preserves_ot
         StatusCode::CREATED
     );
     std::fs::rename(&primary_path, &original_path).unwrap();
-    let replacement = FsStore::init(&primary_path, &StoreMetadata::new("PR")).unwrap();
+    let replacement = FsStore::init_git(&primary_path, &StoreMetadata::new("PR")).unwrap();
     assert_ne!(replacement.metadata().unwrap().instance_id, pinned);
 
     let health = router
@@ -26124,7 +26221,7 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     let new_store = root.path().join("new-store");
     std::fs::create_dir(&first).unwrap();
     std::fs::create_dir(&second).unwrap();
-    let store = FsStore::init(&old_store, &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(&old_store, &StoreMetadata::new("HS")).unwrap();
     let store_instance_id = store.metadata().unwrap().instance_id.unwrap();
     let ticket = ops::create(
         &store,
@@ -26174,7 +26271,7 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     let unrelated_store = root.path().join("unrelated-store");
-    FsStore::init(&unrelated_store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&unrelated_store, &StoreMetadata::new("HS")).unwrap();
     let wrong_valid_store = app
         .clone()
         .oneshot(authed(
@@ -26271,7 +26368,7 @@ async fn reviewed_legacy_git_recovery_is_explicit_and_visible_after_restart() {
     let new_store = root.path().join("new-store");
     let registry_path = root.path().join("checkouts.json");
     std::fs::create_dir(&project).unwrap();
-    let store = FsStore::init(&old_store, &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(&old_store, &StoreMetadata::new("HS")).unwrap();
     let (_primary, initial_state) = state();
     let initial = app(initial_state.with_checkout_registry(&registry_path));
     let registered = initial
@@ -26375,7 +26472,7 @@ async fn checkout_sources_remain_editable_after_same_path_store_identity_mismatc
     let store_path = root.path().join("store");
     let original_path = root.path().join("original");
     std::fs::create_dir(&project).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("HS")).unwrap();
     let (_primary, state) = state();
     let app = app(state.with_checkout_registry(root.path().join("checkouts.json")));
     let registered = app
@@ -26393,7 +26490,7 @@ async fn checkout_sources_remain_editable_after_same_path_store_identity_mismatc
     let source_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
 
     std::fs::rename(&store_path, &original_path).unwrap();
-    let replacement = FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let replacement = FsStore::init_git(&store_path, &StoreMetadata::new("HS")).unwrap();
     let ticket = ops::create(
         &replacement,
         Ulid::new(),
@@ -26459,7 +26556,7 @@ async fn checkout_source_controls_survive_missing_invalid_and_restored_store_pat
     let store_path = root.path().join("store");
     let moved_path = root.path().join("moved");
     std::fs::create_dir(&project).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("HS")).unwrap();
     let (_primary, state) = state();
     let app = app(state.with_checkout_registry(root.path().join("checkouts.json")));
     let registered = app
@@ -26552,7 +26649,7 @@ async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
     let original_path = root.path().join("original");
     let registry_path = root.path().join("checkouts.json");
     std::fs::create_dir(&project).unwrap();
-    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store_path, &StoreMetadata::new("HS")).unwrap();
     let (_primary, state) = state();
     let app = app(state.with_checkout_registry(&registry_path));
     let registered = app
@@ -26576,7 +26673,7 @@ async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
         .remove("store_instance_ids");
     std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
     std::fs::rename(&store_path, &original_path).unwrap();
-    let replacement = FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let replacement = FsStore::init_git(&store_path, &StoreMetadata::new("HS")).unwrap();
     let ticket = ops::create(
         &replacement,
         Ulid::new(),
@@ -30048,7 +30145,7 @@ async fn unqualified_checkout_ids_only_probe_providers_whose_id_shape_they_have(
     let workspace = tempfile::tempdir().unwrap();
     let checkout = workspace.path().join("mixed");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(
+    FsStore::init_git(
         workspace.path().join("mixed.hs2"),
         &StoreMetadata::new("MIX"),
     )
@@ -30549,7 +30646,7 @@ async fn hs2_vbfszj_response_to_accepts_a_legacy_request_and_refuses_explicit_re
     let checkout = workspace.path().join("app");
     let ticket_store = workspace.path().join("app.hs2");
     std::fs::create_dir(&checkout).unwrap();
-    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
     let opened = body_json(
@@ -30648,7 +30745,7 @@ async fn hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim() {
             .unwrap()
             .success()
     );
-    let store = FsStore::init(&tickets, &StoreMetadata::new("PLAN")).unwrap();
+    let store = FsStore::init_git(&tickets, &StoreMetadata::new("PLAN")).unwrap();
     let now = time::OffsetDateTime::now_utc();
     let ticket = hotsheet_ticketing::ops::create(
         &store,

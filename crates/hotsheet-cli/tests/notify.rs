@@ -808,7 +808,7 @@ fn hs2_8vaxxa_cli_writes_notify_without_a_server_and_defer_to_a_live_one() {
     let env = env();
     let (base, received) = loopback();
     let store = env.home.parent().unwrap().join("demo.hs2");
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let tickets = || {
         let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
@@ -934,7 +934,7 @@ fn hs2_g8nxnc_saved_view_rules_forward_only_tickets_in_the_view() {
     let store = root.join("demo.hs2");
     let project = root.join("demo");
     std::fs::create_dir_all(&project).unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let checkout =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(env.home.join("checkouts.json"))

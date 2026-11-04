@@ -107,6 +107,13 @@ impl AppState {
         if self.host.contains(&id) {
             return Ok(false);
         }
+        // HS2-726EXJ: every hosted store is a ticket source and must be an owned or
+        // designated Git store. Checked once when hosting begins, not per request.
+        hotsheet_ticketing::store_git::admit_store(
+            store.root(),
+            hotsheet_ticketing::store_git::StoreRole::TicketSource,
+        )
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
         let index = if self.persist_indexes {
             let path = multistore::index_path_for(&self.machine_home, &store)
                 .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

@@ -54,7 +54,7 @@ async fn send(
 /// A store, a plugin directory with a push-capable and a push-less fake tool, and the app.
 fn fixture() -> (tempfile::TempDir, tempfile::TempDir, axum::Router) {
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
     // The fake "TUI" prints the wiring it was launched with: `sh -c <script> fake --port <p>`.
     write_plugin(
@@ -213,7 +213,7 @@ fn connection(list: &serde_json::Value, id: &str) -> serde_json::Value {
 #[tokio::test]
 async fn a_broker_terminal_keeps_its_push_session_across_a_server_restart() {
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
     write_plugin(
         plugins.path(),
@@ -351,11 +351,11 @@ password_env = "OPENCODE_SERVER_PASSWORD"
 #[tokio::test]
 async fn a_terminal_connection_belongs_to_its_launch_checkout_project() {
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let project_dir = tempfile::tempdir().unwrap();
     let checkout = project_dir.path().join("code");
     std::fs::create_dir(&checkout).unwrap();
-    let source = FsStore::init(
+    let source = FsStore::init_git(
         project_dir.path().join("tickets"),
         &StoreMetadata::new("TK"),
     )
@@ -618,7 +618,7 @@ async fn an_unreachable_session_api_is_a_502() {
 #[tokio::test]
 async fn a_brokered_codex_launch_can_bootstrap_only_once() {
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
     write_plugin(
         plugins.path(),
@@ -680,7 +680,7 @@ async fn a_new_codex_tui_accepts_one_prompt_before_its_thread_is_reported() {
     use std::os::unix::fs::PermissionsExt;
     const THREAD: &str = "01a14736-2ae1-7e92-8da0-5f8db11b19b0";
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
     // Built-in plugin IDs take precedence over fixture directories. Use a distinct ID so
     // CI does not try to launch the real Codex binary from the bundled manifest.
@@ -830,7 +830,7 @@ async fn a_hook_reported_codex_thread_receives_prompts_through_codex_queue() {
     use std::os::unix::fs::PermissionsExt;
     const THREAD: &str = "01a14736-2ae1-7e92-8da0-5f8db11b19b0";
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let bin = tempfile::tempdir().unwrap();
     let log = bin.path().join("argv");
     let codex = bin.path().join("codex");
@@ -961,7 +961,7 @@ async fn a_hook_reported_claude_inbox_receives_prompts_and_its_token_is_never_se
     // socket, an old Claude, a new session without an inbox, and SessionEnd.
     use std::os::unix::net::UnixListener;
     let store_dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let router = app(AppState::new(store, SECRET.into()).unwrap());
     let prompt = r#"{"text":"Ticket HS-1 changed; re-read it."}"#;
     let message = |router: axum::Router, body: &'static str| async move {

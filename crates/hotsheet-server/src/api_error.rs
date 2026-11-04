@@ -104,7 +104,7 @@ impl From<StoreError> for ApiError {
             | StoreError::InvalidFeedbackResponse(_)
             | StoreError::InvalidNoteKindEdit
             | StoreError::ImageCrop(_) => StatusCode::BAD_REQUEST,
-            StoreError::FeedbackNoteEdit(_) => StatusCode::CONFLICT,
+            StoreError::FeedbackNoteEdit(_) | StoreError::Admission(_) => StatusCode::CONFLICT,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,
             StoreError::NotAStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

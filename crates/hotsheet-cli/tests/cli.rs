@@ -19,8 +19,11 @@ fn hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home() {
     std::fs::create_dir_all(&source_codex_home).unwrap();
     std::fs::create_dir_all(&default_home).unwrap();
     std::fs::create_dir_all(&project).unwrap();
-    hotsheet_ticketing::FsStore::init(&store_path, &hotsheet_ticketing::StoreMetadata::new("TST"))
-        .unwrap();
+    hotsheet_ticketing::FsStore::init_git(
+        &store_path,
+        &hotsheet_ticketing::StoreMetadata::new("TST"),
+    )
+    .unwrap();
 
     let codex_home = hotsheet_aitools::launch_safety::IsolatedCodexHome::create(
         &source_codex_home,
@@ -109,7 +112,7 @@ fn hs2_2z11a5_cli_new_records_a_qualified_follow_up_after_creation() {
     let project = root.path().join("project");
     let store_path = root.path().join("tickets.hs2");
     std::fs::create_dir(&project).unwrap();
-    let store = hotsheet_ticketing::FsStore::init(
+    let store = hotsheet_ticketing::FsStore::init_git(
         &store_path,
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -965,7 +968,7 @@ fn hs2_afsf4x_permission_discard_requires_explicit_confirmation() {
     let project = root.path().join("project");
     let store_path = root.path().join("tickets.hs2");
     std::fs::create_dir_all(&project).unwrap();
-    let store = hotsheet_ticketing::FsStore::init(
+    let store = hotsheet_ticketing::FsStore::init_git(
         &store_path,
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -1131,11 +1134,13 @@ fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
     let anchor = root.path().join("anchor.hs2");
     let extra = root.path().join("extra.hs2");
     std::fs::create_dir_all(&project).unwrap();
-    hotsheet_ticketing::FsStore::init(&anchor, &hotsheet_ticketing::StoreMetadata::new("AN"))
+    hotsheet_ticketing::FsStore::init_git(&anchor, &hotsheet_ticketing::StoreMetadata::new("AN"))
         .unwrap();
-    let extra_store =
-        hotsheet_ticketing::FsStore::init(&extra, &hotsheet_ticketing::StoreMetadata::new("EX"))
-            .unwrap();
+    let extra_store = hotsheet_ticketing::FsStore::init_git(
+        &extra,
+        &hotsheet_ticketing::StoreMetadata::new("EX"),
+    )
+    .unwrap();
     let registry =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
     let checkout = registry
@@ -1246,7 +1251,7 @@ fn hs2_54ebk3_permission_discard_fails_closed_for_unavailable_host() {
     let project = root.path().join("project");
     let store_path = root.path().join("tickets.hs2");
     std::fs::create_dir_all(&project).unwrap();
-    let store = hotsheet_ticketing::FsStore::init(
+    let store = hotsheet_ticketing::FsStore::init_git(
         &store_path,
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -1377,9 +1382,11 @@ fn hs2_c9fc2k_cli_links_source_and_queues_pending_rulesync_review() {
     for path in [&store, &project, &home] {
         std::fs::create_dir(path).unwrap();
     }
-    let source_store =
-        hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
-            .unwrap();
+    let source_store = hotsheet_ticketing::FsStore::init_git(
+        &store,
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
     std::fs::write(project.join("AGENTS.md"), "Project guidance.\n").unwrap();
     hs(Path::new("."))
         .env("HOTSHEET_HOME", &home)
@@ -1509,7 +1516,7 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
     std::fs::create_dir_all(project.join(".git/info")).unwrap();
     std::fs::write(project.join(".git/info/exclude"), "existing-rule\n").unwrap();
     std::fs::write(bin.join("codex"), "fake executable for detection").unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     std::fs::write(
         project.join("hotsheet-settings.json"),
@@ -1746,7 +1753,7 @@ fn setup_diagnose_and_refresh_report_blocked_bundled_guidance_without_replacing_
     let project = root.path().join("project");
     let home = root.path().join("home");
     std::fs::create_dir_all(&project).unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let run = |args: &[&str]| {
         hs(&store)
@@ -1802,7 +1809,7 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let store = root.path().join("tickets");
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
@@ -1933,7 +1940,7 @@ fn terminal_message_cli_uses_authenticated_session_push_route() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let store = root.path().join("tickets");
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
@@ -2032,7 +2039,7 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let store = root.path().join("tickets");
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
@@ -5189,7 +5196,7 @@ fn setup_refresh_preserves_a_project_github_source() {
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
-    hotsheet_ticketing::FsStore::init(
+    hotsheet_ticketing::FsStore::init_git(
         store_dir.path(),
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -5286,7 +5293,7 @@ fn launch_opens_the_project_and_injects_the_running_server() {
     std::fs::create_dir_all(&project).unwrap();
     let nested = project.join("src/nested");
     std::fs::create_dir_all(&nested).unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let linked = project.join(".hotsheet");
     std::fs::create_dir_all(&linked).unwrap();
@@ -5370,7 +5377,7 @@ command = "hotsheet-cli permission-hook"
     let adjacent_project = root.path().join("adjacent");
     let adjacent_store = root.path().join("adjacent.hs2");
     std::fs::create_dir(&adjacent_project).unwrap();
-    hotsheet_ticketing::FsStore::init(
+    hotsheet_ticketing::FsStore::init_git(
         &adjacent_store,
         &hotsheet_ticketing::StoreMetadata::new("AD"),
     )
@@ -5413,7 +5420,7 @@ command = "hotsheet-cli permission-hook"
     let registered_project = root.path().join("registered");
     let registered_store = root.path().join("registered-tickets");
     std::fs::create_dir(&registered_project).unwrap();
-    hotsheet_ticketing::FsStore::init(
+    hotsheet_ticketing::FsStore::init_git(
         &registered_store,
         &hotsheet_ticketing::StoreMetadata::new("RG"),
     )
@@ -5512,7 +5519,7 @@ fn launch_releases_the_claims_its_session_left_behind() {
     let home = root.path().join("home");
     let mut host = TemporaryLaunchHost::new(&home);
     std::fs::create_dir_all(&project).unwrap();
-    let store = hotsheet_ticketing::FsStore::init(
+    let store = hotsheet_ticketing::FsStore::init_git(
         &store_path,
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -5707,7 +5714,7 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
         root.path().join("second.hs2"),
     ];
     for store in &stores {
-        hotsheet_ticketing::FsStore::init(store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        hotsheet_ticketing::FsStore::init_git(store, &hotsheet_ticketing::StoreMetadata::new("HS"))
             .unwrap();
     }
     let mut sources = stores
@@ -11473,7 +11480,7 @@ fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation(
     let stores = tempfile::tempdir().unwrap();
     std::fs::create_dir(stores.path().join("tickets")).unwrap();
     let store = stores.path().join("tickets").canonicalize().unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let cli = || {
         let mut command = Command::cargo_bin("hotsheet-cli").unwrap();

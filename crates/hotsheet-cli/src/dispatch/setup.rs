@@ -1114,7 +1114,27 @@ pub(crate) fn cmd_setup(
         .map(|v| v.trim().to_owned())
         .filter(|v| !v.is_empty());
     let home = hotsheet_plugins::hotsheet_home();
-    let sources = if FsStore::open(store).is_ok() && store != home.join("server-bootstrap.hs2") {
+    // HS2-726EXJ: the machine bootstrap anchor is identified by its role, not by comparing
+    // one spelling of its path; it is never linked as the project's ticket source. A store
+    // that is not an admitted ticket source is not linked either: setup still completes
+    // for the source-free project and names the recovery.
+    let admitted = FsStore::open(store).is_ok()
+        && hotsheet_ticketing::store_git::StoreRole::of(store)
+            == hotsheet_ticketing::store_git::StoreRole::TicketSource
+        && match hotsheet_ticketing::store_git::admit_store(
+            store,
+            hotsheet_ticketing::store_git::StoreRole::TicketSource,
+        ) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!(
+                    "warning: not linking {} as a ticket source: {error}",
+                    store.display()
+                );
+                false
+            }
+        };
+    let sources = if admitted {
         vec![hotsheet_ticketing::checkouts::TicketSource::git(store)]
     } else {
         Vec::new()

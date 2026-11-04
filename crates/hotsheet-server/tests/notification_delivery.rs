@@ -93,7 +93,7 @@ impl Harness {
 fn harness() -> Harness {
     hotsheet_aitools::enable_test_permission_vault();
     let dir = tempfile::tempdir().unwrap();
-    let store = FsStore::init(dir.path().join("demo.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let store = FsStore::init_git(dir.path().join("demo.hs2"), &StoreMetadata::new("HS")).unwrap();
     let home = dir.path().join("machine-home");
     let store_id = hotsheet_server::multistore::store_url_id(&store);
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();

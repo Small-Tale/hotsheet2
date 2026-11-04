@@ -505,7 +505,7 @@ mod tests {
     fn detaching_a_git_source_never_touches_provider_records() {
         let f = fixture();
         let store = f._dir.path().join("one.hs2");
-        crate::FsStore::init(&store, &crate::StoreMetadata::new("HS")).unwrap();
+        crate::FsStore::init_git(&store, &crate::StoreMetadata::new("HS")).unwrap();
         let git = TicketSource::git(&store);
         f.checkouts.add_source("one", git.clone(), false).unwrap();
         let report = detach_source(&f.providers, &f.checkouts, "one", &git.connection_id).unwrap();

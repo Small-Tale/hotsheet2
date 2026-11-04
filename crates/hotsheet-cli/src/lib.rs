@@ -243,6 +243,11 @@ pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
         .canonicalize()
         .with_context(|| format!("store path does not exist: {}", store.display()))?;
     FsStore::open(&abs).with_context(|| format!("{} is not a Hot Sheet store", abs.display()))?;
+    // HS2-726EXJ: only an owned or designated Git store becomes a project's ticket source.
+    hotsheet_ticketing::store_git::admit_store(
+        &abs,
+        hotsheet_ticketing::store_git::StoreRole::TicketSource,
+    )?;
     let hs = project_dir.join(".hotsheet2");
     std::fs::create_dir_all(&hs)?;
     std::fs::write(hs.join("store"), format!("{}\n", abs.display()))?;
@@ -453,58 +458,18 @@ pub fn resolve_migrator(explicit: Option<PathBuf>) -> Result<PathBuf> {
 
 /// Initialize (or re-initialize) the store at `path` and settle its Git repository. The
 /// one path `init`, `init --standalone`, `bootstrap`, import, and the GUI launch flow share
-/// (HS2-V6JEBR). Classification happens before any metadata is written, so a location
-/// Git cannot describe is refused untouched. Re-running it changes nothing further.
+/// (HS2-V6JEBR); see [`FsStore::init_with_repository`].
 pub fn init_store(path: &Path, metadata: &StoreMetadata) -> Result<(FsStore, StoreGitOwner)> {
-    std::fs::create_dir_all(path)
-        .with_context(|| format!("creating store directory {}", path.display()))?;
-    let owner = FsStore::git_owner_at(path);
-    if let StoreGitOwner::Unavailable { .. } = owner {
-        bail!("{}", owner.diagnostic(path).unwrap_or_default());
-    }
-    let store = FsStore::init(path, metadata)
-        .with_context(|| format!("initializing store at {}", path.display()))?;
-    let owner = ensure_store_repository(path)?;
-    Ok((store, owner))
+    FsStore::init_with_repository(path, metadata)
+        .with_context(|| format!("initializing store at {}", path.display()))
 }
 
-/// Make sure a repository owns the existing store directory at `path`, by its
-/// [`StoreGitOwner`] rather than by the presence of `<path>/.git` (HS2-V6JEBR):
-///
-/// - **Owned:** nothing to do.
-/// - **Designated:** the enclosing repository already tracks the store; never nest a
-///   repository inside it.
-/// - **NoRepository / Unowned:** `git init` makes the store its own repository.
-/// - **Unavailable:** refused with the ownership diagnostic.
-///
-/// Idempotent: a second call on any result is a no-op.
+/// Make sure a repository owns the existing store directory at `path`
+/// ([`hotsheet_ticketing::store_git::ensure_store_repository`], HS2-V6JEBR).
 pub fn ensure_store_repository(path: &Path) -> Result<StoreGitOwner> {
-    let owner = FsStore::git_owner_at(path);
-    match owner {
-        StoreGitOwner::Owned { .. } | StoreGitOwner::Designated { .. } => return Ok(owner),
-        StoreGitOwner::Unavailable { .. } => {
-            bail!("{}", owner.diagnostic(path).unwrap_or_default())
-        }
-        StoreGitOwner::NoRepository | StoreGitOwner::Unowned { .. } => {}
-    }
-    let output = hotsheet_ticketing::git::command()
-        .arg("-C")
-        .arg(path)
-        .args(["init", "--quiet"])
-        .output()
-        .context("running git init")?;
-    if !output.status.success() {
-        bail!(
-            "git init {} failed: {}",
-            path.display(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let owner = FsStore::git_owner_at(path);
-    if let Some(diagnostic) = owner.diagnostic(path) {
-        bail!("{diagnostic}");
-    }
-    Ok(owner)
+    Ok(hotsheet_ticketing::store_git::ensure_store_repository(
+        path,
+    )?)
 }
 
 /// The exact commands that record a designated root's files in its enclosing repository,
@@ -674,7 +639,7 @@ mod store_link_tests {
     fn link_store_writes_a_gitignored_pointer_that_resolves_from_a_subdir() {
         // A standalone store + a separate code repo that links to it.
         let store_dir = tempfile::tempdir().unwrap();
-        FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
         let code = tempfile::tempdir().unwrap();
         let nested = code.path().join("src").join("deep");
         std::fs::create_dir_all(&nested).unwrap();
@@ -752,12 +717,12 @@ mod store_link_tests {
         );
 
         let exact = root.path().join("app.hs2");
-        FsStore::init(&exact, &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&exact, &StoreMetadata::new("HS")).unwrap();
         let one = discover_launch_sources(&project, &registry).unwrap();
         assert_eq!(one.candidates, vec![exact.canonicalize().unwrap()]);
 
         let other = root.path().join("shared.hs2");
-        FsStore::init(&other, &StoreMetadata::new("SH")).unwrap();
+        FsStore::init_git(&other, &StoreMetadata::new("SH")).unwrap();
         let multiple = discover_launch_sources(&project, &registry).unwrap();
         assert_eq!(multiple.candidates.len(), 2);
         assert_eq!(select_launch_candidate(&multiple.candidates, 0), None);
@@ -786,7 +751,7 @@ mod store_link_tests {
         let project = root.path().join("app");
         let linked = root.path().join("app.hs2");
         std::fs::create_dir(&project).unwrap();
-        FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&linked, &StoreMetadata::new("HS")).unwrap();
         let path = root.path().join("checkouts.json");
         let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&path);
         registry
@@ -800,7 +765,7 @@ mod store_link_tests {
             .remove("store_instance_ids");
         std::fs::write(&path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
         std::fs::rename(&linked, root.path().join("original.hs2")).unwrap();
-        FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+        FsStore::init_git(&linked, &StoreMetadata::new("HS")).unwrap();
 
         assert!(
             discover_launch_sources(&project, &registry)

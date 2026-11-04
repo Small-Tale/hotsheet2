@@ -380,7 +380,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path().join("project");
         std::fs::create_dir(&project).unwrap();
-        let store = FsStore::init(
+        let store = FsStore::init_git(
             temp.path().join("store"),
             &crate::store::StoreMetadata::new("SYN"),
         )
@@ -461,7 +461,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path().join("project");
         std::fs::create_dir(&project).unwrap();
-        let store = FsStore::init(
+        let store = FsStore::init_git(
             temp.path().join("store"),
             &crate::store::StoreMetadata::new("SYN"),
         )

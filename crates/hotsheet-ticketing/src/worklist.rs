@@ -241,7 +241,9 @@ pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
                 .store_instance_ids
                 .contains_key(&source.connection_id)
     }) {
-        let store = FsStore::open(&source.locator)?;
+        // HS2-726EXJ: only an admitted ticket source contributes to the worklist.
+        let store =
+            FsStore::open_admitted(&source.locator, crate::store_git::StoreRole::TicketSource)?;
         for ticket in store.list_tickets()? {
             match by_id.get(&ticket.id) {
                 Some(existing) if existing.status != Status::Moved => {}
@@ -375,7 +377,7 @@ mod tests {
 
     fn store() -> (tempfile::TempDir, FsStore) {
         let dir = tempfile::tempdir().unwrap();
-        let store = FsStore::init(dir.path(), &crate::store::StoreMetadata::new("HS")).unwrap();
+        let store = FsStore::init_git(dir.path(), &crate::store::StoreMetadata::new("HS")).unwrap();
         (dir, store)
     }
 
@@ -616,12 +618,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let project = root.path().join("project");
         std::fs::create_dir(&project).unwrap();
-        let first = FsStore::init(
+        let first = FsStore::init_git(
             root.path().join("first.hs2"),
             &crate::store::StoreMetadata::new("ONE"),
         )
         .unwrap();
-        let second = FsStore::init(
+        let second = FsStore::init_git(
             root.path().join("second.hs2"),
             &crate::store::StoreMetadata::new("TWO"),
         )
@@ -686,7 +688,7 @@ mod tests {
     #[test]
     fn explicit_project_worklists_do_not_leak_across_a_shared_store() {
         let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(
+        let store = FsStore::init_git(
             root.path().join("shared.hs2"),
             &crate::store::StoreMetadata::new("HS"),
         )

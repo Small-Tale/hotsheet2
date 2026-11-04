@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 fn hs2_g78tz9_serverless_process_reads_a_local_connection_ticket() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("ticket-store");
-    FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
         .arg("--path")

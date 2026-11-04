@@ -46,7 +46,7 @@ impl Drop for HeldResource {
 
 fn project_fixture() -> (tempfile::TempDir, AppState, String, Ticket) {
     let root = tempfile::tempdir().unwrap();
-    let store = FsStore::init(
+    let store = FsStore::init_git(
         root.path().join("tickets.hs2"),
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
@@ -169,7 +169,7 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
     let (root, state, project, target) = project_fixture();
     let source_root = root.path().join("other");
     std::fs::create_dir(&source_root).unwrap();
-    let source = FsStore::init(
+    let source = FsStore::init_git(
         source_root.join("source.hs2"),
         &hotsheet_ticketing::StoreMetadata::new("EX"),
     )

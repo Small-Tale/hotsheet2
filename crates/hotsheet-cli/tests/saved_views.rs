@@ -12,7 +12,7 @@ fn hs2_jhhxjm_saved_views_are_listed_set_idempotently_and_removed() {
     let project = root.path().join("app");
     let store = root.path().join("app.hs2");
     std::fs::create_dir_all(&project).unwrap();
-    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let hs = || {
         let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
