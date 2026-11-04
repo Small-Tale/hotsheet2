@@ -10,7 +10,8 @@ const project = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ref = 'refs/hotsheet/main-integration-window';
 const zero = '0'.repeat(40);
 const leaseMs = 120_000;
-const heartbeatMs = 20_000;
+// HS2-RXYJ6G: tests shorten the renewal interval; production keeps 20 s against the 120 s lease.
+const heartbeatMs = Number(process.env.HOTSHEET_MAIN_WINDOW_HEARTBEAT_MS) || 20_000;
 const fullSha = /^[0-9a-f]{40}$/i;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -126,14 +127,19 @@ function alive(pid) {
 
 function assertOwner(repo, token, phase) {
   const current = readWindow(repo);
-  if (
-    !current ||
-    current.value.token !== token ||
-    current.value.expiresAt <= Date.now() ||
-    !alive(current.value.pid) ||
-    (phase && current.value.phase !== phase)
-  )
-    throw new Error('Main integration reservation was lost or expired');
+  // HS2-RXYJ6G: name the failed condition, so a stopped gate says why.
+  const reason = !current
+    ? 'the reservation ref is missing'
+    : current.value.token !== token
+      ? 'another owner replaced the reservation'
+      : current.value.expiresAt <= Date.now()
+        ? `the reservation expired ${Date.now() - current.value.expiresAt} ms ago`
+        : !alive(current.value.pid)
+          ? `the reserving process ${current.value.pid} is gone`
+          : phase && current.value.phase !== phase
+            ? `the reservation phase is ${current.value.phase}, not ${phase}`
+            : null;
+  if (reason) throw new Error(`Main integration reservation was lost or expired: ${reason}`);
   return current;
 }
 
@@ -487,6 +493,12 @@ export async function pushMain(repo, args) {
       );
     }
     return window.value.head;
+  } catch (error) {
+    // HS2-RXYJ6G: a heartbeat failure aborts the gate, whose own exit (often a null code) would
+    // otherwise hide the reason the reservation stopped.
+    if (heartbeatError && error !== heartbeatError)
+      throw new Error(`Main integration heartbeat stopped the push: ${heartbeatError.message}`, { cause: error });
+    throw error;
   } finally {
     clearInterval(heartbeat);
     control.abort();

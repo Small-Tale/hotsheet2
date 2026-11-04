@@ -867,3 +867,43 @@ test("HS2-Z333GJ accepts only this repository's .githooks, absolute or relative,
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test(
+  'HS2-RXYJ6G a heartbeat that loses the reservation stops the gate and names why',
+  { timeout: 60_000 },
+  async () => {
+    const f = fixture();
+    let running;
+    const hold = resolve(f.root, 'hold');
+    try {
+      run('bash', ['scripts/push.sh'], f.repo, f.env);
+      const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+      commit(f.repo, 'heartbeat', f.env);
+      put(hold, 'hold');
+      running = runAsync('bash', ['scripts/push.sh'], f.repo, {
+        ...f.env,
+        HS2_TEST_HOLD: hold,
+        HOTSHEET_MAIN_WINDOW_HEARTBEAT_MS: '100',
+      });
+      await waitForFile(f.env.HS2_TEST_STARTED);
+      // Something outside this push removes the reservation while its gate runs.
+      run('git', ['update-ref', '-d', 'refs/hotsheet/main-integration-window'], f.repo);
+      // The gate is still held: only the heartbeat can end it.
+      const result = await running.completed;
+      assert.notEqual(result.code, 0, result.output);
+      assert.match(result.output, /heartbeat stopped the push/);
+      // The deletion can land before the ownership read or during the renewal's compare-and-swap.
+    assert.match(result.output, /reservation ref is missing|changed during renewal/);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
+    } finally {
+      rmSync(hold, { force: true });
+      if (running?.child.exitCode === null)
+        try {
+          process.kill(-running.child.pid, 'SIGTERM');
+        } catch {
+          /* exited */
+        }
+      f.dispose();
+    }
+  },
+);

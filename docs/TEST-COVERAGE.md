@@ -320,7 +320,8 @@ and gate flags, `scripts/main-integration-authority.test.mjs` for live integrato
 assignment, expiry and standalone decisions, and
 `scripts/main-integration-window.test.mjs` for two-worktree serialization,
 stale-owner recovery, a remote writer before and during the gate, local HEAD
-changes during the gate, pool-file immutability, and ticket phase boundaries. These are
+changes during the gate, pool-file immutability, ticket phase boundaries, and a lost
+reservation that stops the gate with its named reason (HS2-RXYJ6G). These are
 synthetic local Git tests, including a selection-keyed full receipt in the push hook;
 real multi-machine throughput remains measured by the integration
 baseline and CI. `docs/12-code-organization-and-testing.md` records the local

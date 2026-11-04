@@ -852,6 +852,11 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `--gate-arg <argument>` pairs (for example `--gate-arg --ticket --gate-arg HS2-BND42N`).
   When a ticket is supplied, the wrapper changes its phase to `integrating` before push
   and `final_testing` after remote confirmation; set `initial_testing` before the wrapper.
+  The reservation renews every 20 s against a 120 s lease. If renewal or the coordination
+  authority check fails, the wrapper stops the gate and reports the named reason (missing
+  ref, replaced owner, expired lease, gone process, or changed phase) instead of only the
+  gate's exit (HS2-RXYJ6G). Running `scripts/check.sh` first and then the wrapper reuses its
+  exact receipt and keeps the reservation short.
   The pre-push hook checks the live reservation before and after exact receipt
   verification. Direct main pushes without the reservation fail; other branch pushes keep
   their previous gate behavior. A dirty tree cannot produce an exact-input receipt.
