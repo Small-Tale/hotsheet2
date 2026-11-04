@@ -119,6 +119,11 @@ jobs:
           $variable = 'CARGO_TARGET_' + ($hostTriple.ToUpper() -replace '-', '_') + '_LINKER'
           Write-Output "Using $link for $hostTriple"
           "$variable=$link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Native build scripts (the AVIF decoder's meson build) resolve link.exe from PATH
+          # themselves and refuse Git's. This runner is ephemeral, so move Git's out of the way.
+          Get-Command link.exe -All -CommandType Application |
+            Where-Object { $_.Source -like '*\Git\usr\bin\*' } |
+            ForEach-Object { Rename-Item -LiteralPath $_.Source -NewName 'link-coreutils.exe'; Write-Output "Renamed $($_.Source)" }
 
       - name: Install the AVIF decoder for the native build (Windows)
         if: matrix.os == 'windows'
@@ -383,6 +388,11 @@ jobs:
           $variable = 'CARGO_TARGET_' + ($hostTriple.ToUpper() -replace '-', '_') + '_LINKER'
           Write-Output "Using $link for $hostTriple"
           "$variable=$link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Native build scripts (the AVIF decoder's meson build) resolve link.exe from PATH
+          # themselves and refuse Git's. This runner is ephemeral, so move Git's out of the way.
+          Get-Command link.exe -All -CommandType Application |
+            Where-Object { $_.Source -like '*\Git\usr\bin\*' } |
+            ForEach-Object { Rename-Item -LiteralPath $_.Source -NewName 'link-coreutils.exe'; Write-Output "Renamed $($_.Source)" }
 
       - name: Install the AVIF decoder for the native build (Windows)
         if: matrix.os == 'windows'

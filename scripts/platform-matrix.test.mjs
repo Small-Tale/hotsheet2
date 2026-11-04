@@ -155,4 +155,6 @@ test('HS2-MM68CT names the MSVC linker after activating MSVC in every Windows jo
   // It selects the VC tools link.exe and exports the host target's cargo linker variable.
   assert.match(workflow, /VC\\Tools\\MSVC/);
   assert.match(workflow, /'CARGO_TARGET_' \+ \(\$hostTriple\.ToUpper\(\) -replace '-', '_'\) \+ '_LINKER'/);
+  // Native build scripts resolve link.exe from PATH, so Git's coreutils link.exe is moved aside.
+  assert.equal(workflow.split("Where-Object { $_.Source -like '*\\Git\\usr\\bin\\*' }").length - 1, count(point));
 });
