@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
+import { expectProjectSidebarLayout } from './project-sidebar-layout';
 
 test('HS2-1YXCCW and HS2-F203CG review full pins in a settled responsive shell', async ({ page }) => {
   await openDemoProject(page);
@@ -341,20 +342,19 @@ test('HS2-6ZA2RN searches guidance from the main toolbar with owner and tag chip
   await expect(settings.locator('[data-guidance-rule]')).toHaveCount(2);
   await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-wide.png' });
+  // HS2-975G1J: the rail follows each width by itself (collapsed below 1024px, restored above).
+  // Sampling a Hide/Show button before that settles and then clicking it races the resize.
   await page.setViewportSize({ width: 1024, height: 900 });
-  await page.waitForTimeout(400);
+  await expectProjectSidebarLayout(page, true);
   await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-medium.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(400);
-  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
-  if (await hideSettings.isVisible()) await hideSettings.click();
+  await expectProjectSidebarLayout(page, false);
   await settings.locator('[data-guidance-rule="rust-cli"]').scrollIntoViewIfNeeded();
   expect(await settings.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-6za2rn-guidance-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  const showSettings = page.getByRole('button', { name: 'Show Settings Sidebar' });
-  if (await showSettings.isVisible()) await showSettings.click();
+  await expectProjectSidebarLayout(page, true);
   await expect(settings.locator('[data-guidance-rule]')).toHaveCount(2);
 });
 
@@ -543,9 +543,9 @@ test('optional guidance interview previews context, requires consent, and record
   await expect(interview.getByText('Ask which framework runs in production.')).toBeVisible();
   expect(submits).toBe(1);
   expect(guidanceWrites).toBe(0);
+  // HS2-975G1J: wait for the rail's own narrow collapse instead of racing it with a sampled click.
   await page.setViewportSize({ width: 390, height: 1600 });
-  const hideSettings = page.getByRole('button', { name: 'Hide Settings Sidebar' });
-  if (await hideSettings.isVisible()) await hideSettings.click();
+  await expectProjectSidebarLayout(page, false);
   await settings.locator('[name="guidance-owner"]').scrollIntoViewIfNeeded();
   await interview.scrollIntoViewIfNeeded();
   const settingsBox = await settings.boundingBox();

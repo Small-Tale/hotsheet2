@@ -20082,10 +20082,17 @@ test('translates urgent priority through the canonical server contract', async (
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  await page.locator('kui-select[name="inspector-priority"]').evaluate((node: HTMLElement & { value: string }) => {
-    node.value = 'urgent';
-    node.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  // Dispatch only into the loaded inspector: the inert row-backed preview shown while the detail
+  // loads (HS2-15833W) also renders this select, and an event there is no edit (HS2-975G1J).
+  await page
+    .locator(
+      '#app-right-rail [data-component="ticket-inspector-body"]:not([data-content-loading]) ' +
+        '[data-component="ticket-info-panel"]:not([data-placeholder]) kui-select[name="inspector-priority"]',
+    )
+    .evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'urgent';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   await expect.poll(() => patches.at(-1)?.priority).toBe('highest');
   await expect(page.locator('#app-right-rail kui-select[name="inspector-priority"]')).toHaveJSProperty(
     'value',
@@ -20128,7 +20135,9 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await expect(menu.locator('.kui-popup-menu__menu[data-submenu] .kui-popup-menu__divider')).toHaveCount(0);
   await choices.filter({ hasText: 'Archive' }).click();
   await expect.poll(() => patches.some((patch) => patch.status === 'archive')).toBe(true);
-  await page.getByRole('button', { name: /Archive/ }).click();
+  // Once the inspector re-renders the archived status its "Change Status, Archive" trigger also
+  // matches /Archive/; name the Archive view itself (HS2-975G1J).
+  await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
   await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
 });
 

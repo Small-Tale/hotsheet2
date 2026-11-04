@@ -5,6 +5,14 @@ import { expect, test } from '@playwright/test';
 // mutation sequencing now bases each edit off the previous edit's committed token (last-write-wins), so
 // the user's own sequential edits never conflict, while a genuine external write still does.
 
+// HS2-975G1J: until the selected ticket's detail loads, the inspector shows its row-backed preview
+// (an inert `data-content-loading` body, HS2-15833W) or the aria-hidden placeholder. Both render a
+// CSS-visible `inspector-priority`, so `toBeVisible()` passes there, but a change dispatched
+// programmatically into that inert preview is not an edit. Wait for the loaded panel's control.
+const loadedInspectorPriority =
+  '[data-component="ticket-inspector-body"]:not([data-content-loading]) ' +
+  '[data-component="ticket-info-panel"]:not([data-placeholder]) [name="inspector-priority"]';
+
 const capabilities = {
   create: true,
   update: true,
@@ -74,6 +82,10 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
     attachments: [],
     concurrency_token: token,
   });
+  let releaseDetail!: () => void;
+  const detailReleased = new Promise<void>((resolve) => {
+    releaseDetail = resolve;
+  });
   await page.route('**/*', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -114,7 +126,12 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
       }
       return route.fulfill({ json: snapshot });
     }
-    if (/\/tickets\/01$/.test(path) && method === 'GET') return route.fulfill({ json: full() });
+    if (/\/tickets\/01$/.test(path) && method === 'GET') {
+      // Hold the selection's detail read so the row-backed preview is always shown first, as it is
+      // on a slow runner (HS2-975G1J); the test releases it once that preview is on screen.
+      await detailReleased;
+      return route.fulfill({ json: full() });
+    }
     if (path.endsWith('/tickets') && method === 'GET')
       return route.fulfill({
         json: {
@@ -157,17 +174,24 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
-  const priority_ = page.locator('[name="inspector-priority"]');
-  await expect(priority_).toBeVisible();
+  // The inert preview renders a visible priority select before the detail arrives; it is not the
+  // control an edit goes through (HS2-975G1J).
+  await expect(
+    page.locator('[data-component="ticket-inspector-body"][data-content-loading] [name="inspector-priority"]'),
+  ).toBeVisible();
+  const priority_ = page.locator(loadedInspectorPriority);
 
   // Two rapid same-field edits: the first PATCH response is delayed, so without sequencing the second
-  // would fire with the stale token and get a false conflict.
-  await priority_.evaluate((node: HTMLElement & { value: string }) => {
+  // would fire with the stale token and get a false conflict. The edit is issued while the detail is
+  // still held, so it must wait for the loaded inspector rather than land in the preview.
+  const edited = priority_.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'high';
     node.dispatchEvent(new Event('change', { bubbles: true }));
     node.value = 'low';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  releaseDetail();
+  await edited;
 
   // Both writes are sequenced against advancing tokens (no conflict retry): first high, then low.
   await expect.poll(() => tokenSeq).toBe(2);
@@ -285,7 +309,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
-  const priority_ = page.locator('[name="inspector-priority"]');
+  const priority_ = page.locator(loadedInspectorPriority);
   await expect(priority_).toBeVisible();
   await priority_.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'high';

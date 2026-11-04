@@ -322,6 +322,8 @@ jobs:
             clients/web/playwright-report.json
             clients/web/playwright-junit.xml
             clients/web/test-results/
+            # Each failed attempt's page snapshot: platform-only failures are triaged from it (HS2-975G1J).
+            clients/web/target/playwright-test-results/**/error-context.md
             migrator/coverage/lcov.info
           retention-days: 14
           if-no-files-found: ignore
