@@ -486,6 +486,25 @@ describe('projectScopedServerPath', () => {
       '/checkouts/project%20one/tickets',
     );
   });
+
+  it('records shell and AI launches in the checkout run history (HS2-PWNPM2)', () => {
+    expect(projectScopedServerPath('project one', '/commands/git-status/launches')).toBe(
+      '/checkouts/project%20one/commands/git-status/launches',
+    );
+  });
+
+  // HS2-PWNPM2: the launch route shipped on the server without a bridge mapping, so launches landed in the
+  // machine server's unscoped history and the project's run history said Never run. Every checkout-scoped
+  // command route the server defines must reach the checkout through the bridge.
+  it('maps every checkout-scoped command route the server defines (HS2-PWNPM2)', async () => {
+    const source = await readFile(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url), 'utf8'),
+      routes = [...source.matchAll(/"\/checkouts\/\{reference\}(\/command[^"]*)"/g)].map((match) => match[1]);
+    expect(routes).toEqual(expect.arrayContaining(['/commands/{id}/run', '/commands/{id}/launches']));
+    for (const route of routes) {
+      const path = route.replaceAll(/\{[^}]+\}/g, 'x');
+      expect(projectScopedServerPath('project one', path), route).toBe(`/checkouts/project%20one${path}`);
+    }
+  });
 });
 
 describe('authenticatedTerminalWebSocketUrl', () => {

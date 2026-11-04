@@ -14,6 +14,7 @@ import type { AdvisoryClaimStatus, FullTicket, MediaAnnotation, Note, TicketRow 
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
+import { projectScopedServerPath } from '../src/project-bridge';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -36465,26 +36466,32 @@ test('records shell and AI command launches through the real server and lists th
       }),
     );
     await mockProject(page);
-    // Commands, launch records, and the run history come from the real server; the rest is the project fixture.
-    const proxy = async (route: import('@playwright/test').Route, path: string) => {
-      const response = await route.fetch({
-        url: `${server.url}/checkouts/${server.checkoutId}${path}`,
-        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-      });
+    // Commands, launch records, and the run history come from the real server; the rest is the project
+    // fixture. Each request takes the shipped bridge's checkout scoping (projectScopedServerPath), not a
+    // hand-written prefix: that mapping is what dropped the launch records (HS2-PWNPM2).
+    const apiPath = '/__hotsheet/project-api/demo-checkout';
+    const proxy = async (route: import('@playwright/test').Route) => {
+      const incoming = new URL(route.request().url()),
+        path = projectScopedServerPath(
+          server.checkoutId,
+          `${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+        ),
+        response = await route.fetch({
+          url: `${server.url}${path}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
       await route.fulfill({ response });
     };
-    await page.route('**/__hotsheet/project-api/demo-checkout/commands', (route) =>
-      route.request().method() === 'GET' ? proxy(route, '/commands') : route.fallback(),
+    await page.route(`**${apiPath}/commands`, (route) =>
+      route.request().method() === 'GET' ? proxy(route) : route.fallback(),
     );
-    await page.route('**/__hotsheet/project-api/demo-checkout/command-runs', (route) => proxy(route, '/command-runs'));
-    await page.route('**/__hotsheet/project-api/demo-checkout/command-runs/*', (route) =>
-      proxy(route, new URL(route.request().url()).pathname.replace(/^.*\/command-runs\//, '/command-runs/')),
-    );
-    await page.route('**/__hotsheet/project-api/demo-checkout/commands/*/launches', (route) => {
+    await page.route(`**${apiPath}/command-runs`, proxy);
+    await page.route(`**${apiPath}/command-runs/*`, proxy);
+    await page.route(`**${apiPath}/commands/*/launches`, (route) => {
       launches.push(route.request().postDataJSON() as Record<string, unknown>);
-      return proxy(route, new URL(route.request().url()).pathname.replace(/^.*\/commands\//, '/commands/'));
+      return proxy(route);
     });
-    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -36531,6 +36538,14 @@ test('records shell and AI command launches through the real server and lists th
     await openHistory('Build Shell Command');
     await expect(history).toContainText('Opened in terminal Build');
     await history.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-shell-launch-history.png' });
+    await page.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-shell-launch-history-1440.png' });
+    await page.keyboard.press('Escape');
+    await expect(history).toHaveCount(0);
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await openHistory('Build Shell Command');
+    await expect(history).toContainText('Opened in terminal Build');
+    await expect(history).toHaveCSS('opacity', '1');
+    await page.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-shell-launch-history-1024.png' });
     await page.keyboard.press('Escape');
     await expect(history).toHaveCount(0);
     // At phone width the launch row wraps inside the dialog instead of overflowing it.
@@ -36553,6 +36568,12 @@ test('records shell and AI command launches through the real server and lists th
       }),
     ).toBe(true);
     await page.screenshot({ path: 'target/visual-captures/hs2-pwnpm2-ai-launch-history-narrow.png' });
+    await page.keyboard.press('Escape');
+    await expect(history).toHaveCount(0);
+    // Back to wide, the same history still lists the launch.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await openHistory('Everything AI command');
+    await expect(history.getByRole('link', { name: 'HS2-NEW001' })).toBeVisible();
   } finally {
     await server.stop();
   }

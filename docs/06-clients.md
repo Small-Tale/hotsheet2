@@ -800,7 +800,9 @@ preview/download, server directory browser) are separate design work.
   instead of output: press-and-hold lists recent launches with their time, an AI launch's
   queued ticket (its slug opens the ticket and closes the history; a loaded ticket also
   shows its title and current status), and a shell launch's terminal; with none it says
-  Never run (HS2-PWNPM2). Definitions are edited in Project
+  Never run (HS2-PWNPM2). A launch record that fails for any reason except an older
+  server without the route shows the error instead of leaving the history silently empty.
+  Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the
   primary editing interface. Add group opens an in-app New Command Group dialog with a blank

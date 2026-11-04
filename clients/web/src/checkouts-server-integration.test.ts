@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -314,5 +314,54 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     // An unknown project is that project's error, not the whole request's.
     const unknown = await mux([{ project: 'not-open', timeout_ms: 0 }]);
     expect(unknown.results).toEqual([expect.objectContaining({ project: 'not-open', status: 404 })]);
+  }, 120_000);
+
+  // HS2-PWNPM2: the bridge forwarded launch records unscoped, so a sidebar shell or AI command's run
+  // never reached its project's history and the long-press dialog said Never run.
+  it("records shell and AI launches in the project's run history through the bridge (HS2-PWNPM2)", async () => {
+    const app = createDevApp(),
+      roots = [await mkdtemp(join(workspace, 'launches-')), await mkdtemp(join(workspace, 'launches-other-'))];
+    for (const root of roots) {
+      await mkdir(join(root, '.hotsheet2'), { recursive: true });
+      await writeFile(
+        join(root, '.hotsheet2', 'settings.json'),
+        JSON.stringify({
+          commands: [
+            { id: 'git-status', title: 'Git Status', kind: 'shell', command: 'git status' },
+            { id: 'everything', title: 'Everything', kind: 'ai', prompt: 'Do everything.' },
+          ],
+        }),
+      );
+    }
+    const [owner, other] = await Promise.all(
+        roots.map(async (root) => openLocalProject(root, await createLocalGitTicketStore(root))),
+      ),
+      api = (project: string, path: string, init?: RequestInit) =>
+        app.request(`/__hotsheet/project-api/${encodeURIComponent(project)}${path}`, init),
+      launch = (project: string, command: string, body: Record<string, unknown>) =>
+        api(project, `/commands/${command}/launches`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+    // The client reads the project's commands before running one.
+    expect(((await (await api(owner.id, '/commands')).json()) as Array<{ id: string }>).map((item) => item.id)).toEqual(
+      ['git-status', 'everything'],
+    );
+    const shell = await launch(owner.id, 'git-status', {
+        kind: 'shell',
+        terminal_id: 'terminal-1',
+        terminal_label: 'Git Status',
+      }),
+      ai = await launch(owner.id, 'everything', { kind: 'ai', ticket_id: 'ticket-1', ticket_slug: 'HS2-AAAAAA' });
+    expect([shell.status, ai.status]).toEqual([201, 201]);
+    // The history the long-press dialog reads lists both launches, newest first.
+    const runs = (await (await api(owner.id, '/command-runs')).json()) as Array<{
+      command_id: string;
+      launch?: { kind: string };
+    }>;
+    expect(runs.map((run) => `${run.command_id}:${run.launch?.kind}`)).toEqual(['everything:ai', 'git-status:shell']);
+    // Another open project's history stays its own.
+    expect(await (await api(other.id, '/command-runs')).json()).toEqual([]);
   }, 120_000);
 });

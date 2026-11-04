@@ -456,7 +456,10 @@ timestamp. Shell and AI commands run in a client terminal or AI session rather t
 server, so the client records each launch with `POST /commands/{id}/launches`: the run
 completes immediately, its `launch` names the opened terminal or the queued ticket and the
 AI tool signaled, and it joins the same bounded, project-scoped in-memory history as program
-runs (HS2-PWNPM2).
+runs (HS2-PWNPM2). A project client reaches the checkout form through the local project
+bridge, which scopes every `/commands/{id}/run|launches` and `/command-runs` request to the
+project's checkout; an unscoped launch would land in the server's primary-store history,
+which the project's run history never lists.
 
 > **Status: v1 built (HS2-7).** `crates/hotsheet-server` — axum HTTP REST
 > (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,

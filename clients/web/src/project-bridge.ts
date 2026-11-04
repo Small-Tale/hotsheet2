@@ -1730,7 +1730,8 @@ export function projectScopedServerPath(projectId: string, path: string): string
       // (HS2-SM9PM8); there is no machine-wide catalog of sources to browse.
       pathname === '/providers' ||
       /^\/provider-connections(?:\/[^/]+(?:\/disabled)?)?$/.test(pathname) ||
-      /^\/commands\/[^/]+\/run$/.test(pathname) ||
+      // A shell or AI launch joins the same checkout's run history as a program run (HS2-PWNPM2).
+      /^\/commands\/[^/]+\/(?:run|launches)$/.test(pathname) ||
       /^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
   // The server learns which projects are open from which checkout each change stream serves
   // (HS2-ARJ9J1); the browser only knows its project, so the bridge names the checkout.

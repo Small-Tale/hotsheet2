@@ -4503,8 +4503,11 @@ export async function startHotSheetWebClient() {
       const run = await new Api(current.apiPath).recordCommandLaunch(commandId, launch);
       if (project()?.id === current.id)
         commandRuns.value = [run, ...commandRuns.value.filter((item) => item.id !== run.id)];
-    } catch {
-      // History is best-effort: an older server without launch records keeps the launch working.
+    } catch (reason) {
+      // An older server without launch records keeps the launch working. Any other failure is shown:
+      // a silently dropped record left the history saying Never run (HS2-PWNPM2).
+      if (reason instanceof ApiHttpError && reason.status === 404) return;
+      error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
   async function openCommandHistory(commandId: string) {
