@@ -101,11 +101,16 @@ function harness(initial: FakeConversation[]) {
       frames[handle - 1] = () => {};
     },
   };
-  const dispose = wireEmbeddedComposerClearance(root as unknown as HTMLElement, environment);
+  const changed: unknown[] = [];
+  const dispose = wireEmbeddedComposerClearance(root as unknown as HTMLElement, {
+    environment,
+    onClearanceChange: (conversation) => changed.push(conversation),
+  });
   return {
     dispose,
     observed,
     frames,
+    changed,
     mutationsDisconnected: () => mutationsDisconnected,
     add(conversation: FakeConversation) {
       patchComposerQuery(conversation);
@@ -156,6 +161,28 @@ describe('wireEmbeddedComposerClearance (HS2-W0KJVQ)', () => {
     expect(h.frames).toHaveLength(1);
     h.flush();
     expect(value(chat)).toBe('200px');
+  });
+
+  it('reports every changed clearance, including a restore after a re-render, and never an unchanged one (HS2-4J9QFX)', () => {
+    const chat = new FakeConversation();
+    const h = harness([chat]);
+    // The first publish moves the transcript's end.
+    expect(h.changed).toEqual([chat]);
+    h.resize();
+    h.mutate([{ type: 'attributes', target: chat as unknown as Node }]);
+    h.flush();
+    expect(h.changed).toHaveLength(1);
+    // The running turn's pill grows the form.
+    chat.composer!.top = 560;
+    h.resize();
+    expect(h.changed).toEqual([chat, chat]);
+    // The turn completes: its re-render drops the clearance and the wiring restores it before paint.
+    chat.style.removeProperty(COMPOSER_CLEARANCE_PROPERTY);
+    h.mutate([{ type: 'attributes', target: chat as unknown as Node }]);
+    expect(h.changed).toHaveLength(2);
+    h.flush();
+    expect(value(chat)).toBe('240px');
+    expect(h.changed).toEqual([chat, chat, chat]);
   });
 
   it('ignores style changes elsewhere under the root', () => {

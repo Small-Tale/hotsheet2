@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { syncConversationScroll } from './conversation-scroll';
+import { followConversationEnd, syncConversationScroll } from './conversation-scroll';
 
 interface FakeTranscript {
   scrollTop: number;
@@ -149,6 +149,49 @@ describe('conversation scroll', () => {
     drawer.resize(900);
     syncConversationScroll(root);
     expect([dialog.scrollTop, drawer.scrollTop]).toEqual([50, 900]);
+  });
+
+  it('never moves or pins a scrolled-back reader when the composer clearance changes (HS2-4J9QFX)', () => {
+    const view = transcript(300, 650),
+      root = rootOf(view);
+    syncConversationScroll(root);
+    view.scroll(150);
+    // Selecting re-renders: the clearance drops (the end shortens) and the selection bar appears.
+    view.resize(540);
+    view.move(67);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(217);
+    // The browser reports the sync's own scroll, now within the latest-edge slop of the short end.
+    view.scroll(217);
+    // The wiring restores the clearance and keeps only following transcripts at the end.
+    view.resize(650);
+    followConversationEnd(root);
+    expect(view.scrollTop).toBe(217);
+    view.resize(700);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(217);
+  });
+
+  it('keeps a following transcript at the end the clearance moves, and skips an unsynced one (HS2-4J9QFX)', () => {
+    const view = transcript(300, 1_000),
+      unsynced = transcript(300, 1_000);
+    syncConversationScroll(rootOf(view));
+    // A re-render drops the clearance and the sync pins the shorter end; the restore lengthens it.
+    view.resize(890);
+    syncConversationScroll(rootOf(view));
+    expect(view.scrollTop).toBe(890);
+    view.resize(1_000);
+    followConversationEnd(rootOf(view, unsynced));
+    expect(view.scrollTop).toBe(1_000);
+    expect(unsynced.scrollTop).toBe(0);
+    // The reader still scrolls back and returns to the end as before.
+    view.scroll(100);
+    followConversationEnd(rootOf(view));
+    expect(view.scrollTop).toBe(100);
+    view.scroll(700);
+    view.resize(1_100);
+    followConversationEnd(rootOf(view));
+    expect(view.scrollTop).toBe(1_100);
   });
 
   it('is a no-op when no conversation is mounted', () => {

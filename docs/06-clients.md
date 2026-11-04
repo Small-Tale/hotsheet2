@@ -1831,7 +1831,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   `scrollClearance="block-end"` transcript `List`: the dialog's `DialogSurface` floating footer
   publishes it, and the drawer chat measures its composer form
   (`components/embedded-composer-clearance.ts`), so the last message rests above the composer
-  instead of behind a fixed reservation (HS2-W0KJVQ). A short drawer chat (the default drawer
+  instead of behind a fixed reservation (HS2-W0KJVQ). A transcript following its latest message
+  stays at its end whenever the drawer's published clearance changes, including the restore after a
+  re-render drops it, so a completed turn's final message and a growing pill or banner never leave
+  the end beneath the composer at the default drawer height or across a wide-narrow-wide resize; a
+  reader who scrolled back is never moved or pinned by a clearance change, even when a selection
+  re-render briefly shortens the end (HS2-4J9QFX). A short drawer chat (the default drawer
   gives it about 262 px at 390x844 and at 1280x800) compacts that floating form so the transcript
   keeps room (HS2-SZZGC6): below a 480 px chat height the stuck banner shows its one-line short form
   (same warning tone, icon, and Stop), and the draft grows to 3 rows; below

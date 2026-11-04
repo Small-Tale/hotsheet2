@@ -22968,6 +22968,140 @@ for (const width of [1280, 390] as const)
     await expect.poll(async () => (await published()) - (await clearance())).toBe(0);
   });
 
+/**
+ * Without the reader scrolling, the conversation's last item rests above its floating composer form
+ * through overflowing turns, a running and may-be-stuck turn, the turn's end, and a wide to narrow to
+ * wide resize (HS2-4J9QFX).
+ */
+async function expectConversationEndClearsComposer(page: Page, host: Locator, shot: 'drawer' | 'dialog') {
+  const field = host.getByRole('textbox', { name: 'Message Codex' }),
+    form = host.locator('.ai-conversation__composer'),
+    line = form.locator('.ai-conversation__turn-progress'),
+    transcript = host.locator('.ai-conversation__transcript');
+  const rests = () =>
+    host.evaluate((node) => {
+      const formTop = node.querySelector('.ai-conversation__composer')!.getBoundingClientRect().top,
+        last = node.querySelector('.ai-conversation__transcript-content')!.lastElementChild!;
+      return Math.round(formTop - last.getBoundingClientRect().bottom);
+    });
+  const overflows = () => transcript.evaluate((node) => node.scrollHeight > node.clientHeight + 1);
+  for (let turn = 0; turn < 3 || !(await overflows()); turn += 1) {
+    expect(turn, 'turns needed to overflow the transcript').toBeLessThan(12);
+    await field.fill('What time is it in California?');
+    await field.press('Enter');
+    await expect(host.locator('.ai-conversation__message--assistant')).toHaveCount(turn + 1);
+    await expect.poll(rests, { message: `after turn ${turn + 1}` }).toBeGreaterThanOrEqual(0);
+  }
+  // A running turn floats its progress pill above the composer; a silent tool call then grows it into
+  // the may-be-stuck banner, whose Stop ends the turn and removes it.
+  await field.fill('Run the long test suite.');
+  const delivered = stampedToolEventDelivered(page);
+  await field.press('Enter');
+  await delivered;
+  await expect(line).toBeVisible();
+  await expect.poll(rests, { message: 'while the turn runs' }).toBeGreaterThanOrEqual(0);
+  await page.clock.runFor(305_000);
+  await expect(line).toHaveAttribute('data-state', 'stuck');
+  await expect.poll(rests, { message: 'while the turn may be stuck' }).toBeGreaterThanOrEqual(0);
+  await line.getByRole('button', { name: 'Stop Codex' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Stop the active Codex turn?' })
+    .getByRole('button', { name: 'Stop Turn' })
+    .click();
+  await page.clock.runFor(31_000);
+  await expect(line).toHaveCount(0);
+  await expect.poll(rests, { message: 'after the turn ends' }).toBeGreaterThanOrEqual(0);
+  await page.screenshot({ path: `target/visual-captures/hs2-4j9qfx-${shot}-after-turn-1280.png` });
+  // Responsive layout transitions run on real time, not the stopped page clock.
+  await page.clock.resume();
+  for (const [width, height] of [
+    [390, 844],
+    [1280, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(host).toBeInViewport({ ratio: 1 });
+    // Measure and capture once the responsive layout transitions have finished.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === 'running' &&
+                  Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Infinity),
+              ).length,
+        ),
+      )
+      .toBe(0);
+    await expect.poll(rests, { message: `at ${width}px` }).toBeGreaterThanOrEqual(0);
+    await page.screenshot({ path: `target/visual-captures/hs2-4j9qfx-${shot}-resized-${width}.png` });
+  }
+}
+
+test("keeps the default-height drawer chat's last message clear of its composer after a turn (HS2-4J9QFX)", async ({
+  page,
+}) => {
+  await page.clock.install({ time: XV1VCR_T0 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  // The drawer stays at its default height, where the HS2-KMNQ21 capture showed the overlap.
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]');
+  await expectConversationEndClearsComposer(page, host, 'drawer');
+  // A reader who scrolled back is never moved or pinned by a clearance change: a multi-row draft grows
+  // the composer, a selection re-render drops and restores the clearance, and the draft clears.
+  const transcript = host.locator('.ai-conversation__transcript'),
+    field = host.getByRole('textbox', { name: 'Message Codex' }),
+    position = () => transcript.evaluate((node) => node.scrollTop);
+  await transcript.evaluate(
+    (node) =>
+      new Promise((resolve) => {
+        node.addEventListener('scroll', resolve, { once: true });
+        node.scrollTop = 24;
+      }),
+  );
+  const reading = await position();
+  const published = () =>
+    host.evaluate((node) => getComputedStyle(node).getPropertyValue('--kui-scroll-clearance-block-end'));
+  const before = await published();
+  await field.fill(['Draft line 1', 'Draft line 2', 'Draft line 3'].join('\n'));
+  await expect.poll(published).not.toBe(before);
+  expect(await position()).toBe(reading);
+  await host.locator('[data-action="pick-conversation-message"]').first().click();
+  await expect(host).toContainText('1 message selected');
+  await host.getByRole('button', { name: 'Clear Message Selection' }).click();
+  await field.fill('');
+  await expect.poll(published).toBe(before);
+  expect(
+    await transcript.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 32),
+    'still scrolled back',
+  ).toBe(false);
+});
+
+test("keeps the conversation dialog's last message clear of its composer after a turn (HS2-4J9QFX)", async ({
+  page,
+}) => {
+  await page.clock.install({ time: XV1VCR_T0 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-dialog-component="ai-conversation"]');
+  await expect(host).toBeVisible();
+  await expectConversationEndClearsComposer(page, host, 'dialog');
+});
+
 for (const width of [390, 1280] as const)
   test(`Drive sends the skill instruction to a capable terminal session at ${width}px (HS2-FWCE1Y)`, async ({
     page,

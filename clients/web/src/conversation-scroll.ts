@@ -34,6 +34,10 @@ function trackedState(transcript: HTMLElement): TranscriptScrollState {
       // reader position before treating the event as an intentional scroll.
       if (Math.abs(transcript.getBoundingClientRect().top - created.viewportTop) > 0.5) return;
       const top = transcript.scrollTop;
+      // The position a sync just set is not the reader's choice. Judging it would pin a reader whom
+      // a selection-bar offset placed near an end that a re-render had briefly shortened by
+      // dropping the composer clearance (HS2-4J9QFX).
+      if (top === created.top) return;
       if (atLatestEdge(transcript)) created.pinned = true;
       else if (top < created.top) created.pinned = false;
       created.top = top;
@@ -65,5 +69,19 @@ export function syncConversationScroll(root: ParentNode = document, force = fals
     state.pinned = true;
     state.top = transcript.scrollTop;
     state.viewportTop = viewportTop;
+  }
+}
+
+/**
+ * Keep only transcripts that follow their latest message at the end, after chrome over the end
+ * (the drawer composer's published clearance) changed size. A scrolled-back reader, or a transcript
+ * no render has synced yet, is never moved (HS2-4J9QFX).
+ */
+export function followConversationEnd(root: ParentNode = document): void {
+  for (const transcript of root.querySelectorAll<HTMLElement>('.ai-conversation__transcript')) {
+    const state = transcriptStates.get(transcript);
+    if (!state?.pinned) continue;
+    transcript.scrollTop = transcript.scrollHeight;
+    state.top = transcript.scrollTop;
   }
 }

@@ -12,6 +12,12 @@
  * The measurement follows the form as it grows or shrinks (a multi-line draft, the pill or banner
  * appearing) through a `ResizeObserver`, picks up conversations as they render through a
  * `MutationObserver`, and restores the property before paint when a re-render drops it.
+ *
+ * Every published change moves the transcript's scroll end, so `onClearanceChange` runs after each
+ * one, before paint. The conversation wiring uses it to keep a transcript that follows its latest
+ * message at the new end: a re-render drops the clearance, the render's scroll sync pins the end
+ * without it, and the restored clearance would otherwise leave the final message beneath the
+ * composer once a turn completes (HS2-4J9QFX).
  */
 export const COMPOSER_CLEARANCE_PROPERTY = '--kui-scroll-clearance-block-end';
 
@@ -52,8 +58,18 @@ const browserEnvironment: ComposerClearanceEnvironment = {
   },
 };
 
+export interface ComposerClearanceOptions {
+  /** Layout observers and frames; the browser's own by default. */
+  environment?: ComposerClearanceEnvironment;
+  /** Runs, before paint, after a conversation's published clearance changed (HS2-4J9QFX). */
+  onClearanceChange?: (conversation: HTMLElement) => void;
+}
+
 /** Wire every embedded conversation under `root`; the disposer stops and removes the clearance. */
-export function wireEmbeddedComposerClearance(root: HTMLElement, injected?: ComposerClearanceEnvironment): () => void {
+export function wireEmbeddedComposerClearance(
+  root: HTMLElement,
+  { environment: injected, onClearanceChange }: ComposerClearanceOptions = {},
+): () => void {
   // Without layout observers (a non-browser host) there is nothing to measure.
   if (!injected && (typeof ResizeObserver === 'undefined' || typeof MutationObserver === 'undefined')) return () => {};
   const environment = injected ?? browserEnvironment;
@@ -67,9 +83,10 @@ export function wireEmbeddedComposerClearance(root: HTMLElement, injected?: Comp
   const publish = (conversation: HTMLElement) => {
     const composer = conversation.querySelector<HTMLElement>(COMPOSER_SELECTOR) ?? undefined;
     const value = `${composerClearance(conversation.getBoundingClientRect(), composer?.getBoundingClientRect())}px`;
-    if (conversation.style.getPropertyValue(COMPOSER_CLEARANCE_PROPERTY) !== value)
-      conversation.style.setProperty(COMPOSER_CLEARANCE_PROPERTY, value);
     published.add(conversation);
+    if (conversation.style.getPropertyValue(COMPOSER_CLEARANCE_PROPERTY) === value) return;
+    conversation.style.setProperty(COMPOSER_CLEARANCE_PROPERTY, value);
+    onClearanceChange?.(conversation);
   };
   const resize = environment.createResizeObserver(() => {
     for (const conversation of conversations()) publish(conversation);
