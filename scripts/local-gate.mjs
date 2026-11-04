@@ -16,6 +16,7 @@ import {
   reportFileTimings,
   summarizeTimings,
 } from './gate-timings.mjs';
+import { verifyInstalledDependencies } from './installed-dependencies.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -348,6 +349,12 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     fullReason: profile?.deep ? 'deep-testing tag' : 'full fallback',
   });
   const chosen = budgeted.selected;
+  // HS2-PNBH4X: refuse a stale or missing install in any selected Node package, and bind the exact
+  // installed tree into every receipt so evidence from one install is never reused for another.
+  const dependencies = verifyInstalledDependencies(
+    repo,
+    chosen.map((stage) => stage.cwd),
+  );
   const environment = Object.fromEntries(
     [
       'CI',
@@ -375,6 +382,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     analyzed: options.analyzed ?? [],
     profile: profileIdentity,
     tools,
+    dependencies,
     platform: process.platform,
     arch: process.arch,
     environment: hash(environment),

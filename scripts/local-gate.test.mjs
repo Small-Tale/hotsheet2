@@ -366,6 +366,9 @@ test('HS2-RS0FFT source and lock changes invalidate receipts and lock changes se
   f.put('clients/web/package-lock.json', '{}\n');
   f.git('add', 'clients/web/package-lock.json');
   f.git('commit', '--quiet', '-m', 'lock change');
+  // HS2-PNBH4X: a committed lockfile needs its matching install, as npm ci leaves it.
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions), /not installed/);
+  f.put('clients/web/node_modules/.package-lock.json', '{"packages":{}}\n');
   assert.equal(prepare(f.repo, undefined, false, f.options.versions).mode, 'full');
 });
 
@@ -620,4 +623,32 @@ test('HS2-Q5XAAK bare push check reuses the explicit ticket receipt without weak
   const changed = { ...inferred, ticket: 'git:another' };
   assert.notEqual(prepare(f.repo, undefined, false, f.options.versions, { profile: changed, analyzed }).key, first.key);
   assert.throws(() => runGate({ ...f.options, profile: changed, runner, verify: true }), /--t2-stage/);
+});
+
+test('HS2-PNBH4X a stale install blocks the gate and a reinstall changes every receipt key', (t) => {
+  const f = fixture(t);
+  const lock = {
+    lockfileVersion: 3,
+    packages: { '': { name: 'web', dependencies: { kerf: '1.0.0' } }, 'node_modules/kerf': { version: '1.0.1' } },
+  };
+  f.put('clients/web/package.json', JSON.stringify({ name: 'web', dependencies: { kerf: '1.0.0' } }));
+  f.put('clients/web/package-lock.json', JSON.stringify(lock));
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'lockfile advanced');
+  // The worktree moved to a lockfile wanting 1.0.1 while node_modules still holds 1.0.0.
+  const installed = (version, resolved) =>
+    f.put(
+      'clients/web/node_modules/.package-lock.json',
+      JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/kerf': { version, resolved } } }),
+    );
+  installed('1.0.0');
+  assert.throws(() => prepare(f.repo, undefined, false, f.options.versions), /locked at 1\.0\.1[\s\S]*npm ci/);
+  assert.throws(() => runGate({ ...f.options, runner: () => ({ status: 0 }) }), /HS2-PNBH4X/);
+  installed('1.0.1', 'a');
+  const first = prepare(f.repo, undefined, false, f.options.versions);
+  installed('1.0.1', 'b');
+  const second = prepare(f.repo, undefined, false, f.options.versions);
+  assert.notEqual(first.key, second.key);
+  const webStage = (p) => p.checks.find((stage) => stage.cwd === 'clients/web');
+  assert.notEqual(webStage(first).key, webStage(second).key);
 });

@@ -564,7 +564,11 @@ until they pass. They then run the ticket's affected set once. A rebase onto com
 not touch the ticket's area needs no manual test rerun; an overlapping rebase reruns only the
 affected tests of the overlap. In either case, `scripts/check.sh --plan` must be reviewed
 for the new commit/tree, and the exact-input gate receipt must pass before pushing. Matching
-stage receipts may be reused; a prior tree's receipt never authorizes a different tree. A
+stage receipts may be reused; a prior tree's receipt never authorizes a different tree. Before
+any stage runs, every selected Node package's installed tree (`node_modules/.package-lock.json`)
+must match its committed `package.json` and `package-lock.json`; a missing, stale, or extraneous
+install stops the gate with the `npm ci` fix, and the installed-tree digest is part of every
+receipt key, so evidence never carries over to a different install (HS2-PNBH4X). A
 passing suite is never rerun just to double-check. The bundled instructions (v61) carry the
 same targeted rerun rule.
 

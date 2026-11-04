@@ -58,6 +58,7 @@ export const ROOT_TOOLING_TESTS = [
   'gate-budget',
   'gate-ticket-profile',
   'local-gate',
+  'installed-dependencies',
   'git-hooks',
   'windows-crt-directives',
   'windows-crt-link-correlation',

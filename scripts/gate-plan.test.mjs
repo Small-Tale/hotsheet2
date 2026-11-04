@@ -121,7 +121,7 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
     [
       'cargo lint',
       'cargo nextest run --all-features --status-level leak',
-      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs',
+      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs',
       'npm run lint',
       'npm run test:coverage',
       'npm run lint',
