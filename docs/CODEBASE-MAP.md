@@ -840,7 +840,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `hotsheet_query` keeps complete unpaged checkout arrays plain and wraps partial
   or truncated arrays with flags and warnings (HS2-9DV32Q). Exact claim, renew,
   and release use checkout-scoped server routes that resolve the ticket's Git
-  source before the lease mutation (HS2-EM6YWP).
+  source before the lease mutation (HS2-EM6YWP). `hotsheet_claim_next` uses
+  `POST /checkouts/{reference}/claim-next` (`routes/claims.rs`), which claims across
+  the checkout's local stores through `ops::claim_next_across_with_eta` in
+  `Checkout::claim_next_sources` precedence and refuses provider-only checkouts
+  (HS2-AV80C4).
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

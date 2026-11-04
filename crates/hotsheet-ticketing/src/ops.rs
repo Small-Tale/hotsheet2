@@ -2452,6 +2452,69 @@ pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
             .is_some_and(|order| order != Ordering::Greater)
 }
 
+/// Whether automatic claim-next may select `t` at `now`: open, unblocked, without a live
+/// lease, and not waiting on remote CI in `final_testing`.
+fn claim_next_eligible(t: &Ticket, done: &HashSet<Ulid>, now: &Timestamp) -> bool {
+    is_open(t)
+        && !is_blocked(t, done)
+        && claim_available(t, now)
+        && t.started_phase != Some(StartedPhase::FinalTesting)
+}
+
+/// The claim-next queue order: Up Next first, then priority, then creation order (ULID).
+fn claim_next_order(a: &Ticket, b: &Ticket) -> Ordering {
+    b.up_next
+        .cmp(&a.up_next)
+        .then(priority_rank(a.priority).cmp(&priority_rank(b.priority)))
+        .then(a.id.cmp(&b.id))
+}
+
+fn apply_next_claim(
+    t: &mut Ticket,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+    eta: Option<Timestamp>,
+) {
+    t.claimed_by = Some(worker.to_string());
+    t.claim_lease_expires_at = Some(lease_expires);
+    t.claim_eta_at = eta;
+    t.worker_label = label;
+    t.claim_count += 1;
+    let lease_expires_at = t.claim_lease_expires_at.clone();
+    let worker_label = t.worker_label.clone();
+    append_claim_event(
+        t,
+        ClaimEventKind::Claim,
+        worker,
+        now,
+        lease_expires_at,
+        worker_label,
+    );
+    t.updated_at = now.clone();
+    start_claimed_ticket(t, now);
+}
+
+fn claim_next_queue(
+    tickets: Vec<Ticket>,
+    now: &Timestamp,
+) -> impl Iterator<Item = Ticket> + use<'_> {
+    let done: HashSet<Ulid> = tickets
+        .iter()
+        .filter(|t| is_done(t))
+        .map(|t| t.id)
+        .collect();
+    tickets
+        .into_iter()
+        .filter(move |t| claim_next_eligible(t, &done, now))
+}
+
+/// The ticket [`claim_next_with_eta`] would select at `now`, without claiming it.
+pub fn peek_claim_next(store: &FsStore, now: &Timestamp) -> Result<Option<Ticket>, StoreError> {
+    Ok(claim_next_queue(store.list_tickets()?, now).min_by(claim_next_order))
+}
+
 /// [`claim_next`] that also records the worker's estimated completion time (HS2-DQQ0AX).
 pub fn claim_next_with_eta(
     store: &FsStore,
@@ -2462,52 +2525,107 @@ pub fn claim_next_with_eta(
     eta: Option<Timestamp>,
 ) -> Result<Option<Ticket>, StoreError> {
     store.with_ticket_transaction(|| {
-        let tickets = store.list_tickets()?;
-        let done: HashSet<Ulid> = tickets
-            .iter()
-            .filter(|t| is_done(t))
-            .map(|t| t.id)
-            .collect();
-
-        let mut candidates: Vec<Ticket> = tickets
-            .into_iter()
-            .filter(|t| {
-                is_open(t)
-                    && !is_blocked(t, &done)
-                    && claim_available(t, now)
-                    && t.started_phase != Some(StartedPhase::FinalTesting)
-            })
-            .collect();
-        candidates.sort_by(|a, b| {
-            b.up_next
-                .cmp(&a.up_next)
-                .then(priority_rank(a.priority).cmp(&priority_rank(b.priority)))
-                .then(a.id.cmp(&b.id))
-        });
-
-        let Some(mut t) = candidates.into_iter().next() else {
+        let Some(mut t) = peek_claim_next(store, now)? else {
             return Ok(None);
         };
-        t.claimed_by = Some(worker.to_string());
-        t.claim_lease_expires_at = Some(lease_expires);
-        t.claim_eta_at = eta;
-        t.worker_label = label;
-        t.claim_count += 1;
-        let lease_expires_at = t.claim_lease_expires_at.clone();
-        let worker_label = t.worker_label.clone();
-        append_claim_event(
-            &mut t,
-            ClaimEventKind::Claim,
-            worker,
-            now,
-            lease_expires_at,
-            worker_label,
-        );
-        t.updated_at = now.clone();
-        start_claimed_ticket(&mut t, now);
+        apply_next_claim(&mut t, now, lease_expires, worker, label, eta);
         store.write_ticket_committing(&t)?;
         Ok(Some(t))
     })
+}
+
+/// Claim `id` for claim-next only while it is still eligible inside the store
+/// transaction. `None` means another worker took it, or it otherwise left the queue, after
+/// it was selected; the caller selects again.
+fn claim_next_candidate(
+    store: &FsStore,
+    id: &Ulid,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+    eta: Option<Timestamp>,
+) -> Result<Option<Ticket>, StoreError> {
+    store.with_ticket_transaction(|| {
+        let Some(mut t) = claim_next_queue(store.list_tickets()?, now).find(|t| t.id == *id) else {
+            return Ok(None);
+        };
+        apply_next_claim(&mut t, now, lease_expires, worker, label, eta);
+        store.write_ticket_committing(&t)?;
+        Ok(Some(t))
+    })
+}
+
+/// Re-selections after losing a cross-source race before claim-next falls back to each
+/// source's own atomic claim-next in source precedence.
+const CLAIM_NEXT_ACROSS_ATTEMPTS: usize = 16;
+
+/// HS2-AV80C4: claim the next ticket across the local ticket stores of one project.
+///
+/// `stores` is in source precedence: the project's default source first, then the other
+/// linked sources in registry order. The stores form one merged queue in the single-store
+/// order (Up Next, then priority, then creation order); source precedence breaks a
+/// remaining tie. Each claim is atomic within its store. When another worker takes the
+/// selected ticket first, selection repeats against fresh state, so racing workers never
+/// receive the same ticket and a lost race never reports an empty queue while work
+/// remains. Returns the index of the claiming store with the claimed ticket.
+pub fn claim_next_across_with_eta(
+    stores: &[&FsStore],
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+    eta: Option<Timestamp>,
+) -> Result<Option<(usize, Ticket)>, StoreError> {
+    if let [store] = stores {
+        return Ok(
+            claim_next_with_eta(store, now, lease_expires, worker, label, eta)?
+                .map(|ticket| (0, ticket)),
+        );
+    }
+    for _ in 0..CLAIM_NEXT_ACROSS_ATTEMPTS {
+        let mut best: Option<(usize, Ticket)> = None;
+        for (index, store) in stores.iter().enumerate() {
+            let Some(candidate) = peek_claim_next(store, now)? else {
+                continue;
+            };
+            // Strictly better only: an equal key keeps the earlier source.
+            if best
+                .as_ref()
+                .is_none_or(|(_, current)| claim_next_order(&candidate, current).is_lt())
+            {
+                best = Some((index, candidate));
+            }
+        }
+        let Some((index, candidate)) = best else {
+            return Ok(None);
+        };
+        if let Some(claimed) = claim_next_candidate(
+            stores[index],
+            &candidate.id,
+            now,
+            lease_expires.clone(),
+            worker,
+            label.clone(),
+            eta.clone(),
+        )? {
+            return Ok(Some((index, claimed)));
+        }
+    }
+    // Sustained contention: still never report an empty queue while a store has work.
+    for (index, store) in stores.iter().enumerate() {
+        if let Some(claimed) = claim_next_with_eta(
+            store,
+            now,
+            lease_expires.clone(),
+            worker,
+            label.clone(),
+            eta.clone(),
+        )? {
+            return Ok(Some((index, claimed)));
+        }
+    }
+    Ok(None)
 }
 
 /// Claim one exact open, unblocked ticket. A retry by the live holder is idempotent:
@@ -6856,3 +6974,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "ops/claim_next_across_tests.rs"]
+mod claim_next_across_tests;

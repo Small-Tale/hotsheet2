@@ -1915,8 +1915,17 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >   and all its configured Git and external sources through the machine-local server.
 >   It starts that server when absent. Unqualified ticket reads, edits, and exact
 >   claim, renew, and release operations use the checkout identity; callers can
->   specify a connection for ambiguous ticket reads or edits. Project-scoped
->   `hotsheet_claim_next` remains pending HS2-AV80C4.
+>   specify a connection for ambiguous ticket reads or edits. `hotsheet_claim_next`
+>   self-serves from the checkout too (`POST /checkouts/{reference}/claim-next`,
+>   HS2-AV80C4): the linked local Git stores form one queue in the single-store order
+>   (Up Next, then priority, then creation order), and source precedence (the default
+>   source, then registry order) breaks a remaining tie. GitHub, GitLab, and Jira
+>   sources have no claim leases and are skipped; a checkout with only such sources,
+>   or none, returns an explicit unsupported (409) error rather than an empty queue,
+>   and a `connection` argument is refused. Each claim re-validates its selection
+>   inside the owning store's transaction, so racing workers never receive the same
+>   ticket and a lost race selects again instead of reporting an empty queue. The
+>   serverless backend has the same behavior.
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
 >   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
 >   §4.4). The headless default. A running server's watcher still picks up its writes.

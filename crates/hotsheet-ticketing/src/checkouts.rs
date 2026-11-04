@@ -109,6 +109,35 @@ impl Checkout {
             .find(|source| source.connection_id == connection_id)
     }
 
+    /// HS2-AV80C4: the linked local sources project claim-next scans, in source precedence
+    /// (the default source first, then registry order). Provider sources (GitHub, GitLab,
+    /// Jira) have no claim leases and are skipped; when nothing else is linked the error
+    /// names them, so an agent sees an unsupported operation rather than an empty queue.
+    pub fn claim_next_sources(&self) -> Result<Vec<&TicketSource>, String> {
+        let default = self.default_source.as_deref();
+        let (mut local, unsupported): (Vec<_>, Vec<_>) = self
+            .sources
+            .iter()
+            .partition(|source| source.provider == "git");
+        if local.is_empty() {
+            let providers = unsupported
+                .iter()
+                .map(|source| source.provider.as_str())
+                .collect::<std::collections::BTreeSet<_>>();
+            return Err(if providers.is_empty() {
+                "checkout has no linked ticket sources to claim from".to_owned()
+            } else {
+                format!(
+                    "claim-next is unsupported by {} ticket sources; claim an exact ticket in a local Hot Sheet source",
+                    providers.into_iter().collect::<Vec<_>>().join(", ")
+                )
+            });
+        }
+        // A stable sort keeps registry order behind the default source.
+        local.sort_by_key(|source| Some(source.connection_id.as_str()) != default);
+        Ok(local)
+    }
+
     /// Open a linked Git source only after its recorded store identity is verified.
     /// Permission migration uses this boundary so a moved or replaced source cannot
     /// select an unrelated legacy vault by its current path.
@@ -2206,6 +2235,73 @@ fn migrate_checkout(checkout: &mut Checkout) -> Option<String> {
 mod tests {
     use super::*;
     use crate::provider::ProviderConnection;
+
+    fn source(connection_id: &str, provider: &str) -> TicketSource {
+        TicketSource {
+            connection_id: connection_id.into(),
+            provider: provider.into(),
+            locator: format!("{connection_id}-locator"),
+        }
+    }
+
+    fn claim_checkout(sources: Vec<TicketSource>, default_source: Option<&str>) -> Checkout {
+        let mut checkout: Checkout = serde_json::from_value(serde_json::json!({
+            "id": "project-0123456789", "root": "project", "alias": "project"
+        }))
+        .unwrap();
+        checkout.sources = sources;
+        checkout.default_source = default_source.map(str::to_owned);
+        checkout
+    }
+
+    #[test]
+    fn hs2_av80c4_claim_next_sources_put_the_default_first_and_skip_providers() {
+        let checkout = claim_checkout(
+            vec![
+                source("first", "git"),
+                source("issues", "github"),
+                source("second", "git"),
+                source("third", "git"),
+            ],
+            Some("third"),
+        );
+        let ids = |checkout: &Checkout| {
+            checkout
+                .claim_next_sources()
+                .unwrap()
+                .iter()
+                .map(|source| source.connection_id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&checkout), ["third", "first", "second"]);
+        // A provider or absent default keeps registry order.
+        for default in [Some("issues"), None] {
+            let checkout = claim_checkout(checkout.sources.clone(), default);
+            assert_eq!(ids(&checkout), ["first", "second", "third"]);
+        }
+    }
+
+    #[test]
+    fn hs2_av80c4_claim_next_names_unsupported_provider_only_sources() {
+        let providers = claim_checkout(
+            vec![
+                source("work", "jira"),
+                source("issues", "github"),
+                source("more", "github"),
+            ],
+            Some("work"),
+        );
+        let error = providers.claim_next_sources().unwrap_err();
+        assert!(
+            error.contains("claim-next is unsupported by github, jira ticket sources"),
+            "{error}"
+        );
+        let empty = claim_checkout(Vec::new(), None);
+        assert_eq!(
+            empty.claim_next_sources().unwrap_err(),
+            "checkout has no linked ticket sources to claim from"
+        );
+    }
 
     /// HS2-K2YHDE: the app opens a new project folder before it creates the sibling
     /// store, so the store is linked into an already-registered checkout. That link must

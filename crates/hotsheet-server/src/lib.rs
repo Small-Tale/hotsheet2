@@ -109,8 +109,8 @@ use routes::checkouts::{
     resolve_checkout, set_checkout_default_source, set_checkout_source_color,
 };
 use routes::claims::{
-    claim_checkout_ticket, claim_next_ticket, claim_ticket, release_checkout_ticket,
-    release_ticket, renew_checkout_ticket, renew_ticket,
+    claim_checkout_next_ticket, claim_checkout_ticket, claim_next_ticket, claim_ticket,
+    release_checkout_ticket, release_ticket, renew_checkout_ticket, renew_ticket,
 };
 use routes::guidance::{
     decide_checkout_guidance_recommendation, get_checkout_guidance,
@@ -1579,6 +1579,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}/notes/{note_id}/notify",
             post(routes::feedback_session::choose_feedback_session),
+        )
+        .route(
+            "/checkouts/{reference}/claim-next",
+            post(claim_checkout_next_ticket),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/claim",

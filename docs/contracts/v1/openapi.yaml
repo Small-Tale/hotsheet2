@@ -11667,6 +11667,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/claim-next:
+    post:
+      operationId: claim_checkout_next_ticket
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/ResolvedTicket'
+                  - type: 'null'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimTicket'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
   /checkouts/{reference}/tickets/{id}/claim:
     post:
       operationId: claim_checkout_ticket

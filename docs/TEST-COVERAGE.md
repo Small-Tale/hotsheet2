@@ -267,6 +267,21 @@ worker and AI actor. `clients/web/tests/contracts.spec.ts` pins the three
 checkout lease routes to concrete OpenAPI request and response schemas.
 HS2-NB2TTN retains the live agent and browser review.
 
+HS2-AV80C4 covers project-scoped claim-next. The `hotsheet-ticketing` transition
+tests in `src/ops/claim_next_across_tests.rs` walk the merged multi-store order and
+the source-precedence tie, the single-store path, empty-then-refill, live and
+expired leases, blocked and final-testing exclusion, a lost selection race that
+selects again, and eight racing worker threads that claim each ticket exactly once;
+`checkouts.rs` tests pin default-first source precedence and the provider-only
+unsupported error. `crates/hotsheet-mcp` tests check that the injected or explicit
+checkout routes the tool to `/checkouts/{reference}/claim-next`, that a provider
+`connection` is refused, and that the serverless backend reproduces the defect
+(the unscoped call returns null) and then claims the sibling ticket before the
+default store's. The `hotsheet-server` HTTP regression
+`hs2_av80c4_checkout_claim_next_serves_linked_stores_and_racing_workers` checks
+the store attribution, four concurrent requests for three tickets, the drained
+queue, and the 409 and 404 refusals.
+
 HS2-CD3D2T provides a checked-in root gate, gate-before-push command, and
 pre-commit/pre-push hooks. `scripts/git-hooks.test.mjs` uses temporary Git
 repositories to verify no duplicate gate during a push, gate failure before

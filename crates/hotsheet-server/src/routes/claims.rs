@@ -43,6 +43,58 @@ pub(crate) async fn claim_next_ticket(
     ))
 }
 
+/// `POST /checkouts/{reference}/claim-next` — HS2-AV80C4: claim the next ticket across
+/// the project's linked local ticket sources, so a project-launched agent self-serves from
+/// its own queue instead of the machine server's default store. The sources form one
+/// merged queue (Up Next, priority, creation order) with the default source winning a tie
+/// (see `ops::claim_next_across_with_eta`). Provider sources (GitHub, GitLab, Jira) have
+/// no claim leases and are skipped; a project with only provider sources gets 409, and a
+/// linked local source that cannot be opened is a 409 rather than a silently empty queue.
+pub(crate) async fn claim_checkout_next_ticket(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(req): Json<ClaimReq>,
+) -> Result<Json<Option<ResolvedTicket>>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(crate::routes::checkouts::checkout_lookup_error)?;
+    let local = checkout
+        .claim_next_sources()
+        .map_err(|message| ApiError::new(StatusCode::CONFLICT, message))?;
+    let entries = local
+        .iter()
+        .map(|source| {
+            state.hosted_source(source).ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::CONFLICT,
+                    format!(
+                        "checkout links an unhosted git source: {}",
+                        source.connection_id
+                    ),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let stores = entries.iter().map(|entry| &entry.store).collect::<Vec<_>>();
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let eta = req
+        .eta
+        .as_deref()
+        .map(|raw| ops::parse_claim_eta(&now, raw))
+        .transpose()?;
+    let Some((index, claimed)) =
+        ops::claim_next_across_with_eta(&stores, &now, lease, &worker, req.label, eta)?
+    else {
+        return Ok(Json(None));
+    };
+    let entry = &entries[index];
+    state.changed_in(entry, "claimed", &claimed);
+    resolved_claim_ticket(entry, &claimed).map(|Json(ticket)| Json(Some(ticket)))
+}
+
 /// `POST /tickets/{id}/claim` — claim one exact open, unblocked ticket by slug or ULID.
 pub(crate) async fn claim_ticket(
     State(state): State<AppState>,

@@ -456,8 +456,9 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim_next",
-            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
+            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next, then priority, then creation order). Uses the launched project checkout unless checkout is supplied: its local ticket sources form one queue, the default source winning a tie. GitHub, GitLab, and Jira sources have no claim leases and are skipped; a project with only those sources returns an unsupported error. Returns the claimed ticket with its store, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
                 "label": str_prop("human-readable worker label"),
                 "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" },
@@ -1050,7 +1051,24 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
-        "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
+        "hotsheet_claim_next" => {
+            // HS2-AV80C4: self-serve from the launched project's sources, not the machine
+            // server's default store. A provider connection has no claim-next queue.
+            if args
+                .get("connection")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+            {
+                return Err("claim-next is unsupported for a provider connection; pass checkout to claim from a project's local ticket sources".into());
+            }
+            backend
+                .send(
+                    "POST",
+                    &checkout_route(args, "/claim-next"),
+                    &without_many(args, &["checkout", "connection"]),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
             backend
@@ -1479,6 +1497,55 @@ mod core_backend {
                 .as_ref()
                 .map(hotsheet_ticketing::checkouts::Checkout::settings)
                 .unwrap_or_else(|| Settings::new(self.store.root()))
+        }
+
+        /// HS2-AV80C4: serverless parity for `POST /checkouts/{reference}/claim-next`.
+        fn claim_checkout_next(
+            &self,
+            reference: &str,
+            body: &Value,
+        ) -> Result<Value, BackendError> {
+            let reference = decode_checkout_reference(reference)?;
+            let checkout = self
+                .checkout_registry
+                .resolve(&reference)
+                .map_err(checkout_err)?;
+            let stores = checkout
+                .claim_next_sources()
+                .map_err(|message| BackendError {
+                    status: Some(409),
+                    message,
+                })?
+                .into_iter()
+                .map(|source| FsStore::open(Path::new(&source.locator)).map_err(store_err))
+                .collect::<Result<Vec<_>, _>>()?;
+            let now = (self.now)();
+            let lease = now.plus_minutes(lease_minutes(body));
+            let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+            let label = str_field(body, "label");
+            let eta = claim_eta(body, &now)?;
+            // Deliver the claim's ticket transition like a direct-to-disk CLI write.
+            let watches = stores
+                .iter()
+                .map(|store| hotsheet_cli::notify_watch::Watch::before(store.root()))
+                .collect::<Vec<_>>();
+            let claimed = ops::claim_next_across_with_eta(
+                &stores.iter().collect::<Vec<_>>(),
+                &now,
+                lease,
+                &worker,
+                label,
+                eta,
+            )
+            .map_err(store_err)?;
+            let Some((index, ticket)) = claimed else {
+                return Ok(Value::Null);
+            };
+            if let Some(watch) = watches.into_iter().nth(index).flatten() {
+                watch.after();
+            }
+            self.for_checkout(stores[index].clone(), checkout)
+                .api(&ticket)
         }
 
         fn checkout_context(
@@ -2239,6 +2306,11 @@ mod core_backend {
                         )
                         .map_err(|error| plan_conflict(error.to_string()))?;
                     return Ok(to_value(&assignment));
+                }
+                if let Some(reference) = rest.strip_suffix("/claim-next")
+                    && method == "POST"
+                {
+                    return self.claim_checkout_next(reference, body);
                 }
                 if let Some(reference) = rest.strip_suffix("/follow-up-links") {
                     let (checkout, stores) = self.checkout_context(reference)?;
@@ -5121,6 +5193,54 @@ mod tests {
     }
 
     #[test]
+    fn hs2_av80c4_project_claim_next_targets_the_launched_checkout() {
+        let backend = FakeBackend::default();
+        let send = |arguments: Value, checkout: Option<&str>| {
+            handle_message_for_checkout(
+                &req(
+                    "tools/call",
+                    json!({"name":"hotsheet_claim_next","arguments":arguments}),
+                ),
+                &backend,
+                checkout,
+            )
+            .unwrap()
+        };
+        send(
+            json!({"worker":"agent","eta":"45m","actor_role":"ai","actor_id":"agent"}),
+            Some("code-project"),
+        );
+        send(
+            json!({"checkout":"other","worker":"agent"}),
+            Some("code-project"),
+        );
+        send(json!({"worker":"agent"}), None);
+        let refused = send(
+            json!({"connection":"github-issues","worker":"agent"}),
+            Some("code-project"),
+        );
+        assert_eq!(refused["result"]["isError"], true);
+        assert!(
+            refused["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("claim-next is unsupported for a provider connection")
+        );
+        let calls = backend.calls.borrow();
+        assert_eq!(calls.len(), 3, "{calls:?}");
+        assert!(calls[0].starts_with("POST /checkouts/code-project/claim-next "));
+        assert!(calls[0].contains("\"eta\":\"45m\""), "{}", calls[0]);
+        assert!(!calls[0].contains("\"checkout\""), "{}", calls[0]);
+        assert!(
+            calls[0].contains("\"actor\":{\"id\":\"agent\",\"role\":\"ai\"}"),
+            "{}",
+            calls[0]
+        );
+        assert!(calls[1].starts_with("POST /checkouts/other/claim-next "));
+        assert!(calls[2].starts_with("POST /claim-next "));
+    }
+
+    #[test]
     fn hs2_em6ywp_project_claim_lifecycle_targets_the_ticket_checkout() {
         let backend = FakeBackend::default();
         for name in ["hotsheet_claim", "hotsheet_renew", "hotsheet_release"] {
@@ -6600,6 +6720,129 @@ mod tests {
             json!({ "worker": "agent-1" }),
         );
         assert!(empty.is_null(), "no claimable tickets → null");
+    }
+
+    /// HS2-AV80C4: a project-launched agent self-serves from its checkout's sources. The
+    /// unscoped call against the machine default store returns null (the reported defect);
+    /// the checkout call claims the sibling ticket first, then the default store's.
+    #[test]
+    fn hs2_av80c4_corebackend_claim_next_serves_the_launched_checkout_sources() {
+        let root = tempfile::tempdir().unwrap();
+        let primary_root = root.path().join("primary.hs2");
+        let default_root = root.path().join("project.hs2");
+        let sibling_root = root.path().join("sibling.hs2");
+        let project_root = root.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        let primary = FsStore::init(&primary_root, &StoreMetadata::new("PRI")).unwrap();
+        let default = FsStore::init(&default_root, &StoreMetadata::new("DEF")).unwrap();
+        let sibling = FsStore::init(&sibling_root, &StoreMetadata::new("SIB")).unwrap();
+        let default_ticket = call(
+            &CoreBackend::new(default.clone()),
+            "hotsheet_create",
+            json!({"title":"Synthetic default ticket","up_next":true}),
+        );
+        let sibling_ticket = call(
+            &CoreBackend::new(sibling.clone()),
+            "hotsheet_create",
+            json!({"title":"Synthetic sibling ticket","up_next":true,"priority":"high"}),
+        );
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &project_root,
+                Some("project"),
+                None,
+                vec![default_root, sibling_root],
+            )
+            .unwrap();
+        let backend = CoreBackend::new(primary).with_checkout_registry(registry);
+        let claim_next = |checkout: Option<&str>, worker: &str| {
+            let message = req(
+                "tools/call",
+                json!({"name":"hotsheet_claim_next","arguments":{
+                    "worker":worker,"actor_role":"ai","actor_id":worker
+                }}),
+            );
+            let reply = handle_message_for_checkout(&message, &backend, checkout).unwrap();
+            assert_ne!(reply["result"]["isError"], true, "{reply}");
+            serde_json::from_str::<Value>(reply["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap()
+        };
+        assert!(
+            claim_next(None, "agent").is_null(),
+            "unscoped default store"
+        );
+        let first = claim_next(Some(&checkout.id), "agent");
+        assert_eq!(first["slug"], sibling_ticket["slug"]);
+        assert_eq!(first["claimed_by"], "agent");
+        assert_eq!(first["status"], "started");
+        let second = claim_next(Some(&checkout.id), "other");
+        assert_eq!(second["slug"], default_ticket["slug"]);
+        assert_eq!(second["claimed_by"], "other");
+        assert!(claim_next(Some(&checkout.id), "third").is_null());
+        let held = call(
+            &backend,
+            "hotsheet_get",
+            json!({"checkout":checkout.id,"id":first["slug"]}),
+        );
+        assert_eq!(held["claimed_by"], "agent");
+        assert_eq!(held["claim_count"], 1);
+    }
+
+    #[test]
+    fn hs2_av80c4_corebackend_claim_next_rejects_provider_only_projects() {
+        let root = tempfile::tempdir().unwrap();
+        let project_root = root.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        let primary =
+            FsStore::init(root.path().join("primary.hs2"), &StoreMetadata::new("PRI")).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let providers = hotsheet_ticketing::provider::ProviderConfigRegistry::new(
+            root.path().join("home/providers.json"),
+        );
+        providers
+            .save(&[hotsheet_ticketing::provider::ProviderConnection {
+                id: "issues".into(),
+                provider: "github".into(),
+                locator: "example/repo".into(),
+                name: None,
+                default: false,
+                settings: Value::Null,
+                disabled: false,
+            }])
+            .unwrap();
+        let checkout = registry
+            .register(&project_root, Some("project"), None, Vec::new())
+            .unwrap();
+        registry
+            .add_registered_source(
+                &providers,
+                &checkout.id,
+                hotsheet_ticketing::checkouts::TicketSource {
+                    connection_id: "issues".into(),
+                    provider: "github".into(),
+                    locator: "example/repo".into(),
+                },
+                false,
+            )
+            .unwrap();
+        let backend = CoreBackend::new(primary).with_checkout_registry(registry);
+        let refused = call(
+            &backend,
+            "hotsheet_claim_next",
+            json!({"checkout":checkout.id,"worker":"agent"}),
+        );
+        assert!(
+            refused["error"]
+                .as_str()
+                .unwrap()
+                .contains("claim-next is unsupported by github ticket sources"),
+            "{refused}"
+        );
     }
 
     #[test]

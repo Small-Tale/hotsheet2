@@ -17587,6 +17587,136 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
+/// HS2-AV80C4: project claim-next serves the checkout's linked stores as one queue, never
+/// the machine default store, and racing workers each receive a distinct ticket.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_av80c4_checkout_claim_next_serves_linked_stores_and_racing_workers() {
+    let (_primary, state) = state();
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    FsStore::init(first.path(), &StoreMetadata::new("ONE")).unwrap();
+    FsStore::init(second.path(), &StoreMetadata::new("TWO")).unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let empty_project = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let send = |method: &'static str, path: String, body: String| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(authed(method, &path, Some(&body)))
+                .await
+                .unwrap();
+            let status = response.status();
+            (status, body_json(response).await)
+        }
+    };
+    let mut store_ids = Vec::new();
+    for store in [first.path(), second.path()] {
+        let (status, hosted) = send(
+            "POST",
+            "/stores".into(),
+            serde_json::json!({"path":store}).to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        store_ids.push(hosted["id"].as_str().unwrap().to_owned());
+    }
+    for (root, stores) in [
+        (project.path(), vec![first.path(), second.path()]),
+        (empty_project.path(), vec![]),
+    ] {
+        let alias = if stores.is_empty() {
+            "empty"
+        } else {
+            "fixture"
+        };
+        let (status, _) = send(
+            "POST",
+            "/checkouts".into(),
+            serde_json::json!({"root":root,"alias":alias,"stores":stores}).to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+    let create = |store: usize, title: &str, priority: &str| {
+        send(
+            "POST",
+            format!("/stores/{}/tickets", store_ids[store]),
+            serde_json::json!({"title":title,"up_next":true,"priority":priority}).to_string(),
+        )
+    };
+    let (_, urgent) = create(1, "Synthetic second-store urgent", "high").await;
+    for n in 0..3 {
+        create(0, &format!("Synthetic first-store {n}"), "default").await;
+    }
+
+    // The reported defect: the unscoped route claims from the empty machine default store.
+    let (status, unscoped) =
+        send("POST", "/claim-next".into(), r#"{"worker":"agent"}"#.into()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(unscoped.is_null());
+
+    let (status, claimed) = send(
+        "POST",
+        "/checkouts/fixture/claim-next".into(),
+        r#"{"worker":"agent","eta":"30m"}"#.into(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{claimed}");
+    assert_eq!(claimed["slug"], urgent["slug"]);
+    assert_eq!(claimed["store"], store_ids[1]);
+    assert_eq!(claimed["claimed_by"], "agent");
+    assert_eq!(claimed["status"], "started");
+    assert!(claimed["claim_eta_at"].is_string());
+
+    let racers = (0..4).map(|n| {
+        tokio::spawn(send(
+            "POST",
+            "/checkouts/fixture/claim-next".into(),
+            serde_json::json!({"worker":format!("racer-{n}")}).to_string(),
+        ))
+    });
+    let mut slugs = Vec::new();
+    let mut empty = 0;
+    for racer in racers.collect::<Vec<_>>() {
+        let (status, result) = racer.await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{result}");
+        if result.is_null() {
+            empty += 1;
+        } else {
+            assert_eq!(result["store"], store_ids[0]);
+            slugs.push(result["slug"].as_str().unwrap().to_owned());
+        }
+    }
+    slugs.sort();
+    slugs.dedup();
+    assert_eq!((slugs.len(), empty), (3, 1), "{slugs:?}");
+
+    let (status, drained) = send(
+        "POST",
+        "/checkouts/fixture/claim-next".into(),
+        r#"{"worker":"late"}"#.into(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(drained.is_null());
+    let (status, refused) = send(
+        "POST",
+        "/checkouts/empty/claim-next".into(),
+        r#"{"worker":"agent"}"#.into(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    let (status, _) = send(
+        "POST",
+        "/checkouts/missing/claim-next".into(),
+        r#"{"worker":"agent"}"#.into(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[tokio::test]
 async fn hs2_em6ywp_checkout_claim_lifecycle_uses_sibling_store() {
     let (_primary, state) = state();

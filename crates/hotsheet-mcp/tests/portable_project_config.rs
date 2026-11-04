@@ -144,6 +144,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
                 "[]",
                 r#"{"checkout":{"id":"code-project"}}"#,
                 r#"{"store":"sibling","ticket":{"slug":"TST-EXACT","claimed_by":"agent"}}"#,
+                r#"{"store":"sibling","slug":"TST-NEXT","claimed_by":"agent"}"#,
                 "[]",
             ],
         )
@@ -210,6 +211,26 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
     let claimed_ticket: serde_json::Value =
         serde_json::from_str(claimed["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(claimed_ticket["ticket"]["claimed_by"], "agent");
+    // HS2-AV80C4: self-serve claim-next uses the same launched checkout.
+    writeln!(
+        stdin,
+        "{}",
+        serde_json::json!({
+            "jsonrpc":"2.0", "id":5, "method":"tools/call",
+            "params":{"name":"hotsheet_claim_next","arguments":{
+                "worker":"agent", "actor_role":"ai", "actor_id":"agent"
+            }}
+        })
+    )
+    .unwrap();
+    let mut next = String::new();
+    stdout.read_line(&mut next).unwrap();
+    let next: serde_json::Value = serde_json::from_str(&next).unwrap();
+    assert_eq!(next["id"], 5);
+    assert_ne!(next["result"]["isError"], true, "{next}");
+    let next_ticket: serde_json::Value =
+        serde_json::from_str(next["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(next_ticket["slug"], "TST-NEXT");
     writeln!(stdin, "{}", query(2)).unwrap();
     let mut relinked = String::new();
     stdout.read_line(&mut relinked).unwrap();
@@ -273,7 +294,17 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
         "{}",
         paths[3]
     );
-    assert!(paths[4].starts_with("GET /checkouts/code-project/tickets"));
+    assert_eq!(
+        paths[4].lines().next(),
+        Some("POST /checkouts/code-project/claim-next HTTP/1.1")
+    );
+    assert!(
+        paths[4].contains("\"actor\":{\"id\":\"agent\",\"role\":\"ai\"}"),
+        "{}",
+        paths[4]
+    );
+    assert!(!paths[4].contains("\"checkout\""), "{}", paths[4]);
+    assert!(paths[5].starts_with("GET /checkouts/code-project/tickets"));
     let replacement_paths = replacement_server.join().unwrap();
     assert_eq!(
         replacement_paths[0].lines().next(),
