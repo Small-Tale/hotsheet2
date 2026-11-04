@@ -629,13 +629,26 @@ mode ran an `auto` Read without a Hot Sheet hook bridge request. An `auto` Bash 
 an explicit native `permissions.ask` rule emitted one `PermissionRequest` and completed
 after an allow response from an isolated local bridge. A `manual` Write likewise emitted
 one request and completed on allow. An `auto` POST to a disposable local server ran without
-an ask; Claude classified it as allowed. The actual in-app popup and an action naturally
-classified as risky remain manual checks below (`HS2-KMNQ21`).
+an ask; Claude classified it as allowed.
+
+Live in-app validation (HS2-KMNQ21, 2026-11-04): `clients/web/scripts/live-claude-permission.mjs`
+drives the rebuilt production client in Chromium against an isolated host and home with the
+signed-in Claude Code 2.1.318 (`node scripts/live-claude-permission.mjs` from `clients/web`;
+evidence in `target/live-claude-permission/`).
+
+- **Auto:** asked for nothing. An in-project `rm -rf`, a force push, `curl ... | sh`, and an
+  explicit unsandboxed network retry all ran or failed without a prompt. Claude's own sandbox
+  and classifier decided each one.
+- **Accept edits:** a Write outside the workspace reached the Hot Sheet popup. **Allow Once**
+  wrote the file; **Deny** left it unwritten, and Claude reported the bridge's denial.
+- **Mode shield:** the chat tab's shield named the mode throughout.
+
+Re-run the script after a Claude upgrade.
 
 1. Claude under `Accept edits`: ask for a file edit (no popup) and a shell command (popup).
 2. Switch the chat to `Auto` from the model menu's Permissions submenu: a harmless read-only
-   command runs without a popup, and a risky one still reaches the Hot Sheet popup
-   (validating this is `HS2-YAS0FR`).
+   command runs without a popup. Claude 2.1.318 also ran every risky action tried without
+   asking (HS2-KMNQ21), so do not expect an Auto popup; Claude's classifier decides.
    On Claude Code 2.1.307, also exercise a temporary explicit native ask rule for a harmless
    command: confirm the corresponding `PermissionRequest` reaches Hot Sheet exactly once,
    its allow and deny answers are honored, and disconnecting the bridge denies the ask.
