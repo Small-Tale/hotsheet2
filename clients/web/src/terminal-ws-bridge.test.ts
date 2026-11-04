@@ -506,3 +506,74 @@ describe('terminal WebSocket bridge', () => {
     await once(browser, 'close');
   });
 });
+
+describe('change bridge client build announcement (HS2-KPJWBK)', () => {
+  it('announces the served build on subscribed and closed answers, never on events', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    const upstreams = new Set<WebSocket>();
+    upstream.on('connection', (socket) => {
+      upstreams.add(socket);
+      socket.on('close', () => upstreams.delete(socket));
+    });
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      // Project "gone" has no session, as after a host restart.
+      (project) => (project === 'gone' ? undefined : `ws://127.0.0.1:${upstreamPort}/ws/sync?checkout=${project}`),
+      () => undefined,
+      () => 'bundle-served',
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: ChangeWsMessage[] = [];
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
+    });
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'gone', client: 'tab', subscription: 2 }));
+    await vi.waitFor(() => {
+      expect(frames.map((frame) => frame.type).sort()).toEqual(['closed', 'subscribed']);
+    });
+    expect(frames.every((frame) => frame.type !== 'event' && frame.client_build === 'bundle-served')).toBe(true);
+    await vi.waitFor(() => {
+      expect(upstreams.size).toBe(1);
+    });
+    [...upstreams][0].send('{"cursor":1,"kind":"created","id":"1","slug":"HS2-A"}');
+    await vi.waitFor(() => {
+      expect(frames.some((frame) => frame.type === 'event')).toBe(true);
+    });
+    expect(frames.find((frame) => frame.type === 'event')).not.toHaveProperty('client_build');
+    browser.close();
+    await once(browser, 'close');
+  });
+
+  it('omits the field when the host does not know its build', async () => {
+    const bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      () => undefined,
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: Record<string, unknown>[] = [];
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as Record<string, unknown>);
+    });
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    await vi.waitFor(() => {
+      expect(frames).toHaveLength(1);
+    });
+    expect(frames[0]).toEqual({ version: 2, type: 'closed', client: 'tab', project: 'a', subscription: 1 });
+    browser.close();
+    await once(browser, 'close');
+  });
+});

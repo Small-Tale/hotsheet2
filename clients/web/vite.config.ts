@@ -1,11 +1,13 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
 import { uxReviewPlugin } from '@kerfjs/ui/vite-ux-review';
-import { defineConfig, type Plugin, type UserConfig } from 'vite';
+import { defineConfig, type HtmlTagDescriptor, type Plugin, type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
 import { scanBrowserDependencies } from './src/browser-dependency-scan';
+import { CLIENT_BUILD_META_NAME } from './src/client-build';
 import { localClientUrl, publishClientUrl } from './src/client-discovery';
 import { devServerRouteExclude } from './src/dev-server-routes';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
@@ -131,30 +133,80 @@ export function clientDiscoveryPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ command, isSsrBuild }) => ({
-  ...viteDependencyIsolation(),
-  plugins:
-    command === 'serve'
-      ? [
-          // First, so no later middleware or SPA fallback can answer a foreign identity (HS2-BJ00D1).
-          testServerIdentityPlugin(),
-          clientDiscoveryPlugin(),
-          // Serves `__ux-review/project.json` so the UX demo catalog can offer Kerf's Capture region link
-          // (HS2-41YZSB); registered before the Hono dev server so its middleware answers first.
-          uxReviewPlugin(),
-          { name: 'hotsheet-project-websocket-bridge', configureServer: installProjectWebSocketBridge },
-          devServer({
-            entry: 'src/dev-server.ts',
-            exclude: [devServerRouteExclude, ...defaultOptions.exclude],
-            injectClientScript: stableDevInjectClientScript(),
-          }),
-          stableDevClientStripPlugin(),
-        ]
-      : [],
-  define: { 'import.meta.env.HOTSHEET_WEB_STABLE_DEV': JSON.stringify(process.env.HOTSHEET_WEB_STABLE_DEV === '1') },
-  css: { postcss: { plugins: [remifyCss()] } },
-  server: { host: '127.0.0.1', port: 4175, strictPort: true, hmr: stableDevHmr() },
-  build: { sourcemap: true },
-  // The local production host bundle (`npm run build:host`) serves `dist/`; it needs no public assets.
-  publicDir: isSsrBuild ? false : 'public',
-}));
+/**
+ * The production client build id (HS2-KPJWBK): a hash of the emitted script and stylesheet file
+ * names. Vite content-hashes those names, so the same source yields the same id and any bundle change
+ * yields a new one.
+ */
+export function bundleClientBuildId(fileNames: readonly string[]): string {
+  const digest = createHash('sha256')
+    .update([...fileNames].sort().join('\n'))
+    .digest('hex');
+  return `bundle-${digest.slice(0, 16)}`;
+}
+
+/** One id per development server process: a restarted dev server serves a new client (HS2-KPJWBK). */
+export function developmentClientBuildId(now = Date.now(), random = randomBytes(4).toString('hex')): string {
+  return `dev-${now.toString(36)}-${random}`;
+}
+
+function clientBuildMetaTag(id: string): HtmlTagDescriptor {
+  return { tag: 'meta', attrs: { name: CLIENT_BUILD_META_NAME, content: id }, injectTo: 'head' };
+}
+
+/**
+ * Stamp the client build id into `index.html` (HS2-KPJWBK). The page reads it to learn which bundle
+ * it loaded; the host reads the same document to announce which bundle it serves.
+ */
+export function clientBuildIdPlugin(developmentId: string): Plugin {
+  return {
+    name: 'hotsheet-client-build-id',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (_html, context) => {
+        if (!context.bundle) return [clientBuildMetaTag(developmentId)];
+        const names = Object.values(context.bundle)
+          .filter((output) => output.type === 'chunk' || output.fileName.endsWith('.css'))
+          .map((output) => output.fileName);
+        return [clientBuildMetaTag(bundleClientBuildId(names))];
+      },
+    },
+  };
+}
+
+export default defineConfig(({ command, isSsrBuild }) => {
+  const developmentBuildId = developmentClientBuildId();
+  return {
+    ...viteDependencyIsolation(),
+    plugins:
+      command === 'serve'
+        ? [
+            // First, so no later middleware or SPA fallback can answer a foreign identity (HS2-BJ00D1).
+            testServerIdentityPlugin(),
+            clientDiscoveryPlugin(),
+            // Serves `__ux-review/project.json` so the UX demo catalog can offer Kerf's Capture region link
+            // (HS2-41YZSB); registered before the Hono dev server so its middleware answers first.
+            uxReviewPlugin(),
+            {
+              name: 'hotsheet-project-websocket-bridge',
+              configureServer: (server) => {
+                installProjectWebSocketBridge(server, undefined, undefined, undefined, () => developmentBuildId);
+              },
+            },
+            devServer({
+              entry: 'src/dev-server.ts',
+              exclude: [devServerRouteExclude, ...defaultOptions.exclude],
+              injectClientScript: stableDevInjectClientScript(),
+            }),
+            stableDevClientStripPlugin(),
+            clientBuildIdPlugin(developmentBuildId),
+          ]
+        : [clientBuildIdPlugin(developmentBuildId)],
+    define: { 'import.meta.env.HOTSHEET_WEB_STABLE_DEV': JSON.stringify(process.env.HOTSHEET_WEB_STABLE_DEV === '1') },
+    css: { postcss: { plugins: [remifyCss()] } },
+    server: { host: '127.0.0.1', port: 4175, strictPort: true, hmr: stableDevHmr() },
+    build: { sourcemap: true },
+    // The local production host bundle (`npm run build:host`) serves `dist/`; it needs no public assets.
+    publicDir: isSsrBuild ? false : 'public',
+  };
+});

@@ -12,6 +12,8 @@ import type {
   TicketRow as WireTicketRow,
 } from '../api';
 import { type BulkUpdateProgress } from '../bulk-update-progress';
+import { loadedClientBuildId } from '../client-build';
+import { hostClientBuild } from '../client-update-notice';
 import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { AiLaunchDialog } from '../components/ai-launch-dialog';
 import { AppError } from '../components/app-error';
@@ -528,7 +530,10 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         />
         <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />
         {commandDialogSurface()}
-        <ConnectionDetailsSurface assessment={project()?.compatibility} />
+        <ConnectionDetailsSurface
+          assessment={project()?.compatibility}
+          clientBundle={{ loaded: loadedClientBuildId(), served: hostClientBuild.value }}
+        />
         {repositoryStatusSurface()}
         {changeEvidenceSurface()}
         <BulkTicketDialog state={bulkTicketDialog.value} />

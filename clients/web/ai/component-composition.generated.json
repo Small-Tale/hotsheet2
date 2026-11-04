@@ -1246,6 +1246,70 @@
       }
     },
     {
+      "key": "hotsheet-web:client-update-notice-banner",
+      "package": "hotsheet-web",
+      "id": "client-update-notice-banner",
+      "name": "ClientUpdateNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip with a flush-then-Reload action when the host serves a newer web client bundle than this page loaded (HS2-KPJWBK).",
+      "publicExports": [
+        {
+          "name": "ClientUpdateNoticeBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/client-update-notice-banner.tsx"
+      ],
+      "source": "src/components/client-update-notice-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/client-update-notice-banner.tsx",
+        "composition": "src/components/client-update-notice-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:codex-hooks-notice-banner",
       "package": "hotsheet-web",
       "id": "codex-hooks-notice-banner",

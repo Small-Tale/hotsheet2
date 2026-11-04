@@ -5,6 +5,7 @@ import { type ActivityEvent, Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } f
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
 import { createChangeWebSocketMultiplexers } from '../change-ws-mux';
+import { noteHostClientBuild } from '../client-update-notice';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { Project } from '../interactions/types';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
@@ -198,7 +199,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   // on the main thread and in the worker alike.
   const multiplexerFor = createChangePollMultiplexers({ parse: parsePollResponse });
   const directPollerFor = createChangePollMultiplexers({ parse: parsePollResponse, directOnly: true });
-  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers();
+  // The bridge announces the client build it serves on every (re)subscription (HS2-KPJWBK).
+  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(undefined, noteHostClientBuild);
   const changeMuxUrl = (current: Project): string | undefined =>
     current.changeMuxPath ? new URL(current.changeMuxPath, location.href).href : undefined;
   const startStream = (current: Project, directOptions: ProjectChangeStreamOptions): (() => void) => {

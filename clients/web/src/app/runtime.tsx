@@ -5414,6 +5414,7 @@ export async function startHotSheetWebClient() {
     recoverUnhealthyProjectServer,
     previewRepositoryCompaction,
     executeRepositoryCompaction,
+    reloadForClientUpdate,
     repository,
     repositoryView,
     repositoryDetailActive: repositoryController.repositoryDetailActive,
@@ -6051,6 +6052,17 @@ export async function startHotSheetWebClient() {
     flushCommandAutosaves();
   };
   window.addEventListener('pagehide', flushOnHide);
+  // The newer-client notice's Reload (HS2-KPJWBK): capture every local recovery copy, send unsaved text
+  // edits as page hide does, then reload. A failed save (a restarted host has no project session)
+  // still reloads, because the recovery copies restore the drafts when their editors reopen.
+  async function reloadForClientUpdate() {
+    flushProjectSessionPersistence();
+    conversationPersistence.flush();
+    flushCommandAutosaves();
+    captureTicketDraftRecovery();
+    await flushTicketDrafts().catch(() => false);
+    window.location.reload();
+  }
   // HS2-E0H7S0: native shutdown captures recovery before awaiting durable bridge writes.
   listenForDesktopRecovery(window, () => {
     flushProjectSessionPersistence();

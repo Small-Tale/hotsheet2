@@ -40,6 +40,8 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   browseProjectPath: action('browse-project-path'),
   recoverUnhealthyServer: action('recover-unhealthy-server'),
   reloadClient: action('reload-client'),
+  dismissClientUpdateNotice: action('dismiss-client-update-notice'),
+  reloadForClientUpdate: action('reload-for-client-update'),
 } as const;
 
 /**

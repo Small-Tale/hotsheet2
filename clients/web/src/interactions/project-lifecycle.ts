@@ -2,6 +2,7 @@ import { delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { isRemoteClient } from '../client-origin';
+import { dismissClientUpdateNotice } from '../client-update-notice';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { type MigrationJobClient } from '../migration-job-client';
@@ -46,6 +47,8 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
   readonly previewRepositoryCompaction: (source: string) => Promise<void>;
   readonly executeRepositoryCompaction: (form: HTMLFormElement) => Promise<void>;
+  /** Flush unsaved edits through the page-hide path, then reload into the newer client (HS2-KPJWBK). */
+  readonly reloadForClientUpdate: () => Promise<void>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -85,6 +88,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     recoverUnhealthyProjectServer,
     previewRepositoryCompaction,
     executeRepositoryCompaction,
+    reloadForClientUpdate,
   } = dependencies;
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.addProject.selector, () => {
@@ -370,6 +374,17 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.reloadClient.selector, () => {
       window.location.reload();
+    }),
+  );
+  lifetime.add(
+    // One dismissal hides the newer-client notice for this loaded/served pair everywhere (HS2-KPJWBK).
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissClientUpdateNotice.selector, () => {
+      dismissClientUpdateNotice();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.reloadForClientUpdate.selector, () => {
+      void reloadForClientUpdate();
     }),
   );
   return () => {

@@ -25,6 +25,22 @@ const stale: CompatibilityAssessment = {
 };
 
 describe('ConnectionDetailsDialog', () => {
+  it('shows the loaded and served client bundles beside the server revisions (HS2-KPJWBK)', () => {
+    const markup = String(
+      ConnectionDetailsDialog({
+        assessment: stale,
+        clientBundle: { loaded: 'bundle-loaded123', served: 'bundle-served456' },
+      }),
+    );
+    expect(markup).toContain('Host-selected server build');
+    expect(markup).toMatch(
+      /Loaded client bundle[\s\S]*bundle-loaded123[\s\S]*Served client bundle[\s\S]*bundle-served456/,
+    );
+    // Without an announcement (an older host) both rows say so instead of disappearing.
+    const unknown = String(ConnectionDetailsDialog({ assessment: stale }));
+    expect(unknown).toMatch(/Loaded client bundle[\s\S]*Not reported[\s\S]*Served client bundle[\s\S]*Not reported/);
+  });
+
   it('shows authoritative running/client metadata and accessible recovery guidance', () => {
     const markup = String(ConnectionDetailsDialog({ assessment: stale }));
     expect(markup).toContain('role="dialog"');
@@ -41,7 +57,7 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).not.toContain('class="dialog-surface');
     expect(markup).toContain('class="kui-toolbar-text__description" id="connection-details-summary"');
     expect(markup).toContain('data-component="value-table"');
-    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(6);
+    expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(8);
     expect(markup).not.toContain('>Close</button>');
     expect(markup).not.toContain('connection-details-dialog__footer');
     expect(connectionRecoveryGuidance(stale)).toContain('cargo build -p hotsheet-server');

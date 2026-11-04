@@ -30,6 +30,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type MiddlewareHandler } from 'hono';
 
 import { spawnSync } from './child-process';
+import { servedClientBuildId } from './client-build-host';
 import { localClientUrl, publishClientUrl } from './client-discovery';
 import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
@@ -280,7 +281,8 @@ export function startLocalHost({
     server = createServer((request, response) => {
       void listener(request, response);
     });
-  installProjectWebSocketBridge({ httpServer: server });
+  const clientBuild = servedClientBuildId(distRoot);
+  installProjectWebSocketBridge({ httpServer: server }, undefined, undefined, undefined, () => clientBuild);
   return new Promise((resolveListen, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {

@@ -227,6 +227,28 @@ describe('extracted handlers retain live application bindings', () => {
     expect(opened.value).toBe(false);
     expect(recovery.value).toBeUndefined();
   });
+  it('reloads into a newer client only through the flush path, and dismisses by build pair (HS2-KPJWBK)', async () => {
+    const { clientUpdateNoticeDismissed, hostClientBuild } = await import('../client-update-notice');
+    const reloadForClientUpdate = vi.fn(() => Promise.resolve());
+    wireProjectLifecycleInteractions({ reloadForClientUpdate } as unknown as ProjectLifecycleInteractionsDependencies);
+    const reload = handler('click', '[data-action="reload-for-client-update"]');
+    reload(new Event('click'), target({}));
+    reload(new Event('click'), target({}));
+    expect(reloadForClientUpdate).toHaveBeenCalledTimes(2);
+    // Dismissal records the loaded/served pair of this page and never reloads.
+    const page = document as unknown as { querySelector?: unknown };
+    page.querySelector = () => ({ getAttribute: () => 'bundle-loaded' });
+    try {
+      hostClientBuild.value = 'bundle-served';
+      handler('click', '[data-action="dismiss-client-update-notice"]')(new Event('click'), target({}));
+      expect(clientUpdateNoticeDismissed.value).toBe('bundle-loaded|bundle-served');
+      expect(reloadForClientUpdate).toHaveBeenCalledTimes(2);
+    } finally {
+      delete page.querySelector;
+      hostClientBuild.value = undefined;
+      clientUpdateNoticeDismissed.value = undefined;
+    }
+  });
   it('keeps the saved-view name input separate through a Kerf close request, busy protection, and reset', () => {
     const opened = signal(true),
       busy = signal(false),

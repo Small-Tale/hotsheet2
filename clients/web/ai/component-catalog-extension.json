@@ -417,6 +417,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "client-update-notice-banner",
+      "name": "ClientUpdateNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip with a flush-then-Reload action when the host serves a newer web client bundle than this page loaded (HS2-KPJWBK).",
+      "useWhen": [
+        "The host announced a web client build that differs from the bundle this page loaded."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ClientUpdateNoticeBanner behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/client-update-notice-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "codex-hooks-notice-banner",
       "name": "CodexHooksNoticeBanner",
       "kind": "component",

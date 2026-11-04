@@ -137,7 +137,9 @@ test('tells development users to restart a server built from older local source'
     'Running server version',
     'Running server build',
     'Current server source',
-    'Client build',
+    'Host-selected server build',
+    'Loaded client bundle',
+    'Served client bundle',
     'Protocol ranges',
     'Server started',
   ]);

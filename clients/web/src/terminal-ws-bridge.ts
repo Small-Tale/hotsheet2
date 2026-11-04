@@ -11,6 +11,8 @@ const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
 type TargetResolver = (projectId: string, terminalId: string) => string | undefined | Promise<string | undefined>;
 type SyncTargetResolver = (projectId: string, client?: string) => string | undefined | Promise<string | undefined>;
 type StoreResolver = (projectId: string) => string[] | undefined;
+/** The web client build this host serves (HS2-KPJWBK); undefined when it is unknown. */
+type ClientBuildResolver = () => string | undefined;
 
 export function webSocketRawText(data: WebSocket.RawData): string {
   if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
@@ -77,7 +79,12 @@ export function isProjectWebSocketPath(requestUrl: string | undefined): boolean 
   return pathname === CHANGE_WS_MUX_PATH || browserSync.test(pathname) || browserAttach.test(pathname);
 }
 
-function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, resolveStores: StoreResolver): void {
+function serveChangeMux(
+  browser: WebSocket,
+  resolveSync: SyncTargetResolver,
+  resolveStores: StoreResolver,
+  clientBuild: ClientBuildResolver,
+): void {
   type Subscription = {
     client: string;
     project: string;
@@ -99,7 +106,11 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
   const groups = new Map<string, Group>();
   const keyOf = (client: string, project: string) => `${client}\u0000${project}`;
   const send = (message: ChangeWsMessage) => {
-    if (browser.readyState === WebSocket.OPEN) browser.send(JSON.stringify(message));
+    if (browser.readyState !== WebSocket.OPEN) return;
+    // Every (re)subscription answer announces the served client build, so a page that outlived a
+    // host restart learns of a newer bundle without any polling (HS2-KPJWBK).
+    const build = message.type === 'event' ? undefined : clientBuild();
+    browser.send(JSON.stringify(build ? { ...message, client_build: build } : message));
   };
   const groupBase = (target: string, client: string): string => {
     const url = new URL(target);
@@ -384,6 +395,7 @@ export function installProjectWebSocketBridge(
   resolveTerminal: TargetResolver = projectTerminalWebSocketUrl,
   resolveSync: SyncTargetResolver = projectChangeWebSocketUrl,
   resolveStores: StoreResolver = projectChangeStoreIds,
+  clientBuild: ClientBuildResolver = () => undefined,
 ): void {
   const browserServer = new WebSocketServer({ noServer: true });
   server.httpServer?.on('upgrade', (request, socket, head) => {
@@ -398,7 +410,7 @@ export function installProjectWebSocketBridge(
     });
     if (new URL(request.url ?? '/', 'http://localhost').pathname === CHANGE_WS_MUX_PATH) {
       browserServer.handleUpgrade(request, socket, head, (browser) => {
-        serveChangeMux(browser, resolveSync, resolveStores);
+        serveChangeMux(browser, resolveSync, resolveStores, clientBuild);
       });
       return;
     }

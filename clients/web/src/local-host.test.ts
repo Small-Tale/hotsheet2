@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,13 +6,18 @@ import { dirname, resolve } from 'node:path';
 
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
 
+import { CHANGE_WS_MUX_PATH } from './change-ws-mux';
+import { CLIENT_BUILD_META_NAME } from './client-build';
 import {
   createLocalHostApp,
   mcpBinaryEnvironment,
   releaseBinaryEnvironment,
   snapshotLocalHostArtifacts,
+  startLocalHost,
 } from './local-host';
+import { webSocketRawText } from './terminal-ws-bridge';
 
 describe('local production host (HS2-587N4D)', () => {
   let dist: string;
@@ -59,6 +65,59 @@ describe('local production host (HS2-587N4D)', () => {
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+});
+
+describe('local host client build announcement (HS2-KPJWBK)', () => {
+  let dist: string, home: string;
+  const previousHome = process.env.HOTSHEET_HOME;
+  beforeAll(async () => {
+    dist = await mkdtemp(resolve(tmpdir(), 'hs-local-host-build-'));
+    // Client discovery writes under HOTSHEET_HOME; never touch the developer's real home.
+    home = await mkdtemp(resolve(tmpdir(), 'hs-local-host-home-'));
+    process.env.HOTSHEET_HOME = home;
+  });
+  afterAll(async () => {
+    if (previousHome === undefined) delete process.env.HOTSHEET_HOME;
+    else process.env.HOTSHEET_HOME = previousHome;
+    await rm(dist, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  });
+  const stamp = (id: string) =>
+    writeFile(
+      resolve(dist, 'index.html'),
+      `<!doctype html><head><meta name="${CLIENT_BUILD_META_NAME}" content="${id}"></head>`,
+    );
+  /** Start a real host, subscribe once on its change bridge, and return the announced build. */
+  const announcedAfterStart = async (): Promise<unknown> => {
+    const server = await startLocalHost({ port: 0, distRoot: dist });
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('missing host address');
+      const browser = new WebSocket(`ws://127.0.0.1:${address.port}${CHANGE_WS_MUX_PATH}`);
+      await once(browser, 'open');
+      const answer = once(browser, 'message');
+      browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'gone', client: 'tab', subscription: 1 }));
+      const [data] = (await answer) as [WebSocket.RawData];
+      browser.close();
+      await once(browser, 'close');
+      return (JSON.parse(webSocketRawText(data)) as { client_build?: unknown }).client_build;
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolveClose) => server.close(resolveClose));
+    }
+  };
+
+  it('announces the pinned dist build, and a restart onto a newer dist announces the new one', async () => {
+    await stamp('bundle-first');
+    expect(await announcedAfterStart()).toBe('bundle-first');
+    // Restarting onto the same dist announces the same build: an open page raises nothing.
+    expect(await announcedAfterStart()).toBe('bundle-first');
+    await stamp('bundle-second');
+    expect(await announcedAfterStart()).toBe('bundle-second');
+    // An unstamped dist (an older build) announces nothing.
+    await writeFile(resolve(dist, 'index.html'), '<!doctype html><title>Hot Sheet</title>');
+    expect(await announcedAfterStart()).toBeUndefined();
   });
 });
 

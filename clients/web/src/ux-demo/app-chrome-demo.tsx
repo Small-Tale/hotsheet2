@@ -15,6 +15,7 @@ import {
   ProjectRestoreState,
 } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
+import { ClientUpdateNoticeBanner } from '../components/client-update-notice-banner';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
@@ -111,6 +112,14 @@ export function SourceStaleNoticeBannerDemo() {
   return (
     <CatalogExample label="Newer Local Source">
       <SourceStaleNoticeBanner />
+    </CatalogExample>
+  );
+}
+
+export function ClientUpdateNoticeBannerDemo() {
+  return (
+    <CatalogExample label="Newer Client Available">
+      <ClientUpdateNoticeBanner />
     </CatalogExample>
   );
 }
@@ -220,6 +229,7 @@ export const demoModule: DemoModule = {
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
     'server-build-notice-banner': { catalogExamples: true, Demo: ServerBuildNoticeBannerDemo },
     'source-stale-notice-banner': { catalogExamples: true, Demo: SourceStaleNoticeBannerDemo },
+    'client-update-notice-banner': { catalogExamples: true, Demo: ClientUpdateNoticeBannerDemo },
     'ticket-page-more': { catalogExamples: true, Demo: TicketPageMoreDemo },
     'app-empty-state': { catalogExamples: true, Demo: AppEmptyStateDemo },
     'app-error': { catalogExamples: true, Demo: AppErrorDemo },

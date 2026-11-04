@@ -252,3 +252,82 @@ describe('change WebSocket multiplexing (HS2-QJR1K6)', () => {
     expect(sockets[0].readyState).toBe(3);
   });
 });
+
+describe('client build announcement on the change bridge (HS2-KPJWBK)', () => {
+  it('keeps an announced build on acknowledgements only and tolerates frames without one', () => {
+    const base = { version: 2, client: 'tab', project: 'a', subscription: 1 } as const;
+    expect(parseChangeWsMessage({ ...base, type: 'subscribed', client_build: 'bundle-a' })).toEqual({
+      ...base,
+      type: 'subscribed',
+      client_build: 'bundle-a',
+    });
+    expect(parseChangeWsMessage({ ...base, type: 'closed', client_build: 'bundle-a' })).toMatchObject({
+      client_build: 'bundle-a',
+    });
+    // An older host omits it; a malformed value is dropped rather than failing the bridge contract.
+    expect(parseChangeWsMessage({ ...base, type: 'subscribed' })).toEqual({ ...base, type: 'subscribed' });
+    expect(parseChangeWsMessage({ ...base, type: 'subscribed', client_build: 7 })).toEqual({
+      ...base,
+      type: 'subscribed',
+    });
+    expect(parseChangeWsMessage({ ...base, type: 'event', data: '{}', client_build: 'x' })).not.toHaveProperty(
+      'client_build',
+    );
+  });
+
+  it('reports the announced build on every subscription answer, including after a reconnect', () => {
+    const sockets: FakeSocket[] = [],
+      announced: string[] = [];
+    const muxFor = createChangeWebSocketMultiplexers(
+      (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      (build) => announced.push(build),
+    );
+    const mux = muxFor('http://host/__hotsheet/change-mux/poll', 'tab');
+    const first = mux.open('a', 'ws://host/p/a/ws/sync');
+    const opened: string[] = [];
+    first.addEventListener('open', () => opened.push('first'));
+    sockets[0].open();
+    sockets[0].message({
+      version: 2,
+      type: 'subscribed',
+      client: 'tab',
+      project: 'a',
+      subscription: 1,
+      client_build: 'bundle-old',
+    });
+    // Events never carry it, and an older host's acknowledgement reports nothing.
+    sockets[0].message({ version: 2, type: 'event', client: 'tab', project: 'a', subscription: 1, data: '{}' });
+    expect(announced).toEqual(['bundle-old']);
+    sockets[0].close();
+    const resumed = mux.open('a', 'ws://host/p/a/ws/sync');
+    resumed.addEventListener('open', () => opened.push('resumed'));
+    sockets[1].open();
+    sockets[1].message({
+      version: 2,
+      type: 'subscribed',
+      client: 'tab',
+      project: 'a',
+      subscription: 2,
+      client_build: 'bundle-new',
+    });
+    expect(announced).toEqual(['bundle-old', 'bundle-new']);
+    expect(opened).toEqual(['first', 'resumed']);
+    // A host whose project session is gone still announces on the closed answer.
+    const other = mux.open('b', 'ws://host/p/b/ws/sync');
+    sockets[1].message({
+      version: 2,
+      type: 'closed',
+      client: 'tab',
+      project: 'b',
+      subscription: 3,
+      client_build: 'bundle-new',
+    });
+    expect(announced).toEqual(['bundle-old', 'bundle-new', 'bundle-new']);
+    expect(other.readyState).toBe(3);
+    resumed.close();
+  });
+});

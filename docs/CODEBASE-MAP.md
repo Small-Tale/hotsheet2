@@ -363,6 +363,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/search-projection-coalescing.ts # Typing-pause projection of the workspace search model into searchQuery/searchTokens; chips and empty/non-empty publish at once (HS2-X72PD6)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
     src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
+    src/client-build.ts # Web client build id: the index.html meta tag name, validation, and reading the loaded/served id (HS2-KPJWBK); src/client-build-host.ts reads it from the host's pinned dist/index.html
+    src/client-update-notice.ts # Host-announced client build signal, loaded/served comparison, and the global pair-keyed dismissal of the newer-client notice (HS2-KPJWBK)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)
     src/timeline-stage-estimate.ts # The actively worked ticket's in-progress timeline stage: phase-median time left, else claim ETA (HS2-ST6RN1)
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, persisted shell/AI/chat type visibility and scoped bulk inclusion rules
@@ -404,7 +406,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/change-poll-mux.ts # Per-origin ChangePollMultiplexer: v1 per tab or v2 across tab clients; abort+reissue, client/project fan-out, bounded direct fallback on an older bridge (HS2-6W1NNF, HS2-NP7R42, HS2-TVASVW)
     src/change-poll-slots.ts # Origin-scoped Web Locks cap direct polls across independent tabs/workers; paced zero-wait fallback without locks (HS2-GDF4ZJ)
     src/change-mux-bridge.ts # Bridge half of multiplexed change polls: v1 per-tab and v2 per-poll client identity, first-completion-plus-grace fan-in over upstream `/ws/poll` (HS2-6W1NNF, HS2-NP7R42)
-    src/change-ws-mux.ts # Shared change WebSocket protocol: v2 client/project virtual sockets across tabs, direct-socket fallback (HS2-QJR1K6, HS2-NP7R42)
+    src/change-ws-mux.ts # Shared change WebSocket protocol: v2 client/project virtual sockets across tabs, direct-socket fallback, optional client_build on subscribed/closed answers (HS2-QJR1K6, HS2-NP7R42, HS2-KPJWBK)
     src/terminal-ws-bridge.ts # Browser WebSocket bridge: per-project terminal proxy; one change socket per authenticated server and client with checkout/store fan-out and old-server fallback (HS2-QJR1K6/HS2-XAGJP3/HS2-NP7R42)
     src/change-stream-worker-host.ts # Main-thread worker owner: ordered per-project apply + ack, crash restart replaying from the last applied cursor, skew/ready/crash-loop fallback to the main-thread stream (HS2-SH9179)
     src/change-stream-worker.test.ts # Transition-matrix tests: handshake, gap, repeat, out-of-order, reconnect, cancel, restart, skew, coalescing/overflow
@@ -449,6 +451,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
     src/components/server-build-notice-banner.tsx # Dismissible info strip when a pinned host serves a project through a mismatched shared machine server it could not restart yet (HS2-46BKH7)
     src/components/source-stale-notice-banner.tsx # Dismissible info strip when workspace source is newer than the running server build but the client/server pair matches (HS2-B84P1S)
+    src/components/client-update-notice-banner.tsx # Dismissible info strip with Dismiss and flush-then-Reload when the host serves a newer web client bundle (HS2-KPJWBK)
     src/components/notifications-paused-banner.tsx # Kerf StateBanner shown in every project while notifications are paused, with the waiting count and Resume (HS2-QYA9SC)
     src/components/project-strip-actions.tsx # ProjectTabBar zone content: dashboard-mode and Add-project borderless Kerf control groups of native buttons, declared rendersAs toolbar-control-group in kerf.components.json (HS2-PNCDAE)
     src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)

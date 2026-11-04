@@ -87,7 +87,11 @@ export function resetConnectionDetailsDemo(root?: ParentNode) {
 export function ConnectionDetailsDialogDemo() {
   return (
     <CatalogExample label="Interactive" note="Choose a compatibility scenario in the settings pane.">
-      <ConnectionDetailsDialog embedded assessment={connectionDetailsAssessment(connectionDetailsScenario.value)} />
+      <ConnectionDetailsDialog
+        embedded
+        assessment={connectionDetailsAssessment(connectionDetailsScenario.value)}
+        clientBundle={{ loaded: 'bundle-0f3a9c21d4e5b678', served: 'bundle-7c1e2d3f4a5b6978' }}
+      />
     </CatalogExample>
   );
 }

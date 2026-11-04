@@ -14,8 +14,10 @@ import {
   type TicketRow as WireTicketRow,
 } from '../api';
 import { type AppRegionId } from '../app-region-resize';
+import { showsClientUpdateNotice } from '../client-update-notice';
 import { AppEmptyState, ProjectOpeningState, ProjectRestoreState } from '../components/app-empty-state';
 import { type AppShellMobileView } from '../components/app-shell';
+import { ClientUpdateNoticeBanner } from '../components/client-update-notice-banner';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { corruptTicketKey } from '../components/corrupt-ticket-row';
@@ -619,6 +621,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {showsStaleSourceNotice(current.compatibility) && <SourceStaleNoticeBanner />}
+            {showsClientUpdateNotice() && <ClientUpdateNoticeBanner />}
             {RepositorySizeBanner({
               report: repositorySizeReport(current.id),
               dismissed: current.repositorySizeWarningDismissed,

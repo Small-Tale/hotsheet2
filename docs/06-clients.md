@@ -1209,7 +1209,8 @@ preview/download, server directory browser) are separate design work.
   surfaced without an unsafe restart action.
   Every compatibility warning's **View details** action opens an accessible build-details
   dialog. It reports the running server application version, build revision, current local
-  source revision, client revision, both protocol ranges, and server start time when the
+  source revision, host-selected server build, the loaded and served web client bundles
+  (HS2-KPJWBK), both protocol ranges, and server start time when the
   authenticated handshake supplied them. Missing values are labeled rather than guessed.
   The dialog uses the same shared divider-free icon/title/subtitle header and borderless
   inset-separator value table as repository status. Every metadata entry is a canonical
@@ -1228,6 +1229,24 @@ preview/download, server directory browser) are separate design work.
   every open project. The dismissal is keyed on the build and source revision pair, so a later
   rebuild or source change announces again. Protocol mismatches, unknown compatibility, and a
   server running a build other than the client's keep the alert banner.
+  A long-lived page learns when the host serves a newer web client (HS2-KPJWBK). The build stamps
+  a client build id into `index.html` as `<meta name="hotsheet-client-build">`: a production
+  build hashes its content-hashed script and stylesheet names, so the same source yields the same
+  id, and the development server uses one id per process. The page reads the id of the bundle it
+  loaded. The host (the production host from its pinned `dist/index.html`, the Vite dev bridge
+  from its process id) adds an optional `client_build` field to every `subscribed` and
+  `closed` answer on the multiplexed change WebSocket. A host restart always drops that socket,
+  and each reconnect re-subscribes, so the page hears the current build without a timer or a
+  visibility request. Older pages ignore the field, and older hosts omit it. When both ids are
+  known and differ, the shell shows the informational, dismissible `ClientUpdateNoticeBanner`
+  ("A newer version of Hot Sheet is available") with Dismiss and Reload. It never reloads by
+  itself. Reload captures every local recovery copy, sends unsaved text edits through the same
+  path as page hide, and then reloads. A failed save, such as against a restarted host with no
+  project session, still reloads, because the recovery copies restore drafts when their editors
+  reopen. Dismissal is global and keyed on the loaded and served pair, so a later host build
+  announces again. The connection details dialog shows the loaded and served client bundles
+  beside the host-selected server build. The opt-in change-stream worker does not relay the
+  announcement yet (HS2-WHW3M1).
   Every banner in the header slot wraps inside the viewport when several stack, including at
   phone width: the slot is one shrinkable grid track, and the connection alert gives its detail
   its own wrapping line (StateBanner `copyLayout="stacked"`) rather than truncating it beside

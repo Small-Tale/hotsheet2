@@ -37,11 +37,19 @@ export function connectionRecoveryGuidance(assessment: CompatibilityAssessment):
   return 'Reconnect after updating the incompatible Hot Sheet component.';
 }
 
+/** The web client bundle this page loaded and the one the host now serves (HS2-KPJWBK). */
+export interface ClientBundleIds {
+  loaded?: string;
+  served?: string;
+}
+
 export function ConnectionDetailsDialog({
   assessment,
+  clientBundle,
   embedded = false,
 }: {
   assessment?: CompatibilityAssessment;
+  clientBundle?: ClientBundleIds;
   embedded?: boolean;
 }) {
   if (!assessment) return null;
@@ -112,10 +120,26 @@ export function ConnectionDetailsDialog({
             }
           />
           <ValueTableRow
-            label="Client build"
+            label="Host-selected server build"
             value={
               <span class="connection-details-dialog__value">
                 <code class="connection-details-dialog__revision">{valueOrUnavailable(assessment.clientRevision)}</code>
+              </span>
+            }
+          />
+          <ValueTableRow
+            label="Loaded client bundle"
+            value={
+              <span class="connection-details-dialog__value">
+                <code class="connection-details-dialog__revision">{valueOrUnavailable(clientBundle?.loaded)}</code>
+              </span>
+            }
+          />
+          <ValueTableRow
+            label="Served client bundle"
+            value={
+              <span class="connection-details-dialog__value">
+                <code class="connection-details-dialog__revision">{valueOrUnavailable(clientBundle?.served)}</code>
               </span>
             }
           />

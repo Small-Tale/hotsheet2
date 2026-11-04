@@ -169,6 +169,7 @@ describe('UX demo catalog', () => {
       'project-setup-warning-banner',
       'server-build-notice-banner',
       'source-stale-notice-banner',
+      'client-update-notice-banner',
       'repository-size-banner',
       'notifications-paused-banner',
       'provider-icon',

@@ -10,7 +10,18 @@ export type ChangeWsCommand = {
   subscription: number;
 };
 export type ChangeWsMessage =
-  | { version: 2; type: 'subscribed' | 'closed'; client: string; project: string; subscription: number }
+  | {
+      version: 2;
+      type: 'subscribed' | 'closed';
+      client: string;
+      project: string;
+      subscription: number;
+      /**
+       * The web client build the host serves (HS2-KPJWBK). Optional, so an older page ignores it and
+       * an older host omits it; every (re)subscription repeats it.
+       */
+      client_build?: string;
+    }
   | { version: 2; type: 'event'; client: string; project: string; subscription: number; data: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -42,6 +53,7 @@ export function parseChangeWsMessage(value: unknown): ChangeWsMessage | undefine
       client: value.client,
       project: value.project,
       subscription: value.subscription,
+      ...(typeof value.client_build === 'string' ? { client_build: value.client_build } : {}),
     };
   if (value.type === 'event' && typeof value.data === 'string')
     return {
@@ -62,6 +74,8 @@ export function changeWsMuxUrl(pollMuxUrl: string): string {
 }
 
 type OpenSocket = (url: string) => WebSocket;
+/** Receives the host's announced web client build (HS2-KPJWBK). */
+export type ClientBuildListener = (clientBuild: string) => void;
 
 /** A project-local socket facade for the existing cursor/replay transport. */
 class ProjectSocket extends EventTarget {
@@ -135,6 +149,7 @@ export class ChangeWebSocketMultiplexer {
     private readonly client: string,
     private readonly openSocket: OpenSocket = (target) => new WebSocket(target),
     private readonly openTimeoutMs = 1_500,
+    private readonly onClientBuild?: ClientBuildListener,
   ) {}
 
   private key(client: string, project: string): string {
@@ -211,6 +226,7 @@ export class ChangeWebSocketMultiplexer {
       }
       contractSeen = true;
       this.supported = true;
+      if (message.type !== 'event' && message.client_build) this.onClientBuild?.(message.client_build);
       const socket = this.projects.get(this.key(message.client, message.project));
       if (socket?.subscription !== message.subscription) return;
       if (message.type === 'subscribed') socket.opened();
@@ -246,14 +262,14 @@ export class ChangeWebSocketMultiplexer {
   }
 }
 
-export function createChangeWebSocketMultiplexers(openSocket?: OpenSocket) {
+export function createChangeWebSocketMultiplexers(openSocket?: OpenSocket, onClientBuild?: ClientBuildListener) {
   const byEndpoint = new Map<string, ChangeWebSocketMultiplexer>();
   return (pollMuxUrl: string, client: string): ChangeWebSocketMultiplexer => {
     const url = changeWsMuxUrl(pollMuxUrl);
     const key = url;
     let mux = byEndpoint.get(key);
     if (!mux) {
-      mux = new ChangeWebSocketMultiplexer(url, client, openSocket);
+      mux = new ChangeWebSocketMultiplexer(url, client, openSocket, undefined, onClientBuild);
       byEndpoint.set(key, mux);
     }
     return mux;
