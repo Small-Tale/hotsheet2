@@ -228,6 +228,54 @@ export interface WorkerGroup {
   tickets: Array<{ ref: WorkerTicketRef; slug: string; assignment?: WorkerTicket; plan?: PlannedWorkerTicket }>;
 }
 
+/** Lower is more advanced; a review-returned `blocked` operation is superseded by its correction. */
+function workerTicketRank(ticket: WorkerTicket, now: number): number {
+  switch (ticket.assignment_phase) {
+    case 'integrating':
+    case 'suspended_integration':
+      return 0;
+    case 'ci':
+      return 1;
+    case 'handoff':
+    case 'verifying':
+      return 2;
+    case 'accepted':
+      return 4;
+    case 'offered':
+      return 5;
+    case 'done':
+      return 6;
+    case 'blocked':
+      return 8;
+    case null:
+      return ticket.claim_expires_at !== null && ticket.claim_expires_at > now ? 3 : 7;
+  }
+}
+
+/**
+ * HS2-8SZBJJ: the server keeps one record per assignment operation and live claim, so one
+ * qualified ticket can arrive several times for one worker. A Worker Column shows it once:
+ * the most advanced record wins (integrating, remote CI, handoff, live claim, accepted,
+ * offered, done, expired claim, then blocked), ties go to the later assignment id, and
+ * that record decides the section. The same ticket under another worker is unaffected.
+ */
+function representativeWorkerTickets(tickets: readonly WorkerTicket[], now: number): WorkerTicket[] {
+  const best = new Map<string, WorkerTicket>();
+  for (const ticket of tickets) {
+    const key = qualifiedWorkerTicket(ticket.ticket),
+      previous = best.get(key);
+    if (!previous) {
+      best.set(key, ticket);
+      continue;
+    }
+    const order =
+      workerTicketRank(ticket, now) - workerTicketRank(previous, now) ||
+      (previous.assignment_id ?? '').localeCompare(ticket.assignment_id ?? '', undefined, { numeric: true });
+    if (order < 0) best.set(key, ticket);
+  }
+  return [...best.values()];
+}
+
 /** Group authoritative work without treating a reservation or tentative plan as a live claim. */
 export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): WorkerGroup[] {
   const groups = new Map<WorkerGroupKind, WorkerGroup>();
@@ -247,7 +295,7 @@ export function workerGroups(worker: WorkerRow, now = Date.now() / 1000): Worker
     group.tickets.push(item);
     groups.set(kind, group);
   };
-  for (const ticket of worker.tickets) {
+  for (const ticket of representativeWorkerTickets(worker.tickets, now)) {
     const phase = ticket.assignment_phase;
     const kind: WorkerGroupKind =
       worker.availability !== 'live'

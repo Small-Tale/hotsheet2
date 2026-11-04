@@ -110,6 +110,16 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
             started_phase: null,
             eta_at: null,
           },
+          // HS2-8SZBJJ: a live claim on the same qualified ticket is a second record, not a second card.
+          {
+            ticket: { connection_id: 'git-local', native_id: '01' },
+            slug: row.slug,
+            assignment_id: null,
+            assignment_phase: null,
+            claim_expires_at: 1999999999,
+            started_phase: 'working',
+            eta_at: null,
+          },
         ],
         planned: [],
       },
@@ -131,7 +141,16 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
           {
             ticket: { connection_id: 'git-other', native_id: '01' },
             slug: row.slug,
-            assignment_id: 'assignment-2',
+            assignment_id: 'assignment-2-1',
+            assignment_phase: 'blocked',
+            claim_expires_at: null,
+            started_phase: null,
+            eta_at: null,
+          },
+          {
+            ticket: { connection_id: 'git-other', native_id: '01' },
+            slug: row.slug,
+            assignment_id: 'assignment-2-2',
             assignment_phase: 'offered',
             claim_expires_at: null,
             started_phase: null,
@@ -253,6 +272,13 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
   await expect(columns).toContainText('Codex integrator');
   await expect(columns).toContainText('Integrating');
   await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toBeVisible();
+  // HS2-8SZBJJ: each Worker Column lists a qualified ticket once, in its most advanced section.
+  await expect(columns.locator('[data-ticket-qualified-id="git-local:01"]')).toHaveCount(1);
+  await expect(columns.locator('[data-ticket-qualified-id="git-other:01"]')).toHaveCount(1);
+  await expect(columns.getByRole('region', { name: 'Integrating Tickets' })).toContainText('Integrating · 1');
+  await expect(columns.getByRole('region', { name: 'Offered Tickets' })).toContainText('Offered · 1');
+  await expect(columns.getByRole('region', { name: 'Working on Tickets' })).toHaveCount(0);
+  await expect(columns.getByRole('region', { name: 'Assigned Tickets' })).toHaveCount(0);
   await columns.locator('[data-ticket-qualified-id="git-local:01"]').click();
   const inspector = page.getByRole('complementary', { name: 'Inspector rail' });
   await expect(inspector).toContainText(row.title);

@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeWorkerViews,
   parseWorkerView,
+  qualifiedWorkerTicket,
   workerGroups,
   type WorkerRow,
+  type WorkerTicket,
   workerTicketOperationKey,
   type WorkerView,
 } from './worker-view-model';
@@ -111,6 +113,53 @@ describe('HS2-E9SR7R worker view projection', () => {
       view('two', [worker('A', { tickets: [{ ...ticket('same'), ticket: ref('same', 'other') }] })]),
     ]);
     expect(rows[0]?.tickets.map((item) => item.ticket.connection_id)).toEqual(['git', 'other']);
+  });
+
+  it('HS2-8SZBJJ shows one card per qualified ticket in a worker column, choosing the most advanced record', () => {
+    const op = (id: string | null, phase: WorkerTicket['assignment_phase'], claim: number | null = null) => ({
+      ...ticket('same'),
+      assignment_id: id,
+      assignment_phase: phase,
+      claim_expires_at: claim,
+    });
+    const items = (groups: ReturnType<typeof workerGroups>) =>
+      groups.map((group) => [group.kind, group.tickets.map((item) => item.assignment?.assignment_id ?? null)]);
+    // A review-returned blocked operation and its handoff correction on an expired worker.
+    const expired = worker('A', {
+      availability: 'disconnected',
+      tickets: [op('same-1', 'blocked'), op('same-2', 'handoff')],
+    });
+    expect(items(workerGroups(expired, 100))).toEqual([['unresolved', ['same-2']]]);
+    // A live claim wins over an offered or accepted operation for the same ticket.
+    const claimed = worker('A', { tickets: [op('offer', 'offered'), op(null, null, 500)] });
+    expect(items(workerGroups(claimed, 100))).toEqual([['working', [null]]]);
+    // An expired claim falls below the operation; handoff outranks a live claim.
+    expect(items(workerGroups(claimed, 600))).toEqual([['offered', ['offer']]]);
+    expect(items(workerGroups(worker('A', { tickets: [op(null, null, 500), op('h', 'handoff')] }), 100))).toEqual([
+      ['handoff', ['h']],
+    ]);
+    // Equal ranks keep the later assignment, numerically ordered.
+    expect(items(workerGroups(worker('A', { tickets: [op('op-10', 'blocked'), op('op-9', 'blocked')] }), 100))).toEqual(
+      [['assigned', ['op-10']]],
+    );
+    // Records merged from two source reads still collapse; another qualified ticket and plans stay.
+    const [merged] = mergeWorkerViews([
+      view('one', [worker('A', { tickets: [op('same-1', 'blocked')] })]),
+      view('two', [
+        worker('A', {
+          tickets: [op('same-2', 'integrating'), { ...op('other', 'accepted'), ticket: ref('same', 'other') }],
+        }),
+      ]),
+    ]);
+    expect(
+      workerGroups({ ...merged, role: 'integrator' }, 100).map((group) => [
+        group.kind,
+        group.tickets.map((item) => qualifiedWorkerTicket(item.ref)),
+      ]),
+    ).toEqual([
+      ['integrating', ['git:same']],
+      ['assigned', ['other:same']],
+    ]);
   });
 
   it('retains distinct blocked and offered operations plus a claim for one qualified ticket', () => {

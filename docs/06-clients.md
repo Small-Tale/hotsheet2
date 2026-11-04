@@ -246,7 +246,13 @@ preview/download, server directory browser) are separate design work.
   distinguishes live integration from **Waiting to integrate** handoffs and remote
   CI; handed-off tickets do not make the former worker appear busy. Preserve a
   disconnected worker's column and label its retained work **Unresolved**, without
-  a live spinner. If a source or tool cannot be observed, say that coverage is
+  a live spinner. A worker column lists each source-qualified ticket once even
+  when the read model carries several operations or a live claim for it: the most
+  advanced record chooses the section (integrating, remote CI, handoff or verifying,
+  live claim, accepted, offered, done, expired claim, then a review-returned blocked
+  operation), and a tie keeps the later assignment (HS2-8SZBJJ). The same ticket
+  still appears under each other worker that holds it.
+  If a source or tool cannot be observed, say that coverage is
   unknown rather than showing zero workers. Keep idle workers visible and give a
   genuine zero-worker state. Ticket activation opens the existing inspector; this
   monitoring view adds no launch, stop, or message actions.

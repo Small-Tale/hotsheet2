@@ -73,6 +73,14 @@ cursor-driven title/status refresh; the authenticated real-server browser path
 checks checkout coverage. Rebuilt wide/medium/narrow visual review is recorded
 on the ticket.
 
+HS2-8SZBJJ covers one card per source-qualified ticket in a worker column in
+`clients/web/src/worker-view-model.test.ts` (blocked plus handoff on a
+disconnected worker, live versus expired claim against an offered operation,
+handoff over a live claim, numeric tie-break, and records merged from two source
+reads). The shipped Workers parent in `clients/web/tests/providers.spec.ts` feeds
+a duplicate live claim and a superseded blocked operation and asserts a single
+card in the Integrating and Offered sections.
+
 HS2-J118P3 covers cursor coalescing, idle snapshots, save-barrier waiting and
 invalidation/retry, ordinary-refresh ordering, disposal, and exact project/source
 selection in `clients/web/src/worker-ticket-refresh.test.ts`. The shipped mocked
