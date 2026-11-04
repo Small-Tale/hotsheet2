@@ -282,18 +282,15 @@ fn write_worklist(path: &Path, body: &str) -> io::Result<()> {
             .parent()
             .and_then(Path::parent)
             .expect("checkout worklist always has .hotsheet2 parent");
-        let Some(ignore) = local_git_exclude(checkout) else {
+        let Some((ignore, pattern)) = local_git_exclude(checkout) else {
             return std::fs::write(path, body);
         };
         let mut contents = std::fs::read_to_string(&ignore).unwrap_or_default();
-        if !contents
-            .lines()
-            .any(|line| line.trim() == CHECKOUT_WORKLIST)
-        {
+        if !contents.lines().any(|line| line.trim() == pattern) {
             if !contents.is_empty() && !contents.ends_with('\n') {
                 contents.push('\n');
             }
-            contents.push_str(CHECKOUT_WORKLIST);
+            contents.push_str(&pattern);
             contents.push('\n');
             if let Some(parent) = ignore.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -305,9 +302,13 @@ fn write_worklist(path: &Path, body: &str) -> io::Result<()> {
 }
 
 /// Resolve git's machine-local exclude file without changing committed `.gitignore`.
-/// This also follows the gitdir/commondir indirection used by linked worktrees.
-fn local_git_exclude(checkout: &Path) -> Option<PathBuf> {
+/// This also follows the gitdir/commondir indirection used by linked worktrees. Returns
+/// the exclude file and the pattern that names this checkout's worklist in it.
+fn local_git_exclude(checkout: &Path) -> Option<(PathBuf, String)> {
     let dot_git = checkout.join(".git");
+    if !dot_git.exists() {
+        return enclosing_git_exclude(checkout);
+    }
     let git_dir = if dot_git.is_dir() {
         dot_git
     } else {
@@ -331,7 +332,33 @@ fn local_git_exclude(checkout: &Path) -> Option<PathBuf> {
             }
         })
         .unwrap_or(git_dir);
-    Some(common.join("info/exclude"))
+    Some((common.join("info/exclude"), CHECKOUT_WORKLIST.to_owned()))
+}
+
+/// A checkout directory inside an enclosing work tree, such as a designated ticket-store
+/// root used as its own checkout (HS2-V6JEBR). Its worklist is excluded by an anchored
+/// pattern in the enclosing repository, so a store-scoped commit never records it.
+fn enclosing_git_exclude(checkout: &Path) -> Option<(PathBuf, String)> {
+    let output = crate::git::command()
+        .arg("-C")
+        .arg(checkout)
+        .args([
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            "--show-prefix",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let mut lines = stdout.lines();
+    let common = PathBuf::from(lines.next()?);
+    let prefix = lines.next().unwrap_or_default();
+    Some((
+        common.join("info/exclude"),
+        format!("/{prefix}{CHECKOUT_WORKLIST}"),
+    ))
 }
 
 #[cfg(test)]
@@ -553,6 +580,35 @@ mod tests {
         regenerate_to(&store, &output).unwrap();
         let body2 = std::fs::read_to_string(&output).unwrap();
         assert!(!body2.contains("alpha"), "dropped from the queue");
+    }
+
+    /// HS2-V6JEBR: a checkout directory inside an enclosing work tree (a designated
+    /// store root used as its own checkout) has no `.git` of its own. Its worklist is
+    /// excluded by a pattern anchored to that directory, so a store-scoped commit never
+    /// records machine-local state and the enclosing status stays clean.
+    #[test]
+    fn hs2_v6jebr_a_nested_checkout_worklist_is_excluded_in_the_enclosing_repository() {
+        let root = tempfile::tempdir().unwrap();
+        let status = crate::git::command_in(root.path())
+            .args(["init", "-q", "-b", "main"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let nested = root.path().join("tickets");
+        write_worklist(&nested.join(CHECKOUT_WORKLIST), "# Worklist\n").unwrap();
+        write_worklist(&nested.join(CHECKOUT_WORKLIST), "# Worklist\n").unwrap();
+        let exclude = std::fs::read_to_string(root.path().join(".git/info/exclude")).unwrap();
+        let anchored = format!("/tickets/{CHECKOUT_WORKLIST}");
+        assert_eq!(
+            exclude.lines().filter(|line| *line == anchored).count(),
+            1,
+            "{exclude}"
+        );
+        let porcelain = crate::git::command_in(root.path())
+            .args(["status", "--porcelain", "--untracked-files=all"])
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&porcelain.stdout), "");
     }
 
     #[test]

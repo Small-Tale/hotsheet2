@@ -768,8 +768,9 @@ impl FsStore {
         Ok(path)
     }
 
-    /// Stage everything, commit with `message`, and launch a best-effort push. No-op when the
-    /// store isn't a git repo or `HOTSHEET_NO_AUTOCOMMIT` is set. Returns whether a
+    /// Stage everything, commit with `message`, and launch a best-effort push. No-op when no
+    /// repository owns the store or `HOTSHEET_NO_AUTOCOMMIT` is set. A designated root
+    /// stages and commits only its own directory and never pushes (HS2-V6JEBR). Returns whether a
     /// commit was actually made. Falls back to a bot identity when the repo has none
     /// configured, so a fresh/CI checkout still commits.
     pub fn autocommit(&self, message: &str) -> Result<bool, StoreError> {
@@ -801,17 +802,29 @@ impl FsStore {
         message: &str,
         paths: Option<&[PathBuf]>,
     ) -> Result<bool, StoreError> {
-        if std::env::var_os("HOTSHEET_NO_AUTOCOMMIT").is_some() || !self.root.join(".git").exists()
-        {
+        if std::env::var_os("HOTSHEET_NO_AUTOCOMMIT").is_some() {
             return Ok(false);
         }
+        // HS2-V6JEBR: the owning repository decides, not the presence of `<root>/.git`.
+        // A designated root commits only its own paths into the enclosing repository; a
+        // store no repository owns has nothing to commit into.
+        let designated = match self.git_owner() {
+            crate::store_git::StoreGitOwner::Owned { .. } => false,
+            crate::store_git::StoreGitOwner::Designated { .. } => true,
+            crate::store_git::StoreGitOwner::Unavailable { reason }
+                if self.root.join(".git").exists() =>
+            {
+                return Err(StoreError::Git(reason));
+            }
+            _ => return Ok(false),
+        };
         retry_autocommit(
             || {
                 // Git locks each subcommand, not the stage/check/commit sequence. A
                 // second Hot Sheet writer can otherwise replace the shared index
                 // after `git add`, making `diff --cached` report a false no-op.
                 let _lock = self.lock_autocommit()?;
-                self.autocommit_attempt(message, paths)
+                self.autocommit_attempt(message, paths, designated)
             },
             std::thread::sleep,
             20,
@@ -829,18 +842,28 @@ impl FsStore {
         &self,
         message: &str,
         paths: Option<&[PathBuf]>,
+        designated: bool,
     ) -> Result<bool, StoreError> {
         // Queued jobs may have waited behind a history rewrite (HS2-RFJ1GN).
         self.ensure_compaction_recovered()?;
         self.ensure_managed_gitignore()?;
         // An unborn repository has no baseline tree: its first mutation must also commit
         // the store metadata/attributes. Once HEAD exists, path-scoped commits are safe.
-        let mut bounded_paths = if self.head_commit().is_some() {
+        let born = self.head_commit().is_some();
+        let mut bounded_paths = if designated {
+            // HS2-V6JEBR: a designated root never stages or commits outside its own
+            // directory, even for the enclosing repository's first commit; other paths
+            // the user staged stay staged and uncommitted (`commit --only`).
+            Some(match paths {
+                Some(paths) if born => paths.to_vec(),
+                _ => vec![PathBuf::from(".")],
+            })
+        } else if born {
             paths.map(<[PathBuf]>::to_vec)
         } else {
             None
         };
-        if bounded_paths.is_some() {
+        if bounded_paths.is_some() && !designated {
             let has_tracked_finder_metadata = git_stdout(
                 &self.root,
                 &[
@@ -912,7 +935,10 @@ impl FsStore {
         // Remote publication must not hold a local mutation open for network latency.
         // Server-owned stores defer to their coalescing sync loop; headless callers launch
         // a child and a lightweight reaper. The child survives a short-lived CLI process.
+        // A designated root's remotes and branch belong to the enclosing repository,
+        // whose own workflow publishes it (HS2-V6JEBR).
         if self.push_after_commit
+            && !designated
             && git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty())
         {
             if let Ok(mut child) = crate::git::command()

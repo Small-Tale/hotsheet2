@@ -94,7 +94,8 @@ pub fn verify_backup(store: &Path) -> Result<String> {
 
 /// A new attempt cannot inherit cleanup permission from an earlier import/push.
 pub fn invalidate(store: &Path) -> Result<()> {
-    if !store.join(".git").exists() {
+    // HS2-V6JEBR: the owning repository, not `<store>/.git`, says where proofs live.
+    if !FsStore::git_owner_at(store).is_supported() {
         return Ok(());
     }
     for name in [COMPLETION, BACKUP] {
@@ -110,7 +111,15 @@ pub fn invalidate(store: &Path) -> Result<()> {
 fn require_clean(store: &Path) -> Result<()> {
     if !git(
         store,
-        &["status", "--porcelain=v1", "--untracked-files=all"],
+        // Scoped to the store: a designated root's enclosing work tree may hold
+        // unrelated edits (HS2-V6JEBR).
+        &[
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            ".",
+        ],
     )?
     .is_empty()
     {

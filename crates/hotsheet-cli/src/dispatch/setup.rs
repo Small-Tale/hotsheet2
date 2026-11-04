@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use hotsheet_cli::git_init;
+
 use hotsheet_model::Ulid;
 use hotsheet_ticketing::{FsStore, SortKey, StoreMetadata, TicketQuery, ops};
 
@@ -883,8 +883,7 @@ pub(crate) fn cmd_launch(
             .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
         Some(path.canonicalize().unwrap_or(path))
     } else if let Some(path) = create_ticket_store {
-        FsStore::init(&path, &StoreMetadata::new("HS"))?;
-        git_init(&path);
+        hotsheet_cli::init_store(&path, &StoreMetadata::new("HS"))?;
         Some(path.canonicalize().unwrap_or(path))
     } else {
         None

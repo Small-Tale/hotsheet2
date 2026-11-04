@@ -19,7 +19,8 @@ use crate::store::{lock_git_transaction, lock_history_sync};
 /// The outcome of one [`sync_once`] cycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncReport {
-    /// No git remote configured (a local-only store) — nothing to fetch or push.
+    /// No git remote configured (a local-only store), or a designated root whose enclosing
+    /// repository owns its remotes (HS2-V6JEBR) — nothing to fetch or push.
     NoRemote,
     /// Local and remote already agree — nothing to do.
     UpToDate,
@@ -40,6 +41,14 @@ pub fn sync_once(store_path: &Path) -> SyncReport {
         return SyncReport::Offline;
     }
     if !has_remote(store_path) {
+        return SyncReport::NoRemote;
+    }
+    // HS2-V6JEBR: a designated root's remotes and branch belong to the enclosing code
+    // repository. Hot Sheet never commits its other paths, rebases it, or pushes it.
+    if matches!(
+        crate::FsStore::git_owner_at(store_path),
+        crate::store_git::StoreGitOwner::Designated { .. }
+    ) {
         return SyncReport::NoRemote;
     }
     // A sync that already passed its entry check must finish before a rewrite
@@ -185,6 +194,36 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert!(git_ok(dir.path(), &["init", "--quiet"]));
         assert_eq!(sync_once(dir.path()), SyncReport::NoRemote);
+    }
+
+    /// HS2-V6JEBR: a designated root's remote is the enclosing code repository's. Sync
+    /// must not commit the user's other changes, rebase that repository, or push it.
+    #[test]
+    fn hs2_v6jebr_sync_leaves_a_designated_roots_enclosing_repository_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path();
+        let ident = ["-c", "user.name=t", "-c", "user.email=t@localhost"];
+        assert!(git_ok(repo, &["init", "--quiet", "-b", "main"]));
+        let store = repo.join("tickets");
+        crate::FsStore::init(&store, &crate::StoreMetadata::new("HS")).unwrap();
+        assert!(git_ok(repo, &["add", "--", "tickets/hotsheet-store.json"]));
+        let mut commit = ident.to_vec();
+        commit.extend(["commit", "-q", "-m", "track"]);
+        assert!(git_ok(repo, &commit));
+        assert!(git_ok(
+            repo,
+            &["remote", "add", "origin", "/no/such/repo.git"]
+        ));
+        std::fs::write(repo.join("staged.txt"), "user work\n").unwrap();
+        assert!(git_ok(repo, &["add", "--", "staged.txt"]));
+        std::fs::write(repo.join("loose.txt"), "untracked\n").unwrap();
+        let before = git_stdout(repo, &["rev-parse", "HEAD"]);
+
+        assert_eq!(sync_once(&store), SyncReport::NoRemote);
+        assert_eq!(git_stdout(repo, &["rev-parse", "HEAD"]), before);
+        let status = git_stdout(repo, &["status", "--porcelain"]).unwrap();
+        assert!(status.contains("A  staged.txt"), "{status}");
+        assert!(status.contains("?? loose.txt"), "{status}");
     }
 
     #[test]

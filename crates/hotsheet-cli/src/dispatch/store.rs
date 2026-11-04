@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
-use hotsheet_cli::{git_init, run_import};
+use hotsheet_cli::run_import;
 use hotsheet_model::{CloseReason, Ulid, parse_file, to_file_string};
 use hotsheet_ticketing::{FsStore, ProviderConfigRegistry, StoreMetadata, ops, saved_views};
 
@@ -167,14 +167,18 @@ pub(crate) fn cmd_bootstrap(
         },
     );
     let created = !store_candidate.exists();
-    if created {
-        FsStore::init(&store_candidate, &StoreMetadata::new(prefix)).with_context(|| {
-            format!(
-                "initializing standalone store at {}",
-                store_candidate.display()
-            )
-        })?;
-        git_init(&store_candidate);
+    // HS2-V6JEBR: the store's Git owner, never the presence of `<store>/.git`, decides
+    // whether bootstrap may `git init`. An existing store goes through the same repair, so
+    // re-running bootstrap on any state is a no-op once it has succeeded.
+    let owner = if created {
+        hotsheet_cli::init_store(&store_candidate, &StoreMetadata::new(prefix))
+            .with_context(|| {
+                format!(
+                    "initializing standalone store at {}",
+                    store_candidate.display()
+                )
+            })?
+            .1
     } else {
         FsStore::open(&store_candidate).with_context(|| {
             format!(
@@ -182,6 +186,22 @@ pub(crate) fn cmd_bootstrap(
                 store_candidate.display()
             )
         })?;
+        hotsheet_cli::ensure_store_repository(&store_candidate)?
+    };
+    let designated_in = match &owner {
+        hotsheet_ticketing::store_git::StoreGitOwner::Designated { toplevel, .. } => {
+            Some(toplevel.clone())
+        }
+        _ => None,
+    };
+    if let (Some(toplevel), Some(_)) = (&designated_in, remote) {
+        bail!(
+            "ticket store {} is a designated root of the Git repository {}, which owns its remotes; \
+             configure the remote there (`git -C {} remote add origin <url>`) instead of passing --remote",
+            store_candidate.display(),
+            toplevel.display(),
+            shell_quote_path(toplevel)
+        );
     }
     hotsheet_cli::register_merge_driver(&store_candidate);
     let store = hotsheet_cli::link_store(&store_candidate, &project)?;
@@ -190,13 +210,23 @@ pub(crate) fn cmd_bootstrap(
     // mutation has occurred yet, so the normal autocommit path has not run. Remote setup
     // immediately pushes HEAD; make that contract true before either the CLI or a client
     // offers the remote step. This also repairs an older bootstrap-created empty repo.
+    // A designated root's commit is scoped to the store's own paths.
     let store_handle = FsStore::open(&store)?;
     if store_handle.head_commit().is_none() {
         store_handle
             .autocommit("Initialize Hot Sheet ticket repository")
             .context("creating the initial ticket-store commit")?;
         if store_handle.head_commit().is_none() {
-            bail!("ticket repository setup did not create an initial Git commit");
+            let Some(steps) = hotsheet_cli::designated_commit_steps(
+                &owner,
+                "Initialize Hot Sheet ticket repository",
+            ) else {
+                bail!("ticket repository setup did not create an initial Git commit");
+            };
+            println!("The enclosing repository has no commit yet. Record the ticket store with:");
+            for step in steps {
+                println!("  {step}");
+            }
         }
     }
 
@@ -320,13 +350,23 @@ pub(crate) fn cmd_bootstrap(
     }
 
     println!(
-        "{} standalone Hot Sheet store at {} and linked {} via {}.",
+        "{} {} Hot Sheet store at {} and linked {} via {}.",
         if created { "Initialized" } else { "Reused" },
+        if designated_in.is_some() {
+            "designated"
+        } else {
+            "standalone"
+        },
         store.display(),
         project.display(),
         hotsheet_cli::STORE_LINK
     );
-    if remote.is_some() || existing_remote.is_some() {
+    if let Some(toplevel) = &designated_in {
+        println!(
+            "Ticket-store remote: managed by the enclosing repository {}.",
+            toplevel.display()
+        );
+    } else if remote.is_some() || existing_remote.is_some() {
         println!("Ticket-store remote: origin is configured.");
     } else {
         println!("Ticket-store remote: not configured.");
@@ -343,7 +383,7 @@ pub(crate) fn cmd_bootstrap(
 }
 
 pub(crate) fn cmd_init(
-    path: &PathBuf,
+    path: &Path,
     prefix: &str,
     standalone: bool,
     at: Option<&Path>,
@@ -365,9 +405,7 @@ pub(crate) fn cmd_init(
                 destination.display()
             );
         }
-        FsStore::init(&destination, &StoreMetadata::new(prefix))
-            .with_context(|| format!("initializing store at {}", destination.display()))?;
-        git_init(&destination);
+        hotsheet_cli::init_store(&destination, &StoreMetadata::new(prefix))?;
         hotsheet_cli::register_merge_driver(&destination);
         if let Some(url) = remote {
             let status = hotsheet_ticketing::git::command()
@@ -390,11 +428,17 @@ pub(crate) fn cmd_init(
         return Ok(());
     }
 
-    FsStore::init(path, &StoreMetadata::new(prefix))
-        .with_context(|| format!("initializing store at {}", path.display()))?;
-    git_init(path);
+    // HS2-V6JEBR: re-running init on a designated root keeps it designated rather than
+    // nesting a new repository inside the enclosing one.
+    let (_, owner) = hotsheet_cli::init_store(path, &StoreMetadata::new(prefix))?;
     hotsheet_cli::register_merge_driver(path);
     println!("Initialized Hot Sheet store at {}", path.display());
+    if let hotsheet_ticketing::store_git::StoreGitOwner::Designated { toplevel, .. } = &owner {
+        println!(
+            "The store is a designated root of the Git repository {}; Hot Sheet commits only the store's own paths there.",
+            toplevel.display()
+        );
+    }
     print_onboarding_report(path, path);
     Ok(())
 }

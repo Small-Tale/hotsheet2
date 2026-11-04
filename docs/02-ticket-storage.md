@@ -105,6 +105,11 @@ A project references multiple stores because (per the ticket):
   example under its ignored `target/`) is not owned by it: Hot Sheet never borrows that
   checkout's history for the store, and `hotsheet-cli doctor` names the recovery
   (make the store its own repository, or track it as a designated root) (HS2-ABV2J3).
+  `init`, `bootstrap`, import, and autocommit act on that owner, never on the presence
+  of `<store>/.git`: re-running `init` on a designated root never nests a repository, and
+  every commit Hot Sheet makes there stages and records only the store's own paths,
+  leaving the user's other staged changes, branch, and remotes alone (HS2-V6JEBR,
+  docs/04 "Git ownership on init and recovery").
 - `sync.mode: git-remote` stores have a remote and participate in push/pull;
   `local-only` stores have none. `visibility: local` additionally marks a store as
   private to this machine/user — gitignored from the _project_ repo (or kept as its

@@ -108,9 +108,17 @@ impl FsStore {
     /// subdirectory of an enclosing working tree.
     #[must_use]
     pub fn git_owner(&self) -> StoreGitOwner {
+        Self::git_owner_at(self.root())
+    }
+
+    /// Classify the directory `root` exactly as [`FsStore::git_owner`] does, before it
+    /// holds store metadata (HS2-V6JEBR: `init` classifies before it writes anything). An
+    /// untracked directory inside an enclosing work tree is [`StoreGitOwner::Unowned`].
+    #[must_use]
+    pub fn git_owner_at(root: &Path) -> StoreGitOwner {
         let output = crate::git::command()
             .arg("-C")
-            .arg(self.root())
+            .arg(root)
             .args([
                 "rev-parse",
                 "--show-toplevel",
@@ -153,7 +161,7 @@ impl FsStore {
         if prefix.is_empty() {
             return StoreGitOwner::Owned { key, head };
         }
-        if self.metadata_is_tracked() {
+        if Self::metadata_is_tracked(root) {
             StoreGitOwner::Designated {
                 key,
                 head,
@@ -168,10 +176,10 @@ impl FsStore {
     }
 
     /// Whether the enclosing repository's index contains this store's metadata file.
-    fn metadata_is_tracked(&self) -> bool {
+    fn metadata_is_tracked(root: &Path) -> bool {
         crate::git::command()
             .arg("-C")
-            .arg(self.root())
+            .arg(root)
             .args(["ls-files", "--error-unmatch", "--", STORE_METADATA_FILE])
             .output()
             .is_ok_and(|output| output.status.success())

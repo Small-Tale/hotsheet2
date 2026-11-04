@@ -941,7 +941,7 @@ mod tests {
     }
 
     fn mark_compaction_recovery_required(store: &FsStore) {
-        crate::git_init(store.root());
+        crate::ensure_store_repository(store.root()).unwrap();
         let marker =
             hotsheet_ticketing::repository_compaction::recovery_marker_path(store.root()).unwrap();
         std::fs::write(marker, b"{}\n").unwrap();
@@ -1009,7 +1009,7 @@ mod tests {
     fn hs2_yceqnt_rechecks_admission_before_late_checkpoint_and_settings_writes() {
         let (_dir, store) = temp_store();
         let staging = tempfile::tempdir().unwrap();
-        crate::git_init(store.root());
+        crate::ensure_store_repository(store.root()).unwrap();
         let error =
             import_with_progress(&store, &attachment_export(), staging.path(), &mut |event| {
                 if event.phase == "import_tickets" {
@@ -1025,7 +1025,7 @@ mod tests {
         assert!(store.list_tickets().unwrap().is_empty());
 
         let (_dir, store) = temp_store();
-        crate::git_init(store.root());
+        crate::ensure_store_repository(store.root()).unwrap();
         let mut export = export_json();
         export.tickets.clear();
         export

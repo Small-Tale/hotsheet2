@@ -75,6 +75,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
+use hotsheet_ticketing::store_git::StoreGitOwner;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
 use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import_with_progress};
@@ -300,8 +301,7 @@ pub fn run_import_with_progress(
         Ok(store) => store,
         Err(_) => {
             let init_prefix = export.project.ticket_prefix.as_deref().unwrap_or(prefix);
-            let store = FsStore::init(store_path, &StoreMetadata::new(init_prefix))?;
-            git_init(store_path);
+            let (store, _) = init_store(store_path, &StoreMetadata::new(init_prefix))?;
             register_merge_driver(store_path);
             store
         }
@@ -451,12 +451,79 @@ pub fn resolve_migrator(explicit: Option<PathBuf>) -> Result<PathBuf> {
         })
 }
 
-/// Best-effort `git init` of a new store (warns, never fails the command).
-pub fn git_init(path: &Path) {
-    if path.join(".git").exists() {
-        return;
+/// Initialize (or re-initialize) the store at `path` and settle its Git repository. The
+/// one path `init`, `init --standalone`, `bootstrap`, import, and the GUI launch flow share
+/// (HS2-V6JEBR). Classification happens before any metadata is written, so a location
+/// Git cannot describe is refused untouched. Re-running it changes nothing further.
+pub fn init_store(path: &Path, metadata: &StoreMetadata) -> Result<(FsStore, StoreGitOwner)> {
+    std::fs::create_dir_all(path)
+        .with_context(|| format!("creating store directory {}", path.display()))?;
+    let owner = FsStore::git_owner_at(path);
+    if let StoreGitOwner::Unavailable { .. } = owner {
+        bail!("{}", owner.diagnostic(path).unwrap_or_default());
     }
-    run_git(path, &["init", "--quiet"]);
+    let store = FsStore::init(path, metadata)
+        .with_context(|| format!("initializing store at {}", path.display()))?;
+    let owner = ensure_store_repository(path)?;
+    Ok((store, owner))
+}
+
+/// Make sure a repository owns the existing store directory at `path`, by its
+/// [`StoreGitOwner`] rather than by the presence of `<path>/.git` (HS2-V6JEBR):
+///
+/// - **Owned:** nothing to do.
+/// - **Designated:** the enclosing repository already tracks the store; never nest a
+///   repository inside it.
+/// - **NoRepository / Unowned:** `git init` makes the store its own repository.
+/// - **Unavailable:** refused with the ownership diagnostic.
+///
+/// Idempotent: a second call on any result is a no-op.
+pub fn ensure_store_repository(path: &Path) -> Result<StoreGitOwner> {
+    let owner = FsStore::git_owner_at(path);
+    match owner {
+        StoreGitOwner::Owned { .. } | StoreGitOwner::Designated { .. } => return Ok(owner),
+        StoreGitOwner::Unavailable { .. } => {
+            bail!("{}", owner.diagnostic(path).unwrap_or_default())
+        }
+        StoreGitOwner::NoRepository | StoreGitOwner::Unowned { .. } => {}
+    }
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(path)
+        .args(["init", "--quiet"])
+        .output()
+        .context("running git init")?;
+    if !output.status.success() {
+        bail!(
+            "git init {} failed: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let owner = FsStore::git_owner_at(path);
+    if let Some(diagnostic) = owner.diagnostic(path) {
+        bail!("{diagnostic}");
+    }
+    Ok(owner)
+}
+
+/// The exact commands that record a designated root's files in its enclosing repository,
+/// scoped to the store's own paths so nothing else the user staged is committed.
+pub fn designated_commit_steps(owner: &StoreGitOwner, message: &str) -> Option<Vec<String>> {
+    let StoreGitOwner::Designated {
+        toplevel, prefix, ..
+    } = owner
+    else {
+        return None;
+    };
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    let toplevel = quote(&toplevel.to_string_lossy());
+    let prefix = quote(prefix.trim_end_matches('/'));
+    let message = quote(message);
+    Some(vec![
+        format!("git -C {toplevel} add -A -- {prefix}"),
+        format!("git -C {toplevel} commit -m {message} --only -- {prefix}"),
+    ])
 }
 
 /// The `.gitattributes` line + git config value that register the semantic merge driver.
@@ -521,14 +588,24 @@ pub fn merge_driver_registered(store_path: &Path) -> bool {
     attr_ok && config_ok
 }
 
-/// Best-effort `git add -A && git commit` (warns on failure; files are already written).
-/// A clean index is the expected result of an idempotent operation, so it is not a
-/// commit failure and must not produce a warning.
+/// Best-effort commit of everything under the store `path` (warns on failure; files are
+/// already written). A clean index is the expected result of an idempotent operation, so
+/// it is not a commit failure and must not produce a warning.
+///
+/// HS2-V6JEBR: staging and the commit are scoped to the store directory (`-- .`), so a
+/// designated root never stages or commits the rest of its enclosing work tree, and
+/// paths the user staged elsewhere stay staged. A store no repository owns is not
+/// committed into an enclosing checkout; the warning names the recovery instead.
 pub fn git_commit_all(path: &Path, message: &str) {
-    run_git(path, &["add", "-A"]);
+    let owner = FsStore::git_owner_at(path);
+    if let Some(diagnostic) = owner.diagnostic(path) {
+        eprintln!("warning: not committing: {diagnostic}");
+        return;
+    }
+    run_git(path, &["add", "-A", "--", "."]);
     match hotsheet_ticketing::git::command()
         .current_dir(path)
-        .args(["diff", "--cached", "--quiet", "--"])
+        .args(["diff", "--cached", "--quiet", "--", "."])
         .status()
     {
         Ok(status) if status.success() => return,
@@ -542,7 +619,10 @@ pub fn git_commit_all(path: &Path, message: &str) {
             return;
         }
     }
-    run_git(path, &["commit", "--quiet", "-m", message]);
+    run_git(
+        path,
+        &["commit", "--quiet", "-m", message, "--only", "--", "."],
+    );
 }
 
 fn run_git(path: &Path, args: &[&str]) {

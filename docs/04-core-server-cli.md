@@ -1402,6 +1402,26 @@ has been created. With no remote it prints exact provider-neutral rerun
 and first-push commands. It preserves user-authored instruction and MCP configuration,
 and the graphical project's Git-source flow invokes this same CLI workflow.
 
+**Git ownership on init and recovery (HS2-V6JEBR):** `init`, `init --standalone`,
+`bootstrap`, import store creation, and the launch flow's `--create-ticket-store` share
+one helper that reads the store's Git owner (docs/02 §2.2) instead of checking for
+`<store>/.git`. Re-running any of them on any state changes nothing further.
+
+| Owner                  | Setup                                       | Commits                                                                        |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| Owned                  | no `git init`                               | as before                                                                      |
+| Designated             | never `git init` (no nested repository)     | only the store's own paths (`add -A -- .`, `commit --only -- .`); never pushed |
+| NoRepository / Unowned | `git init` makes the store its own repo     | as Owned afterwards                                                            |
+| Unavailable            | refused with the ownership diagnostic first | none                                                                           |
+
+Bootstrap on a designated root makes the store-scoped initial commit (the enclosing
+repository's first commit when it is unborn). When it cannot commit (for example under
+`HOTSHEET_NO_AUTOCOMMIT`), it prints the exact scoped `git -C <toplevel> add`/`commit`
+commands instead of failing. It refuses `--remote` there, because the enclosing
+repository owns its remotes, and sync reports no remote for a designated root rather than
+rebasing or pushing the code repository. Bootstrap of an existing store that no
+repository owns repairs it with `git init` and the initial commit.
+
 **Headless first run (HS2-MNHGT3):** `init` prints the same read-only onboarding
 report available from `doctor --project <code-repo>`. It detects installed plugin
 tools and recommends explicit, idempotent `setup` commands. It recognizes HS1 only
