@@ -260,8 +260,11 @@ test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({
   }
 });
 
-test('paints the replay tail first, then the whole replay keeps the reader in place (HS2-K93QHA)', async ({ page }) => {
-  test.setTimeout(90_000);
+/**
+ * Paint the tail, read back into it, release the whole replay, and reach far older history.
+ * `cpuThrottle` slows the page's CPU the way a slow CI host does (HS2-J6B4MT).
+ */
+async function paintTailThenWholeReplay(page: Page, cpuThrottle?: number) {
   const server = await realTicketServer();
   try {
     const terminal = await server.request<{ id: string }>('/terminals', 'POST', {
@@ -279,6 +282,10 @@ test('paints the replay tail first, then the whole replay keeps the reader in pl
       window.__holdFromMessage = 2;
     });
     await page.goto('/');
+    if (cpuThrottle !== undefined) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
+    }
     const surface = await mountViewport(
       page,
       `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`,
@@ -304,6 +311,13 @@ test('paints the replay tail first, then the whole replay keeps the reader in pl
       'target/visual-captures/hs2-k93qha-tail-phone.png',
       await surface.screenshot({ animations: 'disabled' }),
     );
+    // The scrollbar's slider shows how much history the emulator holds: about 1,170 lines for the
+    // tail alone (about 43 px here), at least 2,500 once the whole replay is parsed (xterm's
+    // 20 px minimum here). The tail's slider sits well above that minimum so it can shrink.
+    const slider = surface.locator('.xterm-scrollable-element > .scrollbar.vertical > .slider');
+    const sliderHeight = async () => (await slider.boundingBox())?.height ?? Number.NaN;
+    const tailSliderHeight = await sliderHeight();
+    expect(tailSliderHeight).toBeGreaterThan(30);
     await page.evaluate(() => {
       window.__holdFromMessage = undefined;
       for (const release of (window.__heldMessages ?? []).splice(0)) release();
@@ -313,27 +327,45 @@ test('paints the replay tail first, then the whole replay keeps the reader in pl
         (await page.evaluate(() => window.__replayFrames ?? [])).some((frame) => frame.text?.includes('"replace"')),
       )
       .toBe(true);
+    // Wait until the whole replay is parsed, not only received. Its payload decodes and parses
+    // asynchronously, so on a slow host the tail stays on screen well after the frame arrives,
+    // and the check below would pass before the replacement ran (HS2-J6B4MT).
+    await expect.poll(sliderHeight, { timeout: 60_000 }).toBeLessThan(tailSliderHeight * 0.75);
     // The same lines stay on screen: the reader's distance from the bottom is kept.
     await expect.poll(async () => (await rows.innerText()).split('\n').filter(Boolean)).toEqual(before);
     writeFileSync(
-      'target/visual-captures/hs2-k93qha-whole-phone.png',
+      `target/visual-captures/hs2-k93qha-whole-phone${cpuThrottle === undefined ? '' : '-throttled'}.png`,
       await surface.screenshot({ animations: 'disabled' }),
     );
 
-    // The whole history is there now: scrolling up reaches lines far older than the 32 KiB tail
-    // held (about the last 1,170 lines), down to the phone's scrollback limit.
+    // The whole history is there now: paging up reaches lines far older than the 32 KiB tail held
+    // (about the last 1,170 lines), down to the phone's scrollback limit. Each Shift+PageUp moves
+    // a whole screen, so the climb takes a few dozen keys at any host speed. Bursts of wheel
+    // events each moved only about four rows, and a slow macOS host ran out of poll time two or
+    // three bursts in, short of the start (HS2-J6B4MT).
     const tailFirstLine = 4_000 - Math.ceil(32_768 / '\u001b[32mreplay line 00000\u001b[0m\r\n'.length);
-    await expect
-      .poll(
-        async () => {
-          // xterm moves a few rows per wheel event, so scroll in bursts.
-          for (let step = 0; step < 100; step++) await page.mouse.wheel(0, -2_000);
-          return Number(/replay line (\d{5})/.exec(await rows.innerText())?.[1] ?? Infinity);
-        },
-        { timeout: 30_000 },
-      )
-      .toBeLessThan(tailFirstLine - 500);
+    const topLine = async () => Number(/replay line (\d{5})/.exec(await rows.innerText())?.[1] ?? Infinity);
+    await surface.locator('.xterm-helper-textarea').focus();
+    for (let current = await topLine(); current >= tailFirstLine - 500; current = await topLine()) {
+      await page.keyboard.press('Shift+PageUp');
+      // Each page lands before the next key: wait on the screen, not on a time budget. At the top
+      // of a capped history the screen stops moving and this fails.
+      await expect.poll(topLine).toBeLessThan(current);
+    }
   } finally {
     await server.stop();
   }
+}
+
+test('paints the replay tail first, then the whole replay keeps the reader in place (HS2-K93QHA)', async ({ page }) => {
+  test.setTimeout(90_000);
+  await paintTailThenWholeReplay(page);
+});
+
+test('on a slow host the whole replay still reaches far older history (HS2-J6B4MT)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'CPU throttling is a Chromium DevTools capability.');
+  test.setTimeout(180_000);
+  // Twenty times slower than this host reproduces the macOS runner's failure under the old wheel
+  // bursts: two bursts, then a timeout at line 3225.
+  await paintTailThenWholeReplay(page, 20);
 });
