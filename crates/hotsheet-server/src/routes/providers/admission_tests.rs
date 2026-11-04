@@ -378,11 +378,13 @@ fn hs2_6h8zy6_owned_read_admission_child() {
                     Err(error) => panic!("owned listener: {error}"),
                 }
             };
+            // HS2-78NQ8M: a hang guard, not a pacing bound. On a loaded gate host the client's request
+            // can arrive after 1 s, and macOS reports the expired read as WouldBlock.
             stream
-                .set_read_timeout(Some(Duration::from_secs(1)))
+                .set_read_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             stream
-                .set_write_timeout(Some(Duration::from_secs(1)))
+                .set_write_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             let mut request = Vec::new();
             while !request.ends_with(b"\r\n\r\n") {
