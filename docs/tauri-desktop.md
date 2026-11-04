@@ -82,16 +82,25 @@ not use them (HS2-ECT6FE):
 | API                                                                    | Why                                                                                         | Use instead                                                                 |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `alert`, `confirm`, `prompt` (bare, `window.`, `globalThis.`, `self.`) | wry's WKWebView UI delegate implements no JavaScript dialog panel, only the file-open panel | The shared `ConfirmationDialog` (HS2-6S1346), in-app input dialogs, or undo |
-| `window.open`, `open`                                                  | wry creates no new window without a handler, and the shell registers none                   | System-browser routing, HS2-0A7FWS                                          |
+| `window.open`, `open` (outside `src/open-external.ts`)                 | wry creates no new window; the shell answers every new-window request itself (HS2-0A7FWS)   | `openExternal()` in `src/open-external.ts`                                  |
 
 ESLint enforces the list for `clients/web/src` (`no-alert`, `no-restricted-globals`,
-`no-restricted-properties`). `src/eslint-policy.test.ts` proves every form is rejected
-and allows no `no-alert` suppression; it caps the remaining `window.open` suppressions so
-they only decrease. `target="_blank"`
-links are tracked with `window.open` in HS2-0A7FWS. `window.print` is supported
-(Tauri routes it to its native print command), and the Notification API goes through
-`tauri-plugin-notification`. Tauri runtime behavior is checked by the `Platforms`
-workflow's tauri targets, not by local browser tests.
+`no-restricted-properties`). `src/eslint-policy.test.ts` proves every form is rejected,
+allows no `no-alert` suppression, and allows the one `window.open` only in
+`src/open-external.ts`.
+
+**Links and new windows (HS2-0A7FWS).** The shell's new-window handler sends every
+http(s) and mailto target, including `target="_blank"` links and `openExternal()`, to the
+system browser or mail client through `tauri-plugin-opener`, and opens no second webview;
+a blank popup (`about:blank`) is refused. Its navigation handler keeps the main webview on
+the app's own origin and sends any other http(s) or mailto navigation to the system browser.
+Because a desktop `openExternal()` returns no window, callers that pre-open a sized popup
+(the GitHub device flow) open the real URL directly once it is known. The routing decisions
+are unit-tested in `src-tauri/src/external_links.rs`.
+
+`window.print` is supported (Tauri routes it to its native print command), and the
+Notification API goes through `tauri-plugin-notification`. Tauri runtime behavior is checked
+by the `Platforms` workflow's tauri targets, not by local browser tests.
 
 ## Build locally
 

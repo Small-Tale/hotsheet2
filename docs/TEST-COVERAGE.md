@@ -562,6 +562,12 @@ explicit review requests, and resolved feedback. Index tests check marker and re
 request filtering before a bounded page; the real-server checkout HTTP test checks
 note, description, and explicit request sources and feedback-resolution transitions.
 
+HS2-0A7FWS covers desktop links and new windows: `clients/web/src-tauri/src/external_links.rs` unit-tests the
+new-window and navigation routing (system browser for http(s) and mailto, the app's origin stays in the
+webview, blank popups refused); `src/eslint-policy.test.ts` allows `window.open` only in
+`src/open-external.ts`; `tests/providers.spec.ts` checks the GitHub device flow opens the verification
+page directly when no popup window is returned. The packaged app is covered by the `Platforms` tauri targets.
+
 HS2-2GCMY1 covers `is:blocked`: `saved_views.rs # hs2_2gcmy1_is_blocked_follows_the_blocked_reason`
 checks blank, set, cleared, case, and Boolean forms; `advanced-search.test.ts` checks the web
 evaluator and advanced-expression detection; `ticket-search-field.test.ts` checks the syntax

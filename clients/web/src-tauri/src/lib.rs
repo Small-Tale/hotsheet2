@@ -13,6 +13,9 @@ use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod close_lifecycle;
 use close_lifecycle::{CloseLifecycle, caller_allowed};
+mod external_links;
+use external_links::{LinkRoute, navigation_route, new_window_route};
+use tauri_plugin_opener::OpenerExt;
 
 struct BridgeChild(Mutex<Child>);
 struct DesktopClose {
@@ -188,6 +191,7 @@ fn stop_bridge(child: &Mutex<Child>) {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![desktop_flush_complete])
         .setup(|app| {
             let url = if cfg!(debug_assertions) {
@@ -227,7 +231,30 @@ pub fn run() {
                 });
                 url
             };
-            let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url));
+            // HS2-0A7FWS: links and window.open targets open in the system browser or mail client;
+            // the webview itself only ever shows the app.
+            let app_url = url.clone();
+            let opener_for_windows = app.handle().clone();
+            let opener_for_navigation = app.handle().clone();
+            let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+                .on_new_window(move |target, _features| {
+                    if new_window_route(&target) == LinkRoute::System {
+                        let _ = opener_for_windows
+                            .opener()
+                            .open_url(target.as_str(), None::<&str>);
+                    }
+                    tauri::webview::NewWindowResponse::Deny
+                })
+                .on_navigation(move |target| match navigation_route(target, &app_url) {
+                    LinkRoute::System => {
+                        let _ = opener_for_navigation
+                            .opener()
+                            .open_url(target.as_str(), None::<&str>);
+                        false
+                    }
+                    LinkRoute::InApp => true,
+                    LinkRoute::Ignore => false,
+                });
             if !cfg!(debug_assertions) {
                 window =
                     window.initialization_script("window.__HOTSHEET_DESKTOP_STORAGE__ = true;");

@@ -23,6 +23,7 @@ import { localBridge } from '../local-bridge-client';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
 import { type ProjectTicketSources, projectTicketSources } from '../new-ticket-source';
+import { openExternal } from '../open-external';
 import type { PermissionAutomation } from '../permission-notifications';
 import { openedProjectYieldsToSelection } from '../project-activation';
 import { openProjectFetch, type ProjectOpenResult } from '../project-startup';
@@ -890,8 +891,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
     const webBase = enterprise?.origin ?? 'https://github.com',
       enterpriseUrl = webBase === 'https://github.com' ? undefined : webBase;
-    // eslint-disable-next-line no-restricted-properties -- Desktop opens no new window; system-browser routing is HS2-0A7FWS.
-    githubPopup = window.open('', GITHUB_POPUP, GITHUB_POPUP_FEATURES);
+    githubPopup = openExternal('', GITHUB_POPUP, GITHUB_POPUP_FEATURES);
     let provideCode!: (code: string) => void, withholdCode!: (reason: unknown) => void;
     const code = new Promise<string>((resolve, reject) => {
       provideCode = resolve;
@@ -903,6 +903,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         started = await client.startGitHubAuth(webBase);
       provideCode(started.user_code);
       if (githubPopup && !githubPopup.closed) githubPopup.location.href = started.verification_uri;
+      // No sized popup (the desktop app, or a blocked popup): open GitHub directly now that the
+      // code exists; the desktop shell sends it to the system browser (HS2-0A7FWS).
+      else githubPopup = openExternal(started.verification_uri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
       githubAuth.value = {
         session: started.session_id,
         userCode: started.user_code,
@@ -967,8 +970,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   function reopenGitHubSignIn() {
     const current = githubAuth.value;
     if (current?.state !== 'waiting') return;
-    // eslint-disable-next-line no-restricted-properties -- Desktop opens no new window; system-browser routing is HS2-0A7FWS.
-    githubPopup = window.open(current.verificationUri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
+    githubPopup = openExternal(current.verificationUri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
   }
 
   /**

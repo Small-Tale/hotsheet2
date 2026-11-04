@@ -106,8 +106,9 @@ describe('web ESLint policy', () => {
       expect([...flaggedLines].sort((left, right) => left - right)).toEqual(forms.map((_, index) => index + 1));
     });
 
-    it('HS2-ECT6FE HS2-6S1346 allows no native dialog and caps window.open until HS2-0A7FWS fixes it', () => {
-      const counts = { dialogs: 0, windowOpen: 0 };
+    it('HS2-ECT6FE HS2-6S1346 HS2-0A7FWS allows no native dialog and opens windows only through openExternal', () => {
+      let dialogs = 0;
+      const windowOpeners: string[] = [];
       const scan = (directory: string) => {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
           const path = join(directory, entry.name);
@@ -115,17 +116,18 @@ describe('web ESLint policy', () => {
           else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
             const source = readFileSync(path, 'utf8');
             // Any suppressed alert, confirm, or prompt counts, whatever ticket its reason names.
-            counts.dialogs += source.match(/eslint-disable[^\n]*\bno-alert\b/g)?.length ?? 0;
-            counts.windowOpen +=
-              source.match(/eslint-disable-next-line no-restricted-properties -- .*HS2-0A7FWS/g)?.length ?? 0;
+            dialogs += source.match(/eslint-disable[^\n]*\bno-alert\b/g)?.length ?? 0;
+            // Any suppressed window.open (the only no-restricted-properties use for it).
+            for (const match of source.match(/eslint-disable[^\n]*\bno-restricted-properties\b[^\n]*/g) ?? [])
+              if (/open|window|HS2-0A7FWS/i.test(match)) windowOpeners.push(path.slice(webRoot.length + 1));
           }
         }
       };
       scan(join(webRoot, 'src'));
-      // These counts only decrease: each fix removes its suppression. Confirmations use the shared
-      // in-app ConfirmationDialog (HS2-6S1346).
-      expect(counts.dialogs).toBe(0);
-      expect(counts.windowOpen).toBeLessThanOrEqual(2);
+      // Confirmations use the shared in-app ConfirmationDialog (HS2-6S1346). New windows go through
+      // src/open-external.ts, which the desktop shell routes to the system browser (HS2-0A7FWS).
+      expect(dialogs).toBe(0);
+      expect(windowOpeners).toEqual(['src/open-external.ts']);
     });
   });
 

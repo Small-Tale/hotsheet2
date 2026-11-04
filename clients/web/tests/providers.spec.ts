@@ -3829,6 +3829,33 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
   expect(number!.x - (icon!.x + icon!.width)).toBeLessThanOrEqual(6);
 });
 
+test('opens GitHub sign-in directly when the desktop shell returns no popup window (HS2-0A7FWS)', async ({ page }) => {
+  // The desktop shell routes window.open to the system browser and returns no window, like a blocked popup.
+  await page.addInitScript(() => {
+    const opened: string[] = [];
+    (window as unknown as { hs2OpenedWindows: string[] }).hs2OpenedWindows = opened;
+    window.open = (url?: string | URL) => {
+      opened.push(String(url ?? ''));
+      return null;
+    };
+  });
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+  );
+  await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  await setup.getByRole('button', { name: 'Sign in with GitHub' }).click();
+  // The click asks for the sized blank popup; with none returned, the verification page opens directly.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { hs2OpenedWindows: string[] }).hs2OpenedWindows))
+    .toEqual(['', 'https://github.test/login/device']);
+});
+
 test('links the first GitHub installation and refreshes granted repositories (HS2-FDTJ98)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
   await page.route('**/__hotsheet/projects/open', (route) =>

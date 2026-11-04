@@ -122,7 +122,7 @@ export default tseslint.config(
   {
     // HS2-ECT6FE: web APIs that do nothing in the Tauri desktop webview. Wry 0.57's WKWebView UI
     // delegate implements no JavaScript alert, confirm, or prompt panel, and wry creates no new
-    // window without a handler the shell does not register (HS2-0A7FWS). Use in-app dialogs.
+    // window unless the shell handles it; the desktop shell now routes new windows (HS2-0A7FWS). Use in-app dialogs.
     files: ['src/**/*.{ts,tsx,mts}'],
     ignores: ['src/**/*.test.ts'],
     rules: {
@@ -133,7 +133,11 @@ export default tseslint.config(
           name,
           message: `${name}() shows nothing in the desktop webview; use an in-app dialog (HS2-ECT6FE).`,
         })),
-        { name: 'open', message: 'window.open() opens nothing in the desktop webview (HS2-0A7FWS).' },
+        {
+          name: 'open',
+          message:
+            'Open windows through openExternal() in src/open-external.ts; the desktop shell routes it (HS2-0A7FWS).',
+        },
       ],
       'no-restricted-properties': [
         'error',
@@ -143,7 +147,12 @@ export default tseslint.config(
             property,
             message: `${property}() shows nothing in the desktop webview; use an in-app dialog (HS2-ECT6FE).`,
           })),
-          { object, property: 'open', message: 'open() opens nothing in the desktop webview (HS2-0A7FWS).' },
+          {
+            object,
+            property: 'open',
+            message:
+              'Open windows through openExternal() in src/open-external.ts; the desktop shell routes it (HS2-0A7FWS).',
+          },
         ]),
       ],
     },
