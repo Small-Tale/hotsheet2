@@ -357,8 +357,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
 - `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
   summary opens a repository-style master/detail dialog: a Kerf `SplitView` whose Docs, Tests,
   Source, and Other views reuse `ListItem`, with the same `ListActionRow` file rows,
-  middle-truncated paths, and Git-letter `Badge`s as Repository Status. Selecting a file opens its diff across the server-validated complete ticket
-  commit span. On compact devices it stacks the views above the files in one `Pane`
+  middle-truncated paths, and Git-letter `Badge`s as Repository Status. Selecting a file opens its server-validated diff over the ticket's own commit
+  runs, one difftool launch per run that changed it, never across another ticket's
+  interleaved commits (HS2-F10Y9P). On compact devices it stacks the views above the files in one `Pane`
   (HS2-B2MD8Z). The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
 - `ListItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,

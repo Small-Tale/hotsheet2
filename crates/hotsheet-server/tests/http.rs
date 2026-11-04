@@ -13170,6 +13170,136 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     assert_eq!(launch_parents(&text).len(), 1, "one git launch: {text}");
 }
 
+#[tokio::test]
+async fn hs2_f10y9p_interleaved_ticket_files_summarize_and_launch_per_run() {
+    // A ticket's two commits separated by another ticket's commit: the summary leaves
+    // out the other ticket's file, and a file both runs changed opens one difftool per
+    // run, each comparing only that run's own trees.
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let log = checkout.path().join(".git").join("difftool.log");
+    let run = |args: &[&str]| {
+        let output = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(checkout.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.name", "Test"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "diff.tool", "hs2-test"]);
+    let record = format!(
+        "echo \"$PPID $(tr '\\n' ' ' < \"$LOCAL\")-> $(tr '\\n' ' ' < \"$REMOTE\")\" >> '{}'; echo --- >> '{}'",
+        log.display(),
+        log.display()
+    );
+    run(&["config", "difftool.hs2-test.cmd", &record]);
+    let shared = checkout.path().join("shared.txt");
+    std::fs::write(&shared, "seed\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-qm", "initial"]);
+
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"runs","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/runs/tickets",
+                Some(r#"{"title":"Interleaved ticket"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let slug = created["slug"].as_str().unwrap();
+    std::fs::write(&shared, "seed\nmine-1\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-qm", &format!("{slug} first run")]);
+    std::fs::write(&shared, "seed\nmine-1\nother\n").unwrap();
+    std::fs::write(checkout.path().join("other.txt"), "other\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-qm", "HS2-ZZZZZZ interleaved work"]);
+    std::fs::write(&shared, "seed\nmine-1\nother\nmine-2\n").unwrap();
+    run(&["add", "."]);
+    run(&["commit", "-qm", &format!("{slug} second run")]);
+
+    let review = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/runs/tickets/{id}/code-review"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(review["ranges"].as_array().unwrap().len(), 2);
+    let paths = review["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file["path"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(paths, ["shared.txt"]);
+    assert_eq!(review["summary"]["files"]["total"], 1);
+    assert!(review.get("file_runs").is_none(), "runs stay server-side");
+
+    let other = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/runs/tickets/{id}/code-review"),
+            Some(r#"{"mode":"ticket_file","paths":["other.txt"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::BAD_REQUEST);
+    let launched = app
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/runs/tickets/{id}/code-review"),
+            Some(r#"{"mode":"ticket_file","paths":["shared.txt"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched.status(), StatusCode::NO_CONTENT);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let text = loop {
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        if text.matches("---").count() >= 2 || std::time::Instant::now() > deadline {
+            break text;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    };
+    assert_eq!(launch_parents(&text).len(), 2, "one launch per run: {text}");
+    assert!(text.contains("seed -> seed mine-1 \n"), "first run: {text}");
+    assert!(
+        text.contains("seed mine-1 other -> seed mine-1 other mine-2 \n"),
+        "second run starts after the other ticket: {text}"
+    );
+    assert!(
+        !text.contains("seed -> seed mine-1 other mine-2"),
+        "no launch spans the gap: {text}"
+    );
+}
+
 /// Distinct parent pids recorded by the test difftool: one per `git difftool` launch.
 fn launch_parents(log: &str) -> std::collections::HashSet<&str> {
     log.lines()

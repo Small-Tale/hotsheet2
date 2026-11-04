@@ -11,7 +11,7 @@
 //! work done in another worktree is visible, marked [`UnmergedSource`], before it is merged
 //! (HS2-0WZRK5).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -136,6 +136,23 @@ pub struct CodeReview {
     /// Recorded shipping work is on remote main, but this checkout has not advanced to it.
     #[serde(default)]
     pub checkout_behind_main: bool,
+    /// The ticket's own first-parent commit runs behind `files`, oldest first, so a file
+    /// launch never diffs across another ticket's interleaved commits (HS2-F10Y9P).
+    #[serde(skip_serializing)]
+    file_runs: Vec<FileRun>,
+}
+
+/// One first-parent run of a ticket's own commits, diffed on its own for the changed-files
+/// summary and for file launches (HS2-F10Y9P).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileRun {
+    /// The oldest run commit's first parent, or the empty tree for a root commit.
+    base: String,
+    /// The newest commit of the run.
+    newest: String,
+    /// Each summary path this run changed, mapped to the run-local pathspec that shows that
+    /// change (the earlier name in a rename run, both names for a rename inside the run).
+    touched: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -510,8 +527,9 @@ fn discover_ticket(
     // Unmerged work is listed first: it is the newest, not-yet-integrated part of the ticket.
     let commits = pending.into_iter().chain(merged).collect::<Vec<_>>();
     let truncated = truncated || unmerged_truncated;
-    let files = discover_ticket_files(root, &commits, classification);
+    let (files, file_runs) = discover_ticket_files(root, &commits, classification);
     Ok(CodeReview {
+        file_runs,
         checkout_behind_main,
         follow_ups: Vec::new(),
         summary: summarize_changes(&files),
@@ -530,6 +548,7 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     let (commits, difftool, truncated) = discover_commits(root)?;
     let ranges = repository_range(&commits, ahead).into_iter().collect();
     Ok(CodeReview {
+        file_runs: Vec::new(),
         checkout_behind_main: false,
         follow_ups: Vec::new(),
         summary: CodeReviewSummary::default(),
@@ -541,27 +560,318 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     })
 }
 
+/// The ticket's changed files, aggregated over its own first-parent commit runs, plus those
+/// runs for file launches (HS2-F10Y9P). One span from the oldest run's parent to the newest
+/// commit would also count every interleaved commit of other tickets, so each run is diffed
+/// on its own and the per-run changes are composed by path ([`compose_run_changes`]). A
+/// ticket with a single run keeps that run's plain diff unchanged.
 fn discover_ticket_files(
     root: &Path,
     commits: &[CodeReviewCommit],
     classification: &CodeReviewClassification,
-) -> Vec<CodeReviewFile> {
-    let Some((newest, oldest)) = file_span(commits) else {
+) -> (Vec<CodeReviewFile>, Vec<FileRun>) {
+    let chains = order_runs(root, first_parent_runs(&file_commits(commits)));
+    let mut runs = Vec::new();
+    let mut changes = Vec::new();
+    for (oldest, newest) in chains {
+        let base = oldest.parents.first().cloned().or_else(|| {
+            git_output(root, &["hash-object", "-t", "tree", "--stdin"])
+                .ok()
+                .map(|value| value.trim().to_owned())
+        });
+        let Some(base) = base else {
+            return (Vec::new(), Vec::new());
+        };
+        let Ok(output) = git_output(
+            root,
+            &[
+                "diff",
+                "--name-status",
+                "-M",
+                "-C",
+                "-z",
+                &base,
+                &newest.sha,
+            ],
+        ) else {
+            return (Vec::new(), Vec::new());
+        };
+        changes.push(parse_changed_files(&output, classification));
+        runs.push(FileRun {
+            base,
+            newest: newest.sha.clone(),
+            touched: BTreeMap::new(),
+        });
+    }
+    let (files, touched) = compose_run_changes(changes, classification);
+    for (run, touched) in runs.iter_mut().zip(touched) {
+        run.touched = touched;
+    }
+    (files, runs)
+}
+
+/// The commits whose trees the changed-files summary may compare: the ticket's merged
+/// commits when it has any, otherwise the unmerged commits of the newest commit's source
+/// branch (HS2-0WZRK5), so a file diff never mixes trees from unrelated branches.
+fn file_commits(commits: &[CodeReviewCommit]) -> Vec<&CodeReviewCommit> {
+    let Some(first) = commits.first() else {
         return Vec::new();
     };
-    let old = oldest.parents.first().cloned().or_else(|| {
-        git_output(root, &["hash-object", "-t", "tree", "--stdin"])
-            .ok()
-            .map(|value| value.trim().to_owned())
+    let source = if commits.iter().any(|commit| commit.unmerged.is_none()) {
+        None
+    } else {
+        first.unmerged.clone()
+    };
+    let mut seen = HashSet::new();
+    commits
+        .iter()
+        .filter(|commit| commit.unmerged == source && seen.insert(commit.sha.as_str()))
+        .collect()
+}
+
+/// Split commits into maximal first-parent runs as `(oldest, newest)` pairs (HS2-F10Y9P).
+/// A run continues only while exactly one selected commit has the previous one as its
+/// first parent, so a run never spans a commit outside the selection. On linear history
+/// these are the same runs as [`contiguous_ranges`]; across merges they are stricter, since
+/// adjacency in a date-ordered log does not imply a parent link.
+fn first_parent_runs<'a>(
+    selected: &[&'a CodeReviewCommit],
+) -> Vec<(&'a CodeReviewCommit, &'a CodeReviewCommit)> {
+    let by_sha: HashSet<&str> = selected.iter().map(|commit| commit.sha.as_str()).collect();
+    let mut children: HashMap<&str, Vec<&'a CodeReviewCommit>> = HashMap::new();
+    for commit in selected {
+        if let Some(parent) = commit.parents.first().map(String::as_str)
+            && by_sha.contains(parent)
+        {
+            children.entry(parent).or_default().push(commit);
+        }
+    }
+    let only_child = |sha: &str| match children.get(sha).map(Vec::as_slice) {
+        Some([child]) => Some(*child),
+        _ => None,
+    };
+    let mut runs = Vec::new();
+    for commit in selected {
+        let continues = commit
+            .parents
+            .first()
+            .is_some_and(|parent| only_child(parent).is_some_and(|child| child.sha == commit.sha));
+        if continues {
+            continue;
+        }
+        let mut newest = *commit;
+        while let Some(child) = only_child(&newest.sha) {
+            newest = child;
+        }
+        runs.push((*commit, newest));
+    }
+    runs
+}
+
+/// Order runs oldest first by topology, not by `committed_at`, which rebases and clock skew
+/// can misorder (HS2-F10Y9P). One bounded `git rev-list --topo-order` over the run tips
+/// ranks them; a tip outside that window (or a failed call) counts as older than every
+/// ranked tip and falls back to commit time.
+fn order_runs<'a>(
+    root: &Path,
+    mut runs: Vec<(&'a CodeReviewCommit, &'a CodeReviewCommit)>,
+) -> Vec<(&'a CodeReviewCommit, &'a CodeReviewCommit)> {
+    if runs.len() < 2 {
+        return runs;
+    }
+    let limit = LOG_LIMIT.to_string();
+    let mut args = vec!["rev-list", "--topo-order", "-n", &limit];
+    args.extend(runs.iter().map(|(_, newest)| newest.sha.as_str()));
+    let ranks: HashMap<String, usize> = git_output(root, &args)
+        .map(|output| {
+            output
+                .lines()
+                .enumerate()
+                .map(|(rank, sha)| (sha.trim().to_owned(), rank))
+                .collect()
+        })
+        .unwrap_or_default();
+    runs.sort_by_cached_key(|(_, newest)| match ranks.get(&newest.sha) {
+        // `--topo-order` lists descendants first, so a higher rank is older.
+        Some(rank) => (1, usize::MAX - rank, String::new(), String::new()),
+        None => (0, 0, newest.committed_at.clone(), newest.sha.clone()),
     });
-    let Some(old) = old else { return Vec::new() };
-    let Ok(output) = git_output(
-        root,
-        &["diff", "--name-status", "-M", "-C", "-z", &old, &newest.sha],
-    ) else {
-        return Vec::new();
+    runs
+}
+
+/// One summary file's lineage while runs are composed: its net change against the state
+/// before the ticket's first run, and the runs (with run-local pathspecs) that touched it.
+struct Lineage {
+    file: CodeReviewFile,
+    touches: Vec<(usize, Vec<String>)>,
+}
+
+/// Compose per-run changes, oldest run first, into the net change of each path against the
+/// state before the ticket's first run (HS2-F10Y9P). Returns the files sorted by path and,
+/// per run, the summary paths it touched with their run-local pathspecs. A single run is
+/// returned unchanged. Rules for a path one run changes and a later run changes again:
+///
+/// - Added, then modified or type-changed: still Added. Added, then deleted: dropped,
+///   because the path neither existed before nor exists after.
+/// - Modified, then deleted: Deleted. Modified, then type-changed: TypeChanged.
+/// - Deleted, then added again: Modified, because the path existed before and after.
+/// - Renamed or copied, then modified: keeps the rename or copy and its origin.
+/// - Renamed, then deleted: Deleted at the origin. Copied, then deleted: dropped.
+/// - A rename of a path an earlier run added stays Added at the new path; a rename of an
+///   earlier rename keeps the first origin, so the chain `a → b`, `b → c` reports `a → c`.
+/// - A rename or copy onto a path an earlier run deleted is Modified there; a renamed
+///   origin that existed before the ticket is then Deleted.
+/// - Adding a path back that an earlier run renamed away turns that rename into a copy,
+///   and the re-added path is Modified.
+fn compose_run_changes(
+    runs: Vec<Vec<CodeReviewFile>>,
+    classification: &CodeReviewClassification,
+) -> (Vec<CodeReviewFile>, Vec<BTreeMap<String, Vec<String>>>) {
+    use CodeReviewFileChange::{Added, Copied, Deleted, Modified, Renamed, TypeChanged};
+    let count = runs.len();
+    if count == 1 {
+        let files = runs.into_iter().next().unwrap_or_default();
+        let touched = files
+            .iter()
+            .map(|file| (file.path.clone(), vec![file.path.clone()]))
+            .collect();
+        return (files, vec![touched]);
+    }
+    let deleted = |path: String, touches| Lineage {
+        file: CodeReviewFile {
+            category: classify(&path, classification),
+            path,
+            original_path: None,
+            change: Deleted,
+        },
+        touches,
     };
-    parse_changed_files(&output, classification)
+    let mut current: HashMap<String, Lineage> = HashMap::new();
+    for (run, files) in runs.into_iter().enumerate() {
+        for file in files {
+            let path = file.path.clone();
+            if let (Renamed | Copied, Some(original)) = (file.change, file.original_path.clone()) {
+                let prior = (file.change == Renamed)
+                    .then(|| current.remove(&original))
+                    .flatten();
+                let source = prior
+                    .as_ref()
+                    .map(|lineage| &lineage.file)
+                    .or_else(|| current.get(&original).map(|lineage| &lineage.file));
+                let (change, origin) = match source {
+                    Some(earlier) if earlier.change == Added => (Added, None),
+                    Some(earlier) if matches!(earlier.change, Renamed | Copied) => (
+                        file.change,
+                        earlier.original_path.clone().or(Some(original.clone())),
+                    ),
+                    _ => (file.change, Some(original.clone())),
+                };
+                let mut touches = prior.map(|lineage| lineage.touches).unwrap_or_default();
+                touches.push((run, vec![original, path.clone()]));
+                let mut net = CodeReviewFile {
+                    original_path: origin,
+                    change,
+                    ..file
+                };
+                if let Some(destination) = current.remove(&path) {
+                    let own = touches.clone();
+                    touches = destination.touches.into_iter().chain(touches).collect();
+                    if destination.file.change == Deleted {
+                        // The destination existed before the ticket and holds new content.
+                        if net.change == Renamed
+                            && let Some(origin) = net.original_path.clone()
+                        {
+                            current.insert(origin.clone(), deleted(origin, own));
+                        }
+                        net.change = Modified;
+                        net.original_path = None;
+                    }
+                }
+                current.insert(path, Lineage { file: net, touches });
+                continue;
+            }
+            let spec = vec![path.clone()];
+            let Some(mut prior) = current.remove(&path) else {
+                let mut change = file.change;
+                if change == Added
+                    && let Some(moved) = current.values_mut().find(|lineage| {
+                        lineage.file.change == Renamed
+                            && lineage.file.original_path.as_deref() == Some(path.as_str())
+                    })
+                {
+                    moved.file.change = Copied;
+                    change = Modified;
+                }
+                current.insert(
+                    path,
+                    Lineage {
+                        file: CodeReviewFile {
+                            original_path: None,
+                            change,
+                            ..file
+                        },
+                        touches: vec![(run, spec)],
+                    },
+                );
+                continue;
+            };
+            prior.touches.push((run, spec));
+            let net = match (prior.file.change, file.change) {
+                (Added | Copied, Deleted) => None,
+                (Added, _) => Some(Added),
+                (Deleted, Added) => Some(Modified),
+                (Renamed, Deleted) => {
+                    if let Some(origin) = prior.file.original_path.take() {
+                        let mut touches = std::mem::take(&mut prior.touches);
+                        if let Some(existing) = current.remove(&origin) {
+                            touches = existing.touches.into_iter().chain(touches).collect();
+                        }
+                        current.insert(origin.clone(), deleted(origin, touches));
+                    }
+                    None
+                }
+                (Renamed | Copied, _) => Some(prior.file.change),
+                (Modified | TypeChanged, Deleted) => Some(Deleted),
+                (TypeChanged, _) | (_, TypeChanged) => Some(TypeChanged),
+                (_, Added | Modified) => Some(Modified),
+                (_, later) => Some(later),
+            };
+            if let Some(net) = net {
+                prior.file.change = net;
+                if !matches!(net, Renamed | Copied) {
+                    prior.file.original_path = None;
+                }
+                current.insert(path, prior);
+            }
+        }
+    }
+    let mut touched = vec![BTreeMap::<String, Vec<String>>::new(); count];
+    let mut files = Vec::with_capacity(current.len());
+    for (path, lineage) in current {
+        for (run, spec) in lineage.touches {
+            let entry = touched[run].entry(path.clone()).or_default();
+            for name in spec {
+                if !entry.contains(&name) {
+                    entry.push(name);
+                }
+            }
+        }
+        files.push(lineage.file);
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    (files, touched)
+}
+
+fn classify(path: &str, classification: &CodeReviewClassification) -> CodeReviewFileCategory {
+    if matches_any(&classification.docs, path) {
+        CodeReviewFileCategory::Docs
+    } else if matches_any(&classification.tests, path) {
+        CodeReviewFileCategory::Tests
+    } else if matches_any(&classification.source, path) {
+        CodeReviewFileCategory::Source
+    } else {
+        CodeReviewFileCategory::Other
+    }
 }
 
 fn parse_changed_files(
@@ -582,15 +892,7 @@ fn parse_changed_files(
             (None, path)
         };
         let path = path.replace('\\', "/");
-        let category = if matches_any(&classification.docs, &path) {
-            CodeReviewFileCategory::Docs
-        } else if matches_any(&classification.tests, &path) {
-            CodeReviewFileCategory::Tests
-        } else if matches_any(&classification.source, &path) {
-            CodeReviewFileCategory::Source
-        } else {
-            CodeReviewFileCategory::Other
-        };
+        let category = classify(&path, classification);
         let change = match code {
             'A' => CodeReviewFileChange::Added,
             'C' => CodeReviewFileChange::Copied,
@@ -765,20 +1067,6 @@ fn discover_commits(
     Ok((all, difftool, truncated))
 }
 
-/// The newest and oldest commit of the ticket's changed-files span: its merged commits
-/// when it has any, otherwise the unmerged commits from the newest commit's source branch
-/// (HS2-0WZRK5), so a file diff never mixes trees from unrelated branches.
-fn file_span(commits: &[CodeReviewCommit]) -> Option<(&CodeReviewCommit, &CodeReviewCommit)> {
-    let source = if commits.iter().any(|commit| commit.unmerged.is_none()) {
-        None
-    } else {
-        commits.first()?.unmerged.clone()
-    };
-    let mut span = commits.iter().filter(|commit| commit.unmerged == source);
-    let newest = span.next()?;
-    Some((newest, span.next_back().unwrap_or(newest)))
-}
-
 /// Commits reachable from a local branch or another worktree's detached `HEAD` but not
 /// from this checkout's `HEAD`, each tagged with where it was found (HS2-0WZRK5). Best
 /// effort: an unreadable repository, an unborn `HEAD`, or a failing scan yields none.
@@ -920,11 +1208,56 @@ pub fn launch(
     if review.difftool.is_none() {
         return Err(CodeReviewError::DifftoolNotConfigured);
     }
-    let (old, new) = launch_revisions(root, review, target)?;
-    match target {
-        ReviewTarget::TicketFile { paths } => spawn_difftool_files(root, (&old, &new), paths),
-        _ => spawn_difftool(root, (old, new)),
+    if let ReviewTarget::TicketFile { paths } = target {
+        for (old, new, pathspec) in ticket_file_launches(review, paths)? {
+            spawn_difftool_files(root, (old, new), &pathspec)?;
+        }
+        return Ok(());
     }
+    let (old, new) = launch_revisions(root, review, target)?;
+    spawn_difftool(root, (old, new))
+}
+
+/// One ticket-file difftool launch: base revision, tip revision, and pathspec.
+type FileLaunch<'a> = (&'a str, &'a str, Vec<String>);
+
+/// The difftool launches for ticket files: one per first-parent run that touched any of
+/// the paths, oldest run first, each over that run's own base, tip, and run-local
+/// pathspec, so a file launch never diffs across another ticket's interleaved commits
+/// (HS2-F10Y9P). A single-run ticket gets one launch over exactly the requested paths.
+/// Every path must be discovered ticket evidence.
+fn ticket_file_launches<'a>(
+    review: &'a CodeReview,
+    paths: &[String],
+) -> Result<Vec<FileLaunch<'a>>, CodeReviewError> {
+    if paths.is_empty()
+        || !paths
+            .iter()
+            .all(|path| review.files.iter().any(|file| file.path == *path))
+    {
+        return Err(CodeReviewError::InvalidTarget);
+    }
+    let launches = review
+        .file_runs
+        .iter()
+        .filter_map(|run| {
+            let mut pathspec: Vec<String> = Vec::new();
+            for name in paths
+                .iter()
+                .filter_map(|path| run.touched.get(path))
+                .flatten()
+            {
+                if !pathspec.contains(name) {
+                    pathspec.push(name.clone());
+                }
+            }
+            (!pathspec.is_empty()).then_some((run.base.as_str(), run.newest.as_str(), pathspec))
+        })
+        .collect::<Vec<_>>();
+    if launches.is_empty() {
+        return Err(CodeReviewError::InvalidTarget);
+    }
+    Ok(launches)
 }
 
 pub fn launch_repository(
@@ -1136,26 +1469,10 @@ fn launch_revisions(
                 .ok_or(CodeReviewError::InvalidTarget)?;
             Ok((from.sha.clone(), to.sha.clone()))
         }
-        ReviewTarget::TicketFile { paths } => {
-            if paths.is_empty()
-                || !paths
-                    .iter()
-                    .all(|path| review.files.iter().any(|file| file.path == *path))
-            {
-                return Err(CodeReviewError::InvalidTarget);
-            }
-            let Some((newest, oldest)) = file_span(&review.commits) else {
-                return Err(CodeReviewError::InvalidTarget);
-            };
-            let old = match oldest.parents.first() {
-                Some(parent) => parent.clone(),
-                None => git_output(root, &["hash-object", "-t", "tree", "--stdin"])?
-                    .trim()
-                    .to_owned(),
-            };
-            Ok((old, newest.sha.clone()))
+        // Ticket files launch per run through `ticket_file_launches` (HS2-F10Y9P).
+        ReviewTarget::TicketFile { .. } | ReviewTarget::WorktreeFile { .. } => {
+            Err(CodeReviewError::InvalidTarget)
         }
-        ReviewTarget::WorktreeFile { .. } => Err(CodeReviewError::InvalidTarget),
     }
 }
 
@@ -1505,29 +1822,79 @@ mod tests {
         assert!(unmerged_ranges(&[]).is_empty());
     }
 
+    /// `(oldest, newest)` of each first-parent file run, in discovery order.
+    fn run_spans(commits: &[CodeReviewCommit]) -> Vec<(String, String)> {
+        first_parent_runs(&file_commits(commits))
+            .into_iter()
+            .map(|(oldest, newest)| (oldest.sha.clone(), newest.sha.clone()))
+            .collect()
+    }
+
+    fn spans(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(oldest, newest)| ((*oldest).to_owned(), (*newest).to_owned()))
+            .collect()
+    }
+
     #[test]
-    fn file_span_prefers_merged_commits_then_the_newest_unmerged_source() {
-        let merged_new = commit("m2", "x", "m1");
-        let merged_old = commit("m1", "x", "m0");
+    fn file_runs_prefer_merged_commits_then_the_newest_unmerged_source() {
         let mixed = vec![
             on(commit("u1", "x", "m2"), Some("feature")),
-            merged_new.clone(),
-            merged_old.clone(),
+            commit("m2", "x", "m1"),
+            commit("m1", "x", "m0"),
         ];
-        let (newest, oldest) = file_span(&mixed).unwrap();
-        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("m2", "m1"));
+        assert_eq!(run_spans(&mixed), spans(&[("m1", "m2")]));
 
         let only_unmerged = vec![
             on(commit("f2", "x", "f1"), Some("feature")),
             on(commit("o1", "x", "base"), Some("other")),
             on(commit("f1", "x", "base"), Some("feature")),
         ];
-        let (newest, oldest) = file_span(&only_unmerged).unwrap();
-        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("f2", "f1"));
+        assert_eq!(run_spans(&only_unmerged), spans(&[("f1", "f2")]));
         let single = vec![on(commit("s1", "x", "base"), None)];
-        let (newest, oldest) = file_span(&single).unwrap();
-        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("s1", "s1"));
-        assert!(file_span(&[]).is_none());
+        assert_eq!(run_spans(&single), spans(&[("s1", "s1")]));
+        assert!(run_spans(&[]).is_empty());
+    }
+
+    #[test]
+    fn hs2_f10y9p_file_runs_split_at_gaps_and_forks_but_not_at_log_adjacency() {
+        // A3 → A2 is one run; A1's child B1 belongs to another ticket, so A1 is its own run.
+        let gap = vec![
+            commit("a3", "x", "a2"),
+            commit("a2", "x", "b1"),
+            commit("a1", "x", "base"),
+        ];
+        assert_eq!(run_spans(&gap), spans(&[("a2", "a3"), ("a1", "a1")]));
+        // Date order interleaves a side-branch commit between parent-linked commits: the
+        // run still follows first parents.
+        let interleaved = vec![
+            commit("m3", "x", "m2"),
+            commit("s1", "x", "base"),
+            commit("m2", "x", "m1"),
+            commit("m1", "x", "base"),
+        ];
+        assert_eq!(
+            run_spans(&interleaved),
+            spans(&[("s1", "s1"), ("m1", "m3")])
+        );
+        // Two ticket commits on top of one ticket commit: the fork ends the run there.
+        let fork = vec![
+            commit("l2", "x", "f1"),
+            commit("r2", "x", "f1"),
+            commit("f1", "x", "base"),
+        ];
+        assert_eq!(
+            run_spans(&fork),
+            spans(&[("l2", "l2"), ("r2", "r2"), ("f1", "f1")])
+        );
+        // Repeated commits are deduplicated before runs are built.
+        let repeated = vec![
+            commit("d2", "x", "d1"),
+            commit("d2", "x", "d1"),
+            commit("d1", "x", ""),
+        ];
+        assert_eq!(run_spans(&repeated), spans(&[("d1", "d2")]));
     }
 
     #[test]
@@ -1617,6 +1984,7 @@ mod tests {
     #[test]
     fn arbitrary_commits_and_ranges_are_rejected_before_launch() {
         let review = CodeReview {
+            file_runs: Vec::new(),
             checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
@@ -1748,6 +2116,7 @@ mod tests {
     #[test]
     fn compare_uses_the_two_exact_discovered_commits() {
         let review = CodeReview {
+            file_runs: Vec::new(),
             checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
@@ -1823,6 +2192,11 @@ mod tests {
     #[test]
     fn ticket_file_targets_must_match_discovered_evidence() {
         let review = CodeReview {
+            file_runs: vec![FileRun {
+                base: "aaaaaaaa".into(),
+                newest: "bbbbbbbb".into(),
+                touched: BTreeMap::from([("src/known.rs".into(), vec!["src/known.rs".into()])]),
+            }],
             checkout_behind_main: false,
             follow_ups: Vec::new(),
             summary: CodeReviewSummary::default(),
@@ -1838,33 +2212,29 @@ mod tests {
             truncated: false,
         };
         assert_eq!(
+            ticket_file_launches(&review, &["src/known.rs".into()]).unwrap(),
+            vec![("aaaaaaaa", "bbbbbbbb", vec!["src/known.rs".to_owned()])]
+        );
+        assert!(matches!(
+            ticket_file_launches(&review, &["--no-index".into()]),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        // Every path in a multi-file target must be ticket evidence.
+        assert!(matches!(
+            ticket_file_launches(&review, &["src/known.rs".into(), "--no-index".into()]),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        assert!(matches!(
+            ticket_file_launches(&review, &[]),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        // Ticket files never resolve to one span through the commit/range path.
+        assert!(matches!(
             launch_revisions(
                 Path::new("."),
                 &review,
                 &ReviewTarget::TicketFile {
                     paths: vec!["src/known.rs".into()]
-                },
-            )
-            .unwrap(),
-            ("aaaaaaaa".into(), "bbbbbbbb".into())
-        );
-        assert!(matches!(
-            launch_revisions(
-                Path::new("."),
-                &review,
-                &ReviewTarget::TicketFile {
-                    paths: vec!["--no-index".into()]
-                },
-            ),
-            Err(CodeReviewError::InvalidTarget)
-        ));
-        // Every path in a multi-file target must be ticket evidence.
-        assert!(matches!(
-            launch_revisions(
-                Path::new("."),
-                &review,
-                &ReviewTarget::TicketFile {
-                    paths: vec!["src/known.rs".into(), "--no-index".into()]
                 },
             ),
             Err(CodeReviewError::InvalidTarget)
@@ -1902,6 +2272,364 @@ mod tests {
         assert_eq!(
             difftool_args("ks", &["old", "new"]),
             ["difftool", "--no-prompt", "--tool=ks", "old", "new"]
+        );
+    }
+
+    fn changed(code: char, path: &str, original: Option<&str>) -> CodeReviewFile {
+        let change = match code {
+            'A' => CodeReviewFileChange::Added,
+            'C' => CodeReviewFileChange::Copied,
+            'D' => CodeReviewFileChange::Deleted,
+            'R' => CodeReviewFileChange::Renamed,
+            'T' => CodeReviewFileChange::TypeChanged,
+            _ => CodeReviewFileChange::Modified,
+        };
+        CodeReviewFile {
+            path: path.into(),
+            original_path: original.map(str::to_owned),
+            change,
+            category: classify(path, &CodeReviewClassification::default()),
+        }
+    }
+
+    /// `path → (change letter, origin)` of composed files, for compact assertions.
+    fn net(files: &[CodeReviewFile]) -> Vec<(String, char, Option<String>)> {
+        files
+            .iter()
+            .map(|file| {
+                let code = match file.change {
+                    CodeReviewFileChange::Added => 'A',
+                    CodeReviewFileChange::Copied => 'C',
+                    CodeReviewFileChange::Deleted => 'D',
+                    CodeReviewFileChange::Renamed => 'R',
+                    CodeReviewFileChange::TypeChanged => 'T',
+                    CodeReviewFileChange::Modified => 'M',
+                };
+                (file.path.clone(), code, file.original_path.clone())
+            })
+            .collect()
+    }
+
+    fn entry(path: &str, code: char, origin: Option<&str>) -> (String, char, Option<String>) {
+        (path.into(), code, origin.map(str::to_owned))
+    }
+
+    #[test]
+    fn hs2_f10y9p_run_changes_compose_by_path() {
+        let classification = CodeReviewClassification::default();
+        let (files, touched) = compose_run_changes(
+            vec![
+                vec![
+                    changed('A', "added_kept.rs", None),
+                    changed('A', "added_dropped.rs", None),
+                    changed('M', "modified_deleted.rs", None),
+                    changed('D', "deleted_readded.rs", None),
+                    changed('R', "b.rs", Some("a.rs")),
+                    changed('R', "gone_new.rs", Some("gone_old.rs")),
+                    changed('A', "added_renamed.rs", None),
+                    changed('M', "typed.rs", None),
+                    changed('C', "copy.rs", Some("copy_source.rs")),
+                    changed('D', "target.rs", None),
+                    changed('R', "moved_away.rs", Some("returns.rs")),
+                ],
+                vec![
+                    changed('M', "added_kept.rs", None),
+                    changed('D', "added_dropped.rs", None),
+                    changed('D', "modified_deleted.rs", None),
+                    changed('A', "deleted_readded.rs", None),
+                    changed('R', "c.rs", Some("b.rs")),
+                    changed('D', "gone_new.rs", None),
+                    changed('R', "added_final.rs", Some("added_renamed.rs")),
+                    changed('T', "typed.rs", None),
+                    changed('D', "copy.rs", None),
+                    changed('R', "target.rs", Some("source.rs")),
+                    changed('A', "returns.rs", None),
+                ],
+            ],
+            &classification,
+        );
+        assert_eq!(
+            net(&files),
+            vec![
+                entry("added_final.rs", 'A', None),
+                entry("added_kept.rs", 'A', None),
+                entry("c.rs", 'R', Some("a.rs")),
+                entry("deleted_readded.rs", 'M', None),
+                entry("gone_old.rs", 'D', None),
+                entry("modified_deleted.rs", 'D', None),
+                entry("moved_away.rs", 'C', Some("returns.rs")),
+                entry("returns.rs", 'M', None),
+                entry("source.rs", 'D', None),
+                entry("target.rs", 'M', None),
+                entry("typed.rs", 'T', None),
+            ]
+        );
+        // A rename chain keeps the run-local names: the first run shows `a.rs → b.rs`, the
+        // second `b.rs → c.rs`; a later-run-only path is not touched by the first run.
+        assert_eq!(touched.len(), 2);
+        assert_eq!(touched[0]["c.rs"], ["a.rs", "b.rs"]);
+        assert_eq!(touched[1]["c.rs"], ["b.rs", "c.rs"]);
+        assert_eq!(touched[0]["added_kept.rs"], ["added_kept.rs"]);
+        assert_eq!(
+            touched[1]["added_final.rs"],
+            ["added_renamed.rs", "added_final.rs"]
+        );
+        assert!(!touched[0].contains_key("source.rs"));
+        assert!(
+            !touched
+                .iter()
+                .any(|run| run.contains_key("added_dropped.rs"))
+        );
+
+        // One run is returned exactly as parsed, including git's own order.
+        let single = vec![changed('M', "z.rs", None), changed('A', "a.rs", None)];
+        let (files, touched) = compose_run_changes(vec![single.clone()], &classification);
+        assert_eq!(files, single);
+        assert_eq!(touched[0]["z.rs"], ["z.rs"]);
+        assert_eq!(
+            compose_run_changes(Vec::new(), &classification),
+            (vec![], vec![])
+        );
+    }
+
+    /// A synthetic repository with a helper that runs git and returns trimmed stdout.
+    fn synthetic_repository() -> (tempfile::TempDir, impl Fn(&[&str]) -> String) {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().to_path_buf();
+        let git = move |args: &[&str]| {
+            let output = hotsheet_ticketing::git::command_in(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "-b", "main"]);
+        git(&["config", "user.name", "Synthetic Test"]);
+        git(&["config", "user.email", "test@invalid.example"]);
+        git(&["config", "diff.tool", "configured"]);
+        (temporary, git)
+    }
+
+    /// Distinct multi-line content so git's rename detection pairs moved files.
+    fn body(name: &str) -> String {
+        (0..12)
+            .map(|line| format!("{name} line {line}\n"))
+            .collect()
+    }
+
+    fn write(root: &Path, path: &str, contents: &str) {
+        let path = root.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+    }
+
+    /// Seed, then ticket A, ticket B, and ticket A again on the current branch. Returns the
+    /// two A commits and the B commit.
+    fn commit_a_b_a(root: &Path, git: &impl Fn(&[&str]) -> String) -> (String, String, String) {
+        write(root, "shared.txt", "seed\n");
+        write(root, "doomed.txt", &body("doomed"));
+        write(root, "notes/old_name.md", &body("notes"));
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "Seed"]);
+        write(root, "shared.txt", "seed\na1\n");
+        write(root, "src/a_only.rs", &body("a_only"));
+        write(root, "temp.rs", &body("temp"));
+        write(root, "doomed.txt", &format!("{}changed\n", body("doomed")));
+        write(root, "notes/old_name.md", &format!("{}a1\n", body("notes")));
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "HS2-AAAAAA First run"]);
+        let first = git(&["rev-parse", "HEAD"]);
+        write(root, "shared.txt", "seed\na1\nb\n");
+        write(root, "src/b_only.rs", &body("b_only"));
+        write(root, "tests/b_only.test.ts", &body("b_test"));
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "HS2-BBBBBB Interleaved other ticket"]);
+        let other = git(&["rev-parse", "HEAD"]);
+        write(root, "shared.txt", "seed\na1\nb\na2\n");
+        git(&["rm", "-q", "temp.rs", "doomed.txt"]);
+        fs::rename(root.join("src/a_only.rs"), root.join("src/a_renamed.rs")).unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::rename(
+            root.join("notes/old_name.md"),
+            root.join("docs/new_name.md"),
+        )
+        .unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "HS2-AAAAAA Second run"]);
+        let second = git(&["rev-parse", "HEAD"]);
+        (first, other, second)
+    }
+
+    #[test]
+    fn hs2_f10y9p_interleaved_ticket_files_exclude_the_other_tickets_paths() {
+        let (temporary, git) = synthetic_repository();
+        let root = temporary.path();
+        let (first, other, second) = commit_a_b_a(root, &git);
+        // The defect: one oldest-parent-to-newest span includes ticket B's files.
+        let span = git(&["diff", "--name-only", &format!("{first}^"), &second]);
+        assert!(span.lines().any(|path| path == "src/b_only.rs"));
+
+        let review = discover(root, "HS2-AAAAAA").unwrap();
+        assert_eq!(review.ranges.len(), 2);
+        assert_eq!(
+            net(&review.files),
+            vec![
+                entry("docs/new_name.md", 'R', Some("notes/old_name.md")),
+                entry("doomed.txt", 'D', None),
+                entry("shared.txt", 'M', None),
+                entry("src/a_renamed.rs", 'A', None),
+            ]
+        );
+        assert_eq!(review.summary.files.total, 4);
+        assert_eq!(review.summary.files.tests, 0);
+        assert_eq!(review.summary.files.source, 1);
+        assert_eq!(review.summary.files.docs, 1);
+        assert_eq!(review.summary.files.other, 2);
+
+        // Each launch covers one run, oldest first, and never spans B's commit.
+        let seed = git(&["rev-parse", &format!("{first}^")]);
+        let shared = vec!["shared.txt".to_owned()];
+        assert_eq!(
+            ticket_file_launches(&review, &shared).unwrap(),
+            vec![
+                (seed.as_str(), first.as_str(), shared.clone()),
+                (other.as_str(), second.as_str(), shared.clone()),
+            ]
+        );
+        // A rename across runs launches each run under that run's names.
+        let renamed = ticket_file_launches(&review, &["docs/new_name.md".into()]).unwrap();
+        assert_eq!(
+            renamed
+                .iter()
+                .map(|(_, newest, paths)| (*newest, paths.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (first.as_str(), vec!["notes/old_name.md".to_owned()]),
+                (
+                    second.as_str(),
+                    vec![
+                        "notes/old_name.md".to_owned(),
+                        "docs/new_name.md".to_owned()
+                    ]
+                ),
+            ]
+        );
+        // A modified-then-deleted path opens both runs; B's and dropped paths are not evidence.
+        let deleted = ticket_file_launches(&review, &["doomed.txt".into()]).unwrap();
+        assert_eq!(deleted.len(), 2);
+        assert!(matches!(
+            ticket_file_launches(&review, &["src/b_only.rs".into()]),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        assert!(matches!(
+            ticket_file_launches(&review, &["temp.rs".into()]),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        // Commit and range review are unchanged: B's commit stays outside the ticket.
+        assert!(!review.commits.iter().any(|commit| commit.sha == other));
+        assert!(matches!(
+            launch_revisions(
+                root,
+                &review,
+                &ReviewTarget::Commit {
+                    commit: other.clone()
+                }
+            ),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        // Ticket B's own summary still sees only its own files.
+        let b_review = discover(root, "HS2-BBBBBB").unwrap();
+        assert_eq!(
+            net(&b_review.files),
+            vec![
+                entry("shared.txt", 'M', None),
+                entry("src/b_only.rs", 'A', None),
+                entry("tests/b_only.test.ts", 'A', None),
+            ]
+        );
+        assert_eq!(b_review.summary.tests_added, 1);
+    }
+
+    #[test]
+    fn hs2_f10y9p_a_single_run_keeps_the_plain_span_diff_and_launch() {
+        let (temporary, git) = synthetic_repository();
+        let root = temporary.path();
+        write(root, "seed.txt", "seed\n");
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "Seed"]);
+        let base = git(&["rev-parse", "HEAD"]);
+        write(root, "src/one.rs", &body("one"));
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "HS2-SINGLE First"]);
+        write(root, "seed.txt", "seed\nchanged\n");
+        write(root, "docs/two.md", &body("two"));
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "HS2-SINGLE Second"]);
+        let newest = git(&["rev-parse", "HEAD"]);
+        let review = discover(root, "HS2-SINGLE").unwrap();
+        let plain = git_output(
+            root,
+            &["diff", "--name-status", "-M", "-C", "-z", &base, &newest],
+        )
+        .unwrap();
+        assert_eq!(
+            review.files,
+            parse_changed_files(&plain, &CodeReviewClassification::default())
+        );
+        let requested = vec!["src/one.rs".to_owned(), "seed.txt".to_owned()];
+        assert_eq!(
+            ticket_file_launches(&review, &requested).unwrap(),
+            vec![(base.as_str(), newest.as_str(), requested.clone())]
+        );
+    }
+
+    #[test]
+    fn hs2_f10y9p_unmerged_only_runs_also_skip_interleaved_commits() {
+        let (temporary, git) = synthetic_repository();
+        let root = temporary.path();
+        write(root, "base.txt", "base\n");
+        git(&["add", "-A"]);
+        git(&["commit", "-m", "Base"]);
+        git(&["switch", "-q", "-c", "worker"]);
+        let (first, other, second) = commit_a_b_a(root, &git);
+        git(&["switch", "-q", "main"]);
+        let review = discover(root, "HS2-AAAAAA").unwrap();
+        assert!(
+            review
+                .commits
+                .iter()
+                .all(|commit| commit.unmerged.is_some())
+        );
+        let paths = review
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            [
+                "docs/new_name.md",
+                "doomed.txt",
+                "shared.txt",
+                "src/a_renamed.rs"
+            ]
+        );
+        let seed = git(&["rev-parse", &format!("{first}^")]);
+        let launches = ticket_file_launches(&review, &["shared.txt".into()]).unwrap();
+        assert_eq!(
+            launches
+                .iter()
+                .map(|(base, newest, _)| (*base, *newest))
+                .collect::<Vec<_>>(),
+            vec![
+                (seed.as_str(), first.as_str()),
+                (other.as_str(), second.as_str())
+            ]
         );
     }
 }

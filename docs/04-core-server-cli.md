@@ -397,7 +397,22 @@ one ref namespace), so ticket work done in another worktree is visible before it
 branch and the worktree directory that has it checked out; unmerged commits are listed
 first. Their ranges join only parent-linked commits from the same source, and the
 changed-files summary stays on the merged commits when any exist (otherwise the newest
-unmerged source's run). Launch validation accepts them exactly like merged commits. The
+unmerged source's run). Launch validation accepts them exactly like merged commits.
+The changed-files summary and file launches cover only the ticket's own commits
+(HS2-F10Y9P). The summary's commits split into first-parent runs: a run continues
+while exactly one ticket commit has the previous one as its first parent, so another
+ticket's interleaved commit always ends a run. Runs are ordered by
+`git rev-list --topo-order`, not by commit time, because rebases and clock skew can
+misorder dates. Each run is diffed from its oldest commit's parent to its newest commit,
+and the per-run changes compose by path: added then modified stays added; added then
+deleted drops out; modified then deleted is deleted; deleted then added back is
+modified; a rename chain keeps its first origin; a renamed path deleted later reports
+its origin deleted. A one-run ticket keeps the plain diff unchanged. A file launch
+starts one `git difftool` per run that changed any requested file, oldest run first,
+each over that run's own base, tip, and run-local names, so no launch diffs across
+the gap. A one-run ticket still opens one launch over exactly the requested paths.
+Commit, range, and compare review, and file validation against the returned `files`,
+are unchanged. The
 ticket-list commit indicator counts unmerged work too; the repository browser stays on
 `HEAD` history.
 After a reviewed integration reaches remote main, `scripts/integration-record.mjs`

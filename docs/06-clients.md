@@ -2464,7 +2464,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   The inspector includes a Code Review segment for ticket-associated code history. It
   begins with a server-derived change-evidence summary: unique documentation, test,
   source, and other file counts plus separate counts for newly added and modified existing
-  test files. The summary is an action that opens a repository-browser-style master/detail
+  test files. The counts cover only the ticket's own commit runs, so another ticket's
+  interleaved commits never add files, and a file that several runs changed opens one diff
+  per run (HS2-F10Y9P; rules in `docs/04-core-server-cli.md`).
+  The summary is an action that opens a repository-browser-style master/detail
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
   card grows to contain every count and test-change line even in the narrow inspector. It has
   no resting fill, only a hover fill as its action affordance, and a rule separates this
