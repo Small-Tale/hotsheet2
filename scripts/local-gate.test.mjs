@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   browserStages,
   importCiTimings,
@@ -13,6 +14,7 @@ import {
   prepare,
   runGate,
 } from './local-gate.mjs';
+import { demoEntryIds, exerciseIndex, exerciseIndexForRepo, ownHooks, routeHooks } from './gate-browser-exercise.mjs';
 import { profileFromTags } from './gate-ticket-profile.mjs';
 
 const fullScript = readFileSync(new URL('./check-full.sh', import.meta.url), 'utf8');
@@ -651,4 +653,298 @@ test('HS2-PNBH4X a stale install blocks the gate and a reinstall changes every r
   assert.notEqual(first.key, second.key);
   const webStage = (p) => p.checks.find((stage) => stage.cwd === 'clients/web');
   assert.notEqual(webStage(first).key, webStage(second).key);
+});
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const web = (path) => `clients/web/${path}`;
+const attachSpecs = [
+  'tests/terminal-safari.spec.ts',
+  'tests/terminal-liveness.spec.ts',
+  'tests/terminal-zoom-refit.spec.ts',
+  'tests/webkit-memory.spec.ts',
+];
+
+/** A small synthetic client: a runtime whose attach URL comes from a helper, and a search component. */
+function exerciseFixture() {
+  const sources = new Map([
+    [web('src/terminal-viewport.ts'), 'export const url = (id) => `/terminals/${id}/attach`;\n'],
+    [
+      web('src/terminal-viewport-runtime.ts'),
+      "import { url } from './terminal-viewport';\nnew WebSocket(url('a'));\nnode.classList.contains('terminal-viewport--dedicated');\n",
+    ],
+    [web('src/inline-search.ts'), 'export const parse = (text) => text.split(" ");\n'],
+    [
+      web('src/components/ticket-search-field.tsx'),
+      "import './ticket-search-field.css';\nimport { parse } from '../inline-search';\nexport const TicketSearchField = () => <div class=\"ticket-search-field\" />;\n",
+    ],
+    [web('src/components/ticket-search-field.css'), '.ticket-search-field__help { inline-size: 1px; }\n'],
+    [web('src/trailing-task.ts'), 'export const later = () => undefined;\n'],
+    [
+      web('src/app/runtime.tsx'),
+      "import { later } from '../trailing-task';\nimport { parse } from '../inline-search';\n",
+    ],
+    [web('src/unrelated-format.ts'), 'export const format = (n) => String(n);\n'],
+    [
+      web('src/components/badge-count.tsx'),
+      'import { format } from \'../unrelated-format\';\nexport const B = () => <span class="badge-count" />;\n',
+    ],
+  ]);
+  const specs = new Map([
+    [
+      web('tests/terminal-safari.spec.ts'),
+      "test('boots', async ({ page }) => {\n  await page.routeWebSocket(/\\/terminals\\/[^/?]+\\/attach(?:\\?.*)?$/, () => {});\n});\n",
+    ],
+    [
+      web('tests/badge.spec.ts'),
+      "test('counts', async ({ page }) => {\n  await page.locator('.badge-count').click();\n});\n",
+    ],
+    [
+      web('tests/providers.spec.ts'),
+      [
+        "import { expect, test } from '@playwright/test';",
+        '',
+        'async function haltedSessionFixture(page) {',
+        '  await page.routeWebSocket(/\\/terminals\\/[^/?]+\\/attach(?:\\?.*)?$/, (route) => void route.close());',
+        '}',
+        '',
+        "test('marks a halted terminal (HS2-HJ4D1H)', async ({ page }) => {",
+        '  await haltedSessionFixture(page);',
+        '});',
+        '',
+        'for (const width of [1280, 390])',
+        '  test(`inserts a search syntax example from the help as a filter chip at ${width}px (HS2-FR1Y70)`, async ({',
+        '    page,',
+        '  }) => {',
+        "    await page.locator('.ticket-search-field').click();",
+        '  });',
+        '',
+        'test(',
+        "  'opens the search syntax help dialog from a wrapped title',",
+        '  async ({ page }) => {',
+        "    await page.locator('.ticket-search-field__help').waitFor();",
+        '  },',
+        ');',
+        '',
+        "test('counts badges in the shipped list', async ({ page }) => {",
+        "  await page.locator('.badge-count').click();",
+        '});',
+        '',
+      ].join('\n'),
+    ],
+  ]);
+  return { sources, specs };
+}
+
+test('HS2-N7EY18 a terminal runtime change selects the specs that route its attach socket', () => {
+  const index = exerciseIndex([web('src/terminal-viewport-runtime.ts')], exerciseFixture());
+  assert.deepEqual(index.files, ['tests/terminal-safari.spec.ts']);
+  // The helper that routes the socket reaches the provider test that calls it.
+  assert.deepEqual(index.providerTitles, ['marks a halted terminal (HS2-HJ4D1H)']);
+  assert.ok(index.reasons[0].includes('terminals/*/attach'));
+  const stages = browserStages([web('src/terminal-viewport-runtime.ts')], false, [], {}, index);
+  assert.ok(stages.some((stage) => stage.command.includes("'tests/terminal-safari.spec.ts'")));
+  assert.ok(
+    stages.some(
+      (stage) =>
+        stage.command.startsWith('npx playwright test tests/providers.spec.ts --grep ') &&
+        stage.command.includes('HS2-HJ4D1H'),
+    ),
+  );
+});
+
+test('HS2-N7EY18 the checked-in runtime, replay stream and socket bridge select every attach-socket spec', () => {
+  for (const path of [
+    'src/terminal-viewport-runtime.ts',
+    'src/terminal-replay-stream.ts',
+    'src/terminal-ws-bridge.ts',
+  ]) {
+    const index = exerciseIndexForRepo(repoRoot, [web(path)]);
+    for (const spec of attachSpecs) assert.ok(index.files.includes(spec), `${path} selects ${spec}`);
+    for (const slug of ['HS2-HJ4D1H', 'HS2-XYSXVT', 'HS2-EV1XK3', 'HS2-PTC0FD'])
+      assert.ok(
+        index.providerTitles.some((title) => title.includes(slug)),
+        `${path} selects the ${slug} provider case`,
+      );
+  }
+});
+
+test('HS2-R1D0S5 a component change selects the provider cases that render it in the shipped parent', () => {
+  const fixture = exerciseFixture();
+  const index = exerciseIndex([web('src/components/ticket-search-field.tsx')], fixture);
+  assert.deepEqual(index.providerTitles, [
+    'inserts a search syntax example from the help as a filter chip at ',
+    'opens the search syntax help dialog from a wrapped title',
+  ]);
+  assert.deepEqual(index.files, []);
+  // The sibling stylesheet speaks for the component.
+  assert.deepEqual(
+    exerciseIndex([web('src/components/ticket-search-field.css')], fixture).providerTitles,
+    index.providerTitles,
+  );
+  // A hook-less helper reaches the specs through its nearest shipped parent, never through app/.
+  const helper = exerciseIndex([web('src/inline-search.ts')], fixture);
+  assert.deepEqual(helper.providerTitles, index.providerTitles);
+  assert.ok(helper.reasons[0].includes('ticket-search-field.tsx'));
+  assert.ok(!helper.reasons[0].includes('app/runtime.tsx'));
+  const real = exerciseIndexForRepo(repoRoot, [web('src/components/ticket-search-field.tsx')]);
+  assert.ok(real.providerTitles.includes('inserts a search syntax example from the help as a filter chip at '));
+  const stages = browserStages([web('src/components/ticket-search-field.tsx')], false, [], {}, real);
+  assert.ok(
+    stages.some(
+      (stage) =>
+        stage.command.startsWith('npx playwright test tests/providers.spec.ts --grep ') &&
+        stage.command.includes('inserts a search syntax example from the help as a filter chip at '),
+    ),
+  );
+});
+
+test('HS2-N7EY18 HS2-R1D0S5 an unrelated module pulls neither the attach specs nor the syntax-help cases', () => {
+  const fixture = exerciseFixture();
+  const unrelated = exerciseIndex([web('src/unrelated-format.ts')], fixture);
+  assert.deepEqual(unrelated.files, ['tests/badge.spec.ts']);
+  assert.deepEqual(unrelated.providerTitles, ['counts badges in the shipped list']);
+  // A module reached only through a composition root adds nothing; the shared rules still apply.
+  const rootOnly = exerciseIndex([web('src/trailing-task.ts')], fixture);
+  assert.deepEqual(rootOnly, { files: [], providerTitles: [], providerWhole: false, demoTitles: [], reasons: [] });
+  const real = exerciseIndexForRepo(repoRoot, [web('src/ticket-timeline-data.ts')]);
+  for (const spec of attachSpecs) assert.ok(!real.files.includes(spec), spec);
+  assert.ok(!real.providerTitles.some((title) => /HS2-HJ4D1H|search syntax example/.test(title)));
+  assert.ok(real.files.includes('tests/ticket-timeline-usage.spec.ts'));
+});
+
+test('HS2-N7EY18 shared spec setup, a fixture module and a direct import select the whole file', () => {
+  const { sources, specs } = exerciseFixture();
+  specs.set(web('tests/shared-setup.spec.ts'), "page.locator('.badge-count');\ntest.use({});\n");
+  specs.set(web('tests/socket-fixture.ts'), 'export const attach = (id) => `/terminals/${id}/attach`;\n');
+  specs.set(
+    web('tests/proxy.spec.ts'),
+    "import { attach } from './socket-fixture';\ntest('proxies', () => attach('a'));\n",
+  );
+  specs.set(
+    web('tests/bridge.spec.ts'),
+    "import { format } from '../src/unrelated-format';\ntest('formats', () => format(1));\n",
+  );
+  const index = exerciseIndex([web('src/unrelated-format.ts')], { sources, specs });
+  assert.ok(index.files.includes('tests/bridge.spec.ts'));
+  assert.ok(index.files.includes('tests/shared-setup.spec.ts'));
+  assert.ok(!index.files.includes('tests/proxy.spec.ts'));
+  const runtime = exerciseIndex([web('src/terminal-viewport-runtime.ts')], { sources, specs });
+  assert.ok(runtime.files.includes('tests/proxy.spec.ts'));
+  // A hook in shared providers setup selects the whole provider file instead of a grep.
+  specs.set(web('tests/providers.spec.ts'), "page.locator('.badge-count');\ntest('x', () => {});\n");
+  const whole = exerciseIndex([web('src/components/badge-count.tsx')], { sources, specs });
+  assert.equal(whole.providerWhole, true);
+  const stages = browserStages([web('src/components/badge-count.tsx')], false, [], {}, whole);
+  assert.ok(stages.some((stage) => stage.command.includes("'tests/providers.spec.ts'")));
+  assert.ok(!stages.some((stage) => stage.command.startsWith('npx playwright test tests/providers.spec.ts --grep ')));
+});
+
+test('HS2-N7EY18 route and class hooks come from template, regex and BEM sources', () => {
+  assert.deepEqual(routeHooks('const r = /^\\/__hotsheet\\/project-api\\/([^/]+)\\/terminals\\/([^/]+)\\/attach$/;'), [
+    'project-api/*/terminals',
+    'terminals/*/attach',
+  ]);
+  const queried = 'el.closest(\'[data-layout-mode="grid"] .app-drawer--open\');';
+  assert.deepEqual(ownHooks('clients/web/src/a.ts', queried, '', { queried: true }).classes, [
+    'app-drawer',
+    'app-drawer--open',
+  ]);
+  assert.deepEqual(ownHooks('clients/web/src/a.ts', queried).classes, []);
+  // One-word stems never become hooks; Kerf classes never do.
+  assert.deepEqual(ownHooks('clients/web/src/state.ts', "const s = 'state'; const k = 'kui-button';").classes, []);
+});
+
+/** A synthetic catalog: a shared fixture file whose notes another demo file also renders. */
+function demoFixture() {
+  const sources = new Map([
+    [
+      web('src/ux-demo/content-components-demo.tsx'),
+      [
+        'export const READER_NOTES = [{ id: "reader-note" }];',
+        'export const demoModule: DemoModule = {',
+        '  entries: {',
+        "    'note-card': { catalogExamples: true, Demo: NoteCardDemo },",
+        "    'markdown-editor': {",
+        '      Demo: MarkdownEditorDemo,',
+        '    },',
+        "    'ticket-reader': { Demo: TicketReaderDemo },",
+        '  },',
+        '};',
+        '',
+      ].join('\n'),
+    ],
+    [
+      web('src/ux-demo/workspace-components-demo.tsx'),
+      "import { READER_NOTES } from './content-components-demo';\nexport const demoModule: DemoModule = {\n  entries: {\n    'ticket-inspector': { Demo: InspectorDemo },\n  },\n};\n",
+    ],
+    [
+      web('src/ux-demo/list-demo.tsx'),
+      'export const demoModule = {\n  entries: {\n    list: { Demo: ListDemo },\n  },\n};\n',
+    ],
+    [
+      web('src/ux-demo/registry.ts'),
+      "import { demoModule as a } from './content-components-demo';\nimport { demoModule as b } from './workspace-components-demo';\nimport { demoModule as c } from './list-demo';\n",
+    ],
+  ]);
+  const specs = new Map([
+    [
+      web('tests/ux-demo.spec.ts'),
+      [
+        "test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {",
+        "  await page.goto('/ux-demo?component=note-card');",
+        '});',
+        '',
+        "test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {",
+        "  await page.goto('/ux-demo?component=ticket-inspector');",
+        '});',
+        '',
+        "test('keeps list rows aligned', async ({ page }) => {",
+        "  await page.goto('/ux-demo?component=list');",
+        "  await page.getByRole('list').waitFor();",
+        '});',
+        '',
+      ].join('\n'),
+    ],
+    [
+      web('tests/ticket-reader-stack.spec.ts'),
+      "test('stacks readers', async ({ page }) => {\n  await page.locator('[data-component=\"note-card\"]').first().click();\n});\n",
+    ],
+  ]);
+  return { sources, specs };
+}
+
+test('HS2-N7EY18 HS2-R1D0S5 a shared ux-demo fixture change selects the demo tests that render it (HS2-EWF0FT escape)', () => {
+  const fixture = demoFixture();
+  const changed = web('src/ux-demo/content-components-demo.tsx');
+  assert.deepEqual(demoEntryIds(fixture.sources.get(changed)), ['note-card', 'markdown-editor', 'ticket-reader']);
+  const index = exerciseIndex([changed], fixture);
+  // The importing demo's entry (ticket-inspector) renders READER_NOTES too.
+  assert.deepEqual(index.demoTitles, [
+    'navigates, toggles, closes, and reopens TicketInspector',
+    'presents note kinds and round-trips reader and Markdown editor compositions',
+  ]);
+  // Demo code is not shipped: a shipped spec's note-card locator is not selected, nor the list demo.
+  assert.deepEqual(index.files, []);
+  const stages = browserStages([changed], false, [], {}, index);
+  assert.ok(
+    stages.some(
+      (stage) =>
+        stage.command.startsWith("npx playwright test 'tests/ux-demo.spec.ts' --grep ") &&
+        stage.command.includes('presents note kinds') &&
+        !stage.command.includes('keeps list rows aligned'),
+    ),
+  );
+  // A one-word entry id matches only its route, not a role name.
+  assert.deepEqual(exerciseIndex([web('src/ux-demo/list-demo.tsx')], fixture).demoTitles, ['keeps list rows aligned']);
+  // A catalog aggregator composes every entry, so it selects the whole demo spec.
+  const registry = exerciseIndex([web('src/ux-demo/registry.ts')], fixture);
+  assert.deepEqual(registry.files, ['tests/ux-demo.spec.ts']);
+  assert.deepEqual(registry.demoTitles, []);
+  // The checked-in tree: exactly the two tests main CI run 41855929835 failed are selected.
+  const real = exerciseIndexForRepo(repoRoot, [changed]);
+  for (const title of [
+    'presents note kinds and round-trips reader and Markdown editor compositions',
+    'navigates, toggles, closes, and reopens TicketInspector',
+  ])
+    assert.ok(real.demoTitles.includes(title), title);
 });

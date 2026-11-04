@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPath, collect, execute, parseCheckScript, plan } from './gate-plan.mjs';
+import { exerciseIndexForRepo } from './gate-browser-exercise.mjs';
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { parseBudget, selectBudget } from './gate-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
@@ -109,10 +110,17 @@ export function inspectTimings(repo) {
   return summarizeTimings(loadTimingHistory(timingPath(repo)));
 }
 
-export function browserStages(changes, full, providerTitles = [], testTitles = {}) {
+/**
+ * `exercised` is the HS2-N7EY18/HS2-R1D0S5 source index (scripts/gate-browser-exercise.mjs): the
+ * specs and provider test titles that render or exercise a changed client module through its hooks.
+ */
+export function browserStages(changes, full, providerTitles = [], testTitles = {}, exercised = undefined) {
   if (!full && !changes.some((path) => classifyPath(path).groups.includes?.('web'))) return [];
   const files = new Set(['tests/contracts.spec.ts', 'tests/shell-composition.spec.ts']);
   const reasons = ['real-server contracts and shipped shell composition'];
+  for (const file of exercised?.files ?? []) files.add(file);
+  if (exercised?.providerWhole) files.add('tests/providers.spec.ts');
+  reasons.push(...(exercised?.reasons ?? []));
   const scoped = [];
   for (const path of changes) {
     if (/^clients\/web\/tests\/.*\.spec\.ts$/.test(path) && !path.endsWith('/providers.spec.ts')) {
@@ -165,7 +173,17 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
   if (workspaceChromeChanged) patterns.push('projects Kerf workspace segments through mode transitions');
-  patterns.push(...providerTitles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const escapeTitle = (title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // HS2-EWF0FT escape: the demo spec is large too; a demo change runs only the tests that open it.
+  if (exercised?.demoTitles?.length)
+    scoped.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      command: `npx playwright test ${quote('tests/ux-demo.spec.ts')} --grep ${quote(exercised.demoTitles.map(escapeTitle).join('|'))}`,
+      reasons: ['HS2-N7EY18/HS2-R1D0S5: ux-demo tests that open or render the changed module'],
+    });
+  patterns.push(...providerTitles.map(escapeTitle));
   if (changes.includes('clients/web/tests/providers.spec.ts') && !providerTitles.length) {
     files.add('tests/providers.spec.ts');
     reasons.push('shared or unclassified provider fixture change requires the full affected file');
@@ -180,6 +198,8 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     files.add('tests/providers.spec.ts');
     reasons.push('shared application infrastructure without a narrower feature boundary requires the provider suite');
   }
+  // HS2-R1D0S5: provider tests that render or exercise a changed module through its shipped parent.
+  patterns.push(...(exercised?.providerTitles ?? []).map(escapeTitle));
   const result = [
     {
       cwd: 'clients/web',
@@ -189,7 +209,7 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       reasons,
     },
   ];
-  if (patterns.length)
+  if (patterns.length && !files.has('tests/providers.spec.ts'))
     result.push({
       cwd: 'clients/web',
       group: 'web',
@@ -308,6 +328,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
       selected.mode === 'full' || profile?.browser === true,
       testTitles['clients/web/tests/providers.spec.ts'] ?? [],
       testTitles,
+      exerciseIndexForRepo(repo, state.changes),
     ),
   ];
   if (profile?.browser && affected.some((stage) => stage.command.startsWith('npx playwright test '))) {

@@ -222,6 +222,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
   scripts/installed-dependencies.mjs # Installed node_modules versus committed lockfile check and installed-tree digest for gate receipts (HS2-PNBH4X; tests: installed-dependencies.test.mjs)
   scripts/gate-timings.mjs   # Bounded per-stage and per-file local/CI timing history for budget estimates; local-gate --timings and --import-ci-timings (HS2-TCCKRZ; tests: gate-timings.test.mjs)
+  scripts/gate-browser-exercise.mjs # Static index of the browser specs and providers.spec titles that exercise a changed client module through its class/route hooks, plain-module helpers and nearest shipped parents (HS2-N7EY18, HS2-R1D0S5; tests: local-gate.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
   scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles (HS2-VQ5ND5; tests: gate-ticket-profile.test.mjs)
   scripts/gate-budget.json   # Checked-in five-minute T0/T1 planning target

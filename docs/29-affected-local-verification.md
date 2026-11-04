@@ -44,6 +44,88 @@ mandatory runs. CI continues
 its full regression. No measured edit-to-green saving is attributed to this
 preview until those runs exist.
 
+## Browser specs that exercise a changed module (HS2-N7EY18, HS2-R1D0S5)
+
+Browser selection used to pick specs from path keywords (`terminal`, `timeline`,
+`command`, and similar). Two defects escaped that way:
+
+- A `terminal-viewport-runtime.ts` change ran only `terminal-feedback.spec.ts`. It
+  missed the specs that route the terminal attach socket.
+- A `ticket-search-field.tsx` change ran no `providers.spec.ts` case that renders the
+  field in its shipped parent.
+
+`scripts/gate-browser-exercise.mjs` now reads the working tree and adds the specs
+that reach each changed client module.
+
+The index uses source rather than a hand-kept map, so a new spec or module needs no
+gate edit. It works from three kinds of hooks:
+
+- **The module's own hooks.** These are the class tokens prefixed by its file stem
+  (the root-class convention) and the classes its sibling stylesheet defines. For the
+  changed module, they also include the classes it queries or toggles, with their BEM
+  block. They also include the route shapes it builds or matches: the template
+  `/terminals/${id}/attach` and the regex `\/terminals\/([^/]+)\/attach` both become
+  `terminals/*/attach`.
+- **Its direct plain-`.ts` helpers' hooks.** The runtime's attach URL comes from
+  `terminal-viewport.ts`. Child `.tsx` components keep their own surfaces.
+- **Its nearest shipped parents' hooks**, when the module has none of its own.
+  `app/`, `main.tsx`, and `ux-demo/` are never walked through, because they import
+  nearly everything. A module reached only through them keeps the existing
+  shared-infrastructure rules.
+
+Each spec is split into top-level test, `test.describe`, and helper blocks. A hook
+selects specs as follows:
+
+| Where the hook appears                                                           | What it selects                                |
+| -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| A test body                                                                      | That test                                      |
+| A helper                                                                         | Every test that calls the helper, transitively |
+| Shared setup, an imported `tests/*.ts` fixture, or a direct import of the module | The whole file                                 |
+
+`providers.spec.ts` and `ux-demo.spec.ts` are large, so each stays a bounded title
+`--grep`. Other spec files run whole. A changed stylesheet stands in for its sibling
+component.
+
+Demo modules under `src/ux-demo/` follow a separate rule. A third escape showed why:
+HS2-EWF0FT added a note to the shared `READER_NOTES` fixture in
+`content-components-demo.tsx`, and main CI then failed two `ux-demo.spec.ts` tests that
+count those notes.
+
+- **Entries reached.** A changed demo file reaches the catalog entries declared in its
+  own `demoModule.entries`. It also reaches the entries of every demo file that imports
+  it, transitively; `workspace-components-demo.tsx` renders `READER_NOTES` in
+  `ticket-inspector`.
+- **Matching.** Those entry ids match only in specs that open `/ux-demo`, either as
+  `component=<id>` or, for a multi-word id, as a quoted literal. The selected
+  `ux-demo.spec.ts` tests run by title.
+- **No class hooks.** Demo code is not shipped, so a demo module's class hooks never
+  select shipped specs.
+- **Aggregators.** `registry.ts`, `catalog.ts` and `main.tsx` compose every entry, so
+  a change to one of them selects the whole demo spec.
+
+This keeps a fixture change to the demos that render it rather than the whole spec.
+For example, `content-components-demo.tsx` reaches 46 entries.
+
+Measured selections, in spec files (counting `ux-demo.spec.ts` once when its titles
+are selected) plus `providers.spec.ts` grep titles. The counts include the contract and
+shell-composition floor. The suite has 87 spec files, about 494 provider test
+declarations, and about 194 demo test declarations.
+
+| Changed module                             | Before            | After                            |
+| ------------------------------------------ | ----------------- | -------------------------------- |
+| `terminal-viewport-runtime.ts`             | 3 files, 0 titles | 26 files, 39 titles              |
+| `terminal-replay-stream.ts`                | 3, 0              | 14, 15                           |
+| `terminal-ws-bridge.ts`                    | 3, 0              | 23, 25                           |
+| `components/ticket-search-field.tsx`       | 2, 0              | 5, 11                            |
+| `inline-search.ts` (hook-less helper)      | 2, 0              | 8, 11                            |
+| `ticket-timeline-data.ts`                  | 3, 0              | 4, 7                             |
+| `components/note-card.tsx`                 | 2, 0              | 8, 11                            |
+| `components/app-shell.tsx`                 | 4, 1              | 18, 41                           |
+| `state.ts`, `trailing-task.ts` (root-only) | unchanged         | unchanged                        |
+| `ux-demo/content-components-demo.tsx`      | 2, 0              | 14 files plus 115 demo titles, 0 |
+| `ux-demo/list-demo.tsx`                    | 2, 0              | 2 files plus 1 demo title, 0     |
+| `ux-demo/registry.ts`                      | 2, 0              | 3 (whole `ux-demo.spec.ts`), 0   |
+
 ## Scoped repository-wide checks (HS2-3ZJBRM)
 
 The local stage catalog now runs repository-wide Prettier and `cargo fmt`
