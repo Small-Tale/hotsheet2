@@ -14,8 +14,15 @@ const SHA = /^[0-9a-f]{40}$/i;
 const OPERATION = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 
-export function command(binary, args, cwd, input) {
-  const result = spawnSync(binary, args, { cwd, encoding: 'utf8', input });
+// HS2-9BH8GF: `show` of a long-lived ticket can exceed spawnSync's 1 MiB default (the largest
+// store ticket is about 1.1 MB), and parseTicket needs the whole document. Use a bounded buffer
+// well above real tickets and name the limit instead of surfacing a bare ENOBUFS.
+export const COMMAND_OUTPUT_LIMIT = 64 * 1024 * 1024;
+
+export function command(binary, args, cwd, input, maxBuffer = COMMAND_OUTPUT_LIMIT) {
+  const result = spawnSync(binary, args, { cwd, encoding: 'utf8', input, maxBuffer });
+  if (result.error?.code === 'ENOBUFS')
+    throw new Error(`${binary} ${args.join(' ')} wrote more than ${maxBuffer} bytes (HS2-9BH8GF)`);
   if (result.error) throw result.error;
   return result;
 }

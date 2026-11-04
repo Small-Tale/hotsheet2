@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { classifyRuns, evaluate, parseTicket, refresh, register } from './ci-completion-proposal.mjs';
+import { classifyRuns, command, evaluate, parseTicket, refresh, register } from './ci-completion-proposal.mjs';
 
 const source = 'a'.repeat(40);
 const integrated = 'b'.repeat(40);
@@ -297,4 +297,23 @@ test('HS2-1C1565 real CLI process replays a registered proposal and refuses chan
   const stale = invoke('refresh', '--project', project, '--assignment', 'process-op');
   assert.equal(stale.status, 2, stale.stderr);
   assert.match(stale.stdout, /ticket changed since registration/);
+});
+
+test('HS2-9BH8GF reads a ticket larger than the 1 MiB spawnSync default through a real child', () => {
+  // About 2 MiB of synthetic history before the last note, like a long-lived store ticket.
+  const history = Array.from({ length: 2048 }, (_, index) => note(`history-${index}`, 'x'.repeat(1024))).join('');
+  const text = markdown(`${history}${note('review-last', '## Review return\nSynthetic finding')}`);
+  assert.ok(text.length > 2 * 1024 * 1024);
+  const dir = mkdtempSync(join(tmpdir(), 'hs2-9bh8gf-'));
+  const file = join(dir, 'ticket.md');
+  writeFileSync(file, text);
+  const printer = ['-e', 'process.stdout.write(require("node:fs").readFileSync(process.argv[1]))', file];
+  const result = command(process.execPath, printer, dir);
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, text);
+  const parsed = parseTicket(result.stdout);
+  assert.equal(parsed.slug, 'HS2-1C1565');
+  assert.ok(parsed.reviewFindings.includes('review-last'));
+  // Past the bound, the failure names the limit rather than a bare ENOBUFS.
+  assert.throws(() => command(process.execPath, printer, dir, undefined, 1024 * 1024), /wrote more than 1048576 bytes \(HS2-9BH8GF\)/);
 });
