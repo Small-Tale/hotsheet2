@@ -1736,7 +1736,9 @@ icons; structural separators do not require icons.
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. Each uppercase
   `CHOICE` block in a feedback-needed note (several per note, HS2-83YCDP) becomes Markdown-capable Kerf multi-select
-  `ContentItem` rows in a labeled `List` grid (HS2-3XV34B; no app choice CSS); they
+  `ContentItem` rows in a labeled `List` grid (HS2-3XV34B; no app choice CSS); an option with
+  details stacks its label and a `size="small"` `MarkdownPreview` of the details in a `List`
+  inside the row (HS2-EWF0FT); they
   support platform-additive and Shift-range selection, and coexist with inline and freeform replies. Hover/focus
   reveals an explicit Edit action in both inspector and reader, while
   the inspector toolbar provides the single Reader entry point from every inspector tab.

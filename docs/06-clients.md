@@ -4449,14 +4449,29 @@ unsupported, so they cannot create this state through Hot Sheet.
   labeled by the prose line preceding its header, or by the question written after the colon
   on the header line itself (`CHOICE: Which approach?`, optionally bold), which then renders as
   a visible paragraph above the options (HS2-3MHSBS); text after a colon-less `CHOICE` stays
-  prose. Selection modifiers act within one
+  prose. **Multi-line choices and lettered blocks (HS2-EWF0FT).** A list item's first line is
+  its label; its lazy continuation lines and lines indented to its content (indented
+  paragraphs and nested lists, blank lines allowed) are its details, rendered under the label
+  in a smaller Markdown size inside the same option. A run of paragraphs led by lettered choice
+  headers also forms a group, with or without a `CHOICE` header above it: `CHOICE A: …`,
+  `Option B — …` (letters, or numbers after the keyword), or a bare `C)` / `C.` lead, each
+  optionally bold. The headers run A, B, C… (or 1, 2, 3…) in one marker style; without a
+  `CHOICE` header at least two are required. The header text without its bold markers is the
+  label; text after a bold lead that carries its own label (`**CHOICE A: Label.** details`),
+  the rest of the paragraph, and any paragraphs before the next header are the details. After
+  the last header only its own paragraph and indented paragraphs belong to it (or, when it is a
+  bare header and an earlier block has details, the one following paragraph), so a trailing
+  recommendation stays prose. A heading or `CHOICE` header ends a lettered run; quoted, inline
+  code, fenced, and indented-code text never parses. The Rust model
+  (`hotsheet_model::feedback_choices`) implements the same grammar, checked against one shared
+  corpus, for server-side note checks. Selection modifiers act within one
   group and leave other groups' selections intact. A normal click selects one option or clears the sole selection; Command on
   macOS and Ctrl elsewhere toggles additional options, while Shift selects a range.
   Enter or Space on a focused option acts as a normal click, and arrow keys move between
   options. Zero or multiple selections are always valid. Selected options use Kerf's
   selected ContentItem presentation (`aria-selected`). Option content uses the same Markdown and attachment
   reference rendering as notes, including image references. Submission records the
-  selected option text in the regular response note (a single group as
+  selected option labels (never their details) in the regular response note (a single group as
   `Selected choice(s):`; multiple groups as each answered group's bold question line
   followed by its selected bullets) and may include the existing
   freeform and inline responses; the choice list never makes an answer mandatory.

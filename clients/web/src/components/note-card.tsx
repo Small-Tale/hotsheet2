@@ -235,12 +235,31 @@ export function FeedbackPrompt({
                   frame="framed"
                   rootAttributes={{ 'data-note-id': id, 'data-choice-id': choice.id }}
                 >
-                  <MarkdownPreview
-                    source={choice.markdown}
-                    attachmentContext={attachmentContext}
-                    size="inherit"
-                    media="thumbnail"
-                  />
+                  {choice.details ? (
+                    // A multi-line choice shows its details under the label (HS2-EWF0FT).
+                    <List gap="2xs">
+                      <MarkdownPreview
+                        source={choice.markdown}
+                        attachmentContext={attachmentContext}
+                        size="inherit"
+                        media="thumbnail"
+                      />
+                      <MarkdownPreview
+                        source={choice.details}
+                        attachmentContext={attachmentContext}
+                        size="small"
+                        density="compact"
+                        media="thumbnail"
+                      />
+                    </List>
+                  ) : (
+                    <MarkdownPreview
+                      source={choice.markdown}
+                      attachmentContext={attachmentContext}
+                      size="inherit"
+                      media="thumbnail"
+                    />
+                  )}
                 </ContentItem>
               ))}
             </List>

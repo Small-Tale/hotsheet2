@@ -1,0 +1,883 @@
+{
+  "about": "HS2-EWF0FT shared FEEDBACK NEEDED CHOICE grammar corpus, read by clients/web/src/feedback-choices.test.ts and crates/hotsheet-model/tests/feedback_choices.rs. raw is the source text a group spans; details null means none. Synthetic text only.",
+  "cases": [
+    {
+      "name": "uppercase header with colon and Markdown list",
+      "source": "Which direction?\n\nCHOICE:\n- **Keep** this\n- `attachment:proof.png`\n\nExplain anything else.",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- **Keep** this\n- `attachment:proof.png`\n",
+          "question": "Which direction?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "**Keep** this",
+              "details": null
+            },
+            {
+              "label": "`attachment:proof.png`",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["Which direction?", "Explain anything else."]
+    },
+    {
+      "name": "bare header with numbered list",
+      "source": "CHOICE\n1. First\n2. Second",
+      "groups": [
+        {
+          "raw": "CHOICE\n1. First\n2. Second",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "First",
+              "details": null
+            },
+            {
+              "label": "Second",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "question on the CHOICE: header line after a table",
+      "source": "FEEDBACK NEEDED: the cache is stale. Choose how to treat it.\n\n| Arm | Cost |\n|---|---|\n| a | b |\n\nCHOICE: How should the cache handle staleness?\n- **Leave it (recommended).** Keep the model.\n- **Force a refresh.** Refresh before each read.\n- **Record the answer.** Read the server value.",
+      "groups": [
+        {
+          "raw": "CHOICE: How should the cache handle staleness?\n- **Leave it (recommended).** Keep the model.\n- **Force a refresh.** Refresh before each read.\n- **Record the answer.** Read the server value.",
+          "question": "How should the cache handle staleness?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "**Leave it (recommended).** Keep the model.",
+              "details": null
+            },
+            {
+              "label": "**Force a refresh.** Refresh before each read.",
+              "details": null
+            },
+            {
+              "label": "**Record the answer.** Read the server value.",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "FEEDBACK NEEDED: the cache is stale. Choose how to treat it.\n\n| Arm | Cost |\n|---|---|\n| a | b |",
+        ""
+      ]
+    },
+    {
+      "name": "bold CHOICE: header with inline question",
+      "source": "**CHOICE:** Which store?\n- Git\n- Jira",
+      "groups": [
+        {
+          "raw": "**CHOICE:** Which store?\n- Git\n- Jira",
+          "question": "Which store?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "Git",
+              "details": null
+            },
+            {
+              "label": "Jira",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "bold inline question",
+      "source": "CHOICE: **Which store?**\n- Git",
+      "groups": [
+        {
+          "raw": "CHOICE: **Which store?**\n- Git",
+          "question": "Which store?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "Git",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "bare header takes its question from preceding prose",
+      "source": "Which store?\nCHOICE:\n- Git",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- Git",
+          "question": "Which store?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Git",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["Which store?", ""]
+    },
+    {
+      "name": "text after a colon-less CHOICE is prose",
+      "source": "CHOICE the best one\n- A",
+      "groups": null
+    },
+    {
+      "name": "several inline groups label themselves",
+      "source": "CHOICE: First?\n- A\n\nCHOICE: Second?\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE: First?\n- A\n",
+          "question": "First?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE: Second?\n- B",
+          "question": "Second?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "", ""]
+    },
+    {
+      "name": "lowercase Choice is prose",
+      "source": "Choice:\n- Not uppercase",
+      "groups": null
+    },
+    {
+      "name": "header without a list",
+      "source": "CHOICE:\nNo list follows",
+      "groups": null
+    },
+    {
+      "name": "header followed only by blank lines",
+      "source": "CHOICE:\n\n",
+      "groups": null
+    },
+    {
+      "name": "header inside a backtick fence",
+      "source": "```\nCHOICE:\n- In code\n```",
+      "groups": null
+    },
+    {
+      "name": "header inside a longer tilde fence",
+      "source": "~~~~md\nCHOICE\n- In code\n```\nCHOICE\n- Still code\n~~~~",
+      "groups": null
+    },
+    {
+      "name": "group after a closed fence",
+      "source": "```\nCHOICE:\n- In code\n```\n\nCHOICE:\n- Real",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- Real",
+          "question": "```",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Real",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["```\nCHOICE:\n- In code\n```", ""]
+    },
+    {
+      "name": "several groups with blank-line lists and prose in order",
+      "source": "Intro prose.\n\n**1. Which store?**\n\nCHOICE:\n- Ticket store\n- Document store\n\n## 2. Does the \"Notes\" field stay?\n\nCHOICE\n\n- Keep it\n\n- Remove it\n\n3. When should it run?\n\nCHOICE:\n\n1. On launch\n2) On command\n\nTrailing prose.",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- Ticket store\n- Document store\n",
+          "question": "1. Which store?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Ticket store",
+              "details": null
+            },
+            {
+              "label": "Document store",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE\n\n- Keep it\n\n- Remove it\n",
+          "question": "2. Does the \"Notes\" field stay?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Keep it",
+              "details": null
+            },
+            {
+              "label": "Remove it",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE:\n\n1. On launch\n2) On command\n",
+          "question": "3. When should it run?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "On launch",
+              "details": null
+            },
+            {
+              "label": "On command",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": [
+        "Intro prose.\n\n**1. Which store?**",
+        "## 2. Does the \"Notes\" field stay?",
+        "3. When should it run?",
+        "Trailing prose."
+      ],
+      "selections": [
+        {
+          "select": ["choice-1", "group-3-choice-1", "group-3-choice-2"],
+          "markdown": "**1. Which store?**\n- Ticket store\n\n**3. When should it run?**\n- On launch\n- On command"
+        },
+        {
+          "select": ["group-2-choice-2"],
+          "markdown": "**2. Does the \"Notes\" field stay?**\n- Remove it"
+        }
+      ]
+    },
+    {
+      "name": "header without a list is skipped and later groups still parse",
+      "source": "CHOICE\nprose\n\nQ?\nCHOICE\n- A",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A",
+          "question": "Q?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["CHOICE\nprose\n\nQ?", ""]
+    },
+    {
+      "name": "adjacent bare headers",
+      "source": "CHOICE\n- A\nCHOICE\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE\n- B",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "", ""],
+      "selections": [
+        {
+          "select": ["group-2-choice-1"],
+          "markdown": "**Choice 2**\n- B"
+        }
+      ]
+    },
+    {
+      "name": "single group selection",
+      "source": "CHOICE:\n- Keep it\n- Use **new** behavior",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- Keep it\n- Use **new** behavior",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Keep it",
+              "details": null
+            },
+            {
+              "label": "Use **new** behavior",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""],
+      "selections": [
+        {
+          "select": ["choice-2"],
+          "markdown": "Selected choice:\n- Use **new** behavior"
+        },
+        {
+          "select": ["choice-1", "choice-2"],
+          "markdown": "Selected choices:\n- Keep it\n- Use **new** behavior"
+        },
+        {
+          "select": [],
+          "markdown": ""
+        }
+      ]
+    },
+    {
+      "name": "list items with continuation lines and indented paragraphs",
+      "source": "Which rollout?\n\nCHOICE:\n- **Ship now.** Lowest effort.\n  Costs a migration later.\n\n  A second paragraph of detail.\n- **Wait a release.**\nlazy continuation line\n- Skip it\n\nClosing prose.",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- **Ship now.** Lowest effort.\n  Costs a migration later.\n\n  A second paragraph of detail.\n- **Wait a release.**\nlazy continuation line\n- Skip it\n",
+          "question": "Which rollout?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "**Ship now.** Lowest effort.",
+              "details": "Costs a migration later.\n\nA second paragraph of detail."
+            },
+            {
+              "label": "**Wait a release.**",
+              "details": "lazy continuation line"
+            },
+            {
+              "label": "Skip it",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["Which rollout?", "Closing prose."],
+      "selections": [
+        {
+          "select": ["choice-1", "choice-2"],
+          "markdown": "Selected choices:\n- **Ship now.** Lowest effort.\n- **Wait a release.**"
+        }
+      ]
+    },
+    {
+      "name": "nested lists are details of their parent item",
+      "source": "CHOICE: Which storage?\n1. Files\n   - pro: simple\n   - con: slow\n2. Database\n   1. sub one\n",
+      "groups": [
+        {
+          "raw": "CHOICE: Which storage?\n1. Files\n   - pro: simple\n   - con: slow\n2. Database\n   1. sub one\n",
+          "question": "Which storage?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "Files",
+              "details": "- pro: simple\n- con: slow"
+            },
+            {
+              "label": "Database",
+              "details": "1. sub one"
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "a CHOICE header right after an item is not a continuation",
+      "source": "CHOICE\n- A\n  more about A\nCHOICE\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A\n  more about A\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": "more about A"
+            }
+          ]
+        },
+        {
+          "raw": "CHOICE\n- B",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "", ""]
+    },
+    {
+      "name": "a list interrupted by prose ends the group",
+      "source": "CHOICE:\n- First\n- Second\n\nAn interrupting paragraph.\n\n- Not a choice",
+      "groups": [
+        {
+          "raw": "CHOICE:\n- First\n- Second\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "First",
+              "details": null
+            },
+            {
+              "label": "Second",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "An interrupting paragraph.\n\n- Not a choice"]
+    },
+    {
+      "name": "empty details on loose items",
+      "source": "CHOICE\n- A\n\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A\n\n- B",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            },
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "bold CHOICE A/B/C blocks with details on the header line",
+      "source": "## FEEDBACK NEEDED\n\nThe widget cache can go stale. Choose one:\n\n**CHOICE A: Rebuild on every launch.** Simple and slow. Adds two seconds.\n\n**CHOICE B: Rebuild on change.** Needs a watcher.\nThe watcher costs memory.\n\n**CHOICE C: Both.** Launch rebuild plus the watcher.\n\nRecommendation: C.",
+      "groups": [
+        {
+          "raw": "**CHOICE A: Rebuild on every launch.** Simple and slow. Adds two seconds.\n\n**CHOICE B: Rebuild on change.** Needs a watcher.\nThe watcher costs memory.\n\n**CHOICE C: Both.** Launch rebuild plus the watcher.\n",
+          "question": "The widget cache can go stale. Choose one:",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "CHOICE A: Rebuild on every launch.",
+              "details": "Simple and slow. Adds two seconds."
+            },
+            {
+              "label": "CHOICE B: Rebuild on change.",
+              "details": "Needs a watcher.\nThe watcher costs memory."
+            },
+            {
+              "label": "CHOICE C: Both.",
+              "details": "Launch rebuild plus the watcher."
+            }
+          ]
+        }
+      ],
+      "regions": ["## FEEDBACK NEEDED\n\nThe widget cache can go stale. Choose one:", "Recommendation: C."],
+      "selections": [
+        {
+          "select": ["choice-2"],
+          "markdown": "Selected choice:\n- CHOICE B: Rebuild on change."
+        }
+      ]
+    },
+    {
+      "name": "Option blocks with a bold marker and paragraphs between headers",
+      "source": "Pick a theme source.\n\n**Option A —** System setting\n\nFollows the OS.\n\nNever surprises anyone.\n\n**Option B —** App setting\n\nStored per user.\n\nUnrelated trailing prose.",
+      "groups": [
+        {
+          "raw": "**Option A —** System setting\n\nFollows the OS.\n\nNever surprises anyone.\n\n**Option B —** App setting\n\nStored per user.\n",
+          "question": "Pick a theme source.",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option A — System setting",
+              "details": "Follows the OS.\n\nNever surprises anyone."
+            },
+            {
+              "label": "Option B — App setting",
+              "details": "Stored per user."
+            }
+          ]
+        }
+      ],
+      "regions": ["Pick a theme source.", "Unrelated trailing prose."]
+    },
+    {
+      "name": "bare lettered one-liners keep trailing prose",
+      "source": "Which name?\n\nA) Short name\nB) Long name\nC) No rename\n\nTell me if none fit.",
+      "groups": [
+        {
+          "raw": "A) Short name\nB) Long name\nC) No rename\n",
+          "question": "Which name?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A) Short name",
+              "details": null
+            },
+            {
+              "label": "B) Long name",
+              "details": null
+            },
+            {
+              "label": "C) No rename",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["Which name?", "Tell me if none fit."]
+    },
+    {
+      "name": "CHOICE header followed by lettered blocks",
+      "source": "CHOICE: Which cache?\n\n**A. Memory.** Fast.\n\n**B. Disk.** Durable.",
+      "groups": [
+        {
+          "raw": "CHOICE: Which cache?\n\n**A. Memory.** Fast.\n\n**B. Disk.** Durable.",
+          "question": "Which cache?",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "A. Memory.",
+              "details": "Fast."
+            },
+            {
+              "label": "B. Disk.",
+              "details": "Durable."
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""],
+      "selections": [
+        {
+          "select": ["choice-1"],
+          "markdown": "Selected choice:\n- A. Memory."
+        }
+      ]
+    },
+    {
+      "name": "CHOICE header with a single lettered block",
+      "source": "CHOICE\n\nOption A: Only this one",
+      "groups": [
+        {
+          "raw": "CHOICE\n\nOption A: Only this one",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option A: Only this one",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "a single lettered block without a header is prose",
+      "source": "**Option A: Keep it.** Only one option is described here.",
+      "groups": null
+    },
+    {
+      "name": "a lettered run must start at A",
+      "source": "B) one\nC) two",
+      "groups": null
+    },
+    {
+      "name": "a marker style change ends the run",
+      "source": "A) one\nOption B: two",
+      "groups": null
+    },
+    {
+      "name": "a heading interrupts a lettered run",
+      "source": "**CHOICE A: One.** x\n\n## Heading\n\n**CHOICE B: Two.** y",
+      "groups": null
+    },
+    {
+      "name": "lettered details may hold lists and fenced code",
+      "source": "Pick one.\n\n**CHOICE A: Script it.**\n\n- pro: repeatable\n- con: upfront work\n\n```sh\nCHOICE: not a header in code\n```\n\n**CHOICE B: Do it by hand.** Quick once.",
+      "groups": [
+        {
+          "raw": "**CHOICE A: Script it.**\n\n- pro: repeatable\n- con: upfront work\n\n```sh\nCHOICE: not a header in code\n```\n\n**CHOICE B: Do it by hand.** Quick once.",
+          "question": "Pick one.",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "CHOICE A: Script it.",
+              "details": "- pro: repeatable\n- con: upfront work\n\n```sh\nCHOICE: not a header in code\n```"
+            },
+            {
+              "label": "CHOICE B: Do it by hand.",
+              "details": "Quick once."
+            }
+          ]
+        }
+      ],
+      "regions": ["Pick one.", ""]
+    },
+    {
+      "name": "empty details on header-only lettered blocks",
+      "source": "**Option A —**\n\n**Option B —**",
+      "groups": [
+        {
+          "raw": "**Option A —**\n\n**Option B —**",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option A —",
+              "details": null
+            },
+            {
+              "label": "Option B —",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "numbered Option blocks and an indented continuation on the last block",
+      "source": "Where should it live?\n\nOption 1: Repo root.\nOption 2: Hidden folder.\n\n  Keeps the root tidy.\n\nDone.",
+      "groups": [
+        {
+          "raw": "Option 1: Repo root.\nOption 2: Hidden folder.\n\n  Keeps the root tidy.\n",
+          "question": "Where should it live?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option 1: Repo root.",
+              "details": null
+            },
+            {
+              "label": "Option 2: Hidden folder.",
+              "details": "Keeps the root tidy."
+            }
+          ]
+        }
+      ],
+      "regions": ["Where should it live?", "Done."]
+    },
+    {
+      "name": "bullets then lettered blocks in one note",
+      "source": "CHOICE: Pick a format.\n- JSON\n- YAML\n\nThen pick a location.\n\n**Option 1: Repo root.** Visible.\n\n**Option 2: Hidden folder.** Tidy.",
+      "groups": [
+        {
+          "raw": "CHOICE: Pick a format.\n- JSON\n- YAML\n",
+          "question": "Pick a format.",
+          "inlineQuestion": true,
+          "choices": [
+            {
+              "label": "JSON",
+              "details": null
+            },
+            {
+              "label": "YAML",
+              "details": null
+            }
+          ]
+        },
+        {
+          "raw": "**Option 1: Repo root.** Visible.\n\n**Option 2: Hidden folder.** Tidy.",
+          "question": "Then pick a location.",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option 1: Repo root.",
+              "details": "Visible."
+            },
+            {
+              "label": "Option 2: Hidden folder.",
+              "details": "Tidy."
+            }
+          ]
+        }
+      ],
+      "regions": ["", "Then pick a location.", ""],
+      "selections": [
+        {
+          "select": ["choice-2", "group-2-choice-1"],
+          "markdown": "**Pick a format.**\n- YAML\n\n**Then pick a location.**\n- Option 1: Repo root."
+        }
+      ]
+    },
+    {
+      "name": "quoted CHOICE list",
+      "source": "> CHOICE:\n> - A\n> - B",
+      "groups": null
+    },
+    {
+      "name": "quoted lettered blocks",
+      "source": "> **CHOICE A: x** y\n>\n> **CHOICE B: z** w",
+      "groups": null
+    },
+    {
+      "name": "inline-code CHOICE mention",
+      "source": "Write `CHOICE:` then a list.\n- A",
+      "groups": null
+    },
+    {
+      "name": "fenced lettered blocks",
+      "source": "```md\n**CHOICE A: x**\n**CHOICE B: y**\n```",
+      "groups": null
+    },
+    {
+      "name": "indented-code lettered blocks",
+      "source": "    A) x\n    B) y",
+      "groups": null
+    },
+    {
+      "name": "words that merely start with a capital letter",
+      "source": "A quick note.\nBecause reasons.\nAlpha) not a marker",
+      "groups": null
+    },
+    {
+      "name": "a thematic break ends lazy continuation",
+      "source": "CHOICE\n- A\n***\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "***\n- B"]
+    },
+    {
+      "name": "a blockquote ends lazy continuation",
+      "source": "CHOICE\n- A\n> quoted",
+      "groups": [
+        {
+          "raw": "CHOICE\n- A\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", "> quoted"]
+    },
+    {
+      "name": "tab-indented continuation",
+      "source": "CHOICE\n-\tA\n\tdetail of A\n- B",
+      "groups": [
+        {
+          "raw": "CHOICE\n-\tA\n\tdetail of A\n- B",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": "detail of A"
+            },
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "CRLF line endings",
+      "source": "CHOICE:\r\n- A\r\n  more\r\n- B\r\n",
+      "groups": [
+        {
+          "raw": "CHOICE:\r\n- A\r\n  more\r\n- B\r\n",
+          "question": null,
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "A",
+              "details": "more"
+            },
+            {
+              "label": "B",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["", ""]
+    },
+    {
+      "name": "a heading question and keyword case variants in one run",
+      "source": "### Which one?\n\nOption A: x\nOPTION B: y",
+      "groups": [
+        {
+          "raw": "Option A: x\nOPTION B: y",
+          "question": "Which one?",
+          "inlineQuestion": false,
+          "choices": [
+            {
+              "label": "Option A: x",
+              "details": null
+            },
+            {
+              "label": "OPTION B: y",
+              "details": null
+            }
+          ]
+        }
+      ],
+      "regions": ["### Which one?", ""]
+    }
+  ]
+}

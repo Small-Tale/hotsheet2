@@ -242,6 +242,69 @@ test('renders a CHOICE: header that carries its own question as a selectable gro
     .toBe('Selected choice:\n- **Leave it unmodeled (recommended).** Keep the strong model and document it.');
 });
 
+// HS2-EWF0FT: options written as multi-line list items or as lettered paragraphs (the shape agents
+// naturally write) render as selectable groups with each option's details under its label.
+const DETAILED_PROMPT = [
+  'CHOICE: Which rollout should the importer use?',
+  '- **Ship now.** Lowest effort for this release.',
+  '  Costs a schema migration in the next release, and the migration needs a backfill window.',
+  '',
+  '  The backfill can run in the background.',
+  '- **Wait a release.**',
+  '',
+  'The widget cache can go stale after an upgrade. Choose one:',
+  '',
+  '**CHOICE A: Rebuild on every launch.** Simple and always correct. Adds about two seconds to startup.',
+  '',
+  '**CHOICE B: Rebuild on change.** Needs a file watcher.',
+  'The watcher costs some memory while the app runs.',
+  '',
+  '**CHOICE C: Both.** Launch rebuild plus the watcher.',
+  '',
+  'Recommendation: C.',
+].join('\n');
+
+test('renders multi-line and lettered choices with details under their labels (HS2-EWF0FT)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', DETAILED_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const note = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  const grids = note.getByRole('grid', { name: /^Feedback Choices \d/ });
+  await expect(grids).toHaveCount(2);
+  await expect(grids.nth(1)).toHaveAccessibleName(
+    'Feedback Choices 2: The widget cache can go stale after an upgrade. Choose one:',
+  );
+  const options = (index: number) => grids.nth(index).locator('[data-component="content-item"]');
+  await expect(options(0)).toHaveCount(2);
+  await expect(options(1)).toHaveCount(3);
+  await expect(options(0).nth(0)).toContainText('The backfill can run in the background.');
+  await expect(options(1).nth(1)).toContainText('The watcher costs some memory while the app runs.');
+  // Trailing prose after the last lettered block stays outside every option.
+  await expect(note.getByText('Recommendation: C.', { exact: true })).toBeVisible();
+  await expect(grids.nth(1).getByText('Recommendation: C.')).toHaveCount(0);
+  await options(0).nth(0).click();
+  await options(1).nth(1).click();
+  await expect(options(1).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await note.screenshot({ path: 'target/visual-captures/hs2-ewf0ft-detailed-choices-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(options(1).nth(2)).toBeVisible();
+  // The whole note is taller than a phone viewport; capture each group where it scrolls into view.
+  for (const index of [0, 1]) {
+    await grids.nth(index).scrollIntoViewIfNeeded();
+    await grids
+      .nth(index)
+      .screenshot({ path: `target/visual-captures/hs2-ewf0ft-detailed-choices-${index + 1}-390.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await note.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => writes.find((write) => write.note_kind === 'regular')?.note)
+    .toBe(
+      '**Which rollout should the importer use?**\n- **Ship now.** Lowest effort for this release.\n\n' +
+        '**The widget cache can go stale after an upgrade. Choose one:**\n- CHOICE B: Rebuild on change.',
+    );
+});
+
 // HS2-ZXGEFE: a FEEDBACK NEEDED prompt can be edited, but only on purpose. A double-click on the
 // prompt body (sidebar) or its Edit Note action (sidebar and reader) opens the ordinary note editor;
 // the save says it is an explicit prompt edit. A single click still never opens it (HS2-MB2Q10).

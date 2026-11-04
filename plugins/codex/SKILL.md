@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 69 -->
+<!-- hotsheet-skill-version: 70 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -199,7 +199,20 @@ Notes:
   `FEEDBACK NEEDED` note may include one or more uppercase `CHOICE` or `CHOICE:` lines, each
   followed by a Markdown list (blank lines allowed). Write each group's question after the
   colon on the same line (`CHOICE: Which approach should we take?`) or as the last line before
-  a bare `CHOICE:`. Options may include attachment references. Use choices
+  a bare `CHOICE:`. Keep each option's first line a short label; put its costs and
+  consequences on continuation lines indented under the item (blank lines and nested lists
+  allowed), which render as the option's details (HS2-EWF0FT):
+
+  ```
+  CHOICE: Which approach should we take?
+  - **Rebuild on launch.** Simple.
+    Adds about two seconds to startup.
+  - **Rebuild on change.**
+  ```
+
+  Lettered paragraphs (`**CHOICE A: Label.** details`, `**Option B —** label`, `C) label`,
+  run A, B, C) also parse as a group, but prefer the list. Options may include attachment
+  references. Use choices
   to make a decision easier, not to offload ordinary implementation judgment or replace
   an open-ended question. Users may select zero or multiple options and may always add a
   freeform response, so do not describe the list as exhaustive or require a selection.

@@ -289,6 +289,27 @@ describe('NoteCard', () => {
     expect(markup).toContain('placeholder="Additional response (optional)"');
   });
 
+  it('renders multi-line and lettered choice details under each label (HS2-EWF0FT)', () => {
+    const markup = String(
+      NoteCard({
+        id: 'detail-feedback',
+        kind: 'feedback_needed',
+        author: 'Codex',
+        time: 'Now',
+        body: 'CHOICE:\n- **Ship now.** Low effort.\n  Costs a *migration* later.\n- Wait\n\nPick a cache.\n\n**CHOICE A: Memory.** Fast.\n\n**CHOICE B: Disk.** Durable.\n\nRecommendation: B.',
+        readerMode: true,
+      }),
+    );
+    expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(4);
+    expect(markup.match(/data-size="small"/g)).toHaveLength(3);
+    expect(markup).toContain('<em>migration</em>');
+    expect(markup).toContain('CHOICE A: Memory.');
+    expect(markup).not.toContain('**CHOICE');
+    // Trailing prose after the last lettered block stays prose, outside every choice.
+    expect(markup).toContain('Recommendation: B.');
+    expect(markup.indexOf('Recommendation: B.')).toBeGreaterThan(markup.lastIndexOf('data-choice-id'));
+  });
+
   it('exposes content editing without a redundant edit button', () => {
     const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
     expect(markup).toContain('data-edit-on-click="true"');

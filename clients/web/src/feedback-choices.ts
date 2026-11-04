@@ -1,6 +1,28 @@
+import {
+  choiceHeader,
+  dedent,
+  FENCE,
+  HEADING,
+  indentOf,
+  interruptsParagraph,
+  isBlank,
+  letteredHeader,
+  listItem,
+  type SourceLine,
+  sourceLines,
+} from './feedback-choice-lines';
+
+/**
+ * The FEEDBACK NEEDED choice grammar (HS2-83YCDP, HS2-3MHSBS, HS2-EWF0FT). The Rust port in
+ * `crates/hotsheet-model/src/feedback_choices.rs` implements the same grammar; both read the shared
+ * corpus `crates/hotsheet-model/tests/fixtures/feedback-choices.json`, so change them together.
+ */
 export interface FeedbackChoice {
   id: string;
+  /** The choice label: a list item's first line or a lettered block's header text. */
   markdown: string;
+  /** Continuation lines, indented paragraphs, or a lettered block's following paragraphs (HS2-EWF0FT). */
+  details?: string;
 }
 export interface FeedbackChoiceGroup {
   /** One-based position of the group within its note. */
@@ -8,7 +30,7 @@ export interface FeedbackChoiceGroup {
   start: number;
   end: number;
   /** The question written after `CHOICE:` on the header line, else the last prose line before
-   * the header; labels the group and its response. */
+   * the group; labels the group and its response. */
   question?: string;
   /** The question was written on the `CHOICE:` line itself, so no prose region shows it. */
   inlineQuestion?: boolean;
@@ -32,44 +54,6 @@ export interface FeedbackChoiceSelection {
   selected: string[];
   anchor?: string;
 }
-
-interface SourceLine {
-  start: number;
-  end: number;
-  text: string;
-}
-
-function sourceLines(source: string): SourceLine[] {
-  const lines: SourceLine[] = [];
-  let start = 0;
-  for (const match of source.matchAll(/[^\n]*(?:\n|$)/g)) {
-    if (!match[0]) continue;
-    lines.push({ start, end: start + match[0].length, text: match[0].replace(/\n$/, '') });
-    start += match[0].length;
-  }
-  return lines;
-}
-
-/**
- * A choice group header: an uppercase `CHOICE` or `CHOICE:` line, optionally bold, optionally
- * carrying the group's question after the colon (`CHOICE: Which approach?`, HS2-3MHSBS). Text
- * after a bare `CHOICE` without a colon is ordinary prose, not a header.
- */
-const CHOICE_HEADER = /^\s*(?:\*\*|__)?CHOICE(:)?(?:\*\*|__)?(?:\s+(.*?))?\s*$/;
-
-function choiceHeader(text: string): { question?: string } | undefined {
-  const match = text.match(CHOICE_HEADER);
-  if (!match) return undefined;
-  // Optional capture groups are undefined when they do not participate in the match.
-  const colon = match.at(1),
-    inline = match.at(2)?.trim();
-  if (!inline) return {};
-  if (!colon) return undefined;
-  const question = inline.replace(/^(\*\*|__)(.*)\1$/, '$2').trim();
-  return question ? { question } : {};
-}
-const LIST_ITEM = /^\s*([-+*]|\d+[.)])\s+(.+?)\s*$/;
-const FENCE = /^\s*(`{3,}|~{3,})/;
 
 /** Unique, stable choice id; group 1 keeps the original `choice-N` form. */
 export function feedbackChoiceId(groupIndex: number, choiceIndex: number): string {
@@ -96,10 +80,181 @@ function region(source: string, from: number, to: number): FeedbackChoiceRegion 
   return { source: raw.slice(leading).replace(/\n+$/, ''), sourceStart: from + leading };
 }
 
+/** One choice under construction: its label line and the last line its details reach. */
+interface PendingChoice {
+  line: number;
+  label: string;
+  /** Leading details already on the label line (a lettered bold lead). */
+  firstDetails?: string;
+  /** Columns removed from detail lines; undefined removes their common indentation. */
+  dedent?: number;
+  lastLine: number;
+}
+
+/** The details Markdown of one choice: every line after the label line through its last line. */
+function choiceDetails(lines: readonly SourceLine[], choice: PendingChoice): string | undefined {
+  const raw = lines.slice(choice.line + 1, choice.lastLine + 1).map((line) => line.text),
+    columns = choice.dedent ?? Math.min(...raw.filter((text) => !isBlank(text)).map(indentOf), Number.MAX_SAFE_INTEGER),
+    body = raw.map((text) => dedent(text, columns).trimEnd());
+  if (choice.firstDetails) body.unshift(choice.firstDetails);
+  while (body.length && !body[0]) body.shift();
+  while (body.length && !body[body.length - 1]) body.pop();
+  return body.length ? body.join('\n') : undefined;
+}
+
+interface ScannedGroup {
+  choices: PendingChoice[];
+  lastLine: number;
+}
+
 /**
- * Parse every uppercase `CHOICE` (or `CHOICE:`, optionally `CHOICE: <question>`) header followed by a
- * Markdown list. Blank lines may separate the header from its list and the list items from each
- * other; headers inside fenced code are ignored. Returns undefined when the note has no choice group.
+ * A Markdown list: each item's first line is its label; lazy continuation lines and lines
+ * indented to the item's content (nested lists included, blank lines allowed) are its details.
+ * A switch between bullet and numbered markers, or an unindented non-item line after a blank
+ * line, ends the list.
+ */
+function scanList(lines: readonly SourceLine[], first: number): ScannedGroup {
+  const firstItem = listItem(lines[first].text)!,
+    choices: PendingChoice[] = [];
+  let current: (PendingChoice & { indent: number }) | undefined,
+    lastLine = first,
+    blankBefore = false;
+  for (let index = first; index < lines.length; index += 1) {
+    const text = lines[index].text;
+    if (isBlank(text)) {
+      blankBefore = true;
+      continue;
+    }
+    if (current && indentOf(text) >= current.indent + 2) {
+      current.lastLine = index;
+      lastLine = index;
+      blankBefore = false;
+      continue;
+    }
+    const item = listItem(text);
+    if (item) {
+      if (item.ordered !== firstItem.ordered) break;
+      current = { line: index, label: item.label, dedent: item.contentColumn, lastLine: index, indent: item.indent };
+      choices.push(current);
+      lastLine = index;
+      blankBefore = false;
+      continue;
+    }
+    if (current && !blankBefore && !interruptsParagraph(text)) {
+      current.lastLine = index;
+      lastLine = index;
+      continue;
+    }
+    break;
+  }
+  return { choices, lastLine };
+}
+
+/** End of the fenced block that opens at `index` (the closing line, or the last line). */
+function fenceEnd(lines: readonly SourceLine[], index: number): number {
+  const open = FENCE.exec(lines[index].text)![1];
+  for (let next = index + 1; next < lines.length; next += 1) {
+    const close = FENCE.exec(lines[next].text);
+    if (close && close[1][0] === open[0] && close[1].length >= open.length) return next;
+  }
+  return lines.length - 1;
+}
+
+/**
+ * A run of lettered blocks, A, B, C (or 1, 2, 3 after a keyword) in one marker style. A block
+ * owns its header line's paragraph; the paragraphs between two headers belong to the earlier
+ * block, while after the last block only its own paragraph and indented paragraphs do, so
+ * trailing prose (a recommendation, say) stays prose. Headings and `CHOICE` headers end the run.
+ */
+function scanLettered(lines: readonly SourceLine[], first: number): ScannedGroup {
+  const header = letteredHeader(lines[first].text)!,
+    choices: PendingChoice[] = [];
+  const isNext = (index: number) => {
+    const next = letteredHeader(lines[index].text);
+    return next?.style === header.style && next.ordinal === choices.length + 1;
+  };
+  let index = first;
+  while (index < lines.length && isNext(index)) {
+    const block = letteredHeader(lines[index].text)!,
+      current: PendingChoice = {
+        line: index,
+        label: block.label,
+        ...(block.details ? { firstDetails: block.details } : {}),
+        lastLine: index,
+      };
+    choices.push(current);
+    index += 1;
+    // The header's own paragraph.
+    while (
+      index < lines.length &&
+      !isBlank(lines[index].text) &&
+      !interruptsParagraph(lines[index].text) &&
+      letteredHeader(lines[index].text) === undefined
+    ) {
+      current.lastLine = index;
+      index += 1;
+    }
+    // Following paragraphs: kept when indented, or when the next header follows them.
+    const headerOnly = current.lastLine === current.line && !current.firstDetails;
+    let probe = index,
+      pendingEnd: number | undefined,
+      firstUnitEnd: number | undefined,
+      foundNext = false;
+    for (;;) {
+      while (probe < lines.length && isBlank(lines[probe].text)) probe += 1;
+      if (probe >= lines.length) break;
+      if (isNext(probe)) {
+        if (pendingEnd !== undefined) current.lastLine = pendingEnd;
+        foundNext = true;
+        break;
+      }
+      const text = lines[probe].text;
+      if (HEADING.test(text) || choiceHeader(text) !== undefined || letteredHeader(text) !== undefined) break;
+      let unitEnd = probe;
+      if (FENCE.test(text)) unitEnd = fenceEnd(lines, probe);
+      else
+        while (
+          unitEnd + 1 < lines.length &&
+          !isBlank(lines[unitEnd + 1].text) &&
+          !interruptsParagraph(lines[unitEnd + 1].text) &&
+          letteredHeader(lines[unitEnd + 1].text) === undefined
+        )
+          unitEnd += 1;
+      if (pendingEnd === undefined && indentOf(text) >= block.indent + 2) current.lastLine = unitEnd;
+      else pendingEnd = unitEnd;
+      firstUnitEnd ??= unitEnd;
+      probe = unitEnd + 1;
+    }
+    // A last block written as a bare header takes the next paragraph as its details when an
+    // earlier block in the run has details; one-line runs keep trailing prose as prose.
+    if (
+      !foundNext &&
+      headerOnly &&
+      current.lastLine === current.line &&
+      firstUnitEnd !== undefined &&
+      choices.slice(0, -1).some((choice) => choice.lastLine > choice.line || choice.firstDetails)
+    )
+      current.lastLine = firstUnitEnd;
+    index = foundNext ? probe : lines.length;
+  }
+  return { choices, lastLine: choices.at(-1)!.lastLine };
+}
+
+/** The group a header (or a headerless lettered run) opens at `first`, if any. */
+function scanGroup(lines: readonly SourceLine[], first: number, explicitHeader: boolean): ScannedGroup | undefined {
+  if (first >= lines.length) return undefined;
+  if (explicitHeader && listItem(lines[first].text)) return scanList(lines, first);
+  if (letteredHeader(lines[first].text)?.ordinal !== 1) return undefined;
+  const group = scanLettered(lines, first);
+  // Without a CHOICE header, one lettered paragraph is ordinary prose.
+  return explicitHeader || group.choices.length >= 2 ? group : undefined;
+}
+
+/**
+ * Parse every choice group: an uppercase `CHOICE` (or `CHOICE:`, optionally `CHOICE: <question>`)
+ * header followed by a Markdown list or lettered blocks, or a headerless run of at least two
+ * lettered blocks. Blank lines may separate the header from its choices; headers inside fenced
+ * code are ignored. Returns undefined when the note has no choice group.
  */
 export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | undefined {
   const lines = sourceLines(source),
@@ -109,7 +264,7 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | u
     proseStart = 0;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const text = lines[lineIndex].text,
-      fenceMatch = text.match(FENCE);
+      fenceMatch = FENCE.exec(text);
     if (fence) {
       if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = undefined;
       continue;
@@ -119,36 +274,35 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | u
       continue;
     }
     const header = choiceHeader(text);
-    if (!header) continue;
-    const choices: FeedbackChoice[] = [],
-      groupIndex = groups.length + 1;
-    let end = lines[lineIndex].end,
-      lastItem = lineIndex,
-      ordered: boolean | undefined;
-    for (let next = lineIndex + 1; next < lines.length; next += 1) {
-      if (!lines[next].text.trim()) continue;
-      const item = lines[next].text.match(LIST_ITEM);
-      // One list per group: a change between bullet and numbered markers ends it.
-      if (!item || (ordered !== undefined && ordered !== /\d/.test(item[1]))) break;
-      ordered = /\d/.test(item[1]);
-      choices.push({ id: feedbackChoiceId(groupIndex, choices.length + 1), markdown: item[2] });
-      end = lines[next].end;
-      lastItem = next;
-    }
-    if (!choices.length) continue;
-    const start = lines[lineIndex].start,
+    let scanned: ScannedGroup | undefined;
+    if (header) {
+      let first = lineIndex + 1;
+      while (first < lines.length && isBlank(lines[first].text)) first += 1;
+      scanned = scanGroup(lines, first, true);
+    } else scanned = scanGroup(lines, lineIndex, false);
+    if (!scanned?.choices.length) continue;
+    const groupIndex = groups.length + 1,
+      start = lines[lineIndex].start,
+      end = lines[scanned.lastLine].end,
       before = region(source, proseStart, start);
     regions.push(before);
     groups.push({
       index: groupIndex,
       start,
       end,
-      question: header.question ?? questionLine(before.source),
-      ...(header.question ? { inlineQuestion: true } : {}),
-      choices,
+      question: header?.question ?? questionLine(before.source),
+      ...(header?.question ? { inlineQuestion: true } : {}),
+      choices: scanned.choices.map((choice, index) => {
+        const details = choiceDetails(lines, choice);
+        return {
+          id: feedbackChoiceId(groupIndex, index + 1),
+          markdown: choice.label,
+          ...(details ? { details } : {}),
+        };
+      }),
     });
     proseStart = end;
-    lineIndex = lastItem;
+    lineIndex = scanned.lastLine;
   }
   if (!groups.length) return undefined;
   regions.push(region(source, proseStart, source.length));

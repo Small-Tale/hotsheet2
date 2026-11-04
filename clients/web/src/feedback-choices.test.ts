@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -8,6 +10,66 @@ import {
   updateFeedbackChoiceSelection,
 } from './feedback-choices';
 import { combineFeedbackReply } from './feedback-replies';
+
+interface CorpusCase {
+  name: string;
+  source: string;
+  groups:
+    | {
+        raw: string;
+        question: string | null;
+        inlineQuestion: boolean;
+        choices: { label: string; details: string | null }[];
+      }[]
+    | null;
+  regions?: string[];
+  selections?: { select: string[]; markdown: string }[];
+}
+
+// The shared TS/Rust grammar corpus (HS2-EWF0FT); crates/hotsheet-model/tests/feedback_choices.rs reads it too.
+const CORPUS = (
+  JSON.parse(
+    readFileSync(
+      new URL('../../../crates/hotsheet-model/tests/fixtures/feedback-choices.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { cases: CorpusCase[] }
+).cases;
+
+describe('feedback choice grammar corpus (HS2-EWF0FT)', () => {
+  it('has unique case names', () => {
+    expect(new Set(CORPUS.map((entry) => entry.name)).size).toBe(CORPUS.length);
+  });
+
+  it.each(CORPUS.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
+    const parsed = parseFeedbackChoices(entry.source);
+    if (!entry.groups) {
+      expect(parsed).toBeUndefined();
+      return;
+    }
+    expect(parsed).toBeDefined();
+    const document = parsed!;
+    expect(
+      document.groups.map((group) => ({
+        raw: entry.source.slice(group.start, group.end),
+        question: group.question ?? null,
+        inlineQuestion: group.inlineQuestion ?? false,
+        choices: group.choices.map((choice) => ({ label: choice.markdown, details: choice.details ?? null })),
+      })),
+    ).toEqual(entry.groups);
+    expect(document.groups.map((group) => group.index)).toEqual(entry.groups.map((_, index) => index + 1));
+    expect(document.regions.map((region) => region.source)).toEqual(entry.regions);
+    for (const region of document.regions)
+      expect(entry.source.slice(region.sourceStart).startsWith(region.source)).toBe(true);
+    for (const selection of entry.selections ?? []) {
+      const markdown = selectedFeedbackChoicesMarkdown(entry.source, selection.select);
+      expect(markdown).toBe(selection.markdown);
+      // A recorded response never reads as a new choice prompt, and the prompt re-parses to the same ids.
+      expect(parseFeedbackChoices(markdown)).toBeUndefined();
+      expect(parseFeedbackChoices(entry.source)).toEqual(document);
+    }
+  });
+});
 
 const MULTI = [
   'Intro prose.',
@@ -142,6 +204,35 @@ describe('feedback choices', () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it('keeps selection and inline replies working across list and lettered groups (HS2-EWF0FT)', () => {
+    const source =
+      'CHOICE: Which rollout?\n- **Ship now.**\n  Costs later.\n- Wait\n\nPick a cache.\n\n**CHOICE A: Memory.** Fast.\n\n**CHOICE B: Disk.** Durable.\n\nRecommendation: B.';
+    const parsed = parseFeedbackChoices(source)!;
+    expect(parsed.groups.map((group) => group.choices.map((choice) => choice.id))).toEqual([
+      ['choice-1', 'choice-2'],
+      ['group-2-choice-1', 'group-2-choice-2'],
+    ]);
+    let state = updateFeedbackChoiceDocumentSelection(parsed, [], 'group-2-choice-1', undefined, {});
+    state = updateFeedbackChoiceDocumentSelection(parsed, state.selected, 'group-2-choice-2', state.anchor, {
+      range: true,
+    });
+    state = updateFeedbackChoiceDocumentSelection(parsed, state.selected, 'choice-1', state.anchor, {});
+    expect(state.selected).toEqual(['choice-1', 'group-2-choice-1', 'group-2-choice-2']);
+    const reply = combineFeedbackReply(source, [], 'Note.', state.selected);
+    expect(reply).toBe(
+      '**Which rollout?**\n- **Ship now.**\n\n**Pick a cache.**\n- CHOICE A: Memory.\n- CHOICE B: Disk.\n\nNote.',
+    );
+    // The recorded answer never parses as a prompt, and the prompt keeps its ids after re-parsing.
+    expect(parseFeedbackChoices(reply)).toBeUndefined();
+    expect(parseFeedbackChoices(source)).toEqual(parsed);
+    const offset = source.indexOf('Recommendation');
+    expect(
+      combineFeedbackReply(source, [{ offset: offset + 'Recommendation: B.'.length, text: 'Agreed.' }], '', [
+        'group-2-choice-2',
+      ]),
+    ).toBe(['> Pick a cache.', 'Selected choice:\n- CHOICE B: Disk.', '> Recommendation: B.', 'Agreed.'].join('\n\n'));
   });
 
   it('supports exclusive, zero, additive, and range selection', () => {

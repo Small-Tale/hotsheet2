@@ -241,6 +241,14 @@ export const READER_NOTES: NoteCardProps[] = [
     body: 'A few decisions before I continue.\n\n**1. Which store owns the notes?**\n\nCHOICE:\n- The ticket store\n- The document store\n\n**2. Does the existing "Notes" field stay?**\n\nCHOICE\n\n- Keep it read-only\n- Migrate and remove it\n\n**3. When should the migration run?**\n\nCHOICE:\n\n1. On first launch\n\n2. From an explicit command\n\nAnything else I should know?',
   },
   {
+    // HS2-EWF0FT: multi-line list items and lettered blocks render details under each label.
+    id: 'reader-feedback-details',
+    kind: 'feedback_needed' as const,
+    author: 'Codex',
+    time: '9 minutes ago',
+    body: 'CHOICE: Which rollout?\n- **Ship now.** Lowest effort.\n  Costs a migration later.\n- **Wait a release.**\n\nThe cache can go stale. Choose one:\n\n**CHOICE A: Rebuild on launch.** Simple, adds two seconds.\n\n**CHOICE B: Rebuild on change.** Needs a watcher.\n\nRecommendation: B.',
+  },
+  {
     id: 'reader-draft',
     kind: 'feedback_draft' as const,
     author: 'You',

@@ -9,6 +9,7 @@
 //! `docs/17-ticket-file-format.md`.
 
 pub mod enums;
+pub mod feedback_choices;
 pub mod format;
 pub mod ids;
 pub mod ticket;
