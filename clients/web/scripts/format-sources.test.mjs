@@ -30,6 +30,8 @@ describe('repository formatting scope (HS2-G9K0NY)', () => {
   });
 
   // HS2-DTPZ3A: real npm and Cargo subprocesses take about 30 seconds even without suite load.
+  // HS2-F8P3ZN: only the clean checkout boots npm. The other states run the formatter script or the
+  // exact package-script command directly, and cargo fmt starts only in the clean and Rust states.
   it('runs real package scripts through clean checkout, local config, drift, and missing tracked paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hotsheet-format-checkout-'));
     cleanup.push(root);
@@ -52,31 +54,39 @@ describe('repository formatting scope (HS2-G9K0NY)', () => {
       '[package]\nname = "format-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
     );
     await writeFile(join(root, 'src/lib.rs'), 'pub fn formatted() {}\n');
-    const run = (script) => {
-      const result = spawnSync('npm', ['run', script], { cwd: web, encoding: 'utf8' });
+    const spawn = (command, args) => {
+      const result = spawnSync(command, args, { cwd: web, encoding: 'utf8' });
       if (result.error) throw result.error;
       return { status: result.status, output: result.stdout + result.stderr };
     };
+    // Real package-script wiring through npm: both the Prettier and the Cargo half.
+    const npm = (name) => spawn('npm', ['run', name]);
+    // The exact package-script command without an npm boot; `sh -c` keeps its `&&` short-circuit.
+    const script = (name) => spawn('sh', ['-c', scripts[name]]);
+    // The Prettier half alone, for states that do not touch Rust sources.
+    const sources = (mode) => spawn(process.execPath, ['scripts/format-sources.mjs', mode]);
     // Normalize the generated manifest, then verify the untouched clean-checkout gate.
-    expect(run('format').status).toBe(0);
-    expect(run('format:check').status).toBe(0);
+    expect(npm('format').status).toBe(0);
+    expect(npm('format:check').status).toBe(0);
     await writeFile(join(root, 'opencode.json'), '{"local":true}');
-    expect(run('format:check')).toMatchObject({ status: 1, output: expect.stringContaining('opencode.json') });
-    expect(run('format').status).toBe(0);
-    expect(run('format:check').status).toBe(0);
+    expect(sources('--check')).toMatchObject({ status: 1, output: expect.stringContaining('opencode.json') });
+    expect(sources('--write').status).toBe(0);
+    expect(sources('--check').status).toBe(0);
     await writeFile(join(root, 'opencode.json'), '{ invalid JSON');
-    expect(run('format:check').status).not.toBe(0);
+    expect(sources('--check').status).not.toBe(0);
     await rm(join(root, 'opencode.json'));
     await writeFile(join(root, 'docs/fixture.json'), '{"tracked":true}');
-    expect(run('format:check')).toMatchObject({ status: 1, output: expect.stringContaining('docs/fixture.json') });
-    expect(run('format').status).toBe(0);
+    expect(sources('--check')).toMatchObject({ status: 1, output: expect.stringContaining('docs/fixture.json') });
+    expect(sources('--write').status).toBe(0);
+    expect(await readFile(join(root, 'docs/fixture.json'), 'utf8')).toBe('{ "tracked": true }\n');
     await rm(join(root, 'docs'), { recursive: true });
-    expect(run('format:check')).toMatchObject({ status: 2, output: expect.stringContaining('No files matching') });
+    expect(script('format:check')).toMatchObject({ status: 2, output: expect.stringContaining('No files matching') });
     await mkdir(join(root, 'docs'));
     await writeFile(join(root, 'docs/fixture.json'), '{}\n');
     await writeFile(join(root, 'src/lib.rs'), 'pub fn formatted( ){}\n');
-    expect(run('format:check').status).not.toBe(0);
-    expect(run('format').status).toBe(0);
-    expect(run('format:check').status).toBe(0);
+    expect(script('format:check').status).not.toBe(0);
+    expect(script('format').status).toBe(0);
+    expect(await readFile(join(root, 'src/lib.rs'), 'utf8')).toBe('pub fn formatted() {}\n');
+    expect(script('format:check').status).toBe(0);
   }, 60000);
 });
