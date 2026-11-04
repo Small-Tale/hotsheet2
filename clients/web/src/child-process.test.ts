@@ -49,7 +49,9 @@ function collect(child: ReturnType<typeof spawn>): Promise<Record<string, string
 }
 const HOSTILE = { GIT_DIR: '/elsewhere/.git', GIT_WORK_TREE: '/elsewhere', GIT_INDEX_FILE: '/elsewhere/index' };
 
-describe('child-process git environment isolation (HS2-T1H6NP)', () => {
+// HS2-K5CWDT: these cases spawn real Node children; at a gate load average near 80 the 5 s default
+// was exceeded. The budget covers the spawns, not a retry.
+describe('child-process git environment isolation (HS2-T1H6NP)', { timeout: 30_000 }, () => {
   it('removes every repository-locating variable without mutating the input', () => {
     const env = Object.fromEntries(GIT_REPOSITORY_ENV_VARS.map((name) => [name, '/elsewhere']));
     const clean = withoutGitRepositoryEnv({ ...env, GIT_AUTHOR_NAME: 'kept', GIT_TERMINAL_PROMPT: '0', HOME: '/h' });

@@ -151,7 +151,9 @@ async function realFixture() {
   return { parent, root, store, remote, beforeImport, revision };
 }
 
-describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', () => {
+// HS2-K5CWDT: these cases run real Git and HTTP round trips (about 1 s on CI); one exceeded a 20 s
+// budget at a gate load average near 80. The budget is a hang guard, not a retry.
+describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', { timeout: 60_000 }, () => {
   it('binds a completed custom-destination import to only its owning open session', async () => {
     const { parent, root, store } = await realFixture(),
       sessions = projectSessionRegistry(),
@@ -235,7 +237,7 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
       projectSessionRegistry().delete('backup-gate');
       await rm(parent, { recursive: true, force: true });
     }
-  }, 20_000);
+  });
 
   it('rolls back only its own origin, preserves existing origins on failure, and rejects legacy receipt-only evidence', async () => {
     const { parent, root, store, remote } = await realFixture();
@@ -280,5 +282,5 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
-  }, 20_000);
+  });
 });
