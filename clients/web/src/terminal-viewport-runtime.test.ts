@@ -16,6 +16,8 @@ import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from
 const allocated = vi.hoisted(() => ({
   proposed: { cols: 80, rows: 24 },
   openElement: false,
+  // Expose xterm's internal user-input signal (HS2-0GZZHV); off, every datum counts as typed input.
+  userInputSignal: false,
   fits: [] as Array<{ fit: ReturnType<typeof vi.fn> }>,
   terminals: [] as Array<{
     cols: number;
@@ -32,6 +34,7 @@ const allocated = vi.hoisted(() => ({
     focus: ReturnType<typeof vi.fn>;
     options: Record<string, unknown>;
     dataHandler?: (value: string) => void;
+    userInputListeners: Array<() => void>;
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -67,8 +70,23 @@ vi.mock('@xterm/xterm', () => ({
     getSelection = vi.fn(() => this.selection);
     element?: { style: Record<string, string> };
     options: Record<string, unknown>;
+    userInputListeners: Array<() => void> = [];
+    _core?: { coreService: { onUserInput: (listener: () => void) => { dispose: () => void } } };
     constructor(options: Record<string, unknown> = {}) {
       this.options = { ...options };
+      if (allocated.userInputSignal)
+        this._core = {
+          coreService: {
+            onUserInput: (listener) => {
+              this.userInputListeners.push(listener);
+              return {
+                dispose: () => {
+                  this.userInputListeners = this.userInputListeners.filter((other) => other !== listener);
+                },
+              };
+            },
+          },
+        };
       allocated.terminals.push(this);
     }
     open() {
@@ -153,6 +171,7 @@ beforeEach(() => {
   allocated.terminals.length = 0;
   allocated.proposed = { cols: 80, rows: 24 };
   allocated.openElement = false;
+  allocated.userInputSignal = false;
   resize.length = 0;
   intersections.length = 0;
   sockets.length = 0;
@@ -1371,6 +1390,29 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
       data: (value: string) => {
         terminal.dataHandler?.(value);
       },
+      /** A datum xterm labels as user input: its user-input signal fires just before `onData`. */
+      typed: (value: string) => {
+        for (const listener of terminal.userInputListeners) listener();
+        terminal.dataHandler?.(value);
+      },
+      /** A size frame from the server, naming the driver and (when given) the query answerer. */
+      size: async (frame: { driven_by?: string | null; answered_by?: string | null }) => {
+        socket.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols: 80, rows: 24 }, ...frame }) }),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      },
+      /** PTY output as a binary frame: the attach replay first, live output after it. */
+      output: (text: string) => {
+        socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(text).buffer }));
+      },
+      /** Each `terminal.write` call's parse callback, when the runtime passed one. */
+      writeCallbacks: () =>
+        (terminal.write.mock.calls as unknown as Array<[Uint8Array, (() => void) | undefined]>).map(([, done]) => done),
+      /** Plain terminal input this viewer sent: typed keys and query replies. */
+      input: () => sent.filter((value) => !value.startsWith('{')),
+      userInputListeners: () => terminal.userInputListeners.length,
       fire: (type: string, event: Event = new Event(type)) => {
         for (const [name, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
           if (name === type) handler(event);
@@ -1545,6 +1587,138 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     view.show();
     expect(view.claims().length).toBeGreaterThan(0);
     expect(interactions(view)).toBe(0);
+    view.dispose();
+  });
+
+  // HS2-0GZZHV: every attached xterm answers the program's queries, so with two viewers the PTY
+  // read two replies. Only the viewer the server names (`answered_by`) forwards them now.
+  const CPR = '\u001b[12;1R';
+  function answeringMagnified() {
+    allocated.userInputSignal = true;
+    return settledMagnified();
+  }
+
+  it('answers until the server names another viewer, while typed input is unchanged (HS2-0GZZHV)', async () => {
+    const view = answeringMagnified();
+    expect(view.userInputListeners()).toBe(1);
+    // Before any size frame a lone viewer must answer.
+    view.data(CPR);
+    expect(view.input()).toEqual([CPR]);
+    await view.size({ driven_by: 'other', answered_by: 'other' });
+    expect(view.viewport.dataset.answersQueries).toBe('false');
+    for (const reply of [CPR, '\u001b[?62;22c', '\u001b[I', '\u001b[O']) view.data(reply);
+    expect(view.input()).toEqual([CPR]);
+    // What the user types on a viewer that does not answer still reaches the PTY.
+    view.typed('a');
+    expect(view.input()).toEqual([CPR, 'a']);
+    view.dispose();
+    expect(view.userInputListeners()).toBe(0);
+  });
+
+  it('starts answering when it becomes the driver and stops at each handoff (HS2-0GZZHV)', async () => {
+    const view = answeringMagnified();
+    await view.size({ driven_by: 'other', answered_by: 'other' });
+    view.data('1');
+    await view.size({ driven_by: 'viewer', answered_by: 'viewer' });
+    expect(view.viewport.dataset.answersQueries).toBe('true');
+    view.data('2');
+    // A repeated frame for the same driver changes nothing.
+    await view.size({ driven_by: 'viewer', answered_by: 'viewer' });
+    view.data('3');
+    await view.size({ driven_by: 'other', answered_by: 'other' });
+    view.data('4');
+    await view.size({ driven_by: 'viewer', answered_by: 'viewer' });
+    view.data('5');
+    expect(view.input()).toEqual(['2', '3', '5']);
+    view.dispose();
+  });
+
+  it('answers an undriven terminal only as the named fallback, or when nobody is named (HS2-0GZZHV)', async () => {
+    const view = answeringMagnified();
+    await view.size({ driven_by: null, answered_by: 'other' });
+    view.data('1');
+    // The earlier-attached fallback left: this viewer is named next.
+    await view.size({ driven_by: null, answered_by: 'viewer' });
+    view.data('2');
+    // The server names nobody (no viewer that can answer has claimed): answer rather than stay silent.
+    await view.size({ driven_by: null, answered_by: null });
+    view.data('3');
+    // A server that predates `answered_by`: its driver answers, and an undriven terminal everyone.
+    await view.size({ driven_by: 'other' });
+    view.data('4');
+    await view.size({ driven_by: 'viewer' });
+    view.data('5');
+    await view.size({ driven_by: null });
+    view.data('6');
+    expect(view.input()).toEqual(['2', '3', '5', '6']);
+    view.dispose();
+  });
+
+  it('lets a grid tile answer only when named, and still send no typed input (HS2-0GZZHV, HS2-JQCGQF)', async () => {
+    const view = answeringMagnified();
+    view.present(true);
+    view.runFrames();
+    await view.size({ driven_by: 'other', answered_by: 'other' });
+    view.data('1');
+    view.typed('t');
+    await view.size({ driven_by: null, answered_by: 'viewer' });
+    view.data('2');
+    view.typed('u');
+    expect(view.input()).toEqual(['2']);
+    view.dispose();
+  });
+
+  it('drops a reply while the socket is not open instead of replaying it later (HS2-0GZZHV)', () => {
+    allocated.userInputSignal = true;
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    view.data(CPR);
+    expect(view.input()).toEqual([]);
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    view.show();
+    expect(view.input()).toEqual([]);
+    view.dispose();
+  });
+
+  it('never answers the past queries in replayed output, only live ones (HS2-0GZZHV)', async () => {
+    const view = answeringMagnified();
+    await view.size({ driven_by: 'viewer', answered_by: 'viewer' });
+    // The attach replay holds a query the program asked long ago; xterm answers it while parsing.
+    view.output('SIZE 80x24\r\n\u001b[6n');
+    const [replayParsed] = view.writeCallbacks();
+    expect(replayParsed).toBeTypeOf('function');
+    view.data('stale');
+    replayParsed?.();
+    // Live output after the replay: its query is answered.
+    view.output('\u001b[6n');
+    expect(view.writeCallbacks()[1]).toBeUndefined();
+    view.data('live');
+    // A resume or a replacement after a lag is replayed output too.
+    for (const kind of ['resume', 'replace', 'tail']) {
+      view.socket.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ terminal_frame: { kind, encoding: 'identity', bytes: 3 } }),
+        }),
+      );
+      view.output('\u001b[c');
+      view.data(`stale ${kind}`);
+      // Typed input while a replay parses is never held back.
+      view.typed(kind);
+      view.writeCallbacks().at(-1)?.();
+    }
+    view.data('after');
+    expect(view.input()).toEqual(['live', 'resume', 'replace', 'tail', 'after']);
+    view.dispose();
+  });
+
+  it('treats every datum as typed input when xterm exposes no user-input signal (HS2-0GZZHV)', async () => {
+    const view = settledMagnified();
+    expect(view.userInputListeners()).toBe(0);
+    await view.size({ driven_by: 'other', answered_by: 'other' });
+    view.data(CPR);
+    expect(view.input()).toEqual([CPR]);
     view.dispose();
   });
 

@@ -46,6 +46,10 @@ pub struct ViewportClaim {
     /// interacting claim advances the recency tiebreak, so one device's heartbeats can't steal
     /// size control from the device the user last actually touched (HS2-3ZBQDG).
     pub interacting: bool,
+    /// This viewport's emulator can answer the program's terminal queries (cursor position,
+    /// device attributes, focus reports). A read-only preview whose emulator emits no data
+    /// declares `false`, so it is never chosen as the answerer (HS2-0GZZHV).
+    pub answers_queries: bool,
     /// When this viewport last saw a genuine interaction — the recency tiebreak. The arbiter
     /// takes it from an interacting claim only; any other claim keeps the viewport's prior value
     /// (0 for a viewport that never interacted), whatever the caller passed (see
@@ -74,6 +78,10 @@ pub struct Decision {
     pub rows: u16,
     /// The viewport whose size won, if any (`None` for pinned / hold-current).
     pub driven_by: Option<String>,
+    /// The one viewport whose emulator answers the program's terminal queries: the driver when
+    /// it can answer, else the earliest-attached live viewport that can (HS2-0GZZHV). `None`
+    /// when no attached viewport can answer yet. See [`SizeArbiter::answerer`].
+    pub answered_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -109,6 +117,9 @@ pub struct SizeArbiter {
     /// When the owner should decide again: the trailing edge of the min-interval rate limit or
     /// the end of a focus-hold takeover, until a later `decide` applies or drops it.
     deferred_until_ms: Option<u64>,
+    /// The answerer named by the last size frame the owner broadcast, so an answerer change
+    /// without a resize is still announced (HS2-0GZZHV).
+    announced_answerer: Option<String>,
 }
 
 impl Default for SizeArbiter {
@@ -131,6 +142,7 @@ impl SizeArbiter {
             driver: None,
             focus_changed_at_ms: 0,
             deferred_until_ms: None,
+            announced_answerer: None,
         }
     }
 
@@ -153,7 +165,44 @@ impl SizeArbiter {
             cols,
             rows,
             driven_by: self.applied_by.clone(),
+            answered_by: self.answerer(),
         })
+    }
+
+    /// The one viewport whose emulator answers the program's terminal queries (HS2-0GZZHV).
+    /// Every attached xterm answers a query such as a cursor-position request, so with several
+    /// viewers the program would read several replies. The answerer is the viewport that drove
+    /// the applied size, when it can answer; otherwise the earliest-attached live viewport that
+    /// can. Attach order is stable while that viewport stays attached, so an undriven terminal's
+    /// answerer never flaps between idle viewers. `None` when no attached viewport can answer.
+    pub fn answerer(&self) -> Option<String> {
+        if let Some(driver) = self.applied_by.as_deref()
+            && self.claims.get(driver).is_some_and(|c| c.answers_queries)
+        {
+            return Some(driver.to_string());
+        }
+        self.claims
+            .values()
+            .filter(|c| c.answers_queries)
+            .min_by_key(|c| {
+                self.seen
+                    .get(&c.viewer_id)
+                    .map_or(u64::MAX, |seen| seen.seq)
+            })
+            .map(|c| c.viewer_id.clone())
+    }
+
+    /// The applied size naming a new answerer, when the answerer changed since the last
+    /// broadcast frame without a resize: a viewport attaching to an undriven terminal, or the
+    /// answerer leaving. The owner broadcasts it so the new answerer starts and the old one
+    /// stops at once (HS2-0GZZHV). `None` when the announced answerer is still current.
+    pub fn answerer_notice(&mut self) -> Option<Decision> {
+        let current = self.applied()?;
+        if current.answered_by == self.announced_answerer {
+            return None;
+        }
+        self.announced_answerer = current.answered_by.clone();
+        Some(current)
     }
 
     pub fn viewer_count(&self) -> usize {
@@ -280,7 +329,12 @@ impl SizeArbiter {
         self.applied = Some((target.cols, target.rows));
         self.applied_by = target.driven_by.clone();
         self.applied_at_ms = now_ms;
-        Some(target)
+        let answered_by = self.answerer();
+        self.announced_answerer = answered_by.clone();
+        Some(Decision {
+            answered_by,
+            ..target
+        })
     }
 
     /// When the owner should call `decide` again because the last one suppressed a change: the
@@ -305,6 +359,7 @@ impl SizeArbiter {
                 cols: *cols,
                 rows: *rows,
                 driven_by: None,
+                answered_by: None,
             }),
             SizePolicy::Smallest => self.by_extreme(false),
             SizePolicy::LargestVisible => self.by_extreme(true),
@@ -332,6 +387,7 @@ impl SizeArbiter {
             cols: c.cols,
             rows: c.rows,
             driven_by: Some(c.viewer_id.clone()),
+            answered_by: None,
         })
     }
 
@@ -346,6 +402,7 @@ impl SizeArbiter {
                 cols,
                 rows,
                 driven_by: None,
+                answered_by: None,
             });
         };
         let driver_present = self
@@ -373,6 +430,7 @@ impl SizeArbiter {
             cols: c.cols,
             rows: c.rows,
             driven_by: Some(c.viewer_id.clone()),
+            answered_by: None,
         })
     }
 
@@ -410,6 +468,7 @@ mod tests {
             focus,
             visible: true,
             interacting: false,
+            answers_queries: true,
             activity_at_ms: at,
         }
     }
@@ -426,7 +485,8 @@ mod tests {
             Some(Decision {
                 cols: 80,
                 rows: 24,
-                driven_by: None
+                driven_by: None,
+                answered_by: None
             })
         );
         // Past the seed's min-interval, so the first claim applies immediately.
@@ -437,7 +497,8 @@ mod tests {
             Some(Decision {
                 cols: 132,
                 rows: 40,
-                driven_by: Some("v1".into())
+                driven_by: Some("v1".into()),
+                answered_by: Some("v1".into())
             })
         );
         // A rate-limited change is deferred, not applied, until the interval passes.
@@ -464,7 +525,8 @@ mod tests {
             Some(Decision {
                 cols: 100,
                 rows: 30,
-                driven_by: None
+                driven_by: None,
+                answered_by: None
             })
         );
         // A re-seed (e.g. a respawn) clears the stale driver.
@@ -474,7 +536,8 @@ mod tests {
             Some(Decision {
                 cols: 90,
                 rows: 30,
-                driven_by: None
+                driven_by: None,
+                answered_by: None
             })
         );
     }
@@ -1053,5 +1116,172 @@ mod tests {
         );
         assert_eq!(a.viewer_count(), 1);
         assert!(a.claims.contains_key("busy"));
+    }
+
+    // HS2-0GZZHV: exactly one viewport answers the program's terminal queries.
+
+    fn hidden(id: &str) -> ViewportClaim {
+        ViewportClaim {
+            visible: false,
+            ..claim(id, 80, 24, false, 0)
+        }
+    }
+
+    fn preview(id: &str) -> ViewportClaim {
+        ViewportClaim {
+            answers_queries: false,
+            ..claim(id, 80, 24, true, 0)
+        }
+    }
+
+    /// A lone viewport answers from its first claim, even when that claim resizes nothing.
+    #[test]
+    fn a_lone_viewport_answers_from_its_first_claim() {
+        let mut a = SizeArbiter::default();
+        a.set_applied(80, 24);
+        assert_eq!(a.answerer(), None, "nobody attached");
+        assert_eq!(a.answerer_notice(), None, "nothing to announce yet");
+        a.upsert(claim("solo", 80, 24, true, 0), 1_000);
+        assert!(a.decide(1_000).is_none(), "the spawn size already fits");
+        let notice = a.answerer_notice().expect("the new answerer is announced");
+        assert_eq!(
+            (
+                notice.cols,
+                notice.rows,
+                notice.driven_by,
+                notice.answered_by.as_deref()
+            ),
+            (80, 24, None, Some("solo"))
+        );
+        // Heartbeats announce nothing more.
+        a.upsert(claim("solo", 80, 24, true, 0), 6_000);
+        assert!(a.decide(6_000).is_none());
+        assert_eq!(a.answerer_notice(), None);
+        assert_eq!(a.applied().unwrap().answered_by.as_deref(), Some("solo"));
+    }
+
+    /// The driver answers; a passive arrival changes nothing; a handoff moves the answerer with
+    /// the size in the same frame, and back again.
+    #[test]
+    fn the_driver_answers_and_the_answerer_follows_a_handoff() {
+        let mut a = desk_driving_with_a_passive_phone();
+        assert_eq!(a.answerer().as_deref(), Some("desk"));
+        assert_eq!(
+            a.answerer_notice(),
+            None,
+            "the resize frame already named the desk"
+        );
+        a.upsert(interacting_claim("phone", 80, 24, true, 0), 3_000);
+        assert!(a.decide(3_000).is_none(), "within the focus-hold");
+        assert_eq!(
+            a.answerer().as_deref(),
+            Some("desk"),
+            "the old driver answers until the handoff lands"
+        );
+        let takeover = a
+            .decide(3_000 + SIZE_FOCUS_HOLD_MS)
+            .expect("the phone takes over");
+        assert_eq!(takeover.driven_by.as_deref(), Some("phone"));
+        assert_eq!(takeover.answered_by.as_deref(), Some("phone"));
+        assert_eq!(a.answerer_notice(), None);
+        a.upsert(interacting_claim("desk", 200, 50, true, 0), 5_000);
+        let back = a
+            .decide(5_000 + SIZE_FOCUS_HOLD_MS)
+            .expect("the desk takes it back");
+        assert_eq!(
+            (back.driven_by.as_deref(), back.answered_by.as_deref()),
+            (Some("desk"), Some("desk"))
+        );
+        assert_eq!(a.answerer_notice(), None);
+    }
+
+    /// With no driver, the earliest-attached live viewport answers. When it leaves, the next
+    /// earliest is announced; a viewport that reattaches goes to the back of the order; when
+    /// the last one leaves, the frame names no answerer.
+    #[test]
+    fn an_undriven_terminal_falls_back_to_the_earliest_attached_viewport() {
+        let mut a = SizeArbiter::default();
+        a.set_applied(80, 24);
+        for (at, id) in [(1_000, "first"), (2_000, "second"), (3_000, "third")] {
+            a.upsert(hidden(id), at);
+            assert!(a.decide(at).is_none(), "nothing eligible holds the size");
+            let notice = a.answerer_notice();
+            if id == "first" {
+                assert_eq!(notice.unwrap().answered_by.as_deref(), Some("first"));
+            } else {
+                assert_eq!(notice, None, "a later arrival never takes the answer");
+            }
+        }
+        assert_eq!(a.applied().unwrap().driven_by, None);
+        a.remove("first");
+        assert!(a.decide(4_000).is_none());
+        assert_eq!(
+            a.answerer_notice().unwrap().answered_by.as_deref(),
+            Some("second")
+        );
+        // "second" reattaches under its id: it is now the newest attach, so "third" answers.
+        a.remove("second");
+        a.upsert(hidden("second"), 5_000);
+        assert!(a.decide(5_000).is_none());
+        assert_eq!(
+            a.answerer_notice().unwrap().answered_by.as_deref(),
+            Some("third")
+        );
+        assert_eq!(a.answerer_notice(), None, "announced once");
+        a.remove("third");
+        assert_eq!(
+            a.answerer_notice().unwrap().answered_by.as_deref(),
+            Some("second")
+        );
+        a.remove("second");
+        let empty = a
+            .answerer_notice()
+            .expect("the empty answerer is announced");
+        assert_eq!((empty.cols, empty.rows, empty.answered_by), (80, 24, None));
+    }
+
+    /// The driver leaving when its survivor's grid matches resizes nothing, yet the survivor
+    /// still learns at once that it now answers.
+    #[test]
+    fn a_driver_leaving_without_a_resize_still_hands_over_the_answer() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 120, 40, true, 0), 1_000);
+        assert!(a.decide(1_000).is_some());
+        a.upsert(claim("phone", 120, 40, true, 0), 2_000);
+        assert!(a.decide(2_000).is_none());
+        assert_eq!(a.answerer_notice(), None);
+        a.remove("desk");
+        assert!(a.decide(3_000).is_none(), "the same size is not a resize");
+        let notice = a.answerer_notice().expect("the survivor is announced");
+        assert_eq!(notice.answered_by.as_deref(), Some("phone"));
+    }
+
+    /// A viewport that cannot answer (a read-only preview) is never chosen, even as the
+    /// earliest attach or as the driver under another policy.
+    #[test]
+    fn a_viewport_that_cannot_answer_is_never_the_answerer() {
+        let mut a = SizeArbiter::new(SizePolicy::Smallest);
+        a.set_applied(80, 24);
+        a.upsert(
+            ViewportClaim {
+                cols: 40,
+                rows: 12,
+                ..preview("preview")
+            },
+            1_000,
+        );
+        let only_preview = a.decide(1_000).expect("the smallest viewport drives");
+        assert_eq!(only_preview.driven_by.as_deref(), Some("preview"));
+        assert_eq!(only_preview.answered_by, None, "no viewport can answer");
+        a.upsert(claim("tile", 80, 24, true, 0), 2_000);
+        assert!(
+            a.decide(2_000).is_none(),
+            "the preview is still the smallest"
+        );
+        assert_eq!(
+            a.answerer_notice().unwrap().answered_by.as_deref(),
+            Some("tile")
+        );
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("preview"));
     }
 }

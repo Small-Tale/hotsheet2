@@ -63,12 +63,29 @@ describe('terminal viewport protocol', () => {
     expect(JSON.parse(terminalResizeClaim('viewer-3', 100, 40, true, true, true))).toEqual({
       resize: { viewer_id: 'viewer-3', cols: 100, rows: 40, focus: true, visible: true, interacting: true },
     });
+    // A read-only preview cannot answer the program's queries; the server assumes every other viewer can (HS2-0GZZHV).
+    expect(JSON.parse(terminalResizeClaim('preview', 80, 24, false, true, false, false))).toEqual({
+      resize: {
+        viewer_id: 'preview',
+        cols: 80,
+        rows: 24,
+        focus: false,
+        visible: true,
+        interacting: false,
+        answers_queries: false,
+      },
+    });
   });
   it('accepts only valid server size broadcasts', () => {
     expect(parseTerminalSizeMessage('{"pty_size":{"cols":120,"rows":40},"driven_by":"viewer-1"}')).toEqual({
       pty_size: { cols: 120, rows: 40 },
       driven_by: 'viewer-1',
     });
+    // The query answerer (HS2-0GZZHV) is a viewer id or null.
+    expect(
+      parseTerminalSizeMessage('{"pty_size":{"cols":80,"rows":24},"driven_by":null,"answered_by":"viewer-2"}'),
+    ).toEqual({ pty_size: { cols: 80, rows: 24 }, driven_by: null, answered_by: 'viewer-2' });
+    expect(parseTerminalSizeMessage('{"pty_size":{"cols":80,"rows":24},"answered_by":7}')).toBeUndefined();
     expect(parseTerminalSizeMessage('terminal text')).toBeUndefined();
     expect(parseTerminalSizeMessage('{"pty_size":{"cols":0,"rows":40}}')).toBeUndefined();
   });

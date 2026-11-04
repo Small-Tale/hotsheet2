@@ -3668,8 +3668,8 @@ temporary viewer over the same PTY.
 > never designed for remotes. `hotsheet-terminals::SizeArbiter` implements the model below —
 > leased viewport claims, focus-follows (default) + smallest/largest/pinned, the
 > `SIZE_FOCUS_HOLD`/`MIN_DELTA`/`RESIZE_MIN_INTERVAL` guards, and disconnect self-heal — wired
-> into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by}` decisions out, plus the
-> applied size right after each attach replay — HS2-7Y1BQ2). The
+> into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by, answered_by}` decisions
+> out, plus the applied size right after each attach replay — HS2-7Y1BQ2, HS2-0GZZHV). The
 > client consumes those decisions through the credential-hiding local bridge described
 > below.
 
@@ -3885,8 +3885,8 @@ point for local _and_ remote viewers. Each viewport registers a **size claim** o
 the terminal WebSocket and keeps it alive with a heartbeat:
 
 ```
-viewer → server:  { viewerId, cols, rows, focus: bool, visible: bool, interacting: bool }
-server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // on attach + broadcast on change
+viewer → server:  { viewerId, cols, rows, focus: bool, visible: bool, interacting: bool, answersQueries?: bool }
+server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId, answeredBy: viewerId }   // on attach + broadcast on change
 ```
 
 - On every attach, the server sends the **applied** size and its driver (`drivenBy` is null for
@@ -3921,6 +3921,36 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // on attach
   that disconnects leaves its interaction time behind (the last 64 are remembered), so the
   authority that reconnects under the same id regains the size after the hold, while a passive
   viewer that reconnects stays passive (**HS2-1YX5VS**).
+- **Exactly one viewer answers the program's terminal queries (HS2-0GZZHV).** Every attached
+  xterm answers a query such as a cursor-position request (`ESC[6n`), device attributes, a mode
+  or colour report, and reports focus changes. With several viewers the program read one reply
+  per viewer, and a passive viewer's cursor position described its own grid rather than the
+  PTY's. Each size frame now names the answerer (`answered_by`): the driver when it can answer;
+  otherwise, while nobody drives, the **earliest-attached** live viewer that can. The arbiter
+  already orders viewers by attach, and that choice never changes while the viewer stays
+  attached, so an undriven terminal's answerer does not flap between idle viewers. A read-only
+  preview, whose emulator emits no data, claims with `answers_queries: false` and is never
+  chosen. When the answerer changes without a resize (a viewer attaching to an undriven
+  terminal, or the answerer leaving) the server sends the unchanged size again naming the new
+  answerer, so it starts at once and the old one stops.
+  - Only the named viewer forwards the emulator's own data; every viewer's typed input is
+    unchanged, and a grid tile, which takes no typed input (HS2-JQCGQF), forwards replies only
+    when it is the answerer. The client tells the two apart by xterm's own label: xterm marks
+    keyboard, IME composition, paste, and mouse input as user input when it emits them, and its
+    parser replies and focus reports as not. The label is internal to xterm (pinned by a unit
+    test against the installed version); without it, all data counts as typed input, so a later
+    xterm can bring back duplicate replies but never drop a keystroke. DOM event timing is not
+    used, because xterm emits IME composition input from a later timer.
+  - The client fails open: before its first size frame, or while the server names no answerer
+    (no viewer that can answer has claimed), it answers, so a lone viewer never leaves a query
+    such as a shell's start-up device-attributes request unanswered. A server without
+    `answered_by` lets its driver answer and every viewer answer an undriven terminal.
+  - Replayed output (the attach replay, a tail, a lag replacement, or the output missed while
+    disconnected) repeats the program's past queries; no viewer answers those. A reply is never
+    buffered across a reconnect, because the query it answers belonged to the lost connection.
+  - The server announces a decision before it resizes the PTY, and the viewer pump checks size
+    frames before output, so the query a program sends in response to SIGWINCH always reaches a
+    viewer after the frame naming its answerer. Before, the old driver could still answer it.
 - The protocol retains the historical `focus` field name, but the web client uses it as
   **sizing eligibility**. Visible grid previews and visible interactive terminals are eligible;
   keyboard focus only controls input and never changes a terminal's local geometry

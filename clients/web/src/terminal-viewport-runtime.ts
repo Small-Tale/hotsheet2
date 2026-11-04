@@ -31,6 +31,7 @@ import {
 } from './terminal-keys';
 import { onTerminalLimitsChange } from './terminal-limits';
 import { createLongPressController } from './terminal-long-press';
+import { terminalAnswersQueries, trackTerminalUserInput } from './terminal-query-replies';
 import {
   createTerminalInboundSequencer,
   nextTerminalStreamPosition,
@@ -514,6 +515,12 @@ function initializeTerminalViewport(
     tileGridSize: { cols: number; rows: number } | undefined,
     tileCanClaim = false,
     tileWebglReleased = false,
+    // Whether this viewer forwards the emulator's replies to the program's queries: the server names
+    // one answerer per terminal in each size frame (HS2-0GZZHV). Answering until told otherwise
+    // keeps a lone viewer from ever leaving a query unanswered.
+    answeringQueries = true,
+    // Replayed chunks xterm has not finished parsing; a reply emitted meanwhile answers a past query.
+    replayParses = 0,
     // Set while a user gesture that mounted this viewport may still claim PTY sizing (HS2-1YX5VS).
     gestureClaim = terminalGestureClaimAtMount(typeof navigator === 'undefined' ? undefined : navigator, Date.now());
   own(() => {
@@ -527,6 +534,14 @@ function initializeTerminalViewport(
     socket?.close();
   });
   const claimsSizing = () => terminalViewportClaimsSizing(scaledPreview, fixedDashboardGrid);
+  // xterm calls a write's callback right after parsing that chunk, before the next one, so every
+  // reply the chunk's queries produce lands while the count is raised (HS2-0GZZHV).
+  const replayParseStarted = () => {
+    replayParses += 1;
+    return () => {
+      replayParses -= 1;
+    };
+  };
   // On a phone-width viewport a dedicated drawer terminal keeps a fixed column count (80 by default,
   // down to 40 for larger text — HS2-WMN626) but fills the available height with M rows, scaled to
   // fit width (HS2-S708S3).
@@ -586,7 +601,9 @@ function initializeTerminalViewport(
       // grid tile is never interacted with, so its 80×24 claim stays passive (HS2-JQCGQF).
       interacting = !tiled && terminalGestureClaimDue(gestureClaim, Date.now(), sizingFocus && claimVisible);
     if (interacting) gestureClaim = undefined;
-    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, interacting));
+    socket.send(
+      terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, interacting, !scaledPreview),
+    );
   };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
   // makes this the "last interacted" viewport, so it takes over PTY sizing (HS2-3ZBQDG).
@@ -611,7 +628,7 @@ function initializeTerminalViewport(
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(visible);
     const size = claimDimensions();
-    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, true));
+    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, true, !scaledPreview));
     lastInteractionAt = Date.now();
     gestureClaim = undefined;
   };
@@ -957,6 +974,8 @@ function initializeTerminalViewport(
         const local = claimDimensions();
         resizeTerminalPreservingScroll(terminal, local.cols, local.rows);
         element.dataset.driving = String(drivenByViewer);
+        answeringQueries = terminalAnswersQueries(viewerId, size);
+        element.dataset.answersQueries = String(answeringQueries);
         element.dataset.ptySize = `${size.pty_size.cols}x${size.pty_size.rows}`;
         element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
         queueMicrotask(tiled ? layoutTile : reconcileScale);
@@ -981,6 +1000,10 @@ function initializeTerminalViewport(
           : 0;
       tailShown = frame.header?.kind === 'tail';
       let bytes = frame.bytes;
+      // Replayed output (an attach replay, a tail, a replacement, or the output missed while
+      // disconnected) repeats the program's past queries; answering them again would hand the
+      // program stale replies, one per attaching viewer (HS2-0GZZHV).
+      const replayed = frame.header !== undefined || initialReplay;
       if (initialReplay) {
         initialReplay = false;
         if (fixedPresentation() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
@@ -989,11 +1012,14 @@ function initializeTerminalViewport(
         replacementReplayPending = false;
         bytes = terminalReplacementPayload(bytes);
       }
+      const parsed = replayed ? replayParseStarted() : undefined;
       if (keepFromBottom <= 0) {
-        terminal.write(bytes);
+        if (parsed) terminal.write(bytes, parsed);
+        else terminal.write(bytes);
         return;
       }
       terminal.write(bytes, () => {
+        parsed?.();
         terminal.scrollToLine(Math.max(0, terminal.buffer.active.baseY - keepFromBottom));
       });
     };
@@ -1411,18 +1437,40 @@ function initializeTerminalViewport(
         holdInputBehindProbe(current, value);
         return;
       }
-      // `onData` also carries xterm's automatic replies to the program's queries (cursor position,
-      // device attributes, focus reports), which every attached viewer sends. Only the DOM events
-      // below count as a human interaction, so those replies cannot hand PTY sizing back and forth
-      // between idle viewers (HS2-1YX5VS).
+      // Sending input is not an interaction: only the DOM events below are, so xterm's automatic
+      // replies to the program's queries cannot hand PTY sizing back and forth between idle viewers
+      // (HS2-1YX5VS). Those replies take `sendReply` instead (HS2-0GZZHV).
       current.send(value);
       return;
     }
     pendingInput = bufferTerminalInput(pendingInput, value);
     reconnectNow();
   };
+  // The emulator's own replies to the program's queries and its focus reports (HS2-0GZZHV). Only
+  // the viewer the server names as the answerer forwards them, from any presentation, a grid tile
+  // included; typed input is unaffected. A reply never waits for a reconnect: the query it answers
+  // belonged to a connection that is gone.
+  const sendReply = (value: string) => {
+    if (!answeringQueries || replayParses > 0) return;
+    const current = socket;
+    if (current?.readyState !== WebSocket.OPEN || socketStale()) return;
+    if (inputProbe !== undefined) {
+      // Keep order behind typed input that waits for the probe.
+      pendingInput = bufferTerminalInput(pendingInput, value);
+      return;
+    }
+    current.send(value);
+  };
+  const userInput = trackTerminalUserInput(terminal);
+  own(() => {
+    userInput.dispose();
+  });
   let pasting = false;
   const input = terminal.onData((value) => {
+    if (!userInput.wasUserInput() && !pasting) {
+      sendReply(value);
+      return;
+    }
     // A sticky key-bar modifier applies to the next typed character (HS2-CKS78M), never to a paste.
     const active = pasting ? undefined : modifiers?.current();
     if (active && terminalModifiersActive(active)) {

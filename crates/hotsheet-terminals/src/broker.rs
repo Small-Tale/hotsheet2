@@ -132,6 +132,10 @@ pub enum StreamOut {
         rows: u16,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         driven_by: Option<String>,
+        /// The one viewer that answers the program's terminal queries (HS2-0GZZHV); brokers
+        /// that predate it omit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        answered_by: Option<String>,
     },
     /// No terminal with that id (attach failed).
     NotFound,
@@ -159,6 +163,10 @@ pub enum StreamIn {
         /// interacting claims advance the size-arbiter recency (HS2-3ZBQDG).
         #[serde(default)]
         interacting: bool,
+        /// This viewport's emulator can answer the program's terminal queries (HS2-0GZZHV);
+        /// clients that predate it are assumed to.
+        #[serde(default = "stream_default_true")]
+        answers_queries: bool,
     },
 }
 
@@ -447,6 +455,7 @@ async fn write_stream_frames(
                 cols: d.cols,
                 rows: d.rows,
                 driven_by: d.driven_by,
+                answered_by: d.answered_by,
             },
         };
         if write_line(&mut write, &line).await.is_err() {
@@ -497,6 +506,7 @@ async fn stream_terminal(
                 cols: current.cols,
                 rows: current.rows,
                 driven_by: current.driven_by,
+                answered_by: current.answered_by,
             },
         )
         .await?;
@@ -517,11 +527,11 @@ async fn stream_terminal(
                     if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
                         match inbound {
                             StreamIn::Input { data } => { let _ = term.queue_input(data.into_vec()).await; }
-                            StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting } => {
+                            StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting, answers_queries } => {
                                 my_viewer = Some(viewer_id.clone());
                                 let now = now_ms();
                                 term.claim_size(
-                                    ViewportClaim { viewer_id, cols, rows, focus, visible, interacting, activity_at_ms: now },
+                                    ViewportClaim { viewer_id, cols, rows, focus, visible, interacting, answers_queries, activity_at_ms: now },
                                     now,
                                 );
                             }
@@ -1457,8 +1467,9 @@ mod tests {
                 cols,
                 rows,
                 driven_by,
+                answered_by,
             } => {
-                assert_eq!((cols, rows, driven_by), (80, 24, None))
+                assert_eq!((cols, rows, driven_by, answered_by), (80, 24, None, None))
             }
             other => panic!("expected the applied size after the replay, got {other:?}"),
         }
@@ -1472,6 +1483,7 @@ mod tests {
                 focus: true,
                 visible: true,
                 interacting: true,
+                answers_queries: true,
             })
             .await
             .unwrap();
@@ -1493,11 +1505,53 @@ mod tests {
                 cols,
                 rows,
                 driven_by,
+                answered_by,
             } => {
-                assert_eq!((cols, rows, driven_by.as_deref()), (132, 40, Some("wide")))
+                assert_eq!(
+                    (cols, rows, driven_by.as_deref(), answered_by.as_deref()),
+                    (132, 40, Some("wide"), Some("wide"))
+                )
             }
             other => panic!("expected the applied size after the replay, got {other:?}"),
         }
+    }
+
+    /// HS2-0GZZHV: the query-answerer fields are optional on the wire both ways, so a broker
+    /// and a server from either side of the change still interoperate.
+    #[test]
+    fn query_answerer_fields_default_for_older_peers() {
+        let resize: StreamIn = serde_json::from_str(
+            r#"{"frame":"resize","viewer_id":"v","cols":80,"rows":24,"focus":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            resize,
+            StreamIn::Resize {
+                answers_queries: true,
+                ..
+            }
+        ));
+        let size: StreamOut =
+            serde_json::from_str(r#"{"frame":"size","cols":80,"rows":24,"driven_by":"v"}"#)
+                .unwrap();
+        assert!(matches!(
+            size,
+            StreamOut::Size {
+                answered_by: None,
+                ..
+            }
+        ));
+        let line = serde_json::to_string(&StreamOut::Size {
+            cols: 80,
+            rows: 24,
+            driven_by: None,
+            answered_by: Some("v".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            line,
+            r#"{"frame":"size","cols":80,"rows":24,"answered_by":"v"}"#
+        );
     }
 
     #[tokio::test]

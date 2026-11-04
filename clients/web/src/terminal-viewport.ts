@@ -10,6 +10,8 @@ import { currentTerminalLimits } from './terminal-limits';
 export interface TerminalSizeMessage {
   pty_size: { cols: number; rows: number };
   driven_by?: string | null;
+  /** The one viewer that answers the program's terminal queries (HS2-0GZZHV); absent from older servers. */
+  answered_by?: string | null;
 }
 
 export function terminalResizeClaim(
@@ -19,10 +21,21 @@ export function terminalResizeClaim(
   focus: boolean,
   visible: boolean,
   interacting = false,
+  answersQueries = true,
 ): string {
   const dimension = (value: number) => (Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1);
   return JSON.stringify({
-    resize: { viewer_id: viewerId, cols: dimension(cols), rows: dimension(rows), focus, visible, interacting },
+    resize: {
+      viewer_id: viewerId,
+      cols: dimension(cols),
+      rows: dimension(rows),
+      focus,
+      visible,
+      interacting,
+      // A viewer whose emulator emits no data (a read-only preview) is never the query answerer
+      // (HS2-0GZZHV). The server assumes the default, so it is only sent when false.
+      ...(answersQueries ? {} : { answers_queries: false }),
+    },
   });
 }
 
@@ -38,7 +51,8 @@ export function parseTerminalSizeMessage(value: string): TerminalSizeMessage | u
       Number.isInteger(rows) &&
       cols > 0 &&
       rows > 0 &&
-      (parsed.driven_by === undefined || parsed.driven_by === null || typeof parsed.driven_by === 'string')
+      (parsed.driven_by === undefined || parsed.driven_by === null || typeof parsed.driven_by === 'string') &&
+      (parsed.answered_by === undefined || parsed.answered_by === null || typeof parsed.answered_by === 'string')
     )
       return parsed as unknown as TerminalSizeMessage;
   } catch {

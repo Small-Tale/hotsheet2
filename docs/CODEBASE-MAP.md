@@ -376,6 +376,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, live scrollback limit updates, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-replay-stream.ts # Opt-in attach replay negotiation: URL parameters, frame headers, ordered async deflate-raw decoding, stream positions for resume, tail-first default by host (HS2-K93QHA)
+    src/terminal-query-replies.ts # Which viewer answers the program's terminal queries (server-named `answered_by`, fail-open) and xterm's user-input label that separates replies from typed input (HS2-0GZZHV)
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-long-press.ts # Touch long-press controller (500 ms, 10px tolerance) that opens the terminal edit menu (HS2-KKP8YJ)
     src/terminal-touch-selection.ts # Touch text selection: point→buffer cell, word bounds, anchored drag range, and the controller the long-press drives (HS2-EYR96N)

@@ -1150,3 +1150,147 @@ async fn a_passive_viewer_never_resizes_the_pty_until_its_user_interacts() {
         vec![(80, 24, "phone".to_string())]
     );
 }
+
+/// The next `{pty_size}` frame's (driven_by, answered_by), "" for null, skipping output.
+async fn next_answerer_frame(ws: &mut TestWs) -> Option<(String, String)> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while let Some(Ok(msg)) = ws.next().await {
+            if let WsMessage::Text(t) = msg
+                && let Ok(v) = serde_json::from_str::<serde_json::Value>(&t)
+                && v.get("pty_size").is_some()
+            {
+                return Some((
+                    v["driven_by"].as_str().unwrap_or("").to_string(),
+                    v["answered_by"].as_str().unwrap_or("").to_string(),
+                ));
+            }
+        }
+        None
+    })
+    .await
+    .unwrap_or(None)
+}
+
+/// A claim from a viewer that is not sizing-eligible (hidden), optionally unable to answer.
+fn hidden_claim_frame(viewer: &str, answers_queries: bool) -> WsMessage {
+    WsMessage::Text(
+        format!(
+            r#"{{"resize":{{"viewer_id":"{viewer}","cols":80,"rows":24,"focus":false,"visible":false,"answers_queries":{answers_queries}}}}}"#
+        )
+        .into(),
+    )
+}
+
+fn pair(driven_by: &str, answered_by: &str) -> Option<(String, String)> {
+    Some((driven_by.to_string(), answered_by.to_string()))
+}
+
+/// HS2-0GZZHV: through the real attach, every size frame names the one viewer that answers the
+/// program's terminal queries: the earliest attached while nobody drives, the driver once one
+/// does, the survivor at once when the driver leaves without a resize, and never a viewer that
+/// cannot answer.
+#[tokio::test]
+async fn size_frames_name_the_one_viewer_that_answers_terminal_queries() {
+    let (_d, addr, id) = boot_with_cat().await;
+    one_viewer_answers_terminal_queries(addr, &id).await;
+}
+
+/// The same answerer frames through the detached broker (HS2-0GZZHV).
+#[tokio::test]
+async fn broker_size_frames_name_the_one_viewer_that_answers_terminal_queries() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let bdir = tempfile::tempdir().unwrap();
+    let sock = bdir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj"));
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = tcp.local_addr().unwrap();
+    let app = app(state);
+    tokio::spawn(async move {
+        axum::serve(tcp, app).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+    let id = tokio::task::spawn_blocking(move || {
+        let resp = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"command":"cat","id":"banswer"}"#)
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        v["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+    one_viewer_answers_terminal_queries(addr, &id).await;
+}
+
+async fn one_viewer_answers_terminal_queries(addr: std::net::SocketAddr, id: &str) {
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut desk, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        next_answerer_frame(&mut desk).await,
+        pair("", ""),
+        "nobody claimed yet"
+    );
+    // A hidden viewer drives nothing, but as the only one it answers.
+    desk.send(hidden_claim_frame("desk", true)).await.unwrap();
+    assert_eq!(next_answerer_frame(&mut desk).await, pair("", "desk"));
+
+    // A read-only preview attaches and claims; it never answers.
+    let (mut preview, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(next_answerer_frame(&mut preview).await, pair("", "desk"));
+    preview
+        .send(hidden_claim_frame("preview", false))
+        .await
+        .unwrap();
+    let (mut phone, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        next_answerer_frame(&mut phone).await,
+        pair("", "desk"),
+        "a later attach learns the answerer and does not take it"
+    );
+
+    // The desk's user types: it drives and answers.
+    desk.send(claim_frame("desk", 120, 40, true)).await.unwrap();
+    assert_eq!(next_answerer_frame(&mut desk).await, pair("desk", "desk"));
+    // The phone's user types: after the focus hold it drives and answers, in the same frame.
+    // (A later millisecond than the desk's interaction, so recency, not a tie, decides.)
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    phone
+        .send(claim_frame("phone", 100, 30, true))
+        .await
+        .unwrap();
+    assert_eq!(next_answerer_frame(&mut desk).await, pair("phone", "phone"));
+    assert_eq!(next_answerer_frame(&mut phone).await, pair("desk", "desk"));
+    assert_eq!(
+        next_answerer_frame(&mut phone).await,
+        pair("phone", "phone")
+    );
+
+    // The desk is hidden, then the phone leaves: nothing resizes, yet the desk answers again.
+    desk.send(hidden_claim_frame("desk", true)).await.unwrap();
+    phone.close(None).await.unwrap();
+    assert_eq!(next_answerer_frame(&mut desk).await, pair("", "desk"));
+
+    // The desk leaves too: the remaining preview cannot answer, so the frame names nobody.
+    desk.close(None).await.unwrap();
+    for expected in [
+        pair("desk", "desk"),
+        pair("phone", "phone"),
+        pair("", "desk"),
+        pair("", ""),
+    ] {
+        assert_eq!(next_answerer_frame(&mut preview).await, expected);
+    }
+}

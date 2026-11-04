@@ -163,6 +163,21 @@ pub async fn pump_viewer_output<F: From<ViewerFrame> + Send>(
                     permit.send(frame.into());
                 }
             }
+            // A size frame is checked before output: the terminal announces a decision before it
+            // resizes the PTY, so output the resize provokes (a TUI's cursor-position query) always
+            // follows the frame that names the viewer answering it (HS2-0GZZHV). Output already
+            // taken from the channel still goes first.
+            size = sizes.recv() => match size {
+                Ok(decision) => {
+                    if pending.flush(&frames).await.is_err()
+                        || frames.send(ViewerFrame::Size(decision).into()).await.is_err()
+                    {
+                        return;
+                    }
+                }
+                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
+                Err(RecvError::Closed) => break,
+            },
             chunk = output.recv() => match chunk {
                 Ok(chunk) => {
                     if pending.push(chunk, &frames).is_err() {
@@ -174,18 +189,6 @@ pub async fn pump_viewer_output<F: From<ViewerFrame> + Send>(
                 }
                 // Only reachable if the pump itself was starved; recover the same way.
                 Err(RecvError::Lagged(_)) => resync(&term, &mut output, &mut pending),
-                Err(RecvError::Closed) => break,
-            },
-            size = sizes.recv() => match size {
-                Ok(decision) => {
-                    // Keep order: output produced before the resize reaches the viewer first.
-                    if pending.flush(&frames).await.is_err()
-                        || frames.send(ViewerFrame::Size(decision).into()).await.is_err()
-                    {
-                        return;
-                    }
-                }
-                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
                 Err(RecvError::Closed) => break,
             },
         }

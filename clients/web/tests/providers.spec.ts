@@ -9642,7 +9642,12 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     const preview = connections[attachesBeforeClose];
     expect(preview, 'the preview opened its own attach').toBeDefined();
     expect(preview.sizes, 'exactly one size frame: the attach report, not a resize').toEqual([
-      { pty_size: { cols, rows: Number(ptySize.split('x')[1]) }, driven_by: expect.any(String) as unknown },
+      {
+        pty_size: { cols, rows: Number(ptySize.split('x')[1]) },
+        driven_by: expect.any(String) as unknown,
+        // The drawer drives, so it also answers the program's queries (HS2-0GZZHV).
+        answered_by: expect.any(String) as unknown,
+      },
     ]);
     expect(preview.claims.every((claim) => !claim.focus && !claim.interacting)).toBe(true);
     await settledAnimations(dialog);

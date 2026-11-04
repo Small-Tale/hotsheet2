@@ -82,6 +82,10 @@ struct ResizeClaim {
     /// than a heartbeat; only interacting claims advance the size-arbiter recency (HS2-3ZBQDG).
     #[serde(default)]
     interacting: bool,
+    /// This viewport's emulator can answer the program's terminal queries; a read-only preview
+    /// sends `false` so it is never the answerer (HS2-0GZZHV). Older clients are assumed to.
+    #[serde(default = "default_true")]
+    answers_queries: bool,
 }
 
 enum TerminalText<'a> {
@@ -118,6 +122,8 @@ fn classify_terminal_text(value: &str) -> TerminalText<'_> {
 struct SizeMsg<'a> {
     pty_size: PtySizeMsg,
     driven_by: Option<&'a str>,
+    /// The one viewer whose emulator answers the program's terminal queries (HS2-0GZZHV).
+    answered_by: Option<&'a str>,
 }
 #[derive(Serialize)]
 struct PtySizeMsg {
@@ -125,11 +131,16 @@ struct PtySizeMsg {
     rows: u16,
 }
 
-/// The `{pty_size, driven_by}` text frame a viewer receives on attach and on every change.
-fn terminal_size_message(cols: u16, rows: u16, driven_by: Option<&str>) -> Message {
+/// The `{pty_size, driven_by, answered_by}` text frame a viewer receives on attach and on every
+/// change of the size or of the query answerer.
+fn terminal_size_message(decision: &hotsheet_terminals::Decision) -> Message {
     let msg = SizeMsg {
-        pty_size: PtySizeMsg { cols, rows },
-        driven_by,
+        pty_size: PtySizeMsg {
+            cols: decision.cols,
+            rows: decision.rows,
+        },
+        driven_by: decision.driven_by.as_deref(),
+        answered_by: decision.answered_by.as_deref(),
     };
     // Serializing two integers and an optional string cannot fail.
     Message::Text(serde_json::to_string(&msg).unwrap_or_default().into())
@@ -191,13 +202,7 @@ async fn outbound_messages(outbound: Outbound, replay: ReplayOptions) -> Vec<Mes
         Outbound::Frame(ViewerFrame::Replace { data, position }) => {
             replay_messages(replay, ReplayKind::Replace, data, position).await
         }
-        Outbound::Frame(ViewerFrame::Size(d)) => {
-            vec![terminal_size_message(
-                d.cols,
-                d.rows,
-                d.driven_by.as_deref(),
-            )]
-        }
+        Outbound::Frame(ViewerFrame::Size(d)) => vec![terminal_size_message(&d)],
         Outbound::LivenessHello => vec![terminal_liveness_hello()],
     }
 }
@@ -274,15 +279,7 @@ async fn terminal_attach_loop(
     // learn the PTY grid. Report the applied size right after the replay (HS2-7Y1BQ2); the size
     // receiver is already subscribed, so a concurrent change still arrives after this frame.
     if let Some(current) = term.current_size() {
-        if socket
-            .send(terminal_size_message(
-                current.cols,
-                current.rows,
-                current.driven_by.as_deref(),
-            ))
-            .await
-            .is_err()
-        {
+        if socket.send(terminal_size_message(&current)).await.is_err() {
             return;
         }
     }
@@ -342,6 +339,7 @@ async fn terminal_attach_loop(
                                     focus: r.focus,
                                     visible: r.visible,
                                     interacting: r.interacting,
+                                    answers_queries: r.answers_queries,
                                     activity_at_ms: now,
                                 },
                                 now,
@@ -425,8 +423,8 @@ async fn pump_broker_output(
                         return;
                     }
                 }
-                Ok(Some(S::Size { cols, rows, driven_by })) => {
-                    let size = ViewerFrame::Size(hotsheet_terminals::Decision { cols, rows, driven_by });
+                Ok(Some(S::Size { cols, rows, driven_by, answered_by })) => {
+                    let size = ViewerFrame::Size(hotsheet_terminals::Decision { cols, rows, driven_by, answered_by });
                     if pending.flush(&frames).await.is_err() || frames.send(size.into()).await.is_err() {
                         return;
                     }
@@ -492,6 +490,7 @@ async fn broker_attach_loop(
                                     focus: r.focus,
                                     visible: r.visible,
                                     interacting: r.interacting,
+                                    answers_queries: r.answers_queries,
                                 })
                                 .await
                         }

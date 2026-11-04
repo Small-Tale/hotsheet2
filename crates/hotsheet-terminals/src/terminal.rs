@@ -340,6 +340,15 @@ impl OutputReplay {
     }
 }
 
+/// What one arbiter pass asks the terminal to do.
+enum Decided {
+    /// Resize the PTY and broadcast the decision.
+    Resize(Decision),
+    /// Broadcast the unchanged applied size because the query answerer changed (HS2-0GZZHV).
+    Notice(Decision),
+    Nothing,
+}
+
 /// A running PTY terminal.
 pub struct Terminal {
     kind: TerminalKind,
@@ -676,22 +685,33 @@ impl Terminal {
     /// changed, resize the PTY and broadcast the decision to all viewers. Returns the decision
     /// when a resize happened. `now_ms` is the injected clock (real millis from the caller).
     pub fn claim_size(&self, claim: ViewportClaim, now_ms: u64) -> Option<Decision> {
-        let decision = {
+        let decided = {
             let mut s = self.sizer.lock_or_recover();
             s.upsert(claim, now_ms);
-            s.decide(now_ms)
+            Self::decide_or_notice(&mut s, now_ms)
         };
-        self.apply_size(decision)
+        self.apply_size(decided)
     }
 
     /// A viewport disconnected: drop its claim and recompute (self-heal).
     pub fn drop_viewer(&self, viewer_id: &str, now_ms: u64) -> Option<Decision> {
-        let decision = {
+        let decided = {
             let mut s = self.sizer.lock_or_recover();
             s.remove(viewer_id);
-            s.decide(now_ms)
+            Self::decide_or_notice(&mut s, now_ms)
         };
-        self.apply_size(decision)
+        self.apply_size(decided)
+    }
+
+    /// Decide the PTY size; when nothing resizes but the query answerer changed, the applied
+    /// size naming the new answerer to broadcast instead (HS2-0GZZHV).
+    fn decide_or_notice(s: &mut SizeArbiter, now_ms: u64) -> Decided {
+        match s.decide(now_ms) {
+            Some(decision) => Decided::Resize(decision),
+            None => s
+                .answerer_notice()
+                .map_or(Decided::Nothing, Decided::Notice),
+        }
     }
 
     /// Set the per-terminal sizing policy (focus-follows | smallest | largest | pinned).
@@ -714,11 +734,23 @@ impl Terminal {
         self.size_tx.subscribe()
     }
 
-    fn apply_size(&self, decision: Option<Decision>) -> Option<Decision> {
-        if let Some(d) = &decision {
-            let _ = self.resize(d.rows, d.cols);
-            let _ = self.size_tx.send(d.clone());
-        }
+    fn apply_size(&self, decided: Decided) -> Option<Decision> {
+        let decision = match decided {
+            Decided::Resize(d) => {
+                // Announce before resizing: the program's reaction to SIGWINCH (often a cursor
+                // position query) must reach each viewer after the frame naming the new answerer,
+                // or the old driver answers it too (HS2-0GZZHV).
+                let _ = self.size_tx.send(d.clone());
+                let _ = self.resize(d.rows, d.cols);
+                Some(d)
+            }
+            // Same size, new answerer: every viewer learns who answers queries now.
+            Decided::Notice(d) => {
+                let _ = self.size_tx.send(d);
+                None
+            }
+            Decided::Nothing => None,
+        };
         self.schedule_trailing_resize();
         decision
     }
@@ -751,8 +783,10 @@ impl Terminal {
                     let (decision, next) =
                         sizer.with_lock(|s| (s.decide(wall_ms()), s.deferred_until()));
                     if let Some(d) = decision {
-                        let _ = resize_pty(&master, d.rows, d.cols);
+                        // Announce first, as in `apply_size` (HS2-0GZZHV).
+                        let (rows, cols) = (d.rows, d.cols);
                         let _ = size_tx.send(d);
+                        let _ = resize_pty(&master, rows, cols);
                     }
                     due = next;
                 }
@@ -1036,6 +1070,7 @@ mod tests {
             focus: true,
             visible: true,
             interacting: false,
+            answers_queries: true,
             activity_at_ms: wall_ms(),
         };
         assert!(term.claim_size(claim(100, 40), wall_ms()).is_some());
@@ -1077,6 +1112,7 @@ mod tests {
             focus: true,
             visible: true,
             interacting,
+            answers_queries: true,
             activity_at_ms: wall_ms(),
         };
         assert!(
@@ -1106,6 +1142,49 @@ mod tests {
         );
         std::thread::sleep(std::time::Duration::from_millis(250));
         assert!(sizes.try_recv().is_err(), "one takeover, no repeats");
+        let _ = term.kill();
+    }
+
+    /// HS2-0GZZHV: an answerer change that resizes nothing is still broadcast, once, so the new
+    /// answerer starts replying to the program's queries and the old one stops.
+    #[test]
+    fn an_answerer_change_without_a_resize_is_broadcast_once() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        let mut sizes = term.subscribe_size();
+        let claim = |viewer: &str, interacting| ViewportClaim {
+            viewer_id: viewer.into(),
+            cols: 120,
+            rows: 40,
+            focus: true,
+            visible: true,
+            interacting,
+            answers_queries: true,
+            activity_at_ms: wall_ms(),
+        };
+        assert!(term.claim_size(claim("desk", true), wall_ms()).is_some());
+        let first = sizes.blocking_recv().expect("the desk size");
+        assert_eq!(first.answered_by.as_deref(), Some("desk"));
+        assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
+        assert!(
+            sizes.try_recv().is_err(),
+            "a passive arrival changes nothing"
+        );
+        assert!(term.drop_viewer("desk", wall_ms()).is_none(), "no resize");
+        let notice = sizes.blocking_recv().expect("the answerer notice");
+        assert_eq!(
+            (
+                notice.cols,
+                notice.rows,
+                notice.driven_by,
+                notice.answered_by.as_deref()
+            ),
+            (120, 40, None, Some("phone"))
+        );
+        assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert!(sizes.try_recv().is_err(), "announced once");
         let _ = term.kill();
     }
 
