@@ -20,7 +20,6 @@ import {
   type TerminalPasteDetail,
   type TerminalReadTextDetail,
 } from './terminal-clipboard';
-import { TERMINAL_GRID_PHONE_BREAKPOINT } from './terminal-grid-layout';
 import {
   applyTerminalModifiersToText,
   encodeTerminalKey,
@@ -573,8 +572,8 @@ function initializeTerminalViewport(
   // must NOT advance the arbiter's recency, so one device's heartbeats can't steal size control
   // from the device the user last touched (HS2-3ZBQDG).
   const claim = () => {
-    // The visible tile owns this viewport while the drawer is hidden. It claims its fitted grid
-    // through the same arbiter as a dedicated terminal, so the TUI can use the whole tile.
+    // The visible tile owns this viewport while the drawer is hidden. It claims the 80×24 grid
+    // through the same arbiter as a dedicated terminal and scales it to the card (HS2-JQCGQF).
     const sizingFocus = claimsSizing() && (!tiled || tileCanClaim),
       claimVisible = visible && (!tiled || tileCanClaim);
     element.dataset.sizingFocus = String(sizingFocus);
@@ -583,8 +582,9 @@ function initializeTerminalViewport(
     if (!fixedPresentation() && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const size = claimDimensions(),
       // A viewport the user just opened (a tap or click that mounted it) takes PTY sizing with its first
-      // eligible claim; a passive mount, a reconnect, or a later claim does not (HS2-1YX5VS).
-      interacting = terminalGestureClaimDue(gestureClaim, Date.now(), sizingFocus && claimVisible);
+      // eligible claim; a passive mount, a reconnect, or a later claim does not (HS2-1YX5VS). An inert
+      // grid tile is never interacted with, so its 80×24 claim stays passive (HS2-JQCGQF).
+      interacting = !tiled && terminalGestureClaimDue(gestureClaim, Date.now(), sizingFocus && claimVisible);
     if (interacting) gestureClaim = undefined;
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, interacting));
   };
@@ -718,7 +718,7 @@ function initializeTerminalViewport(
       applyDashboardPhysicalFill();
     });
   };
-  // A tiled emulator fits the PTY to its frame, then centers any remainder left by whole cells.
+  // A tiled emulator scales its 80×24 screen (or a mirrored PTY grid) into its frame and centers it.
   const layoutTile = () => {
     if (!tiled || disposed || !terminal.element) return;
     if (
@@ -761,27 +761,10 @@ function initializeTerminalViewport(
     if (tiled) {
       const frame = element.parentElement;
       if (!frame || !frame.clientWidth || !frame.clientHeight) return;
-      // FitAddon measures its terminal root's parent, which is this viewport. Give it the
-      // tile's actual size before restoring the screen-sized, centered presentation.
-      element.style.transform = '';
-      element.style.width = `${frame.clientWidth}px`;
-      element.style.height = `${frame.clientHeight}px`;
-      const size = fit.proposeDimensions();
-      if (!size) return;
-      // A phone Workspace Grid always shows the same 80×24 PTY as its fixed dashboard
-      // cards, even when this instance moved here from the dedicated drawer. Scale the
-      // grid into the tile instead of shrinking the PTY to the phone card's cell count.
-      const phoneWorkspaceTile =
-        window.innerWidth <= TERMINAL_GRID_PHONE_BREAKPOINT &&
-        Boolean(element.closest('.terminal-dashboard[data-layout-mode="responsive"]'));
-      // Outside the phone Workspace Grid, a very small tile cannot host a usable TUI grid;
-      // mirror the existing PTY there.
-      const sizing = terminalTileSizing(
-        size,
-        serverSize,
-        { cols: terminal.cols, rows: terminal.rows },
-        phoneWorkspaceTile,
-      );
+      // Every grid tile shows the same 80×24 PTY as its fixed dashboard preview, at the
+      // dashboard font, and scales that grid into the card instead of shrinking the PTY to
+      // the card's cell count (HS2-JQCGQF).
+      const sizing = terminalTileSizing();
       tileCanClaim = sizing.canClaim;
       tileGridSize = sizing.grid;
       resizeTerminalPreservingScroll(terminal, tileGridSize.cols, tileGridSize.rows);
@@ -1132,7 +1115,7 @@ function initializeTerminalViewport(
     element.removeEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
   });
   // One emulator per terminal (HS2-EYD24K): the owner moves this dedicated viewport into a grid tile and
-  // back. In a tile the emulator keeps its socket and scrollback, and fits its PTY grid to the frame.
+  // back. In a tile the emulator keeps its socket and scrollback, and scales an 80×24 grid to the frame.
   const tileStyles = ['inset', 'width', 'height', 'overflow', 'transform', 'transformOrigin'] as const;
   const present = (event: Event) => {
     const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
@@ -1152,6 +1135,8 @@ function initializeTerminalViewport(
       if (tile) {
         tileGridSize = undefined;
         tileCanClaim = false;
+        // Opening a grid is not opening this terminal: a tile spends no mount gesture (HS2-JQCGQF).
+        gestureClaim = undefined;
         element.dataset.geometryReady = 'false';
         if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
         fitFrame = undefined;
@@ -1173,9 +1158,26 @@ function initializeTerminalViewport(
         element.style.inset = '0 auto auto 0';
         element.style.overflow = 'hidden';
         element.style.transformOrigin = 'top left';
+        // The tile renders the 80×24 grid at the dashboard preview's font and line height, so
+        // its natural screen has the preview's proportions and fills the card (HS2-JQCGQF).
+        terminal.options.fontSize = TERMINAL_DASHBOARD_FONT_SIZE;
+        terminal.options.lineHeight = TERMINAL_DASHBOARD_LINE_HEIGHT;
+        element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
+        element.dataset.letterSpacing = '0';
+        element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
+        delete element.dataset.containmentRows;
       } else {
         tileGridSize = undefined;
         tileCanClaim = false;
+        // Restore the drawer's own font; the next geometry pass refits the drawer grid (or the
+        // magnified pass fits its font) and claims that size (HS2-JQCGQF).
+        terminal.options.fontSize = initialFixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12;
+        terminal.options.lineHeight = initialFixedGrid ? TERMINAL_DASHBOARD_LINE_HEIGHT : 1;
+        if (!initialFixedGrid) {
+          delete element.dataset.fontSize;
+          delete element.dataset.letterSpacing;
+          delete element.dataset.lineHeight;
+        }
         for (const property of tileStyles) element.style[property] = '';
         element.inert = false;
         element.removeAttribute('aria-hidden');

@@ -698,6 +698,11 @@ available, open an AI chat in the terminal drawer and in the conversation dialog
 - With two live terminals on a physical phone, including one first opened in the drawer, open the Workspace Grid. Confirm that one full-width 80×24 preview appears per row, that both terminals remain reachable by vertical scrolling, and that tapping a card still opens the magnified terminal. The drawer terminal must keep an 80×24 PTY claim while shown in the phone grid.
 - Zoom out to two cards across, reload, and confirm the phone preference persists. Zoom back in; switch to a desktop viewport and confirm its grid fit is independent.
 
+## Grid tiles claim scaled 80×24 (HS2-JQCGQF)
+
+- Run Claude Code (or another full-screen TUI) in a drawer terminal, then show the drawer project grid and the Workspace Grid on a desktop window. Confirm the tile shows a full 80-column, 24-row screen scaled to the card and that the TUI does not truncate its own lines.
+- Return to the drawer tab and confirm the TUI reflows to the drawer's full width and height.
+
 ## Rulesync local policy migration review
 
 Follow `guidance/rulesync/README.md` with a disposable copy of a real project that has

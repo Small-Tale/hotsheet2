@@ -6621,7 +6621,14 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
           socket.sent
             .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
             .map(
-              (value) => JSON.parse(value).resize as { cols: number; rows: number; focus: boolean; visible: boolean },
+              (value) =>
+                JSON.parse(value).resize as {
+                  cols: number;
+                  rows: number;
+                  focus: boolean;
+                  visible: boolean;
+                  interacting: boolean;
+                },
             ),
         );
       }, terminalId);
@@ -6642,7 +6649,14 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   });
   const socketsBeforeSwitch = (await claimsFor('codex-main')).length;
   const dedicatedClaimsBeforeSwitch = (await claimsFor('codex-main')).at(-1) ?? [];
-  expect(dedicatedClaimsBeforeSwitch.map(({ cols, rows }) => `${cols}x${rows}`)).not.toContain('80x24');
+  // The drawer opens on its project grid, where this terminal cold-mounts as a visible live tile
+  // (HS2-QV814W) and passively claims its scaled 80×24 (HS2-JQCGQF). Only the drawer's fitted size
+  // may be claimed as an interaction, and the drawer claims it once the tab shows the session.
+  const sized = (claim: { cols: number; rows: number }) => `${claim.cols}x${claim.rows}`,
+    tileClaimCount = dedicatedClaimsBeforeSwitch.findIndex((claim) => sized(claim) !== '80x24');
+  expect(tileClaimCount).toBeGreaterThanOrEqual(0);
+  expect(dedicatedClaimsBeforeSwitch.slice(0, tileClaimCount).every((claim) => !claim.interacting)).toBe(true);
+  expect(dedicatedClaimsBeforeSwitch.slice(tileClaimCount).map(sized)).not.toContain('80x24');
   const dedicatedClaimCountBeforeSwitch = dedicatedClaimsBeforeSwitch.length,
     dedicatedSizeBeforeSwitch = `${dedicatedClaimsBeforeSwitch.at(-1)?.cols}x${dedicatedClaimsBeforeSwitch.at(-1)?.rows}`;
 
@@ -6671,9 +6685,7 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   await expect(retained).not.toHaveAttribute('data-grid-size', '80x24');
   expect(await retained.evaluate((element) => '__hs2RetainedTerminal' in element)).toBe(true);
   expect((await claimsFor('codex-main')).length).toBe(socketsBeforeSwitch);
-  expect(((await claimsFor('codex-main')).at(-1) ?? []).map(({ cols, rows }) => `${cols}x${rows}`)).not.toContain(
-    '80x24',
-  );
+  expect(((await claimsFor('codex-main')).at(-1) ?? []).slice(tileClaimCount).map(sized)).not.toContain('80x24');
   await page.screenshot({ path: 'target/visual-captures/hs2-v93pyf-terminal-retained-after.png', fullPage: true });
 });
 

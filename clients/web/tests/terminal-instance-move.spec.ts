@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { ticketsJson } from './ticket-page-fixture';
 
@@ -116,6 +116,64 @@ const socketsFor = (page: Page, id: string) =>
     id,
   );
 
+type MoveSocket = { url: string; sent: unknown[]; dispatchEvent: (event: Event) => boolean };
+type ResizeClaim = { viewer_id: string; cols: number; rows: number; focus: boolean; visible: boolean };
+
+/** The newest PTY sizing claim the page sent on `id`'s socket. */
+const latestClaim = (page: Page, id: string) =>
+  page.evaluate((terminalId) => {
+    const claims = ((window as unknown as { __moveSockets?: MoveSocket[] }).__moveSockets ?? [])
+      .filter((socket) => socket.url.includes(`/terminals/${terminalId}/`))
+      .flatMap((socket) => socket.sent)
+      .filter((value): value is string => typeof value === 'string' && value.startsWith('{"resize"'))
+      .map((value) => (JSON.parse(value) as { resize: ResizeClaim }).resize);
+    return claims.at(-1);
+  }, id);
+
+/** Reports a PTY size from the server, as the arbiter does after a claim (`drivenBy` names the driver). */
+const reportSize = (page: Page, id: string, cols: number, rows: number, drivenBy: string) =>
+  page.evaluate(
+    ({ terminalId, cols, rows, drivenBy }) => {
+      for (const socket of ((window as unknown as { __moveSockets?: MoveSocket[] }).__moveSockets ?? []).filter(
+        (candidate) => candidate.url.includes(`/terminals/${terminalId}/`),
+      ))
+        socket.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols, rows }, driven_by: drivenBy }) }),
+        );
+    },
+    { terminalId: id, cols, rows, drivenBy },
+  );
+
+/** The `{cols, rows}` of a `data-grid-size` value. */
+const claimOf = (grid: string) => {
+  const [cols, rows] = grid.split('x').map(Number);
+  return { cols, rows };
+};
+
+/**
+ * A live instance in a grid tile renders and claims the scaled 80×24 grid, never a small fitted PTY
+ * (HS2-JQCGQF). Its screen stays inside the card and fills it along one axis.
+ */
+async function expectScaled80x24Tile(page: Page, tile: Locator, id: string) {
+  const viewport = tile.locator('[data-presentation="tile"]');
+  await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+  await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+  await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
+  await expect(viewport).toHaveAttribute('data-font-size', '24');
+  await expect.poll(async () => (await latestClaim(page, id)) ?? null).toMatchObject({ cols: 80, rows: 24 });
+  await expect
+    .poll(() =>
+      viewport.evaluate((element) => {
+        const frame = element.parentElement!.getBoundingClientRect(),
+          screen = element.querySelector('.xterm-screen')!.getBoundingClientRect(),
+          width = screen.width / frame.width,
+          height = screen.height / frame.height;
+        return width <= 1.01 && height <= 1.01 && Math.max(width, height) > 0.95;
+      }),
+    )
+    .toBe(true);
+}
+
 /** Tags the live emulator of `id` wherever it is, and reports where it sits. */
 function emulatorOf(page: Page, id: string) {
   return page.evaluate((terminalId) => {
@@ -153,6 +211,9 @@ for (const width of [1280, 390])
     const [opened] = await emulatorOf(page, 'demo-one'),
       sockets = await socketsFor(page, 'demo-one');
     expect(opened).toMatchObject({ inSession: true, presentation: 'drawer' });
+    await expect(dedicated).toHaveAttribute('data-geometry-ready', 'true');
+    const drawerFit = (await dedicated.getAttribute('data-grid-size'))!;
+    expect(drawerFit).not.toBe('80x24');
 
     for (let round = 0; round < 2; round += 1) {
       // The drawer's project grid shows the same emulator inside the tile, scaled and inert.
@@ -184,6 +245,7 @@ for (const width of [1280, 390])
       expect(placement.inert).toBe(true);
       expect(placement.painted).toBe('visible');
       expect(await socketsFor(page, 'demo-one'), 'no new socket for the tile').toBe(sockets);
+      await expectScaled80x24Tile(page, tile, 'demo-one');
       // Other terminals continue painting; a cold full instance can scroll its initial READY line away.
       await expect(drawer.locator('[data-terminal-key="demo-checkout:demo-two"] .xterm-rows').last()).toContainText(
         'demo-two line 30',
@@ -194,9 +256,12 @@ for (const width of [1280, 390])
           animations: 'disabled',
         });
 
-      // Back to the terminal tab: the drawer takes the same emulator back, with no reconnect.
+      // Back to the terminal tab: the drawer takes the same emulator back, with no reconnect,
+      // and refits and claims its own grid rather than keeping the tile's 80×24 (HS2-JQCGQF).
       await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
       await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+      await expect(dedicated).toHaveAttribute('data-grid-size', drawerFit);
+      await expect.poll(async () => (await latestClaim(page, 'demo-one')) ?? null).toMatchObject(claimOf(drawerFit));
       expect(await emulatorOf(page, 'demo-one')).toEqual([
         { tag: opened.tag, inTile: false, inSession: true, presentation: 'drawer', mode: 'interactive' },
       ]);
@@ -204,43 +269,13 @@ for (const width of [1280, 390])
     }
 
     // The Workspace Grid composition: hide the drawer, and the Workspace Grid tile hosts the instance.
-    const drawerGrid = await dedicated.getAttribute('data-grid-size');
     await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
     await page.getByRole('button', { name: 'Workspace Grid', exact: true }).first().click();
     const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
       workspaceTile = workspace.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:demo-one"]');
     await expect(workspaceTile.locator('[data-presentation="tile"] .xterm-rows')).toContainText('demo-one READY');
-    const workspaceFill = () =>
-      workspaceTile.locator('[data-presentation="tile"]').evaluate((viewport) => {
-        const frame = viewport.parentElement!.getBoundingClientRect(),
-          screen = viewport.querySelector('.xterm-screen')!.getBoundingClientRect();
-        return { width: screen.width / frame.width, height: screen.height / frame.height };
-      });
-    if (width === 1280) {
-      // Three tiles make each frame too small for the minimum 40×12 TUI grid even on desktop, so
-      // the tile mirrors the drawer grid without claiming PTY sizing. Preserve aspect and contain it;
-      // font metrics can leave more letterbox on either axis (HS2-BWSPMJ).
-      const tiledViewport = workspaceTile.locator('[data-presentation="tile"]');
-      await expect(tiledViewport).toHaveAttribute('data-geometry-ready', 'true');
-      await expect(tiledViewport).toHaveAttribute('data-sizing-focus', 'false');
-      await expect(tiledViewport).toHaveAttribute('data-grid-size', drawerGrid!);
-      // The moved viewport may paint before its animation-frame scale settles. Check the final
-      // contained frame rather than passing on an oversized first paint.
-      await expect
-        .poll(async () => {
-          const fill = await workspaceFill();
-          return fill.width <= 1.01 && fill.height <= 1.01 && Math.max(fill.width, fill.height) > 0.9;
-        })
-        .toBe(true);
-    } else {
-      // A phone tile cannot fit a usable TUI grid, so it keeps the legible scaled mirror.
-      await expect
-        .poll(async () => {
-          const fill = await workspaceFill();
-          return fill.width <= 1.01 && fill.height <= 1.01 && Math.max(fill.width, fill.height) > 0.9;
-        })
-        .toBe(true);
-    }
+    // Every width claims the same scaled 80×24 grid, never the tile's small cell count (HS2-JQCGQF).
+    await expectScaled80x24Tile(page, workspaceTile, 'demo-one');
     expect(await emulatorOf(page, 'demo-one')).toEqual([
       { tag: opened.tag, inTile: true, inSession: false, presentation: 'tile', mode: 'interactive' },
     ]);
@@ -260,6 +295,8 @@ for (const width of [1280, 390])
     await expect(workspaceTile.locator('[data-presentation="tile"]')).toHaveCount(1);
     expect((await emulatorOf(page, 'demo-one'))[0].tag).toBe(opened.tag);
     expect(await socketsFor(page, 'demo-one')).toBe(sockets);
+    // Grid to magnified to grid: the tile claims its scaled 80×24 again.
+    await expectScaled80x24Tile(page, workspaceTile, 'demo-one');
     await page.screenshot({
       path: `target/visual-captures/hs2-eyd24k-workspace-grid-tile-${String(width)}.png`,
       animations: 'disabled',
@@ -292,6 +329,8 @@ for (const width of [1280, 390])
     expect(await socketsFor(page, 'demo-three')).toBe(1);
     const first = (await emulatorOf(page, 'demo-one'))[0];
     expect(first).toMatchObject({ inTile: true, presentation: 'tile', mode: 'interactive' });
+    // A cold-mounted full instance claims the same scaled 80×24 grid as a moved one (HS2-JQCGQF).
+    await expectScaled80x24Tile(page, drawer.locator('[data-terminal-key="demo-checkout:demo-one"]'), 'demo-one');
     const firstSockets = await socketsFor(page, 'demo-one');
     const firstTile = drawer.locator('[data-terminal-key="demo-checkout:demo-one"]');
     await firstTile.click();
@@ -346,4 +385,83 @@ for (const width of [1280, 390])
       { ...first, inTile: false, inSession: true, presentation: 'drawer' },
     ]);
     expect(await socketsFor(page, 'demo-one')).toBe(1);
+  });
+
+// HS2-JQCGQF: a drawer terminal moved into the drawer project grid and the Workspace Grid claims a
+// scaled 80×24 PTY at wide, medium, and narrow widths, keeps it across a wide-narrow-wide resize,
+// mirrors another device that takes the size, and refits to the drawer when it returns there.
+for (const width of [1440, 1024, 390])
+  test(`claims a scaled 80x24 grid in every grid tile and refits in the drawer at ${String(width)}px (HS2-JQCGQF)`, async ({
+    page,
+  }) => {
+    await openProject(page, width, ['demo-one', 'demo-two']);
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await expect(drawer).toHaveAttribute('data-mode', 'grid');
+    await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
+    const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-one"]');
+    await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+    await expect(dedicated).toHaveAttribute('data-geometry-ready', 'true');
+    const drawerFit = (await dedicated.getAttribute('data-grid-size'))!;
+    expect(drawerFit).not.toBe('80x24');
+    await expect.poll(async () => (await latestClaim(page, 'demo-one')) ?? null).toMatchObject(claimOf(drawerFit));
+    // The server confirms this viewer as the driver, as the arbiter does after its claim.
+    const viewerId = (await latestClaim(page, 'demo-one'))!.viewer_id;
+    await reportSize(page, 'demo-one', claimOf(drawerFit).cols, claimOf(drawerFit).rows, viewerId);
+
+    // Drawer to drawer project grid to drawer.
+    await drawer.getByRole('button', { name: 'Project Grid' }).click();
+    const drawerTile = drawer.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:demo-one"]');
+    await expectScaled80x24Tile(page, drawerTile, 'demo-one');
+    await reportSize(page, 'demo-one', 80, 24, viewerId);
+    await drawer.screenshot({ path: `target/visual-captures/hs2-jqcgqf-drawer-grid-${String(width)}.png` });
+    await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
+    await expect(dedicated).toHaveAttribute('data-grid-size', drawerFit);
+    await expect(dedicated).not.toHaveAttribute('data-font-size', '24');
+    await expect.poll(async () => (await latestClaim(page, 'demo-one')) ?? null).toMatchObject(claimOf(drawerFit));
+    await reportSize(page, 'demo-one', claimOf(drawerFit).cols, claimOf(drawerFit).rows, viewerId);
+
+    // Drawer to Workspace Grid.
+    await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+    await page.getByRole('button', { name: 'Workspace Grid', exact: true }).first().click();
+    const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
+      workspaceTile = workspace.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:demo-one"]');
+    await expectScaled80x24Tile(page, workspaceTile, 'demo-one');
+    await reportSize(page, 'demo-one', 80, 24, viewerId);
+    await expect(workspaceTile.locator('[data-presentation="tile"]')).toHaveAttribute('data-pty-size', '80x24');
+    await page.screenshot({ path: `target/visual-captures/hs2-jqcgqf-workspace-grid-${String(width)}.png` });
+
+    // Wide to narrow to wide: the tile keeps claiming 80×24 at every width.
+    for (const next of [390, 1440, width]) {
+      await page.setViewportSize({ width: next, height: 900 });
+      await expectScaled80x24Tile(page, workspaceTile, 'demo-one');
+    }
+
+    // Another device takes the size: the tile mirrors that PTY, scaled and contained, and does
+    // not fight it with its own claim.
+    await reportSize(page, 'demo-one', 132, 40, 'other-device');
+    const tiled = workspaceTile.locator('[data-presentation="tile"]');
+    await expect(tiled).toHaveAttribute('data-grid-size', '132x40');
+    await expect(tiled).toHaveAttribute('data-driving', 'false');
+    await expect
+      .poll(() =>
+        tiled.evaluate((element) => {
+          const frame = element.parentElement!.getBoundingClientRect(),
+            screen = element.querySelector('.xterm-screen')!.getBoundingClientRect();
+          return screen.width <= frame.width + 1 && screen.height <= frame.height + 1;
+        }),
+      )
+      .toBe(true);
+    await reportSize(page, 'demo-one', 80, 24, viewerId);
+    await expect(tiled).toHaveAttribute('data-grid-size', '80x24');
+
+    // Workspace Grid back to the drawer: the drawer refits to its own size.
+    await workspaceTile.dblclick();
+    await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+    await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+    await expect(dedicated).not.toHaveAttribute('data-presentation', 'tile');
+    await expect
+      .poll(async () => (await latestClaim(page, 'demo-one')) ?? null)
+      .not.toMatchObject({ cols: 80, rows: 24 });
+    const refit = (await dedicated.getAttribute('data-grid-size'))!;
+    await expect.poll(async () => (await latestClaim(page, 'demo-one')) ?? null).toMatchObject(claimOf(refit));
   });

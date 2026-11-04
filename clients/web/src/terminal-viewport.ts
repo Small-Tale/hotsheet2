@@ -313,18 +313,14 @@ export function terminalDedicatedGridSize(cols: number, rows: number) {
   return { cols: Math.max(1, cols), rows: Math.max(1, rows - 1) };
 }
 
-/** Decide whether a moved drawer instance may claim PTY sizing from its grid tile. */
-export function terminalTileSizing(
-  proposed: { cols: number; rows: number },
-  server: { cols: number; rows: number } | undefined,
-  current: { cols: number; rows: number },
-  phoneWorkspaceTile: boolean,
-): { canClaim: boolean; grid: { cols: number; rows: number } } {
-  if (phoneWorkspaceTile)
-    return { canClaim: true, grid: { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS } };
-  if (proposed.cols >= 40 && proposed.rows >= 12)
-    return { canClaim: true, grid: terminalDedicatedGridSize(proposed.cols, proposed.rows) };
-  return { canClaim: false, grid: server ?? current };
+/**
+ * The PTY grid a live instance claims in grid-tile presentation. Every Workspace Grid and drawer
+ * project grid tile renders and claims the dashboard's 80×24 grid and scales it to its card, at every
+ * viewport width, like the lightweight preview (HS2-JQCGQF). It never fits the tile's cell count: an
+ * 80×24 grid scales to any tile, and a fitted claim shrank the shared PTY to about 47×12.
+ */
+export function terminalTileSizing(): { canClaim: true; grid: { cols: number; rows: number } } {
+  return { canClaim: true, grid: { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS } };
 }
 
 export function terminalViewportClaimsSizing(scaledPreview: boolean, fixedDashboardGrid: boolean): boolean {

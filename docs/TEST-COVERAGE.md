@@ -1659,9 +1659,16 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 ### Phone Workspace Grid fit (HS2-7VV2KN)
 
 - Behavior: Phone widths start with one 80×24 terminal card across; the one-to-three-card phone zoom setting persists without changing desktop grid fit. A dedicated drawer instance moved into the phone Workspace Grid claims the same 80×24 PTY size.
-- Unit: `clients/web/src/terminal-grid-layout.test.ts` checks phone, short-phone, boundary, and desktop layout choices; `clients/web/src/terminal-viewport.test.ts` checks phone fixed, desktop fitted, and too-small mirrored tile sizing.
+- Unit: `clients/web/src/terminal-grid-layout.test.ts` checks phone, short-phone, boundary, and desktop layout choices; `clients/web/src/terminal-viewport.test.ts` checks that every tile claims 80×24 (HS2-JQCGQF).
 - End to end: `clients/web/tests/terminal-feedback.spec.ts` checks rendered 80×24 rows and PTY size, one/two-card zoom and persistence, short viewport, desktop transition, moved drawer instance, and phone/wide captures.
 - Manual: `docs/manual-test-plan.md` checks the grid on a physical phone with more than one live terminal.
+
+### Grid tiles claim scaled 80×24 (HS2-JQCGQF)
+
+- Behavior: A live terminal instance in a Workspace Grid or drawer project grid tile, moved from the drawer or cold-mounted, renders and claims an 80×24 PTY at the dashboard font and scales it to its card at every width. A tile that is not the driver mirrors the reported PTY size. Returning to the drawer restores the drawer font, refits, and claims the drawer size.
+- Unit: `clients/web/src/terminal-viewport.test.ts` pins the 80×24 tile claim; `clients/web/src/terminal-viewport-runtime.test.ts` walks drawer, tile, drawer, magnified, and tile transitions, tiny tiles, repeated moves, the dashboard font switch and restore, and another device's size.
+- End to end: `clients/web/tests/terminal-instance-move.spec.ts` moves a drawer terminal into the drawer project grid and the Workspace Grid at 1440, 1024, and 390 px, checks `data-grid-size="80x24"` and the 80×24 claim, walks wide to narrow to wide, mirrors a second device, and refits in the drawer; it also checks cold-mounted tiles and grid to magnified to grid. `clients/web/tests/terminal-feedback.spec.ts` checks the Nano drawer round trip and the phone tile.
+- Manual: `docs/manual-test-plan.md` checks a real TUI in both grids.
 
 ### Independently linked feedback requests (HS2-W1ENZD)
 

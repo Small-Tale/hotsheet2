@@ -16,6 +16,7 @@ import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from
 const allocated = vi.hoisted(() => ({
   proposed: { cols: 80, rows: 24 },
   openElement: false,
+  fits: [] as Array<{ fit: ReturnType<typeof vi.fn> }>,
   terminals: [] as Array<{
     cols: number;
     rows: number;
@@ -100,6 +101,9 @@ vi.mock('./terminal-theme', () => ({
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     fit = vi.fn();
+    constructor() {
+      allocated.fits.push(this);
+    }
     dispose() {}
     proposeDimensions() {
       return allocated.proposed;
@@ -1756,11 +1760,14 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
     view.flush();
     expect(view.viewport.dataset.presentation).toBe('tile');
-    expect(view.terminal.options.fontSize).toBe(12);
+    // Back in the tile it renders at the dashboard font again (HS2-JQCGQF).
+    expect(view.terminal.options.fontSize).toBe(24);
+    expect(view.terminal.options.lineHeight).toBe(1.085);
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
     view.dispose();
   });
 
-  it('keeps its socket in a tile and claims a usable fitted grid', async () => {
+  it('keeps its socket in a tile and claims a scaled 80x24 grid (HS2-JQCGQF)', async () => {
     const view = mountMovable();
     view.flush();
     view.size(120, 40, 'viewer');
@@ -1773,9 +1780,13 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     expect(view.viewport.inert).toBe(true);
     expect(view.terminal.options.disableStdin).toBe(true);
     expect(view.terminal.blur).toHaveBeenCalled();
+    expect(view.terminal.options.fontSize).toBe(24);
+    expect(view.terminal.options.lineHeight).toBe(1.085);
+    expect(view.viewport.dataset.fontSize).toBe('24');
     view.flush();
-    expect(view.claims().at(-1)).toMatchObject({ focus: true, visible: true, cols: 80, rows: 23 });
-    expect(view.terminal.resize).toHaveBeenCalledWith(80, 23);
+    // 80×24 without a containment row: the tile scales the whole grid into the card.
+    expect(view.claims().at(-1)).toMatchObject({ focus: true, visible: true, cols: 80, rows: 24 });
+    expect(view.terminal.resize).toHaveBeenCalledWith(80, 24);
     // The screen mock has a fixed 800×480 footprint; the browser flow checks real cell geometry.
     expect(view.viewport.dataset.tileScale).toBe('0.5');
     expect(view.viewport.style.transform).toBe('translate(0px, 30px) scale(0.5)');
@@ -1792,6 +1803,10 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
 
     view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
     expect(view.viewport.dataset.presentation).toBeUndefined();
+    // The drawer font returns before the drawer refits its own grid (HS2-JQCGQF).
+    expect(view.terminal.options.fontSize).toBe(12);
+    expect(view.terminal.options.lineHeight).toBe(1);
+    expect(view.viewport.dataset.fontSize).toBeUndefined();
     expect(view.viewport.inert).toBe(false);
     expect(view.viewport.style.transform).toBe('');
     expect(view.viewport.style.width).toBe('');
@@ -1805,7 +1820,7 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     view.dispose();
   });
 
-  it('keeps an unusably narrow tile as a scaled, non-driving mirror', async () => {
+  it('claims 80x24 even in a tile too small to fit a usable grid (HS2-JQCGQF)', async () => {
     const view = mountMovable();
     view.flush();
     view.size(120, 40, 'viewer');
@@ -1813,22 +1828,86 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     allocated.proposed = { cols: 20, rows: 10 };
     view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
     view.flush();
-    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false, cols: 120, rows: 40 });
-    expect([view.terminal.cols, view.terminal.rows]).toEqual([120, 40]);
+    expect(view.claims().at(-1)).toMatchObject({ focus: true, visible: true, cols: 80, rows: 24 });
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
     view.dispose();
   });
 
-  it('lays out a tiny tile before any server size report (HS2-BWSPMJ)', () => {
+  it('lays out a tiny tile at 80x24 before any server size report (HS2-BWSPMJ, HS2-JQCGQF)', () => {
     const view = mountMovable();
     view.flush();
     allocated.proposed = { cols: 20, rows: 10 };
-    const originalGrid = [view.terminal.cols, view.terminal.rows];
     view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
     view.flush();
     expect(view.viewport.dataset.geometryReady).toBe('true');
     expect(view.viewport.style.transform).toBe('translate(0px, 30px) scale(0.5)');
-    expect([view.terminal.cols, view.terminal.rows]).toEqual(originalGrid);
-    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false });
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
+    expect(view.claims().at(-1)).toMatchObject({ focus: true, visible: true, cols: 80, rows: 24 });
+    view.dispose();
+  });
+
+  it('walks drawer, tile, drawer, tile, magnified, tile, drawer with the right claim at each step (HS2-JQCGQF)', async () => {
+    const view = mountMovable();
+    allocated.proposed = { cols: 150, rows: 40 };
+    // A real FitAddon resizes the emulator to the drawer's proposed cell count.
+    allocated.fits.at(-1)!.fit.mockImplementation(() => {
+      Object.assign(view.terminal, { cols: allocated.proposed.cols, rows: allocated.proposed.rows });
+    });
+    view.flush();
+    // The drawer claims its fitted grid minus one containment row.
+    expect(view.claims().at(-1)).toMatchObject({ cols: 150, rows: 39, focus: true, visible: true });
+    view.size(150, 39, 'viewer');
+    await Promise.resolve();
+    for (let round = 0; round < 2; round += 1) {
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+      view.flush();
+      expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, focus: true, visible: true });
+      view.size(80, 24, 'viewer');
+      await Promise.resolve();
+      expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
+      // A repeated presentation event is a no-op that keeps the 80×24 grid.
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+      view.flush();
+      expect([view.terminal.cols, view.terminal.rows]).toEqual([80, 24]);
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+      view.flush();
+      // Back in the drawer it refits to the drawer, not the tile's 80×24.
+      expect(view.terminal.options.fontSize).toBe(12);
+      expect(view.claims().at(-1)).toMatchObject({ cols: 150, rows: 39, focus: true, visible: true });
+      view.size(150, 39, 'viewer');
+      await Promise.resolve();
+    }
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    view.setMagnified(true);
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+    view.flush();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, focus: true, visible: true });
+    view.setMagnified(false);
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    expect(view.terminal.options.fontSize).toBe(24);
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, focus: true, visible: true });
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+    view.flush();
+    expect(view.terminal.options.fontSize).toBe(12);
+    expect(view.claims().at(-1)).toMatchObject({ cols: 150, rows: 39 });
+    view.dispose();
+  });
+
+  it('keeps a tile claim passive even when a user gesture mounted the instance (HS2-JQCGQF, HS2-1YX5VS)', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/150.0', userActivation: { isActive: true } });
+    const view = mountMovable();
+    // Opening a grid mounts its tiles under the user's click; that click did not open this terminal.
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 80, rows: 24, focus: true, visible: true });
+    expect(view.claims().every((claim) => !(claim as { interacting?: boolean }).interacting)).toBe(true);
+    // The tile dropped the mount gesture, so the later drawer claim is passive too; the tab click
+    // itself reaches the arbiter as a DOM interaction.
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+    view.flush();
+    expect(view.claims().every((claim) => !(claim as { interacting?: boolean }).interacting)).toBe(true);
     view.dispose();
   });
 

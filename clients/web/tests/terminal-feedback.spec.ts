@@ -765,17 +765,15 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(dashboardFrames.slice(firstDashboardFrame, readyDashboardFrame).every((frame) => frame?.hidden)).toBe(true);
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]'),
-    // This small tile keeps the drawer's own instance (HS2-EYD24K) as a non-driving mirror.
+    // The tile keeps the drawer's own instance (HS2-EYD24K) and claims a scaled 80×24 PTY, so
+    // Nano redraws at 80×24 instead of the card's small cell count (HS2-JQCGQF).
     assertTiled = async (viewport: typeof dedicated) => {
       await expect(viewport).toHaveAttribute('data-presentation', 'tile');
-      await expect
-        .poll(
-          async () =>
-            (await viewport.getAttribute('data-grid-size')) === (await viewport.getAttribute('data-pty-size')),
-        )
-        .toBe(true);
-      await expect(viewport).toHaveAttribute('data-sizing-focus', 'false');
-      await expect(viewport).toHaveAttribute('data-viewport-visible', 'false');
+      await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+      await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+      await expect.poll(async () => (await latestClaim()) ?? null).toMatchObject({ cols: 80, rows: 24, focus: true });
+      await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
+      await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
       await expect(viewport).toHaveAttribute('data-renderer', 'dom');
       await expect(viewport.locator('canvas')).toHaveCount(0);
       await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
@@ -887,8 +885,8 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   // Evidence: the terminal still renders content (not empty) on a phone-width viewport.
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  // The tile now shows the drawer's own instance (HS2-EYD24K). At phone width it claims
-  // the same fixed 80×24 grid as a fresh Workspace Grid tile (HS2-7VV2KN).
+  // The tile now shows the drawer's own instance (HS2-EYD24K). Like every grid tile it claims
+  // the same fixed 80×24 grid as a fresh Workspace Grid tile (HS2-7VV2KN, HS2-JQCGQF).
   const mobileTile = page
     .getByRole('region', { name: 'Workspace Grid' })
     .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-presentation="tile"]');
@@ -1628,4 +1626,76 @@ test('recovers a drawer terminal whose socket closed on focus, typing, visibilit
   await dedicated.click();
   await page.keyboard.type('echo online');
   await expect.poll(typedOnLiveSocket).toContain('echo online');
+});
+
+// HS2-JQCGQF: a Nano drawer terminal shown in the drawer project grid and the Workspace Grid
+// redraws at a scaled 80×24 in each tile at wide, medium, and narrow widths, and reflows to the
+// drawer's own size when it returns there. The captures are the ticket's after evidence.
+test('shows a moved Nano terminal at scaled 80x24 in both grids across widths (HS2-JQCGQF)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  await expect(dedicated).toHaveAttribute('data-geometry-ready', 'true');
+  await expect
+    .poll(
+      async () => (await dedicated.getAttribute('data-pty-size')) === (await dedicated.getAttribute('data-grid-size')),
+    )
+    .toBe(true);
+  const drawerGrid = (await dedicated.getAttribute('data-grid-size'))!;
+  expect(drawerGrid).not.toBe('80x24');
+  const expect80x24 = async (tile: import('@playwright/test').Locator) => {
+    const viewport = tile.locator('[data-presentation="tile"]');
+    await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
+    await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+    await expect(viewport.locator('.xterm-rows')).toContainText('80 columns × 24 rows');
+    await expect
+      .poll(() =>
+        viewport.evaluate((element) => {
+          const frame = element.parentElement!.getBoundingClientRect(),
+            screen = element.querySelector('.xterm-screen')!.getBoundingClientRect(),
+            width = screen.width / frame.width,
+            height = screen.height / frame.height;
+          return width <= 1.01 && height <= 1.01 && Math.max(width, height) > 0.95;
+        }),
+      )
+      .toBe(true);
+  };
+  const walkWidths = async (name: string, tile: import('@playwright/test').Locator) => {
+    for (const [step, width] of [1440, 1024, 390, 1440].entries()) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect80x24(tile);
+      await page.screenshot({
+        path: `target/visual-captures/hs2-jqcgqf-${name}-${String(step + 1)}-${String(width)}-after.png`,
+        animations: 'disabled',
+      });
+    }
+  };
+
+  await drawer.getByRole('button', { name: 'Project Grid' }).click();
+  const drawerTile = drawer.locator(
+    '[data-component="terminal-tile"][data-terminal-key="terminal-feedback:terminal-new"]',
+  );
+  await walkWidths('drawer-grid', drawerTile);
+  await drawer.getByRole('tab', { name: 'Terminal New', exact: true }).click();
+  await expect(dedicated).toHaveAttribute('data-grid-size', drawerGrid);
+  await expect(dedicated).toHaveAttribute('data-pty-size', drawerGrid);
+
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
+    workspaceTile = workspace.locator('[data-terminal-key="terminal-feedback:terminal-new"]');
+  await walkWidths('workspace-grid', workspaceTile);
+  await workspaceTile.dblclick();
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+  await expect(dedicated).toHaveAttribute('data-grid-size', drawerGrid);
+  await expect(dedicated).toHaveAttribute('data-pty-size', drawerGrid);
+  await expect(dedicated.locator('.xterm-rows')).toContainText(`${drawerGrid.replace('x', ' columns × ')} rows`);
 });

@@ -3277,9 +3277,10 @@ is constructed, then a single uniform physical scale fits it to the available pr
 changing rows, columns, or glyph proportions. At phone
 viewport widths of 600px or less, the Workspace Grid defaults to one card across so the scaled
 80×24 preview fills the available width. Its one-to-three-card zoom preference persists
-separately from the desktop across and short-layout high preferences. A dedicated drawer
-terminal moved into a phone Workspace Grid tile also renders and claims 80×24 rather than
-shrinking the PTY to the tile's fitted cell count (HS2-7VV2KN).
+separately from the desktop across and short-layout high preferences. A live drawer
+terminal shown in any Workspace Grid or drawer project grid tile also renders and claims 80×24,
+scaled to its card, rather than shrinking the PTY to the tile's fitted cell count (HS2-7VV2KN,
+HS2-JQCGQF).
 Magnified interactive terminals first fit their font
 metrics to the available modal frame while keeping the same 80×24 rows and columns. Magnifying a grid tile
 keeps the 80×24 contract in its larger interactive frame. On desktop that card is the largest
@@ -3763,17 +3764,24 @@ tiles cold-mount, at the existing progressive pace of two per turn.
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 
-- **Size:** a tile with room for at least 40 columns and 12 rows fits its own PTY grid and
-  claims that size; moving a wide drawer terminal into a tall Workspace Grid tile then lets
-  the TUI use the tile's height. Smaller tiles mirror the existing PTY grid instead.
-- **Scale:** the fitted emulator is uniformly scaled to the tile's whole-cell remainder;
-  small tiles keep the existing letterboxed mirror, including before the server reports a PTY size.
+- **Size:** at every viewport width, the instance renders the dashboard's 80×24 grid at the
+  dashboard font and line height, like the lightweight preview, and claims 80×24. It never fits
+  the tile's own cell count: a fitted claim shrank the shared PTY to about 47×12 for a desktop
+  card, and every other viewer then showed that small grid (HS2-JQCGQF).
+- **Scale:** the 80×24 screen is uniformly scaled and centered in the card, so it fills the card
+  along one axis. Before its first geometry pass, and while another viewer drives the PTY, the
+  tile shows the reported PTY grid scaled and contained the same way.
 - **Input and focus:** the instance is `inert`, input is disabled, and its scrollbar is hidden.
-- **Sizing:** a usable visible tile claims its fitted size through the normal sizing arbiter.
-  A tile too small for a usable grid reports `visible:false` and cannot resize the PTY.
+- **Sizing:** a visible tile claims 80×24 through the normal sizing arbiter. The claim is
+  always passive, even for a tile mounted by the click that opened its grid: a tile is inert, and
+  opening a grid is not opening that terminal, so the tile drops the mount gesture (HS2-JQCGQF).
+  It takes effect only when this viewer is the last human-interacted one (a moved drawer instance
+  keeps its viewer and therefore its authority; HS2-1YX5VS). Otherwise the tile mirrors the
+  driver's size.
 - **Resources:** it holds no WebGL context.
 
-Returning to the drawer refits the instance. If the drawer and a tile both
+Returning to the drawer restores the drawer font, refits the instance, and claims the drawer's
+fitted size. If the drawer and a tile both
 ask for the instance in one pass, the drawer wins. A tile still on screen while the drawer shows the
 terminal falls back to its lightweight preview. A tile that leaves the page parks the instance
 again.
