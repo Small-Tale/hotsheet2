@@ -25786,13 +25786,55 @@ async fn a_restarted_server_releases_the_claims_of_drives_the_last_run_left_open
     );
 }
 
+/// Wait up to 10 s for a terminal's scrollback to show `needle`.
+async fn scrollback_shows(app: &axum::Router, id: &str, needle: &str) -> bool {
+    for _ in 0..100 {
+        let info = body_json(
+            app.clone()
+                .oneshot(authed("GET", &format!("/terminals/{id}"), None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if info["scrollback"]
+            .as_str()
+            .is_some_and(|text| text.contains(needle))
+        {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    false
+}
+
+/// Type `data` into a terminal.
+async fn terminal_input(app: &axum::Router, id: &str, data: &str) {
+    let body = serde_json::json!({ "data": data }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/terminals/{id}/input"),
+            Some(&body),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+}
+
 /// Run a command in a shell terminal and check that a claim its session takes meanwhile is
 /// released when the command exits back to the prompt, while the shell stays open.
+///
+/// HS2-C2886C: each step waits on terminal output, not elapsed time. The command blocks on
+/// `head -n 1` until the test sends it a line, so a slow store write while recording a claim
+/// can no longer let the command finish first. The shell builds each marker, so the
+/// terminal's echo of the typed command never matches it.
 async fn a_finished_foreground_command_releases_claims(
     app: axum::Router,
     store: &FsStore,
     id: &str,
 ) {
+    let worker = format!("terminal-{id}");
     let body = serde_json::json!({"command": "/bin/sh", "args": ["-i"], "id": id});
     let resp = app
         .clone()
@@ -25800,32 +25842,45 @@ async fn a_finished_foreground_command_releases_claims(
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
-    let before = claimed_by(store, &format!("terminal-{id}"));
+    terminal_input(&app, id, "echo prompt-$((40 + 2))\n").await;
+    assert!(
+        scrollback_shows(&app, id, "prompt-42").await,
+        "the shell runs commands"
+    );
+    let before = claimed_by(store, &worker);
+    // Long enough for the session watcher (500 ms) to sample the idle prompt more than once.
     tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
     assert!(
         claim_holder(store, &before).is_some(),
         "an idle prompt does not release"
     );
 
-    // An AI tool stand-in: a command that holds the foreground for a while, then exits.
-    let resp = app
-        .clone()
-        .oneshot(authed(
-            "POST",
-            &format!("/terminals/{id}/input"),
-            Some(r#"{"data":"sleep 2\n"}"#),
-        ))
-        .await
-        .unwrap();
-    assert!(resp.status().is_success());
-    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
-    let during = claimed_by(store, &format!("terminal-{id}"));
-    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    // An AI tool stand-in: a foreground job that announces itself, then holds the foreground
+    // until the test sends it a line.
+    terminal_input(
+        &app,
+        id,
+        "sh -c 'echo command-$0; exec head -n 1' running\n",
+    )
+    .await;
+    assert!(
+        scrollback_shows(&app, id, "command-running").await,
+        "the command starts"
+    );
+    let during = claimed_by(store, &worker);
+    // The command cannot exit before the line below, so this hold has no race; it gives the
+    // watcher time to observe the running command before it finishes.
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
     assert!(
         claim_holder(store, &during).is_some(),
         "a running command keeps its claims"
     );
+    assert!(
+        claim_holder(store, &before).is_some(),
+        "a running command keeps earlier claims"
+    );
+
+    terminal_input(&app, id, "done\n").await;
     assert!(released_eventually(store, &during).await);
     assert_eq!(claim_holder(store, &before), None);
     let info = body_json(
@@ -25843,7 +25898,8 @@ async fn a_finished_foreground_command_releases_claims(
 }
 
 #[cfg(unix)]
-#[tokio::test]
+// HS2-C2886C: the session watcher must not wait behind the test's blocking store writes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_shell_terminal_releases_claims_when_its_foreground_command_exits() {
     let (dir, st) = state();
     let store = FsStore::open(dir.path()).unwrap();
@@ -25851,7 +25907,8 @@ async fn a_shell_terminal_releases_claims_when_its_foreground_command_exits() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+// HS2-C2886C: the session watcher must not wait behind the test's blocking store writes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_broker_shell_terminal_releases_claims_when_its_foreground_command_exits() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 
