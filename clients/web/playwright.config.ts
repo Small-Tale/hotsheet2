@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { defineConfig } from '@playwright/test';
 
+import { playwrightServerPort } from './scripts/playwright-port.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
 import { isolateAiToolProbes } from './scripts/test-ai-tool-isolation.mjs';
 import { playwrightRetries, quarantineGrepInvert } from './src/test-quarantine';
@@ -14,9 +15,9 @@ lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 // Fixture servers and CLIs inherit this and never run installed AI tools (HS2-F6R2HQ).
 isolateAiToolProbes();
 
-const port = Number(process.env.HOTSHEET_WEB_TEST_PORT ?? 4176);
-// Readiness must prove this run's own Vite answers, never another worktree's server on the same port
-// (HS2-BJ00D1); concurrent runs still choose distinct ports with HOTSHEET_WEB_TEST_PORT.
+// A free port per run unless HOTSHEET_WEB_TEST_PORT names one; workers inherit the runner's choice
+// (HS2-6WH4PQ). Readiness still proves this run's own Vite answers (HS2-BJ00D1).
+const port = playwrightServerPort(process.env);
 const serverId = randomUUID();
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));
 // Legacy visual captures remain easy to inspect, with portable package-relative paths.

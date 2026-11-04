@@ -1272,15 +1272,16 @@ which uses real captured runner output and spawns real processes; CI runs it in 
 
 ### 12.7.10 Concurrent browser runs (HS2-BJ00D1)
 
-Every Playwright run in `clients/web` starts its own Vite dev server on
-`HOTSHEET_WEB_TEST_PORT` (default 4176), with `reuseExistingServer: false` and a fresh
-Vite cache directory. Workers that verify in separate worktrees at the same time give each run
-a distinct port:
+Every Playwright run in `clients/web` starts its own Vite dev server, with
+`reuseExistingServer: false` and a fresh Vite cache directory. Without
+`HOTSHEET_WEB_TEST_PORT`, the runner picks a free loopback port once and records it in its
+environment, so its workers reuse it and concurrent runs in any worktree never collide
+(HS2-6WH4PQ, `scripts/playwright-port.mjs`). Set the variable only to pin a port:
 
 ```sh
 cd <worktree>/clients/web
-HOTSHEET_WEB_TEST_PORT=<unused port> npx playwright test <specs> --retries=0
-# or: HOTSHEET_WEB_TEST_PORT=<unused port> node ../../scripts/test-quiet.mjs web-e2e -- <specs>
+npx playwright test <specs> --retries=0
+# pinned: HOTSHEET_WEB_TEST_PORT=<port> node ../../scripts/test-quiet.mjs web-e2e -- <specs>
 ```
 
 Each run also passes its own random `HOTSHEET_WEB_TEST_SERVER_ID` to its Vite child and waits
