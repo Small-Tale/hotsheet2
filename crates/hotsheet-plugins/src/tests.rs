@@ -439,7 +439,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
         ))
     );
     assert!(worker.contains("<!-- hotsheet-skill-version: 47 -->")); // HS2-EJ8JTG
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 19 -->")); // HS2-V9BXWF
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 20 -->")); // HS2-BAK4BC
+    assert!(flatten(integrator).contains("A `blocked_reason` does not refuse the claim")); // HS2-BAK4BC
     assert!(
         flatten(integrator).contains("Retire them in one step with `coordination retire-finished`")
     ); // HS2-V9BXWF

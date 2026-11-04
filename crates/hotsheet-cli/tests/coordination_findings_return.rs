@@ -1,4 +1,6 @@
 //! HS2-AEBJYN: actual claim/release and findings correction loops, with prior code CI retained.
+//! HS2-BAK4BC: explicit claims take blocked tickets and print the reason to re-evaluate,
+//! claim-next still skips them, and a findings handoff on a blocked ticket is verified.
 #[path = "support/coordination.rs"]
 mod support;
 
@@ -254,5 +256,177 @@ fn hs2_aebjyn_real_findings_correction_loop_preserves_original_and_pending_code_
             base,
             "findings do not require an empty commit"
         );
+    }
+}
+
+// ---- HS2-BAK4BC: blocked tickets are explicitly claimable --------------------------
+
+const REASON: &str = "Waiting on a synthetic dependency";
+
+fn blocked_coord_output(f: &Fixture, args: &[&str]) -> std::process::Output {
+    let args = f.coord(args);
+    f.command(&args.iter().map(String::as_str).collect::<Vec<_>>())
+        .output()
+        .unwrap()
+}
+
+fn mark_output(f: &Fixture, assignment: &str, phase: &str) -> std::process::Output {
+    blocked_coord_output(
+        f,
+        &[
+            "mark",
+            "--id",
+            "integrator",
+            "--session",
+            "root",
+            "--assignment",
+            assignment,
+            "--phase",
+            phase,
+        ],
+    )
+}
+
+fn reason(f: &Fixture, ticket: &Ticket) -> Option<String> {
+    f.store.read_ticket(&ticket.id).unwrap().blocked_reason
+}
+
+#[test]
+fn hs2_bak4bc_cli_claim_and_renew_print_the_blocked_reason_and_claim_next_skips_it() {
+    let f = Fixture::new();
+    let ticket = f.ticket();
+    f.cli(&["edit", &ticket.slug, "--blocked-reason", REASON]);
+
+    assert_eq!(
+        f.cli(&["claim-next", "--worker", "auto"]).trim(),
+        "No claimable tickets.",
+        "automatic selection skips the blocked ticket"
+    );
+    let claimed = f.cli(&["claim", &ticket.slug, "--worker", "person"]);
+    assert!(claimed.contains(&format!("Claimed {} for person", ticket.slug)));
+    assert!(
+        claimed.contains(&format!("Blocked: {REASON}.")),
+        "the claim names the reason to re-evaluate: {claimed}"
+    );
+    assert!(claimed.contains(&format!("edit {} --clear-blocked-reason", ticket.slug)));
+    let renewed = f.cli(&["renew", &ticket.slug, "--worker", "person"]);
+    assert!(
+        renewed.contains(&format!("Blocked: {REASON}.")),
+        "{renewed}"
+    );
+    assert_eq!(reason(&f, &ticket).as_deref(), Some(REASON));
+
+    // The holder re-evaluates and clears the reason; the claim and its renewals continue.
+    f.cli(&["edit", &ticket.slug, "--clear-blocked-reason"]);
+    let renewed = f.cli(&["renew", &ticket.slug, "--worker", "person"]);
+    assert!(!renewed.contains("Blocked:"), "{renewed}");
+    f.cli(&["release", &ticket.slug, "--worker", "person"]);
+    let next = f.cli(&["claim-next", "--worker", "auto"]);
+    assert!(
+        next.contains(&format!("Claimed {} for auto", ticket.slug)),
+        "{next}"
+    );
+}
+
+/// HS2-KBK83M: findings that conclude the ticket is blocked no longer strand the
+/// handoff. The integrator claims the blocked ticket and records Verifying; a block set
+/// during Verifying keeps the claim renewable and review-return still works.
+#[test]
+fn hs2_bak4bc_findings_handoff_on_a_blocked_ticket_is_verified_and_finished() {
+    for block_during_verifying in [false, true] {
+        let f = Fixture::new();
+        let ticket = f.ticket();
+        for (role, id, session) in [
+            ("integrator", "integrator", "root"),
+            ("worker", "worker", "worker-session"),
+        ] {
+            f.run(&["register", "--role", role, "--id", id, "--session", session]);
+        }
+        let base = git(&f.project, &["rev-parse", "HEAD"]);
+        f.assign("findings", &ticket, &base, "root");
+        f.cli(&["claim", &ticket.slug, "--worker", "worker", "--eta", "10m"]);
+        worker(&f, "findings", "accepted", &[]);
+        let findings = note(
+            &f,
+            &ticket,
+            "## Findings handoff\nSynthetic findings: this waits on a synthetic dependency.".into(),
+        );
+        if !block_during_verifying {
+            f.cli(&["edit", &ticket.slug, "--blocked-reason", REASON]);
+        }
+        f.cli(&["release", &ticket.slug, "--worker", "worker"]);
+        worker(&f, "findings", "handoff", &["--findings-note", &findings]);
+
+        let claimed = f.cli(&[
+            "claim",
+            &ticket.slug,
+            "--worker",
+            "integrator",
+            "--eta",
+            "10m",
+        ]);
+        assert_eq!(
+            claimed.contains("Blocked:"),
+            !block_during_verifying,
+            "{claimed}"
+        );
+        let verifying = mark_output(&f, "findings", "verifying");
+        assert!(
+            verifying.status.success(),
+            "verifying a blocked findings ticket: {}",
+            String::from_utf8_lossy(&verifying.stderr)
+        );
+        if block_during_verifying {
+            f.cli(&["edit", &ticket.slug, "--blocked-reason", REASON]);
+            let renewed = f.cli(&["renew", &ticket.slug, "--worker", "integrator"]);
+            assert!(
+                renewed.contains(&format!("Blocked: {REASON}.")),
+                "{renewed}"
+            );
+            // The integrator returns the findings for more work instead of finishing.
+            f.cli(&["release", &ticket.slug, "--worker", "integrator"]);
+            let review = note(
+                &f,
+                &ticket,
+                format!("## Review return\nfindings {findings}\nSynthetic follow-up request."),
+            );
+            let returned = f.run(&[
+                "review-return",
+                "--id",
+                "integrator",
+                "--session",
+                "root",
+                "--assignment",
+                "findings",
+                "--evidence-note",
+                &review,
+                "--inspected",
+            ]);
+            assert!(returned.state.assignments["findings"].returned_for_review());
+            assert_eq!(reason(&f, &ticket).as_deref(), Some(REASON));
+            continue;
+        }
+        // Done still requires a closed ticket (the remaining HS2-KBK83M decision).
+        let early = mark_output(&f, "findings", "done");
+        assert!(!early.status.success());
+        assert!(
+            String::from_utf8_lossy(&early.stderr)
+                .contains("complete or close the findings ticket")
+        );
+        f.cli(&[
+            "edit",
+            &ticket.slug,
+            "--status",
+            "completed",
+            "--note",
+            "Verified synthetic findings.",
+        ]);
+        let done = mark_output(&f, "findings", "done");
+        assert!(
+            done.status.success(),
+            "{}",
+            String::from_utf8_lossy(&done.stderr)
+        );
+        assert_eq!(reason(&f, &ticket).as_deref(), Some(REASON));
     }
 }

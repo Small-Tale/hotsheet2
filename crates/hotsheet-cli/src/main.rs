@@ -764,7 +764,8 @@ enum Cmd {
         #[arg(long)]
         eta: Option<String>,
     },
-    /// Claim one exact open, unblocked ticket by slug or ULID (local lease).
+    /// Claim one exact open ticket by slug or ULID (local lease), even a blocked one:
+    /// the output prints its blocked reason to re-evaluate (HS2-BAK4BC).
     Claim {
         id: String,
         /// Worker id recorded on the claim.

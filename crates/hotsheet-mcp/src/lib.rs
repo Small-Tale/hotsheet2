@@ -419,7 +419,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim",
-            "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
+            "description": "Claim one exact open ticket by slug or ULID. A blocked ticket is claimable: its blocked_reason is a note to re-evaluate, and the result carries blocked_notice while it is set. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
@@ -456,7 +456,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim_next",
-            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next, then priority, then creation order). Uses the launched project checkout unless checkout is supplied: its local ticket sources form one queue, the default source winning a tie. GitHub, GitLab, and Jira sources have no claim leases and are skipped; a project with only those sources returns an unsupported error. Returns the claimed ticket with its store, or null if nothing is claimable.",
+            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; automatic selection skips blocked tickets, which hotsheet_claim can still take explicitly; prefers Up Next, then priority, then creation order). Uses the launched project checkout unless checkout is supplied: its local ticket sources form one queue, the default source winning a tie. GitHub, GitLab, and Jira sources have no claim leases and are skipped; a project with only those sources returns an unsupported error. Returns the claimed ticket with its store, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
@@ -477,7 +477,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_renew",
-            "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated.",
+            "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated, and blocked_notice while the ticket has a blocked_reason to re-evaluate.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
@@ -1035,6 +1035,7 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                     &checkout_route(args, &format!("/tickets/{id}/claim")),
                     &without_many(args, &["id", "checkout", "connection"]),
                 )
+                .map(with_blocked_notice)
                 .map_err(be_msg)
         }
         "hotsheet_advisory_claim_status" => {
@@ -1102,7 +1103,7 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                     .is_some_and(|order| order != std::cmp::Ordering::Greater);
                 object.insert("eta_expired".into(), Value::Bool(expired));
             }
-            Ok(renewed)
+            Ok(with_blocked_notice(renewed))
         }
         // Cross-store copy / move (HS2-60 / HS2-S4H2AM): `to` + `confirm` ride the body
         // (a serverless `to` is a store path with slashes, so it can't go in the URL).
@@ -1213,6 +1214,30 @@ fn without_many(args: &Value, keys: &[&str]) -> Value {
         }
     }
     v
+}
+
+/// HS2-BAK4BC: claims take blocked tickets, so an explicit claim or renewal of one says so
+/// instead of succeeding silently. Adds `blocked_notice` while the ticket's `blocked_reason`
+/// is non-empty; any other response is returned unchanged.
+fn with_blocked_notice(mut response: Value) -> Value {
+    let notice = {
+        let ticket = response.get("ticket").unwrap_or(&response);
+        ticket
+            .get("blocked_reason")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|reason| !reason.is_empty())
+            .map(|reason| {
+                format!(
+                    "Blocked: {reason}. Re-evaluate it: update blocked_reason with hotsheet_update, \
+                     or set it to null when it no longer applies."
+                )
+            })
+    };
+    if let (Some(notice), Some(object)) = (notice, response.as_object_mut()) {
+        object.insert("blocked_notice".into(), Value::String(notice));
+    }
+    response
 }
 
 /// HS2-8N7QZ2: a completion through MCP gets the same skipped-phase reminder as the CLI's,
@@ -6261,6 +6286,31 @@ mod tests {
                 json!({ "id": id, "status": "completed" }),
             );
             assert!(done.get("warnings").is_none(), "{title}: {done}");
+        }
+    }
+
+    /// HS2-BAK4BC: the notice reads a flat ticket or a checkout `{ticket, store}` result,
+    /// and leaves unblocked, blank-reason and non-ticket responses unchanged.
+    #[test]
+    fn hs2_bak4bc_blocked_notice_covers_both_claim_shapes() {
+        let flat = with_blocked_notice(json!({"slug": "HS-1", "blocked_reason": " Waiting "}));
+        assert!(
+            flat["blocked_notice"]
+                .as_str()
+                .unwrap()
+                .starts_with("Blocked: Waiting.")
+        );
+        let nested = with_blocked_notice(
+            json!({"ticket": {"slug": "HS-1", "blocked_reason": "Waiting"}, "store": {}}),
+        );
+        assert!(nested["blocked_notice"].is_string());
+        for unchanged in [
+            json!({"slug": "HS-1", "blocked_reason": null}),
+            json!({"slug": "HS-1", "blocked_reason": "  "}),
+            json!({"ticket": {"slug": "HS-1"}}),
+            Value::Null,
+        ] {
+            assert_eq!(with_blocked_notice(unchanged.clone()), unchanged);
         }
     }
 

@@ -2343,6 +2343,21 @@ pub fn is_blocked(t: &Ticket, _done: &HashSet<Ulid>) -> bool {
         .is_some_and(|reason| !reason.trim().is_empty())
 }
 
+/// The re-evaluation prompt shown when an explicit claim or renewal holds a blocked ticket
+/// (HS2-BAK4BC). Claims never refuse a blocked ticket: its reason is a note about known
+/// state that the holder may need to update, re-evaluate, or clear. `None` when unblocked.
+pub fn blocked_claim_notice(t: &Ticket) -> Option<String> {
+    let reason = t.blocked_reason.as_deref()?.trim();
+    if reason.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Blocked: {reason}. Re-evaluate it: update it with `edit {slug} --blocked-reason <text>` \
+         or clear it with `edit {slug} --clear-blocked-reason` when it no longer applies.",
+        slug = t.slug
+    ))
+}
+
 /// A claim is available if unclaimed, lease-less (stale), or the lease is at/before `now`.
 pub fn claim_available(t: &Ticket, now: &Timestamp) -> bool {
     match (&t.claimed_by, &t.claim_lease_expires_at) {
@@ -2453,7 +2468,8 @@ pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
 }
 
 /// Whether automatic claim-next may select `t` at `now`: open, unblocked, without a live
-/// lease, and not waiting on remote CI in `final_testing`.
+/// lease, and not waiting on remote CI in `final_testing`. Only automatic selection skips
+/// a blocked ticket; an exact claim may still take it (HS2-BAK4BC).
 fn claim_next_eligible(t: &Ticket, done: &HashSet<Ulid>, now: &Timestamp) -> bool {
     is_open(t)
         && !is_blocked(t, done)
@@ -2628,9 +2644,9 @@ pub fn claim_next_across_with_eta(
     Ok(None)
 }
 
-/// Claim one exact open, unblocked ticket. A retry by the live holder is idempotent:
-/// it may extend the lease and update an explicit label, but does not increment the
-/// historical claim count. Expired/stale claims are new acquisitions and do increment it.
+/// Claim one exact open ticket, blocked or not (HS2-BAK4BC). A retry by the live holder
+/// is idempotent: it may extend the lease and update an explicit label, but does not
+/// increment the historical claim count. Expired/stale claims are new acquisitions and do increment it.
 pub fn claim(
     store: &FsStore,
     id: &Ulid,
@@ -2706,17 +2722,10 @@ fn prepare_claim(
             reason: "ticket is not open",
         });
     }
-    let done: HashSet<Ulid> = tickets
-        .iter()
-        .filter(|ticket| is_done(ticket))
-        .map(|ticket| ticket.id)
-        .collect();
-    if is_blocked(&t, &done) {
-        return Err(OpError::ClaimUnavailable {
-            slug: t.slug,
-            reason: "ticket has unresolved blockers",
-        });
-    }
+    // A blocked reason is a re-evaluable note about known state, not a claim fence
+    // (HS2-BAK4BC): an explicit claim may take a blocked ticket so its holder can
+    // update, re-evaluate, or clear the reason. Only automatic selection
+    // (`claim_next_eligible`, distwork, the dispatcher) skips blocked tickets.
 
     if !claim_available(&t, now) {
         let holder = t
@@ -6934,20 +6943,24 @@ mod tests {
             "2026-08-19T00:50:00Z",
             "an expired holder's exact end remains its final lease deadline"
         );
-        assert!(matches!(
-            claim(
-                &store,
-                &blocked.id,
-                &now,
-                ts("2026-08-19T00:40:00Z"),
-                "w1",
-                None
-            ),
-            Err(OpError::ClaimUnavailable {
-                reason: "ticket has unresolved blockers",
-                ..
-            })
-        ));
+        // HS2-BAK4BC: a blocked reason is a re-evaluable note, not a claim fence.
+        let claimed_blocked = claim(
+            &store,
+            &blocked.id,
+            &now,
+            ts("2026-08-19T00:40:00Z"),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(claimed_blocked.claimed_by.as_deref(), Some("w1"));
+        assert_eq!(claimed_blocked.status, Status::Started);
+        assert_eq!(
+            claimed_blocked.blocked_reason.as_deref(),
+            Some("Waiting for blocker"),
+            "claiming keeps the reason for the holder to re-evaluate"
+        );
+        assert_eq!(claimed_blocked.blocked_by, vec![blocker.id]);
         let completed = update(
             &store,
             &blocker.id,
@@ -6978,3 +6991,7 @@ mod tests {
 #[cfg(test)]
 #[path = "ops/claim_next_across_tests.rs"]
 mod claim_next_across_tests;
+
+#[cfg(test)]
+#[path = "ops/claim_blocked_tests.rs"]
+mod claim_blocked_tests;

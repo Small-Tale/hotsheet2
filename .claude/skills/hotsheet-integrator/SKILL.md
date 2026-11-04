@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 19 -->
+<!-- hotsheet-skill-version: 20 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -203,7 +203,9 @@ above still applies before invoking any command with a schema-three CLI.
    live claims, and `git worktree list --porcelain` before assigning exact slugs to
    distinct workers. Give each worker its ticket, the common ticket store, the
    shipping base, any known scope boundary, and an explicit return route. Start only
-   independent tickets in parallel. `ls --unblocked` is a visible-reason filter,
+   independent tickets in parallel. Automatic selection skips a ticket with a
+   `blocked_reason`, but an exact claim takes it to re-evaluate that reason (HS2-BAK4BC).
+   `ls --unblocked` is a visible-reason filter,
    not dependency eligibility; the runtime separately checks `blocked_by`
    (HS2-BSYW6F). A worker creates its own ticket branch and worktree unless one is
    already prepared. Do not give two workers the same checkout.
@@ -264,7 +266,9 @@ integration delta and all required gates; the integrator retains the final decis
 For a `## Findings handoff`, read the whole exact provider-qualified ticket and
 the referenced regular note. Confirm the worker released its claim. Claim that exact
 Started ticket, record the `integrating` ticket phase for verification work, and mark
-the mailbox `verifying`. Check the note's evidence and scope, required coverage and
+the mailbox `verifying`. A `blocked_reason` does not refuse the claim (HS2-BAK4BC): the
+claim prints it, and verification re-evaluates it, updating or clearing a reason the
+findings show is wrong or out of date. Check the note's evidence and scope, required coverage and
 follow-ups, then complete the ticket with the evidence note id and release the claim.
 Mark the mailbox `done` only after the ticket is Completed or Verified. An interrupted
 verification resumes from the durable note and `verifying` phase; repeat the same

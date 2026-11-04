@@ -290,6 +290,10 @@ pub(crate) fn cmd_claim(
         eta_suffix(&claimed)
     );
     println!("{}", phase_hint(&claimed));
+    // HS2-BAK4BC: claims take blocked tickets; say so instead of claiming silently.
+    if let Some(notice) = ops::blocked_claim_notice(&claimed) {
+        println!("{notice}");
+    }
     Ok(())
 }
 
@@ -350,6 +354,9 @@ pub(crate) fn cmd_renew(
         println!("ETA passed; pass --eta with a new estimate.");
     }
     println!("{}", phase_hint(&renewed));
+    if let Some(notice) = ops::blocked_claim_notice(&renewed) {
+        println!("{notice}");
+    }
     Ok(())
 }
 

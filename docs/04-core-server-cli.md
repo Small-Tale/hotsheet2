@@ -827,7 +827,7 @@ hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove
 hotsheet batch HS-7f3k9q HS-abc123 --priority high --note-file update.md # one update, per-ticket results
 hotsheet delete-note HS-7f3k9q <note-ulid>                                # remove a git ticket note
 hotsheet claim-next --worker worker-1                       # self-select + claim + start
-hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact claim + start
+hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact claim + start (blocked too; prints the reason)
 hotsheet renew HS-7f3k9q --worker orchestrator-1             # extend active lease
 hotsheet release HS-7f3k9q --worker orchestrator-1           # stop advertising work
 hotsheet key set openai                    # hidden terminal prompt
@@ -1184,6 +1184,14 @@ leaves the current reason unchanged, a string sets its trimmed value, and JSON `
 MCP paths preserve that distinction instead of treating null as an omitted patch;
 external-provider capability handling is tracked separately. `blocked_by` remains structured
 dependency context, but an edge without a non-empty reason never creates an invisible block.
+A blocked reason is a re-evaluable note about known state, not a claim fence (HS2-BAK4BC).
+Automatic selection (`claim-next`, the checkout cross-source queue, distributed claim-next,
+and dispatcher assignment) skips a blocked ticket, but an explicit exact claim takes it and
+keeps the reason: CLI `claim` and `renew` print `Blocked: <reason>.` with the `edit
+--blocked-reason` and `--clear-blocked-reason` commands, MCP `hotsheet_claim` and
+`hotsheet_renew` results carry `blocked_notice`, and the HTTP claim returns the ticket with its
+`blocked_reason`. "Skipped by auto-selection" and "refused by claim" are different: a claim is
+refused only for a closed ticket or another worker's live lease.
 Create requests may also carry an initial `status` of `not_started`, `started`, or
 `backlog`; omitting it remains backward-compatible and defaults to `not_started`.
 Backlog creation clears `up_next`, and terminal/archive statuses must be reached through

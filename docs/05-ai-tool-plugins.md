@@ -1165,6 +1165,11 @@ lengthy work, and release on completion, handoff, error, or feedback. A same-wor
 claim retry is idempotent and does not inflate `claim_count`; another live holder is a
 conflict, while an expired lease can be acquired as a new attempt. Every successful claim
 advances Not Started to Started in the same durable write; later status values are preserved.
+Blocked tickets are skipped by `claim-next` (local, cross-source, and distributed) and by
+dispatcher assignment, but an exact claim takes them: a blocked reason is a note about known
+state that the holder may need to update, re-evaluate, or clear. The claim and renew output
+names the reason (CLI `Blocked: <reason>.`, MCP `blocked_notice`), and a findings handoff on a
+blocked ticket can be verified because the integrator's claim succeeds (HS2-BAK4BC).
 Each successful claim, renewal, and explicit release is also appended to `claim_history`.
 For telemetry, a worker interval starts at a `claim` event; renewals replace its current
 deadline; a `release` ends it at that event's time, while an absent release ends it at the

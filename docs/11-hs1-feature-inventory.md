@@ -209,7 +209,8 @@ announce/signal_done/request_feedback) + per-project server naming (docs/63, 9, 
 
 ## 22. Distributed Execution (Claim/Lease) — **keep core, drop pool** (build: HS2-11)
 
-Keep: claim/lease columns + atomic claim-next + blocked-by gate + auto-claim actor +
+Keep: claim/lease columns + atomic claim-next + blocked skip in auto-selection (explicit
+claims take blocked tickets, HS2-BAK4BC) + auto-claim actor +
 poison dead-letter (docs/90). **Drop (retired HS-9686):** worker pool, dynamic
 scaling, coordinator-dispatch, batching, worker git-state (docs/91, 92, 98–102).
 Reconcile with human assignment (docs/10).

@@ -209,6 +209,48 @@ mod tests {
         assert_eq!(candidates(&store, &ts("03")).unwrap(), vec![ready.id]);
     }
 
+    /// HS2-BAK4BC: distributed auto-selection still skips a blocked ticket, while an
+    /// explicit local claim of the same ticket succeeds and keeps its reason.
+    #[test]
+    fn hs2_bak4bc_distributed_candidates_skip_blocked_but_explicit_claim_takes_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let make = |title: &str, at: &str| {
+            create(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts(at),
+                NewTicket {
+                    title: title.into(),
+                    up_next: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let blocked = make("Blocked", "00");
+        let ready = make("Ready", "01");
+        ops::update(
+            &store,
+            &blocked.id,
+            ts("02"),
+            ops::TicketPatch {
+                blocked_reason: Some(Some("Waiting on a synthetic decision".into())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(candidates(&store, &ts("03")).unwrap(), vec![ready.id]);
+        let claimed = ops::claim(&store, &blocked.id, &ts("03"), ts("40"), "w", None).unwrap();
+        assert_eq!(claimed.claimed_by.as_deref(), Some("w"));
+        assert_eq!(
+            claimed.blocked_reason.as_deref(),
+            Some("Waiting on a synthetic decision")
+        );
+        assert_eq!(candidates(&store, &ts("04")).unwrap(), vec![ready.id]);
+    }
+
     /// A bare remote + two clones that are each Hot Sheet stores holding the SAME two Up
     /// Next tickets (so both workers see the same queue and race over it).
     fn two_workers_sharing_a_queue() -> (tempfile::TempDir, FsStore, FsStore, Ulid, Ulid) {

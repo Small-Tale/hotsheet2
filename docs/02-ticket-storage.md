@@ -656,6 +656,9 @@ already the exception. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.
 Moving a ticket to any terminal status automatically clears `claimed_by`,
 `claim_lease_expires_at`, `claim_eta_at`, and `worker_label`, so completion cannot continue advertising
 active work. Reopening a legacy terminal ticket clears stale claim metadata as well.
+A `blocked_reason` never refuses a claim: an explicit claim may take a blocked ticket so its
+holder can update, re-evaluate, or clear the reason, while automatic claim-next selection
+skips blocked tickets (HS2-BAK4BC, [04](04-core-server-cli.md)).
 
 **3 — A semantic git merge driver makes same-ticket merges automatic.** When two
 branches _do_ touch the same ticket file (e.g. an offline edit merged against an

@@ -282,6 +282,21 @@ default store's. The `hotsheet-server` HTTP regression
 the store attribution, four concurrent requests for three tickets, the drained
 queue, and the 409 and 404 refusals.
 
+HS2-BAK4BC covers explicit claims of blocked tickets. `hotsheet-ticketing`
+`src/ops/claim_blocked_tests.rs` walks claim, idempotent retry, renew, release, and
+reclaim of a blocked ticket with its reason kept; clearing and then setting the reason
+while claimed; local and cross-source claim-next skipping a blocked ticket that an exact
+claim takes, staying skipped after release, and eligible once cleared; and eight racing
+explicit claims with one winner and live-holder refusals. `distwork.rs` pins the
+distributed candidate skip. `crates/hotsheet-cli/tests/coordination_findings_return.rs` runs the real
+CLI: `claim` and `renew` print the reason, `claim-next` skips it, and a findings handoff
+on a blocked ticket is claimed and marked Verifying, then either finished after close or
+blocked during Verifying, renewed, and review-returned (HS2-KBK83M).
+`crates/hotsheet-server/tests/claim_blocked.rs` claims, renews, and contests a blocked
+ticket over HTTP on a real server socket, then runs MCP `hotsheet_claim`,
+`hotsheet_renew`, and `hotsheet_claim_next` through the shim's HTTP backend and the
+serverless backend, checking `blocked_notice`.
+
 HS2-CD3D2T provides a checked-in root gate, gate-before-push command, and
 pre-commit/pre-push hooks. `scripts/git-hooks.test.mjs` uses temporary Git
 repositories to verify no duplicate gate during a push, gate failure before

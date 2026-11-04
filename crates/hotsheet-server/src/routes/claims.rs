@@ -95,7 +95,8 @@ pub(crate) async fn claim_checkout_next_ticket(
     resolved_claim_ticket(entry, &claimed).map(|Json(ticket)| Json(Some(ticket)))
 }
 
-/// `POST /tickets/{id}/claim` — claim one exact open, unblocked ticket by slug or ULID.
+/// `POST /tickets/{id}/claim` — claim one exact open ticket by slug or ULID; a blocked
+/// ticket is claimable and keeps its reason (HS2-BAK4BC).
 pub(crate) async fn claim_ticket(
     State(state): State<AppState>,
     Path(id): Path<String>,

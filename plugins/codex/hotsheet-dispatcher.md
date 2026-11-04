@@ -3,7 +3,7 @@ name: hotsheet-dispatcher
 description: Keep a local dispatcher assigning independent Hot Sheet tickets while an integrator reviews and ships handoffs.
 ---
 
-<!-- hotsheet-skill-version: 2 -->
+<!-- hotsheet-skill-version: 3 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -46,7 +46,9 @@ poll the store or network on a timer. A stale or duplicate generation is refused
 
 Read the whole Up Next queue and each candidate ticket, its latest notes, exact
 claim and qualified source. `ls --unblocked` filters visible `blocked_reason`; it
-does not prove that `blocked_by` dependencies are closed (HS2-BSYW6F). Check
+does not prove that `blocked_by` dependencies are closed (HS2-BSYW6F). Assignment
+skips a ticket with a `blocked_reason`, although an exact claim may still take it so a
+person or agent can re-evaluate the reason (HS2-BAK4BC). Check
 dependencies, source capabilities, live worker generation, overlap and the
 integrator's latest published safe base before every reservation. `status` exposes
 `live_dispatcher`, `dispatch_blockers`, assignments and the integration report;
