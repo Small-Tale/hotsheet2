@@ -834,7 +834,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   hook fixture bypasses the helper or the rerun list. Toolchain and home settings stay
   inherited.
 - **Local push gate (HS2-CD3D2T, HS2-BND42N):** Run `scripts/install-git-hooks.sh` once per
-  checkout. For each clean, committed main ticket, inspect `scripts/check.sh --plan`, then
+  checkout. The push accepts a `core.hooksPath` that resolves to this repository's own
+  `.githooks`, relative or absolute, from the main checkout or any linked worktree; worktree
+  creation can leave the absolute form behind. Any other location is refused (HS2-Z333GJ). For each clean, committed main ticket, inspect `scripts/check.sh --plan`, then
   use `scripts/push.sh origin main`. The wrapper reserves the Git common directory's main
   integration ref before reading remote main, runs the selected exact-input gate inside that
   reservation, verifies its receipt, makes a fast-forward push of the frozen commit, and

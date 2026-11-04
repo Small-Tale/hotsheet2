@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { readWindow, verifyMainPush } from './main-integration-window.mjs';
+import { acceptedHooksPath, readWindow, verifyMainPush } from './main-integration-window.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = (program, args, cwd, env = process.env, input) =>
@@ -830,5 +830,40 @@ test('HS2-BND42N two worktrees serialize the gate and reject the superseded writ
           /* exited */
         }
     f.dispose();
+  }
+});
+
+test("HS2-Z333GJ accepts only this repository's .githooks, absolute or relative, from the checkout and its worktrees", () => {
+  const root = realpathSync(mkdtempSync(resolve(tmpdir(), 'hs2-z333gj-')));
+  try {
+    const repo = resolve(root, 'repo'),
+      worktree = resolve(root, 'linked'),
+      env = {
+        ...process.env,
+        GIT_AUTHOR_NAME: 't',
+        GIT_AUTHOR_EMAIL: 't@example.invalid',
+        GIT_COMMITTER_NAME: 't',
+        GIT_COMMITTER_EMAIL: 't@example.invalid',
+      };
+    mkdirSync(repo);
+    run('git', ['init', '-q', '-b', 'main'], repo, env);
+    put(resolve(repo, '.githooks/pre-push'), '#!/bin/sh\n', true);
+    run('git', ['add', '.'], repo, env);
+    run('git', ['commit', '-q', '-m', 'hooks'], repo, env);
+    run('git', ['worktree', 'add', '-q', '--detach', worktree], repo, env);
+    put(resolve(root, 'elsewhere/.githooks/pre-push'), '#!/bin/sh\n', true);
+    const mainHooks = resolve(repo, '.githooks');
+    // The installer's relative path, and the absolute path worktree creation leaves behind.
+    for (const place of [repo, worktree]) {
+      assert.equal(acceptedHooksPath(place, '.githooks'), true, `relative from ${place}`);
+      assert.equal(acceptedHooksPath(place, mainHooks), true, `absolute main hooks from ${place}`);
+      // Anything outside this repository's tracked hooks stays refused.
+      assert.equal(acceptedHooksPath(place, resolve(root, 'elsewhere/.githooks')), false);
+      assert.equal(acceptedHooksPath(place, resolve(root, 'missing')), false);
+      assert.equal(acceptedHooksPath(place, resolve(repo, '.git/hooks')), false);
+    }
+    assert.equal(acceptedHooksPath(worktree, resolve(worktree, '.githooks')), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

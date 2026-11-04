@@ -2,7 +2,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMainPushArgs } from './main-integration-options.mjs';
 
@@ -391,11 +391,32 @@ export function verifyMainPush(repo, token, remote, target, localSha, remoteSha)
   return value;
 }
 
+/**
+ * Whether `hooks` (the shared `core.hooksPath`) names this repository's own tracked `.githooks`
+ * (HS2-Z333GJ). Linked worktrees share one config, and creating one can leave an absolute path to
+ * the main checkout's `.githooks`; that is still the repository's hooks, so it is accepted from the
+ * main checkout and from any of its worktrees. Any other location is refused.
+ */
+export function acceptedHooksPath(repo, hooks) {
+  const real = (path) => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return undefined;
+    }
+  };
+  const configured = real(resolve(repo, hooks));
+  if (configured === undefined) return false;
+  const commonDir = real(resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])));
+  const owners = [resolve(repo, '.githooks')];
+  if (commonDir && basename(commonDir) === '.git') owners.push(resolve(dirname(commonDir), '.githooks'));
+  return owners.some((owner) => real(owner) === configured);
+}
+
 export async function pushMain(repo, args) {
   const options = parseMainPushArgs(args);
   options.sourceStore = resolve(options.sourceStore ?? repo);
-  const hooks = git(repo, ['config', '--get', 'core.hooksPath']);
-  if (realpathSync(resolve(repo, hooks)) !== realpathSync(resolve(repo, '.githooks')))
+  if (!acceptedHooksPath(repo, git(repo, ['config', '--get', 'core.hooksPath'])))
     throw new Error('Run scripts/install-git-hooks.sh before main push');
   let window = await acquire(repo, options);
   const token = window.value.token;
