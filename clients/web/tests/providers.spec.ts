@@ -3940,6 +3940,88 @@ test('links the first GitHub installation and refreshes granted repositories (HS
   await expect(access.getByRole('link', { name: 'Install Hot Sheet on GitHub' })).toHaveCount(0);
 });
 
+for (const width of [1280, 390])
+  test(`keeps a typed GitHub repository path when the repository list loads at ${width}px (HS2-52BEHN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 860 });
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.route('**/__hotsheet/projects/open', (route) =>
+      route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+    );
+    await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
+    await page.route('**/github-auth/device/auth-1', (route) =>
+      route.fulfill({ json: { state: 'authorized', credential_reference: 'github-app-auth-1' } }),
+    );
+    // Hold the repository list behind a promise, never a timer, so the path is typed while it loads.
+    let releaseList!: () => void, listRequested!: () => void;
+    const listGate = new Promise<void>((resolve) => (releaseList = resolve)),
+      listPending = new Promise<void>((resolve) => (listRequested = resolve));
+    await page.route('**/github-auth/device/auth-1/repositories', async (route) => {
+      listRequested();
+      await listGate;
+      await route.fulfill({
+        json: {
+          repositories: ['small-tale/hotsheet2', 'small-tale/secondary', 'small-tale/reused'],
+          installations: [{ account: 'small-tale', selection: 'all', settings_url: null }],
+          install_url: 'https://github.test/apps/hot-sheet/installations/new',
+        },
+      });
+    });
+    await page
+      .context()
+      .route('https://github.test/**', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<title>Synthetic GitHub sign-in</title>' }),
+      );
+    const creates: Array<Record<string, unknown>> = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
+        creates.push(request.postDataJSON());
+    });
+    await page.goto('/');
+    await page
+      .context()
+      .grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const setup = page.locator('[data-ticket-source-setup-dialog]'),
+      form = setup.locator('[data-action="save-provider-connection"]');
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    await setup.getByRole('button', { name: 'Sign in with GitHub' }).click();
+    await listPending;
+    await expect(form.getByText('Loading your repositories…')).toBeVisible();
+    const repository = form.getByRole('combobox', { name: 'Repository', exact: true });
+    await expect(repository).toHaveAttribute('placeholder', 'owner/repository');
+    await repository.click();
+    await repository.pressSequentially('small-tale/typed-path');
+    await page.screenshot({ path: test.info().outputPath(`hs2-52behn-typed-while-loading-${width}.png`) });
+    const inputNode = await repository.elementHandle();
+    releaseList();
+    await expect(form.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(3);
+    await expect(form.getByText('3 repositories available.')).toBeVisible();
+    // The same field stays mounted: the typed path, focus, and caret survive the list arriving.
+    expect(await inputNode.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(repository).toHaveValue('small-tale/typed-path');
+    await expect(repository).toBeFocused();
+    expect(await repository.evaluate((node: HTMLInputElement) => node.selectionStart)).toBe(
+      'small-tale/typed-path'.length,
+    );
+    await expect(repository).toHaveAttribute('placeholder', 'Search your repositories…');
+    await page.screenshot({ path: test.info().outputPath(`hs2-52behn-typed-after-list-${width}.png`) });
+    // The typed path also survives the wide-to-narrow-to-wide transition.
+    for (const size of [900, 390, width]) {
+      await page.setViewportSize({ width: size, height: 860 });
+      await expect(repository).toHaveValue('small-tale/typed-path');
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      ).toBe(true);
+    }
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect(setup).not.toHaveAttribute('open');
+    expect(creates).toEqual([expect.objectContaining({ provider: 'github', locator: 'small-tale/typed-path' })]);
+    await expect(page.locator('.app-error')).toHaveCount(0);
+  });
+
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);

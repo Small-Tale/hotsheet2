@@ -1277,7 +1277,11 @@ preview/download, server directory browser) are separate design work.
   inside the dialog content.
   Repository search is a Kerf `Combobox` that filters every reachable repository as the person
   types, keeps a picked suggestion in the field, and still accepts a typed path (HS2-EN1E76;
-  `wireProviderSetupComboboxes` wires it in production and the UX demo). The default-source
+  `wireProviderSetupComboboxes` wires it in production and the UX demo). The GitHub
+  Repository field is that same Combobox before the repository list arrives: it has no
+  suggestions while the list loads and gains them when the list arrives, so a path typed
+  while the list loads keeps its text, focus, and caret, and that typed path is what the form
+  submits (HS2-52BEHN). GitLab and Jira keep a plain TextField. The default-source
   checkbox carries its help text below the label. Removal confirmation puts its explanation
   above the footer actions at narrow and wide widths. The UX demo's selector sits inside
   the open modal and previews source choice, sign-in, authorized, editing, removal, busy,

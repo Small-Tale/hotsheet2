@@ -141,8 +141,48 @@ describe('ticket source surfaces', () => {
     expect(form({ repositories: ['a/b'], installations: [], refreshing: true })).toMatch(
       /refresh-github-repositories" disabled[\s\S]*?Refreshing…/,
     );
-    // Before the list arrives there is nothing to search yet.
-    expect(form({})).not.toContain('provider-setup-repository');
+    // Before the list arrives there is nothing to search yet, but the field is already the same
+    // Combobox, so the list arriving cannot replace what the person typed (HS2-52BEHN).
+    expect(form({})).toContain('data-combobox-id="provider-setup-repository"');
+    expect(form({})).not.toContain('repositories available.');
+  });
+
+  it('keeps one Repository field identity while the repository list arrives (HS2-52BEHN)', () => {
+    const auth = { session: 's', userCode: 'C', verificationUri: 'https://github.test', state: 'authorized' as const },
+      repositoryInput = (markup: string) => {
+        const input = /<input id="provider-setup-repository"[^>]*>/u.exec(markup)?.[0] ?? '';
+        // Placeholder and hint wiring follow the list; everything that identifies the node or seeds
+        // its value must not change, or Kerf's morph would replace the input or reset its text.
+        return input.replace(/ placeholder="[^"]*"| aria-describedby="[^"]*"/gu, '');
+      };
+    const loading = String(ProviderSetupForm({ kind: 'github', auth })),
+      loaded = String(ProviderSetupForm({ kind: 'github', auth: { ...auth, repositories: ['acme/one', 'acme/two'] } }));
+    expect(repositoryInput(loading)).toMatch(/role="combobox"[\s\S]*name="connection-locator" value=""/u);
+    expect(repositoryInput(loaded)).toBe(repositoryInput(loading));
+    expect(loading).toContain('placeholder="owner/repository"');
+    expect(loaded).toContain('placeholder="Search your repositories…"');
+    expect(loading).not.toContain('data-value="acme/one"');
+    expect(loaded).toContain('data-value="acme/one"');
+    // Editing lists repositories too; the saved path seeds the same field in both states.
+    const connection = {
+        id: 'github-main',
+        provider: 'github' as const,
+        locator: 'acme/issues',
+        name: 'Issues',
+        default: false,
+        settings: {},
+      },
+      editAuth = { ...auth, session: 'edit:github-main' },
+      editLoading = String(ProviderSetupForm({ kind: 'github', connection, auth: editAuth })),
+      editLoaded = String(
+        ProviderSetupForm({ kind: 'github', connection, auth: { ...editAuth, repositories: ['acme/issues'] } }),
+      );
+    expect(repositoryInput(editLoading)).toContain('value="acme/issues"');
+    expect(repositoryInput(editLoaded)).toBe(repositoryInput(editLoading));
+    // GitLab and Jira have no repository list and keep their plain text field.
+    expect(
+      String(ProviderSetupForm({ kind: 'gitlab', connection: { ...connection, provider: 'gitlab' } })),
+    ).not.toContain('provider-setup-repository');
   });
 
   it('toggles availability while editing and marks disabled connections in settings (HS2-SF6W34)', () => {
@@ -372,7 +412,9 @@ describe('ticket source surfaces', () => {
     );
     expect(failedEdit).toContain('You can enter a repository path manually.');
     expect(failedEdit).toContain('value="acme/issues"');
-    expect(failedEdit).not.toContain('provider-setup-repository');
+    // A failed listing leaves the same Combobox with no suggestions for a typed path (HS2-52BEHN).
+    expect(failedEdit).toContain('data-combobox-id="provider-setup-repository"');
+    expect(failedEdit).not.toMatch(/id="provider-setup-repository-option-0"/u);
     expect(configured).toMatch(/<input[^>]*name="attachment-folder"[^>]*value="evidence"/);
     expect(configured).toMatch(/<input[^>]*name="attachment-branch"[^>]*value="media"/);
     const remote = String(

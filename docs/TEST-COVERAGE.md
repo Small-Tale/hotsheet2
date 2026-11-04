@@ -1,5 +1,15 @@
 # Feature Coverage Matrix
 
+HS2-52BEHN keeps a typed GitHub repository path when the repository list loads.
+`clients/web/src/components/ticket-source-surfaces.test.ts` checks that the Repository
+input has the same identity and seeded value before and after the list arrives, for both
+new and edit sessions, and that GitLab keeps its TextField. The shipped
+`clients/web/tests/providers.spec.ts` case “keeps a typed GitHub repository path when the
+repository list loads” runs at 1280 and 390 px. It holds the repository list behind a
+promise, types a path, and releases the list. It then checks that the input node, value,
+focus, and caret survive a wide-to-narrow-to-wide pass, and that Connect provider posts the
+typed locator.
+
 HS2-RS96EJ names the phone terminal's ellipsis toggle **More terminal keys**, keeping
 Shift in that expanded group. `clients/web/src/components/terminal-key-bar.test.ts`
 pins the label, ordinary and expanded groups, and Shift presence. The shipped

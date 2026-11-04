@@ -368,19 +368,25 @@ export function ProviderSetupForm({
               hint={`Leave blank to use “${labels[0]}”.`}
             />
           </div>
-          {choosing ? (
+          {kind === 'github' ? (
             // Kerf Combobox filters every reachable repository as the person types and still accepts a
-            // typed one (HS2-27T5WT, HS2-EN1E76).
+            // typed one (HS2-27T5WT, HS2-EN1E76). It is the same field before and after the list
+            // arrives, so a path typed while the list loads keeps its text, focus, and caret
+            // (HS2-52BEHN); only its suggestions, placeholder, and hint follow the list.
             <div class="provider-setup-form__wide">
               <Combobox
                 id="provider-setup-repository"
                 name="connection-locator"
                 label="Repository"
-                placeholder="Search your repositories…"
+                placeholder={choosing ? 'Search your repositories…' : labels[1]}
                 value={connection?.locator ?? ''}
-                suggestions={repositories}
+                suggestions={choosing ? repositories : []}
                 createLabel="Use “{value}”"
-                hint={`${repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to filter.`}
+                hint={
+                  choosing
+                    ? `${repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to filter.`
+                    : undefined
+                }
               />
             </div>
           ) : (
