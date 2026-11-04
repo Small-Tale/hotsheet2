@@ -914,7 +914,9 @@ export async function startHotSheetWebClient() {
   let projectSessionTimer: number | undefined,
     restoringProjectSession = false,
     projectSessionDirtyDuringRestore = false,
-    projectSessionInteractionVersion = 0;
+    projectSessionInteractionVersion = 0,
+    // The selection an activation applied; a different array later means the user selected since (HS2-VDJJEY).
+    activationTicketSelection: string[] | undefined;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -2796,6 +2798,7 @@ export async function startHotSheetWebClient() {
         selectedCorruptKey.value = undefined;
         selectedTicket.value = null;
         selectedTicketSlugs.value = selection;
+        activationTicketSelection = selection;
         ticketSelectionAnchor = selection[0];
         error.value = '';
         refreshError.value = '';
@@ -2971,11 +2974,20 @@ export async function startHotSheetWebClient() {
           );
         }
       }
+      // A ticket the user selected during this activation's async refresh window wins over the parked
+      // session, like the composer above (HS2-VDJJEY); its stored per-ticket drafts belong elsewhere.
+      const userSelected =
+        activationTicketSelection !== undefined && selectedTicketSlugs.value !== activationTicketSelection;
+      activationTicketSelection = undefined;
       const live = new Set(tickets.value.map((ticket) => ticket.slug)),
-        selection = stored.selectedTicketSlugs.filter((slug) => live.has(slug));
-      selectedTicketSlugs.value = selection;
-      ticketSelectionAnchor = selection[0];
-      if (selection.length === 1) {
+        selection = userSelected
+          ? selectedTicketSlugs.value
+          : stored.selectedTicketSlugs.filter((slug) => live.has(slug));
+      if (!userSelected) {
+        selectedTicketSlugs.value = selection;
+        ticketSelectionAnchor = selection[0];
+      }
+      if (!userSelected && selection.length === 1) {
         const row = tickets.value.find((ticket) => ticket.slug === selection[0]);
         if (row) {
           const full = (await new Api(current.apiPath).checkoutTicket(current.id, row.qualified_id)).ticket;
@@ -2983,16 +2995,18 @@ export async function startHotSheetWebClient() {
           presentTicket(full);
         }
       }
-      composingNote.value = selection.length === 1 && stored.composingNote;
-      newNoteDraft.value = composingNote.value ? stored.newNoteDraft : '';
-      readerInlineFeedbackReplies.value = selection.length === 1 ? stored.feedbackReplies : {};
-      readerFeedbackChoiceSelections.value = selection.length === 1 ? stored.feedbackSelections : {};
-      const feedbackNote = selectedTicket.value?.notes.find(
-        (note) =>
-          note.id === stored.feedbackNoteId && (note.kind === 'feedback_needed' || note.kind === 'feedback_draft'),
-      );
-      readerEditingNoteId.value = feedbackNote?.id;
-      readerNoteDraft.value = feedbackNote ? stored.feedbackDraft : '';
+      if (!userSelected) {
+        composingNote.value = selection.length === 1 && stored.composingNote;
+        newNoteDraft.value = composingNote.value ? stored.newNoteDraft : '';
+        readerInlineFeedbackReplies.value = selection.length === 1 ? stored.feedbackReplies : {};
+        readerFeedbackChoiceSelections.value = selection.length === 1 ? stored.feedbackSelections : {};
+        const feedbackNote = selectedTicket.value?.notes.find(
+          (note) =>
+            note.id === stored.feedbackNoteId && (note.kind === 'feedback_needed' || note.kind === 'feedback_draft'),
+        );
+        readerEditingNoteId.value = feedbackNote?.id;
+        readerNoteDraft.value = feedbackNote ? stored.feedbackDraft : '';
+      }
       if (
         stored.notWorking &&
         attachmentEpochs().notWorking === epochs.notWorking &&

@@ -1613,7 +1613,9 @@ preview/download, server directory browser) are separate design work.
   without another invalidation, or within 900 ms of the first one in a continuous burst.
   Events received while a read is in flight trigger at most one trailing refresh. Closing a
   project cancels its pending refresh; switching tabs still performs an authoritative
-  activation refresh. This bounds full ticket and corrupt-ticket reads while keeping the
+  activation refresh. The project's parked session is restored after that refresh, but a
+  ticket the user selects during the refresh keeps its selection (HS2-VDJJEY), as an opened
+  composer stays open (HS2-T1F2VT). This bounds full ticket and corrupt-ticket reads while keeping the
   latest state current (HS2-B5SJMJ). Startup stays active-only (see the remembered-project startup rules
   above): a project becomes warm on its first visit, or when a live-refreshed background
   snapshot fits spare warm capacity; that first visit is an ordinary cold load. Activating a

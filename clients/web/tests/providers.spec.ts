@@ -30853,6 +30853,65 @@ test('keeps the new-ticket composer open when it is opened right after a project
   await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toBeVisible();
 });
 
+test('keeps a ticket selected right after a project tab switch when the session restore lands (HS2-VDJJEY)', async ({
+  page,
+}) => {
+  const otherRow = {
+    ...row,
+    id: 'other-01',
+    native_id: 'other-01',
+    qualified_id: 'git-local:other-01',
+    slug: 'HS2-OTHER1',
+    title: 'Other project ticket',
+  };
+  let holdRefreshes = false;
+  const pending = new Map<string, import('@playwright/test').Route>();
+  await mockProject(page);
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    if (root === '/work/other')
+      return route.fulfill({
+        status: 201,
+        json: {
+          ...project,
+          id: 'other-checkout',
+          root,
+          name: 'other',
+          apiPath: '/__hotsheet/project-api/other-checkout',
+        },
+      });
+    return route.fulfill({ status: 201, json: project });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
+    if (holdRefreshes) {
+      pending.set(other ? 'other' : 'demo', route);
+      return;
+    }
+    return route.fulfill({ json: ticketsJson(route.request(), other ? [otherRow] : [row, notStartedRow]) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
+  // Switch back with the activation refresh (and so the delayed session restore) held, then select a row.
+  holdRefreshes = true;
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${row.slug}"]`).first().click();
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.getByText(row.title).first()).toBeVisible();
+  // Releasing the refresh runs the restore of the parked (empty) selection; it must keep the user's choice.
+  await expect.poll(() => pending.has('demo')).toBe(true);
+  holdRefreshes = false;
+  await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
+  await page.waitForLoadState('networkidle');
+  await expect(inspector.getByText(row.title).first()).toBeVisible();
+  await expect(inspector.getByText('Select a ticket to see and edit its details')).toHaveCount(0);
+});
+
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
   page,
 }) => {
